@@ -21,6 +21,7 @@ from uuid import uuid4
 from codex_plugin_scanner.path_support import resolve_path_within_allowed_roots, resolves_within_root
 
 from .adapters.base import HarnessContext
+from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
 from .config import GuardConfig, resolve_risk_action
 from .models import GuardArtifact
 from .package_firewall_entitlement import resolve_package_firewall_entitlement
@@ -779,12 +780,17 @@ def build_package_protect_payload(
         config_path="hol-guard.toml",
         source_scope="project",
     )
-    artifact_hash = _package_request_artifact_hash(artifact, workspace_dir=workspace_dir)
     evaluation = evaluate_package_request_artifact(
         artifact=artifact,
         store=store,
         workspace_dir=workspace_dir,
         now=now,
+    )
+    artifact_hash = _package_request_artifact_hash(
+        artifact,
+        workspace_dir=workspace_dir,
+        store=store,
+        evaluation=evaluation,
     )
     evaluation = _apply_stored_package_policy_override(
         evaluation,
@@ -984,15 +990,137 @@ def _apply_stored_package_policy_override(
     return evaluation
 
 
-def _package_request_artifact_hash(artifact: GuardArtifact, *, workspace_dir: Path) -> str:
+def recompute_package_protect_artifact_hash(
+    command: Sequence[str],
+    *,
+    store: GuardStore,
+    workspace_dir: Path,
+    now: str | None = None,
+) -> str | None:
+    from .runtime.package_intent_parser import parse_package_intent
+
+    intent = parse_package_intent(shlex.join(command), workspace=workspace_dir)
+    if intent is None:
+        return None
+    sanitized_intent = replace(intent, redacted_command=shlex.join(redacted_command_tokens(command)))
+    artifact = build_package_request_artifact(
+        _LOCAL_SUPPLY_CHAIN_HARNESS,
+        sanitized_intent,
+        config_path="hol-guard.toml",
+        source_scope="project",
+    )
+    evaluation_timestamp = now or datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    evaluation = evaluate_package_request_artifact(
+        artifact=artifact,
+        store=store,
+        workspace_dir=workspace_dir,
+        now=evaluation_timestamp,
+    )
+    return _package_request_artifact_hash(
+        artifact,
+        workspace_dir=workspace_dir,
+        store=store,
+        evaluation=evaluation,
+    )
+
+
+def _package_target_identities(artifact: GuardArtifact) -> tuple[ProtectTargetIdentity, ...]:
     metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
     targets = metadata.get("targets")
-    if isinstance(targets, list) and any(isinstance(item, dict) for item in targets):
-        return stable_digest_hex(artifact.artifact_id.encode("utf-8"))
+    if not isinstance(targets, list):
+        return ()
+    identities: list[ProtectTargetIdentity] = []
+    for item in targets:
+        if not isinstance(item, dict):
+            continue
+        ecosystem = str(item.get("ecosystem") or "")
+        package_name = item.get("package_name") if isinstance(item.get("package_name"), str) else None
+        raw_spec = str(item.get("raw_spec") or package_name or "")
+        version = item.get("requested_specifier") if isinstance(item.get("requested_specifier"), str) else None
+        source_url = item.get("source_url") if isinstance(item.get("source_url"), str) else None
+        artifact_id = f"{ecosystem}:{package_name or raw_spec}"
+        artifact_name = package_name or raw_spec
+        identities.append(
+            ProtectTargetIdentity(
+                artifact_id=artifact_id,
+                artifact_name=artifact_name,
+                ecosystem=ecosystem,
+                package_name=package_name,
+                package_url=build_package_url(ecosystem, package_name, version),
+                source_url=source_url,
+            )
+        )
+    return tuple(identities)
+
+
+def _package_matched_cached_advisory_ids(store: GuardStore, artifact: GuardArtifact) -> tuple[str, ...]:
+    advisories = store.list_cached_advisories(limit=None)
+    identities = _package_target_identities(artifact)
+    matched_ids: set[str] = set()
+    for advisory in advisories:
+        for identity in identities:
+            if advisory_matches_target(advisory, identity):
+                advisory_id = advisory.get("id")
+                if isinstance(advisory_id, str) and advisory_id:
+                    matched_ids.add(advisory_id)
+                break
+    return tuple(sorted(matched_ids))
+
+
+def _package_feed_snapshot_hash(store: GuardStore) -> str | None:
+    workspace_id = store.get_cloud_workspace_id()
+    if workspace_id is None:
+        return None
+    cached_bundle = store.get_cached_supply_chain_bundle(workspace_id)
+    if not isinstance(cached_bundle, dict):
+        return None
+    bundle = cached_bundle.get("bundle")
+    if not isinstance(bundle, dict):
+        return None
+    value = bundle.get("feedSnapshotHash")
+    return value if isinstance(value, str) and value else None
+
+
+def _package_policy_gate_context(
+    store: GuardStore,
+    artifact: GuardArtifact,
+    evaluation: PackageRequestEvaluation,
+) -> dict[str, object]:
+    return {
+        "bundle_version": evaluation.bundle_version,
+        "decision": evaluation.decision,
+        "feed_snapshot_hash": _package_feed_snapshot_hash(store),
+        "matched_advisory_ids": list(_package_matched_cached_advisory_ids(store, artifact)),
+        "matched_rule_id": evaluation.matched_rule_id,
+        "policy_action": evaluation.policy_action,
+        "policy_version": evaluation.policy_version,
+    }
+
+
+def _package_request_artifact_hash(
+    artifact: GuardArtifact,
+    *,
+    workspace_dir: Path,
+    store: GuardStore,
+    evaluation: PackageRequestEvaluation,
+) -> str:
+    policy_gate = _package_policy_gate_context(store, artifact, evaluation)
+    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
+    targets = metadata.get("targets")
     manifest_paths = tuple(str(item) for item in metadata.get("manifest_paths", []) if isinstance(item, str))
     lockfile_paths = tuple(str(item) for item in metadata.get("lockfile_paths", []) if isinstance(item, str))
-    if not manifest_paths and not lockfile_paths:
-        return stable_digest_hex(artifact.artifact_id.encode("utf-8"))
+    has_targets = isinstance(targets, list) and any(isinstance(item, dict) for item in targets)
+    if has_targets or (not manifest_paths and not lockfile_paths):
+        return stable_digest_hex(
+            json.dumps(
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "policy_gate": policy_gate,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        )
     return stable_digest_hex(
         json.dumps(
             {
@@ -1001,6 +1129,7 @@ def _package_request_artifact_hash(artifact: GuardArtifact, *, workspace_dir: Pa
                 "lockfile_paths": list(lockfile_paths),
                 "manifest_hashes": _hash_existing_paths(workspace_dir, manifest_paths),
                 "lockfile_hashes": _hash_existing_paths(workspace_dir, lockfile_paths),
+                "policy_gate": policy_gate,
             },
             sort_keys=True,
             separators=(",", ":"),

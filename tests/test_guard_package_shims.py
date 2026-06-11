@@ -21,8 +21,10 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import shims as guard_shims_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
+from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.protect import build_protect_payload
+from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
 from codex_plugin_scanner.guard.shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from codex_plugin_scanner.guard.shims import install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
@@ -80,6 +82,9 @@ def _bundle_response(
     ecosystem: str,
     package_name: str,
     package_version: str,
+    feed_snapshot_hash: str = "feed-snapshot-shim-proof",
+    policy_hash: str = "policy-hash-shim-proof",
+    bundle_version: str = "1747612800000-shim-proof",
 ) -> dict[str, object]:
     generated_at = datetime(2026, 5, 19, tzinfo=timezone.utc)
     expires_at = generated_at + timedelta(hours=12)
@@ -100,9 +105,9 @@ def _bundle_response(
                 "title": f"High-risk package: {package_name}",
             }
         ],
-        "bundleVersion": "1747612800000-shim-proof",
+        "bundleVersion": bundle_version,
         "expiresAt": _iso(expires_at),
-        "feedSnapshotHash": "feed-snapshot-shim-proof",
+        "feedSnapshotHash": feed_snapshot_hash,
         "generatedAt": _iso(generated_at),
         "keyId": "guard-bundle-key-2026-05",
         "packages": [
@@ -126,7 +131,7 @@ def _bundle_response(
                 "version": package_version,
             }
         ],
-        "policyHash": "policy-hash-shim-proof",
+        "policyHash": policy_hash,
         "policyRules": [],
         "scoringVersion": "scf-v1",
         "sourceHashes": [{"payloadHash": "ghsa-feed-hash", "sourceKey": "ghsa", "staleStatus": "fresh"}],
@@ -1229,6 +1234,121 @@ def test_guard_protect_denied_retry_with_cloud_block_does_not_requeue_local_pack
     assert "primary_approval_request_id" not in retry_payload
     assert pending == []
     assert len(resolved) == 1
+
+
+def test_guard_protect_saved_approval_does_not_bypass_new_bundle_block_for_unpinned_package(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    marker_path = tmp_path / "npm-somepkg-marker.json"
+    write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    package_name = "somepkg"
+    original_resolved_target_version = supply_chain_package_eval_module._resolved_target_version
+
+    def _resolve_somepkg_version(**kwargs: object) -> str | None:
+        target = kwargs.get("target")
+        if isinstance(target, dict) and str(target.get("normalized_name")) == package_name:
+            return "1.0.0"
+        return original_resolved_target_version(**kwargs)
+
+    monkeypatch.setattr(
+        supply_chain_package_eval_module,
+        "_resolved_target_version",
+        _resolve_somepkg_version,
+    )
+    server, thread, sync_url = _start_cloud_eval_server(
+        decision="allow",
+        package_name=package_name,
+        evaluate_status=401,
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    try:
+        store = GuardStore(home_dir)
+        _seed_bundle_cache_only(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name=package_name,
+            package_version="1.0.0",
+            action="allow",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+
+        first_payload, first_exit_code = build_protect_payload(
+            command=["npm", "install", package_name],
+            store=store,
+            workspace_dir=workspace_dir,
+            dry_run=True,
+            now="2026-05-19T00:00:00Z",
+        )
+
+        assert first_exit_code == 2
+        assert first_payload["verdict"]["action"] in {"block", "review"}
+        receipt = first_payload["receipt"]
+        assert isinstance(receipt, dict)
+        store.upsert_policy(
+            PolicyDecision(
+                harness="guard-cli",
+                scope="artifact",
+                action="allow",
+                artifact_id=str(receipt["artifact_id"]),
+                artifact_hash=str(receipt["artifact_hash"]),
+                workspace=None,
+                publisher=None,
+                reason="reviewed",
+            ),
+            "2026-05-19T00:00:00Z",
+        )
+
+        response = _bundle_response(
+            action="block",
+            ecosystem="npm",
+            package_name=package_name,
+            package_version="1.0.0",
+            feed_snapshot_hash="feed-snapshot-block-2",
+            policy_hash="policy-hash-block-2",
+            bundle_version="1747612801000-shim-proof",
+        )
+        store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T01:00:00Z")
+        bundle = response["bundle"]
+        assert isinstance(bundle, dict)
+        store.set_sync_payload(
+            "supply_chain_bundle_entitlement",
+            {
+                "bundle_version": bundle["bundleVersion"],
+                "key_id": bundle["keyId"],
+                "policy_hash": bundle["policyHash"],
+                "tier": bundle["tier"],
+                "workspace_id": WORKSPACE_ID,
+            },
+            "2026-05-19T01:00:00Z",
+        )
+
+        original_path = os.environ.get("PATH", "")
+        monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
+        retry_payload, retry_exit_code = build_protect_payload(
+            command=["npm", "install", package_name],
+            store=store,
+            workspace_dir=workspace_dir,
+            dry_run=False,
+            now="2026-05-19T01:00:00Z",
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
+
+    assert retry_exit_code == 2
+    assert retry_payload["executed"] is False
+    assert retry_payload["verdict"]["action"] == "block"
+    assert marker_path.exists() is False
+    assert not any(
+        isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
+        for reason in retry_payload["supply_chain_evaluation"]["reasons"]
+    )
 
 
 def test_guard_protect_retry_runs_after_cached_advisory_package_approval(
