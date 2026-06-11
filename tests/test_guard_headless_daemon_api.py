@@ -476,6 +476,68 @@ def test_supply_chain_package_firewall_install_requires_reconnect_when_cloud_aut
     assert payload["entitlement"]["tier"] == "unknown"
 
 
+def test_supply_chain_package_firewall_status_self_heals_connected_cloud_auth_without_cached_entitlement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    seed_connected_oauth_without_entitlement,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    seed_connected_oauth_without_entitlement(store)
+    calls: list[str] = []
+
+    def fake_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:
+        assert current_store is store
+        calls.append("proof")
+        current_store.record_latest_guard_connect_sync_success(
+            sync_payload={"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1},
+            now="2026-06-05T01:41:00+00:00",
+        )
+        return {"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1}
+
+    def fake_sync_supply_chain_bundle(current_store: GuardStore) -> dict[str, object]:
+        assert current_store is store
+        calls.append("bundle")
+        current_store.set_sync_payload(
+            "supply_chain_bundle_entitlement",
+            {
+                "bundle_version": "bundle-version-test",
+                "key_id": "bundle-key-test",
+                "policy_hash": "policy-hash-test",
+                "tier": "pro",
+                "workspace_id": "workspace-1",
+            },
+            "2026-06-05T01:41:05+00:00",
+        )
+        return {"bundle_version": "bundle-version-test", "tier": "pro"}
+
+    monkeypatch.setattr(local_supply_chain_module, "sync_local_guard_cloud_proof", fake_sync_local_guard_cloud_proof)
+    monkeypatch.setattr(local_supply_chain_module, "sync_supply_chain_bundle", fake_sync_supply_chain_bundle)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims",
+                method="GET",
+                token=token,
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert calls == ["proof", "bundle"]
+    assert payload["entitlement"] == {
+        "allowed": True,
+        "reason": "paid_entitlement_active",
+        "tier": "pro",
+        "upgrade_cta": None,
+    }
+    assert payload["actions"]["install"] == "available"
+
+
 def test_supply_chain_package_firewall_install_self_heals_retry_required_cloud_auth(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

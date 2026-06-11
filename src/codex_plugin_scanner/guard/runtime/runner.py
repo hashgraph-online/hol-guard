@@ -2341,6 +2341,15 @@ def _refresh_guard_oauth_access_token(
     dpop_nonce: str | None = None
     nonce_retry_count = 0
     while True:
+        try:
+            dpop_proof = _sign_guard_dpop_proof(
+                request_url=token_endpoint,
+                method="POST",
+                dpop_key_material=dpop_key_material,
+                nonce=dpop_nonce,
+            )
+        except (RuntimeError, TypeError, ValueError) as error:
+            raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
         request = urllib.request.Request(
             token_endpoint,
             data=request_body,
@@ -2349,12 +2358,7 @@ def _refresh_guard_oauth_access_token(
                 "Content-Type": "application/x-www-form-urlencoded",
                 "Accept": "application/json",
                 "User-Agent": _GUARD_SYNC_USER_AGENT,
-                "DPoP": _sign_guard_dpop_proof(
-                    request_url=token_endpoint,
-                    method="POST",
-                    dpop_key_material=dpop_key_material,
-                    nonce=dpop_nonce,
-                ),
+                "DPoP": dpop_proof,
             },
         )
         try:
