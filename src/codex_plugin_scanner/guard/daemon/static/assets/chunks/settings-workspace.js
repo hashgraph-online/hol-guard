@@ -2108,11 +2108,20 @@ function buildClearReviewQueuePayload(input) {
 function resolveTotpSetupStep(enrollment) {
   return enrollment !== null ? "scan" : "confirm";
 }
-function shouldShowApprovalPasswordCurrentField(wasConfigured, newPassword, confirmPassword) {
+function shouldShowApprovalPasswordCurrentField(wasConfigured, newPassword, confirmPassword, gateSettingsChanged) {
   if (!wasConfigured) {
     return false;
   }
-  return newPassword.trim().length > 0 || confirmPassword.trim().length > 0;
+  if (newPassword.trim().length > 0 || confirmPassword.trim().length > 0) {
+    return true;
+  }
+  return gateSettingsChanged;
+}
+function hasApprovalGateSettingsChanged(gateConfig, enabled, cooldownSeconds, strictAllDecisions) {
+  if (gateConfig === null) {
+    return false;
+  }
+  return enabled !== gateConfig.enabled || cooldownSeconds !== gateConfig.cooldown_seconds || strictAllDecisions !== gateConfig.strict_all_decisions;
 }
 const actionOptions = [
   { value: "allow", label: "Allow without asking" },
@@ -3577,10 +3586,17 @@ const cooldownOptions = [
 ];
 function ApprovalGateCard(props) {
   const wasConfigured = props.gateConfig?.configured === true;
+  const gateSettingsChanged = hasApprovalGateSettingsChanged(
+    props.gateConfig,
+    props.enabled,
+    props.cooldownSeconds,
+    props.strictAllDecisions
+  );
   const showCurrentPassword = shouldShowApprovalPasswordCurrentField(
     wasConfigured,
     props.newPassword,
-    props.confirmPassword
+    props.confirmPassword,
+    gateSettingsChanged
   );
   const changingPassword = props.newPassword.trim().length > 0 || props.confirmPassword.trim().length > 0;
   const cooldownActive = props.gateConfig?.cooldown_active === true;
@@ -3607,7 +3623,7 @@ function ApprovalGateCard(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval password" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: wasConfigured ? "Guard asks for this password before allow or trust changes stick." : "Choose a password. Guard will ask for it before allow or trust changes stick." }),
-        wasConfigured ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-slate-500", children: changingPassword ? "Enter your current password below, then save settings to apply the new one." : "Leave the fields below empty to keep your current password." }) : null,
+        wasConfigured ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-slate-500", children: changingPassword ? "Enter your current password below, then save settings to apply the new one." : gateSettingsChanged ? "Enter your current password below, then save settings to apply these gate changes." : "Leave the fields below empty to keep your current password." }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3", children: [
           showCurrentPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Current password" }),
@@ -3862,6 +3878,11 @@ function TotpSetupModal(props) {
                 autoComplete: "current-password",
                 value: props.actionPassword,
                 onChange: props.onActionPasswordChange,
+                onKeyDown: (event) => {
+                  if (event.key === "Enter" && props.actionPassword.trim().length > 0 && props.pending === null) {
+                    props.onConfirmPassword();
+                  }
+                },
                 className: "mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               }
             )
@@ -3894,6 +3915,11 @@ function TotpSetupModal(props) {
                   maxLength: 6,
                   value: props.totpCode,
                   onChange: props.onTotpCodeChange,
+                  onKeyDown: (event) => {
+                    if (event.key === "Enter" && props.totpCode.trim().length > 0 && props.pending === null) {
+                      props.onVerify();
+                    }
+                  },
                   placeholder: "123456",
                   className: "mt-2 min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                 }
@@ -3916,6 +3942,7 @@ export {
   buildTotpQrImageOptions,
   formatTotpEnrollmentExpiry,
   formatTotpManualKey,
+  hasApprovalGateSettingsChanged,
   hasUnsavedChanges,
   isFineTuningEditable,
   resolveFineTuningSectionDescription,

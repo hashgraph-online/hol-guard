@@ -9,6 +9,7 @@ import {
   isFineTuningEditable,
   resolveTotpSetupStep,
   shouldShowApprovalPasswordCurrentField,
+  hasApprovalGateSettingsChanged,
 } from "./settings-workspace";
 import { repairApprovalCenter, setupDesktopNotifications } from "./guard-api";
 
@@ -91,14 +92,27 @@ assert(
 );
 
 assert(
-  shouldShowApprovalPasswordCurrentField(true, "", "") === false,
+  shouldShowApprovalPasswordCurrentField(true, "", "", false) === false,
   "approval-password: hide current field until user starts a password change",
 );
 assert(
-  shouldShowApprovalPasswordCurrentField(true, "next-password", "") === true,
+  shouldShowApprovalPasswordCurrentField(true, "next-password", "", false) === true,
   "approval-password: show current field when new password is entered",
 );
 assert(
-  shouldShowApprovalPasswordCurrentField(false, "first-password", "first-password") === false,
+  shouldShowApprovalPasswordCurrentField(true, "", "", true) === true,
+  "approval-password: show current field when gate settings changed",
+);
+assert(
+  shouldShowApprovalPasswordCurrentField(false, "first-password", "first-password", false) === false,
   "approval-password: first-time setup does not ask for a current password",
+);
+assert(
+  hasApprovalGateSettingsChanged(
+    { enabled: true, configured: true, cooldown_seconds: 0, strict_all_decisions: false, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: false, totp_enabled: false, totp_pending: false },
+    true,
+    900,
+    false,
+  ) === true,
+  "approval-password: cooldown edits count as gate setting changes",
 );
