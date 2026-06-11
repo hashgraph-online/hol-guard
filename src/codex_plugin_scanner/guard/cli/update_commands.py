@@ -133,7 +133,7 @@ def run_guard_update(
         resulting_version,
     )
     payload["status"] = _success_status(payload)
-    payload["changed"] = payload["status"] == "updated"
+    payload["changed"] = _version_changed(current_version, resulting_version) or payload["status"] == "updated"
     stale_retry_command = _stale_retry_command(payload)
     if stale_retry_command:
         payload["retry_command"] = stale_retry_command
@@ -253,6 +253,16 @@ def _success_status(payload: dict[str, object]) -> str:
 def _is_stale_install(payload: dict[str, object]) -> bool:
     version_check = payload.get("version_check")
     return isinstance(version_check, dict) and version_check.get("update_available") is True
+
+
+def _version_changed(current_version: str, resulting_version: str) -> bool:
+    return (
+        bool(current_version)
+        and bool(resulting_version)
+        and current_version != "unknown"
+        and resulting_version != "unknown"
+        and current_version != resulting_version
+    )
 
 
 def _merge_version_checks(

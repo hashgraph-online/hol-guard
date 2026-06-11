@@ -299,6 +299,7 @@ def test_update_marks_partial_pypi_repair_as_stale(monkeypatch: pytest.MonkeyPat
 
     assert exit_code == 0
     assert payload["status"] == "stale"
+    assert payload["changed"] is True
     assert payload["resulting_version"] == "2.0.400"
     assert "behind PyPI 2.0.489" in str(payload["message"])
 
