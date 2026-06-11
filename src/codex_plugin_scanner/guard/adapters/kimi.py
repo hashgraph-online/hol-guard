@@ -19,9 +19,8 @@ except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redef]
 
 
-_KIMI_HOME_ENV_VARS = ("KIMI_CODE_HOME", "KIMI_HOME")
-_KIMI_PRIMARY_DIR = ".kimi-code"
-_KIMI_LEGACY_DIR = ".kimi"
+_KIMI_HOME_ENV_VAR = "KIMI_CODE_HOME"
+_KIMI_DIR = ".kimi-code"
 _KIMI_CONFIG_FILE = "config.toml"
 _KIMI_MCP_FILE = "mcp.json"
 
@@ -46,32 +45,29 @@ class KimiHarnessAdapter(HarnessAdapter):
 
     @staticmethod
     def _kimi_home_dir(context: HarnessContext) -> Path:
-        for env_var in _KIMI_HOME_ENV_VARS:
-            value = os.environ.get(env_var)
-            if value:
-                return Path(value).expanduser().resolve()
+        value = os.environ.get(_KIMI_HOME_ENV_VAR)
+        if value:
+            return Path(value).expanduser().resolve()
         return context.home_dir
 
     @classmethod
     def _config_candidates(cls, context: HarnessContext) -> list[tuple[Path, str]]:
         home = cls._kimi_home_dir(context)
-        candidates: list[tuple[Path, str]] = []
-        for base_dir in (_KIMI_PRIMARY_DIR, _KIMI_LEGACY_DIR):
-            candidates.append((home / base_dir / _KIMI_CONFIG_FILE, "global"))
+        candidates: list[tuple[Path, str]] = [
+            (home / _KIMI_DIR / _KIMI_CONFIG_FILE, "global"),
+        ]
         if context.workspace_dir is not None:
-            for base_dir in (_KIMI_PRIMARY_DIR, _KIMI_LEGACY_DIR):
-                candidates.append((context.workspace_dir / base_dir / _KIMI_CONFIG_FILE, "project"))
+            candidates.append((context.workspace_dir / _KIMI_DIR / _KIMI_CONFIG_FILE, "project"))
         return candidates
 
     @classmethod
     def _mcp_candidates(cls, context: HarnessContext) -> list[tuple[Path, str]]:
         home = cls._kimi_home_dir(context)
-        candidates: list[tuple[Path, str]] = []
-        for base_dir in (_KIMI_PRIMARY_DIR, _KIMI_LEGACY_DIR):
-            candidates.append((home / base_dir / _KIMI_MCP_FILE, "global"))
+        candidates: list[tuple[Path, str]] = [
+            (home / _KIMI_DIR / _KIMI_MCP_FILE, "global"),
+        ]
         if context.workspace_dir is not None:
-            for base_dir in (_KIMI_PRIMARY_DIR, _KIMI_LEGACY_DIR):
-                candidates.append((context.workspace_dir / base_dir / _KIMI_MCP_FILE, "project"))
+            candidates.append((context.workspace_dir / _KIMI_DIR / _KIMI_MCP_FILE, "project"))
         return candidates
 
     @staticmethod
@@ -88,12 +84,12 @@ class KimiHarnessAdapter(HarnessAdapter):
     def policy_path(self, context: HarnessContext) -> Path:
         home = self._kimi_home_dir(context)
         if context.workspace_dir is not None:
-            return context.workspace_dir / _KIMI_PRIMARY_DIR / _KIMI_CONFIG_FILE
-        return home / _KIMI_PRIMARY_DIR / _KIMI_CONFIG_FILE
+            return context.workspace_dir / _KIMI_DIR / _KIMI_CONFIG_FILE
+        return home / _KIMI_DIR / _KIMI_CONFIG_FILE
 
     def _managed_config_path(self, context: HarnessContext) -> Path:
         home = self._kimi_home_dir(context)
-        return home / _KIMI_PRIMARY_DIR / _KIMI_CONFIG_FILE
+        return home / _KIMI_DIR / _KIMI_CONFIG_FILE
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
         artifacts: list[GuardArtifact] = []
@@ -287,6 +283,7 @@ class KimiHarnessAdapter(HarnessAdapter):
 
     @staticmethod
     def _build_managed_block(hook_command: str) -> str:
+        escaped_command = _toml_escape(hook_command)
         lines = [
             _GUARD_MANAGED_BEGIN,
             "# The hooks below are managed by HOL Guard. Do not edit manually.",
@@ -295,11 +292,16 @@ class KimiHarnessAdapter(HarnessAdapter):
             lines.extend([
                 "[[hooks]]",
                 f'event = "{event}"',
-                f'command = "{hook_command}"',
+                f'command = "{escaped_command}"',
                 "timeout = 30",
             ])
         lines.append(_GUARD_MANAGED_END)
         return "\n".join(lines)
+
+
+def _toml_escape(value: str) -> str:
+    """Escape backslashes and double quotes for a TOML double-quoted string."""
+    return value.replace("\\", "\\\\").replace('"', "\\\"")
 
 
 def _remove_managed_block(text: str) -> str:

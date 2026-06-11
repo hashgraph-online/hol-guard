@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import json
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -121,18 +125,6 @@ command = "b.sh"
         assert "kimi:global:hook:pretooluse:0" in hook_ids
         assert "kimi:global:hook:posttooluse:1" in hook_ids
 
-    def test_legacy_kimi_home_config_detected(self, tmp_path: Path) -> None:
-        ctx = _ctx(tmp_path)
-        _write_toml(
-            ctx.home_dir / ".kimi" / "config.toml",
-            '''[[hooks]]
-event = "PreToolUse"
-command = "legacy.sh"
-''',
-        )
-        result = KimiHarnessAdapter().detect(ctx)
-        assert any(a.artifact_id == "kimi:global:hook:pretooluse:0" for a in result.artifacts)
-
     def test_workspace_config_detected(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
         assert ctx.workspace_dir is not None
@@ -225,6 +217,19 @@ command = "user-format.sh"
         config_path = ctx.home_dir / ".kimi-code" / "config.toml"
         text = config_path.read_text(encoding="utf-8")
         assert text.count("BEGIN HOL GUARD MANAGED HOOKS") == 1
+
+
+class TestKimiManagedBlock:
+    def test_managed_block_escapes_quotes_and_backslashes(self) -> None:
+        from codex_plugin_scanner.guard.adapters.kimi import _toml_escape
+
+        command = 'python -c "print(\\"hello\\")"'
+        block = KimiHarnessAdapter._build_managed_block(command)
+        parsed = tomllib.loads(block)
+        hooks = parsed.get("hooks", [])
+        assert len(hooks) == 5
+        assert hooks[0]["command"] == command
+        assert _toml_escape('a"b\\c') == 'a\\"b\\\\c'
 
 
 class TestKimiLaunchCommand:

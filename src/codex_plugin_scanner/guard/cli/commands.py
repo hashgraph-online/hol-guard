@@ -3025,11 +3025,15 @@ def run_guard_command(
             args.harness = runtime_harness.strip()
         else:
             args.harness = resolve_runtime_hook_harness(args.harness)
-        payload = _load_hook_payload(getattr(args, "event_file", None), input_text=input_text)
+        payload = _load_hook_payload(
+            getattr(args, "event_file", None),
+            input_text=input_text,
+            harness=args.harness,
+        )
         if _canonical_harness_name(args.harness) == "cursor":
             from ..adapters.cursor_hooks import prepare_cursor_hook_payload
 
-            payload = _normalize_hook_payload(prepare_cursor_hook_payload(payload))
+            payload = _normalize_hook_payload(prepare_cursor_hook_payload(payload), harness=args.harness)
         managed_install = _managed_install_for(store, args.harness)
         workspace_was_explicit = workspace is not None
         runtime_workspace = workspace
@@ -4294,9 +4298,7 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
 
 def _should_emit_native_hook_response(args: argparse.Namespace) -> bool:
     canonical = _canonical_harness_name(args.harness)
-    if canonical in {"claude-code", "codex"} and not getattr(args, "json", False):
-        return True
-    return canonical == "kimi" and not getattr(args, "json", False)
+    return canonical in {"claude-code", "codex", "kimi"} and not getattr(args, "json", False)
 
 
 def _should_emit_claude_native_pretooluse_notice(
@@ -7220,15 +7222,20 @@ def _approval_surface_policy_for_flow(config_policy: str, approval_flow: dict[st
     return config_policy
 
 
-def _load_hook_payload(event_file: str | None, *, input_text: str | None = None) -> dict[str, object]:
+def _load_hook_payload(
+    event_file: str | None,
+    *,
+    input_text: str | None = None,
+    harness: str | None = None,
+) -> dict[str, object]:
     if event_file:
         payload = json.loads(Path(event_file).read_text(encoding="utf-8"))
-        return _normalize_hook_payload(payload) if isinstance(payload, dict) else {}
+        return _normalize_hook_payload(payload, harness=harness) if isinstance(payload, dict) else {}
     raw = input_text.strip() if isinstance(input_text, str) else sys.stdin.read().strip()
     if not raw:
         return {}
     payload = json.loads(raw)
-    return _normalize_hook_payload(payload) if isinstance(payload, dict) else {}
+    return _normalize_hook_payload(payload, harness=harness) if isinstance(payload, dict) else {}
 
 
 _ACTION_ENVELOPE_HARNESSES = frozenset(
@@ -7259,7 +7266,11 @@ def _action_envelope_json(envelope: GuardActionEnvelope | None) -> dict[str, obj
     return envelope.to_dict() if envelope is not None else None
 
 
-def _normalize_hook_payload(payload: dict[str, object]) -> dict[str, object]:
+def _normalize_hook_payload(
+    payload: dict[str, object],
+    *,
+    harness: str | None = None,
+) -> dict[str, object]:
     normalized = dict(payload)
     for source_key, target_key in (
         ("artifactId", "artifact_id"),
@@ -7293,7 +7304,8 @@ def _normalize_hook_payload(payload: dict[str, object]) -> dict[str, object]:
     if arguments is not None:
         normalized["tool_input"] = arguments
         normalized["arguments"] = arguments
-    normalized["prompt"] = _normalize_kimi_prompt(normalized.get("prompt"))
+    if harness is not None and _canonical_harness_name(harness) == "kimi":
+        normalized["prompt"] = _normalize_kimi_prompt(normalized.get("prompt"))
     return normalized
 
 

@@ -284,7 +284,7 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
     HarnessProtectionContract(
         harness="kimi",
         install_aliases=("kimi", "kimi-code", "kimi-cli"),
-        config_paths=("~/.kimi-code/config.toml", "~/.kimi/config.toml"),
+        config_paths=("~/.kimi-code/config.toml",),
         event_surfaces=("shell", "prompt"),
         native_approval=False,
         browser_fallback=True,
