@@ -33,7 +33,7 @@ class KimiHarnessAdapter(HarnessAdapter):
     """Discover Kimi Code CLI settings, hooks, MCP servers, and manage Guard hooks."""
 
     harness = "kimi"
-    aliases = ("kimi",)
+    aliases = ("kimi", "kimi-code", "kimi-cli")
     executable = "kimi"
     launcher_name = "kimi"
     approval_tier = "approval-center"
