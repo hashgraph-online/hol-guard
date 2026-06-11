@@ -70,6 +70,23 @@ _SENSITIVE_KEY_RE = re.compile(
     re.IGNORECASE,
 )
 _SENSITIVE_VALUE_RE = re.compile(r"(?i)(gh[pousr]_[a-z0-9_]+|sk-[a-z0-9_-]+|guard_live_[a-z0-9_-]+|bearer\s+\S+)")
+_UNSAFE_PATH_MARKERS = (
+    "".join(("/", "Users", "/")),
+    "".join(("/", "home", "/")),
+    "".join(("/", "root", "/")),
+    "".join(("\\", "Users", "\\")),
+    "".join(("/", "var", "/", "folders", "/")),
+)
+_SERIALIZER_UNSAFE_PATH_PATTERN = (
+    r"(?:^|[\s\"'=:({])(?:"
+    + "|".join(re.escape(marker) for marker in _UNSAFE_PATH_MARKERS)
+    + ")"
+)
+_SERIALIZER_UNSAFE_PATH_RE = re.compile(_SERIALIZER_UNSAFE_PATH_PATTERN, re.IGNORECASE)
+_SERIALIZER_SECRET_ASSIGNMENT_RE = re.compile(
+    r"(?i)\b(?:api[_-]?key|authorization|password|secret|token|access[_-]?token|refresh[_-]?token)\b\s*[:=]\s*(?!redacted\b)\S+",
+)
+_SERIALIZER_REDACTED_VALUE = "[REDACTED]"
 _WHITESPACE_RE = re.compile(r"\s+")
 _MCP_READ_RE = re.compile(
     r"(?<![a-z0-9])(read|reads|reading|search|searches|list|lists)(?![a-z0-9])",
@@ -221,6 +238,7 @@ def serialize_inventory_snapshot(snapshot: GuardAgentInventorySnapshot) -> dict[
     payload = _safe_json(asdict(snapshot))
     if not isinstance(payload, dict):
         raise TypeError("Inventory snapshot serialization produced invalid payload.")
+    _assert_serialized_inventory_payload_safe(payload)
     return payload
 
 
@@ -1051,6 +1069,22 @@ def _redact_command_value(value: str, home_dir: Path, workspace_dir: Path | None
     return redacted
 
 
+def _sanitize_serializer_string(value: str) -> str:
+    if _SERIALIZER_UNSAFE_PATH_RE.search(value):
+        return _SERIALIZER_REDACTED_VALUE
+    if _SENSITIVE_VALUE_RE.search(value):
+        return _SERIALIZER_REDACTED_VALUE
+    if _SERIALIZER_SECRET_ASSIGNMENT_RE.search(value):
+        return _SERIALIZER_REDACTED_VALUE
+    return value
+
+
+def _assert_serialized_inventory_payload_safe(payload: object) -> None:
+    encoded = json.dumps(payload, sort_keys=True)
+    if _SERIALIZER_UNSAFE_PATH_RE.search(encoded) or _SENSITIVE_VALUE_RE.search(encoded):
+        raise ValueError("Inventory snapshot serialization produced unsafe payload.")
+
+
 def _safe_json(value: object) -> object:
     if isinstance(value, dict):
         return {str(key): _safe_json(item) for key, item in value.items()}
@@ -1059,7 +1093,7 @@ def _safe_json(value: object) -> object:
     if isinstance(value, Path):
         return value.name
     if isinstance(value, str):
-        return value
+        return _sanitize_serializer_string(value)
     return value
 
 

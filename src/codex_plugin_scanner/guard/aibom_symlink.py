@@ -15,6 +15,7 @@ AibomPathClass = Literal["workspace_relative", "home_relative", "config_root", "
 AibomValidationState = Literal["valid", "broken", "loop", "escape_blocked", "missing"]
 
 _MAX_SYMLINK_HOPS = 16
+_MAX_SYMLINK_TARGET_BYTES = 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,7 +251,9 @@ def _content_hash_for_target(path: Path, *, home_dir: Path) -> str | None:
         if path.is_dir():
             return fingerprint_path_tree(path, home_dir=home_dir)
         if path.is_file():
-            payload = path.read_bytes()[: 1024 * 1024]
+            if path.stat().st_size > _MAX_SYMLINK_TARGET_BYTES:
+                return None
+            payload = path.read_bytes()[:_MAX_SYMLINK_TARGET_BYTES]
             return fingerprint_text(payload.decode("utf-8", errors="replace"))
     except OSError:
         return None
