@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.error
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -292,6 +293,30 @@ def sync_aibom_snapshots(
             timeout_seconds=30,
             retry_timeout_seconds=60,
         )
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            synced_at = generated_at
+            store.set_sync_payload(
+                "guard_events_v1_summary",
+                {
+                    "synced_at": synced_at,
+                    "events": 0,
+                    "accepted": 0,
+                    "skipped": 0,
+                    "sync_skipped": True,
+                    "sync_reason": "guard_events_endpoint_unavailable",
+                },
+                synced_at,
+            )
+            summary = {
+                "synced": False,
+                "skipped": True,
+                "reason": "guard_events_endpoint_unavailable",
+                "synced_at": synced_at,
+            }
+            store.set_sync_payload("aibom_sync_summary", summary, synced_at)
+            return summary
+        raise RuntimeError("Guard Cloud AIBOM sync failed due to an HTTP error.") from error
     except OSError as error:
         raise RuntimeError("Guard Cloud AIBOM sync failed due to a network error.") from error
     accepted = payload.get("accepted")
