@@ -3464,10 +3464,6 @@
     padding-block: 1.125rem;
   }
 
-  .pt-0\.5 {
-    padding-top: calc(var(--spacing) * .5);
-  }
-
   .pt-1 {
     padding-top: calc(var(--spacing) * 1);
   }
@@ -4949,7 +4945,7 @@
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
-  .focus\:ring-brand-blue:focus, .focus\:ring-brand-blue\/20:focus {
+  .focus\:ring-brand-blue\/20:focus {
     --tw-ring-color: var(--brand-blue);
   }
 

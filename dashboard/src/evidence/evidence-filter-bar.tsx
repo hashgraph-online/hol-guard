@@ -16,6 +16,7 @@ interface EvidenceFilterBarProps {
   totalCount: number;
   filteredCount: number;
   harnesses: string[];
+  hideHarnessFilter?: boolean;
 }
 
 const CATEGORY_OPTIONS = [
@@ -101,6 +102,7 @@ export function EvidenceFilterBar({
   totalCount,
   filteredCount,
   harnesses,
+  hideHarnessFilter = false,
 }: EvidenceFilterBarProps) {
   const [showMore, setShowMore] = useState(false);
 
@@ -190,7 +192,7 @@ export function EvidenceFilterBar({
     filters.search ||
     filters.time !== "all" ||
     filters.decision !== "all" ||
-    filters.harness !== "all" ||
+    (!hideHarnessFilter && filters.harness !== "all") ||
     filters.category ||
     filters.sourceScope ||
     filters.day;
@@ -250,19 +252,21 @@ export function EvidenceFilterBar({
 
       {showMore && (
         <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-slate-50/60 p-2">
-          <select
-            value={filters.harness}
-            onChange={handleHarnessChange}
-            aria-label="App filter"
-            className="min-h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-          >
-            <option value="all">All apps</option>
-            {harnesses.map((h) => (
-              <option key={h} value={h}>
-                {harnessDisplayName(h)}
-              </option>
-            ))}
-          </select>
+          {!hideHarnessFilter && (
+            <select
+              value={filters.harness}
+              onChange={handleHarnessChange}
+              aria-label="App filter"
+              className="min-h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            >
+              <option value="all">All apps</option>
+              {harnesses.map((h) => (
+                <option key={h} value={h}>
+                  {harnessDisplayName(h)}
+                </option>
+              ))}
+            </select>
+          )}
 
           <select
             value={filters.category}
@@ -317,7 +321,7 @@ export function EvidenceFilterBar({
               onRemove={handleRemoveDecision}
             />
           )}
-          {filters.harness !== "all" && (
+          {filters.harness !== "all" && !hideHarnessFilter && (
             <ActiveChip
               label={harnessDisplayName(filters.harness)}
               onRemove={handleRemoveHarness}

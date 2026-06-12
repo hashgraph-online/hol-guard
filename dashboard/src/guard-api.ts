@@ -1092,7 +1092,7 @@ export function buildDemoRuntimeSnapshot(): GuardRuntimeSnapshot {
     "This machine is connected to Guard Cloud, but the first protected session has not landed yet. Open Watched Apps while the first sync settles.";
   const dashboardUrl = "https://hol.org/guard";
   const inboxUrl = "https://hol.org/guard/inbox";
-  const fleetUrl = "https://hol.org/guard/fleet";
+  const fleetUrl = "https://hol.org/guard/protect";
   const connectUrl = "https://hol.org/guard/connect";
   return {
     generated_at: now,

@@ -1,4 +1,4 @@
-import { r as reactExports, ac as fetchApprovalPage, ad as fetchPolicy, j as jsxRuntimeExports, ae as HiMiniArrowLeft, x as HiMiniChevronRight, h as harnessDisplayName, e as GuardHero, P as ProofStrip, af as HiMiniHome, w as HiMiniBolt, O as HiMiniAdjustmentsHorizontal, A as ActionButton, S as SectionLabel, m as formatRelativeTime, v as HiMiniExclamationTriangle, a9 as Tag, ag as detectCategory, ah as CATEGORIES, B as Badge, b as EmptyState, u as useFocusTrap, ai as policyIdentityKey, s as HiMiniCloud, aj as HiMiniChartBar, d as HiMiniCheckCircle, D as HiMiniXCircle, ak as runHarnessAction, al as GuardHarnessActionError, am as HiMiniRocketLaunch, l as HiMiniShieldCheck, an as HiMiniArrowPath, ao as HiMiniTrash, ap as clearLabelForScope, q as HiMiniChevronDown, aq as formatHarnessCommand } from "../guard-dashboard.js";
+import { r as reactExports, ac as fetchApprovalPage, ad as fetchPolicy, j as jsxRuntimeExports, ae as HiMiniArrowLeft, x as HiMiniChevronRight, h as harnessDisplayName, e as GuardHero, P as ProofStrip, af as HiMiniHome, w as HiMiniBolt, O as HiMiniAdjustmentsHorizontal, A as ActionButton, S as SectionLabel, m as formatRelativeTime, v as HiMiniExclamationTriangle, a9 as Tag, ag as DEFAULT_FILTER_STATE, ah as filterEvidence, ai as sortEvidence, aj as computeMetrics, B as Badge, b as EmptyState, ak as EvidenceFilterBar, al as EvidenceInsightStrip, am as EvidenceActionList, an as EvidenceActionDetail, u as useFocusTrap, ao as policyIdentityKey, s as HiMiniCloud, ap as HiMiniChartBar, d as HiMiniCheckCircle, D as HiMiniXCircle, aq as runHarnessAction, ar as GuardHarnessActionError, as as HiMiniRocketLaunch, l as HiMiniShieldCheck, at as HiMiniArrowPath, au as HiMiniTrash, av as clearLabelForScope, aw as formatHarnessCommand } from "../guard-dashboard.js";
 const tabOrder = ["overview", "activity", "settings"];
 const TAB_DEFINITIONS = [
   { key: "overview", label: "Overview", icon: HiMiniHome },
@@ -539,90 +539,82 @@ function firstRunIntro(harness) {
   }
   return `Guard writes the ${harnessDisplayName(harness)} local configuration through the daemon. After connecting, restart the app so protected hooks load before your next agent run.`;
 }
+const ACTIVITY_PAGE_SIZE = 50;
 function AppActivityTab(props) {
-  const [filter, setFilter] = reactExports.useState("all");
-  const [timeFilter, setTimeFilter] = reactExports.useState("all");
-  const [categoryFilter, setCategoryFilter] = reactExports.useState("");
-  const [search, setSearch] = reactExports.useState("");
-  const [selectedIds, setSelectedIds] = reactExports.useState(/* @__PURE__ */ new Set());
+  const [showPending, setShowPending] = reactExports.useState(false);
+  const [filters, setFilters] = reactExports.useState(() => ({
+    ...DEFAULT_FILTER_STATE,
+    view: "actions"
+  }));
+  const [debouncedSearch, setDebouncedSearch] = reactExports.useState("");
+  const [page, setPage] = reactExports.useState(0);
   reactExports.useEffect(() => {
-    function handleKeyDown(event) {
-      if (event.key === " " && document.activeElement?.tagName !== "INPUT") {
-        const focused = document.activeElement;
-        if (focused?.closest('[role="listitem"]')) {
-          const checkbox = focused.querySelector('input[type="checkbox"]');
-          if (checkbox) {
-            event.preventDefault();
-            checkbox.click();
-          }
-        }
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    const timer = setTimeout(() => setDebouncedSearch(filters.search), 300);
+    return () => clearTimeout(timer);
+  }, [filters.search]);
+  reactExports.useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, filters.time, filters.decision, filters.category, filters.sourceScope, filters.day]);
+  const { view, time, decision, category, sourceScope, day, sort, selectedId } = filters;
+  const effectiveFilters = reactExports.useMemo(
+    () => ({
+      view,
+      time,
+      decision,
+      category,
+      sourceScope,
+      day,
+      sort,
+      selectedId,
+      search: debouncedSearch,
+      harness: props.harness
+    }),
+    [view, time, decision, category, sourceScope, day, sort, selectedId, debouncedSearch, props.harness]
+  );
+  const filtered = reactExports.useMemo(
+    () => filterEvidence(props.harnessReceipts, effectiveFilters),
+    [props.harnessReceipts, effectiveFilters]
+  );
+  const sorted = reactExports.useMemo(
+    () => sortEvidence(filtered, filters.sort),
+    [filtered, filters.sort]
+  );
+  const metrics = reactExports.useMemo(() => computeMetrics(filtered), [filtered]);
+  const selectedReceipt = reactExports.useMemo(() => {
+    if (!filters.selectedId) return null;
+    return filtered.find((receipt) => receipt.receipt_id === filters.selectedId) ?? null;
+  }, [filtered, filters.selectedId]);
+  const handleFilterChange = reactExports.useCallback((patch) => {
+    setFilters((prev) => ({ ...prev, ...patch }));
   }, []);
-  const filteredReceipts = reactExports.useMemo(() => {
-    let items = props.harnessReceipts;
-    if (filter === "allowed") items = items.filter((r) => r.policy_decision === "allow");
-    if (filter === "blocked") items = items.filter((r) => r.policy_decision === "block");
-    if (timeFilter === "today") {
-      const start = /* @__PURE__ */ new Date();
-      start.setHours(0, 0, 0, 0);
-      items = items.filter((r) => new Date(r.timestamp) >= start);
-    }
-    if (timeFilter === "week") {
-      const start = /* @__PURE__ */ new Date();
-      start.setDate(start.getDate() - 7);
-      items = items.filter((r) => new Date(r.timestamp) >= start);
-    }
-    if (categoryFilter) {
-      items = items.filter((r) => detectCategory(r) === categoryFilter);
-    }
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      items = items.filter(
-        (r) => (r.artifact_name ?? r.artifact_id).toLowerCase().includes(q)
-      );
-    }
-    return items;
-  }, [props.harnessReceipts, filter, timeFilter, search, categoryFilter]);
-  const groups = reactExports.useMemo(() => {
-    const today = [];
-    const yesterday = [];
-    const thisWeek = [];
-    const earlier = [];
-    const now = /* @__PURE__ */ new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfYesterday = new Date(startOfToday);
-    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
-    const startOfWeek = new Date(startOfToday);
-    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-    filteredReceipts.forEach((r) => {
-      const d = new Date(r.timestamp);
-      if (d >= startOfToday) today.push(r);
-      else if (d >= startOfYesterday) yesterday.push(r);
-      else if (d >= startOfWeek) thisWeek.push(r);
-      else earlier.push(r);
-    });
-    return { today, yesterday, thisWeek, earlier };
-  }, [filteredReceipts]);
+  const handleSelectId = reactExports.useCallback((id) => {
+    setFilters((prev) => ({
+      ...prev,
+      selectedId: prev.selectedId === id ? "" : id
+    }));
+  }, []);
+  const handleCloseDetail = reactExports.useCallback(() => {
+    setFilters((prev) => ({ ...prev, selectedId: "" }));
+  }, []);
+  const handleFilterCategory = reactExports.useCallback((category2) => {
+    setFilters((prev) => ({ ...prev, category: category2 }));
+  }, []);
+  const handleSortChange = reactExports.useCallback((sort2) => {
+    handleFilterChange({ sort: sort2 });
+  }, [handleFilterChange]);
+  const handleLoadMore = reactExports.useCallback(() => {
+    setPage((prev) => prev + 1);
+  }, []);
+  const handleShowActions = reactExports.useCallback(() => {
+    setShowPending(false);
+  }, []);
+  const handleShowPending = reactExports.useCallback(() => {
+    setShowPending(true);
+    setFilters((prev) => ({ ...prev, selectedId: "" }));
+  }, []);
+  const noopHarnessFilter = reactExports.useCallback((_harness) => {
+  }, []);
   const hasPending = props.pendingItems.length > 0;
-  const allReceiptIds = reactExports.useMemo(() => filteredReceipts.map((r) => r.receipt_id), [filteredReceipts]);
-  const selectedCount = selectedIds.size;
-  const toggleSelection = reactExports.useCallback((id) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-  const selectAll = reactExports.useCallback(() => {
-    setSelectedIds(new Set(allReceiptIds));
-  }, [allReceiptIds]);
-  const clearSelection = reactExports.useCallback(() => {
-    setSelectedIds(/* @__PURE__ */ new Set());
-  }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
     props.queueError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4 sm:p-5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
@@ -639,83 +631,31 @@ function AppActivityTab(props) {
         )
       ] })
     ] }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-        [
-          { key: "all", label: "All" },
-          { key: "pending", label: `Pending (${props.pendingItems.length})` },
-          { key: "allowed", label: "Allowed" },
-          { key: "blocked", label: "Blocked" }
-        ].map((c) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: () => {
-              setFilter(c.key);
-              clearSelection();
-            },
-            className: `rounded-full px-3 py-1.5 text-xs font-medium transition-all ${filter === c.key ? "bg-brand-blue text-white shadow-sm" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
-            children: c.label
-          },
-          c.key
-        )),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mx-1 h-4 w-px bg-slate-200" }),
-        CATEGORIES.slice(0, 5).map((cat) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: () => {
-              setCategoryFilter(categoryFilter === cat.key ? "" : cat.key);
-              clearSelection();
-            },
-            className: `rounded-full px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider transition-all ${categoryFilter === cat.key ? `${cat.color} bg-slate-50 shadow-sm` : "border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`,
-            children: cat.label
-          },
-          cat.key
-        )),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "ml-auto flex gap-2", children: [
-          { key: "all", label: "All time" },
-          { key: "today", label: "Today" },
-          { key: "week", label: "This week" }
-        ].map((c) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: () => {
-              setTimeFilter(c.key);
-              clearSelection();
-            },
-            className: `rounded-full px-3 py-1.5 text-xs font-medium transition-all ${timeFilter === c.key ? "bg-brand-dark text-white shadow-sm" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
-            children: c.label
-          },
-          c.key
-        )) })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          value: search,
-          onChange: (e) => {
-            setSearch(e.target.value);
-            clearSelection();
-          },
-          placeholder: "Search by name...",
-          className: "mt-3 w-full rounded-xl border border-slate-200/70 bg-white px-4 py-2.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-        }
-      )
-    ] }),
-    filter !== "pending" && filteredReceipts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+    hasPending && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
-          onClick: selectedCount === allReceiptIds.length ? clearSelection : selectAll,
-          className: "rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-brand-dark transition-colors hover:bg-slate-50",
-          children: selectedCount === allReceiptIds.length ? "Deselect all" : "Select all"
+          type: "button",
+          onClick: handleShowActions,
+          className: `rounded-full px-3 py-1.5 text-xs font-medium transition-all ${!showPending ? "bg-brand-blue text-white shadow-sm" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
+          children: "Actions"
         }
       ),
-      selectedCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-muted-foreground", children: [
-        selectedCount,
-        " selected"
-      ] })
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          onClick: handleShowPending,
+          className: `rounded-full px-3 py-1.5 text-xs font-medium transition-all ${showPending ? "bg-brand-blue text-white shadow-sm" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
+          children: [
+            "Pending (",
+            props.pendingItems.length,
+            ")"
+          ]
+        }
+      )
     ] }),
-    filter === "pending" && hasPending && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: props.pendingItems.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    showPending ? hasPending ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: props.pendingItems.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
       {
         onClick: () => props.onOpenRequest(item.request_id),
@@ -733,103 +673,54 @@ function AppActivityTab(props) {
         ]
       },
       item.request_id
-    )) }),
-    filter !== "pending" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-6", children: filteredReceipts.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    )) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EmptyState,
+      {
+        title: "No pending reviews",
+        body: "Guard will surface blocked actions here when this app needs a decision.",
+        tone: "teach"
+      }
+    ) : props.harnessReceipts.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
       {
         title: "No activity yet",
-        body: filter === "all" ? "Guard hasn't recorded any decisions for this app yet. Allow or block an action and it will appear here." : `No ${filter} decisions match your filters.`,
+        body: "Guard has not recorded any decisions for this app yet. Allow or block an action and it will appear here.",
         tone: "teach"
       }
-    ) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptGroup, { title: "Today", items: groups.today, selectedIds, onToggle: toggleSelection }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptGroup, { title: "Yesterday", items: groups.yesterday, selectedIds, onToggle: toggleSelection }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptGroup, { title: "This week", items: groups.thisWeek, selectedIds, onToggle: toggleSelection }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptGroup, { title: "Earlier", items: groups.earlier, selectedIds, onToggle: toggleSelection })
-    ] }) })
-  ] });
-}
-function ReceiptGroup({ title, items, selectedIds, onToggle }) {
-  if (items.length === 0) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: title }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-muted-foreground", children: [
-        items.length,
-        " events"
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: items.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsx(ExpandableReceiptRow, { receipt, selected: selectedIds.has(receipt.receipt_id), onToggle }, receipt.receipt_id)) })
-  ] });
-}
-function ExpandableReceiptRow({ receipt, selected, onToggle }) {
-  const [expanded, setExpanded] = reactExports.useState(false);
-  const decisionLabel = receipt.policy_decision === "allow" ? "Allowed" : "Blocked";
-  const name = receipt.artifact_name ?? receipt.artifact_id;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200/70 bg-white overflow-hidden", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex w-full items-start gap-2 px-4 py-3", children: [
-      onToggle !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "flex items-center pt-0.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          type: "checkbox",
-          checked: selected ?? false,
-          onChange: () => onToggle(receipt.receipt_id),
-          className: "h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue",
-          "aria-label": `Select ${name}`
-        }
-      ) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          onClick: () => setExpanded(!expanded),
-          className: "flex flex-1 items-start justify-between gap-3 text-left transition-colors hover:bg-slate-50 rounded-lg -m-1 p-1",
-          "aria-expanded": expanded,
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: decisionLabel }),
-                " ",
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-xs", children: name })
-              ] }),
-              receipt.capabilities_summary && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: receipt.capabilities_summary }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-[11px] text-muted-foreground", children: formatRelativeTime(receipt.timestamp) })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: receipt.policy_decision === "allow" ? "green" : "attention", children: receipt.policy_decision }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                HiMiniChevronDown,
-                {
-                  className: `h-4 w-4 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`,
-                  "aria-hidden": "true"
-                }
-              )
-            ] })
-          ]
-        }
-      )
-    ] }),
-    expanded && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in border-t border-slate-200/70 bg-slate-50/60 px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-1 gap-2 text-xs", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: "Action ID" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 font-mono text-brand-dark", children: receipt.artifact_id })
+    ) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: selectedReceipt ? "grid grid-cols-1 gap-3 lg:grid-cols-[1fr_340px]" : "", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          EvidenceFilterBar,
+          {
+            filters,
+            onChange: handleFilterChange,
+            totalCount: props.harnessReceipts.length,
+            filteredCount: filtered.length,
+            harnesses: [],
+            hideHarnessFilter: true
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightStrip, { metrics }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          EvidenceActionList,
+          {
+            receipts: sorted,
+            selectedId: filters.selectedId,
+            onSelectId: handleSelectId,
+            onFilterHarness: noopHarnessFilter,
+            onFilterCategory: handleFilterCategory,
+            sort: filters.sort,
+            onSortChange: handleSortChange,
+            page,
+            pageSize: ACTIVITY_PAGE_SIZE,
+            onLoadMore: handleLoadMore,
+            hideHarnessColumn: true,
+            tableLabel: `${harnessDisplayName(props.harness)} actions`
+          }
+        )
       ] }),
-      receipt.artifact_hash && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: "Hash" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 font-mono text-brand-dark", children: receipt.artifact_hash })
-      ] }),
-      receipt.capabilities_summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: "Capabilities" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-brand-dark", children: receipt.capabilities_summary })
-      ] }),
-      receipt.provenance_summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: "Provenance" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-brand-dark", children: receipt.provenance_summary })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: "Time" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 font-mono text-brand-dark", children: new Date(receipt.timestamp).toLocaleString() })
-      ] })
-    ] }) })
+      selectedReceipt && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceActionDetail, { receipt: selectedReceipt, onClose: handleCloseDetail }) })
+    ] })
   ] });
 }
 function policyDecisionTitle(policy) {

@@ -177,6 +177,12 @@ function HomeWorkspace(props) {
   const [clearError, setClearError] = reactExports.useState(null);
   const [clearSubmitting, setClearSubmitting] = reactExports.useState(false);
   const [shareOpen, setShareOpen] = reactExports.useState(false);
+  const handleShareOpen = reactExports.useCallback(() => {
+    setShareOpen(true);
+  }, []);
+  const handleShareClose = reactExports.useCallback(() => {
+    setShareOpen(false);
+  }, []);
   const toastTimerRef = reactExports.useRef(null);
   const analyticsEnabled = props.runtime.kind === "ready" && (props.runtime.snapshot?.receipt_count ?? 0) > 0;
   const analyticsState = useReceiptAnalytics(analyticsEnabled);
@@ -260,7 +266,7 @@ function HomeWorkspace(props) {
     () => snapshot ? resolveCloudUpsellVisible(queuedCount, snapshot.cloud_state) : false,
     [snapshot, queuedCount]
   );
-  const ctaAction = state.ctaTarget === "inbox" ? props.onOpenInbox : state.ctaTarget === "fleet" ? props.onOpenFleet : props.onOpenEvidence;
+  const ctaAction = state.ctaTarget === "inbox" ? props.onOpenInbox : state.ctaTarget === "protect" ? props.onOpenFleet : props.onOpenEvidence;
   if (props.runtime.kind === "loading" || props.requests.kind === "loading") {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-36 w-full" }),
@@ -289,7 +295,7 @@ function HomeWorkspace(props) {
       {
         analytics: analyticsState.data,
         runtime: snapshot,
-        onClose: () => setShareOpen(false)
+        onClose: handleShareClose
       }
     ) : null,
     toastMessage && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-fade-in fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border border-brand-green/25 bg-brand-green-bg/90 px-4 py-3 shadow-lg backdrop-blur", children: [
@@ -317,7 +323,7 @@ function HomeWorkspace(props) {
         analyticsLoading: analyticsState.kind === "loading" && analyticsEnabled,
         runtime: snapshot,
         onOpenInsights: props.onOpenInsights,
-        onShare: () => setShareOpen(true)
+        onShare: handleShareOpen
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(StreakMilestoneBanner, { streak }),
@@ -509,7 +515,7 @@ function deriveHomeState(input) {
       headline: "Guard is ready",
       subheadline: "Connect your first AI app so Guard can start protecting it.",
       ctaLabel: "Open Protect",
-      ctaTarget: "fleet"
+      ctaTarget: "protect"
     };
   }
   if (!hasActiveInstalls && hasObservedHarnesses) {
@@ -518,7 +524,7 @@ function deriveHomeState(input) {
       headline: "Finish setup",
       subheadline: "Guard detected apps but they need setup to be fully protected.",
       ctaLabel: "Open Protect",
-      ctaTarget: "fleet"
+      ctaTarget: "protect"
     };
   }
   return {

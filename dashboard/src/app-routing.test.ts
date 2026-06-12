@@ -1,4 +1,4 @@
-import { parseAppDetail, resolveView, viewTitle } from "./app";
+import { parseAppDetail, PROTECT_ROUTE, resolveView, viewTitle } from "./app";
 import { harnessDisplayName, isDisplayableHarness, normalizeHarnessFilter, normalizeHarnessSlug } from "./approval-center-utils";
 
 function assert(condition: boolean, message: string): void {
@@ -19,6 +19,7 @@ assert(parseAppDetail("/apps/opencode/settings") === null, "nested app route is 
 assert(resolveView("/apps/opencode") === "app-detail", "valid app route opens app detail");
 assert(resolveView("/apps/*") === "fleet", "wildcard app route falls back to fleet");
 assert(resolveView("/apps/%2A") === "fleet", "encoded wildcard app route falls back to fleet");
+assert(resolveView(PROTECT_ROUTE) === "fleet", "/protect resolves to protect workspace view");
 assert(resolveView("/about") === "about", "/about resolves to about view");
 assert(viewTitle("about") === "About", "about view title is About");
 

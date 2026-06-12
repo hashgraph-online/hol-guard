@@ -119,7 +119,7 @@ const paidSnapshot: GuardRuntimeSnapshot = {
     sync_configured: true,
     dashboard_url: "https://hol.org/guard",
     inbox_url: "https://hol.org/guard/inbox",
-    fleet_url: "https://hol.org/guard/fleet",
+    fleet_url: "https://hol.org/guard/protect",
     connect_url: "https://hol.org/guard/connect",
   },
   cloud_sync_health: {
@@ -145,7 +145,7 @@ const degradedSnapshot: GuardRuntimeSnapshot = {
     sync_configured: true,
     dashboard_url: "https://hol.org/guard",
     inbox_url: "https://hol.org/guard/inbox",
-    fleet_url: "https://hol.org/guard/fleet",
+    fleet_url: "https://hol.org/guard/protect",
     connect_url: "https://hol.org/guard/connect",
   },
   cloud_sync_health: {

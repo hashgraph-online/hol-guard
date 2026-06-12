@@ -122,6 +122,8 @@ function parseRequestId(pathname: string): string | null {
   return null;
 }
 
+export const PROTECT_ROUTE = "/protect";
+
 type AppView = "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health" | "about";
 
 export function viewTitle(view: AppView): string {
@@ -160,7 +162,7 @@ export function resolveView(pathname: string): AppView {
   if (pathname === "/settings") {
     return "settings";
   }
-  if (pathname === "/fleet") {
+  if (pathname === PROTECT_ROUTE) {
     return "fleet";
   }
   if (pathname === "/evidence") {
@@ -423,7 +425,7 @@ export function App() {
   }, [activeRequestId]);
 
   const handleOpenInbox = useCallback(() => navigate("/inbox"), []);
-  const handleOpenFleet = useCallback(() => navigate("/fleet"), []);
+  const handleOpenFleet = useCallback(() => navigate(PROTECT_ROUTE), []);
   const handleOpenEvidence = useCallback(() => navigate("/evidence"), []);
   const handleOpenInsights = useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenSettings = useCallback(() => navigate("/settings"), []);

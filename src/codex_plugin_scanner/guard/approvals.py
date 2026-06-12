@@ -30,7 +30,7 @@ from .store import GuardStore
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
 GUARD_INBOX_URL = f"{GUARD_DASHBOARD_URL}/inbox"
-GUARD_FLEET_URL = f"{GUARD_DASHBOARD_URL}/fleet"
+GUARD_FLEET_URL = f"{GUARD_DASHBOARD_URL}/protect"
 GUARD_CONNECT_URL = f"{GUARD_DASHBOARD_URL}/connect"
 _WORKSPACE_SCOPED_RUNTIME_ARTIFACT_TYPES = frozenset(
     {
@@ -1268,7 +1268,7 @@ def _resolve_guard_urls(sync_url: object) -> tuple[str, str, str, str]:
     return (
         dashboard_url,
         f"{dashboard_url}/inbox",
-        f"{dashboard_url}/fleet",
+        f"{dashboard_url}/protect",
         f"{dashboard_url}/connect",
     )
 

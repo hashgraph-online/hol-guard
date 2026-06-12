@@ -78,7 +78,7 @@ export const paidStateSnapshot = {
     sync_configured: true,
     dashboard_url: "https://hol.org/guard",
     inbox_url: "https://hol.org/guard/inbox",
-    fleet_url: "https://hol.org/guard/fleet",
+    fleet_url: "https://hol.org/guard/protect",
     connect_url: "https://hol.org/guard/connect",
   },
   cloud_sync_health: {
@@ -91,7 +91,7 @@ export const paidStateSnapshot = {
   },
   dashboard_url: "https://hol.org/guard",
   inbox_url: "https://hol.org/guard/inbox",
-  fleet_url: "https://hol.org/guard/fleet",
+  fleet_url: "https://hol.org/guard/protect",
   connect_url: "https://hol.org/guard/connect",
 };
 
@@ -108,7 +108,7 @@ export const degradedStateSnapshot = {
     sync_configured: true,
     dashboard_url: "https://hol.org/guard",
     inbox_url: "https://hol.org/guard/inbox",
-    fleet_url: "https://hol.org/guard/fleet",
+    fleet_url: "https://hol.org/guard/protect",
     connect_url: "https://hol.org/guard/connect",
   },
   cloud_sync_health: {
@@ -121,7 +121,7 @@ export const degradedStateSnapshot = {
   },
   dashboard_url: "https://hol.org/guard",
   inbox_url: "https://hol.org/guard/inbox",
-  fleet_url: "https://hol.org/guard/fleet",
+  fleet_url: "https://hol.org/guard/protect",
   connect_url: "https://hol.org/guard/connect",
 };
 
