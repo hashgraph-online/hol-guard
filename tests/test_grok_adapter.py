@@ -326,6 +326,90 @@ args = ["-y", "@modelcontextprotocol/server-github"]
         mcp = [artifact for artifact in result.artifacts if artifact.artifact_type == "mcp_server"]
         assert any(artifact.name == "github" for artifact in mcp)
 
+    def test_mcp_env_keys_and_headers_in_metadata(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        config = ctx.home_dir / ".grok" / "config.toml"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text(
+            """
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+
+[mcp_servers.github.env]
+GITHUB_TOKEN = "redacted"
+
+[mcp_servers.remote]
+url = "https://mcp.example.com/mcp"
+
+[mcp_servers.remote.headers]
+Authorization = "Bearer redacted"
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+        result = GrokHarnessAdapter().detect(ctx)
+        github = next(artifact for artifact in result.artifacts if artifact.name == "github")
+        remote = next(artifact for artifact in result.artifacts if artifact.name == "remote")
+        assert github.metadata["env_keys"] == ["GITHUB_TOKEN"]
+        assert remote.metadata["headers_keys"] == ["Authorization"]
+
+    def test_mcp_env_change_changes_artifact_hash(self, tmp_path: Path) -> None:
+        from codex_plugin_scanner.guard.consumer import artifact_hash
+
+        ctx = _ctx(tmp_path)
+        config = ctx.home_dir / ".grok" / "config.toml"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text(
+            """
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+        adapter = GrokHarnessAdapter()
+        baseline = next(artifact for artifact in adapter.detect(ctx).artifacts if artifact.name == "github")
+        config.write_text(
+            """
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+
+[mcp_servers.github.env]
+GITHUB_TOKEN = "redacted"
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+        changed = next(artifact for artifact in adapter.detect(ctx).artifacts if artifact.name == "github")
+        assert artifact_hash(baseline) != artifact_hash(changed)
+        assert changed.metadata["env_keys"] == ["GITHUB_TOKEN"]
+
+    def test_mcp_credential_env_emits_secret_risk_signals(self, tmp_path: Path) -> None:
+        from codex_plugin_scanner.guard.risk import artifact_risk_signals_typed
+
+        ctx = _ctx(tmp_path)
+        config = ctx.home_dir / ".grok" / "config.toml"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text(
+            """
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+
+[mcp_servers.github.env]
+GITHUB_TOKEN = "redacted"
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+        artifact = next(artifact for artifact in GrokHarnessAdapter().detect(ctx).artifacts if artifact.name == "github")
+        signal_ids = {signal.signal_id for signal in artifact_risk_signals_typed(artifact)}
+        assert "secret:env-keys" in signal_ids
+        assert "secret:env-semantic" in signal_ids
+
     def test_detects_degraded_always_approve_signal(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         config = ctx.home_dir / ".grok" / "config.toml"

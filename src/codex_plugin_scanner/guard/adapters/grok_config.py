@@ -6,6 +6,7 @@ import json
 import re
 from pathlib import Path
 
+from ..aibom_detection import enrich_mcp_server_metadata
 from ..models import GuardArtifact
 from .base import _json_payload
 
@@ -169,6 +170,22 @@ def append_permission_artifacts(
             )
 
 
+def _mcp_env_keys(server_config: dict[str, object]) -> list[str]:
+    keys: set[str] = set()
+    for field in ("env", "environment"):
+        value = server_config.get(field)
+        if isinstance(value, dict):
+            keys.update(key for key in value if isinstance(key, str))
+    return sorted(keys)
+
+
+def _mcp_headers_keys(server_config: dict[str, object]) -> list[str]:
+    headers = server_config.get("headers")
+    if not isinstance(headers, dict):
+        return []
+    return sorted(key for key in headers if isinstance(key, str))
+
+
 def append_mcp_artifacts(
     *,
     harness: str,
@@ -195,6 +212,17 @@ def append_mcp_artifacts(
             continue
         raw_args = server_config.get("args")
         args = tuple(str(item) for item in raw_args) if isinstance(raw_args, list) else ()
+        transport = "http" if isinstance(url, str) else "stdio"
+        metadata = enrich_mcp_server_metadata(
+            {
+                "env_keys": _mcp_env_keys(server_config),
+                "headers_keys": _mcp_headers_keys(server_config),
+            },
+            command=command if isinstance(command, str) else None,
+            args=args,
+            url=url if isinstance(url, str) else None,
+            transport=transport,
+        )
         artifacts.append(
             GuardArtifact(
                 artifact_id=f"{harness}:{scope}:mcp:{server_name}",
@@ -206,7 +234,8 @@ def append_mcp_artifacts(
                 command=command if isinstance(command, str) else None,
                 args=args,
                 url=url if isinstance(url, str) else None,
-                transport="http" if isinstance(url, str) else "stdio",
+                transport=transport,
+                metadata=metadata,
             )
         )
 
