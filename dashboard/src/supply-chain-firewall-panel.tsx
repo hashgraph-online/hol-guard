@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, forwardRef, useImperativeHandle, useRef } from "react";
 import type { ChangeEvent, MutableRefObject } from "react";
 import { HiMiniArrowPath, HiMiniExclamationTriangle } from "react-icons/hi2";
 import { ApprovalProofModal } from "./approval-proof-modal";
@@ -44,6 +44,15 @@ type ApprovalOp = {
 };
 
 type StatusFilter = FirewallStatusFilter;
+
+export type PackageFirewallPanelHandle = {
+  scrollIntoView: () => void;
+  focusUnprotected: () => void;
+  focusActionable: () => void;
+  runAudit: () => void;
+  startConnect: () => Promise<void>;
+  openShell: () => Promise<void>;
+};
 
 function actionLabel(op: PackageFirewallActionType): string {
   return op.charAt(0).toUpperCase() + op.slice(1);
@@ -115,14 +124,18 @@ function RefreshButton({ disabled, spinning, onRefresh }: RefreshButtonProps) {
   );
 }
 
-export function PackageFirewallPanel(props: {
+export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
+  props: {
   approvalGate: GuardApprovalGatePublicConfig | null;
   onStateChanged?: () => Promise<void> | void;
   onAuditCompleted?: (resultDetail: Record<string, unknown>) => void;
   onAuditRunningChange?: (running: boolean) => void;
   runAuditRef?: MutableRefObject<(() => void) | null>;
-}) {
+},
+  ref,
+) {
   const { approvalGate, onStateChanged, onAuditCompleted, onAuditRunningChange, runAuditRef } = props;
+  const rootRef = useRef<HTMLDivElement>(null);
   const [panelLoad, setPanelLoad] = useState<PanelLoadState>({ phase: "loading" });
   const [pendingOp, setPendingOp] = useState<PendingOp | null>(null);
   const [lastCompleted, setLastCompleted] = useState<CompletedOp | null>(null);
@@ -348,6 +361,30 @@ export function PackageFirewallPanel(props: {
     setInterceptProof(null);
   }, []);
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      scrollIntoView: () => {
+        rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      },
+      focusUnprotected: () => {
+        setStatusFilter("unprotected");
+        setManagerFilter("");
+      },
+      focusActionable: () => {
+        setStatusFilter("actionable");
+        setManagerFilter("");
+      },
+      runAudit: () => {
+        handleAudit();
+      },
+      startConnect: handleStartConnect,
+      openShell: handleOpenShell,
+    }),
+    [handleAudit, handleOpenShell, handleStartConnect],
+  );
+
+
   const managerDrawerShim =
     panelLoad.phase === "loaded" && managerDrawerTarget !== null
       ? panelLoad.data.package_shims.find((entry) => entry.manager === managerDrawerTarget)
@@ -355,7 +392,7 @@ export function PackageFirewallPanel(props: {
 
   const anyPending = pendingOp !== null;
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
+    <div ref={rootRef} className="rounded-2xl border border-slate-100 bg-white shadow-sm" data-testid="package-firewall-panel">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
         <div>
           <SectionLabel>Package manager firewall</SectionLabel>
@@ -448,4 +485,4 @@ export function PackageFirewallPanel(props: {
       )}
     </div>
   );
-}
+});

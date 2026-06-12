@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, S as SectionLabel, ac as Tag, ad as HiMiniMagnifyingGlass, b as EmptyState, h as harnessDisplayName, B as Badge, b3 as HiMiniDocumentText, b4 as guardAwareHref, ax as HiMiniTrash, A as ActionButton, d as HiMiniCheckCircle, b5 as HiMiniBarsArrowUp, b6 as HiMiniBarsArrowDown, m as formatRelativeTime } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, S as SectionLabel, ac as Tag, ad as HiMiniMagnifyingGlass, b as EmptyState, h as harnessDisplayName, B as Badge, b4 as HiMiniDocumentText, b5 as guardAwareHref, ax as HiMiniTrash, A as ActionButton, d as HiMiniCheckCircle, b6 as HiMiniBarsArrowUp, b7 as HiMiniBarsArrowDown, m as formatRelativeTime } from "../guard-dashboard.js";
 function groupPoliciesByHarness(policies) {
   const map = /* @__PURE__ */ new Map();
   for (const p of policies) {

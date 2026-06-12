@@ -12802,6 +12802,9 @@ function HiMiniCodeBracket(props) {
 function HiMiniCloud(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M1 12.5A4.5 4.5 0 0 0 5.5 17H15a4 4 0 0 0 1.866-7.539 3.504 3.504 0 0 0-4.504-4.272A4.5 4.5 0 0 0 4.06 8.235 4.502 4.502 0 0 0 1 12.5Z" }, "child": [] }] })(props);
 }
+function HiMiniCloudArrowUp(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M5.5 17a4.5 4.5 0 0 1-1.44-8.765 4.5 4.5 0 0 1 8.302-3.046 3.5 3.5 0 0 1 4.504 4.272A4 4 0 0 1 15 17H5.5Zm3.75-2.75a.75.75 0 0 0 1.5 0V9.66l1.95 2.1a.75.75 0 1 0 1.1-1.02l-3.25-3.5a.75.75 0 0 0-1.1 0l-3.25 3.5a.75.75 0 1 0 1.1 1.02l1.95-2.1v4.59Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniClock(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -19542,7 +19545,7 @@ function EvidenceInsightsShareModal({
   const [connectStarting, setConnectStarting] = reactExports.useState(false);
   const [connectError, setConnectError] = reactExports.useState(null);
   const cloudConnected = insightsShareCloudReady(runtime);
-  const connectMode = runtime?.cloud_state === "local_only" ? "connect" : "repair";
+  const connectMode = runtime?.cloud_state === "local_only" || runtime?.cloud_state === "paired_waiting" ? "connect" : "repair";
   const refreshConnectState = reactExports.useCallback(async () => {
     const [connectStatus, runtimeSnapshot] = await Promise.all([
       fetchGuardCloudConnectStatus(),
@@ -26187,7 +26190,7 @@ export {
   fetchRuntimeSnapshot as Z,
   updateSettings as _,
   EvidenceActivityHeatmapMini as a,
-  HiMiniInformationCircle as a$,
+  HiMiniArrowRight as a$,
   clearReviewQueue as a0,
   revokeApprovalGateCooldown as a1,
   disableApprovalGateTotp as a2,
@@ -26252,14 +26255,15 @@ export {
   clearLabelForScope as ay,
   formatHarnessCommand as az,
   EmptyState as b,
-  fetchReceipts as b0,
-  HiMiniArrowRight as b1,
-  runAuditRemediation as b2,
-  HiMiniDocumentText as b3,
-  guardAwareHref as b4,
-  HiMiniBarsArrowUp as b5,
-  HiMiniBarsArrowDown as b6,
-  HiMiniSignal as b7,
+  HiMiniCloudArrowUp as b0,
+  HiMiniInformationCircle as b1,
+  fetchReceipts as b2,
+  runAuditRemediation as b3,
+  HiMiniDocumentText as b4,
+  guardAwareHref as b5,
+  HiMiniBarsArrowUp as b6,
+  HiMiniBarsArrowDown as b7,
+  HiMiniSignal as b8,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,
