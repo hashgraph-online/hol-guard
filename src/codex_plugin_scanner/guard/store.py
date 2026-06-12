@@ -295,23 +295,7 @@ class KeychainSecretStore:
     def set_secret(self, secret_id: str, value: str) -> None:
         if not self._is_available():
             raise RuntimeError("macOS keychain command is not available")
-        prompt_payload = f"{value}\n{value}\n"
-        subprocess.run(
-            [
-                "/usr/bin/security",
-                "add-generic-password",
-                "-a",
-                secret_id,
-                "-s",
-                self.service_name,
-                "-U",
-                "-w",
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-            input=prompt_payload,
-        )
+        raise RuntimeError("macOS security CLI does not support noninteractive secret writes without argv exposure")
 
     def get_secret(self, secret_id: str) -> str | None:
         if not self._is_available():
