@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import (
@@ -71,7 +72,7 @@ def test_inventory_snapshot_serialization_redacts_raw_secrets(tmp_path: Path) ->
         redaction_report={"raw_secret_values": False, "redacted_fields": ("headers.authorization", "url.token")},
     )
 
-    payload = serialize_inventory_snapshot(snapshot)
+    payload = cast(dict[str, Any], serialize_inventory_snapshot(snapshot))
     encoded = json.dumps(payload, sort_keys=True)
 
     assert payload["agentId"] == "agent-hermes"
@@ -106,7 +107,7 @@ def test_inventory_snapshot_omits_null_optional_finding_summary() -> None:
         ),
     )
 
-    payload = serialize_inventory_snapshot(snapshot)
+    payload = cast(dict[str, Any], serialize_inventory_snapshot(snapshot))
 
     assert "summary" not in payload["findings"][0]
 
@@ -137,7 +138,7 @@ def test_inventory_snapshot_serialization_preserves_free_form_metadata_keys() ->
         ),
     )
 
-    payload = serialize_inventory_snapshot(snapshot)
+    payload = cast(dict[str, Any], serialize_inventory_snapshot(snapshot))
     schema = payload["items"][0]["metadata"]["tool_schemas"][0]["input_schema"]
 
     assert schema["properties"]["file_path"]["type"] == "string"
@@ -442,6 +443,8 @@ def test_inventory_snapshot_attaches_cisco_mcp_trust_layer_to_server_and_tool(tm
         isinstance(layer, dict)
         and layer.get("layerType") == "cisco_mcp_scanner"
         and isinstance(layer.get("metadata"), dict)
+        and layer["metadata"].get("attestationStatus") == "unsigned"
+        and layer["metadata"].get("attestation") is None
         and layer["metadata"].get("inheritedFromServerItemId") == server_item.item_id
         for layer in tool_layers
     )
@@ -691,7 +694,7 @@ def test_inventory_snapshot_maps_cisco_findings_to_redacted_inventory_evidence(t
         home_dir=tmp_path,
         cisco_runs=(cisco_run,),
     )
-    payload = serialize_inventory_snapshot(snapshot)
+    payload = cast(dict[str, Any], serialize_inventory_snapshot(snapshot))
     encoded = json.dumps(payload, sort_keys=True)
 
     assert len(payload["findings"]) == 1
