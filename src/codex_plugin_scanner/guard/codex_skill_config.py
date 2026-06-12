@@ -78,10 +78,7 @@ def load_codex_skill_config_rules(
 
 def _normalize_match_path(value: str, *, home_dir: Path) -> str:
     candidate = Path(value).expanduser()
-    if not candidate.is_absolute():
-        candidate = (home_dir / candidate).resolve()
-    else:
-        candidate = candidate.resolve()
+    candidate = (home_dir / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
     return candidate.as_posix()
 
 
@@ -95,18 +92,19 @@ def resolve_codex_skill_enabled(
     if not rules:
         return True
     skill_path = Path(config_path).expanduser()
-    if not skill_path.is_absolute():
-        skill_path = (home_dir / skill_path).resolve()
-    else:
-        skill_path = skill_path.resolve()
+    skill_path = (home_dir / skill_path).resolve() if not skill_path.is_absolute() else skill_path.resolve()
+    skill_dir_path = skill_path.parent.as_posix()
     normalized_skill_path = skill_path.as_posix()
     normalized_name = display_name.strip().lower()
     resolved: bool | None = None
     for rule in rules:
         if rule.path is not None:
             normalized_rule_path = _normalize_match_path(rule.path, home_dir=home_dir)
-            if normalized_skill_path == normalized_rule_path or normalized_skill_path.endswith(
-                normalized_rule_path
+            if (
+                normalized_skill_path == normalized_rule_path
+                or skill_dir_path == normalized_rule_path
+                or normalized_skill_path.endswith(normalized_rule_path)
+                or skill_dir_path.endswith(normalized_rule_path)
             ):
                 resolved = rule.enabled
                 continue

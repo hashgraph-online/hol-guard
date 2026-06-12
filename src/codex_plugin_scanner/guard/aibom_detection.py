@@ -127,16 +127,17 @@ def discover_shared_workspace_aibom_artifacts(
     artifacts: list[GuardArtifact] = []
     artifacts.extend(_discover_agents_md(harness, workspace_dir=workspace_dir))
     artifacts.extend(_discover_cursor_rules(harness, workspace_dir=workspace_dir))
-    artifacts.extend(
-        _discover_codex_skills(
-            harness,
-            workspace_dir=workspace_dir,
-            home_dir=home_dir,
-            skill_roots=_CODEX_WORKSPACE_SKILL_ROOTS,
-            source_scope="project",
-            artifact_scope="project",
+    if harness != "codex":
+        artifacts.extend(
+            _discover_codex_skills(
+                harness,
+                workspace_dir=workspace_dir,
+                home_dir=home_dir,
+                skill_roots=_CODEX_WORKSPACE_SKILL_ROOTS,
+                source_scope="project",
+                artifact_scope="project",
+            )
         )
-    )
     artifacts.extend(_discover_codex_marketplace_plugins(harness, workspace_dir=workspace_dir))
     return tuple(artifacts)
 

@@ -40,6 +40,26 @@ def test_load_codex_skill_config_rules_merges_home_and_workspace(tmp_path: Path)
     assert rules[1].enabled is False
 
 
+def test_resolve_codex_skill_enabled_matches_skill_directory_path(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    skill_md = home / ".codex" / "skills" / "lint" / "SKILL.md"
+    skill_md.parent.mkdir(parents=True)
+    skill_md.write_text("# lint\n", encoding="utf-8")
+    (home / ".codex").mkdir(exist_ok=True)
+    (home / ".codex" / "config.toml").write_text(
+        f'[[skills.config]]\npath = "{skill_md.parent}"\nenabled = false\n',
+        encoding="utf-8",
+    )
+    rules = load_codex_skill_config_rules(home_dir=home, workspace_dir=None)
+    assert not resolve_codex_skill_enabled(
+        config_path=str(skill_md),
+        display_name="lint",
+        rules=rules,
+        home_dir=home,
+    )
+
+
 def test_resolve_codex_skill_enabled_matches_path_and_name(tmp_path: Path) -> None:
     home = tmp_path / "home"
     home.mkdir()
