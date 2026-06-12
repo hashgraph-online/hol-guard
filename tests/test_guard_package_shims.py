@@ -660,6 +660,24 @@ def test_guard_package_shims_repair_command_regenerates_stale_manager(tmp_path: 
     assert shim_path.read_text(encoding="utf-8") == current_content
 
 
+def test_guard_package_shims_status_ignores_dynamic_generated_paths(tmp_path: Path) -> None:
+    home_dir = tmp_path / "guard-home"
+    install_workspace = tmp_path / "workspace-a"
+    status_workspace = tmp_path / "workspace-b"
+    install_workspace.mkdir(parents=True, exist_ok=True)
+    status_workspace.mkdir(parents=True, exist_ok=True)
+    install_package_shims(
+        HarnessContext(home_dir=home_dir, workspace_dir=install_workspace, guard_home=home_dir),
+        managers=("npm",),
+    )
+
+    status = package_shim_status(
+        HarnessContext(home_dir=home_dir, workspace_dir=status_workspace, guard_home=home_dir),
+    )
+
+    assert status["manager_details"][0]["integrity"] == "ok"
+
+
 def test_guard_package_shims_install_does_not_mutate_path_environment(
     tmp_path: Path,
     capsys,
