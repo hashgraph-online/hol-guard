@@ -307,7 +307,7 @@ const GENERIC_REASONS = [
   "local e2e approval proof"
 ];
 function isCloudManagedPolicy(source) {
-  return source === "cloud-sync" || source === "team-policy" || source === "cloud-bundle";
+  return source === "cloud-sync" || source === "team-policy" || source === "policy-bundle";
 }
 function resolvePolicySourceLabel(source) {
   if (isCloudManagedPolicy(source)) {
@@ -486,8 +486,21 @@ function resolvePolicyEvidenceHref(policy) {
   return query ? `/evidence?${query}` : "/evidence";
 }
 function resolveCloudPolicyControlsUrl(snapshot) {
-  const url = snapshot.dashboard_url?.trim();
-  return url || null;
+  const dashboardUrl = snapshot.dashboard_url?.trim();
+  if (dashboardUrl) {
+    return dashboardUrl;
+  }
+  const connectUrl = snapshot.connect_url?.trim();
+  return connectUrl && connectUrl.length > 0 ? connectUrl : null;
+}
+function resolveCloudBundleSurfaceClass(tone) {
+  if (tone === "attention") {
+    return "rounded-2xl border border-amber-200/70 bg-amber-50/70 p-4 shadow-sm";
+  }
+  if (tone === "green") {
+    return "rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-4 shadow-sm";
+  }
+  return "rounded-2xl border border-slate-200/70 bg-slate-50/70 p-4 shadow-sm";
 }
 function resolvePolicyMatcherFamily(policy) {
   const target = policy.artifact_id?.trim();
@@ -735,6 +748,15 @@ function groupPoliciesByFamily(policies) {
   }
   return counts;
 }
+function resolvePolicyViewLabel(view) {
+  if (view === "rules") {
+    return "Remembered rules";
+  }
+  if (view === "exceptions") {
+    return "Exceptions";
+  }
+  return "Strict config";
+}
 function PolicyWorkspace({
   policies,
   snapshot,
@@ -822,7 +844,7 @@ function PolicyWorkspace({
   );
   const familyCounts = reactExports.useMemo(() => groupPoliciesByFamily(rememberedRules), [rememberedRules]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    cloudBundleCopy ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-4 shadow-sm", children: [
+    cloudBundleCopy ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: resolveCloudBundleSurfaceClass(cloudBundleCopy.tone), children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-2 flex flex-wrap items-center gap-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Guard Cloud bundle" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: cloudBundleCopy.tone, children: cloudBundleCopy.label })
@@ -844,7 +866,7 @@ function PolicyWorkspace({
         onClick: () => handleViewChange(view),
         "aria-pressed": activeView === view,
         className: `rounded-full px-4 py-1.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${activeView === view ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`,
-        children: view === "rules" ? "Remembered rules" : view === "exceptions" ? "Exceptions" : "Strict config"
+        children: resolvePolicyViewLabel(view)
       },
       view
     )) }),

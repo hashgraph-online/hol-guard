@@ -25,7 +25,7 @@ export type PolicyDisplay = {
 };
 
 export function isCloudManagedPolicy(source: string): boolean {
-  return source === "cloud-sync" || source === "team-policy" || source === "cloud-bundle";
+  return source === "cloud-sync" || source === "team-policy" || source === "policy-bundle";
 }
 
 export function resolvePolicySourceLabel(source: string): string {
@@ -225,9 +225,26 @@ export function resolvePolicyEvidenceHref(policy: GuardPolicyDecision): string {
   return query ? `/evidence?${query}` : "/evidence";
 }
 
-export function resolveCloudPolicyControlsUrl(snapshot: { dashboard_url?: string | null }): string | null {
-  const url = snapshot.dashboard_url?.trim();
-  return url || null;
+export function resolveCloudPolicyControlsUrl(snapshot: {
+  dashboard_url?: string | null;
+  connect_url?: string | null;
+}): string | null {
+  const dashboardUrl = snapshot.dashboard_url?.trim();
+  if (dashboardUrl) {
+    return dashboardUrl;
+  }
+  const connectUrl = snapshot.connect_url?.trim();
+  return connectUrl && connectUrl.length > 0 ? connectUrl : null;
+}
+
+export function resolveCloudBundleSurfaceClass(tone: "green" | "attention" | "slate"): string {
+  if (tone === "attention") {
+    return "rounded-2xl border border-amber-200/70 bg-amber-50/70 p-4 shadow-sm";
+  }
+  if (tone === "green") {
+    return "rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-4 shadow-sm";
+  }
+  return "rounded-2xl border border-slate-200/70 bg-slate-50/70 p-4 shadow-sm";
 }
 
 export function resolvePolicyMatcherFamily(policy: GuardPolicyDecision): string | null {

@@ -26007,9 +26007,10 @@ function App() {
     }
   }, [setRuntime, setRequests, setPolicies]);
   const handleRefreshPolicies = reactExports.useCallback(async () => {
-    const policiesResult = await Promise.allSettled([fetchPolicies()]);
-    if (policiesResult[0].status === "fulfilled") {
-      setPolicies({ kind: "ready", items: policiesResult[0].value });
+    try {
+      const items = await fetchPolicies();
+      setPolicies({ kind: "ready", items });
+    } catch {
     }
   }, []);
   const handleClearPolicy = reactExports.useCallback(async (policy) => {
@@ -26146,6 +26147,35 @@ function App() {
       }
     );
   }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateAfterAction]);
+  const policyContent = reactExports.useMemo(() => {
+    if (runtime.kind !== "ready") {
+      return null;
+    }
+    if (policies.kind === "ready") {
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        PolicyWorkspacePage,
+        {
+          snapshot: runtime.snapshot,
+          policies: policies.items,
+          onClearPolicy: handleClearPolicy,
+          onOpenSettings: handleOpenSettings,
+          onOpenInbox: handleOpenInbox,
+          onRefreshPolicies: handleRefreshPolicies
+        }
+      ) });
+    }
+    if (policies.kind === "error") {
+      return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm text-red-700", children: policies.message });
+    }
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {});
+  }, [
+    runtime,
+    policies,
+    handleClearPolicy,
+    handleOpenSettings,
+    handleOpenInbox,
+    handleRefreshPolicies
+  ]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "a",
@@ -26230,17 +26260,7 @@ function App() {
             onRuntimeRefresh: refreshStateAfterAction
           }
         ) }) : null,
-        policyContent: runtime.kind === "ready" ? policies.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          PolicyWorkspacePage,
-          {
-            snapshot: runtime.snapshot,
-            policies: policies.items,
-            onClearPolicy: handleClearPolicy,
-            onOpenSettings: handleOpenSettings,
-            onOpenInbox: handleOpenInbox,
-            onRefreshPolicies: handleRefreshPolicies
-          }
-        ) }) : policies.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm text-red-700", children: policies.message }) : /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}) : null,
+        policyContent,
         aboutContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(AboutWorkspace, { runtimeSummary: runtime.kind === "ready" ? {
           // TODO: GuardRuntimeSnapshot does not yet expose guard_version or protected_app_count.
           // When those fields are added, populate them here instead of null/0.

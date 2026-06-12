@@ -1803,6 +1803,16 @@
     }
   }
 
+  .border-amber-200\/70 {
+    border-color: #fee685b3;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-amber-200\/70 {
+      border-color: color-mix(in oklab, var(--color-amber-200) 70%, transparent);
+    }
+  }
+
   .border-amber-200\/90 {
     border-color: #fee685e6;
   }

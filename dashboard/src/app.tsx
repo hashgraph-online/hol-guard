@@ -539,9 +539,11 @@ export function App() {
   }, [setRuntime, setRequests, setPolicies]);
 
   const handleRefreshPolicies = useCallback(async () => {
-    const policiesResult = await Promise.allSettled([fetchPolicies()]);
-    if (policiesResult[0].status === "fulfilled") {
-      setPolicies({ kind: "ready", items: policiesResult[0].value });
+    try {
+      const items = await fetchPolicies();
+      setPolicies({ kind: "ready", items });
+    } catch {
+      // Keep the current policy list when refresh fails.
     }
   }, []);
 
@@ -711,6 +713,41 @@ export function App() {
     );
   }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateAfterAction]);
 
+  const policyContent = useMemo(() => {
+    if (runtime.kind !== "ready") {
+      return null;
+    }
+    if (policies.kind === "ready") {
+      return (
+        <Suspense fallback={<LazyFallback />}>
+          <PolicyWorkspacePage
+            snapshot={runtime.snapshot}
+            policies={policies.items}
+            onClearPolicy={handleClearPolicy}
+            onOpenSettings={handleOpenSettings}
+            onOpenInbox={handleOpenInbox}
+            onRefreshPolicies={handleRefreshPolicies}
+          />
+        </Suspense>
+      );
+    }
+    if (policies.kind === "error") {
+      return (
+        <div className="rounded-2xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm text-red-700">
+          {policies.message}
+        </div>
+      );
+    }
+    return <LazyFallback />;
+  }, [
+    runtime,
+    policies,
+    handleClearPolicy,
+    handleOpenSettings,
+    handleOpenInbox,
+    handleRefreshPolicies,
+  ]);
+
   return (
     <>
       <a
@@ -811,28 +848,7 @@ export function App() {
           </Suspense>
         ) : null
       }
-      policyContent={
-        runtime.kind === "ready" ? (
-          policies.kind === "ready" ? (
-            <Suspense fallback={<LazyFallback />}>
-              <PolicyWorkspacePage
-                snapshot={runtime.snapshot}
-                policies={policies.items}
-                onClearPolicy={handleClearPolicy}
-                onOpenSettings={handleOpenSettings}
-                onOpenInbox={handleOpenInbox}
-                onRefreshPolicies={handleRefreshPolicies}
-              />
-            </Suspense>
-          ) : policies.kind === "error" ? (
-            <div className="rounded-2xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm text-red-700">
-              {policies.message}
-            </div>
-          ) : (
-            <LazyFallback />
-          )
-        ) : null
-      }
+      policyContent={policyContent}
       aboutContent={
         <Suspense fallback={<LazyFallback />}>
           <AboutWorkspace runtimeSummary={

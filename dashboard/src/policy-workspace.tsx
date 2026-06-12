@@ -7,6 +7,7 @@ import type { GuardPolicyDecision, GuardRuntimeSnapshot } from "./guard-types";
 import { PolicyExceptionForm } from "./policy-exception-form";
 import {
   isCloudManagedPolicy,
+  resolveCloudBundleSurfaceClass,
   resolveCloudPolicyBundleCopy,
   resolveCloudPolicyControlsUrl,
   resolvePolicyDisplay,
@@ -21,6 +22,16 @@ import {
 } from "./policy-workspace-views";
 
 export type PolicyPageView = "rules" | "exceptions" | "strict";
+
+function resolvePolicyViewLabel(view: PolicyPageView): string {
+  if (view === "rules") {
+    return "Remembered rules";
+  }
+  if (view === "exceptions") {
+    return "Exceptions";
+  }
+  return "Strict config";
+}
 
 export {
   groupPoliciesByHarness,
@@ -147,7 +158,7 @@ export function PolicyWorkspace({
   return (
     <div className="space-y-6">
       {cloudBundleCopy ? (
-        <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-4 shadow-sm">
+        <div className={resolveCloudBundleSurfaceClass(cloudBundleCopy.tone)}>
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <SectionLabel>Guard Cloud bundle</SectionLabel>
             <Tag tone={cloudBundleCopy.tone}>{cloudBundleCopy.label}</Tag>
@@ -184,7 +195,7 @@ export function PolicyWorkspace({
                 : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
             }`}
           >
-            {view === "rules" ? "Remembered rules" : view === "exceptions" ? "Exceptions" : "Strict config"}
+            {resolvePolicyViewLabel(view)}
           </button>
         ))}
       </div>
