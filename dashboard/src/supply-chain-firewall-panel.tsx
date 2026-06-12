@@ -50,7 +50,6 @@ export type PackageFirewallPanelHandle = {
   focusUnprotected: () => void;
   focusActionable: () => void;
   runAudit: () => void;
-  runSync: () => void;
   startConnect: () => Promise<void>;
   openShell: () => Promise<void>;
 };
@@ -379,13 +378,10 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       runAudit: () => {
         handleAudit();
       },
-      runSync: () => {
-        handleSync();
-      },
       startConnect: handleStartConnect,
       openShell: handleOpenShell,
     }),
-    [handleAudit, handleOpenShell, handleStartConnect, handleSync],
+    [handleAudit, handleOpenShell, handleStartConnect],
   );
 
 

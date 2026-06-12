@@ -139,32 +139,31 @@ export function SupplyChainWorkspace({
       if (panel === null) {
         return;
       }
+      if (action.kind === "firewall_unprotected") {
+        panel.focusUnprotected();
+        panel.scrollIntoView();
+        return;
+      }
+      if (action.kind === "firewall_repair") {
+        panel.focusActionable();
+        panel.scrollIntoView();
+        return;
+      }
+      if (action.kind === "firewall_audit") {
+        panel.runAudit();
+        panel.scrollIntoView();
+        return;
+      }
+
       setIssueActionPending(true);
       try {
-        panel.scrollIntoView();
         if (action.kind === "connect") {
           await panel.startConnect();
           await onRuntimeRefresh?.();
           return;
         }
-        if (action.kind === "firewall_unprotected") {
-          panel.focusUnprotected();
-          return;
-        }
-        if (action.kind === "firewall_repair") {
-          panel.focusActionable();
-          return;
-        }
-        if (action.kind === "firewall_audit") {
-          panel.runAudit();
-          return;
-        }
         if (action.kind === "open_shell") {
           await panel.openShell();
-          return;
-        }
-        if (action.kind === "sync") {
-          panel.runSync();
         }
       } finally {
         setIssueActionPending(false);

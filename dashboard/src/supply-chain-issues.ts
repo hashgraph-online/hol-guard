@@ -9,8 +9,7 @@ export type SupplyChainIssueAction =
   | { kind: "firewall_unprotected" }
   | { kind: "firewall_repair" }
   | { kind: "firewall_audit" }
-  | { kind: "open_shell" }
-  | { kind: "sync" };
+  | { kind: "open_shell" };
 
 export type SupplyChainIssue = {
   id: string;

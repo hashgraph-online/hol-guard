@@ -92,26 +92,28 @@ export function SupplyChainIssueFocus({
     >
       <div className="flex items-center justify-between gap-3 border-b border-black/[0.04] px-4 py-3 sm:px-5">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Next step {activeIndex + 1} of {issues.length}
+          {issues.length === 1 ? "Next step" : `Next step ${activeIndex + 1} of ${issues.length}`}
         </p>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={goPrevious}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200/80 bg-white/80 text-slate-600 transition-colors hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
-            aria-label="Previous issue"
-          >
-            <HiMiniArrowLeft className="h-4 w-4" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            onClick={goNext}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200/80 bg-white/80 text-slate-600 transition-colors hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
-            aria-label="Next issue"
-          >
-            <HiMiniArrowRight className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </div>
+        {issues.length > 1 ? (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={goPrevious}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200/80 bg-white/80 text-slate-600 transition-colors hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
+              aria-label="Previous issue"
+            >
+              <HiMiniArrowLeft className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={goNext}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200/80 bg-white/80 text-slate-600 transition-colors hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
+              aria-label="Next issue"
+            >
+              <HiMiniArrowRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className="px-4 py-5 sm:px-6 sm:py-6">

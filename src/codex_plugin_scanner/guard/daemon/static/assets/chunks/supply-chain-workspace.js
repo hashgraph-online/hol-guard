@@ -1933,13 +1933,10 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       runAudit: () => {
         handleAudit();
       },
-      runSync: () => {
-        handleSync();
-      },
       startConnect: handleStartConnect,
       openShell: handleOpenShell
     }),
-    [handleAudit, handleOpenShell, handleStartConnect, handleSync]
+    [handleAudit, handleOpenShell, handleStartConnect]
   );
   const managerDrawerShim = panelLoad.phase === "loaded" && managerDrawerTarget !== null ? panelLoad.data.package_shims.find((entry) => entry.manager === managerDrawerTarget) : void 0;
   const anyPending = pendingOp !== null;
@@ -3218,13 +3215,8 @@ function SupplyChainIssueFocus({
       "data-testid": "supply-chain-issue-focus",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3 border-b border-black/[0.04] px-4 py-3 sm:px-5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: [
-            "Next step ",
-            activeIndex + 1,
-            " of ",
-            issues.length
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: issues.length === 1 ? "Next step" : `Next step ${activeIndex + 1} of ${issues.length}` }),
+          issues.length > 1 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
               {
@@ -3245,7 +3237,7 @@ function SupplyChainIssueFocus({
                 children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { className: "h-4 w-4", "aria-hidden": "true" })
               }
             )
-          ] })
+          ] }) : null
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 py-5 sm:px-6 sm:py-6", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
@@ -3513,32 +3505,30 @@ function SupplyChainWorkspace({
       if (panel === null) {
         return;
       }
+      if (action.kind === "firewall_unprotected") {
+        panel.focusUnprotected();
+        panel.scrollIntoView();
+        return;
+      }
+      if (action.kind === "firewall_repair") {
+        panel.focusActionable();
+        panel.scrollIntoView();
+        return;
+      }
+      if (action.kind === "firewall_audit") {
+        panel.runAudit();
+        panel.scrollIntoView();
+        return;
+      }
       setIssueActionPending(true);
       try {
-        panel.scrollIntoView();
         if (action.kind === "connect") {
           await panel.startConnect();
           await onRuntimeRefresh?.();
           return;
         }
-        if (action.kind === "firewall_unprotected") {
-          panel.focusUnprotected();
-          return;
-        }
-        if (action.kind === "firewall_repair") {
-          panel.focusActionable();
-          return;
-        }
-        if (action.kind === "firewall_audit") {
-          panel.runAudit();
-          return;
-        }
         if (action.kind === "open_shell") {
           await panel.openShell();
-          return;
-        }
-        if (action.kind === "sync") {
-          panel.runSync();
         }
       } finally {
         setIssueActionPending(false);
