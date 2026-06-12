@@ -28,7 +28,12 @@ def test_finalize_guard_connect_payload_keeps_first_sync_pending_on_transient_sy
         lambda: {"configured": True, "state": "healthy"},
     )
 
-    def _raise_runtime_error(_store: GuardStore) -> dict[str, object]:
+    def _raise_runtime_error(
+        _store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        assert auth_context is None
         raise RuntimeError("temporary receipt sync failure")
 
     monkeypatch.setattr(guard_commands_module, "sync_local_guard_cloud_proof", _raise_runtime_error)
@@ -99,8 +104,92 @@ def test_finalize_guard_connect_payload_uses_fresh_oauth_access_token_once(tmp_p
         now=now,
     )
 
-    assert sync_calls == [None]
+    assert sync_calls == [
+        {
+            "access_token": "access-token-1",
+            "dpop_key_material": "dpop",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        }
+    ]
     assert CONNECT_SYNC_AUTH_CONTEXT_KEY not in payload
+
+
+def test_daemon_finalize_guard_connect_payload_uses_fresh_oauth_access_token_once(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    connect_url = "https://hol.org/guard/connect"
+    now = "2026-06-04T12:00:00+00:00"
+    sync_calls: list[dict[str, object] | None] = []
+
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+    monkeypatch.setattr(
+        store,
+        "get_oauth_local_credential_health",
+        lambda: {"configured": True, "state": "healthy"},
+    )
+
+    def _fake_sync(
+        _store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        sync_calls.append(auth_context)
+        return {
+            "synced_at": "2026-06-04T12:00:05+00:00",
+            "runtime_session_id": "session-1",
+            "runtime_session_synced_at": "2026-06-04T12:00:05+00:00",
+            "runtime_sessions_visible": 1,
+            "receipts_stored": 0,
+        }
+
+    monkeypatch.setattr(daemon_server_module, "sync_local_guard_cloud_proof", _fake_sync)
+
+    payload = daemon_server_module._finalize_daemon_guard_connect_payload(
+        store=store,
+        connect_url=connect_url,
+        payload={
+            "status": "connected",
+            CONNECT_SYNC_AUTH_CONTEXT_KEY: {
+                "access_token": "access-token-1",
+                "dpop_key_material": "dpop",
+                "sync_url": "https://hol.org/api/guard/receipts/sync",
+            },
+        },
+        now=now,
+    )
+
+    assert sync_calls == [
+        {
+            "access_token": "access-token-1",
+            "dpop_key_material": "dpop",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        }
+    ]
+    assert CONNECT_SYNC_AUTH_CONTEXT_KEY not in payload
+
+
+def test_queue_headless_cloud_sync_respects_cross_process_sync_lock(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+
+    with store.hold_cloud_sync_lock():
+        payload = daemon_server_module._queue_headless_cloud_sync(store=store)
+
+    assert payload == {
+        "status": "in_progress",
+        "message": "Guard Cloud sync already running.",
+    }
 
 
 def test_guard_daemon_runtime_request_queues_pending_first_sync(tmp_path, monkeypatch) -> None:
@@ -170,7 +259,12 @@ def test_finalize_guard_connect_payload_keeps_reauth_failures_in_retry_required_
         lambda: {"configured": True, "state": "healthy"},
     )
 
-    def _raise_auth_expired(_store: GuardStore) -> dict[str, object]:
+    def _raise_auth_expired(
+        _store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        assert auth_context is None
         raise guard_commands_module.GuardSyncAuthorizationExpiredError("reauth required")
 
     monkeypatch.setattr(guard_commands_module, "sync_local_guard_cloud_proof", _raise_auth_expired)

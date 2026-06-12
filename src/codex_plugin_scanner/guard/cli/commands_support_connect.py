@@ -164,7 +164,8 @@ def _finalize_guard_connect_payload(
     payload: dict[str, object],
     now: str,
 ) -> dict[str, object]:
-    payload.pop(CONNECT_SYNC_AUTH_CONTEXT_KEY, None)
+    sync_auth_context = payload.pop(CONNECT_SYNC_AUTH_CONTEXT_KEY, None)
+    resolved_sync_auth_context = sync_auth_context if isinstance(sync_auth_context, dict) else None
     urls = _guard_cloud_urls_for_connect(connect_url)
     for key in ("connect_url", "sync_url", "dashboard_url", "inbox_url", "fleet_url"):
         payload.setdefault(key, urls[key])
@@ -213,7 +214,10 @@ def _finalize_guard_connect_payload(
         return payload
     payload["sync_attempted"] = True
     try:
-        sync_payload = sync_local_guard_cloud_proof(store)
+        sync_payload = sync_local_guard_cloud_proof(
+            store,
+            auth_context=resolved_sync_auth_context,
+        )
     except GuardSyncNotAvailableError as error:
         store.record_latest_guard_connect_sync_result(
             status="connected",
