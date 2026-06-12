@@ -2831,13 +2831,13 @@ class GuardStore:
         publisher: str | None,
     ) -> tuple[list[str] | None, tuple[object, ...]]:
         if scope == "global":
-            if _runtime_scoped_exact_match_key(artifact_id) is not None and artifact_id is not None:
+            if _runtime_scoped_exact_match_key(artifact_id) is not None:
                 return ["artifact_id = ?"], (artifact_id,)
             return [], ()
         if scope == "harness":
             if harness is None:
                 return None, ()
-            if _runtime_scoped_exact_match_key(artifact_id) is not None and artifact_id is not None:
+            if _runtime_scoped_exact_match_key(artifact_id) is not None:
                 return ["harness = ?", "artifact_id = ?"], (harness, artifact_id)
             family_key = _artifact_family_key(artifact_id)
             if family_key is None:
