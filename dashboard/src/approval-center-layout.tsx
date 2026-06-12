@@ -259,12 +259,15 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     }
   });
   const queuedItems = props.requests.kind === "ready" ? props.requests.items : [];
-  const queuedCount =
-    queuedItems.length > 0
-      ? queuedItems.length
-      : props.runtime.kind === "ready"
-        ? props.runtime.snapshot.pending_count
-        : 0;
+  const needsFullQueue = props.view === "inbox";
+  let queuedCount = 0;
+  if (needsFullQueue && props.requests.kind === "ready") {
+    queuedCount = queuedItems.length;
+  } else if (props.runtime.kind === "ready") {
+    queuedCount = props.runtime.snapshot.pending_count;
+  } else {
+    queuedCount = queuedItems.length;
+  }
 
   const handleOpenMobileQueue = useCallback(() => setMobileQueueOpen(true), []);
   const handleCloseMobileQueue = useCallback(() => setMobileQueueOpen(false), []);

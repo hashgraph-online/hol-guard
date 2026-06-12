@@ -257,6 +257,7 @@ export function App() {
     let cancelled = false;
     let pollId: number | undefined;
     let refreshInFlight = false;
+    let clearedQueue = false;
     const needsFullQueue = view === "inbox" || requestId !== null;
     const loadApprovalQueue = () => {
       if (refreshInFlight || cancelled || resolutionInFlight.current) {
@@ -279,8 +280,9 @@ export function App() {
               }
             })
         : Promise.resolve().then(() => {
-            if (!cancelled && !resolutionInFlight.current) {
+            if (!cancelled && !resolutionInFlight.current && !clearedQueue) {
               setRequests({ kind: "ready", items: [] });
+              clearedQueue = true;
             }
           });
       const runtimeSnapshot = fetchRuntimeSnapshot({ includeItems: false })

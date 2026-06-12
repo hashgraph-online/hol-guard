@@ -237,5 +237,5 @@ class TestReceiptAnalyticsIndexes:
                 """
             ).fetchall()
         names = {str(row["name"]) for row in rows}
-        assert "idx_receipts_timestamp" in names
-        assert "idx_receipts_harness" in names
+        assert "idx_receipts_harness_artifact" in names
+        assert "idx_receipts_timestamp_harness" in names

@@ -778,16 +778,8 @@ _OAUTH_HEALTH_RESULT_PROCESS_CACHE: dict[tuple[str, str], tuple[float, dict[str,
 
 def receipt_index_statements() -> list[str]:
     return [
-        "create index if not exists idx_receipts_timestamp on runtime_receipts(timestamp)",
-        "create index if not exists idx_receipts_harness on runtime_receipts(harness)",
-        (
-            "create index if not exists idx_receipts_harness_artifact "
-            "on runtime_receipts(harness, artifact_id)"
-        ),
-        (
-            "create index if not exists idx_receipts_timestamp_harness "
-            "on runtime_receipts(timestamp, harness)"
-        ),
+        ("create index if not exists idx_receipts_harness_artifact on runtime_receipts(harness, artifact_id)"),
+        ("create index if not exists idx_receipts_timestamp_harness on runtime_receipts(timestamp, harness)"),
     ]
 
 
@@ -930,11 +922,10 @@ class GuardStore:
     def _connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
-        connection.execute("pragma journal_mode=WAL")
-        connection.execute("pragma busy_timeout=10000")
-        connection.execute("pragma synchronous=NORMAL")
         start = time.monotonic()
         try:
+            connection.execute("pragma busy_timeout=10000")
+            connection.execute("pragma synchronous=NORMAL")
             yield connection
             connection.commit()
         finally:
@@ -1350,6 +1341,7 @@ class GuardStore:
             self._ensure_local_device(connection)
             if not self._schema_version_applied(connection, version=2):
                 self._record_schema_version(connection, version=2)
+            connection.execute("pragma journal_mode=WAL")
 
     @staticmethod
     def _ensure_policy_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:

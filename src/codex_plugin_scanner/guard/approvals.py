@@ -642,9 +642,9 @@ def build_runtime_snapshot(
     active_request_id: str | None = None,
     include_items: bool = True,
 ) -> dict[str, object]:
-    pending_count = store.count_pending_requests()
-    queue_page = store.list_pending_approval_summaries(limit=1, include_totals=False)
+    queue_page = store.list_pending_approval_summaries(limit=1)
     queue_items = queue_page["items"] if isinstance(queue_page["items"], list) else []
+    pending_count = int(queue_page["total_pending_count"])
     pending_requests = store.list_approval_requests(limit=request_limit) if include_items else []
     active_request = store.get_approval_request(active_request_id) if active_request_id else None
     active_is_pending = active_request is not None and active_request.get("status") == "pending"
