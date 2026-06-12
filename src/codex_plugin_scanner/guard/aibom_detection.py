@@ -106,6 +106,7 @@ def mcp_server_content_hash(
     url: str | None,
     transport: str | None,
     env_keys: tuple[str, ...] = (),
+    headers_keys: tuple[str, ...] = (),
 ) -> str:
     return fingerprint_mapping(
         {
@@ -114,6 +115,7 @@ def mcp_server_content_hash(
             "url": url,
             "transport": transport,
             "env_keys": sorted(env_keys),
+            "headers_keys": sorted(headers_keys),
         }
     )
 
@@ -631,12 +633,17 @@ def enrich_mcp_server_metadata(
     normalized_env_keys: tuple[str, ...] = ()
     if isinstance(env_keys, list):
         normalized_env_keys = tuple(str(key) for key in env_keys if isinstance(key, str))
+    headers_keys = metadata.get("headers_keys")
+    normalized_headers_keys: tuple[str, ...] = ()
+    if isinstance(headers_keys, list):
+        normalized_headers_keys = tuple(str(key) for key in headers_keys if isinstance(key, str))
     content_hash = mcp_server_content_hash(
         command=command,
         args=args,
         url=url,
         transport=transport,
         env_keys=normalized_env_keys,
+        headers_keys=normalized_headers_keys,
     )
     enriched = dict(metadata)
     enriched["content_hash"] = content_hash

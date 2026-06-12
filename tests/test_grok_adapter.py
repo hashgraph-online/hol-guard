@@ -353,6 +353,8 @@ Authorization = "Bearer redacted"
         remote = next(artifact for artifact in result.artifacts if artifact.name == "remote")
         assert github.metadata["env_keys"] == ["GITHUB_TOKEN"]
         assert remote.metadata["headers_keys"] == ["Authorization"]
+        assert github.metadata["versionInfo"]["versionLabel"] == "github"
+        assert remote.metadata["versionInfo"]["versionLabel"] == "remote"
 
     def test_mcp_env_change_changes_artifact_hash(self, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.consumer import artifact_hash
@@ -386,6 +388,38 @@ GITHUB_TOKEN = "redacted"
         changed = next(artifact for artifact in adapter.detect(ctx).artifacts if artifact.name == "github")
         assert artifact_hash(baseline) != artifact_hash(changed)
         assert changed.metadata["env_keys"] == ["GITHUB_TOKEN"]
+
+    def test_mcp_headers_change_changes_artifact_hash(self, tmp_path: Path) -> None:
+        from codex_plugin_scanner.guard.consumer import artifact_hash
+
+        ctx = _ctx(tmp_path)
+        config = ctx.home_dir / ".grok" / "config.toml"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text(
+            """
+[mcp_servers.remote]
+url = "https://mcp.example.com/mcp"
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+        adapter = GrokHarnessAdapter()
+        baseline = next(artifact for artifact in adapter.detect(ctx).artifacts if artifact.name == "remote")
+        config.write_text(
+            """
+[mcp_servers.remote]
+url = "https://mcp.example.com/mcp"
+
+[mcp_servers.remote.headers]
+Authorization = "Bearer redacted"
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+        changed = next(artifact for artifact in adapter.detect(ctx).artifacts if artifact.name == "remote")
+        assert artifact_hash(baseline) != artifact_hash(changed)
+        assert changed.metadata["headers_keys"] == ["Authorization"]
+        assert baseline.metadata["versionInfo"]["contentHash"] != changed.metadata["versionInfo"]["contentHash"]
 
     def test_mcp_credential_env_emits_secret_risk_signals(self, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.risk import artifact_risk_signals_typed

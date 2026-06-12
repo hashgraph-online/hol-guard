@@ -215,6 +215,7 @@ def append_mcp_artifacts(
         transport = "http" if isinstance(url, str) else "stdio"
         metadata = enrich_mcp_server_metadata(
             {
+                "name": server_name,
                 "env_keys": _mcp_env_keys(server_config),
                 "headers_keys": _mcp_headers_keys(server_config),
             },
