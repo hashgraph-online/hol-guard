@@ -253,7 +253,7 @@ def _finalize_guard_connect_payload(
             }
         )
         return payload
-    except RuntimeError as error:
+    except (RuntimeError, TimeoutError) as error:
         repair_message = (
             "Guard Cloud pairing finished, but the first proof sync is still pending. "
             "Local Guard will retry automatically while the daemon is running, or run hol-guard sync now."

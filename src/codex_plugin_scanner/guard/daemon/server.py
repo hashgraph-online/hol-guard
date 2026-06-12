@@ -472,14 +472,14 @@ def _queue_headless_cloud_sync(
             "status": "not_configured",
             "message": "Guard Cloud sync is not paired on this machine.",
         }
-    if store.cloud_sync_in_progress():
-        return {
-            "status": "in_progress",
-            "message": "Guard Cloud sync already running.",
-        }
     store_key = _headless_cloud_sync_store_key(store)
     with _HEADLESS_CLOUD_SYNC_STATE_LOCK:
         if store_key in _HEADLESS_CLOUD_SYNC_IN_FLIGHT:
+            return {
+                "status": "in_progress",
+                "message": "Guard Cloud sync already running.",
+            }
+        if store.cloud_sync_in_progress():
             return {
                 "status": "in_progress",
                 "message": "Guard Cloud sync already running.",
@@ -776,7 +776,7 @@ def _finalize_daemon_guard_connect_payload(
             }
         )
         return payload
-    except RuntimeError as error:
+    except (RuntimeError, TimeoutError) as error:
         repair_message = (
             "Guard Cloud pairing finished, but the first proof sync is still pending. Local Guard will retry while "
             "the daemon is running."
