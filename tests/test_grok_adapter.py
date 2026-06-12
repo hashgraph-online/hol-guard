@@ -102,12 +102,22 @@ class TestGrokInstallUninstall:
         assert pretool_hook.is_file()
         assert prompt_hook.is_file()
         pretool_payload = json.loads(pretool_hook.read_text(encoding="utf-8"))
+        assert "UserPromptSubmit" not in pretool_payload["hooks"]
         matchers = {
             entry["matcher"]
             for entry in pretool_payload["hooks"]["PreToolUse"]
             if isinstance(entry, dict) and isinstance(entry.get("matcher"), str)
         }
-        assert matchers == {"Bash", "Read", "Edit", "Grep", "MCPTool", "WebFetch"}
+        assert matchers == {
+            "Bash",
+            "Read",
+            "Edit",
+            "Grep",
+            "MCPTool",
+            "WebFetch",
+            "write",
+            "search_replace",
+        }
 
     def test_repeated_install_is_idempotent(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
