@@ -59,6 +59,22 @@ export function EvidenceInsightsShareSheet({ publicUrl, onClose }: EvidenceInsig
           {publicUrl}
         </div>
 
+        <div className="mt-4 rounded-xl border border-brand-blue/10 bg-gradient-to-br from-white to-[#f0f6ff] px-4 py-3">
+          <p className="text-sm font-medium text-brand-dark">A referral link is shown on your public stats page.</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Visitors who sign up through it get 20% off HOL Guard Pro or Team for 12 months. Track referrals and payouts in the{" "}
+            <a
+              href="https://hol.org/guard/affiliates"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-brand-blue hover:underline"
+            >
+              affiliate dashboard
+            </a>
+            .
+          </p>
+        </div>
+
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
