@@ -1926,6 +1926,14 @@ def test_headless_remote_once_applies_pending_request_and_records_receipt(tmp_pa
     assert payload["resolved_request"]["resolution_scope"] == "artifact"
     events = store.list_events(limit=5, event_name="approval.remote_once_applied")
     assert events[0]["payload"]["receipt_id"] == "cloud-receipt-1"
+    # Remote-once must resolve the queued request without persisting an artifact policy.
+    persisted_action = store.resolve_policy(
+        "codex",
+        request.artifact_id,
+        artifact_hash=request.artifact_hash,
+        workspace=request.workspace,
+    )
+    assert persisted_action is None
 
 
 def test_headless_remote_once_rejects_stale_requests_and_replays(tmp_path: Path) -> None:

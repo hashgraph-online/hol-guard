@@ -247,7 +247,10 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
     return args.harness == "copilot" and not getattr(args, "json", False)
 
 def _should_emit_native_hook_response(args: argparse.Namespace) -> bool:
-    return _canonical_harness_name(args.harness) in {"claude-code", "codex"} and not getattr(args, "json", False)
+    return (
+        _canonical_harness_name(args.harness) in {"claude-code", "codex", "kimi"}
+        and not getattr(args, "json", False)
+    )
 
 def _should_emit_claude_native_pretooluse_notice(
     args: argparse.Namespace,
@@ -282,9 +285,11 @@ def _should_emit_native_hook_json_response(
     )
 
 def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
-    del args, event_name, policy_action
     # Codex v0.133 logs non-zero PreToolUse hooks as failed but still executes
     # the tool. Blocking must be communicated through the JSON hook response.
+    canonical = _canonical_harness_name(args.harness)
+    if canonical == "kimi" and event_name in {"PreToolUse", "UserPromptSubmit"}:
+        return policy_action in {"block", "sandbox-required", "require-reapproval"}
     return False
 
 def _codex_browser_approval_decision(

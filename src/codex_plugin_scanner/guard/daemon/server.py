@@ -1887,6 +1887,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return_queue_result=True,
                 resolve_scope_matches=False,
                 approval_gate_input=approval_gate_input_from_mapping(payload),
+                persist_policy=False,
             )
         except ApprovalRequestNotFoundError:
             self.server.store.release_remote_once_receipt(receipt_id)  # type: ignore[attr-defined]
