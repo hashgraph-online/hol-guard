@@ -18,7 +18,6 @@ import type {
 } from "./guard-types";
 import { derivePackageWorkbenchFromReceipts, fetchReceipts, normalizeSupplyChainAuditSnapshot } from "./guard-api";
 import { PackageFirewallPanel, type PackageFirewallPanelHandle } from "./supply-chain-firewall-panel";
-import { PackageWorkbenchPanel } from "./package-workbench-panel";
 import { SupplyChainBundlePanel } from "./supply-chain-bundle-panel";
 import {
   deriveSupplyChainEvidenceRail,
@@ -215,10 +214,6 @@ export function SupplyChainWorkspace({
     setAuditRunning(running);
   }, []);
 
-  const handleRunAudit = useCallback(() => {
-    runAuditRef.current?.();
-  }, []);
-
   return (
     <div className={SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS} data-testid="supply-chain-workspace">
       <div className="flex flex-wrap items-start justify-end gap-3">
@@ -227,7 +222,9 @@ export function SupplyChainWorkspace({
         </ActionButton>
       </div>
 
-      <SupplyChainWorkspaceHero hero={workspaceHero} compact={supplyChainIssues.length > 0} />
+      {supplyChainIssues.length === 0 ? (
+        <SupplyChainWorkspaceHero hero={workspaceHero} />
+      ) : null}
 
       <SupplyChainIssueFocus
         issues={supplyChainIssues}
@@ -235,6 +232,18 @@ export function SupplyChainWorkspace({
           void handleIssueAction(action);
         }}
         actionPending={issueActionPending}
+        tagline={
+          <div className="flex flex-wrap items-center gap-2">
+            <Tag tone={(() => {
+              if (workspaceHero.cloudMode === "paired_active") return "green" as const;
+              if (workspaceHero.cloudMode === "paired_waiting") return "blue" as const;
+              return "attention" as const;
+            })()}>
+              {workspaceHero.cloudLabel}
+            </Tag>
+            <span className="text-xs text-slate-500">{workspaceHero.statLine}</span>
+          </div>
+        }
       />
 
       {supplyChainIssues.length === 0 ? (
@@ -246,7 +255,6 @@ export function SupplyChainWorkspace({
       <SupplyChainAuditFindingsSummary
         auditSnapshot={auditSnapshot}
         auditRunning={auditRunning}
-        onRunAudit={handleRunAudit}
       />
 
       <SupplyChainBundlePanel />
@@ -258,12 +266,6 @@ export function SupplyChainWorkspace({
         onAuditCompleted={handleAuditCompleted}
         onAuditRunningChange={handleAuditRunningChange}
         runAuditRef={runAuditRef}
-      />
-
-      <PackageWorkbenchPanel
-        auditSnapshot={auditSnapshot}
-        onRunAudit={handleRunAudit}
-        auditRunning={auditRunning}
       />
 
       <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
