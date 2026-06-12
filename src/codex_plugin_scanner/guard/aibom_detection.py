@@ -472,6 +472,19 @@ def extend_codex_runtime_inventory(
     )
 
 
+def _is_workspace_root_claude_md(artifact: GuardArtifact, workspace_dir: Path) -> bool:
+    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
+    if metadata.get("instructionRole") != "claude_md":
+        return False
+    config_path = getattr(artifact, "config_path", None)
+    if not isinstance(config_path, str):
+        return False
+    try:
+        return Path(config_path).resolve() == (workspace_dir / "CLAUDE.md").resolve()
+    except OSError:
+        return False
+
+
 def extend_detection_with_workspace_aibom(
     detection: HarnessDetection,
     *,
@@ -489,12 +502,19 @@ def extend_detection_with_workspace_aibom(
         return detection
     existing_ids = {artifact.artifact_id for artifact in detection.artifacts}
     merged = list(detection.artifacts)
+    artifact_index_by_id = {artifact.artifact_id: index for index, artifact in enumerate(merged)}
     found_paths = list(detection.config_paths)
     for artifact in extra:
         if artifact.artifact_id in existing_ids:
+            if _is_workspace_root_claude_md(artifact, workspace_dir):
+                merged[artifact_index_by_id[artifact.artifact_id]] = artifact
+                config_path = getattr(artifact, "config_path", None)
+                if isinstance(config_path, str):
+                    found_paths.append(config_path)
             continue
         merged.append(artifact)
         existing_ids.add(artifact.artifact_id)
+        artifact_index_by_id[artifact.artifact_id] = len(merged) - 1
         config_path = getattr(artifact, "config_path", None)
         if isinstance(config_path, str):
             found_paths.append(config_path)
