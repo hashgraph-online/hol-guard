@@ -230,6 +230,12 @@ def _configure_guard_policy_parsers(
     )
     doctor_parser.add_argument("--perf", action="store_true", help="Include detector performance timings")
     doctor_parser.add_argument(
+        "--repair",
+        "--fix",
+        action="store_true",
+        help="Repair common local Guard issues such as stale package-manager shims",
+    )
+    doctor_parser.add_argument(
         "--notifications",
         action="store_true",
         help="Send a notification preview and open macOS notification settings when needed",

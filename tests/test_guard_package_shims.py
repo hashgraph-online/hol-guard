@@ -21,12 +21,12 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import shims as guard_shims_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
-from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.protect import build_protect_payload
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
 from codex_plugin_scanner.guard.shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
-from codex_plugin_scanner.guard.shims import install_package_shims, package_shim_status
+from codex_plugin_scanner.guard.shims import build_shim_content_hash, install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.shim_execution_helpers import write_fake_manager_script
 from tests.test_guard_protect import _seed_bundle_cache_only, _SyncAndEvaluateHandler
@@ -591,6 +591,91 @@ def test_guard_package_shims_repair_command_restores_selected_manager(tmp_path: 
     assert repair_payload["repaired"] == ["npm"]
     assert (shim_dir / "npm").exists()
     assert not (shim_dir / "pip").exists()
+
+
+def test_guard_package_shims_repair_command_regenerates_stale_manager(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    _seed_paid_bundle_entitlement(home_dir)
+
+    install_rc = main(
+        [
+            "guard",
+            "package-shims",
+            "install",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--manager",
+            "npm",
+            "--json",
+        ]
+    )
+    install_payload = json.loads(capsys.readouterr().out)
+    assert install_rc == 0
+    shim_path = Path(str(install_payload["shim_dir"])) / "npm"
+    manifest_path = Path(str(install_payload["manifest_path"]))
+    current_content = shim_path.read_text(encoding="utf-8")
+    stale_content = '#!/bin/sh\nexec npm "$@"\n'
+    shim_path.write_text(stale_content, encoding="utf-8")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["content_hashes"]["npm"] = build_shim_content_hash(stale_content.encode("utf-8"))
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+
+    status_rc = main(
+        [
+            "guard",
+            "package-shims",
+            "status",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    status_payload = json.loads(capsys.readouterr().out)
+    repair_rc = main(
+        [
+            "guard",
+            "package-shims",
+            "repair",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--manager",
+            "npm",
+            "--json",
+        ]
+    )
+    repair_payload = json.loads(capsys.readouterr().out)
+
+    assert status_rc == 0
+    assert status_payload["manager_details"][0]["integrity"] == "stale"
+    assert repair_rc == 0
+    assert repair_payload["repaired"] == ["npm"]
+    assert shim_path.read_text(encoding="utf-8") == current_content
+
+
+def test_guard_package_shims_status_ignores_dynamic_generated_paths(tmp_path: Path) -> None:
+    home_dir = tmp_path / "guard-home"
+    install_workspace = tmp_path / "workspace-a"
+    status_workspace = tmp_path / "workspace-b"
+    install_workspace.mkdir(parents=True, exist_ok=True)
+    status_workspace.mkdir(parents=True, exist_ok=True)
+    install_package_shims(
+        HarnessContext(home_dir=home_dir, workspace_dir=install_workspace, guard_home=home_dir),
+        managers=("npm",),
+    )
+
+    status = package_shim_status(
+        HarnessContext(home_dir=home_dir, workspace_dir=status_workspace, guard_home=home_dir),
+    )
+
+    assert status["manager_details"][0]["integrity"] == "ok"
 
 
 def test_guard_package_shims_install_does_not_mutate_path_environment(
