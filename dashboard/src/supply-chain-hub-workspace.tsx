@@ -1,16 +1,16 @@
 import { lazy, Suspense, useCallback } from "react";
-import type { GuardApprovalGatePublicConfig, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
+import type { GuardApprovalGatePublicConfig, GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 import { WorkspacePageHeader } from "./workspace-page-header";
 import { SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout";
 
 const SupplyChainWorkspace = lazy(() =>
-  import("./supply-chain-workspace").then((module) => ({ default: module.SupplyChainWorkspace })),
+  import("./supply-chain-workspace").then((m) => ({ default: m.SupplyChainWorkspace }))
 );
 const AuditWorkspace = lazy(() =>
-  import("./audit-workspace").then((module) => ({ default: module.AuditWorkspace })),
+  import("./audit-workspace").then((m) => ({ default: m.AuditWorkspace }))
 );
 const FeedHealthWorkspace = lazy(() =>
-  import("./feed-health-workspace").then((module) => ({ default: module.FeedHealthWorkspace })),
+  import("./feed-health-workspace").then((m) => ({ default: m.FeedHealthWorkspace }))
 );
 
 type HubTab = "supply-chain" | "audit" | "feed-health";
@@ -21,7 +21,7 @@ const hubTabs: Array<{ value: HubTab; label: string }> = [
   { value: "feed-health", label: "Feed Health" },
 ];
 
-export function hubTitleForTab(tab: string): string {
+export function hubTitleForTab(tab: HubTab): string {
   return hubTabs.find((item) => item.value === tab)?.label ?? "Supply Chain";
 }
 
@@ -36,7 +36,9 @@ export function SupplyChainHubWorkspace(props: {
   activeView: string;
   snapshot: GuardRuntimeSnapshot;
   receipts: GuardReceipt[];
+  policies: GuardPolicyDecision[];
   approvalGate: GuardApprovalGatePublicConfig | null;
+  onClearPolicy: (policy: GuardPolicyDecision) => void;
   onOpenSettings: () => void;
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
@@ -49,7 +51,7 @@ export function SupplyChainHubWorkspace(props: {
       const path = value === "supply-chain" ? "/supply-chain" : `/${value}`;
       props.onNavigate(path);
     },
-    [props.onNavigate],
+    [props.onNavigate]
   );
 
   return (
@@ -62,20 +64,20 @@ export function SupplyChainHubWorkspace(props: {
         onTabChange={handleTabChange}
       />
       <Suspense fallback={<LazyFallback />}>
-        {tab === "supply-chain" ? (
+        {tab === "supply-chain" && (
           <SupplyChainWorkspace
             snapshot={props.snapshot}
             approvalGate={props.approvalGate}
             onGoHome={props.onGoHome}
             onRuntimeRefresh={props.onRuntimeRefresh}
           />
-        ) : null}
-        {tab === "audit" ? (
+        )}
+        {tab === "audit" && (
           <AuditWorkspace snapshot={props.snapshot} receipts={props.receipts} approvalGate={props.approvalGate} />
-        ) : null}
-        {tab === "feed-health" ? (
+        )}
+        {tab === "feed-health" && (
           <FeedHealthWorkspace snapshot={props.snapshot} onOpenSettings={props.onOpenSettings} />
-        ) : null}
+        )}
       </Suspense>
     </div>
   );

@@ -10,6 +10,7 @@ import {
   HiMiniAdjustmentsHorizontal,
   HiMiniShieldCheck,
   HiMiniInformationCircle,
+  HiMiniClipboardDocumentList,
   HiBars3,
   HiMiniXMark as HiMiniXMarkLayout,
   HiMiniCheckCircle,
@@ -24,7 +25,6 @@ import {
   HiMiniBugAnt,
   HiMiniCog6Tooth,
   HiMiniSquares2X2,
-  HiMiniClipboardDocumentList,
 } from "react-icons/hi2";
 
 import { guardAwareHref } from "./guard-api";
@@ -169,8 +169,8 @@ const sidebarLinks = [
   { href: "/inbox", label: "Inbox", view: "inbox", icon: HiMiniInbox },
   { href: "/protect", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
   { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
-  { href: "/policy", label: "Policy", view: "policy", icon: HiMiniClipboardDocumentList },
   { href: "/supply-chain", label: "Supply chain", view: "supply-chain", icon: HiMiniSquares2X2 },
+  { href: "/policy", label: "Policy", view: "policy", icon: HiMiniClipboardDocumentList },
   { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal },
   { href: "/about", label: "About", view: "about", icon: HiMiniInformationCircle }
 ] as const;

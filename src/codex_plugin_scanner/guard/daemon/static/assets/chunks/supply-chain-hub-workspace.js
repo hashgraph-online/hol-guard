@@ -1,14 +1,14 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/use-resolved-approval-gate.js","assets/chunks/feed-health-workspace.js","assets/chunks/home-protection-module.js","assets/chunks/supply-chain-workspace-layout.js","assets/chunks/audit-workspace.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/use-resolved-approval-gate.js","assets/chunks/feed-health-workspace.js","assets/chunks/home-protection-module.js","assets/chunks/audit-workspace.js"])))=>i.map(i=>d[i]);
 import { r as reactExports, j as jsxRuntimeExports, aB as WorkspacePageHeader, aC as __vitePreload } from "../guard-dashboard.js";
-import { S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout.js";
+const SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS = "min-w-0 max-w-full space-y-6 overflow-x-hidden";
 const SupplyChainWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./supply-chain-workspace.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6]) : void 0).then((module) => ({ default: module.SupplyChainWorkspace }))
+  () => __vitePreload(() => import("./supply-chain-workspace.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0).then((m) => ({ default: m.SupplyChainWorkspace }))
 );
 const AuditWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./audit-workspace.js"), true ? __vite__mapDeps([7,1,2,3]) : void 0).then((module) => ({ default: module.AuditWorkspace }))
+  () => __vitePreload(() => import("./audit-workspace.js"), true ? __vite__mapDeps([6,1,2,3]) : void 0).then((m) => ({ default: m.AuditWorkspace }))
 );
 const FeedHealthWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./feed-health-workspace.js"), true ? __vite__mapDeps([4,1,2]) : void 0).then((module) => ({ default: module.FeedHealthWorkspace }))
+  () => __vitePreload(() => import("./feed-health-workspace.js"), true ? __vite__mapDeps([4,1,2]) : void 0).then((m) => ({ default: m.FeedHealthWorkspace }))
 );
 const hubTabs = [
   { value: "supply-chain", label: "Supply Chain" },
@@ -45,7 +45,7 @@ function SupplyChainHubWorkspace(props) {
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: [
-      tab === "supply-chain" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      tab === "supply-chain" && /* @__PURE__ */ jsxRuntimeExports.jsx(
         SupplyChainWorkspace,
         {
           snapshot: props.snapshot,
@@ -53,16 +53,21 @@ function SupplyChainHubWorkspace(props) {
           onGoHome: props.onGoHome,
           onRuntimeRefresh: props.onRuntimeRefresh
         }
-      ) : null,
-      tab === "audit" ? /* @__PURE__ */ jsxRuntimeExports.jsx(AuditWorkspace, { snapshot: props.snapshot, receipts: props.receipts, approvalGate: props.approvalGate }) : null,
-      tab === "feed-health" ? /* @__PURE__ */ jsxRuntimeExports.jsx(FeedHealthWorkspace, { snapshot: props.snapshot, onOpenSettings: props.onOpenSettings }) : null
+      ),
+      tab === "audit" && /* @__PURE__ */ jsxRuntimeExports.jsx(AuditWorkspace, { snapshot: props.snapshot, receipts: props.receipts, approvalGate: props.approvalGate }),
+      tab === "feed-health" && /* @__PURE__ */ jsxRuntimeExports.jsx(FeedHealthWorkspace, { snapshot: props.snapshot, onOpenSettings: props.onOpenSettings })
     ] })
   ] });
 }
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
 }
-export {
+const supplyChainHubWorkspace = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
   SupplyChainHubWorkspace,
   hubTitleForTab
+}, Symbol.toStringTag, { value: "Module" }));
+export {
+  SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS as S,
+  supplyChainHubWorkspace as s
 };

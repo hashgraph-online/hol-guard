@@ -1,135 +1,43 @@
-import { useState, useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
-import { HiMiniMagnifyingGlass, HiMiniCloudArrowUp } from "react-icons/hi2";
-import { SectionLabel, Tag, ActionButton } from "./approval-center-primitives";
+import { HiMiniMagnifyingGlass, HiMiniCloudArrowUp, HiMiniPlus } from "react-icons/hi2";
+import { SectionLabel, Tag, ActionButton, EmptyState } from "./approval-center-primitives";
+import { harnessDisplayName, policyActionLabel } from "./approval-center-utils";
 import type { GuardPolicyDecision, GuardRuntimeSnapshot } from "./guard-types";
+import { PolicyExceptionForm } from "./policy-exception-form";
 import {
   isCloudManagedPolicy,
-  policyTargetLabel,
+  resolveCloudBundleSurfaceClass,
+  resolveCloudPolicyBundleCopy,
   resolveCloudPolicyControlsUrl,
+  resolvePolicyDisplay,
+  resolvePolicyMatcherFamily,
+  resolveSecurityModeCopy,
 } from "./policy-workspace-helpers";
 import {
-  ExceptionsView,
-  PolicyTableSection,
-  StrictModeView,
-  type PolicySortKey,
-  type PolicySortState,
+  GroupedPolicySection,
+  PolicyRuleList,
+  resolveFamilyFilterLabel,
+  groupPoliciesByFamily,
 } from "./policy-workspace-views";
 
 export type PolicyPageView = "rules" | "exceptions" | "strict";
 
-export type PolicyFilterState = {
-  searchQuery: string;
-  harnessFilter: string;
-  scopeFilter: string;
-};
-
-export { policyTargetLabel } from "./policy-workspace-helpers";
-
-export function groupPoliciesByHarness(
-  policies: GuardPolicyDecision[],
-): Map<string, GuardPolicyDecision[]> {
-  const map = new Map<string, GuardPolicyDecision[]>();
-  for (const policy of policies) {
-    const key = policy.harness || "global";
-    const existing = map.get(key) ?? [];
-    map.set(key, [...existing, policy]);
+function resolvePolicyViewLabel(view: PolicyPageView): string {
+  if (view === "rules") {
+    return "Remembered rules";
   }
-  return map;
+  if (view === "exceptions") {
+    return "Exceptions";
+  }
+  return "Strict config";
 }
 
-export function resolveSecurityModeCopy(
-  level: string | undefined,
-): { label: string; description: string; tone: "green" | "attention" | "slate" } {
-  if (level === "strict") {
-    return {
-      label: "Strict mode",
-      description:
-        "Guard asks before most actions including new network connections and file writes. Higher noise, maximum protection.",
-      tone: "attention",
-    };
-  }
-  if (level === "balanced") {
-    return {
-      label: "Balanced (default)",
-      description:
-        "Guard asks for secrets, destructive commands, and new network destinations. Low noise, solid coverage.",
-      tone: "green",
-    };
-  }
-  if (level === "gentle" || level === "relaxed") {
-    return {
-      label: "Low noise",
-      description: "Guard only asks for the highest-risk actions. Minimal interruptions.",
-      tone: "slate",
-    };
-  }
-  return {
-    label: level ?? "Custom",
-    description: "Custom policy rules apply. Review individual rules below.",
-    tone: "slate",
-  };
-}
-
-export function resolveCloudPolicyBundleCopy(snapshot: GuardRuntimeSnapshot): {
-  label: string;
-  detail: string;
-  tone: "green" | "attention" | "slate";
-} | null {
-  const bundleVersion = snapshot.cloud_policy_bundle_version?.trim();
-  if (!bundleVersion) {
-    return null;
-  }
-  const rollout = snapshot.cloud_policy_rollout_state?.trim() || "unknown";
-  const syncError = snapshot.cloud_policy_sync_error?.trim();
-  if (syncError) {
-    return {
-      label: `Cloud bundle ${bundleVersion}`,
-      detail: `Guard Cloud Controls owns rollout and authoring. Latest sync issue: ${syncError}.`,
-      tone: "attention",
-    };
-  }
-  return {
-    label: `Cloud bundle ${bundleVersion}`,
-    detail: `Guard Cloud Controls owns authoring and rollout. This local workspace reflects rollout state ${rollout}.`,
-    tone: "green",
-  };
-}
-
-function sortPolicies(policies: GuardPolicyDecision[], sort: PolicySortState): GuardPolicyDecision[] {
-  if (sort === null) {
-    return policies;
-  }
-  const sorted = [...policies];
-  const dir = sort.direction === "asc" ? 1 : -1;
-  sorted.sort((a, b) => {
-    switch (sort.key) {
-      case "app":
-        return a.harness.localeCompare(b.harness) * dir;
-      case "scope":
-        return a.scope.localeCompare(b.scope) * dir;
-      case "action":
-        return a.action.localeCompare(b.action) * dir;
-      case "target":
-        return policyTargetLabel(a).localeCompare(policyTargetLabel(b)) * dir;
-      case "updated":
-        return (new Date(a.updated_at || 0).getTime() - new Date(b.updated_at || 0).getTime()) * dir;
-      default:
-        return 0;
-    }
-  });
-  return sorted;
-}
-
-function resolveCloudBundleSurfaceClass(tone: "green" | "attention" | "slate"): string {
-  if (tone === "attention") {
-    return "border border-amber-200/70 bg-amber-50/70";
-  }
-  if (tone === "slate") {
-    return "border border-slate-200/70 bg-slate-50/70";
-  }
-  return "border border-emerald-200/70 bg-emerald-50/70";
-}
+export {
+  groupPoliciesByHarness,
+  resolveSecurityModeCopy,
+  resolveCloudPolicyBundleCopy,
+} from "./policy-workspace-helpers";
 
 type PolicyWorkspaceProps = {
   policies: GuardPolicyDecision[];
@@ -137,6 +45,7 @@ type PolicyWorkspaceProps = {
   onClearPolicy?: (policy: GuardPolicyDecision) => void;
   onOpenSettings?: () => void;
   onOpenInbox?: () => void;
+  onRefreshPolicies?: () => void;
 };
 
 export function PolicyWorkspace({
@@ -145,63 +54,84 @@ export function PolicyWorkspace({
   onClearPolicy,
   onOpenSettings,
   onOpenInbox,
+  onRefreshPolicies,
 }: PolicyWorkspaceProps) {
   const [activeView, setActiveView] = useState<PolicyPageView>("rules");
-  const [filter, setFilter] = useState<PolicyFilterState>({
-    searchQuery: "",
-    harnessFilter: "",
-    scopeFilter: "",
-  });
-  const [sort, setSort] = useState<PolicySortState>({ key: "updated", direction: "desc" });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [appFilter, setAppFilter] = useState("");
+  const [familyFilter, setFamilyFilter] = useState("");
+  const [showExceptionForm, setShowExceptionForm] = useState(false);
 
   const handleSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setFilter((current) => ({ ...current, searchQuery: event.target.value }));
+    setSearchQuery(event.target.value);
   }, []);
 
   const handleViewChange = useCallback((view: PolicyPageView) => {
     setActiveView(view);
+    setShowExceptionForm(false);
   }, []);
 
-  const handleSort = useCallback((key: PolicySortKey) => {
-    setSort((current) => {
-      if (current?.key === key) {
-        if (current.direction === "asc") {
-          return { key, direction: "desc" };
-        }
-        return { key, direction: "asc" };
-      }
-      return { key, direction: "asc" };
-    });
+  const handleOpenExceptionForm = useCallback(() => {
+    setShowExceptionForm(true);
   }, []);
 
-  const securityLevel = snapshot.security_level;
-  const modeCopy = useMemo(() => resolveSecurityModeCopy(securityLevel), [securityLevel]);
+  const handleCloseExceptionForm = useCallback(() => {
+    setShowExceptionForm(false);
+  }, []);
+
+  const handleExceptionSaved = useCallback(() => {
+    setShowExceptionForm(false);
+    onRefreshPolicies?.();
+  }, [onRefreshPolicies]);
+
+  const modeCopy = useMemo(() => resolveSecurityModeCopy(snapshot.security_level), [snapshot.security_level]);
   const cloudControlsUrl = useMemo(() => resolveCloudPolicyControlsUrl(snapshot), [snapshot]);
+  const cloudBundleCopy = useMemo(() => resolveCloudPolicyBundleCopy(snapshot), [snapshot]);
 
   const filteredPolicies = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
     return policies.filter((policy) => {
-      const query = filter.searchQuery.toLowerCase();
-      if (query === "") {
+      if (appFilter && policy.harness !== appFilter) {
+        return false;
+      }
+      if (familyFilter) {
+        const family = resolvePolicyMatcherFamily(policy) ?? "other";
+        if (family !== familyFilter) {
+          return false;
+        }
+      }
+      if (!query) {
         return true;
       }
-      return (
-        policy.harness.toLowerCase().includes(query) ||
-        (policy.artifact_id ?? "").toLowerCase().includes(query) ||
-        (policy.workspace ?? "").toLowerCase().includes(query) ||
-        (policy.publisher ?? "").toLowerCase().includes(query) ||
-        policy.scope.toLowerCase().includes(query) ||
-        policy.action.toLowerCase().includes(query) ||
-        (policy.reason ?? "").toLowerCase().includes(query)
-      );
+      const display = resolvePolicyDisplay(policy);
+      const displayHaystack = [
+        policy.harness,
+        policy.artifact_id,
+        policy.workspace,
+        policy.publisher,
+        policy.scope,
+        policy.action,
+        policy.reason,
+        display.headline,
+        display.subtitle,
+        harnessDisplayName(policy.harness),
+        policyActionLabel(policy.action),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return displayHaystack.includes(query);
     });
-  }, [policies, filter.searchQuery]);
-
-  const sortedPolicies = useMemo(() => sortPolicies(filteredPolicies, sort), [filteredPolicies, sort]);
+  }, [policies, searchQuery, appFilter, familyFilter]);
 
   const rememberedRules = useMemo(
-    () => sortedPolicies.filter((policy) => policy.action === "allow" || policy.action === "block"),
-    [sortedPolicies],
+    () =>
+      filteredPolicies
+        .filter((policy) => policy.action === "allow" || policy.action === "block")
+        .sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()),
+    [filteredPolicies],
   );
+
   const localRules = useMemo(
     () => rememberedRules.filter((policy) => !isCloudManagedPolicy(policy.source)),
     [rememberedRules],
@@ -210,33 +140,30 @@ export function PolicyWorkspace({
     () => rememberedRules.filter((policy) => isCloudManagedPolicy(policy.source)),
     [rememberedRules],
   );
+
   const exceptionPolicies = useMemo(
-    () => sortedPolicies.filter((policy) => policy.action !== "allow" && policy.action !== "block"),
-    [sortedPolicies],
+    () =>
+      filteredPolicies
+        .filter((policy) => policy.action !== "allow" && policy.action !== "block")
+        .sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()),
+    [filteredPolicies],
   );
 
-  const cloudBundleCopy = useMemo(() => resolveCloudPolicyBundleCopy(snapshot), [snapshot]);
+  const appOptions = useMemo(
+    () => [...new Set(policies.map((policy) => policy.harness).filter(Boolean))].sort(),
+    [policies],
+  );
+  const familyCounts = useMemo(() => groupPoliciesByFamily(rememberedRules), [rememberedRules]);
 
   return (
     <div className="space-y-6">
       {cloudBundleCopy ? (
-        <div className={`rounded-2xl p-4 shadow-sm ${resolveCloudBundleSurfaceClass(cloudBundleCopy.tone)}`}>
+        <div className={resolveCloudBundleSurfaceClass(cloudBundleCopy.tone)}>
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <SectionLabel>Guard Cloud bundle</SectionLabel>
             <Tag tone={cloudBundleCopy.tone}>{cloudBundleCopy.label}</Tag>
           </div>
           <p className="text-sm text-brand-dark/75">{cloudBundleCopy.detail}</p>
-          {cloudControlsUrl ? (
-            <a
-              href={cloudControlsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-brand-blue hover:underline"
-            >
-              <HiMiniCloudArrowUp className="h-4 w-4" aria-hidden="true" />
-              View bundle in Guard Cloud Controls
-            </a>
-          ) : null}
         </div>
       ) : null}
 
@@ -268,60 +195,166 @@ export function PolicyWorkspace({
                 : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
             }`}
           >
-            {view === "rules" ? "Remembered rules" : view === "exceptions" ? "Exceptions" : "Strict config"}
+            {resolvePolicyViewLabel(view)}
           </button>
         ))}
-        <div className="ml-auto flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5">
-          <HiMiniMagnifyingGlass className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
-          <input
-            type="search"
-            placeholder="Search policies..."
-            value={filter.searchQuery}
-            onChange={handleSearchChange}
-            aria-label="Search policies"
-            className="w-36 bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none sm:w-48"
-          />
-        </div>
       </div>
 
       {activeView === "rules" ? (
-        <div className="space-y-6">
-          <PolicyTableSection
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2">
+              <HiMiniMagnifyingGlass className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+              <input
+                type="search"
+                placeholder="Search by app, action, or reason…"
+                value={searchQuery}
+                onChange={handleSearchChange}
+                aria-label="Search policies"
+                className="w-full bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <select
+                value={appFilter}
+                onChange={(event) => setAppFilter(event.target.value)}
+                aria-label="Filter by app"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark"
+              >
+                <option value="">All apps</option>
+                {appOptions.map((app) => (
+                  <option key={app} value={app}>
+                    {harnessDisplayName(app)}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={familyFilter}
+                onChange={(event) => setFamilyFilter(event.target.value)}
+                aria-label="Filter by action type"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark"
+              >
+                <option value="">All action types</option>
+                {[...familyCounts.entries()].map(([family, count]) => (
+                  <option key={family} value={family}>
+                    {resolveFamilyFilterLabel(family)} ({count})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <GroupedPolicySection
             title="Remembered on this device"
-            description="Rules you created from Inbox approvals. You can clear them here or jump to the related evidence."
+            description="Choices you saved from Inbox. Each card explains what Guard will do next time."
             policies={localRules}
-            sort={sort}
-            onSort={handleSort}
             cloudControlsUrl={cloudControlsUrl}
             onClearPolicy={onClearPolicy}
             emptyTitle="No local remembered rules yet"
-            emptyBody="Approve or block actions in Inbox and Guard will remember your choice here."
+            emptyBody="Approve or block in Inbox and Guard remembers the decision here in plain language."
+            defaultOpen
           />
-          <PolicyTableSection
+          <GroupedPolicySection
             title="From Guard Cloud"
-            description="Synced bundle rules are read-only on this device. Open Guard Cloud Controls to review or edit rollout."
+            description="Synced team rules are read-only here. Edit them in Guard Cloud Controls."
             policies={cloudRules}
-            sort={sort}
-            onSort={handleSort}
             cloudControlsUrl={cloudControlsUrl}
-            emptyTitle="No Guard Cloud rules synced yet"
-            emptyBody="Connect Guard Cloud to sync shared bundle rules to this device."
+            emptyTitle="No Guard Cloud rules synced"
+            emptyBody="Connect Guard Cloud to sync shared policy bundles."
+            defaultOpen={cloudRules.length > 0}
           />
         </div>
       ) : null}
+
       {activeView === "exceptions" ? (
-        <ExceptionsView
-          policies={exceptionPolicies}
-          cloudControlsUrl={cloudControlsUrl}
-          onClearPolicy={onClearPolicy}
-          onOpenInbox={onOpenInbox}
-          onOpenSettings={onOpenSettings}
-          sort={sort}
-          onSort={handleSort}
-        />
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-slate-600">
+              Exceptions change how Guard responds (warn, require review, block, or allow) without waiting for Inbox.
+            </p>
+            {!showExceptionForm ? (
+              <ActionButton variant="primary" onClick={handleOpenExceptionForm}>
+                <HiMiniPlus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                New exception
+              </ActionButton>
+            ) : null}
+          </div>
+
+          {showExceptionForm ? (
+            <PolicyExceptionForm
+              policies={policies}
+              onSaved={handleExceptionSaved}
+              onCancel={handleCloseExceptionForm}
+            />
+          ) : null}
+
+          {exceptionPolicies.length === 0 && !showExceptionForm ? (
+            <EmptyState
+              title="No exceptions yet"
+              body="Create one when you want Guard to warn, always review, block, or allow a whole class of actions."
+              tone="teach"
+            />
+          ) : (
+            <PolicyRuleList
+              policies={exceptionPolicies}
+              cloudControlsUrl={cloudControlsUrl}
+              onClearPolicy={onClearPolicy}
+              emptyTitle="No active exceptions"
+              emptyBody="Saved warn, review, and custom rules appear here."
+            />
+          )}
+
+          {cloudControlsUrl ? (
+            <a
+              href={cloudControlsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-sm font-medium text-brand-blue hover:underline"
+            >
+              <HiMiniCloudArrowUp className="h-4 w-4" aria-hidden="true" />
+              Manage team exceptions in Guard Cloud
+            </a>
+          ) : null}
+        </div>
       ) : null}
+
       {activeView === "strict" ? (
-        <StrictModeView snapshot={snapshot} onOpenSettings={onOpenSettings} />
+        <StrictModeView snapshot={snapshot} onOpenSettings={onOpenSettings} onOpenInbox={onOpenInbox} />
+      ) : null}
+    </div>
+  );
+}
+
+function StrictModeView({
+  snapshot,
+  onOpenSettings,
+  onOpenInbox,
+}: {
+  snapshot: GuardRuntimeSnapshot;
+  onOpenSettings?: () => void;
+  onOpenInbox?: () => void;
+}) {
+  const isStrict = snapshot.security_level === "strict";
+  return (
+    <div className="space-y-4">
+      <div className={`rounded-2xl border p-5 ${isStrict ? "border-brand-green/20 bg-brand-green/[0.04]" : "border-slate-200 bg-slate-50/40"}`}>
+        <div className="mb-2 flex items-center gap-2">
+          <SectionLabel>Strict mode</SectionLabel>
+          <Tag tone={isStrict ? "green" : "slate"}>{isStrict ? "Enabled" : "Disabled"}</Tag>
+        </div>
+        <p className="mb-4 text-sm text-brand-dark/75">
+          Strict mode asks before new network connections, subprocess launches, file writes, and harness starts.
+        </p>
+        {!isStrict && onOpenSettings ? (
+          <ActionButton variant="secondary" onClick={onOpenSettings}>
+            Enable strict mode
+          </ActionButton>
+        ) : null}
+      </div>
+      {onOpenInbox ? (
+        <ActionButton variant="secondary" onClick={onOpenInbox}>
+          Review pending Inbox items
+        </ActionButton>
       ) : null}
     </div>
   );
