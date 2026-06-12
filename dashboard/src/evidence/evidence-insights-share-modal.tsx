@@ -9,7 +9,7 @@ import {
   startGuardCloudConnect,
   type GuardInsightsShareResult,
 } from "../guard-api";
-import { EvidenceInsightsShareConnectPanel } from "./evidence-insights-share-connect-panel";
+import { ConnectFlowCard } from "../supply-chain-firewall-views";
 import { EvidenceInsightsShareSheet } from "./evidence-insights-share-sheet";
 import { GuardStatMetric } from "./guard-stat-metric";
 import { HomeInsightsMetrics } from "./evidence-insights-headline-bento";
@@ -51,6 +51,8 @@ export function EvidenceInsightsShareModal({
   const [connectError, setConnectError] = useState<string | null>(null);
 
   const cloudConnected = insightsShareCloudReady(runtime);
+  const connectMode =
+    runtime?.cloud_state === "local_only" || runtime?.cloud_state === "paired_waiting" ? "connect" : "repair";
 
   const refreshConnectState = useCallback(async () => {
     const [connectStatus, runtimeSnapshot] = await Promise.all([
@@ -175,10 +177,13 @@ export function EvidenceInsightsShareModal({
         </div>
 
         {!cloudConnected ? (
-          <EvidenceInsightsShareConnectPanel
-            connectError={connectError}
+          <ConnectFlowCard
+            minimal
+            purpose="insights_share"
+            mode={connectMode}
             connectFlow={activeConnectFlow}
             connectStarting={connectStarting}
+            connectError={connectError}
             onStartConnect={handleStartConnect}
           />
         ) : (

@@ -35,8 +35,8 @@ assert(
   "insights workspace: header description mentions full local store",
 );
 assert(shareModalSource.includes("GuardModalLayer"), "insights share modal: uses viewport modal layer");
-assert(shareModalSource.includes("EvidenceInsightsShareConnectPanel"), "insights share modal: uses slim connect panel");
-assert(!shareModalSource.includes("ConnectFlowCard"), "insights share modal: avoids verbose connect card");
+assert(shareModalSource.includes('minimal'), "insights share modal: uses minimal connect flow card");
+assert(shareModalSource.includes('purpose="insights_share"'), "insights share modal: insights share connect purpose");
 assert(shareSheetSource.includes("useCopyFeedbackTimeout"), "insights share sheet: clears copy reset timers");
 assert(surfaceSource.includes("handleShareClose"), "insights surface: stable share modal close handler");
 assert(heatmapSource.includes("if (!displayKey) return"), "insights heatmap: avoids idle global scroll listeners");
