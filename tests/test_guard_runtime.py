@@ -14157,6 +14157,93 @@ def test_guard_runtime_tool_action_policy_uses_network_egress_when_stricter(tmp_
     assert guard_commands_module._runtime_artifact_policy_action(config, artifact, "codex") == "block"
 
 
+@pytest.mark.parametrize(
+    "scope",
+    [
+        "harness",
+        "global",
+    ],
+)
+def test_guard_runtime_honors_broader_saved_allows_for_risky_tool_actions(
+    tmp_path: Path,
+    scope: str,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    workspace = tmp_path / "workspace"
+    request = GuardApprovalRequest(
+        request_id=f"req-opencode-{scope}",
+        harness="opencode",
+        artifact_id="opencode:project:tool-action:docker-compose-postgres",
+        artifact_name="Bash docker-sensitive command",
+        artifact_type="tool_action_request",
+        artifact_hash="hash-request",
+        publisher=None,
+        policy_action="require-reapproval",
+        recommended_scope="artifact",
+        changed_fields=("tool_action_request",),
+        source_scope="project",
+        config_path=str(workspace / "opencode.json"),
+        workspace=str(workspace),
+        launch_target="docker compose -f scripts/guard-cloud/docker-lab/docker-compose.yml up -d postgres",
+        review_command=f"hol-guard approvals approve req-opencode-{scope}",
+        approval_url=f"http://127.0.0.1:5474/requests/req-opencode-{scope}",
+        action_envelope_json={
+            "schema_version": 1,
+            "action_id": f"req-opencode-{scope}",
+            "harness": "opencode",
+            "event_name": "PreToolUse",
+            "action_type": "shell_command",
+            "workspace": str(workspace),
+            "workspace_hash": "workspace-hash",
+            "tool_name": "Bash",
+            "command": "docker compose -f scripts/guard-cloud/docker-lab/docker-compose.yml up -d postgres",
+            "prompt_excerpt": None,
+            "target_paths": [],
+            "network_hosts": [],
+            "mcp_server": None,
+            "mcp_tool": None,
+            "package_manager": None,
+            "package_name": None,
+            "script_name": None,
+            "raw_payload_redacted": {"tool_name": "Bash"},
+        },
+    )
+    store.add_approval_request(request, "2026-06-12T00:00:00+00:00")
+
+    apply_approval_resolution(
+        store=store,
+        request_id=request.request_id,
+        action="allow",
+        scope=scope,
+        workspace=request.workspace,
+        reason=f"saved for {scope}",
+        now="2026-06-12T00:01:00+00:00",
+    )
+
+    runtime_artifact = GuardArtifact(
+        artifact_id=request.artifact_id,
+        name=request.artifact_name,
+        harness="opencode",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=request.config_path,
+        publisher=None,
+        metadata={"action_class": "docker-sensitive command"},
+    )
+
+    assert (
+        guard_commands_module._runtime_stored_policy_action(
+            store=store,
+            harness="opencode",
+            artifact=runtime_artifact,
+            artifact_id=runtime_artifact.artifact_id,
+            artifact_hash="hash-retry",
+            workspace=str(workspace),
+        )
+        == "allow"
+    )
+
+
 def test_guard_runtime_tool_action_policy_prefers_configured_risk_action_over_default(tmp_path):
     artifact = GuardArtifact(
         artifact_id="codex:test:tool-action:upload",
@@ -17070,10 +17157,13 @@ def test_policy_bundle_version_persists_after_store_reopen(tmp_path):
 
 
 def test_policy_bundle_downgrade_check_ignores_mixed_timezone_formats():
-    assert guard_runner_module._policy_bundle_is_version_downgrade(
-        {"issuedAt": "2026-06-05T13:30:00+00:00"},
-        {"issuedAt": "2026-06-05T13:29:00"},
-    ) is False
+    assert (
+        guard_runner_module._policy_bundle_is_version_downgrade(
+            {"issuedAt": "2026-06-05T13:30:00+00:00"},
+            {"issuedAt": "2026-06-05T13:29:00"},
+        )
+        is False
+    )
 
 
 def test_sync_receipts_uploads_policy_bundle_acknowledgement(tmp_path, monkeypatch):
