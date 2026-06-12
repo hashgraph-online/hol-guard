@@ -25,7 +25,7 @@ from .local_dashboard_session import build_local_dashboard_session_token
 from .local_supply_chain import build_local_supply_chain_posture
 from .models import GuardApprovalRequest, HarnessDetection, PolicyDecision
 from .risk import artifact_risk_signals, artifact_risk_summary
-from .store import GuardStore
+from .store import GuardStore, _runtime_scoped_exact_match_key
 
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
@@ -271,12 +271,16 @@ def apply_approval_resolution(
     request_artifact_hash = _string_or_none(request.get("artifact_hash"))
     request_publisher = _string_or_none(request.get("publisher"))
     scoped_artifact_id = request_artifact_id if scope in {"artifact", "harness", "global"} else workspace_artifact_id
+    scoped_artifact_hash = request_artifact_hash if scope == "artifact" else workspace_artifact_hash
+    broad_runtime_exact_match_key = _broad_runtime_exact_match_key(request, scope)
+    if broad_runtime_exact_match_key is not None:
+        scoped_artifact_hash = broad_runtime_exact_match_key
     decision = PolicyDecision(
         harness="*" if scope == "global" else str(request["harness"]),
         scope=scope,
         action="allow" if action == "allow" else "block",
         artifact_id=scoped_artifact_id,
-        artifact_hash=request_artifact_hash if scope == "artifact" else workspace_artifact_hash,
+        artifact_hash=scoped_artifact_hash,
         workspace=workspace if scope == "workspace" else None,
         publisher=request_publisher if scope == "publisher" else None,
         reason=reason,
@@ -372,6 +376,17 @@ def _workspace_policy_artifact_keys(request: Mapping[str, object], scope: str) -
     if not isinstance(artifact_hash, str) or not artifact_hash:
         return artifact_id, None
     return artifact_id, artifact_hash
+
+
+def _broad_runtime_exact_match_key(request: Mapping[str, object], scope: str) -> str | None:
+    if scope not in {"harness", "global"}:
+        return None
+    if request.get("artifact_type") not in _WORKSPACE_SCOPED_RUNTIME_ARTIFACT_TYPES:
+        return None
+    artifact_id = request.get("artifact_id")
+    if not isinstance(artifact_id, str) or not artifact_id:
+        return None
+    return _runtime_scoped_exact_match_key(artifact_id)
 
 
 def _append_guard_token_to_url(url: str, auth_token: str) -> str:
