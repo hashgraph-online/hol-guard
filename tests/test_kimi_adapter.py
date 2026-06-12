@@ -8,6 +8,7 @@ try:
     import tomllib
 except ModuleNotFoundError:
     import tomli as tomllib
+import sys
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -80,12 +81,12 @@ class TestKimiDetectHooks:
         ctx = _ctx(tmp_path)
         _write_toml(
             ctx.home_dir / ".kimi-code" / "config.toml",
-            '''[[hooks]]
+            """[[hooks]]
 event = "PreToolUse"
 matcher = "Bash"
 command = "bash hook.sh"
 timeout = 10
-''',
+""",
         )
         result = KimiHarnessAdapter().detect(ctx)
         hook_artifacts = [a for a in result.artifacts if a.artifact_type == "hook"]
@@ -99,10 +100,10 @@ timeout = 10
         ctx = _ctx(tmp_path)
         _write_toml(
             ctx.home_dir / ".kimi-code" / "config.toml",
-            '''[[hooks]]
+            """[[hooks]]
 event = "UserPromptSubmit"
 command = "bash prompt-hook.sh"
-''',
+""",
         )
         result = KimiHarnessAdapter().detect(ctx)
         hook_artifacts = [a for a in result.artifacts if a.artifact_type == "hook"]
@@ -112,14 +113,14 @@ command = "bash prompt-hook.sh"
         ctx = _ctx(tmp_path)
         _write_toml(
             ctx.home_dir / ".kimi-code" / "config.toml",
-            '''[[hooks]]
+            """[[hooks]]
 event = "PreToolUse"
 command = "a.sh"
 
 [[hooks]]
 event = "PostToolUse"
 command = "b.sh"
-''',
+""",
         )
         result = KimiHarnessAdapter().detect(ctx)
         hook_ids = {a.artifact_id for a in result.artifacts if a.artifact_type == "hook"}
@@ -131,10 +132,10 @@ command = "b.sh"
         assert ctx.workspace_dir is not None
         _write_toml(
             ctx.workspace_dir / ".kimi-code" / "config.toml",
-            '''[[hooks]]
+            """[[hooks]]
 event = "PreToolUse"
 command = "ws.sh"
-''',
+""",
         )
         result = KimiHarnessAdapter().detect(ctx)
         assert any(a.source_scope == "project" for a in result.artifacts)
@@ -200,10 +201,10 @@ class TestKimiInstallUninstall:
         config_path = ctx.home_dir / ".kimi-code" / "config.toml"
         _write_toml(
             config_path,
-            '''[[hooks]]
+            """[[hooks]]
 event = "PostToolUse"
 command = "user-format.sh"
-''',
+""",
         )
         KimiHarnessAdapter().install(ctx)
         text = config_path.read_text(encoding="utf-8")
@@ -231,6 +232,41 @@ class TestKimiManagedBlock:
         assert len(hooks) == 5
         assert hooks[0]["command"] == command
         assert _toml_escape('a"b\\c') == 'a\\"b\\\\c'
+
+
+class TestKimiHookQuoting:
+    def test_shell_command_uses_posix_quoting_on_unix(self) -> None:
+        from codex_plugin_scanner.guard.adapters.kimi import _shell_command
+
+        cmd = _shell_command(("python", "-c", "echo hello & world"), windows=False)
+        assert cmd == "python -c 'echo hello & world'"
+
+    def test_shell_command_uses_windows_quoting_when_requested(self) -> None:
+        from codex_plugin_scanner.guard.adapters.kimi import _shell_command
+
+        cmd = _shell_command(("python", "-c", "echo hello & world"), windows=True)
+        assert cmd.startswith('python -c "')
+        assert "&" in cmd
+        assert "'" not in cmd
+
+    def test_windows_hook_command_quotes_metacharacters(self, tmp_path: Path) -> None:
+        from codex_plugin_scanner.guard.adapters.kimi import _shell_command
+
+        workspace_dir = tmp_path / "workspace & tools"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        ctx = HarnessContext(
+            home_dir=tmp_path / "home",
+            workspace_dir=workspace_dir,
+            guard_home=tmp_path / "guard-home",
+        )
+        parts = KimiHarnessAdapter._hook_command_parts(ctx)
+        windows_cmd = _shell_command(parts, windows=True)
+        # The workspace path with '&' must live inside the quoted -c argument,
+        # not be exposed as a cmd.exe metacharacter. list2cmdline quotes the
+        # entire -c argument because it contains spaces.
+        assert windows_cmd.startswith(f'{sys.executable} -c "')
+        assert windows_cmd.endswith('"')
+        assert "workspace & tools" in windows_cmd
 
 
 class TestKimiLaunchCommand:

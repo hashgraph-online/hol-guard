@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import subprocess
 import sys
 from pathlib import Path
 
@@ -23,6 +24,15 @@ _KIMI_HOME_ENV_VAR = "KIMI_CODE_HOME"
 _KIMI_DIR = ".kimi-code"
 _KIMI_CONFIG_FILE = "config.toml"
 _KIMI_MCP_FILE = "mcp.json"
+
+
+def _shell_command(command: tuple[str, ...], *, windows: bool | None = None) -> str:
+    """Return a shell-escaped command string appropriate for the target OS."""
+    is_windows = os.name == "nt" if windows is None else windows
+    if is_windows:
+        return subprocess.list2cmdline(list(command))
+    return shlex.join(command)
+
 
 _GUARD_MANAGED_BEGIN = "# BEGIN HOL GUARD MANAGED HOOKS"
 _GUARD_MANAGED_END = "# END HOL GUARD MANAGED HOOKS"
@@ -235,7 +245,7 @@ class KimiHarnessAdapter(HarnessAdapter):
         _ensure_path_within_root(context.home_dir, config_path, label="Kimi Code")
         config_path.parent.mkdir(parents=True, exist_ok=True)
 
-        hook_command = shlex.join(self._hook_command_parts(context))
+        hook_command = _shell_command(self._hook_command_parts(context))
         managed_block = self._build_managed_block(hook_command)
         existing_text = config_path.read_text(encoding="utf-8") if config_path.is_file() else ""
         cleaned_text = _remove_managed_block(existing_text)
