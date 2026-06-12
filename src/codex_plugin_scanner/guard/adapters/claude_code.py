@@ -450,7 +450,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                         harness=self.harness,
                         artifact_type="instruction",
                         artifact_id_prefix="instruction",
-                        name_for_path=lambda artifact_path, _base_dir: artifact_path.stem,
+                        name_for_path=lambda artifact_path, _base_dir: f"rules-{artifact_path.stem}",
                     )
                 )
         resolved_executable = self.resolved_executable(context)
