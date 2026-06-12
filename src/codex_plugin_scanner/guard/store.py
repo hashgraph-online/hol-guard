@@ -2085,12 +2085,21 @@ class GuardStore:
                       artifact_id is null or artifact_id = ?
                     )
                   )
-                  or scope = 'global'
+                    or (
+                      scope = 'global' and (
+                        artifact_id is null
+                        or artifact_id = ?
+                        or artifact_id = ?
+                      )
+                    )
                 )
                 and (expires_at is null or expires_at > ?)
                 order by case scope when 'artifact' then 0 when 'workspace' then 1 when 'publisher' then 2
-                          when 'harness' then 3 else 4 end,
-                         case when scope = 'workspace' and artifact_id is not null then 0 else 1 end,
+                         when 'harness' then 3 else 4 end,
+                         case
+                           when scope in ('workspace', 'harness', 'global') and artifact_id is not null then 0
+                           else 1
+                         end,
                          updated_at desc
                 """,
                 (
@@ -2104,6 +2113,8 @@ class GuardStore:
                     artifact_hash,
                     artifact_hash,
                     publisher,
+                    action_family_key,
+                    artifact_id,
                     action_family_key,
                     current_time,
                 ),
@@ -2124,7 +2135,7 @@ class GuardStore:
 
     @staticmethod
     def _normalized_policy_keys(decision: PolicyDecision) -> tuple[str | None, str | None, str | None, str | None]:
-        if decision.scope == "harness":
+        if decision.scope in {"harness", "global"}:
             artifact_id = _artifact_family_key(decision.artifact_id)
         else:
             artifact_id = decision.artifact_id if decision.scope in {"artifact", "workspace"} else None
