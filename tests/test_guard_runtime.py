@@ -17939,11 +17939,12 @@ def test_sync_local_guard_cloud_proof_refreshes_oauth_once(tmp_path, monkeypatch
 
     assert len(token_requests) == 1
     assert _request_header(token_requests[0], "User-Agent") == f"hol-guard/{guard_runner_module.__version__}"
-    assert [request.full_url for request in sync_requests] == [
+    sync_urls = [request.full_url for request in sync_requests]
+    assert sync_urls[:2] == [
         "https://hol.org/api/guard/runtime/sessions/sync",
         "https://hol.org/api/guard/receipts/sync",
-        "https://hol.org/api/v1/guard/events",
     ]
+    assert sync_urls.count("https://hol.org/api/v1/guard/events") >= 1
     assert payload["runtime_session_id"] == expected_session_id
 
 

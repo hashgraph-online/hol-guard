@@ -181,6 +181,8 @@ _SECRET_FINGERPRINT_PREFIX = "pbkdf2-sha256$"
 _SECRET_FINGERPRINT_SALT = b"hol-guard-secret-fingerprint:v1"
 _OAUTH_REFRESH_LOCK_TIMEOUT_SECONDS = 30.0
 _OAUTH_REFRESH_LOCK_POLL_SECONDS = 0.05
+_CLOUD_SYNC_LOCK_TIMEOUT_SECONDS = 30.0
+_CLOUD_SYNC_LOCK_POLL_SECONDS = 0.05
 _GUARD_STORE_PRIVATE_DIR_MODE = 0o700
 _GUARD_STORE_PRIVATE_FILE_MODE = 0o600
 
@@ -947,6 +949,44 @@ class GuardStore:
                     time.sleep(_OAUTH_REFRESH_LOCK_POLL_SECONDS)
             try:
                 yield
+            finally:
+                with suppress(OSError):
+                    _release_advisory_file_lock(handle)
+
+    @contextmanager
+    def hold_cloud_sync_lock(
+        self,
+        *,
+        timeout_seconds: float = _CLOUD_SYNC_LOCK_TIMEOUT_SECONDS,
+    ) -> Iterator[None]:
+        lock_path = self.guard_home / "cloud-sync.lock"
+        deadline = time.monotonic() + max(timeout_seconds, 0.0)
+        with lock_path.open("a+b") as handle:
+            while True:
+                try:
+                    _acquire_advisory_file_lock(handle)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("Timed out waiting for Guard Cloud sync lock.") from None
+                    time.sleep(_CLOUD_SYNC_LOCK_POLL_SECONDS)
+            try:
+                yield
+            finally:
+                with suppress(OSError):
+                    _release_advisory_file_lock(handle)
+
+    def cloud_sync_in_progress(self) -> bool:
+        lock_path = self.guard_home / "cloud-sync.lock"
+        with lock_path.open("a+b") as handle:
+            try:
+                # This is an advisory probe, not a reservation: callers must still
+                # acquire hold_cloud_sync_lock() for the actual sync critical section.
+                _acquire_advisory_file_lock(handle)
+            except BlockingIOError:
+                return True
+            try:
+                return False
             finally:
                 with suppress(OSError):
                     _release_advisory_file_lock(handle)
