@@ -475,6 +475,7 @@ def test_top_level_guard_doctor_repair_regenerates_stale_package_shim(
     guard_home = tmp_path / "guard-home"
     _install_local_package_shim(guard_home, home_dir, "npm")
     shim_path = guard_home / "package-shims" / "bin" / "npm"
+    current_content = shim_path.read_text(encoding="utf-8")
     stale_content = '#!/bin/sh\nexec npm "$@"\n'
     shim_path.write_text(stale_content, encoding="utf-8")
     manifest_path = guard_home / "package-shims" / "manifest.json"
@@ -488,6 +489,7 @@ def test_top_level_guard_doctor_repair_regenerates_stale_package_shim(
     assert rc == 0
     assert payload["package_shims"]["repair"]["repaired"] == ["npm"]
     assert payload["package_shims"]["after_repair"]["manager_details"][0]["integrity"] == "ok"
+    assert shim_path.read_text(encoding="utf-8") == current_content
 
 
 def test_package_shims_uninstall_runs_without_guard_cloud_connect(
