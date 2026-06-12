@@ -980,6 +980,8 @@ class GuardStore:
         lock_path = self.guard_home / "cloud-sync.lock"
         with lock_path.open("a+b") as handle:
             try:
+                # This is an advisory probe, not a reservation: callers must still
+                # acquire hold_cloud_sync_lock() for the actual sync critical section.
                 _acquire_advisory_file_lock(handle)
             except BlockingIOError:
                 return True
