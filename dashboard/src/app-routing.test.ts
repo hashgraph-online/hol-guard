@@ -10,6 +10,7 @@ function assert(condition: boolean, message: string): void {
 assert(parseAppDetail("/apps/opencode") === "opencode", "valid app route parses harness slug");
 assert(parseAppDetail("/apps/claude-code") === "claude-code", "hyphenated app route parses harness slug");
 assert(parseAppDetail("/apps/kimi") === "kimi", "kimi app route parses harness slug");
+assert(parseAppDetail("/apps/grok") === "grok", "grok app route parses harness slug");
 assert(parseAppDetail("/apps/OpenCode") === "opencode", "app route normalizes case");
 assert(parseAppDetail("/apps/*") === null, "wildcard app route is rejected");
 assert(parseAppDetail("/apps/%2A") === null, "encoded wildcard app route is rejected");
@@ -42,6 +43,8 @@ assert(isDisplayableHarness("codex"), "real app harness is displayable");
 assert(!isDisplayableHarness("*"), "wildcard pseudo-harness is not displayable");
 assert(!isDisplayableHarness("Ce2b7ac2ccab4fab9902347b033bf25e"), "token-like pseudo-harness is not displayable");
 assert(harnessDisplayName("*") === "All apps", "wildcard pseudo-harness never renders as raw star");
+assert(harnessDisplayName("grok") === "Grok", "grok harness displays as Grok");
+assert(harnessDisplayName("grok") !== "*", "grok harness never renders as wildcard");
 assert(
   harnessDisplayName("Ce2b7ac2ccab4fab9902347b033bf25e") === "Unknown app",
   "token-like pseudo-harness never renders raw"

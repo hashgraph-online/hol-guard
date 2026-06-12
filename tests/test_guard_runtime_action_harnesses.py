@@ -305,6 +305,22 @@ def test_normalize_harness_payload_dispatches_supported_harnesses(tmp_path: Path
     assert envelope.target_paths == ("~/.npmrc",)
 
 
+def test_normalize_harness_payload_dispatches_grok(tmp_path: Path) -> None:
+    envelope = normalize_harness_payload(
+        "grok",
+        "PreToolUse",
+        {
+            "hookEventName": "pre_tool_use",
+            "toolName": "grep",
+            "toolInput": {"pattern": "TODO", "path": "src"},
+        },
+        workspace=tmp_path / "workspace",
+        home_dir=tmp_path,
+    )
+    assert envelope.harness == "grok"
+    assert envelope.event_name == "PreToolUse"
+
+
 def test_normalize_harness_payload_rejects_unknown_harness(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Unsupported Guard harness"):
         normalize_harness_payload(

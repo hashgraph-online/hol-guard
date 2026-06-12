@@ -117,7 +117,7 @@ def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str
     if policy_action in {"block", "sandbox-required"}:
         return "deny"
     if policy_action == "require-reapproval":
-        if canonical in {"codex", "kimi"}:
+        if canonical in {"codex", "kimi", "grok"}:
             return "deny"
         return "ask"
     if canonical == "codex":
@@ -370,7 +370,7 @@ def _load_hook_payload(
     return _normalize_hook_payload(payload, harness=harness) if isinstance(payload, dict) else {}
 
 _ACTION_ENVELOPE_HARNESSES = frozenset(
-    {"codex", "claude-code", "opencode", "copilot", "gemini", "hermes", "openclaw", "cursor"}
+    {"codex", "claude-code", "opencode", "copilot", "gemini", "hermes", "openclaw", "cursor", "grok"}
 )
 
 def _hook_action_envelope(

@@ -1,0 +1,15 @@
+{
+  "hookEventName": "pre_tool_use",
+  "sessionId": "session-redacted-006",
+  "cwd": "<workspace>",
+  "workspaceRoot": "<workspace>",
+  "toolName": "MCPTool",
+  "toolInput": {
+    "server": "filesystem",
+    "tool": "write_file",
+    "arguments": {
+      "path": "<workspace>/notes.txt",
+      "content": "hello"
+    }
+  }
+}

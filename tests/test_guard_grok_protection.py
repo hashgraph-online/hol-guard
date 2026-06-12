@@ -1,0 +1,173 @@
+"""Integration tests for Grok managed protection and harness setup."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from pathlib import Path
+
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.contracts import setup_contract_for
+from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
+from codex_plugin_scanner.guard.cli.install_commands import (
+    _grok_protection_checks,
+    build_harness_setup_plan,
+    build_harness_verification,
+    uninstall_confirmation_token,
+)
+from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
+from codex_plugin_scanner.guard.store_approvals import (
+    add_approval_request,
+    approval_index_statements,
+    approval_schema_statement,
+    resolve_request_with_queue_result,
+)
+
+
+def _ctx(tmp_path: Path) -> HarnessContext:
+    return HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=tmp_path / "workspace",
+        guard_home=tmp_path / "guard-home",
+    )
+
+
+def test_uninstall_confirmation_token_for_grok() -> None:
+    assert uninstall_confirmation_token("grok") == "disconnect-grok"
+
+
+def test_setup_contract_includes_grok_connect_and_repair() -> None:
+    contract = setup_contract_for("grok")
+    assert contract is not None
+    assert contract.display_name == "Grok"
+    assert contract.setup_steps[0].command == ("hol-guard", "apps", "connect", "grok")
+    assert contract.repair_steps[0].command == ("hol-guard", "apps", "repair", "grok")
+
+
+def test_build_harness_setup_plan_disconnect_confirmation(tmp_path: Path) -> None:
+    payload = build_harness_setup_plan("uninstall", "grok", _ctx(tmp_path), dry_run=False)
+    assert payload["confirmation_phrase"] == "disconnect-grok"
+    assert "hol-guard apps disconnect grok --confirm disconnect-grok" in str(payload["confirm_command"])
+
+
+def test_grok_protection_checks_ready_after_install(tmp_path: Path, monkeypatch) -> None:
+    ctx = _ctx(tmp_path)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
+        lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
+    )
+    GrokHarnessAdapter().install(ctx)
+    (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
+    (ctx.guard_home / "bin" / "guard-grok").write_text("#!/bin/sh\n", encoding="utf-8")
+    checks = _grok_protection_checks(ctx)
+    assert checks["pretool_hook_installed"] is True
+    assert checks["prompt_hook_installed"] is True
+    assert checks["managed_config_installed"] is True
+    assert checks["ready"] is True
+
+
+def test_build_harness_verification_includes_grok_checks(tmp_path: Path, monkeypatch) -> None:
+    ctx = _ctx(tmp_path)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
+        lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
+    )
+    GrokHarnessAdapter().install(ctx)
+    (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
+    (ctx.guard_home / "bin" / "guard-grok").write_text("#!/bin/sh\n", encoding="utf-8")
+    payload = build_harness_verification("grok", ctx)
+    verification = payload["verification"]
+    assert isinstance(verification, dict)
+    assert verification.get("pretool_hook_installed") is True
+
+
+def test_normalize_harness_payload_supports_grok_bash(tmp_path: Path) -> None:
+    envelope = normalize_harness_payload(
+        "grok",
+        "PreToolUse",
+        {
+            "hookEventName": "pre_tool_use",
+            "toolName": "run_terminal_command",
+            "toolInput": {"command": "git diff README.md"},
+        },
+        workspace=tmp_path / "workspace",
+        home_dir=tmp_path,
+    )
+    assert envelope.harness == "grok"
+    assert envelope.action_type == "shell_command"
+    assert envelope.command is not None
+    assert "git diff" in envelope.command
+
+
+def test_normalize_harness_payload_supports_grok_secret_read(tmp_path: Path) -> None:
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures" / "grok" / "pretooluse_read_secret.json").read_text(encoding="utf-8")
+    )
+    envelope = normalize_harness_payload(
+        "grok",
+        "PreToolUse",
+        fixture,
+        workspace=tmp_path / "workspace",
+        home_dir=tmp_path,
+    )
+    assert envelope.harness == "grok"
+    assert envelope.action_type == "file_read"
+    assert any(".env" in path for path in envelope.target_paths)
+
+
+def _approval_connection() -> sqlite3.Connection:
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    connection.execute(approval_schema_statement())
+    for statement in approval_index_statements():
+        connection.execute(statement)
+    return connection
+
+
+def _grok_approval_request(request_id: str, *, command: str, harness: str = "grok") -> GuardApprovalRequest:
+    artifact_id = f"{harness}:project:{request_id}"
+    return GuardApprovalRequest(
+        request_id=request_id,
+        harness=harness,
+        artifact_id=artifact_id,
+        artifact_name=artifact_id.rsplit(":", maxsplit=1)[-1],
+        artifact_hash=f"hash-{request_id}",
+        policy_action="require-reapproval",
+        recommended_scope="artifact",
+        changed_fields=("args",),
+        source_scope="project",
+        config_path=".grok/managed_config.toml",
+        workspace="workspace-a",
+        launch_target=command,
+        action_envelope_json={
+            "action_type": "shell_command",
+            "tool_name": "run_terminal_command",
+            "command": command,
+            "target_paths": [],
+            "network_hosts": [],
+        },
+        review_command=f"hol-guard approvals approve {request_id}",
+        approval_url=f"http://127.0.0.1/pending/{request_id}",
+    )
+
+
+def test_scoped_grok_approval_keeps_unrelated_queue() -> None:
+    connection = _approval_connection()
+    grok_active = _grok_approval_request("grok-active", command="cat .env")
+    codex_pending = _grok_approval_request("codex-pending", command="cat .npmrc", harness="codex")
+    add_approval_request(connection, codex_pending, "2026-06-12T10:00:00+00:00")
+    add_approval_request(connection, grok_active, "2026-06-12T10:01:00+00:00")
+
+    result = resolve_request_with_queue_result(
+        connection,
+        "grok-active",
+        resolution_action="allow",
+        resolution_scope="artifact",
+        reason="reviewed",
+        resolved_at="2026-06-12T10:02:00+00:00",
+    )
+
+    assert result["resolved"] is True
+    assert result["remaining_pending_count"] == 1
+    assert result["remaining_pending_summaries"][0]["request_id"] == "codex-pending"
