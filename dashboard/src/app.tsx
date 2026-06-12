@@ -34,6 +34,9 @@ const HelpModal = lazy(() => import("./help-modal").then((m) => ({ default: m.He
 const SupplyChainHubWorkspace = lazy(() =>
   import("./supply-chain-hub-workspace").then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
+const PolicyWorkspacePage = lazy(() =>
+  import("./policy-workspace-page").then((m) => ({ default: m.PolicyWorkspacePage }))
+);
 const AboutWorkspace = lazy(() =>
   import("./about/about-workspace").then((m) => ({ default: m.AboutWorkspace }))
 );
@@ -789,13 +792,24 @@ export function App() {
 	              activeView={view}
 	              snapshot={runtime.snapshot}
 	              receipts={receipts.kind === "ready" ? receipts.items : []}
-	              policies={policies.kind === "ready" ? policies.items : []}
 	              approvalGate={approvalGate}
-	              onClearPolicy={handleClearPolicy}
 	              onOpenSettings={handleOpenSettings}
 	              onGoHome={handleGoHome}
               onNavigate={navigate}
               onRuntimeRefresh={refreshStateAfterAction}
+            />
+          </Suspense>
+        ) : null
+      }
+      policyContent={
+        runtime.kind === "ready" ? (
+          <Suspense fallback={<LazyFallback />}>
+            <PolicyWorkspacePage
+              policies={policies.kind === "ready" ? policies.items : []}
+              snapshot={runtime.snapshot}
+              onClearPolicy={handleClearPolicy}
+              onOpenSettings={handleOpenSettings}
+              onOpenInbox={handleOpenInbox}
             />
           </Suspense>
         ) : null
