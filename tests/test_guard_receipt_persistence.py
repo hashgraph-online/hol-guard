@@ -15,8 +15,11 @@ Covers:
 
 from __future__ import annotations
 
+import time
 import uuid
 from pathlib import Path
+
+import pytest
 
 from codex_plugin_scanner.guard.models import GuardArtifact, GuardReceipt
 from codex_plugin_scanner.guard.store import GuardStore
@@ -432,3 +435,36 @@ class TestReceiptAnalytics:
         assert analytics["total"] == 2
         assert len(bash_entries) == 1
         assert bash_entries[0]["total"] == 2
+
+    def test_receipt_analytics_updates_after_policy_decision_change(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+        receipt = _make_receipt(receipt_id="r-policy", policy_decision="allow")
+        store.add_receipt(receipt)
+        store.update_receipt_policy_decision("r-policy", "block")
+
+        analytics = store.receipt_analytics(top_limit=5)
+
+        assert analytics["total"] == 1
+        assert analytics["allowed"] == 0
+        assert analytics["blocked"] == 1
+
+    @pytest.mark.slow
+    def test_receipt_analytics_with_100k_rows_stays_under_50ms(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+        for index in range(100_000):
+            store.add_receipt(
+                _make_receipt(
+                    receipt_id=f"r-scale-{index:06d}",
+                    harness="codex" if index % 2 == 0 else "claude",
+                    policy_decision="allow" if index % 3 == 0 else "block",
+                    artifact_name=f"tool-{index % 25}",
+                    timestamp=f"2026-01-{(index % 28) + 1:02d}T12:00:00Z",
+                )
+            )
+
+        started = time.perf_counter()
+        analytics = store.receipt_analytics(activity_days=90, trend_days=7, top_limit=8)
+        elapsed = time.perf_counter() - started
+
+        assert analytics["total"] == 100_000
+        assert elapsed < 0.05, f"rollup analytics took {elapsed * 1000:.1f}ms, expected < 50ms"
