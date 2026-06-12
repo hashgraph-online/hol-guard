@@ -214,6 +214,25 @@ def _resolve_legacy_args(
         if resolved_guard_args is None:
             return ["guard"]
         return ["guard", *resolved_guard_args]
+    guard_doctor_flags = {
+        "--fix",
+        "--force-notification-settings",
+        "--guard-home",
+        "--harnesses",
+        "--home",
+        "--json",
+        "--notifications",
+        "--perf",
+        "--repair",
+        "--workspace",
+    }
+    if program_mode == "combined" and argv[0] == "doctor":
+        has_guard_doctor_flag = any(arg in guard_doctor_flags for arg in argv[1:])
+        is_hol_guard_doctor_help = _is_hol_guard_program(program_name) and (
+            len(argv) == 1 or "-h" in argv[1:] or "--help" in argv[1:]
+        )
+        if has_guard_doctor_flag or is_hol_guard_doctor_help:
+            return ["guard", *argv]
     known_commands = {
         "scan",
         "lint",

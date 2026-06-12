@@ -469,6 +469,19 @@ args = ["workspace-skill.js", "--changed"]
         assert "doctor       Run local diagnostics" in output
         assert "Use status for Home posture" in output
 
+    def test_hol_guard_top_level_doctor_help_shows_guard_doctor(self, capsys, monkeypatch):
+        monkeypatch.setattr(sys, "argv", ["hol-guard"])
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(["doctor", "--help"])
+
+        output = capsys.readouterr().out
+
+        assert excinfo.value.code == 0
+        assert "--repair, --fix" in output
+        assert "Repair common local Guard issues" in output
+        assert "--component" not in output
+
     def test_guard_status_softens_refresh_race_copy_when_local_protection_stays_active(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         guard_home = home_dir / ".hol-guard"
