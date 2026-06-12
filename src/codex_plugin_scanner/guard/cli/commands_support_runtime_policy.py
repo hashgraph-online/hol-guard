@@ -1,12 +1,22 @@
 """Guard CLI helper definitions."""
 
 # fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
+_RUNTIME_SCOPED_EXACT_FAMILIES = frozenset(
+    {
+        "file-read",
+        "package-request",
+        "prompt",
+        "tool-action",
+    }
+)
+_RUNTIME_SCOPED_EXACT_MATCH_PREFIX = "runtime-exact:"
 
 def _claude_notification_tool_name(payload: dict[str, object]) -> str | None:
     direct_name = _optional_string(payload.get("tool_name"))
@@ -220,9 +230,26 @@ def _runtime_stored_policy_action(
                 return action
             return None
         if scope in {"harness", "global"}:
-            return action if decision_artifact_id is not None else None
+            decision_artifact_hash = _optional_string(decision.get("artifact_hash"))
+            exact_match_key = _runtime_scoped_exact_match_key(artifact_id)
+            if exact_match_key is None:
+                return action if decision_artifact_id is not None else None
+            return action if decision_artifact_hash == exact_match_key else None
         return None
     return action
+
+
+def _runtime_scoped_exact_match_key(artifact_id: str | None) -> str | None:
+    if artifact_id is None or not artifact_id.strip() or artifact_id.startswith("family:"):
+        return None
+    parts = artifact_id.split(":")
+    if len(parts) < 3:
+        return None
+    family = parts[2].strip().lower()
+    if family not in _RUNTIME_SCOPED_EXACT_FAMILIES:
+        return None
+    digest = hashlib.sha256(artifact_id.encode("utf-8")).hexdigest()
+    return f"{_RUNTIME_SCOPED_EXACT_MATCH_PREFIX}{digest}"
 
 def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact, harness: str) -> str:
     if _prompt_requires_hard_block(artifact):

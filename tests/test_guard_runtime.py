@@ -14164,7 +14164,7 @@ def test_guard_runtime_tool_action_policy_uses_network_egress_when_stricter(tmp_
         "global",
     ],
 )
-def test_guard_runtime_honors_broader_saved_allows_for_risky_tool_actions(
+def test_guard_runtime_honors_saved_allows_for_same_risky_tool_action(
     tmp_path: Path,
     scope: str,
 ) -> None:
@@ -14241,6 +14241,104 @@ def test_guard_runtime_honors_broader_saved_allows_for_risky_tool_actions(
             workspace=str(workspace),
         )
         == "allow"
+    )
+
+
+@pytest.mark.parametrize(
+    "scope",
+    [
+        "harness",
+        "global",
+    ],
+)
+def test_guard_runtime_rejects_saved_allows_for_different_risky_tool_action(
+    tmp_path: Path,
+    scope: str,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    workspace = tmp_path / "workspace"
+    request = GuardApprovalRequest(
+        request_id=f"req-opencode-{scope}",
+        harness="opencode",
+        artifact_id="opencode:project:tool-action:docker-compose-postgres",
+        artifact_name="Bash docker-sensitive command",
+        artifact_type="tool_action_request",
+        artifact_hash="hash-request",
+        publisher=None,
+        policy_action="require-reapproval",
+        recommended_scope="artifact",
+        changed_fields=("tool_action_request",),
+        source_scope="project",
+        config_path=str(workspace / "opencode.json"),
+        workspace=str(workspace),
+        launch_target="docker compose -f scripts/guard-cloud/docker-lab/docker-compose.yml up -d postgres",
+        review_command=f"hol-guard approvals approve req-opencode-{scope}",
+        approval_url=f"http://127.0.0.1:5474/requests/req-opencode-{scope}",
+        action_envelope_json={
+            "schema_version": 1,
+            "action_id": f"req-opencode-{scope}",
+            "harness": "opencode",
+            "event_name": "PreToolUse",
+            "action_type": "shell_command",
+            "workspace": str(workspace),
+            "workspace_hash": "workspace-hash",
+            "tool_name": "Bash",
+            "command": "docker compose -f scripts/guard-cloud/docker-lab/docker-compose.yml up -d postgres",
+            "prompt_excerpt": None,
+            "target_paths": [],
+            "network_hosts": [],
+            "mcp_server": None,
+            "mcp_tool": None,
+            "package_manager": None,
+            "package_name": None,
+            "script_name": None,
+            "raw_payload_redacted": {"tool_name": "Bash"},
+        },
+    )
+    store.add_approval_request(request, "2026-06-12T00:00:00+00:00")
+
+    apply_approval_resolution(
+        store=store,
+        request_id=request.request_id,
+        action="allow",
+        scope=scope,
+        workspace=request.workspace,
+        reason=f"saved for {scope}",
+        now="2026-06-12T00:01:00+00:00",
+    )
+
+    later_artifact = GuardArtifact(
+        artifact_id="opencode:project:tool-action:credential-upload",
+        name="Bash shell file upload command",
+        harness="opencode",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=request.config_path,
+        publisher=None,
+        metadata={"action_class": "shell file upload command"},
+    )
+    config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=None,
+        security_level="balanced",
+    )
+
+    assert (
+        guard_commands_module._runtime_stored_policy_action(
+            store=store,
+            harness="opencode",
+            artifact=later_artifact,
+            artifact_id=later_artifact.artifact_id,
+            artifact_hash="hash-later",
+            workspace=str(workspace),
+        )
+        is None
+    )
+    assert (
+        guard_commands_module._runtime_artifact_policy_action(
+            config, later_artifact, "opencode"
+        )
+        == "require-reapproval"
     )
 
 
