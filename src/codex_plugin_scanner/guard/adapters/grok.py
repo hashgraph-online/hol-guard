@@ -139,6 +139,7 @@ class GrokHarnessAdapter(HarnessAdapter):
                 payload = self._read_toml(config_path)
                 if payload:
                     self._append_permission_artifacts(artifacts, payload, config_path, "global")
+                    self._append_mcp_artifacts(artifacts, payload, config_path, "global")
                     degraded = self._degraded_mode_warnings(config_path, payload)
                     warnings.extend(degraded)
 
@@ -157,6 +158,23 @@ class GrokHarnessAdapter(HarnessAdapter):
         hooks_paths_file = grok_root / "hooks-paths"
         if hooks_paths_file.is_file():
             self._append_found_path(found_paths, hooks_paths_file)
+
+        marketplaces_file = grok_root / "plugins" / "known_marketplaces.json"
+        if marketplaces_file.is_file():
+            self._append_found_path(found_paths, marketplaces_file)
+            payload = _json_payload(marketplaces_file)
+            if payload:
+                artifacts.append(
+                    GuardArtifact(
+                        artifact_id="grok:global:marketplace-metadata",
+                        name="known_marketplaces",
+                        harness=self.harness,
+                        artifact_type="marketplace",
+                        source_scope="global",
+                        config_path=str(marketplaces_file),
+                        metadata={"entries": len(payload) if isinstance(payload, dict) else 0},
+                    )
+                )
 
         for relative in ("skills", "plugins", "plugins/marketplaces", "plugins/known_marketplaces.json", "sessions"):
             candidate = grok_root / relative
@@ -285,15 +303,63 @@ class GrokHarnessAdapter(HarnessAdapter):
                     )
                 )
 
+    def _append_mcp_artifacts(
+        self,
+        artifacts: list[GuardArtifact],
+        payload: dict[str, object],
+        config_path: Path,
+        scope: str,
+    ) -> None:
+        servers: dict[str, object] = {}
+        nested = payload.get("mcp_servers")
+        if isinstance(nested, dict):
+            servers.update(nested)
+        for key, value in payload.items():
+            if not isinstance(key, str) or not key.startswith("mcp_servers."):
+                continue
+            if isinstance(value, dict):
+                servers[key.split(".", 1)[1]] = value
+        for server_name, server_config in servers.items():
+            if not isinstance(server_name, str) or not isinstance(server_config, dict):
+                continue
+            command = server_config.get("command")
+            url = server_config.get("url")
+            if not isinstance(command, str) and not isinstance(url, str):
+                continue
+            raw_args = server_config.get("args")
+            args = tuple(str(item) for item in raw_args) if isinstance(raw_args, list) else ()
+            artifacts.append(
+                GuardArtifact(
+                    artifact_id=f"grok:{scope}:mcp:{server_name}",
+                    name=server_name,
+                    harness=self.harness,
+                    artifact_type="mcp_server",
+                    source_scope=scope,
+                    config_path=str(config_path),
+                    command=command if isinstance(command, str) else None,
+                    args=args,
+                    url=url if isinstance(url, str) else None,
+                    transport="http" if isinstance(url, str) else "stdio",
+                )
+            )
+
     def _degraded_mode_warnings(self, config_path: Path, payload: dict[str, object]) -> list[str]:
         warnings: list[str] = []
         serialized = json.dumps(payload, sort_keys=True).lower()
+        raw_text = config_path.read_text(encoding="utf-8").lower() if config_path.is_file() else ""
         for marker in _DEGRADED_MODE_MARKERS:
-            if marker.lower() in serialized:
+            marker_lower = marker.lower()
+            if marker_lower in serialized or marker_lower in raw_text:
                 warnings.append(
                     f"Degraded Grok protection signal in {config_path.name}: {marker}. "
                     "Guard hooks still run, but Grok may auto-approve some actions."
                 )
+        sandbox = payload.get("sandbox")
+        if isinstance(sandbox, str) and sandbox.strip().lower() == "off":
+            warnings.append(
+                f"Degraded Grok protection signal in {config_path.name}: sandbox off. "
+                "Guard hooks still run, but Grok may auto-approve some actions."
+            )
         return warnings
 
     def _managed_state_dir(self, context: HarnessContext) -> Path:
