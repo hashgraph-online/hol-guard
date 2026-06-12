@@ -61,5 +61,19 @@ const summary = resolvePolicyRuleSummary(packagePolicy, {
 });
 assert(summary.includes("Allowed"), "POL008: rule summary includes action label");
 assert(summary.includes("Kimi"), "POL009: rule summary includes app name");
+assert(summary.includes("Approved once for package install review"), "POL010: rule summary includes reason");
+
+const globalPolicy: GuardPolicyDecision = {
+  ...packagePolicy,
+  scope: "global",
+  artifact_id: null,
+  reason: "Always allow npm installs",
+};
+const globalSummary = resolvePolicyRuleSummary(globalPolicy, {
+  appName: "Kimi",
+  scopeLabel: "Everywhere",
+  actionLabel: "Allowed",
+});
+assert(globalSummary.includes("Reason: Always allow npm installs"), "POL011: global scope summary includes reason");
 
 console.log("policy-workspace-helpers.test.ts: all assertions passed");

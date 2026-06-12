@@ -70,22 +70,22 @@ export function resolvePolicyRuleSummary(
   const target = policyTargetLabel(policy);
   const reason = policy.reason?.trim();
   const targetPhrase = target === "Global" ? "all matching actions" : `"${target}"`;
+  let summary = "";
 
   if (policy.scope === "global") {
-    return `${labels.actionLabel} ${targetPhrase} on this device.`;
-  }
-  if (policy.scope === "harness") {
-    return `${labels.actionLabel} ${targetPhrase} anywhere in ${labels.appName}.`;
-  }
-  if (policy.scope === "workspace") {
+    summary = `${labels.actionLabel} ${targetPhrase} on this device.`;
+  } else if (policy.scope === "harness") {
+    summary = `${labels.actionLabel} ${targetPhrase} anywhere in ${labels.appName}.`;
+  } else if (policy.scope === "workspace") {
     const project = policy.workspace?.trim() || "this project";
-    return `${labels.actionLabel} ${targetPhrase} in ${project} (${labels.scopeLabel}).`;
-  }
-  if (policy.scope === "publisher") {
+    summary = `${labels.actionLabel} ${targetPhrase} in ${project} (${labels.scopeLabel}).`;
+  } else if (policy.scope === "publisher") {
     const publisher = policy.publisher?.trim() || "this source";
-    return `${labels.actionLabel} actions from ${publisher} in ${labels.appName}.`;
+    summary = `${labels.actionLabel} actions from ${publisher} in ${labels.appName}.`;
+  } else {
+    summary = `${labels.actionLabel} ${targetPhrase} in ${labels.appName} (${labels.scopeLabel}).`;
   }
-  const summary = `${labels.actionLabel} ${targetPhrase} in ${labels.appName} (${labels.scopeLabel}).`;
+
   if (reason) {
     return `${summary} Reason: ${reason}.`;
   }
