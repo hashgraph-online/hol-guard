@@ -581,6 +581,25 @@ def _install_fake_sync_keychain(monkeypatch) -> dict[tuple[str, str], str]:
     return secrets
 
 
+def test_keychain_secret_store_rejects_cli_secret_writes(monkeypatch):
+    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
+
+    def fake_run(
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        raise AssertionError("keychain writes must not shell out with secret material")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="argv exposure"):
+        KeychainSecretStore("hol-guard.sync").set_secret("guard-token", "secret-value")
+
+
 def test_secret_store_prefers_encrypted_file_backend_when_keychain_is_available_outside_macos(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
@@ -654,11 +673,10 @@ def test_sync_credentials_do_not_shell_out_to_keychain_when_file_store_is_availa
     GuardStore(guard_home)
 
 
-def test_sync_credentials_write_to_keychain_primary_on_macos(tmp_path, monkeypatch):
+def test_sync_credentials_fall_back_when_keychain_cli_rejects_writes_on_macos(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
-    sync_keychain = _install_fake_sync_keychain(monkeypatch)
     store = GuardStore(guard_home)
 
     store.set_sync_credentials(
@@ -668,14 +686,16 @@ def test_sync_credentials_write_to_keychain_primary_on_macos(tmp_path, monkeypat
         workspace_id="workspace-123",
     )
 
-    assert sync_keychain[("hol-guard.sync", store._sync_token_ref)] == "access-secret-value"
     assert store.get_sync_credentials() == {
         "sync_url": "https://hol.org/api/guard/receipts/sync",
         "token": "access-secret-value",
     }
 
 
-def test_get_sync_credentials_promotes_legacy_file_secret_into_keychain_on_macos(tmp_path, monkeypatch):
+def test_get_sync_credentials_keeps_legacy_file_secret_when_keychain_cli_rejects_writes_on_macos(
+    tmp_path,
+    monkeypatch,
+):
     guard_home = tmp_path / "guard-home"
     monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: False))
     legacy_store = GuardStore(guard_home)
@@ -688,14 +708,12 @@ def test_get_sync_credentials_promotes_legacy_file_secret_into_keychain_on_macos
 
     monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
-    sync_keychain = _install_fake_sync_keychain(monkeypatch)
     migrated_store = GuardStore(guard_home)
 
     assert migrated_store.get_sync_credentials() == {
         "sync_url": "https://hol.org/api/guard/receipts/sync",
         "token": "legacy-access-secret",
     }
-    assert sync_keychain[("hol-guard.sync", migrated_store._sync_token_ref)] == "legacy-access-secret"
 
 
 def test_oauth_local_credentials_do_not_shell_out_to_keychain_when_system_keyring_is_available(tmp_path, monkeypatch):
