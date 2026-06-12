@@ -209,7 +209,7 @@ LOCAL_ROUTE_OWNERSHIP = (
         auth_required=True,
         writes_state=True,
     ),
-    RouteOwnership(route="/fleet", persona=("solo", "team_manager"), auth_required=True, writes_state=True),
+    RouteOwnership(route="/protect", persona=("solo", "team_manager"), auth_required=True, writes_state=True),
     RouteOwnership(route="/apps/{slug}", persona=("solo", "team_manager"), auth_required=True, writes_state=True),
     RouteOwnership(
         route="/evidence",

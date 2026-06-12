@@ -338,7 +338,7 @@ args = ["workspace-skill.js", "--changed"]
         assert output["connect_url"] == "https://hol.org/guard/connect"
         assert output["dashboard_url"] == "https://hol.org/guard"
         assert output["inbox_url"] == "https://hol.org/guard/inbox"
-        assert output["fleet_url"] == "https://hol.org/guard/fleet"
+        assert output["fleet_url"] == "https://hol.org/guard/protect"
         assert output["connect_command"] == "hol-guard connect"
         assert output["connect_status_command"] == "hol-guard connect status"
         assert output["connect_recovery_command"] == "hol-guard connect"
@@ -391,7 +391,7 @@ args = ["workspace-skill.js", "--changed"]
         assert output["connect_url"] == "https://hol.org/guard/connect"
         assert output["dashboard_url"] == "https://hol.org/guard"
         assert output["inbox_url"] == "https://hol.org/guard/inbox"
-        assert output["fleet_url"] == "https://hol.org/guard/fleet"
+        assert output["fleet_url"] == "https://hol.org/guard/protect"
         assert "retry automatically" in output["cloud_state_detail"]
         assert "finish the pairing loop" not in output["cloud_state_detail"]
 

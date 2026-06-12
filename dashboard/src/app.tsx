@@ -122,6 +122,9 @@ function parseRequestId(pathname: string): string | null {
   return null;
 }
 
+export const PROTECT_ROUTE = "/protect";
+const LEGACY_FLEET_ROUTE = "/fleet";
+
 type AppView = "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health" | "about";
 
 export function viewTitle(view: AppView): string {
@@ -160,7 +163,7 @@ export function resolveView(pathname: string): AppView {
   if (pathname === "/settings") {
     return "settings";
   }
-  if (pathname === "/fleet") {
+  if (pathname === PROTECT_ROUTE || pathname === LEGACY_FLEET_ROUTE) {
     return "fleet";
   }
   if (pathname === "/evidence") {
@@ -217,6 +220,16 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
 export function App() {
   const pathname = usePathname();
   const view = resolveView(pathname);
+
+  useEffect(() => {
+    if (pathname !== LEGACY_FLEET_ROUTE) {
+      return;
+    }
+    const next = new URL(window.location.href);
+    next.pathname = PROTECT_ROUTE;
+    window.history.replaceState({}, "", next.toString());
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, [pathname]);
   useRouteFocus(view);
   const requestId = parseRequestId(pathname);
   const appDetailHarness = parseAppDetail(pathname);
@@ -423,7 +436,7 @@ export function App() {
   }, [activeRequestId]);
 
   const handleOpenInbox = useCallback(() => navigate("/inbox"), []);
-  const handleOpenFleet = useCallback(() => navigate("/fleet"), []);
+  const handleOpenFleet = useCallback(() => navigate(PROTECT_ROUTE), []);
   const handleOpenEvidence = useCallback(() => navigate("/evidence"), []);
   const handleOpenInsights = useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenSettings = useCallback(() => navigate("/settings"), []);

@@ -14728,7 +14728,7 @@ function buildDemoRuntimeSnapshot() {
   const cloudDetail = "This machine is connected to Guard Cloud, but the first protected session has not landed yet. Open Watched Apps while the first sync settles.";
   const dashboardUrl = "https://hol.org/guard";
   const inboxUrl = "https://hol.org/guard/inbox";
-  const fleetUrl = "https://hol.org/guard/fleet";
+  const fleetUrl = "https://hol.org/guard/protect";
   const connectUrl = "https://hol.org/guard/connect";
   return {
     generated_at: now2,
@@ -16166,7 +16166,7 @@ const hubViews = /* @__PURE__ */ new Set(["audit", "policy", "feed-health"]);
 const sidebarLinks = [
   { href: "/", label: "Home", view: "home", icon: HiMiniHome },
   { href: "/inbox", label: "Inbox", view: "inbox", icon: HiMiniInbox },
-  { href: "/fleet", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
+  { href: "/protect", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
   { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
   { href: "/supply-chain", label: "Supply chain", view: "supply-chain", icon: HiMiniSquares2X2 },
   { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal },
@@ -17015,7 +17015,8 @@ function EvidenceFilterBar({
   onChange,
   totalCount,
   filteredCount,
-  harnesses
+  harnesses,
+  hideHarnessFilter = false
 }) {
   const [showMore, setShowMore] = reactExports.useState(false);
   const handleSearchChange = reactExports.useCallback(
@@ -17086,7 +17087,7 @@ function EvidenceFilterBar({
   const handleToggleMore = reactExports.useCallback(() => {
     setShowMore((prev) => !prev);
   }, []);
-  const hasActiveFilters = filters.search || filters.time !== "all" || filters.decision !== "all" || filters.harness !== "all" || filters.category || filters.sourceScope || filters.day;
+  const hasActiveFilters = filters.search || filters.time !== "all" || filters.decision !== "all" || !hideHarnessFilter && filters.harness !== "all" || filters.category || filters.sourceScope || filters.day;
   const isFiltered = filteredCount !== totalCount;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1.5", "aria-label": "Evidence filters", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1.5", children: [
@@ -17131,7 +17132,7 @@ function EvidenceFilterBar({
       )
     ] }),
     showMore && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1.5 rounded-lg bg-slate-50/60 p-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      !hideHarnessFilter && /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "select",
         {
           value: filters.harness,
@@ -17189,7 +17190,7 @@ function EvidenceFilterBar({
           onRemove: handleRemoveDecision
         }
       ),
-      filters.harness !== "all" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      filters.harness !== "all" && !hideHarnessFilter && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ActiveChip,
         {
           label: harnessDisplayName(filters.harness),
@@ -18215,6 +18216,7 @@ function EvidenceActivityHeatmap({
     updateTooltipForKey(displayKey);
   }, [displayKey, updateTooltipForKey, weeks]);
   reactExports.useEffect(() => {
+    if (!displayKey) return;
     const onScrollOrResize = () => updateTooltipForKey(displayKey);
     window.addEventListener("scroll", onScrollOrResize, true);
     window.addEventListener("resize", onScrollOrResize);
@@ -18612,6 +18614,8 @@ function GuardModalLayer({
 }) {
   const [mounted, setMounted] = reactExports.useState(false);
   const panelRef = reactExports.useRef(null);
+  const onCloseRef = reactExports.useRef(onClose);
+  onCloseRef.current = onClose;
   useFocusTrap(mounted, panelRef);
   reactExports.useEffect(() => {
     setMounted(true);
@@ -18637,12 +18641,12 @@ function GuardModalLayer({
     function handleKeyDown(event) {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
       }
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [mounted, onClose]);
+  }, [mounted]);
   const handleBackdropClick = (event) => {
     if (event.target === event.currentTarget) {
       onClose();
@@ -18683,17 +18687,44 @@ function FiCopy(props) {
 function FiCheck(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2", "strokeLinecap": "round", "strokeLinejoin": "round" }, "child": [{ "tag": "polyline", "attr": { "points": "20 6 9 17 4 12" }, "child": [] }] })(props);
 }
-function EvidenceInsightsShareSheet({ publicUrl, onClose }) {
+function useCopyFeedbackTimeout(resetMs) {
   const [copied, setCopied] = reactExports.useState(false);
+  const resetTimeoutRef = reactExports.useRef(null);
+  const clearResetTimeout = reactExports.useCallback(() => {
+    if (resetTimeoutRef.current !== null) {
+      clearTimeout(resetTimeoutRef.current);
+      resetTimeoutRef.current = null;
+    }
+  }, []);
+  reactExports.useEffect(() => {
+    return () => {
+      clearResetTimeout();
+    };
+  }, [clearResetTimeout]);
+  const flashCopied = reactExports.useCallback(() => {
+    clearResetTimeout();
+    setCopied(true);
+    resetTimeoutRef.current = setTimeout(() => {
+      resetTimeoutRef.current = null;
+      setCopied(false);
+    }, resetMs);
+  }, [clearResetTimeout, resetMs]);
+  const resetCopied = reactExports.useCallback(() => {
+    clearResetTimeout();
+    setCopied(false);
+  }, [clearResetTimeout]);
+  return { copied, flashCopied, resetCopied };
+}
+function EvidenceInsightsShareSheet({ publicUrl, onClose }) {
+  const { copied, flashCopied, resetCopied } = useCopyFeedbackTimeout(2e3);
   const handleCopy = reactExports.useCallback(async () => {
     try {
       await navigator.clipboard.writeText(publicUrl);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2e3);
+      flashCopied();
     } catch {
-      setCopied(false);
+      resetCopied();
     }
-  }, [publicUrl]);
+  }, [flashCopied, publicUrl, resetCopied]);
   const handleNativeShare = reactExports.useCallback(async () => {
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
@@ -19295,6 +19326,12 @@ function EvidenceInsightsSurface({
 }) {
   const [mounted, setMounted] = reactExports.useState(false);
   const [shareOpen, setShareOpen] = reactExports.useState(false);
+  const handleShareOpen = reactExports.useCallback(() => {
+    setShareOpen(true);
+  }, []);
+  const handleShareClose = reactExports.useCallback(() => {
+    setShareOpen(false);
+  }, []);
   reactExports.useEffect(() => {
     setMounted(true);
   }, []);
@@ -19314,7 +19351,7 @@ function EvidenceInsightsSurface({
       {
         analytics,
         runtime,
-        onClose: () => setShareOpen(false)
+        onClose: handleShareClose
       }
     ) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm ${mounted ? "evidence-insights-mounted" : ""}`, children: [
@@ -19323,7 +19360,7 @@ function EvidenceInsightsSurface({
           /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Your Guard stats" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "All-time local store" })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightsShareButton, { onClick: () => setShareOpen(true) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightsShareButton, { onClick: handleShareOpen })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightsHeadlineBento, { analytics, variant: "full" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 px-5 py-5", children: [
@@ -22981,7 +23018,15 @@ function ApprovalCenterLayout(props) {
     }
   });
   const queuedItems = props.requests.kind === "ready" ? props.requests.items : [];
-  const queuedCount = queuedItems.length > 0 ? queuedItems.length : props.runtime.kind === "ready" ? props.runtime.snapshot.pending_count : 0;
+  const needsFullQueue = props.view === "inbox";
+  let queuedCount = 0;
+  if (needsFullQueue && props.requests.kind === "ready") {
+    queuedCount = queuedItems.length;
+  } else if (props.runtime.kind === "ready") {
+    queuedCount = props.runtime.snapshot.pending_count;
+  } else {
+    queuedCount = queuedItems.length;
+  }
   const handleOpenMobileQueue = reactExports.useCallback(() => setMobileQueueOpen(true), []);
   const handleCloseMobileQueue = reactExports.useCallback(() => setMobileQueueOpen(false), []);
   const handleToggleSidebar = reactExports.useCallback(() => {
@@ -24761,6 +24806,8 @@ function parseRequestId(pathname) {
   }
   return null;
 }
+const PROTECT_ROUTE = "/protect";
+const LEGACY_FLEET_ROUTE = "/fleet";
 function viewTitle(view) {
   if (view === "home") return "Home";
   if (view === "inbox") return "Inbox";
@@ -24795,7 +24842,7 @@ function resolveView(pathname) {
   if (pathname === "/settings") {
     return "settings";
   }
-  if (pathname === "/fleet") {
+  if (pathname === PROTECT_ROUTE || pathname === LEGACY_FLEET_ROUTE) {
     return "fleet";
   }
   if (pathname === "/evidence") {
@@ -24844,6 +24891,15 @@ async function loadDetail(requestId) {
 function App() {
   const pathname = usePathname();
   const view = resolveView(pathname);
+  reactExports.useEffect(() => {
+    if (pathname !== LEGACY_FLEET_ROUTE) {
+      return;
+    }
+    const next = new URL(window.location.href);
+    next.pathname = PROTECT_ROUTE;
+    window.history.replaceState({}, "", next.toString());
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, [pathname]);
   useRouteFocus(view);
   const requestId = parseRequestId(pathname);
   const appDetailHarness = parseAppDetail(pathname);
@@ -24882,6 +24938,7 @@ function App() {
     let cancelled = false;
     let pollId;
     let refreshInFlight = false;
+    let clearedQueue = false;
     const needsFullQueue = view === "inbox" || requestId !== null;
     const loadApprovalQueue = () => {
       if (refreshInFlight || cancelled || resolutionInFlight.current) {
@@ -24900,8 +24957,9 @@ function App() {
           setRequests({ kind: "error", message });
         }
       }) : Promise.resolve().then(() => {
-        if (!cancelled && !resolutionInFlight.current) {
+        if (!cancelled && !resolutionInFlight.current && !clearedQueue) {
           setRequests({ kind: "ready", items: [] });
+          clearedQueue = true;
         }
       });
       const runtimeSnapshot = fetchRuntimeSnapshot({ includeItems: false }).then((snapshot) => {
@@ -25028,7 +25086,7 @@ function App() {
     };
   }, [activeRequestId]);
   const handleOpenInbox = reactExports.useCallback(() => navigate("/inbox"), []);
-  const handleOpenFleet = reactExports.useCallback(() => navigate("/fleet"), []);
+  const handleOpenFleet = reactExports.useCallback(() => navigate(PROTECT_ROUTE), []);
   const handleOpenEvidence = reactExports.useCallback(() => navigate("/evidence"), []);
   const handleOpenInsights = reactExports.useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenSettings = reactExports.useCallback(() => navigate("/settings"), []);
@@ -25400,6 +25458,7 @@ export {
   clearReviewQueue as Z,
   revokeApprovalGateCooldown as _,
   EvidenceActivityHeatmapMini as a,
+  HiMiniSignal as a$,
   enrollApprovalGateTotp as a0,
   verifyApprovalGateTotp as a1,
   clearEvidence as a2,
@@ -25410,54 +25469,59 @@ export {
   resetSettings as a7,
   setupDesktopNotifications as a8,
   Tag as a9,
-  HiMiniBugAnt as aA,
-  fetchPackageFirewallStatus as aB,
-  runPackageFirewallAction as aC,
-  runPackageAudit as aD,
-  runPackageSync as aE,
-  startPackageFirewallConnect as aF,
-  openPackageFirewallShell as aG,
-  HiMiniArrowDown as aH,
-  HiMiniArrowUp as aI,
-  fetchSupplyChainBundle as aJ,
-  HiMiniDocumentMagnifyingGlass as aK,
-  HiMiniShieldExclamation as aL,
-  HiMiniComputerDesktop as aM,
-  HiMiniInformationCircle as aN,
-  fetchReceipts as aO,
-  HiMiniArrowRight as aP,
-  runAuditRemediation as aQ,
-  HiMiniDocumentText as aR,
-  guardAwareHref as aS,
-  HiMiniBarsArrowUp as aT,
-  HiMiniBarsArrowDown as aU,
-  HiMiniSignal as aV,
+  Surface as aA,
+  HiMiniArrowTopRightOnSquare as aB,
+  HiMiniCheckBadge as aC,
+  HiMiniClock as aD,
+  IconActionButton as aE,
+  HiMiniBeaker as aF,
+  HiMiniBugAnt as aG,
+  fetchPackageFirewallStatus as aH,
+  runPackageFirewallAction as aI,
+  runPackageAudit as aJ,
+  runPackageSync as aK,
+  startPackageFirewallConnect as aL,
+  openPackageFirewallShell as aM,
+  HiMiniArrowDown as aN,
+  HiMiniArrowUp as aO,
+  fetchSupplyChainBundle as aP,
+  HiMiniDocumentMagnifyingGlass as aQ,
+  HiMiniShieldExclamation as aR,
+  HiMiniComputerDesktop as aS,
+  HiMiniInformationCircle as aT,
+  fetchReceipts as aU,
+  HiMiniArrowRight as aV,
+  runAuditRemediation as aW,
+  HiMiniDocumentText as aX,
+  guardAwareHref as aY,
+  HiMiniBarsArrowUp as aZ,
+  HiMiniBarsArrowDown as a_,
   HiMiniMagnifyingGlass as aa,
   approvalGateCooldownLabel as ab,
   fetchApprovalPage as ac,
   fetchPolicy as ad,
   HiMiniArrowLeft as ae,
   HiMiniHome as af,
-  detectCategory as ag,
-  CATEGORIES as ah,
-  policyIdentityKey as ai,
-  HiMiniChartBar as aj,
-  runHarnessAction as ak,
-  GuardHarnessActionError as al,
-  HiMiniRocketLaunch as am,
-  HiMiniArrowPath as an,
-  HiMiniTrash as ao,
-  clearLabelForScope as ap,
-  formatHarnessCommand as aq,
-  HiMiniCommandLine as ar,
-  WorkspacePageHeader as as,
-  __vitePreload as at,
-  Surface as au,
-  HiMiniArrowTopRightOnSquare as av,
-  HiMiniCheckBadge as aw,
-  HiMiniClock as ax,
-  IconActionButton as ay,
-  HiMiniBeaker as az,
+  DEFAULT_FILTER_STATE as ag,
+  filterEvidence as ah,
+  sortEvidence as ai,
+  computeMetrics as aj,
+  EvidenceFilterBar as ak,
+  EvidenceInsightStrip as al,
+  EvidenceActionList as am,
+  EvidenceActionDetail as an,
+  policyIdentityKey as ao,
+  HiMiniChartBar as ap,
+  runHarnessAction as aq,
+  GuardHarnessActionError as ar,
+  HiMiniRocketLaunch as as,
+  HiMiniArrowPath as at,
+  HiMiniTrash as au,
+  clearLabelForScope as av,
+  formatHarnessCommand as aw,
+  HiMiniCommandLine as ax,
+  WorkspacePageHeader as ay,
+  __vitePreload as az,
   EmptyState as b,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,

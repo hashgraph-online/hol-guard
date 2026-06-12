@@ -23,7 +23,7 @@ GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
 GUARD_CONNECT_URL = f"{GUARD_DASHBOARD_URL}/connect"
 GUARD_INBOX_URL = f"{GUARD_DASHBOARD_URL}/inbox"
-GUARD_FLEET_URL = f"{GUARD_DASHBOARD_URL}/fleet"
+GUARD_FLEET_URL = f"{GUARD_DASHBOARD_URL}/protect"
 
 
 def build_guard_start_payload(
@@ -456,7 +456,7 @@ def _resolve_guard_urls(sync_url: str | None) -> tuple[str, str, str, str]:
         f"{origin}/guard",
         f"{origin}/guard/connect",
         f"{origin}/guard/inbox",
-        f"{origin}/guard/fleet",
+        f"{origin}/guard/protect",
     )
 
 

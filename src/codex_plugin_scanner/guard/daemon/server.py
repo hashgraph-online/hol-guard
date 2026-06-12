@@ -694,7 +694,7 @@ def _finalize_daemon_guard_connect_payload(
     payload.setdefault("sync_url", sync_url)
     payload.setdefault("dashboard_url", dashboard_url)
     payload.setdefault("inbox_url", f"{dashboard_url}/inbox")
-    payload.setdefault("fleet_url", f"{dashboard_url}/fleet")
+    payload.setdefault("fleet_url", f"{dashboard_url}/protect")
     if str(payload.get("status") or "") != "connected":
         return payload
     store.clear_cloud_sync_state_for_reconnect()
@@ -4335,6 +4335,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/dashboard",
             "/inbox",
             "/fleet",
+            "/protect",
             "/evidence",
             "/supply-chain",
             "/audit",

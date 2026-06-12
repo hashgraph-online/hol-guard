@@ -252,7 +252,7 @@ export function HomeWorkspace(props: {
   const ctaAction =
     state.ctaTarget === "inbox"
       ? props.onOpenInbox
-      : state.ctaTarget === "fleet"
+      : state.ctaTarget === "protect"
       ? props.onOpenFleet
       : props.onOpenEvidence;
 
@@ -525,7 +525,7 @@ export function deriveHomeState(input: {
   headline: string;
   subheadline: string;
   ctaLabel: string;
-  ctaTarget: "inbox" | "fleet" | "evidence";
+  ctaTarget: "inbox" | "protect" | "evidence";
 } {
   const { hasActiveInstalls, hasObservedHarnesses, queuedCount, watchedAppsCount } = input;
 
@@ -545,7 +545,7 @@ export function deriveHomeState(input: {
       headline: "Guard is ready",
       subheadline: "Connect your first AI app so Guard can start protecting it.",
       ctaLabel: "Open Protect",
-      ctaTarget: "fleet",
+      ctaTarget: "protect",
     };
   }
 
@@ -555,7 +555,7 @@ export function deriveHomeState(input: {
       headline: "Finish setup",
       subheadline: "Guard detected apps but they need setup to be fully protected.",
       ctaLabel: "Open Protect",
-      ctaTarget: "fleet",
+      ctaTarget: "protect",
     };
   }
 
