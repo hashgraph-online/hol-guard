@@ -1,44 +1,42 @@
-import { lazy, Suspense } from "react";
+import { Suspense, lazy, useCallback } from "react";
 import type { GuardPolicyDecision, GuardRuntimeSnapshot } from "./guard-types";
-import { SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout";
+import { WorkspacePageHeader } from "./workspace-page-header";
 
 const PolicyWorkspace = lazy(() =>
   import("./policy-workspace").then((module) => ({ default: module.PolicyWorkspace })),
 );
 
-type PolicyWorkspacePageProps = {
-  policies: GuardPolicyDecision[];
+function PolicyFallback() {
+  return <div className="guard-skeleton h-40 w-full rounded-2xl" aria-busy="true" aria-live="polite" />;
+}
+
+export function PolicyWorkspacePage(props: {
   snapshot: GuardRuntimeSnapshot;
+  policies: GuardPolicyDecision[];
   onClearPolicy: (policy: GuardPolicyDecision) => void;
   onOpenSettings: () => void;
   onOpenInbox: () => void;
-};
+  onRefreshPolicies: () => void;
+}) {
+  const handleOpenSettings = useCallback(() => props.onOpenSettings(), [props]);
+  const handleOpenInbox = useCallback(() => props.onOpenInbox(), [props]);
+  const handleRefresh = useCallback(() => props.onRefreshPolicies(), [props]);
 
-function LazyFallback() {
   return (
-    <div className="flex min-h-[200px] items-center justify-center">
-      <div className="guard-skeleton h-8 w-48" />
-    </div>
-  );
-}
-
-export function PolicyWorkspacePage(props: PolicyWorkspacePageProps) {
-  return (
-    <div className={`${SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS} space-y-6`} data-testid="policy-workspace-page">
-      <header className="space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Guard</p>
-        <h1 className="text-2xl font-semibold tracking-tight text-brand-dark">Policy</h1>
-        <p className="max-w-2xl text-sm text-slate-500">
-          Remembered decisions, Guard Cloud bundle rules, and strict-mode posture for this device.
-        </p>
-      </header>
-      <Suspense fallback={<LazyFallback />}>
+    <div className="space-y-6">
+      <WorkspacePageHeader
+        eyebrow="Policy"
+        title="Remembered rules and exceptions"
+        description="See what Guard will do next time, in plain language. Remove local rules or add custom exceptions here."
+      />
+      <Suspense fallback={<PolicyFallback />}>
         <PolicyWorkspace
           policies={props.policies}
           snapshot={props.snapshot}
           onClearPolicy={props.onClearPolicy}
-          onOpenSettings={props.onOpenSettings}
-          onOpenInbox={props.onOpenInbox}
+          onOpenSettings={handleOpenSettings}
+          onOpenInbox={handleOpenInbox}
+          onRefreshPolicies={handleRefresh}
         />
       </Suspense>
     </div>

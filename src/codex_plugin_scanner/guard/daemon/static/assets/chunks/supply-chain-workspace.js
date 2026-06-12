@@ -2,7 +2,7 @@ import { r as reactExports, j as jsxRuntimeExports, d as HiMiniCheckCircle, aw a
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 import { resolveFeedStaleness } from "./feed-health-workspace.js";
 import { r as resolveHomeProtectionStatus } from "./home-protection-module.js";
-import { S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout.js";
+import { S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-hub-workspace.js";
 const SEVERITY_RANK = {
   critical: 4,
   high: 3,
