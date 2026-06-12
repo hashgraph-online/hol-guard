@@ -13,6 +13,7 @@ const panelSource = readFileSync(join(__dirname, "evidence-analytics-panel.tsx")
 const heatmapSource = readFileSync(join(__dirname, "evidence-activity-heatmap.tsx"), "utf8");
 const provenanceSource = readFileSync(join(__dirname, "evidence-data-provenance-strip.tsx"), "utf8");
 const shareModalSource = readFileSync(join(__dirname, "evidence-insights-share-modal.tsx"), "utf8");
+const shareSheetSource = readFileSync(join(__dirname, "evidence-insights-share-sheet.tsx"), "utf8");
 const modalLayerSource = readFileSync(join(__dirname, "../guard-modal-layer.tsx"), "utf8");
 const workspaceSource = readFileSync(join(__dirname, "../receipts-workspace.tsx"), "utf8");
 
@@ -34,6 +35,10 @@ assert(
   "insights workspace: header description mentions full local store",
 );
 assert(shareModalSource.includes("GuardModalLayer"), "insights share modal: uses viewport modal layer");
+assert(shareSheetSource.includes("useCopyFeedbackTimeout"), "insights share sheet: clears copy reset timers");
+assert(surfaceSource.includes("handleShareClose"), "insights surface: stable share modal close handler");
+assert(heatmapSource.includes("if (!displayKey) return"), "insights heatmap: avoids idle global scroll listeners");
+assert(modalLayerSource.includes("onCloseRef"), "insights share modal: stable escape close handler");
 assert(modalLayerSource.includes("createPortal"), "insights share modal: portal layer renders to body");
 
 console.log("evidence-insights-layout.test.ts: all tests passed");

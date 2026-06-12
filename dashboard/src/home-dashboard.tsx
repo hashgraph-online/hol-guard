@@ -147,6 +147,12 @@ export function HomeWorkspace(props: {
   const [clearError, setClearError] = useState<string | null>(null);
   const [clearSubmitting, setClearSubmitting] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const handleShareOpen = useCallback(() => {
+    setShareOpen(true);
+  }, []);
+  const handleShareClose = useCallback(() => {
+    setShareOpen(false);
+  }, []);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const analyticsEnabled = props.runtime.kind === "ready" && (props.runtime.snapshot?.receipt_count ?? 0) > 0;
   const analyticsState = useReceiptAnalytics(analyticsEnabled);
@@ -284,7 +290,7 @@ export function HomeWorkspace(props: {
         <EvidenceInsightsShareModal
           analytics={analyticsState.data}
           runtime={snapshot}
-          onClose={() => setShareOpen(false)}
+          onClose={handleShareClose}
         />
       ) : null}
       {toastMessage && (
@@ -315,7 +321,7 @@ export function HomeWorkspace(props: {
         analyticsLoading={analyticsState.kind === "loading" && analyticsEnabled}
         runtime={snapshot}
         onOpenInsights={props.onOpenInsights}
-        onShare={() => setShareOpen(true)}
+        onShare={handleShareOpen}
       />
 
       <StreakMilestoneBanner streak={streak} />

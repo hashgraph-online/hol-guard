@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   GuardReceiptAnalytics,
   GuardReceiptArtifactStat,
@@ -75,6 +75,12 @@ export function EvidenceInsightsSurface({
 }: EvidenceInsightsSurfaceProps) {
   const [mounted, setMounted] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const handleShareOpen = useCallback(() => {
+    setShareOpen(true);
+  }, []);
+  const handleShareClose = useCallback(() => {
+    setShareOpen(false);
+  }, []);
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -98,7 +104,7 @@ export function EvidenceInsightsSurface({
         <EvidenceInsightsShareModal
           analytics={analytics}
           runtime={runtime}
-          onClose={() => setShareOpen(false)}
+          onClose={handleShareClose}
         />
       ) : null}
       <div className={`overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm ${mounted ? "evidence-insights-mounted" : ""}`}>
@@ -107,7 +113,7 @@ export function EvidenceInsightsSurface({
             <SectionLabel>Your Guard stats</SectionLabel>
             <p className="mt-1 text-sm text-slate-500">All-time local store</p>
           </div>
-          <EvidenceInsightsShareButton onClick={() => setShareOpen(true)} />
+          <EvidenceInsightsShareButton onClick={handleShareOpen} />
         </div>
         <EvidenceInsightsHeadlineBento analytics={analytics} variant="full" />
 
