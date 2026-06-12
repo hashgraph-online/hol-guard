@@ -50,6 +50,11 @@ class TestGrokAdapterIdentity:
     def test_get_adapter_returns_grok_instance(self) -> None:
         assert isinstance(get_adapter("grok"), GrokHarnessAdapter)
 
+    def test_grok_is_registered_in_adapter_list(self) -> None:
+        from codex_plugin_scanner.guard.adapters import list_adapters
+
+        assert "grok" in {item.harness for item in list_adapters()}
+
 
 class TestGrokDetect:
     def test_detects_managed_config_and_hooks(self, tmp_path: Path) -> None:
