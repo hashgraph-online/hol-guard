@@ -147,6 +147,7 @@ def test_connect_status_requires_retry_when_oauth_not_configured(tmp_path: Path)
     assert payload["status"] == "retry_required"
     assert payload["milestone"] == "first_sync_failed"
     assert payload["recovery_command"] == "hol-guard connect"
+    assert payload["repair_message"] == "Run hol-guard connect again to repair local Guard Cloud authorization."
 
 
 def test_browser_connect_caches_paid_package_firewall_entitlement(tmp_path: Path) -> None:

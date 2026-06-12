@@ -1189,6 +1189,8 @@ def build_connect_status_payload(
         payload["repair_message"] = "Run hol-guard connect to start OAuth Device Code approval."
     elif oauth_repair_required and cloud_profile is None:
         payload["repair_message"] = "Run hol-guard connect again to repair local Guard Cloud authorization."
+    elif not bool(oauth_storage_health.get("configured")) and payload["status"] == "retry_required":
+        payload["repair_message"] = "Run hol-guard connect again to repair local Guard Cloud authorization."
     return payload
 
 
