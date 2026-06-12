@@ -11,7 +11,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
-from codex_plugin_scanner.guard.shims import install_package_shims
+from codex_plugin_scanner.guard.shims import build_shim_content_hash, install_package_shims
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -407,6 +407,58 @@ def test_package_shims_repair_runs_without_guard_cloud_connect(
     assert payload["profile"]["changed"] is True
     profile_path = Path(str(payload["profile"]["profile_path"]))
     assert str(guard_home / "package-shims" / "bin") in profile_path.read_text(encoding="utf-8")
+
+
+def test_guard_doctor_repair_regenerates_stale_package_shim(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    guard_home = tmp_path / "guard-home"
+    _install_local_package_shim(guard_home, home_dir, "npm")
+    shim_path = guard_home / "package-shims" / "bin" / "npm"
+    current_content = shim_path.read_text(encoding="utf-8")
+    stale_content = "#!/bin/sh\nexec npm \"$@\"\n"
+    shim_path.write_text(stale_content, encoding="utf-8")
+    manifest_path = guard_home / "package-shims" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["content_hashes"]["npm"] = build_shim_content_hash(stale_content.encode("utf-8"))
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+
+    rc = main(
+        [
+            "guard",
+            "doctor",
+            "--repair",
+            "--home",
+            str(home_dir),
+            "--guard-home",
+            str(guard_home),
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["package_shims"]["issues"] == [
+        {
+            "kind": "package_shim_integrity",
+            "manager": "npm",
+            "integrity": "stale",
+            "repair": "Run `hol-guard doctor --repair` to regenerate package-manager shims.",
+        },
+        {
+            "kind": "package_shim_path",
+            "repair": "Run `hol-guard doctor --repair`, then open a new shell if PATH changed.",
+        },
+    ]
+    assert payload["package_shims"]["repair"]["repaired"] == ["npm"]
+    assert payload["package_shims"]["after_repair"]["manager_details"][0]["integrity"] == "ok"
+    assert shim_path.read_text(encoding="utf-8") == current_content
 
 
 def test_package_shims_uninstall_runs_without_guard_cloud_connect(

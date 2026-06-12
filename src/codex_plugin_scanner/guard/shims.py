@@ -430,10 +430,14 @@ def package_shim_status(context: HarnessContext) -> dict[str, object]:
             active_managers.append(manager)
             current_hash = build_shim_content_hash(shim_path.read_bytes())
             stored_hash = stored_hashes.get(manager)
-            if stored_hash is None:
-                integrity = "unknown"
-            elif current_hash == stored_hash:
+            expected_content = _build_package_manager_python_shim(context, command).encode("utf-8")
+            expected_hash = build_shim_content_hash(expected_content)
+            if current_hash == expected_hash:
                 integrity = "ok"
+            elif stored_hash == current_hash:
+                integrity = "stale"
+            elif stored_hash is None:
+                integrity = "unknown"
             else:
                 integrity = "tampered"
         else:
@@ -589,7 +593,7 @@ def repair_package_shims(
             continue
         if selected_managers is not None and manager not in selected_managers:
             continue
-        if detail.get("integrity") in ("missing", "tampered"):
+        if detail.get("integrity") in ("missing", "stale", "tampered"):
             managers_to_repair.append(manager)
         elif not bool(detail.get("path_active")):
             path_repair_required.append(manager)
