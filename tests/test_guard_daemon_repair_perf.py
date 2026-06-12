@@ -239,3 +239,25 @@ class TestReceiptAnalyticsIndexes:
         names = {str(row["name"]) for row in rows}
         assert "idx_receipts_harness_artifact" in names
         assert "idx_receipts_timestamp_harness" in names
+        assert "idx_receipts_timestamp_desc" in names
+
+    def test_guard_store_creates_receipt_rollup_tables(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        with store._connect() as connection:
+            rows = connection.execute(
+                """
+                select name from sqlite_master
+                where type = 'table'
+                  and name in (
+                    'receipt_aggregate_totals',
+                    'receipt_daily_rollups',
+                    'receipt_harness_rollups',
+                    'receipt_artifact_rollups'
+                  )
+                """
+            ).fetchall()
+        names = {str(row["name"]) for row in rows}
+        assert "receipt_aggregate_totals" in names
+        assert "receipt_daily_rollups" in names
+        assert "receipt_harness_rollups" in names
+        assert "receipt_artifact_rollups" in names
