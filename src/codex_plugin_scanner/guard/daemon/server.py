@@ -2742,6 +2742,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         else:
             self._write_json({"error": "invalid_status"}, status=400)
             return
+        include_totals = self._query_bool(query_string, "include_totals", default=True)
         try:
             page = self.server.store.list_approval_request_page(  # type: ignore[attr-defined]
                 status=status_filter,
@@ -2749,6 +2750,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 cursor=self._query_string(query_string, "cursor"),
                 harness=self._query_string(query_string, "harness"),
                 search=self._query_string(query_string, "search"),
+                include_totals=include_totals,
             )
         except InvalidApprovalCursorError:
             self._write_json(

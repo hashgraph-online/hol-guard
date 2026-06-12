@@ -233,6 +233,27 @@ class TestQueueScaleTargets:
         assert result["next_selectable_request_id"] == "req-099998"
         assert elapsed < 0.1
 
+    def test_listing_queue_page_without_totals_skips_count_queries(self) -> None:
+        conn = _make_conn()
+        _bulk_insert_pending(conn, 50)
+
+        page = list_pending_approval_summaries(conn, limit=10, include_totals=False)
+
+        assert len(page["items"]) == 10
+        assert "total_pending_count" not in page
+        assert "total_count" not in page
+
+    def test_listing_queue_page_without_totals_stays_under_50ms_with_100k_rows(self) -> None:
+        conn = _make_conn()
+        _bulk_insert_pending(conn, 100_000)
+
+        started = time.perf_counter()
+        page = list_pending_approval_summaries(conn, limit=25, include_totals=False)
+        elapsed = time.perf_counter() - started
+
+        assert len(page["items"]) == 25
+        assert elapsed < 0.05
+
 
 class TestSearchFilter:
     def test_search_matches_artifact_name(self) -> None:

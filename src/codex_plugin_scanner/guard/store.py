@@ -776,6 +776,21 @@ _OAUTH_SECRET_PAYLOAD_PROCESS_CACHE: dict[tuple[str, str, str], str] = {}
 _OAUTH_HEALTH_RESULT_PROCESS_CACHE: dict[tuple[str, str], tuple[float, dict[str, object]]] = {}
 
 
+def receipt_index_statements() -> list[str]:
+    return [
+        "create index if not exists idx_receipts_timestamp on runtime_receipts(timestamp)",
+        "create index if not exists idx_receipts_harness on runtime_receipts(harness)",
+        (
+            "create index if not exists idx_receipts_harness_artifact "
+            "on runtime_receipts(harness, artifact_id)"
+        ),
+        (
+            "create index if not exists idx_receipts_timestamp_harness "
+            "on runtime_receipts(timestamp, harness)"
+        ),
+    ]
+
+
 class GuardStore:
     """Local SQLite store for Guard state."""
 
@@ -915,6 +930,9 @@ class GuardStore:
     def _connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
+        connection.execute("pragma journal_mode=WAL")
+        connection.execute("pragma busy_timeout=10000")
+        connection.execute("pragma synchronous=NORMAL")
         start = time.monotonic()
         try:
             yield connection
@@ -1324,6 +1342,8 @@ class GuardStore:
                 backfill_approval_queue_columns(connection)
                 self._record_schema_version(connection, version=3)
             for idx_stmt in approval_index_statements():
+                connection.execute(idx_stmt)
+            for idx_stmt in receipt_index_statements():
                 connection.execute(idx_stmt)
             self._ensure_attachment_column(connection, "lease_id", "text not null default ''")
             self._ensure_attachment_column(connection, "lease_expires_at", "text")
@@ -2647,6 +2667,7 @@ class GuardStore:
         cursor: str | None = None,
         harness: str | None = None,
         search: str | None = None,
+        include_totals: bool = True,
     ) -> dict[str, object]:
         with self._connect() as connection:
             return load_pending_approval_summaries(
@@ -2655,6 +2676,7 @@ class GuardStore:
                 cursor=cursor,
                 harness=harness,
                 search=search,
+                include_totals=include_totals,
             )
 
     def list_approval_request_page(
@@ -2665,6 +2687,7 @@ class GuardStore:
         cursor: str | None = None,
         harness: str | None = None,
         search: str | None = None,
+        include_totals: bool = True,
     ) -> dict[str, object]:
         with self._connect() as connection:
             return load_approval_request_page(
@@ -2674,6 +2697,7 @@ class GuardStore:
                 cursor=cursor,
                 harness=harness,
                 search=search,
+                include_totals=include_totals,
             )
 
     def get_approval_request(self, request_id: str) -> dict[str, object] | None:

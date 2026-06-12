@@ -224,3 +224,18 @@ class TestApproveOnceNoSecondPrompt:
 
         result = store.resolve_policy("codex", artifact_id, "hash-canary-v2-changed", workspace=None)
         assert result is None, f"Changed hash must not inherit prior approval, got {result!r}"
+
+
+class TestReceiptAnalyticsIndexes:
+    def test_guard_store_creates_receipt_indexes(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        with store._connect() as connection:
+            rows = connection.execute(
+                """
+                select name from sqlite_master
+                where type = 'index' and tbl_name = 'runtime_receipts'
+                """
+            ).fetchall()
+        names = {str(row["name"]) for row in rows}
+        assert "idx_receipts_timestamp" in names
+        assert "idx_receipts_harness" in names
