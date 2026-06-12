@@ -257,6 +257,8 @@ export function App() {
     let cancelled = false;
     let pollId: number | undefined;
     let refreshInFlight = false;
+    let clearedQueue = false;
+    const needsFullQueue = view === "inbox" || requestId !== null;
     const loadApprovalQueue = () => {
       if (refreshInFlight || cancelled || resolutionInFlight.current) {
         return;
@@ -264,18 +266,25 @@ export function App() {
       refreshInFlight = true;
       const queueErrorMessage = "Unable to load the local approval queue.";
       const runtimeErrorMessage = "Unable to load the local runtime snapshot.";
-      const pendingRequests = fetchAllPendingRequests()
-        .then((items) => {
-          if (!cancelled && !resolutionInFlight.current) {
-            setRequests({ kind: "ready", items });
-          }
-        })
-        .catch((error: unknown) => {
-          if (!cancelled && !resolutionInFlight.current) {
-            const message = error instanceof Error ? error.message : queueErrorMessage;
-            setRequests({ kind: "error", message });
-          }
-        });
+      const pendingRequests = needsFullQueue
+        ? fetchAllPendingRequests()
+            .then((items) => {
+              if (!cancelled && !resolutionInFlight.current) {
+                setRequests({ kind: "ready", items });
+              }
+            })
+            .catch((error: unknown) => {
+              if (!cancelled && !resolutionInFlight.current) {
+                const message = error instanceof Error ? error.message : queueErrorMessage;
+                setRequests({ kind: "error", message });
+              }
+            })
+        : Promise.resolve().then(() => {
+            if (!cancelled && !resolutionInFlight.current && !clearedQueue) {
+              setRequests({ kind: "ready", items: [] });
+              clearedQueue = true;
+            }
+          });
       const runtimeSnapshot = fetchRuntimeSnapshot({ includeItems: false })
         .then((snapshot) => {
           if (!cancelled && !resolutionInFlight.current) {
@@ -293,14 +302,14 @@ export function App() {
       });
     };
     loadApprovalQueue();
-    pollId = window.setInterval(loadApprovalQueue, 4000);
+    pollId = window.setInterval(loadApprovalQueue, needsFullQueue ? 4000 : 12000);
     return () => {
       cancelled = true;
       if (pollId !== undefined) {
         window.clearInterval(pollId);
       }
     };
-  }, []);
+  }, [view, requestId]);
 
   useEffect(() => {
     let cancelled = false;

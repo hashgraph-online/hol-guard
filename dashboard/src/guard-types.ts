@@ -147,6 +147,7 @@ export type GuardApprovalPageFilters = {
   search?: string;
   cursor?: string;
   limit?: number;
+  includeTotals?: boolean;
 };
 
 export type GuardApprovalPage = {

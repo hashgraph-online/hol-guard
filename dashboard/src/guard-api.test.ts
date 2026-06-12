@@ -796,6 +796,10 @@ assert(
   "L078b: fetchAllPendingRequests includes later-page harnesses"
 );
 assert(pendingPageCalls.length === 2, "L078b: fetchAllPendingRequests follows next_cursor");
+assert(
+  new URL(pendingPageCalls[1].url, "http://127.0.0.1:4174").searchParams.get("include_totals") === "0",
+  "L078b: fetchAllPendingRequests skips totals on later pages"
+);
 
 installGuardWindow("?guard-token=token-runtime&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const fetchQueueCalls = installFetchStub({

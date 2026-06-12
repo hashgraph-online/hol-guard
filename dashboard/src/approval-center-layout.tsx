@@ -259,6 +259,15 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     }
   });
   const queuedItems = props.requests.kind === "ready" ? props.requests.items : [];
+  const needsFullQueue = props.view === "inbox";
+  let queuedCount = 0;
+  if (needsFullQueue && props.requests.kind === "ready") {
+    queuedCount = queuedItems.length;
+  } else if (props.runtime.kind === "ready") {
+    queuedCount = props.runtime.snapshot.pending_count;
+  } else {
+    queuedCount = queuedItems.length;
+  }
 
   const handleOpenMobileQueue = useCallback(() => setMobileQueueOpen(true), []);
   const handleCloseMobileQueue = useCallback(() => setMobileQueueOpen(false), []);
@@ -284,7 +293,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
   return (
     <div className="min-h-screen bg-white text-brand-dark">
       <ShellHeader
-        queuedCount={queuedItems.length}
+        queuedCount={queuedCount}
         view={props.view}
         onNavigate={props.onNavigate}
         onOpenMobileQueue={handleOpenMobileQueue}
@@ -294,7 +303,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         onUpdateGuard={onUpdateGuard}
       />
       <ShellSidebar
-        queuedCount={queuedItems.length}
+        queuedCount={queuedCount}
         view={props.view}
         collapsed={sidebarCollapsed}
         onToggleCollapse={handleToggleSidebar}
