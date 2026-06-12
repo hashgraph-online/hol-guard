@@ -650,11 +650,7 @@ def _mcp_tool_items_from_artifact(
                     {
                         **layer,
                         "metadata": {
-                            **{
-                                key: value
-                                for key, value in layer_metadata.items()
-                                if key != "attestation"
-                            },
+                            **{key: value for key, value in layer_metadata.items() if key != "attestation"},
                             "attestationStatus": "unsigned",
                             "inheritedFromServerItemId": server_item.item_id,
                         },

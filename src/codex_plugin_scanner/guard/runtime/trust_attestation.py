@@ -42,9 +42,7 @@ def resolve_trust_attestation_signing_config(
 ) -> GuardTrustAttestationSigningConfig | None:
     env = environ or os.environ
     active_key_id = _sanitize_env(env.get("GUARD_AIBOM_TRUST_ATTESTATION_KEY_ID")) or "guard-aibom-trust-key-default"
-    private_key_pem = _normalize_pem(
-        _sanitize_env(env.get("GUARD_AIBOM_TRUST_ATTESTATION_PRIVATE_KEY"))
-    )
+    private_key_pem = _normalize_pem(_sanitize_env(env.get("GUARD_AIBOM_TRUST_ATTESTATION_PRIVATE_KEY")))
     if not private_key_pem:
         return None
     return GuardTrustAttestationSigningConfig(
@@ -195,9 +193,7 @@ def sign_trust_attestation(
     signed_at: str,
 ) -> dict[str, object]:
     private_key = _load_private_key(config.private_key_pem)
-    canonical_payload = canonical_trust_attestation_payload(
-        _payload_with_signed_at(payload, signed_at)
-    )
+    canonical_payload = canonical_trust_attestation_payload(_payload_with_signed_at(payload, signed_at))
     signature = private_key.sign(
         canonical_payload,
         padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
@@ -251,9 +247,7 @@ def verify_trust_attestation(
     signature: str = raw_signature
     if signature_algorithm != GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM:
         raise ValueError("Unsupported trust attestation signature algorithm")
-    canonical_payload = canonical_trust_attestation_payload(
-        _payload_with_signed_at(payload, envelope.get("signedAt"))
-    )
+    canonical_payload = canonical_trust_attestation_payload(_payload_with_signed_at(payload, envelope.get("signedAt")))
     if hashlib.sha256(canonical_payload).hexdigest() != payload_hash:
         raise ValueError("Trust attestation payload hash mismatch")
     if _public_key_fingerprint(public_key_pem) != fingerprint_sha256:
@@ -323,7 +317,7 @@ def _public_key_fingerprint(public_key_pem: str) -> str:
 
 
 def _sanitize_env(value: str | None) -> str:
-    return value.replace('\\n', '\n').replace("\r\n", "\n").strip().strip("'\"") if isinstance(value, str) else ""
+    return value.replace("\\n", "\n").replace("\r\n", "\n").strip().strip("'\"") if isinstance(value, str) else ""
 
 
 def _normalize_pem(value: str) -> str:
