@@ -24,6 +24,7 @@ import {
   HiMiniBugAnt,
   HiMiniCog6Tooth,
   HiMiniSquares2X2,
+  HiMiniClipboardDocumentList,
 } from "react-icons/hi2";
 
 import { guardAwareHref } from "./guard-api";
@@ -161,13 +162,14 @@ export function ShellHeader(props: {
   );
 }
 
-const hubViews = new Set(["audit", "policy", "feed-health"]);
+const hubViews = new Set(["audit", "feed-health"]);
 
 const sidebarLinks = [
   { href: "/", label: "Home", view: "home", icon: HiMiniHome },
   { href: "/inbox", label: "Inbox", view: "inbox", icon: HiMiniInbox },
   { href: "/protect", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
   { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
+  { href: "/policy", label: "Policy", view: "policy", icon: HiMiniClipboardDocumentList },
   { href: "/supply-chain", label: "Supply chain", view: "supply-chain", icon: HiMiniSquares2X2 },
   { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal },
   { href: "/about", label: "About", view: "about", icon: HiMiniInformationCircle }

@@ -1,29 +1,25 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/use-resolved-approval-gate.js","assets/chunks/feed-health-workspace.js","assets/chunks/home-protection-module.js","assets/chunks/audit-workspace.js","assets/chunks/policy-workspace.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/use-resolved-approval-gate.js","assets/chunks/feed-health-workspace.js","assets/chunks/home-protection-module.js","assets/chunks/supply-chain-workspace-layout.js","assets/chunks/audit-workspace.js"])))=>i.map(i=>d[i]);
 import { r as reactExports, j as jsxRuntimeExports, aB as WorkspacePageHeader, aC as __vitePreload } from "../guard-dashboard.js";
-const SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS = "min-w-0 max-w-full space-y-6 overflow-x-hidden";
+import { S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout.js";
 const SupplyChainWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./supply-chain-workspace.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0).then((m) => ({ default: m.SupplyChainWorkspace }))
+  () => __vitePreload(() => import("./supply-chain-workspace.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6]) : void 0).then((module) => ({ default: module.SupplyChainWorkspace }))
 );
 const AuditWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./audit-workspace.js"), true ? __vite__mapDeps([6,1,2,3]) : void 0).then((m) => ({ default: m.AuditWorkspace }))
-);
-const PolicyWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./policy-workspace.js"), true ? __vite__mapDeps([7,1,2]) : void 0).then((m) => ({ default: m.PolicyWorkspace }))
+  () => __vitePreload(() => import("./audit-workspace.js"), true ? __vite__mapDeps([7,1,2,3]) : void 0).then((module) => ({ default: module.AuditWorkspace }))
 );
 const FeedHealthWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./feed-health-workspace.js"), true ? __vite__mapDeps([4,1,2]) : void 0).then((m) => ({ default: m.FeedHealthWorkspace }))
+  () => __vitePreload(() => import("./feed-health-workspace.js"), true ? __vite__mapDeps([4,1,2]) : void 0).then((module) => ({ default: module.FeedHealthWorkspace }))
 );
 const hubTabs = [
   { value: "supply-chain", label: "Supply Chain" },
   { value: "audit", label: "Audit" },
-  { value: "policy", label: "Policy" },
   { value: "feed-health", label: "Feed Health" }
 ];
 function hubTitleForTab(tab) {
   return hubTabs.find((item) => item.value === tab)?.label ?? "Supply Chain";
 }
 function viewToTab(view) {
-  if (view === "supply-chain" || view === "audit" || view === "policy" || view === "feed-health") {
+  if (view === "supply-chain" || view === "audit" || view === "feed-health") {
     return view;
   }
   return "supply-chain";
@@ -49,7 +45,7 @@ function SupplyChainHubWorkspace(props) {
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: [
-      tab === "supply-chain" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      tab === "supply-chain" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
         SupplyChainWorkspace,
         {
           snapshot: props.snapshot,
@@ -57,30 +53,16 @@ function SupplyChainHubWorkspace(props) {
           onGoHome: props.onGoHome,
           onRuntimeRefresh: props.onRuntimeRefresh
         }
-      ),
-      tab === "audit" && /* @__PURE__ */ jsxRuntimeExports.jsx(AuditWorkspace, { snapshot: props.snapshot, receipts: props.receipts, approvalGate: props.approvalGate }),
-      tab === "policy" && /* @__PURE__ */ jsxRuntimeExports.jsx(
-        PolicyWorkspace,
-        {
-          policies: props.policies,
-          snapshot: props.snapshot,
-          onClearPolicy: props.onClearPolicy,
-          onOpenSettings: props.onOpenSettings
-        }
-      ),
-      tab === "feed-health" && /* @__PURE__ */ jsxRuntimeExports.jsx(FeedHealthWorkspace, { snapshot: props.snapshot, onOpenSettings: props.onOpenSettings })
+      ) : null,
+      tab === "audit" ? /* @__PURE__ */ jsxRuntimeExports.jsx(AuditWorkspace, { snapshot: props.snapshot, receipts: props.receipts, approvalGate: props.approvalGate }) : null,
+      tab === "feed-health" ? /* @__PURE__ */ jsxRuntimeExports.jsx(FeedHealthWorkspace, { snapshot: props.snapshot, onOpenSettings: props.onOpenSettings }) : null
     ] })
   ] });
 }
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
 }
-const supplyChainHubWorkspace = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
-  __proto__: null,
+export {
   SupplyChainHubWorkspace,
   hubTitleForTab
-}, Symbol.toStringTag, { value: "Module" }));
-export {
-  SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS as S,
-  supplyChainHubWorkspace as s
 };

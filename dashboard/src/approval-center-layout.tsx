@@ -153,6 +153,7 @@ type LayoutProps = {
   settingsContent: ReactNode;
   appDetailContent: ReactNode;
   supplyChainHubContent?: ReactNode;
+  policyContent?: ReactNode;
   aboutContent?: ReactNode;
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
@@ -343,8 +344,10 @@ export function ApprovalCenterLayout(props: LayoutProps) {
               props.settingsContent
             ) : props.view === "about" ? (
               props.aboutContent ?? null
-            ) : props.view === "supply-chain" || props.view === "audit" || props.view === "policy" || props.view === "feed-health" ? (
+            ) : props.view === "supply-chain" || props.view === "audit" || props.view === "feed-health" ? (
               props.supplyChainHubContent ?? null
+            ) : props.view === "policy" ? (
+              props.policyContent ?? null
             ) : props.view === "inbox" ? (
               renderInboxContent(props)
             ) : (
