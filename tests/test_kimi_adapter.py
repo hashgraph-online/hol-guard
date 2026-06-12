@@ -263,6 +263,44 @@ class TestKimiHookQuoting:
         assert "workspace & tools" in windows_cmd
 
 
+class TestKimiHookChatUx:
+    def test_kimi_block_emits_reason_to_stderr(self, tmp_path: Path) -> None:
+        import io
+        from contextlib import redirect_stderr
+
+        from codex_plugin_scanner.guard.cli.commands_hook_generic import (
+            _run_hook_generic_payload,
+        )
+        from codex_plugin_scanner.guard.config import GuardConfig
+        from codex_plugin_scanner.guard.store import GuardStore
+
+        guard_home = tmp_path / ".hol-guard"
+        store = GuardStore(guard_home)
+        config = GuardConfig(guard_home=guard_home, workspace=tmp_path)
+        args = argparse.Namespace(
+            harness="kimi",
+            json=False,
+            policy_action="block",
+            artifact_id=None,
+            artifact_name=None,
+        )
+        payload = {"hookEventName": "UserPromptSubmit", "prompt": "delete all files"}
+        stderr_capture = io.StringIO()
+        stdout_capture = io.StringIO()
+        with redirect_stderr(stderr_capture):
+            rc = _run_hook_generic_payload(
+                args,
+                action_envelope=None,
+                config=config,
+                output_stream=stdout_capture,
+                payload=payload,
+                runtime_workspace=tmp_path,
+                store=store,
+            )
+        assert rc == 2
+        assert "HOL Guard flagged" in stderr_capture.getvalue()
+
+
 class TestKimiLaunchCommand:
     def test_launch_command_passes_workspace(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)

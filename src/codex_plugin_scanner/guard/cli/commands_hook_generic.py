@@ -149,6 +149,8 @@ def _run_hook_generic_payload(
                 reason=block_reason,
                 output_stream=output_stream,
             )
+            # Kimi surfaces stderr to the user as the blocking explanation.
+            _emit_native_hook_block_stderr(block_reason)
         else:
             _emit_native_hook_block_stderr(block_reason)
         return 2
