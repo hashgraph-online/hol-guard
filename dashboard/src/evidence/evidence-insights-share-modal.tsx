@@ -9,7 +9,7 @@ import {
   startGuardCloudConnect,
   type GuardInsightsShareResult,
 } from "../guard-api";
-import { ConnectFlowCard } from "../supply-chain-firewall-views";
+import { EvidenceInsightsShareConnectPanel } from "./evidence-insights-share-connect-panel";
 import { EvidenceInsightsShareSheet } from "./evidence-insights-share-sheet";
 import { GuardStatMetric } from "./guard-stat-metric";
 import { HomeInsightsMetrics } from "./evidence-insights-headline-bento";
@@ -38,7 +38,7 @@ export function EvidenceInsightsShareModal({
   runtime: initialRuntime,
   onClose,
 }: EvidenceInsightsShareModalProps) {
-  const [runtime, setRuntime] = useState<GuardRuntimeSnapshot | null>(initialRuntime);
+  const [runtime, setRuntime] = useState(initialRuntime);
   const [includeTopArtifacts, setIncludeTopArtifacts] = useState(false);
   const [showDisplayName, setShowDisplayName] = useState(true);
   const [displayName, setDisplayName] = useState("");
@@ -51,8 +51,6 @@ export function EvidenceInsightsShareModal({
   const [connectError, setConnectError] = useState<string | null>(null);
 
   const cloudConnected = insightsShareCloudReady(runtime);
-  const connectMode =
-    runtime?.cloud_state === "local_only" || runtime?.cloud_state === "paired_waiting" ? "connect" : "repair";
 
   const refreshConnectState = useCallback(async () => {
     const [connectStatus, runtimeSnapshot] = await Promise.all([
@@ -124,12 +122,12 @@ export function EvidenceInsightsShareModal({
     }
   }, [displayName, includeTopArtifacts, showDisplayName]);
 
-  const activeConnectFlow = useMemo(() => {
+  const activeConnectFlow = useMemo((): GuardCloudConnectFlow => {
     if (connectFlow !== null) {
       return connectFlow;
     }
     return {
-      state: "idle" as const,
+      state: "idle",
       title: "Connect Guard Cloud to publish insights",
       detail:
         "Guard keeps protecting this machine locally. Connect Guard Cloud here so the daemon can publish a public share link with preview image support.",
@@ -164,9 +162,11 @@ export function EvidenceInsightsShareModal({
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-brand-dark">Share publicly</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Publish a redacted stats card to HOL Guard Cloud with a link and preview image.
-              </p>
+              {cloudConnected ? (
+                <p className="mt-1 text-sm text-slate-500">
+                  Publish a redacted stats card with a public link and preview image.
+                </p>
+              ) : null}
             </div>
             <button type="button" onClick={onClose} className="text-sm font-medium text-slate-500 hover:text-brand-dark">
               Close
@@ -175,17 +175,12 @@ export function EvidenceInsightsShareModal({
         </div>
 
         {!cloudConnected ? (
-          <div className="px-5 py-5">
-            <ConnectFlowCard
-              compact
-              connectError={connectError}
-              connectStarting={connectStarting}
-              connectFlow={activeConnectFlow}
-              mode={connectMode}
-              purpose="insights_share"
-              onStartConnect={handleStartConnect}
-            />
-          </div>
+          <EvidenceInsightsShareConnectPanel
+            connectError={connectError}
+            connectFlow={activeConnectFlow}
+            connectStarting={connectStarting}
+            onStartConnect={handleStartConnect}
+          />
         ) : (
           <>
             <div className="space-y-4 px-5 py-5">
@@ -260,7 +255,10 @@ export function EvidenceInsightsShareModal({
               </label>
 
               {error ? (
-                <div className={`rounded-xl border px-3 py-2 text-sm ${errorIsReauth ? "border-amber-200 bg-amber-50 text-amber-900" : "border-rose-200 bg-rose-50 text-rose-900"}`} role="alert">
+                <div
+                  className={`rounded-xl border px-3 py-2 text-sm ${errorIsReauth ? "border-amber-200 bg-amber-50 text-amber-900" : "border-rose-200 bg-rose-50 text-rose-900"}`}
+                  role="alert"
+                >
                   <p>{error}</p>
                   {errorIsReauth ? (
                     <ActionButton variant="outline" onClick={handleStartConnect} className="mt-2 w-full">
