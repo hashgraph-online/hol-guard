@@ -704,6 +704,7 @@ def _row_to_approval_summary(row: sqlite3.Row) -> dict[str, object]:
         "artifact_name": str(row["artifact_name"]),
         "artifact_type": str(row["artifact_type"]),
         "policy_action": str(row["policy_action"]),
+        "changed_fields": _safe_json_list(row["changed_fields_json"]),
         "source_scope": str(row["source_scope"]),
         "config_path": str(row["config_path"]),
         "workspace": row["workspace"],
@@ -736,8 +737,9 @@ def list_approval_request_summary_rows(
     )
     query = f"""
         select request_id, harness, artifact_id, artifact_name, artifact_type, policy_action,
-               source_scope, config_path, workspace, launch_target, risk_summary, risk_headline,
-               action_identity, queue_group_id, dedupe_count, created_at, last_seen_at, status
+               changed_fields_json, source_scope, config_path, workspace, launch_target,
+               risk_summary, risk_headline, action_identity, queue_group_id, dedupe_count,
+               created_at, last_seen_at, status
         from approval_requests
         {where_clause}
         order by last_seen_at desc, request_id desc

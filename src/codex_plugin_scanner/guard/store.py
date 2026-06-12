@@ -925,7 +925,6 @@ class GuardStore:
         start = time.monotonic()
         try:
             connection.execute("pragma busy_timeout=10000")
-            connection.execute("pragma synchronous=NORMAL")
             yield connection
             connection.commit()
         finally:
