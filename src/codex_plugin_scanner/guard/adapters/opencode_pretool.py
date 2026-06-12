@@ -72,23 +72,92 @@ async function runGuardHook(directory: string, payload: Record<string, unknown>)
   return { exitCode, stdout, stderr };
 }
 
-function guardBlockMessage(stdout: string, stderr: string): string {
-  try {
-    const payload = JSON.parse(stdout) as {
-      review_hint?: string;
-      decision_v2_json?: { harness_message?: string; retry_instruction?: string };
-    };
-    const decision = payload.decision_v2_json;
-    return (
-      payload.review_hint ||
-      decision?.retry_instruction ||
-      decision?.harness_message ||
-      stderr.trim() ||
-      "HOL Guard blocked this OpenCode action."
-    );
-  } catch {
+function parseGuardPayload(stdout: string): Record<string, unknown> | null {
+  const trimmed = stdout.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const parseCandidate = (candidate: string): Record<string, unknown> | null => {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {}
+    return null;
+  };
+  const direct = parseCandidate(trimmed);
+  if (direct !== null) {
+    return direct;
+  }
+  const lines = trimmed.split(/\\r?\\n/);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const candidate = lines[index]?.trim();
+    if (!candidate) {
+      continue;
+    }
+    const parsed = parseCandidate(candidate);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function guardReviewUrl(payload: Record<string, unknown>): string | null {
+  const primary = typeof payload.primary_approval_url === "string" ? payload.primary_approval_url.trim() : "";
+  if (primary) {
+    return primary;
+  }
+  const reviewUrl = typeof payload.review_url === "string" ? payload.review_url.trim() : "";
+  if (reviewUrl) {
+    return reviewUrl;
+  }
+  const queued = payload.approval_requests;
+  if (Array.isArray(queued)) {
+    for (const item of queued) {
+      if (!item || typeof item !== "object") {
+        continue;
+      }
+      const approvalUrl = (item as { approval_url?: unknown }).approval_url;
+      if (typeof approvalUrl === "string" && approvalUrl.trim()) {
+        return approvalUrl.trim().replace(/\\/approvals\\//g, "/requests/");
+      }
+    }
+  }
+  const center = typeof payload.approval_center_url === "string" ? payload.approval_center_url.trim() : "";
+  return center || null;
+}
+
+export function guardBlockMessage(stdout: string, stderr: string): string {
+  const payload = parseGuardPayload(stdout);
+  if (payload === null) {
     return stderr.trim() || "HOL Guard blocked this OpenCode action.";
   }
+  const decision = payload.decision_v2_json;
+  const decisionPayload =
+    decision && typeof decision === "object"
+      ? (decision as { harness_message?: unknown; retry_instruction?: unknown })
+      : null;
+  const reviewHint = typeof payload.review_hint === "string" ? payload.review_hint.trim() : "";
+  const retryInstruction =
+    typeof decisionPayload?.retry_instruction === "string" ? decisionPayload.retry_instruction.trim() : "";
+  const harnessMessage =
+    typeof decisionPayload?.harness_message === "string" ? decisionPayload.harness_message.trim() : "";
+  const baseMessage =
+    reviewHint ||
+    retryInstruction ||
+    harnessMessage ||
+    stderr.trim() ||
+    "HOL Guard blocked this OpenCode action.";
+  const reviewUrl = guardReviewUrl(payload);
+  if (!reviewUrl || baseMessage.includes(reviewUrl)) {
+    return baseMessage;
+  }
+  return (
+    `${baseMessage} Open HOL Guard to approve or keep this blocked: ${reviewUrl}. `
+    + "After you choose, retry the same OpenCode action."
+  );
 }
 
 export const HolGuardPretoolPlugin = async ({

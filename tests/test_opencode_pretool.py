@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -39,6 +41,33 @@ def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:
     )
 
 
+def _run_generated_guard_block_message(tmp_path: Path, *, stdout: str, stderr: str = "") -> str:
+    bun = shutil.which("bun")
+    if bun is None:
+        pytest.skip("bun not installed")
+    source = pretool_plugin_source(_ctx(tmp_path))
+    plugin_path = tmp_path / "guard-block-plugin.ts"
+    plugin_path.write_text(source, encoding="utf-8")
+    script_path = tmp_path / "guard-block-runner.ts"
+    script_path.write_text(
+        "import { guardBlockMessage } from './guard-block-plugin';\n"
+        + "console.log(guardBlockMessage("
+        + json.dumps(stdout)
+        + ", "
+        + json.dumps(stderr)
+        + "));\n",
+        encoding="utf-8",
+    )
+    completed = subprocess.run(
+        [bun, str(script_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    return completed.stdout.strip()
+
+
 def test_pretool_plugin_source_embeds_guard_paths(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     source = pretool_plugin_source(ctx)
@@ -64,6 +93,39 @@ def test_pretool_plugin_source_embeds_guard_paths(tmp_path: Path) -> None:
 def test_pretool_plugin_source_normalizes_argv_array_commands(tmp_path: Path) -> None:
     source = pretool_plugin_source(_ctx(tmp_path))
     assert "Array.isArray(command)" in source
+
+
+def test_pretool_plugin_guard_block_message_appends_primary_approval_url(tmp_path: Path) -> None:
+    message = _run_generated_guard_block_message(
+        tmp_path,
+        stdout=json.dumps(
+            {
+                "decision_v2_json": {
+                    "harness_message": "HOL Guard blocked this OpenCode action.",
+                },
+                "primary_approval_url": "http://127.0.0.1:4455/requests/req-opencode",
+            }
+        ),
+    )
+    assert "http://127.0.0.1:4455/requests/req-opencode" in message
+    assert "Open HOL Guard to approve or keep this blocked" in message
+
+
+def test_pretool_plugin_guard_block_message_recovers_last_json_line(tmp_path: Path) -> None:
+    message = _run_generated_guard_block_message(
+        tmp_path,
+        stdout="Guard queued approval request\n"
+        + json.dumps(
+            {
+                "review_hint": "HOL Guard queued this OpenCode action for review.",
+                "approval_requests": [
+                    {"approval_url": "http://127.0.0.1:4455/approvals/req-opencode"},
+                ],
+            }
+        ),
+    )
+    assert "http://127.0.0.1:4455/requests/req-opencode" in message
+    assert message.count("http://127.0.0.1:4455/requests/req-opencode") == 1
 
 
 def test_pretool_hook_launcher_ignores_workspace_package_hijack(
