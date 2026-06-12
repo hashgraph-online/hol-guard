@@ -1,13 +1,12 @@
 import { useMemo } from "react";
 import { HiMiniBugAnt, HiMiniExclamationTriangle } from "react-icons/hi2";
-import { SectionLabel, Tag, EmptyState, ActionButton } from "./approval-center-primitives";
+import { SectionLabel, Tag, EmptyState } from "./approval-center-primitives";
 import { formatRelativeTime } from "./approval-center-utils";
 import type { SupplyChainAuditFinding, SupplyChainAuditSnapshot } from "./guard-types";
 
 type SupplyChainAuditFindingsSummaryProps = {
   auditSnapshot: SupplyChainAuditSnapshot | null;
   auditRunning: boolean;
-  onRunAudit?: () => void;
 };
 
 const decisionPriority: Record<string, number> = {
@@ -102,7 +101,6 @@ function FindingSummaryRow({ finding }: FindingSummaryRowProps) {
 export function SupplyChainAuditFindingsSummary({
   auditSnapshot,
   auditRunning,
-  onRunAudit,
 }: SupplyChainAuditFindingsSummaryProps) {
   const topFindings = useMemo(() => {
     if (auditSnapshot === null) {
@@ -147,13 +145,6 @@ export function SupplyChainAuditFindingsSummary({
                 : "Run an audit from the firewall panel to see package risks here."
             }
             tone="teach"
-            action={
-              auditRunning || onRunAudit === undefined ? undefined : (
-                <ActionButton variant="primary" onClick={onRunAudit}>
-                  Run audit
-                </ActionButton>
-              )
-            }
           />
         </div>
       ) : topFindings.length === 0 ? (

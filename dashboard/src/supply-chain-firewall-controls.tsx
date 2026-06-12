@@ -16,7 +16,6 @@ import {
 } from "./supply-chain-firewall-views";
 import { resolvePackageFirewallNextAction } from "./supply-chain-firewall-next-action";
 import { ManagerRow, resolveShimStatus } from "./supply-chain-firewall-manager-row";
-import { SupplyChainManagerCards } from "./supply-chain-manager-cards";
 
 export type FirewallOpKey = PackageFirewallActionType | "audit" | "sync";
 
@@ -219,13 +218,6 @@ export function FirewallControlsView({
         onOpenShell={onOpenShell}
         onRefreshStatus={onRefreshStatus}
         protection={data.protection}
-      />
-
-      <SupplyChainManagerCards
-        managers={
-          data.supported_managers.length > 0 ? data.supported_managers : data.detected_managers
-        }
-        shims={data.package_shims}
       />
 
       {lastFailed !== null && <FailureBanner failed={lastFailed} />}
