@@ -56,6 +56,7 @@ from ..approvals import (
     build_runtime_snapshot,
 )
 from ..cli.connect_flow import (
+    CONNECT_SYNC_AUTH_CONTEXT_KEY,
     _build_sync_auth_context,
     exchange_guard_authorization_code,
     resolve_connect_url,
@@ -478,6 +479,13 @@ def _queue_headless_cloud_sync(
                 "status": "in_progress",
                 "message": "Guard Cloud sync already running.",
             }
+        # This probe only short-circuits obviously overlapping cross-process work.
+        # sync_local_guard_cloud_proof() still acquires the real cloud sync lock.
+        if store.cloud_sync_in_progress():
+            return {
+                "status": "in_progress",
+                "message": "Guard Cloud sync already running.",
+            }
         _HEADLESS_CLOUD_SYNC_IN_FLIGHT.add(store_key)
 
     def _run_and_finalize() -> None:
@@ -677,7 +685,8 @@ def _finalize_daemon_guard_connect_payload(
     payload: dict[str, object],
     now: str,
 ) -> dict[str, object]:
-    payload.pop("_guard_sync_auth_context", None)
+    sync_auth_context = payload.pop(CONNECT_SYNC_AUTH_CONTEXT_KEY, None)
+    resolved_sync_auth_context = sync_auth_context if isinstance(sync_auth_context, dict) else None
     normalized_connect_url, allowed_origin = resolve_connect_url(connect_url)
     sync_url = f"{allowed_origin}/api/guard/receipts/sync"
     dashboard_url = f"{allowed_origin}/guard"
@@ -730,7 +739,10 @@ def _finalize_daemon_guard_connect_payload(
         return payload
     payload["sync_attempted"] = True
     try:
-        sync_payload = sync_local_guard_cloud_proof(store)
+        sync_payload = sync_local_guard_cloud_proof(
+            store,
+            auth_context=resolved_sync_auth_context,
+        )
     except GuardSyncNotAvailableError as error:
         store.record_latest_guard_connect_sync_result(
             status="connected",
@@ -766,7 +778,7 @@ def _finalize_daemon_guard_connect_payload(
             }
         )
         return payload
-    except RuntimeError as error:
+    except (RuntimeError, TimeoutError) as error:
         repair_message = (
             "Guard Cloud pairing finished, but the first proof sync is still pending. Local Guard will retry while "
             "the daemon is running."
