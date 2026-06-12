@@ -16,9 +16,14 @@ InstructionRole = Literal[
     "agents_md",
     "cursor_rules",
     "claude_md",
-    "design_md",
     "mcp_json",
+    "design_md",
     "product_md",
+    "roadmap_md",
+    "security_md",
+    "policy_md",
+    "standards_md",
+    "unknown_instruction",
 ]
 INVENTORY_ITEM_KINDS: tuple[str, ...] = (
     "agent",
@@ -46,11 +51,26 @@ _CURSOR_RULE_PATTERNS = ("*.mdc", "*.md")
 _CODEX_WORKSPACE_SKILL_ROOTS = (".agents/skills",)
 _CODEX_HOME_SKILL_ROOTS = (".codex/skills", ".agents/skills")
 _STANDARDS_CONTEXT_ROOTS = (".", ".agents/context", "docs")
-_STANDARDS_INSTRUCTION_FILES: tuple[tuple[str, InstructionRole], ...] = (
-    ("PRODUCT.md", "product_md"),
-    ("DESIGN.md", "design_md"),
+_ROOT_INSTRUCTION_ROLE_NAMES: tuple[tuple[str, InstructionRole], ...] = (
     ("CLAUDE.md", "claude_md"),
+    ("DESIGN.md", "design_md"),
+    ("PRODUCT.md", "product_md"),
+    ("ROADMAP.md", "roadmap_md"),
+    ("SECURITY.md", "security_md"),
+    ("POLICY.md", "policy_md"),
+    ("POLICIES.md", "policy_md"),
+    ("STANDARDS.md", "standards_md"),
 )
+_DOC_DIRECTORY_ROLES: tuple[tuple[str, InstructionRole], ...] = (
+    ("design", "design_md"),
+    ("product", "product_md"),
+    ("standards", "standards_md"),
+    ("policy", "policy_md"),
+    ("policies", "policy_md"),
+    ("security", "security_md"),
+    ("roadmap", "roadmap_md"),
+)
+_STANDARDS_INSTRUCTION_FILES = _ROOT_INSTRUCTION_ROLE_NAMES
 
 
 def file_content_hash(path: Path, *, max_bytes: int | None = None) -> str | None:
@@ -119,6 +139,14 @@ def instruction_role_for_path(path: Path) -> InstructionRole | None:
         return "design_md"
     if name == "product.md":
         return "product_md"
+    if name == "roadmap.md":
+        return "roadmap_md"
+    if name == "security.md":
+        return "security_md"
+    if name in {"policy.md", "policies.md"}:
+        return "policy_md"
+    if name == "standards.md":
+        return "standards_md"
     if name == "mcp.json":
         return "mcp_json"
     if path.suffix.lower() in {".md", ".mdc"}:
@@ -126,6 +154,11 @@ def instruction_role_for_path(path: Path) -> InstructionRole | None:
         for index, part in enumerate(parts):
             if part == ".cursor" and index + 1 < len(parts) and parts[index + 1] == "rules":
                 return "cursor_rules"
+            if part == "docs" and index + 1 < len(parts):
+                child = parts[index + 1].lower()
+                for directory_name, role in _DOC_DIRECTORY_ROLES:
+                    if child == directory_name:
+                        return role
     return None
 
 
@@ -205,6 +238,30 @@ def _discover_standards_context_files(harness: str, *, workspace_dir: Path) -> l
                     artifact_id=legacy_artifact_id,
                 )
             )
+        docs_root = search_root / "docs"
+        if not docs_root.is_dir() or not resolves_within_root(workspace_dir, docs_root, require_exists=True):
+            continue
+        for directory_name, _role in _DOC_DIRECTORY_ROLES:
+            base_dir = docs_root / directory_name
+            if not base_dir.is_dir() or not resolves_within_root(workspace_dir, base_dir, require_exists=True):
+                continue
+            for doc_path in _iter_recursive_markdown_files(workspace_dir, base_dir):
+                normalized_path = doc_path.resolve().as_posix()
+                if normalized_path in seen_paths:
+                    continue
+                seen_paths.add(normalized_path)
+                role = instruction_role_for_path(doc_path) or "unknown_instruction"
+                relative_id = doc_path.relative_to(workspace_dir).as_posix()
+                artifacts.append(
+                    _instruction_artifact(
+                        harness,
+                        doc_path,
+                        role=role,
+                        scope="project",
+                        display_name=relative_id,
+                        artifact_name=relative_id.replace("/", ":"),
+                    )
+                )
     return artifacts
 
 
@@ -225,6 +282,16 @@ def _discover_cursor_rules(harness: str, *, workspace_dir: Path) -> list[GuardAr
                 )
             )
     return artifacts
+
+
+def _iter_recursive_markdown_files(root: Path, base_dir: Path) -> tuple[Path, ...]:
+    return tuple(
+        candidate
+        for candidate in sorted(base_dir.rglob("*.md"))
+        if candidate.is_file()
+        and not candidate.is_symlink()
+        and resolves_within_root(root, candidate, require_exists=True)
+    )
 
 
 def discover_codex_skill_artifacts(

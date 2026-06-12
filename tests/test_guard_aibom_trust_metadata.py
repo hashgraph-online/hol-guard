@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins
 import json
 from pathlib import Path
+from typing import Mapping
 
 from codex_plugin_scanner.guard.aibom_trust_metadata import trust_resolution_from_domain
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
@@ -32,6 +33,17 @@ def _write_good_plugin(plugin_dir: Path) -> None:
     (plugin_dir / "README.md").write_text("# Demo\n", encoding="utf-8")
     (plugin_dir / "SECURITY.md").write_text("Report issues privately.\n", encoding="utf-8")
     (plugin_dir / "LICENSE").write_text("MIT\n", encoding="utf-8")
+
+
+def _trust_layer_types(item_metadata: dict[str, object]) -> set[str]:
+    layers = item_metadata.get("trustLayers")
+    if not isinstance(layers, list):
+        return set()
+    return {
+        str(layer.get("layerType"))
+        for layer in layers
+        if isinstance(layer, dict) and isinstance(layer.get("layerType"), str)
+    }
 
 
 def test_trust_resolution_captured_at_uses_utc_z_suffix() -> None:
@@ -94,9 +106,12 @@ def test_inventory_snapshot_attaches_local_plugin_trust_resolution(tmp_path: Pat
     assert isinstance(metadata, dict)
     assert metadata.get("trustDomain") == "plugin"
     assert metadata.get("scorer") == "hol-guard-local"
+    assert metadata.get("attestationStatus") == "unsigned"
+    assert isinstance(metadata.get("evidenceHash"), str)
     components = trust.get("trustComponents")
     assert isinstance(components, list)
     assert components
+    assert "local_baseline" in _trust_layer_types(plugin_item.metadata)
 
 
 def test_inventory_skill_trust_enrichment_disables_cisco_scan(
@@ -111,10 +126,16 @@ def test_inventory_skill_trust_enrichment_disables_cisco_scan(
     cisco_modes: list[str] = []
     original_import = builtins.__import__
 
-    def _guard_import(name: str, *args: object, **kwargs: object) -> object:
+    def _guard_import(
+        name: str,
+        globals: Mapping[str, object] | None = None,
+        locals: Mapping[str, object] | None = None,
+        fromlist: tuple[str, ...] = (),
+        level: int = 0,
+    ) -> object:
         if name == "skill_scanner" or name.startswith("skill_scanner."):
             raise AssertionError("inventory trust enrichment must not import skill_scanner")
-        return original_import(name, *args, **kwargs)
+        return original_import(name, globals, locals, fromlist, level)
 
     def _record_cisco_mode(**kwargs: object) -> object:
         from codex_plugin_scanner.integrations.cisco_skill_scanner import (
@@ -171,6 +192,7 @@ def test_inventory_skill_trust_enrichment_disables_cisco_scan(
     assert isinstance(trust, dict)
     assert trust.get("resolutionSource") == "local"
     assert cisco_modes == ["off"]
+    assert "local_baseline" in _trust_layer_types(skill_item.metadata)
 
 
 def test_inventory_snapshot_attaches_local_skill_trust_resolution(tmp_path: Path) -> None:
@@ -208,10 +230,13 @@ def test_inventory_snapshot_attaches_local_skill_trust_resolution(tmp_path: Path
     metadata = trust.get("metadata")
     assert isinstance(metadata, dict)
     assert metadata.get("trustDomain") == "skills"
+    assert metadata.get("attestationStatus") == "unsigned"
+    assert isinstance(metadata.get("evidenceHash"), str)
     components = trust.get("trustComponents")
     assert isinstance(components, list)
     assert len(components) > 0
     assert all(isinstance(component.get("componentId"), str) for component in components)
+    assert "local_baseline" in _trust_layer_types(skill_item.metadata)
 
 
 def test_inventory_snapshot_attaches_local_mcp_trust_resolution(tmp_path: Path) -> None:
@@ -261,3 +286,94 @@ def test_inventory_snapshot_attaches_local_mcp_trust_resolution(tmp_path: Path) 
     metadata = trust.get("metadata")
     assert isinstance(metadata, dict)
     assert metadata.get("trustDomain") == "mcp"
+    assert "local_baseline" in _trust_layer_types(mcp_item.metadata)
+
+
+def test_registry_identified_skill_still_gets_local_baseline(tmp_path: Path) -> None:
+    plugin_dir = tmp_path
+    _write_good_plugin(plugin_dir)
+    skills_dir = plugin_dir / "skills" / "registry-skill"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "SKILL.md").write_text("---\nname: registry-skill\ndescription: Demo\n---\n", encoding="utf-8")
+
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(str(skills_dir / "SKILL.md"),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:project:skill:registry-skill",
+                name="registry-skill",
+                harness="codex",
+                artifact_type="skill",
+                source_scope="project",
+                config_path=str(skills_dir / "SKILL.md"),
+                metadata={
+                    "registryIdentity": {
+                        "entityId": "hol-skill-registry-skill",
+                        "entityType": "skill",
+                        "name": "registry-skill",
+                        "version": "1.0.0",
+                    }
+                },
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=plugin_dir,
+    )
+    skill_item = next(item for item in snapshot.items if item.item_kind == "skill")
+
+    trust_resolution = skill_item.metadata.get("trustResolution")
+    assert isinstance(trust_resolution, dict)
+    assert trust_resolution.get("resolutionSource") == "local"
+    assert "local_baseline" in _trust_layer_types(skill_item.metadata)
+
+
+def test_inventory_snapshot_attaches_instruction_trust_resolution(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    design_doc = workspace / "DESIGN.md"
+    design_doc.write_text(
+        "# Design\n\n## Scope\nOnly write reviewed changes.\n\n## Governance\nOwner: Platform. Review required.\n",
+        encoding="utf-8",
+    )
+
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(str(design_doc),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:project:instruction:design",
+                name="DESIGN.md",
+                harness="codex",
+                artifact_type="instruction",
+                source_scope="project",
+                config_path=str(design_doc),
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+    )
+    overlay_item = next(item for item in snapshot.items if item.item_kind == "overlay")
+    trust = overlay_item.metadata.get("trustResolution")
+
+    assert overlay_item.metadata.get("instructionRole") == "design_md"
+    assert isinstance(trust, dict)
+    assert trust.get("resolutionSource") == "local"
+    trust_metadata = trust.get("metadata")
+    assert isinstance(trust_metadata, dict)
+    assert trust_metadata.get("trustDomain") == "instructions"
+    assert "local_baseline" in _trust_layer_types(overlay_item.metadata)

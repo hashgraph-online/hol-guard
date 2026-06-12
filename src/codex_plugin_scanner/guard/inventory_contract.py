@@ -146,6 +146,7 @@ _AIBOM_METADATA_KEYS = (
     "registryIdentity",
     "sourceLinks",
     "sourceOfTruth",
+    "trustLayers",
     "trustResolution",
     "versionInfo",
 )
@@ -365,7 +366,7 @@ def inventory_snapshot_from_detection(
     from .aibom_detection import discover_shared_workspace_aibom_artifacts
 
     harness = str(getattr(detection, "harness", "unknown"))
-    artifacts = list(getattr(detection, "artifacts", ()))
+    artifacts: list[object] = list(getattr(detection, "artifacts", ()))
     if workspace_dir is not None:
         existing_ids = {str(getattr(artifact, "artifact_id", "")) for artifact in artifacts}
         for artifact in discover_shared_workspace_aibom_artifacts(
@@ -376,15 +377,16 @@ def inventory_snapshot_from_detection(
             if artifact.artifact_id not in existing_ids:
                 artifacts.append(artifact)
                 existing_ids.add(artifact.artifact_id)
-    artifacts = tuple(artifacts)
+    artifact_tuple = tuple(artifacts)
     items: list[GuardAgentInventoryItem] = []
-    for artifact in artifacts:
+    for artifact in artifact_tuple:
         item = _item_from_artifact(
             harness,
             artifact,
             generated_at=generated_at,
             home_dir=home_dir,
             workspace_dir=workspace_dir,
+            cisco_runs=cisco_runs,
             include_symlinks=include_symlinks,
             follow_unsafe_symlinks=follow_unsafe_symlinks,
         )
@@ -537,6 +539,7 @@ def _item_from_artifact(
     generated_at: str,
     home_dir: Path,
     workspace_dir: Path | None,
+    cisco_runs: tuple[object, ...] = (),
     include_symlinks: bool = True,
     follow_unsafe_symlinks: bool = False,
 ) -> GuardAgentInventoryItem:
@@ -551,6 +554,7 @@ def _item_from_artifact(
         item_kind=item_kind,
         metadata=safe_metadata,
         workspace_dir=workspace_dir,
+        cisco_runs=cisco_runs,
     )
     if include_symlinks:
         safe_metadata = _apply_source_of_truth_metadata(
@@ -600,6 +604,12 @@ def _mcp_tool_items_from_artifact(
         return ()
 
     items: list[GuardAgentInventoryItem] = []
+    raw_trust_layers = server_item.metadata.get("trustLayers")
+    inherited_layers: list[dict[str, object]] = []
+    if isinstance(raw_trust_layers, list):
+        for layer in raw_trust_layers:
+            if isinstance(layer, dict) and layer.get("layerType") == "cisco_mcp_scanner":
+                inherited_layers.append(dict(layer))
     for raw_tool in raw_tools:
         if not isinstance(raw_tool, dict):
             continue
@@ -622,6 +632,21 @@ def _mcp_tool_items_from_artifact(
             "annotations": safe_annotations,
             "schemaPresent": input_schema is not None or output_schema is not None,
         }
+        if inherited_layers:
+            inherited_tool_layers: list[dict[str, object]] = []
+            for layer in inherited_layers:
+                raw_layer_metadata = layer.get("metadata")
+                layer_metadata = dict(raw_layer_metadata) if isinstance(raw_layer_metadata, dict) else {}
+                inherited_tool_layers.append(
+                    {
+                        **layer,
+                        "metadata": {
+                            **layer_metadata,
+                            "inheritedFromServerItemId": server_item.item_id,
+                        },
+                    }
+                )
+            metadata["trustLayers"] = inherited_tool_layers
         capabilities = _capabilities_for_mcp_tool(name, description, input_schema, safe_annotations)
         semantic_hash = fingerprint_mapping(
             {
@@ -835,15 +860,25 @@ def _cisco_inventory_sources(cisco_runs: tuple[object, ...]) -> tuple[GuardInven
 
 def _cisco_source(run: object) -> InventoryFindingSource | None:
     source = str(getattr(run, "source", ""))
-    if source in {"cisco-mcp-scanner", "cisco-skill-scanner"}:
-        return source
+    if source == "cisco-mcp-scanner":
+        return "cisco-mcp-scanner"
+    if source == "cisco-skill-scanner":
+        return "cisco-skill-scanner"
     return None
 
 
 def _inventory_severity(value: object) -> InventorySeverity:
     severity_value = str(getattr(value, "value", value)).strip().lower()
-    if severity_value in {"critical", "high", "medium", "low", "info"}:
-        return severity_value
+    if severity_value == "critical":
+        return "critical"
+    if severity_value == "high":
+        return "high"
+    if severity_value == "medium":
+        return "medium"
+    if severity_value == "low":
+        return "low"
+    if severity_value == "info":
+        return "info"
     return "info"
 
 
@@ -1028,6 +1063,7 @@ def _apply_aibom_metadata_enrichment(
     item_kind: InventoryItemKind,
     metadata: dict[str, object],
     workspace_dir: Path | None,
+    cisco_runs: tuple[object, ...] = (),
 ) -> dict[str, object]:
     from .aibom_detection import instruction_role_for_path
     from .aibom_trust_metadata import apply_local_trust_metadata
@@ -1045,6 +1081,7 @@ def _apply_aibom_metadata_enrichment(
         item_kind=item_kind,
         metadata=enriched,
         workspace_dir=workspace_dir,
+        cisco_runs=cisco_runs,
     )
 
 
@@ -1085,6 +1122,8 @@ def _safe_artifact_metadata(
     artifact_type = str(getattr(artifact, "artifact_type", "unknown"))
     raw_metadata = getattr(artifact, "metadata", {})
     metadata = _sanitize_paths(raw_metadata if isinstance(raw_metadata, dict) else {}, home_dir, workspace_dir)
+    if not isinstance(metadata, dict):
+        metadata = {}
     config_path = getattr(artifact, "config_path", None)
     command = getattr(artifact, "command", None)
     url = getattr(artifact, "url", None)
