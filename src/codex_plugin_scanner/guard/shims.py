@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -198,6 +199,60 @@ def _home_override_args(context: HarnessContext) -> list[str]:
 def build_shim_content_hash(content: bytes) -> str:
     """Return hex SHA-256 of shim content bytes."""
     return hashlib.sha256(content).hexdigest()
+
+
+def _normalized_package_shim_content(content: bytes) -> str:
+    """Return generated-shim content with install-specific paths masked."""
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        return ""
+    normalized_lines: list[str] = []
+    for line in text.splitlines():
+        if line.startswith("#!"):
+            normalized_lines.append("#!<python>")
+            continue
+        if line.startswith("base_command = "):
+            normalized_lines.append(f"base_command = {_normalized_base_command_repr(line)}")
+            continue
+        if line.startswith("guard_cwd = "):
+            normalized_lines.append("guard_cwd = '<path>'")
+            continue
+        if line.startswith("guard_has_explicit_workspace = "):
+            normalized_lines.append("guard_has_explicit_workspace = <workspace-mode>")
+            continue
+        if line.startswith("shim_dir = "):
+            normalized_lines.append("shim_dir = '<path>'")
+            continue
+        normalized_lines.append(line)
+    return "\n".join(normalized_lines)
+
+
+def _normalized_base_command_repr(line: str) -> str:
+    raw_value = line.split("=", 1)[1].strip()
+    try:
+        value = ast.literal_eval(raw_value)
+    except (SyntaxError, ValueError):
+        return raw_value
+    if not isinstance(value, list):
+        return raw_value
+    normalized: list[object] = []
+    skip_path_after: str | None = None
+    for index, item in enumerate(value):
+        if index == 0 and isinstance(item, str):
+            normalized.append("<python>")
+            continue
+        if isinstance(item, str) and index + 1 < len(value) and value[index + 1] == "codex_plugin_scanner.cli":
+            normalized.append("<import-root>")
+            continue
+        if skip_path_after is not None:
+            normalized.append(f"<{skip_path_after}>")
+            skip_path_after = None
+            continue
+        normalized.append(item)
+        if item in {"--guard-home", "--home", "--workspace"}:
+            skip_path_after = str(item).lstrip("-")
+    return repr(normalized)
 
 
 def get_real_binary_info(
@@ -428,12 +483,19 @@ def package_shim_status(context: HarnessContext) -> dict[str, object]:
         path_status = get_path_order_status(context, manager=manager)
         if exists:
             active_managers.append(manager)
-            current_hash = build_shim_content_hash(shim_path.read_bytes())
+            current_content = shim_path.read_bytes()
+            current_hash = build_shim_content_hash(current_content)
             stored_hash = stored_hashes.get(manager)
-            if stored_hash is None:
-                integrity = "unknown"
-            elif current_hash == stored_hash:
+            expected_content = _build_package_manager_python_shim(context, command).encode("utf-8")
+            expected_hash = build_shim_content_hash(expected_content)
+            if current_hash == expected_hash or _normalized_package_shim_content(
+                current_content
+            ) == _normalized_package_shim_content(expected_content):
                 integrity = "ok"
+            elif stored_hash == current_hash:
+                integrity = "stale"
+            elif stored_hash is None:
+                integrity = "unknown"
             else:
                 integrity = "tampered"
         else:
@@ -589,7 +651,7 @@ def repair_package_shims(
             continue
         if selected_managers is not None and manager not in selected_managers:
             continue
-        if detail.get("integrity") in ("missing", "tampered"):
+        if detail.get("integrity") in ("missing", "stale", "tampered"):
             managers_to_repair.append(manager)
         elif not bool(detail.get("path_active")):
             path_repair_required.append(manager)

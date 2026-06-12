@@ -262,6 +262,38 @@ def _run_guard_doctor_command(
         }
     if getattr(args, "perf", False):
         payload["detector_perf"] = _runtime_detector_perf_payload(config)
+    package_shims_payload = package_shim_status(context)
+    package_shim_issues = [
+        {
+            "kind": "package_shim_integrity",
+            "manager": str(detail.get("manager")),
+            "integrity": str(detail.get("integrity")),
+            "repair": "Run `hol-guard doctor --repair` to regenerate package-manager shims.",
+        }
+        for detail in package_shims_payload.get("manager_details", [])
+        if isinstance(detail, dict) and detail.get("integrity") in {"missing", "stale", "tampered"}
+    ]
+    if not bool(package_shims_payload.get("path_active")) and package_shims_payload.get("installed_managers"):
+        package_shim_issues.append(
+            {
+                "kind": "package_shim_path",
+                "repair": "Run `hol-guard doctor --repair`, then open a new shell if PATH changed.",
+            }
+        )
+    if getattr(args, "repair", False):
+        installed_managers = tuple(
+            str(manager)
+            for manager in package_shims_payload.get("installed_managers", [])
+            if isinstance(manager, str) and manager.strip()
+        )
+        if installed_managers:
+            repair_payload = activate_package_shims(context, managers=installed_managers, repair=True)
+            package_shims_payload["repair"] = repair_payload
+            package_shims_payload["after_repair"] = repair_payload["package_shims"]
+        else:
+            package_shims_payload["repair"] = {"nothing_to_repair": True, "repaired": [], "repaired_count": 0}
+    package_shims_payload["issues"] = package_shim_issues
+    payload["package_shims"] = package_shims_payload
     payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
     payload["aibom"] = build_aibom_status_payload(store, context, generated_at=_now())
     _emit("doctor", payload, getattr(args, "json", False))
