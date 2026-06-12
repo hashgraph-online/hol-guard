@@ -76,7 +76,6 @@ def _native_approval_center_context(response_payload: dict[str, object], *, harn
         "guard-cli": "package install",
         "opencode": "OpenCode",
         "kimi": "Kimi",
-        "kimi-code": "Kimi Code",
     }.get(canonical_harness, "the harness")
     if canonical_harness in {
         "npm",

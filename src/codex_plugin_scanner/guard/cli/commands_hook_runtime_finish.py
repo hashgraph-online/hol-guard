@@ -87,10 +87,8 @@ def _finalize_runtime_artifact_hook(
                 reason=native_block_reason,
                 output_stream=output_stream,
             )
-            # Kimi surfaces stderr to the user as the blocking explanation.
-            _emit_native_hook_block_stderr(native_block_reason)
-        else:
-            _emit_native_hook_block_stderr(native_block_reason)
+        # Kimi surfaces stderr to the user as the blocking explanation.
+        _emit_native_hook_block_stderr(native_block_reason)
         _record_harness_usage_for_hook(
             store=store,
             action_envelope=action_envelope,

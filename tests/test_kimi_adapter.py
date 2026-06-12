@@ -299,6 +299,7 @@ class TestKimiHookChatUx:
             )
         assert rc == 2
         assert "HOL Guard flagged" in stderr_capture.getvalue()
+        assert '"decision":"block"' in stdout_capture.getvalue()
 
 
 class TestKimiLaunchCommand:
