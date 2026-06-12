@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/runtime-overview.js","assets/chunks/home-protection-module.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/runtime-overview.js","assets/chunks/home-protection-module.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js","assets/chunks/supply-chain-hub-workspace.js","assets/chunks/supply-chain-workspace-layout.js","assets/chunks/policy-workspace-page.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -12814,6 +12814,9 @@ function HiMiniClipboard(props) {
 function HiMiniClipboardDocument(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M15.988 3.012A2.25 2.25 0 0 1 18 5.25v6.5A2.25 2.25 0 0 1 15.75 14H13.5v-3.379a3 3 0 0 0-.879-2.121l-3.12-3.121a3 3 0 0 0-1.402-.791 2.252 2.252 0 0 1 1.913-1.576A2.25 2.25 0 0 1 12.25 1h1.5a2.25 2.25 0 0 1 2.238 2.012ZM11.5 3.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v.25h-3v-.25Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.5 6A1.5 1.5 0 0 0 2 7.5v9A1.5 1.5 0 0 0 3.5 18h7a1.5 1.5 0 0 0 1.5-1.5v-5.879a1.5 1.5 0 0 0-.44-1.06L8.44 6.439A1.5 1.5 0 0 0 7.378 6H3.5Z" }, "child": [] }] })(props);
 }
+function HiMiniClipboardDocumentList(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M15.988 3.012A2.25 2.25 0 0 1 18 5.25v6.5A2.25 2.25 0 0 1 15.75 14H13.5V7A2.5 2.5 0 0 0 11 4.5H8.128a2.252 2.252 0 0 1 1.884-1.488A2.25 2.25 0 0 1 12.25 1h1.5a2.25 2.25 0 0 1 2.238 2.012ZM11.5 3.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v.25h-3v-.25Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 7a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7Zm2 3.25a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1-.75-.75Zm0 3.5a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1-.75-.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniClipboardDocumentCheck(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 5.25a2.25 2.25 0 0 0-2.012-2.238A2.25 2.25 0 0 0 13.75 1h-1.5a2.25 2.25 0 0 0-2.238 2.012c-.875.092-1.6.686-1.884 1.488H11A2.5 2.5 0 0 1 13.5 7v7h2.25A2.25 2.25 0 0 0 18 11.75v-6.5ZM12.25 2.5a.75.75 0 0 0-.75.75v.25h3v-.25a.75.75 0 0 0-.75-.75h-1.5Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3 6a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H3Zm6.874 4.166a.75.75 0 1 0-1.248-.832l-2.493 3.739-.853-.853a.75.75 0 0 0-1.06 1.06l1.5 1.5a.75.75 0 0 0 1.154-.114l3-4.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -13218,6 +13221,22 @@ function buildMemorySummary(item, receipt) {
     return `HOL Guard has not saved an earlier approval for ${item.artifact_name}.`;
   }
   return `The last saved decision for ${item.artifact_name} was ${receipt.policy_decision}.`;
+}
+function scopeLabel(scope) {
+  switch (scope) {
+    case "artifact":
+      return "This retry only";
+    case "workspace":
+      return "Same action in this project";
+    case "publisher":
+      return "This source in this app";
+    case "harness":
+      return "This app";
+    case "global":
+      return "Every project on this machine";
+    default:
+      return scope;
+  }
 }
 function policyActionLabel(action) {
   switch (action) {
@@ -16165,12 +16184,13 @@ function ShellHeader(props) {
     }
   );
 }
-const hubViews = /* @__PURE__ */ new Set(["audit", "policy", "feed-health"]);
+const hubViews = /* @__PURE__ */ new Set(["audit", "feed-health"]);
 const sidebarLinks = [
   { href: "/", label: "Home", view: "home", icon: HiMiniHome },
   { href: "/inbox", label: "Inbox", view: "inbox", icon: HiMiniInbox },
   { href: "/protect", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
   { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
+  { href: "/policy", label: "Policy", view: "policy", icon: HiMiniClipboardDocumentList },
   { href: "/supply-chain", label: "Supply chain", view: "supply-chain", icon: HiMiniSquares2X2 },
   { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal },
   { href: "/about", label: "About", view: "about", icon: HiMiniInformationCircle }
@@ -23095,7 +23115,7 @@ function ApprovalCenterLayout(props) {
         onClearEvidence: props.onClearEvidence,
         onNavigate: props.onNavigate
       }
-    ) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "about" ? props.aboutContent ?? null : props.view === "supply-chain" || props.view === "audit" || props.view === "policy" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "inbox" ? renderInboxContent(props) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+    ) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "about" ? props.aboutContent ?? null : props.view === "supply-chain" || props.view === "audit" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "policy" ? props.policyContent ?? null : props.view === "inbox" ? renderInboxContent(props) : /* @__PURE__ */ jsxRuntimeExports.jsx(
       QueueWorkspace,
       {
         requests: props.requests,
@@ -24779,7 +24799,10 @@ const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./
 const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.s), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js"), true ? __vite__mapDeps([6,7]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+);
+const PolicyWorkspacePage = reactExports.lazy(
+  () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? __vite__mapDeps([8,7]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = reactExports.lazy(
   () => __vitePreload(() => import("./chunks/about-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AboutWorkspace }))
@@ -25389,13 +25412,21 @@ function App() {
             activeView: view,
             snapshot: runtime.snapshot,
             receipts: receipts.kind === "ready" ? receipts.items : [],
-            policies: policies.kind === "ready" ? policies.items : [],
             approvalGate,
-            onClearPolicy: handleClearPolicy,
             onOpenSettings: handleOpenSettings,
             onGoHome: handleGoHome,
             onNavigate: navigate,
             onRuntimeRefresh: refreshStateAfterAction
+          }
+        ) }) : null,
+        policyContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          PolicyWorkspacePage,
+          {
+            policies: policies.kind === "ready" ? policies.items : [],
+            snapshot: runtime.snapshot,
+            onClearPolicy: handleClearPolicy,
+            onOpenSettings: handleOpenSettings,
+            onOpenInbox: handleOpenInbox
           }
         ) }) : null,
         aboutContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(AboutWorkspace, { runtimeSummary: runtime.kind === "ready" ? {
@@ -25451,7 +25482,7 @@ export {
   clearReviewQueue as Z,
   revokeApprovalGateCooldown as _,
   EvidenceActivityHeatmapMini as a,
-  HiMiniBarsArrowDown as a$,
+  HiMiniInbox as a$,
   enrollApprovalGateTotp as a0,
   verifyApprovalGateTotp as a1,
   clearEvidence as a2,
@@ -25488,7 +25519,7 @@ export {
   runAuditRemediation as aX,
   HiMiniDocumentText as aY,
   guardAwareHref as aZ,
-  HiMiniBarsArrowUp as a_,
+  HiMiniSignal as a_,
   HiMiniMagnifyingGlass as aa,
   approvalGateCooldownLabel as ab,
   fetchApprovalPage as ac,
@@ -25516,7 +25547,10 @@ export {
   WorkspacePageHeader as ay,
   __vitePreload as az,
   EmptyState as b,
-  HiMiniSignal as b0,
+  HiMiniBarsArrowUp as b0,
+  HiMiniBarsArrowDown as b1,
+  policyActionLabel as b2,
+  scopeLabel as b3,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,

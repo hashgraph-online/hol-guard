@@ -1,36 +1,32 @@
 import { lazy, Suspense, useCallback } from "react";
-import type { GuardApprovalGatePublicConfig, GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
+import type { GuardApprovalGatePublicConfig, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 import { WorkspacePageHeader } from "./workspace-page-header";
 import { SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout";
 
 const SupplyChainWorkspace = lazy(() =>
-  import("./supply-chain-workspace").then((m) => ({ default: m.SupplyChainWorkspace }))
+  import("./supply-chain-workspace").then((module) => ({ default: module.SupplyChainWorkspace })),
 );
 const AuditWorkspace = lazy(() =>
-  import("./audit-workspace").then((m) => ({ default: m.AuditWorkspace }))
-);
-const PolicyWorkspace = lazy(() =>
-  import("./policy-workspace").then((m) => ({ default: m.PolicyWorkspace }))
+  import("./audit-workspace").then((module) => ({ default: module.AuditWorkspace })),
 );
 const FeedHealthWorkspace = lazy(() =>
-  import("./feed-health-workspace").then((m) => ({ default: m.FeedHealthWorkspace }))
+  import("./feed-health-workspace").then((module) => ({ default: module.FeedHealthWorkspace })),
 );
 
-type HubTab = "supply-chain" | "audit" | "policy" | "feed-health";
+type HubTab = "supply-chain" | "audit" | "feed-health";
 
 const hubTabs: Array<{ value: HubTab; label: string }> = [
   { value: "supply-chain", label: "Supply Chain" },
   { value: "audit", label: "Audit" },
-  { value: "policy", label: "Policy" },
   { value: "feed-health", label: "Feed Health" },
 ];
 
-export function hubTitleForTab(tab: HubTab): string {
+export function hubTitleForTab(tab: string): string {
   return hubTabs.find((item) => item.value === tab)?.label ?? "Supply Chain";
 }
 
 function viewToTab(view: string): HubTab {
-  if (view === "supply-chain" || view === "audit" || view === "policy" || view === "feed-health") {
+  if (view === "supply-chain" || view === "audit" || view === "feed-health") {
     return view;
   }
   return "supply-chain";
@@ -40,9 +36,7 @@ export function SupplyChainHubWorkspace(props: {
   activeView: string;
   snapshot: GuardRuntimeSnapshot;
   receipts: GuardReceipt[];
-  policies: GuardPolicyDecision[];
   approvalGate: GuardApprovalGatePublicConfig | null;
-  onClearPolicy: (policy: GuardPolicyDecision) => void;
   onOpenSettings: () => void;
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
@@ -55,7 +49,7 @@ export function SupplyChainHubWorkspace(props: {
       const path = value === "supply-chain" ? "/supply-chain" : `/${value}`;
       props.onNavigate(path);
     },
-    [props.onNavigate]
+    [props.onNavigate],
   );
 
   return (
@@ -68,28 +62,20 @@ export function SupplyChainHubWorkspace(props: {
         onTabChange={handleTabChange}
       />
       <Suspense fallback={<LazyFallback />}>
-        {tab === "supply-chain" && (
+        {tab === "supply-chain" ? (
           <SupplyChainWorkspace
             snapshot={props.snapshot}
             approvalGate={props.approvalGate}
             onGoHome={props.onGoHome}
             onRuntimeRefresh={props.onRuntimeRefresh}
           />
-        )}
-        {tab === "audit" && (
+        ) : null}
+        {tab === "audit" ? (
           <AuditWorkspace snapshot={props.snapshot} receipts={props.receipts} approvalGate={props.approvalGate} />
-        )}
-        {tab === "policy" && (
-          <PolicyWorkspace
-            policies={props.policies}
-            snapshot={props.snapshot}
-            onClearPolicy={props.onClearPolicy}
-            onOpenSettings={props.onOpenSettings}
-          />
-        )}
-        {tab === "feed-health" && (
+        ) : null}
+        {tab === "feed-health" ? (
           <FeedHealthWorkspace snapshot={props.snapshot} onOpenSettings={props.onOpenSettings} />
-        )}
+        ) : null}
       </Suspense>
     </div>
   );

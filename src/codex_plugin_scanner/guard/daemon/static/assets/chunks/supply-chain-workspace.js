@@ -3,7 +3,7 @@ import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-res
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
 import { resolveFeedStaleness } from "./feed-health-workspace.js";
 import { r as resolveHomeProtectionStatus } from "./home-protection-module.js";
-import { S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-hub-workspace.js";
+import { S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout.js";
 const SEVERITY_RANK = {
   critical: 4,
   high: 3,
