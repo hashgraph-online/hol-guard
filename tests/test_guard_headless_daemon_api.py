@@ -384,6 +384,101 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
     assert store.get_oauth_local_credential_health()["state"] == "healthy"
 
 
+def test_guard_cloud_connect_starts_local_browser_flow_for_insights_share(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/cloud/connect",
+                method="GET",
+                token=token,
+            ),
+        )
+        assert status == 200
+        assert payload["connect_required"] is True
+        assert payload["connect_flow"]["state"] == "idle"
+        assert payload["connect_flow"]["action_label"] == "Connect Guard Cloud"
+
+        class _FakeSession:
+            authorize_url = "https://hol.org/mock-authorize"
+            redirect_uri = "http://127.0.0.1:53111/oauth/callback"
+            pkce_verifier = "pkce-verifier"
+            dpop_key_material = type(
+                "KeyMaterial",
+                (),
+                {
+                    "private_key_pem": "private-key-new",
+                    "public_jwk": {"kty": "EC", "crv": "P-256", "x": "x-value-new", "y": "y-value-new"},
+                    "public_jwk_thumbprint": "thumbprint-new",
+                },
+            )()
+
+            def wait_for_callback(self, _timeout_seconds: float):
+                return type("Callback", (), {"code": "auth-code-1"})()
+
+            def close(self) -> None:
+                return None
+
+        monkeypatch.setattr(daemon_server, "start_guard_browser_session", lambda **_kwargs: _FakeSession())
+        monkeypatch.setattr(daemon_server.webbrowser, "open", lambda _url: True)
+        monkeypatch.setattr(
+            daemon_server,
+            "exchange_guard_authorization_code",
+            lambda **_kwargs: GuardOAuthTokenExchangeResult(
+                access_token="access-token-1",
+                refresh_token="refresh-token-new",
+                expires_in=300,
+                scope="guard:runtime.sync guard:offline_access",
+                token_type="Bearer",
+                grant_id="grant-new",
+                machine_id="machine-new",
+                supply_chain_entitlement={},
+                workspace_id="workspace-1",
+            ),
+        )
+
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/cloud/connect",
+                token=token,
+                payload={},
+            ),
+        )
+        assert status == 202
+        assert payload["connect_required"] is True
+        assert payload["connect_flow"]["state"] == "running"
+        assert payload["connect_flow"]["authorize_url"] == "https://hol.org/mock-authorize"
+
+        for _ in range(20):
+            status, refreshed = _read_json_response(
+                _request(
+                    daemon.port,
+                    "/v1/cloud/connect",
+                    method="GET",
+                    token=token,
+                ),
+            )
+            if refreshed["connect_required"] is False:
+                assert status == 200
+                assert refreshed["connect_flow"] is None
+                break
+            time.sleep(0.1)
+        else:
+            raise AssertionError("cloud connect never completed for insights share")
+    finally:
+        daemon.stop()
+
+    assert store.get_cloud_sync_profile() is not None
+
+
 def test_supply_chain_package_firewall_status_reports_reconnect_gate_for_expired_cloud_auth(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

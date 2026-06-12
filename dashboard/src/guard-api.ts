@@ -47,6 +47,7 @@ import type {
   GuardReceiptDailyActivity,
   GuardReceiptHarnessStat,
   GuardRuntimeSnapshot,
+  GuardCloudConnectStatusResponse,
   SupplyChainSnapshot,
   GuardSettingsPayload,
   GuardSettingsExport,
@@ -1521,6 +1522,30 @@ export async function publishInsightsShare(input: {
     throw new Error(record.error);
   }
   throw new Error("Invalid insights share response");
+}
+
+function normalizeGuardCloudConnectStatus(value: unknown): GuardCloudConnectStatusResponse {
+  if (!isRecord(value)) {
+    return { connect_required: false, connect_flow: null };
+  }
+  return {
+    connect_required: value.connect_required === true,
+    connect_flow: normalizePackageFirewallConnectFlow(value.connect_flow),
+  };
+}
+
+export async function fetchGuardCloudConnectStatus(): Promise<GuardCloudConnectStatusResponse> {
+  return normalizeGuardCloudConnectStatus(await readJson<unknown>("/v1/cloud/connect"));
+}
+
+export async function startGuardCloudConnect(): Promise<GuardCloudConnectStatusResponse> {
+  return normalizeGuardCloudConnectStatus(
+    await readJson<unknown>("/v1/cloud/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }),
+  );
 }
 
 export async function fetchLatestReceipt(
