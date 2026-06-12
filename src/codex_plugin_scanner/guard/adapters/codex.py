@@ -15,7 +15,11 @@ try:  # pragma: no cover - Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib  # type: ignore[no-redef]
 
-from ..aibom_detection import enrich_mcp_server_metadata, extend_detection_with_workspace_aibom
+from ..aibom_detection import (
+    enrich_mcp_server_metadata,
+    extend_codex_runtime_inventory,
+    extend_detection_with_workspace_aibom,
+)
 from ..codex_config import dump_toml, read_toml_payload, write_toml_payload
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config
 from ..launcher import merge_guard_launcher_env
@@ -627,9 +631,11 @@ class CodexHarnessAdapter(HarnessAdapter):
                         continue
                     url = server_config.get("url")
                     env = server_config.get("env")
+                    enabled = server_config.get("enabled", True) is not False
                     mcp_metadata = enrich_mcp_server_metadata(
                         {
                             "name": name,
+                            "enabled": enabled,
                             "env": {
                                 str(key): str(value)
                                 for key, value in env.items()
@@ -701,8 +707,13 @@ class CodexHarnessAdapter(HarnessAdapter):
             artifacts=tuple(artifacts),
             warnings=(),
         )
-        return extend_detection_with_workspace_aibom(
+        extended = extend_detection_with_workspace_aibom(
             detection,
+            home_dir=context.home_dir,
+            workspace_dir=context.workspace_dir,
+        )
+        return extend_codex_runtime_inventory(
+            extended,
             home_dir=context.home_dir,
             workspace_dir=context.workspace_dir,
         )
