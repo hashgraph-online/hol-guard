@@ -149,8 +149,8 @@ def _run_hook_generic_payload(
                 reason=block_reason,
                 output_stream=output_stream,
             )
-        else:
-            _emit_native_hook_block_stderr(block_reason)
+        # Kimi surfaces stderr to the user as the blocking explanation.
+        _emit_native_hook_block_stderr(block_reason)
         return 2
     if _canonical_harness_name(args.harness) == "codex" and (
         hook_event_name == "UserPromptSubmit" or approval_context is not None
