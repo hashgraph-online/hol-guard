@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+
 from codex_plugin_scanner.guard.policy_bundle_parser import (
+    canonical_policy_bundle_payload,
     computed_policy_bundle_hash,
+    payload_hash_for_policy_bundle,
     validated_policy_bundle_payload,
 )
 from codex_plugin_scanner.guard.store import GuardStore
@@ -63,6 +69,33 @@ def _sample_policy_bundle(*, bundle_hash: str | None = None) -> dict[str, object
     return bundle
 
 
+def _signed_policy_bundle() -> dict[str, object]:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key_pem = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    ).decode('utf-8')
+    bundle = _sample_policy_bundle()
+    bundle['workspaceId'] = 'workspace-1'
+    verifier = dict(bundle['verifier']) if isinstance(bundle['verifier'], dict) else {}
+    verifier['algorithm'] = 'rsa-pss-sha256'
+    verifier['keyId'] = 'guard-policy-bundle-test-key'
+    verifier['publicKeyPem'] = public_key_pem
+    verifier['signature'] = None
+    bundle['verifier'] = verifier
+    bundle['bundleHash'] = computed_policy_bundle_hash(bundle)
+    bundle['payloadHash'] = payload_hash_for_policy_bundle(bundle)
+    verifier['signature'] = base64.b64encode(
+        private_key.sign(
+            canonical_policy_bundle_payload(bundle),
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+            hashes.SHA256(),
+        )
+    ).decode('utf-8')
+    bundle['verifier'] = verifier
+    return bundle
+
+
 def test_hgc071_valid_policy_bundle_parses() -> None:
     bundle = _sample_policy_bundle()
 
@@ -73,6 +106,68 @@ def test_hgc071_valid_policy_bundle_parses() -> None:
     assert validated_bundle["bundleVersion"] == "policy-2026-04-19.1"
     assert validated_bundle["bundleHash"] == computed_policy_bundle_hash(bundle)
     assert validated_bundle["rules"] == bundle["rules"]
+
+
+def test_hgc071_signed_policy_bundle_parses() -> None:
+    bundle = _signed_policy_bundle()
+
+    validated_bundle, reason = validated_policy_bundle_payload(bundle)
+
+    assert reason is None
+    assert validated_bundle is not None
+    assert validated_bundle["workspaceId"] == "workspace-1"
+    assert validated_bundle["payloadHash"] == payload_hash_for_policy_bundle(bundle)
+    verifier = validated_bundle["verifier"]
+    assert isinstance(verifier, dict)
+    assert verifier["algorithm"] == "rsa-pss-sha256"
+
+
+def test_hgc073_signed_policy_bundle_rejects_invalid_signature() -> None:
+    bundle = _signed_policy_bundle()
+    verifier = dict(bundle["verifier"]) if isinstance(bundle["verifier"], dict) else {}
+    verifier["signature"] = base64.b64encode(b"tampered-signature").decode('utf-8')
+    bundle["verifier"] = verifier
+
+    validated_bundle, reason = validated_policy_bundle_payload(bundle)
+
+    assert validated_bundle is None
+    assert reason == "bundle_signature_invalid"
+
+
+def test_hgc073_bundle_hash_ignores_public_key_rotation() -> None:
+    first_bundle = _signed_policy_bundle()
+    second_bundle = _signed_policy_bundle()
+    first_verifier = first_bundle["verifier"]
+    second_verifier = second_bundle["verifier"]
+
+    assert isinstance(first_verifier, dict)
+    assert isinstance(second_verifier, dict)
+
+    assert first_bundle["bundleHash"] == computed_policy_bundle_hash(first_bundle)
+    assert second_bundle["bundleHash"] == computed_policy_bundle_hash(second_bundle)
+    assert first_bundle["bundleHash"] == second_bundle["bundleHash"]
+    assert first_verifier["publicKeyPem"] != second_verifier["publicKeyPem"]
+
+
+def test_hgc071_legacy_sha256_bundle_omits_workspace_id_when_unset() -> None:
+    bundle = _sample_policy_bundle()
+
+    validated_bundle, reason = validated_policy_bundle_payload(bundle)
+
+    assert reason is None
+    assert validated_bundle is not None
+    assert "payloadHash" not in validated_bundle
+    assert "workspaceId" not in validated_bundle
+
+
+def test_hgc071_sha256_bundle_hash_ignores_public_key_field() -> None:
+    bundle = _sample_policy_bundle()
+    legacy_hash = computed_policy_bundle_hash(bundle)
+    verifier = dict(bundle["verifier"]) if isinstance(bundle["verifier"], dict) else {}
+    verifier["publicKeyPem"] = "unused-public-key"
+    bundle["verifier"] = verifier
+
+    assert computed_policy_bundle_hash(bundle) == legacy_hash
 
 
 def test_hgc072_invalid_schema_rejected() -> None:
