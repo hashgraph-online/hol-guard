@@ -38,11 +38,15 @@ def _run_guard_hook_command(
         args.harness = runtime_harness.strip()
     else:
         args.harness = resolve_runtime_hook_harness(args.harness)
-    payload = _load_hook_payload(getattr(args, "event_file", None), input_text=input_text)
+    payload = _load_hook_payload(
+        getattr(args, "event_file", None),
+        input_text=input_text,
+        harness=args.harness,
+    )
     if _canonical_harness_name(args.harness) == "cursor":
         from ..adapters.cursor_hooks import prepare_cursor_hook_payload
 
-        payload = _normalize_hook_payload(prepare_cursor_hook_payload(payload))
+        payload = _normalize_hook_payload(prepare_cursor_hook_payload(payload), harness=args.harness)
     managed_install = _managed_install_for(store, args.harness)
     workspace_was_explicit = workspace is not None
     runtime_workspace = workspace

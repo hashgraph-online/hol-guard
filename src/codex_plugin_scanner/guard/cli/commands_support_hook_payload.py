@@ -112,13 +112,14 @@ def _emit_native_hook_notification_stderr(reason: str) -> None:
     print(reason, file=sys.stderr)
 
 def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str | None:
+    canonical = _canonical_harness_name(harness)
     if policy_action in {"block", "sandbox-required"}:
         return "deny"
     if policy_action == "require-reapproval":
-        if harness == "codex":
+        if canonical in {"codex", "kimi"}:
             return "deny"
         return "ask"
-    if harness == "codex":
+    if canonical == "codex":
         return None
     return "allow"
 
@@ -352,15 +353,20 @@ def _approval_surface_policy_for_flow(config_policy: str, approval_flow: dict[st
         return "never-auto-open"
     return config_policy
 
-def _load_hook_payload(event_file: str | None, *, input_text: str | None = None) -> dict[str, object]:
+def _load_hook_payload(
+    event_file: str | None,
+    *,
+    input_text: str | None = None,
+    harness: str | None = None,
+) -> dict[str, object]:
     if event_file:
         payload = json.loads(Path(event_file).read_text(encoding="utf-8"))
-        return _normalize_hook_payload(payload) if isinstance(payload, dict) else {}
+        return _normalize_hook_payload(payload, harness=harness) if isinstance(payload, dict) else {}
     raw = input_text.strip() if isinstance(input_text, str) else sys.stdin.read().strip()
     if not raw:
         return {}
     payload = json.loads(raw)
-    return _normalize_hook_payload(payload) if isinstance(payload, dict) else {}
+    return _normalize_hook_payload(payload, harness=harness) if isinstance(payload, dict) else {}
 
 _ACTION_ENVELOPE_HARNESSES = frozenset(
     {"codex", "claude-code", "opencode", "copilot", "gemini", "hermes", "openclaw", "cursor"}
@@ -387,7 +393,11 @@ def _hook_action_envelope(
 def _action_envelope_json(envelope: GuardActionEnvelope | None) -> dict[str, object] | None:
     return envelope.to_dict() if envelope is not None else None
 
-def _normalize_hook_payload(payload: dict[str, object]) -> dict[str, object]:
+def _normalize_hook_payload(
+    payload: dict[str, object],
+    *,
+    harness: str | None = None,
+) -> dict[str, object]:
     normalized = dict(payload)
     for source_key, target_key in (
         ("artifactId", "artifact_id"),
@@ -421,7 +431,26 @@ def _normalize_hook_payload(payload: dict[str, object]) -> dict[str, object]:
     if arguments is not None:
         normalized["tool_input"] = arguments
         normalized["arguments"] = arguments
+    if harness is not None and _canonical_harness_name(harness) == "kimi":
+        normalized["prompt"] = _normalize_kimi_prompt(normalized.get("prompt"))
     return normalized
+
+
+def _normalize_kimi_prompt(value: object | None) -> str | None:
+    """Flatten Kimi Code's ContentPart[] prompt into a single string."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            if isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "\n".join(parts) if parts else None
+    return None
 
 def _normalize_hook_arguments(*values: object | None) -> object | None:
     for value in values:
