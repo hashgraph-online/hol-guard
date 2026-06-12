@@ -1899,39 +1899,39 @@ def sync_local_guard_cloud_proof(
     auth_context: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Publish the local Guard runtime session before syncing receipts."""
-
-    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    runtime_summary = sync_runtime_session(
-        store,
-        session=_local_guard_runtime_session(),
-        auth_context=resolved_auth_context,
-    )
-    receipts_summary = sync_receipts(
-        store,
-        persist_sync_summary=False,
-        persist_connect_state=False,
-        auth_context=resolved_auth_context,
-    )
-    summary = dict(receipts_summary)
-    summary.update(
-        {
-            "runtime_session_id": runtime_summary.get("runtime_session_id"),
-            "runtime_session_synced_at": runtime_summary.get("runtime_session_synced_at"),
-            "runtime_sessions_visible": runtime_summary.get("runtime_sessions_visible"),
-            "local_guard_online_at": runtime_summary.get("local_guard_online_at")
-            or receipts_summary.get("local_guard_online_at"),
-            "runtime_harness": runtime_summary.get("runtime_harness"),
-            "runtime_surface": runtime_summary.get("runtime_surface"),
-            "runtime_workspace": runtime_summary.get("runtime_workspace"),
-            "runtime_device_id": runtime_summary.get("runtime_device_id"),
-            "runtime": runtime_summary,
-            "receipts": dict(receipts_summary),
-        }
-    )
-    recorded_at = str(summary.get("synced_at") or summary.get("runtime_session_synced_at") or _now())
-    store.set_sync_payload("sync_summary", summary, recorded_at)
-    store.record_latest_guard_connect_sync_success(sync_payload=summary, now=recorded_at)
-    return summary
+    with store.hold_cloud_sync_lock():
+        resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
+        runtime_summary = sync_runtime_session(
+            store,
+            session=_local_guard_runtime_session(),
+            auth_context=resolved_auth_context,
+        )
+        receipts_summary = sync_receipts(
+            store,
+            persist_sync_summary=False,
+            persist_connect_state=False,
+            auth_context=resolved_auth_context,
+        )
+        summary = dict(receipts_summary)
+        summary.update(
+            {
+                "runtime_session_id": runtime_summary.get("runtime_session_id"),
+                "runtime_session_synced_at": runtime_summary.get("runtime_session_synced_at"),
+                "runtime_sessions_visible": runtime_summary.get("runtime_sessions_visible"),
+                "local_guard_online_at": runtime_summary.get("local_guard_online_at")
+                or receipts_summary.get("local_guard_online_at"),
+                "runtime_harness": runtime_summary.get("runtime_harness"),
+                "runtime_surface": runtime_summary.get("runtime_surface"),
+                "runtime_workspace": runtime_summary.get("runtime_workspace"),
+                "runtime_device_id": runtime_summary.get("runtime_device_id"),
+                "runtime": runtime_summary,
+                "receipts": dict(receipts_summary),
+            }
+        )
+        recorded_at = str(summary.get("synced_at") or summary.get("runtime_session_synced_at") or _now())
+        store.set_sync_payload("sync_summary", summary, recorded_at)
+        store.record_latest_guard_connect_sync_success(sync_payload=summary, now=recorded_at)
+        return summary
 
 
 def sync_pain_signals(
