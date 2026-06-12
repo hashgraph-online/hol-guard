@@ -78,6 +78,7 @@ function cloudLabel(snapshot: GuardRuntimeSnapshot): string {
 
 export function resolveSupplyChainWorkspaceHero(
   snapshot: GuardRuntimeSnapshot,
+  options?: { openIssueCount?: number },
 ): SupplyChainWorkspaceHeroState {
   const protectionStatus = resolveHomeProtectionStatus(snapshot);
   const stats = buildSupplyChainStats(snapshot);
@@ -85,6 +86,19 @@ export function resolveSupplyChainWorkspaceHero(
     stats.preventedInstalls > 0
       ? `${stats.preventedInstalls} blocked install${stats.preventedInstalls === 1 ? "" : "s"}`
       : "No blocked installs yet";
+
+  const openIssueCount = options?.openIssueCount ?? 0;
+  if (openIssueCount > 0) {
+    return {
+      cloudMode: snapshot.cloud_state,
+      cloudLabel: cloudLabel(snapshot),
+      protectionStatus,
+      title: "Work through the steps below",
+      detail: `${openIssueCount} setup step${openIssueCount === 1 ? "" : "s"} need attention on this device.`,
+      tone: protectionTone(protectionStatus),
+      statLine: `${stats.protectedManagers} protected · ${stats.unprotectedManagers} open · ${preventedLabel}`,
+    };
+  }
 
   return {
     cloudMode: snapshot.cloud_state,

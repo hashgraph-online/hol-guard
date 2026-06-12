@@ -17,23 +17,21 @@ import type {
   SupplyChainAuditSnapshot,
 } from "./guard-types";
 import { derivePackageWorkbenchFromReceipts, fetchReceipts, normalizeSupplyChainAuditSnapshot } from "./guard-api";
-import { PackageFirewallPanel } from "./supply-chain-firewall-panel";
+import { PackageFirewallPanel, type PackageFirewallPanelHandle } from "./supply-chain-firewall-panel";
 import { PackageWorkbenchPanel } from "./package-workbench-panel";
 import { SupplyChainBundlePanel } from "./supply-chain-bundle-panel";
 import {
   deriveSupplyChainEvidenceRail,
-  resolveSupplyChainCloudDegradedState,
   type SupplyChainEvidenceRailSnapshot,
 } from "./supply-chain-evidence-rail";
 import {
-  SupplyChainCloudDegradedBanner,
   SupplyChainEvidenceRail,
 } from "./supply-chain-evidence-rail-panel";
 import { resolveSupplyChainCloudCapabilities } from "./supply-chain-cloud-capabilities";
 import { SupplyChainCloudCapabilitiesPanel } from "./supply-chain-cloud-capabilities-panel";
 import { SupplyChainAuditFindingsSummary } from "./supply-chain-audit-findings-summary";
-import { resolveSupplyChainPostureAlerts } from "./supply-chain-posture";
-import { SupplyChainPostureBanners } from "./supply-chain-posture-banners";
+import { resolveSupplyChainIssues, type SupplyChainIssueAction } from "./supply-chain-issues";
+import { SupplyChainIssueFocus } from "./supply-chain-issue-focus";
 import { resolveSupplyChainWorkspaceHero } from "./supply-chain-workspace-hero-state";
 import { SupplyChainWorkspaceHero } from "./supply-chain-workspace-hero";
 import { SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout";
@@ -132,15 +130,54 @@ export function SupplyChainWorkspace({
   const [evidenceRail, setEvidenceRail] = useState<SupplyChainEvidenceRailSnapshot | null>(null);
   const [auditRunning, setAuditRunning] = useState(false);
   const runAuditRef = useRef<(() => void) | null>(null);
-  const cloudDegraded = useMemo(
-    () => resolveSupplyChainCloudDegradedState(snapshot),
-    [snapshot],
+  const firewallPanelRef = useRef<PackageFirewallPanelHandle>(null);
+  const [issueActionPending, setIssueActionPending] = useState(false);
+
+  const handleIssueAction = useCallback(
+    async (action: SupplyChainIssueAction) => {
+      const panel = firewallPanelRef.current;
+      if (panel === null) {
+        return;
+      }
+      if (action.kind === "firewall_unprotected") {
+        panel.focusUnprotected();
+        panel.scrollIntoView();
+        return;
+      }
+      if (action.kind === "firewall_repair") {
+        panel.focusActionable();
+        panel.scrollIntoView();
+        return;
+      }
+      if (action.kind === "firewall_audit") {
+        panel.runAudit();
+        panel.scrollIntoView();
+        return;
+      }
+
+      setIssueActionPending(true);
+      try {
+        if (action.kind === "connect") {
+          await panel.startConnect();
+          await onRuntimeRefresh?.();
+          return;
+        }
+        if (action.kind === "open_shell") {
+          await panel.openShell();
+        }
+      } finally {
+        setIssueActionPending(false);
+      }
+    },
+    [onRuntimeRefresh],
   );
-  const postureAlerts = useMemo(
-    () => resolveSupplyChainPostureAlerts(snapshot),
-    [snapshot],
+
+
+  const supplyChainIssues = useMemo(() => resolveSupplyChainIssues(snapshot), [snapshot]);
+  const workspaceHero = useMemo(
+    () => resolveSupplyChainWorkspaceHero(snapshot, { openIssueCount: supplyChainIssues.length }),
+    [snapshot, supplyChainIssues.length],
   );
-  const workspaceHero = useMemo(() => resolveSupplyChainWorkspaceHero(snapshot), [snapshot]);
   const cloudCapabilities = useMemo(
     () => resolveSupplyChainCloudCapabilities(snapshot),
     [snapshot],
@@ -190,13 +227,19 @@ export function SupplyChainWorkspace({
         </ActionButton>
       </div>
 
-      <SupplyChainWorkspaceHero hero={workspaceHero} />
+      <SupplyChainWorkspaceHero hero={workspaceHero} compact={supplyChainIssues.length > 0} />
 
-      <SupplyChainCloudDegradedBanner state={cloudDegraded} />
+      <SupplyChainIssueFocus
+        issues={supplyChainIssues}
+        onIssueAction={(action) => {
+          void handleIssueAction(action);
+        }}
+        actionPending={issueActionPending}
+      />
 
-      <SupplyChainPostureBanners alerts={postureAlerts} />
-
-      <SupplyChainCloudCapabilitiesPanel state={cloudCapabilities} />
+      {supplyChainIssues.length === 0 ? (
+        <SupplyChainCloudCapabilitiesPanel state={cloudCapabilities} />
+      ) : null}
 
       {evidenceRail !== null ? <SupplyChainEvidenceRail rail={evidenceRail} /> : null}
 
@@ -209,6 +252,7 @@ export function SupplyChainWorkspace({
       <SupplyChainBundlePanel />
 
       <PackageFirewallPanel
+        ref={firewallPanelRef}
         approvalGate={approvalGate}
         onStateChanged={onRuntimeRefresh}
         onAuditCompleted={handleAuditCompleted}
@@ -255,13 +299,13 @@ export function SupplyChainWorkspace({
             Whether this device uses sample data or live Guard Cloud updates.
           </p>
         </div>
-        <FeedHealthPanel snapshot={snapshot} />
+        <FeedHealthPanel snapshot={snapshot} hideLocalOnlyWarning={supplyChainIssues.some((issue) => issue.id === "cloud_connect")} />
       </div>
     </div>
   );
 }
 
-function FeedHealthPanel({ snapshot }: { snapshot: GuardRuntimeSnapshot }) {
+function FeedHealthPanel({ snapshot, hideLocalOnlyWarning = false }: { snapshot: GuardRuntimeSnapshot; hideLocalOnlyWarning?: boolean }) {
   const cloudState = snapshot.cloud_state;
   const isSample = cloudState === "local_only";
   const isStale =
@@ -288,7 +332,7 @@ function FeedHealthPanel({ snapshot }: { snapshot: GuardRuntimeSnapshot }) {
           </Tag>
         </div>
       </div>
-      {isSample && (
+      {isSample && !hideLocalOnlyWarning && (
         <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5">
           <HiMiniExclamationTriangle
             className="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
