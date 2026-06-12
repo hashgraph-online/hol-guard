@@ -179,7 +179,7 @@ def _discover_standards_context_files(harness: str, *, workspace_dir: Path) -> l
         if not resolves_within_root(workspace_dir, search_root, require_exists=True):
             continue
         for filename, role in _STANDARDS_INSTRUCTION_FILES:
-            path = search_root / filename if relative_root == "." else workspace_dir / relative_root / filename
+            path = search_root / filename
             if path.is_symlink() or not path.is_file():
                 continue
             if not resolves_within_root(workspace_dir, path, require_exists=True):
@@ -190,6 +190,10 @@ def _discover_standards_context_files(harness: str, *, workspace_dir: Path) -> l
             seen_paths.add(normalized_path)
             relative_id = path.relative_to(workspace_dir).as_posix()
             display_name = path.name if relative_root == "." else f"{path.name} ({relative_root})"
+            artifact_suffix = relative_id.replace("/", ":")
+            legacy_artifact_id: str | None = None
+            if harness == "claude-code" and relative_id == "CLAUDE.md":
+                legacy_artifact_id = f"{harness}:project:instruction:claude-md"
             artifacts.append(
                 _instruction_artifact(
                     harness,
@@ -197,7 +201,8 @@ def _discover_standards_context_files(harness: str, *, workspace_dir: Path) -> l
                     role=role,
                     scope="project",
                     display_name=display_name,
-                    artifact_name=relative_id.replace("/", ":"),
+                    artifact_name=artifact_suffix,
+                    artifact_id=legacy_artifact_id,
                 )
             )
     return artifacts
@@ -414,12 +419,14 @@ def _instruction_artifact(
     scope: str,
     display_name: str | None = None,
     artifact_name: str | None = None,
+    artifact_id: str | None = None,
 ) -> GuardArtifact:
     content_hash = file_content_hash(path) or fingerprint_text(path.name)
     name = display_name or path.name
     artifact_suffix = artifact_name or name
+    resolved_artifact_id = artifact_id or f"{harness}:{scope}:instruction:{role}:{artifact_suffix}"
     return GuardArtifact(
-        artifact_id=f"{harness}:{scope}:instruction:{role}:{artifact_suffix}",
+        artifact_id=resolved_artifact_id,
         name=name,
         harness=harness,
         artifact_type="instruction",
