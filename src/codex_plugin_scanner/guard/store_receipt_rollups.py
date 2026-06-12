@@ -293,6 +293,14 @@ def backfill_receipt_rollups(connection: sqlite3.Connection) -> None:
     )
 
 
+def receipt_rollups_initialized(connection: sqlite3.Connection) -> bool:
+    rollup_row = connection.execute(
+        "select 1 from receipt_aggregate_totals where totals_key = ?",
+        (_RECEIPT_TOTALS_KEY,),
+    ).fetchone()
+    return rollup_row is not None
+
+
 def receipt_rollups_need_backfill(connection: sqlite3.Connection) -> bool:
     rollup_row = connection.execute(
         "select total from receipt_aggregate_totals where totals_key = ?",
@@ -321,7 +329,9 @@ def count_receipts_from_rollups(connection: sqlite3.Connection, *, harness: str 
         "select total from receipt_harness_rollups where harness = ?",
         (harness,),
     ).fetchone()
-    return int(row["total"]) if row is not None else 0
+    if row is None:
+        return None
+    return int(row["total"])
 
 
 def load_receipt_analytics(

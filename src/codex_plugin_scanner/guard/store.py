@@ -100,6 +100,7 @@ from .store_receipt_rollups import (
     load_receipt_analytics,
     receipt_rollup_index_statements,
     receipt_rollup_schema_statements,
+    receipt_rollups_initialized,
     receipt_rollups_need_backfill,
     record_receipt_insert,
     record_receipt_policy_decision_change,
@@ -936,7 +937,6 @@ class GuardStore:
         start = time.monotonic()
         try:
             connection.execute("pragma busy_timeout=10000")
-            connection.execute("pragma cache_size=-80000")
             yield connection
             connection.commit()
         finally:
@@ -2424,7 +2424,7 @@ class GuardStore:
         top_limit = max(1, min(top_limit, 50))
 
         with self._connect() as connection:
-            if receipt_rollups_need_backfill(connection):
+            if not receipt_rollups_initialized(connection):
                 backfill_receipt_rollups(connection)
             return load_receipt_analytics(
                 connection,
