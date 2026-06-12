@@ -254,28 +254,39 @@ def _cisco_trust_layers_for_artifact(
     layers: list[dict[str, object]] = []
     for run in cisco_runs:
         source = getattr(run, "source", None)
-        if source == "cisco-skill-scanner" and item_kind in {"skill", "plugin"}:
-            if _matches_skill_cisco_run(artifact, item_kind=item_kind, run=run, workspace_dir=workspace_dir):
-                layers.append(
-                    _cisco_trust_layer(
-                        run,
-                        captured_at=captured_at,
-                        layer_id="cisco_skill_scanner",
-                        component_id="cisco.skill.score",
-                        label="Cisco Skill Scanner",
-                    )
+        if (
+            source == "cisco-skill-scanner"
+            and item_kind in {"skill", "plugin"}
+            and _matches_skill_cisco_run(
+                artifact,
+                item_kind=item_kind,
+                run=run,
+                workspace_dir=workspace_dir,
+            )
+        ):
+            layers.append(
+                _cisco_trust_layer(
+                    run,
+                    captured_at=captured_at,
+                    layer_id="cisco_skill_scanner",
+                    component_id="cisco.skill.score",
+                    label="Cisco Skill Scanner",
                 )
-        if source == "cisco-mcp-scanner" and item_kind == "mcp_server":
-            if _matches_mcp_cisco_run(artifact, run=run):
-                layers.append(
-                    _cisco_trust_layer(
-                        run,
-                        captured_at=captured_at,
-                        layer_id="cisco_mcp_scanner",
-                        component_id="cisco.mcp.score",
-                        label="Cisco MCP Scanner",
-                    )
+            )
+        if (
+            source == "cisco-mcp-scanner"
+            and item_kind == "mcp_server"
+            and _matches_mcp_cisco_run(artifact, run=run)
+        ):
+            layers.append(
+                _cisco_trust_layer(
+                    run,
+                    captured_at=captured_at,
+                    layer_id="cisco_mcp_scanner",
+                    component_id="cisco.mcp.score",
+                    label="Cisco MCP Scanner",
                 )
+            )
     return layers
 
 

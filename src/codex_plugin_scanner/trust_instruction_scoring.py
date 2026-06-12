@@ -110,6 +110,8 @@ def build_instruction_domain(
     governance_score = _score_by_count(len(governance_terms), high=90.0, medium=70.0, low=55.0, zero=30.0)
     provenance_score = _score_by_count(len(provenance_terms), high=100.0, medium=75.0, low=55.0, zero=25.0)
 
+    operational_role = role in _OPERATIONAL_ROLES or item_kind == "prompt_pack"
+
     adapters = (
         build_adapter_score(
             INSTRUCTION_TRUST_SPEC.adapters[0],
@@ -137,7 +139,7 @@ def build_instruction_domain(
         ),
         build_adapter_score(
             INSTRUCTION_TRUST_SPEC.adapters[2],
-            component_scores={"score": boundaries_score} if role in _OPERATIONAL_ROLES or item_kind == "prompt_pack" else None,
+            component_scores={"score": boundaries_score} if operational_role else None,
             rationales={
                 "score": (
                     "Operational guidance includes capability boundaries and safety language."
@@ -146,7 +148,7 @@ def build_instruction_domain(
                 )
             },
             evidence={"score": tuple((boundary_terms + capability_terms + secret_terms)[:6])},
-            applicable=role in _OPERATIONAL_ROLES or item_kind == "prompt_pack",
+            applicable=operational_role,
         ),
         build_adapter_score(
             INSTRUCTION_TRUST_SPEC.adapters[3],
