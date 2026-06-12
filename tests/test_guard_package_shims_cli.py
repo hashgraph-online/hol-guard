@@ -422,7 +422,7 @@ def test_guard_doctor_repair_regenerates_stale_package_shim(
     _install_local_package_shim(guard_home, home_dir, "npm")
     shim_path = guard_home / "package-shims" / "bin" / "npm"
     current_content = shim_path.read_text(encoding="utf-8")
-    stale_content = "#!/bin/sh\nexec npm \"$@\"\n"
+    stale_content = '#!/bin/sh\nexec npm "$@"\n'
     shim_path.write_text(stale_content, encoding="utf-8")
     manifest_path = guard_home / "package-shims" / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))

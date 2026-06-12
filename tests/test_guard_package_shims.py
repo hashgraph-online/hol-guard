@@ -618,7 +618,7 @@ def test_guard_package_shims_repair_command_regenerates_stale_manager(tmp_path: 
     shim_path = Path(str(install_payload["shim_dir"])) / "npm"
     manifest_path = Path(str(install_payload["manifest_path"]))
     current_content = shim_path.read_text(encoding="utf-8")
-    stale_content = "#!/bin/sh\nexec npm \"$@\"\n"
+    stale_content = '#!/bin/sh\nexec npm "$@"\n'
     shim_path.write_text(stale_content, encoding="utf-8")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["content_hashes"]["npm"] = build_shim_content_hash(stale_content.encode("utf-8"))

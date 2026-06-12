@@ -286,12 +286,12 @@ def _run_guard_doctor_command(
             for manager in package_shims_payload.get("installed_managers", [])
             if isinstance(manager, str) and manager.strip()
         )
-        package_shims_payload["repair"] = (
-            activate_package_shims(context, managers=installed_managers, repair=True)
-            if installed_managers
-            else {"nothing_to_repair": True, "repaired": [], "repaired_count": 0}
-        )
-        package_shims_payload["after_repair"] = package_shim_status(context)
+        if installed_managers:
+            repair_payload = activate_package_shims(context, managers=installed_managers, repair=True)
+            package_shims_payload["repair"] = repair_payload
+            package_shims_payload["after_repair"] = repair_payload["package_shims"]
+        else:
+            package_shims_payload["repair"] = {"nothing_to_repair": True, "repaired": [], "repaired_count": 0}
     package_shims_payload["issues"] = package_shim_issues
     payload["package_shims"] = package_shims_payload
     payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())

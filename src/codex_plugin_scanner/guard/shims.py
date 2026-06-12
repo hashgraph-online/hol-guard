@@ -242,11 +242,7 @@ def _normalized_base_command_repr(line: str) -> str:
         if index == 0 and isinstance(item, str):
             normalized.append("<python>")
             continue
-        if (
-            isinstance(item, str)
-            and index + 1 < len(value)
-            and value[index + 1] == "codex_plugin_scanner.cli"
-        ):
+        if isinstance(item, str) and index + 1 < len(value) and value[index + 1] == "codex_plugin_scanner.cli":
             normalized.append("<import-root>")
             continue
         if skip_path_after is not None:
