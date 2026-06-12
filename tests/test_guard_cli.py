@@ -829,7 +829,7 @@ args = ["workspace-skill.js"]
         artifact_ids = [item["artifact_id"] for item in output["harnesses"][0]["artifacts"]]
 
         assert rc == 0
-        assert artifact_ids == ["claude-code:global:shared-tools", "claude-code:project:shared-tools"]
+        assert artifact_ids == ["claude-code:global:mcp:shared-tools", "claude-code:project:mcp:shared-tools"]
 
     def test_guard_detect_scopes_claude_hook_artifact_ids(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
