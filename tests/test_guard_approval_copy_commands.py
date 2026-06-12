@@ -124,6 +124,44 @@ def test_first_approval_url_ignores_malformed_queue_items() -> None:
     )
 
 
+def test_first_approval_url_repairs_stale_local_port() -> None:
+    queued = [
+        {
+            "approval_url": "http://127.0.0.1:5713/requests/req-stale-port",
+            "harness": "package-firewall",
+            "request_id": "req-stale-port",
+        }
+    ]
+
+    assert (
+        first_approval_url(
+            queued,
+            harness="package-firewall",
+            approval_center_url="http://127.0.0.1:5474",
+        )
+        == "http://127.0.0.1:5474/requests/req-stale-port"
+    )
+
+
+def test_first_approval_url_does_not_rewrite_external_url() -> None:
+    queued = [
+        {
+            "approval_url": "https://guard.example/requests/req-cloud",
+            "harness": "package-firewall",
+            "request_id": "req-cloud",
+        }
+    ]
+
+    assert (
+        first_approval_url(
+            queued,
+            harness="package-firewall",
+            approval_center_url="http://127.0.0.1:5474",
+        )
+        == "https://guard.example/requests/req-cloud"
+    )
+
+
 def test_primary_approval_request_prefers_matching_harness() -> None:
     queued = [
         {
