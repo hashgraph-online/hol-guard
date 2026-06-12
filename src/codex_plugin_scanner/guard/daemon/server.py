@@ -1214,6 +1214,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/policy/sync":
             self._handle_headless_policy_sync(payload)
             return
+        if parsed.path == "/v1/requests/remote-once":
+            self._handle_headless_remote_once(payload)
+            return
         if parsed.path == "/v1/settings":
             self._handle_settings_update(payload)
             return
@@ -1822,6 +1825,111 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             }
         )
 
+    def _handle_headless_remote_once(self, payload: dict[str, object]) -> None:
+        harness = self._optional_string(payload.get("harness"))
+        if harness is None:
+            self._write_json({"error": "missing_harness"}, status=400)
+            return
+        try:
+            adapter = get_adapter(harness)
+        except ValueError:
+            self._write_json({"error": "unknown_harness"}, status=404)
+            return
+        remote_once = self._policy_memory_payload(payload.get("remote_once") or payload.get("remoteOnce"))
+        request_id = self._coalesce_string(remote_once, "request_id", "requestId")
+        request_last_seen_at = self._coalesce_string(remote_once, "request_last_seen_at", "requestLastSeenAt")
+        receipt_id = self._coalesce_string(remote_once, "receipt_id", "receiptId")
+        if request_id is None or request_last_seen_at is None or receipt_id is None:
+            self._write_json({"error": "missing_remote_once_fields"}, status=400)
+            return
+        if self._remote_once_receipt_replayed(receipt_id):
+            self._write_json({"error": "remote_once_replayed"}, status=409)
+            return
+        request_row = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
+        if not isinstance(request_row, dict) or request_row.get("status") != "pending":
+            self._write_json({"error": "remote_once_request_expired"}, status=409)
+            return
+        request_policy_action = self._optional_string(request_row.get("policy_action"))
+        request_recommended_scope = self._optional_string(request_row.get("recommended_scope"))
+        if request_policy_action not in {"review", "require-reapproval"} or request_recommended_scope != "artifact":
+            self._write_json({"error": "remote_once_not_permitted"}, status=409)
+            return
+        if self._optional_string(request_row.get("last_seen_at")) != request_last_seen_at:
+            self._write_json({"error": "remote_once_request_stale"}, status=409)
+            return
+        if not self.server.store.claim_remote_once_receipt(  # type: ignore[attr-defined]
+            receipt_id,
+            request_id=request_id,
+            claimed_at=_now(),
+        ):
+            self._write_json({"error": "remote_once_replayed"}, status=409)
+            return
+        try:
+            result = apply_approval_resolution(
+                store=self.server.store,  # type: ignore[attr-defined]
+                request_id=request_id,
+                action="allow",
+                scope="artifact",
+                workspace=self._optional_string(request_row.get("workspace")),
+                reason=self._optional_string(remote_once.get("reason")) or "Guard Cloud remote once approval",
+                return_queue_result=True,
+                resolve_scope_matches=False,
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+            )
+        except ApprovalRequestNotFoundError:
+            self.server.store.release_remote_once_receipt(receipt_id)  # type: ignore[attr-defined]
+            self._write_json({"error": "remote_once_request_expired"}, status=409)
+            return
+        except ApprovalRequestAlreadyResolvedError:
+            self.server.store.release_remote_once_receipt(receipt_id)  # type: ignore[attr-defined]
+            self._write_json({"error": "remote_once_request_expired"}, status=409)
+            return
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
+        except ValueError as error:
+            self._write_json({"error": str(error)}, status=400)
+            return
+        if result.get("resolved") is not True:
+            self._write_json({"error": "remote_once_apply_failed"}, status=409)
+            return
+        resolved_request = result.get("resolved_request") if isinstance(result.get("resolved_request"), dict) else {}
+        resolved_at = self._optional_string(resolved_request.get("resolved_at")) or _now()
+        self.server.store.add_event(  # type: ignore[attr-defined]
+            "approval.remote_once_applied",
+            {
+                "approval_url": self._optional_string(resolved_request.get("approval_url")),
+                "receipt_id": receipt_id,
+                "request_id": request_id,
+                "review_command": self._optional_string(resolved_request.get("review_command")),
+                "scope": "artifact",
+            },
+            resolved_at,
+        )
+        artifact_name = self._optional_string(request_row.get("artifact_name")) or request_id
+        receipt = self._record_headless_receipt(
+            harness=adapter.harness,
+            operation="remote_once",
+            payload=payload,
+            result=result,
+            workspace_id=self._optional_string(request_row.get("workspace")),
+            artifact_name=f"Remote once approval for {artifact_name}",
+            scanner_evidence_extra={
+                "receipt_id": receipt_id,
+                "request_id": request_id,
+            },
+        )
+        self._write_json(
+            {
+                "harness": adapter.harness,
+                "operation": "remote_once",
+                "receipt": receipt,
+                "request_id": request_id,
+                "resolved_request": resolved_request,
+                "status": "completed",
+            }
+        )
+
     def _handle_audit_remediation(self, action: str, payload: dict[str, object]) -> None:
         if action != "package_shim_path":
             self._write_json({"error": "unsupported_remediation", "operation": action}, status=404)
@@ -2293,6 +2401,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return {}
             return parsed if isinstance(parsed, dict) else {}
         return {}
+
+    def _remote_once_receipt_replayed(self, receipt_id: str) -> bool:
+        return self.server.store.has_remote_once_receipt(receipt_id)  # type: ignore[attr-defined]
 
     def _record_headless_receipt(
         self,
@@ -3420,6 +3531,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/operations/start",
             "/v1/operations/block",
             "/v1/requests/clear",
+            "/v1/requests/remote-once",
             "/v1/settings/import",
             "/v1/settings/reset",
             "/v1/policy/clear",
@@ -3691,6 +3803,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/receipts/latest",
             "/v1/requests",
             "/v1/requests/clear",
+            "/v1/requests/remote-once",
             "/v1/runtime",
             "/v1/settings",
             "/v1/settings/export",
@@ -3885,6 +3998,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return value.strip()
         return None
 
+    def _coalesce_string(self, mapping: dict[str, object], *keys: str) -> str | None:
+        for key in keys:
+            value = self._optional_string(mapping.get(key))
+            if value is not None:
+                return value
+        return None
+
     @staticmethod
     def _query_string(query_string: str, key: str) -> str | None:
         value = parse_qs(query_string).get(key, [None])[-1]
@@ -4055,6 +4175,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/policy/clear",
             "/v1/policy/sync",
             "/v1/requests/clear",
+            "/v1/requests/remote-once",
             "/v1/settings",
             "/v1/settings/import",
             "/v1/settings/reset",
