@@ -105,11 +105,11 @@ from ..package_firewall_entitlement import (
 )
 from ..package_firewall_receipts import package_firewall_receipt_metadata
 from ..package_shim_status import record_package_shim_audit_result
-from ..receipts.manager import build_receipt
 from ..policy_bundle_trusted_keys import (
     policy_bundle_keyring_payload,
     validate_synced_policy_bundle,
 )
+from ..receipts.manager import build_receipt
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncNotAvailableError,

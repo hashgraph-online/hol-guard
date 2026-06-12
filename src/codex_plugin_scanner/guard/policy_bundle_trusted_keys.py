@@ -169,7 +169,9 @@ def signing_key_is_current(
     return current_time <= expiry
 
 
-def load_policy_bundle_verification_keys_from_sync(payload: dict[str, object]) -> tuple[PolicyBundleVerificationKey, ...]:
+def load_policy_bundle_verification_keys_from_sync(
+    payload: dict[str, object],
+) -> tuple[PolicyBundleVerificationKey, ...]:
     verification_keys = payload.get("policyBundleVerificationKeys")
     if verification_keys is None:
         return ()
