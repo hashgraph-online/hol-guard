@@ -186,6 +186,16 @@ _SCOPED_HARNESS_FAMILIES = frozenset(
         "tool-action",
     }
 )
+_SCOPED_RUNTIME_EXACT_FAMILIES = frozenset(
+    {
+        "file-read",
+        "package-request",
+        "prompt",
+        "tool-action",
+    }
+)
+_RUNTIME_SCOPED_EXACT_MATCH_PREFIX = "runtime-exact:"
+_REMOTE_POLICY_SOURCES = frozenset({"cloud-sync", "team-policy", "policy-bundle"})
 _POLICY_SCOPES = frozenset({"artifact", "workspace", "publisher", "harness", "global"})
 _SLOW_STORE_WARNING_ENV = "HOL_GUARD_WARN_SLOW_STORE"
 _SECRET_FINGERPRINT_PREFIX = "pbkdf2-sha256$"
@@ -2121,7 +2131,26 @@ class GuardStore:
             ).fetchall()
         if not rows:
             return None
-        row = rows[0]
+        row = next(
+            (
+                candidate
+                for candidate in rows
+                if not _scoped_runtime_row_requires_exact_match(
+                    scope=str(candidate["scope"]),
+                    stored_artifact_id=(
+                        str(candidate["artifact_id"]) if isinstance(candidate["artifact_id"], str) else None
+                    ),
+                    stored_artifact_hash=(
+                        str(candidate["artifact_hash"]) if isinstance(candidate["artifact_hash"], str) else None
+                    ),
+                    source=str(candidate["source"]),
+                    requested_artifact_id=artifact_id,
+                )
+            ),
+            None,
+        )
+        if row is None:
+            return None
         return {
             "harness": row["harness"],
             "scope": row["scope"],
@@ -2139,7 +2168,11 @@ class GuardStore:
             artifact_id = _artifact_family_key(decision.artifact_id)
         else:
             artifact_id = decision.artifact_id if decision.scope in {"artifact", "workspace"} else None
-        artifact_hash = decision.artifact_hash if decision.scope in {"artifact", "workspace"} else None
+        artifact_hash = (
+            decision.artifact_hash
+            if decision.scope in {"artifact", "workspace"} or _is_runtime_scoped_exact_match_key(decision.artifact_hash)
+            else None
+        )
         workspace = _workspace_policy_key(decision.workspace) if decision.scope == "workspace" else None
         publisher = decision.publisher if decision.scope == "publisher" else None
         return artifact_id, artifact_hash, workspace, publisher
@@ -2798,10 +2831,14 @@ class GuardStore:
         publisher: str | None,
     ) -> tuple[list[str] | None, tuple[object, ...]]:
         if scope == "global":
+            if _runtime_scoped_exact_match_key(artifact_id) is not None:
+                return ["artifact_id = ?"], (artifact_id,)
             return [], ()
         if scope == "harness":
             if harness is None:
                 return None, ()
+            if _runtime_scoped_exact_match_key(artifact_id) is not None:
+                return ["harness = ?", "artifact_id = ?"], (harness, artifact_id)
             family_key = _artifact_family_key(artifact_id)
             if family_key is None:
                 return ["harness = ?"], (harness,)
@@ -5072,6 +5109,41 @@ def _artifact_family_key(artifact_id: str | None) -> str | None:
     if family not in _SCOPED_HARNESS_FAMILIES:
         return None
     return f"family:{family}"
+
+
+def _runtime_scoped_exact_match_key(artifact_id: str | None) -> str | None:
+    if artifact_id is None or not artifact_id.strip() or artifact_id.startswith("family:"):
+        return None
+    family_key = _artifact_family_key(artifact_id)
+    if family_key is None or _family_key_value(family_key) not in _SCOPED_RUNTIME_EXACT_FAMILIES:
+        return None
+    digest = sha256(artifact_id.encode("utf-8")).hexdigest()
+    return f"{_RUNTIME_SCOPED_EXACT_MATCH_PREFIX}{digest}"
+
+
+def _is_runtime_scoped_exact_match_key(value: str | None) -> bool:
+    return isinstance(value, str) and value.startswith(_RUNTIME_SCOPED_EXACT_MATCH_PREFIX)
+
+
+def _scoped_runtime_row_requires_exact_match(
+    *,
+    scope: str,
+    stored_artifact_id: str | None,
+    stored_artifact_hash: str | None,
+    source: str,
+    requested_artifact_id: str | None,
+) -> bool:
+    if scope not in {"harness", "global"}:
+        return False
+    if source in _REMOTE_POLICY_SOURCES:
+        return False
+    family_key = _artifact_family_key(stored_artifact_id)
+    if family_key is None or _family_key_value(family_key) not in _SCOPED_RUNTIME_EXACT_FAMILIES:
+        return False
+    expected_exact_key = _runtime_scoped_exact_match_key(requested_artifact_id)
+    if expected_exact_key is None:
+        return True
+    return stored_artifact_hash != expected_exact_key
 
 
 def _family_key_value(family_key: str) -> str:
