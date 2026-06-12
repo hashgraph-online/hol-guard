@@ -479,6 +479,8 @@ def _queue_headless_cloud_sync(
                 "status": "in_progress",
                 "message": "Guard Cloud sync already running.",
             }
+        # This probe only short-circuits obviously overlapping cross-process work.
+        # sync_local_guard_cloud_proof() still acquires the real cloud sync lock.
         if store.cloud_sync_in_progress():
             return {
                 "status": "in_progress",
