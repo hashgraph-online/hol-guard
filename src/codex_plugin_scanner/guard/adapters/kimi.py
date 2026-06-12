@@ -4,15 +4,20 @@ from __future__ import annotations
 
 import os
 import re
-import shlex
-import subprocess
 import sys
 from pathlib import Path
 
 from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
-from .base import HarnessAdapter, HarnessContext, _command_available, _ensure_path_within_root, _json_payload
+from .base import (
+    HarnessAdapter,
+    HarnessContext,
+    _command_available,
+    _ensure_path_within_root,
+    _json_payload,
+    _shell_command,
+)
 
 try:
     import tomllib  # type: ignore[attr-defined]
@@ -24,14 +29,6 @@ _KIMI_HOME_ENV_VAR = "KIMI_CODE_HOME"
 _KIMI_DIR = ".kimi-code"
 _KIMI_CONFIG_FILE = "config.toml"
 _KIMI_MCP_FILE = "mcp.json"
-
-
-def _shell_command(command: tuple[str, ...], *, windows: bool | None = None) -> str:
-    """Return a shell-escaped command string appropriate for the target OS."""
-    is_windows = os.name == "nt" if windows is None else windows
-    if is_windows:
-        return subprocess.list2cmdline(list(command))
-    return shlex.join(command)
 
 
 _GUARD_MANAGED_BEGIN = "# BEGIN HOL GUARD MANAGED HOOKS"

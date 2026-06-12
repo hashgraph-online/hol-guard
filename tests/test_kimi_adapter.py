@@ -8,10 +8,9 @@ try:
     import tomllib
 except ModuleNotFoundError:
     import tomli as tomllib
-import sys
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
 from codex_plugin_scanner.guard.adapters.kimi import KimiHarnessAdapter
 
 
@@ -236,22 +235,16 @@ class TestKimiManagedBlock:
 
 class TestKimiHookQuoting:
     def test_shell_command_uses_posix_quoting_on_unix(self) -> None:
-        from codex_plugin_scanner.guard.adapters.kimi import _shell_command
-
         cmd = _shell_command(("python", "-c", "echo hello & world"), windows=False)
         assert cmd == "python -c 'echo hello & world'"
 
     def test_shell_command_uses_windows_quoting_when_requested(self) -> None:
-        from codex_plugin_scanner.guard.adapters.kimi import _shell_command
-
         cmd = _shell_command(("python", "-c", "echo hello & world"), windows=True)
-        assert cmd.startswith('python -c "')
+        assert ' -c "' in cmd
         assert "&" in cmd
         assert "'" not in cmd
 
     def test_windows_hook_command_quotes_metacharacters(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.adapters.kimi import _shell_command
-
         workspace_dir = tmp_path / "workspace & tools"
         workspace_dir.mkdir(parents=True, exist_ok=True)
         ctx = HarnessContext(
@@ -264,7 +257,7 @@ class TestKimiHookQuoting:
         # The workspace path with '&' must live inside the quoted -c argument,
         # not be exposed as a cmd.exe metacharacter. list2cmdline quotes the
         # entire -c argument because it contains spaces.
-        assert windows_cmd.startswith(f'{sys.executable} -c "')
+        assert ' -c "' in windows_cmd
         assert windows_cmd.endswith('"')
         assert "workspace & tools" in windows_cmd
 

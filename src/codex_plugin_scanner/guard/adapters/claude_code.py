@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import shlex
-import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -18,7 +15,14 @@ from ..daemon import guard_daemon_url_for_home, load_guard_daemon_url
 from ..models import GuardArtifact, HarnessDetection
 from ..runtime.harness_attribution import cursor_hook_query_extras
 from ..shims import install_guard_shim, remove_guard_shim
-from .base import HarnessAdapter, HarnessContext, _ensure_path_within_root, _json_payload, _run_command_probe
+from .base import (
+    HarnessAdapter,
+    HarnessContext,
+    _ensure_path_within_root,
+    _json_payload,
+    _run_command_probe,
+    _shell_command,
+)
 
 CLAUDE_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
 CLAUDE_GUARD_POST_TOOL_MATCHER = f"{CLAUDE_GUARD_TOOL_MATCHER}|AskUserQuestion"
@@ -46,13 +50,6 @@ def _guard_command_handler(
 
 def _claude_managed_settings_path(context: HarnessContext) -> Path:
     return context.home_dir / ".claude" / "settings.json"
-
-
-def _shell_command(command: tuple[str, ...], *, windows: bool | None = None) -> str:
-    is_windows = os.name == "nt" if windows is None else windows
-    if is_windows:
-        return subprocess.list2cmdline(list(command))
-    return shlex.join(command)
 
 
 def _sync_runtime_hook_groups(hooks: dict[str, object], hook_command: str) -> None:
@@ -491,7 +488,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
     @staticmethod
     def _hook_command(context: HarnessContext) -> str:
         command = ClaudeCodeHarnessAdapter._hook_command_parts(context)
-        return subprocess.list2cmdline(list(command))
+        return _shell_command(command, windows=True)
 
     @staticmethod
     def _daemon_hook_command(context: HarnessContext) -> str:
@@ -501,7 +498,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
     @staticmethod
     def _session_start_command(context: HarnessContext) -> str:
         command = ClaudeCodeHarnessAdapter._session_start_command_parts(context)
-        return subprocess.list2cmdline(list(command))
+        return _shell_command(command, windows=True)
 
     @staticmethod
     def _hook_http_url(context: HarnessContext) -> str:
