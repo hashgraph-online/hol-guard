@@ -144,7 +144,7 @@ function resolveCloudUpsellVisible(pendingCount, cloudState) {
 function buildEmptyStateCopy() {
   return {
     title: "No apps connected",
-    body: "Connect an AI app so Guard can start protecting it. Guard works with Codex, Claude Code, Cursor, Hermes, and more.",
+    body: "Connect an AI app so Guard can start protecting it. Guard works with Codex, Claude Code, Cursor, Hermes, Kimi, and more.",
     installHint: "hol-guard apps connect <app>"
   };
 }

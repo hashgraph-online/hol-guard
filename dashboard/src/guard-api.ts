@@ -973,6 +973,9 @@ function queueSearchParams(input: GuardApprovalPageFilters): URLSearchParams {
   if (typeof input.limit === "number") {
     params.set("limit", String(input.limit));
   }
+  if (input.includeTotals === false) {
+    params.set("include_totals", "0");
+  }
   return params;
 }
 
@@ -995,6 +998,7 @@ export async function fetchAllPendingRequests(): Promise<GuardApprovalRequest[]>
       status: "pending",
       limit: PENDING_QUEUE_PAGE_LIMIT,
       cursor,
+      includeTotals: pageIndex === 0,
     });
     items.push(...page.items);
     if (!page.next_cursor || page.next_cursor === cursor) {

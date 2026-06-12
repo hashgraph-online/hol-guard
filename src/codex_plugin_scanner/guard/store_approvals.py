@@ -645,6 +645,7 @@ def list_pending_approval_summaries(
     cursor: str | None = None,
     harness: str | None = None,
     search: str | None = None,
+    include_totals: bool = True,
 ) -> dict[str, object]:
     return list_approval_request_page(
         connection,
@@ -653,7 +654,101 @@ def list_pending_approval_summaries(
         cursor=cursor,
         harness=harness,
         search=search,
+        include_totals=include_totals,
     )
+
+
+def _approval_summary_where_clause(
+    *,
+    status: str | None,
+    harness: str | None,
+    cursor: str | None,
+    search: str | None,
+) -> tuple[str, list[object]]:
+    clauses: list[str] = []
+    params: list[object] = []
+    if status is not None:
+        clauses.append("status = ?")
+        params.append(status)
+    if harness is not None:
+        clauses.append("harness = ?")
+        params.append(harness)
+    if cursor is not None:
+        marker = _decode_page_cursor(cursor)
+        if marker is None:
+            raise InvalidApprovalCursorError("invalid approval queue cursor")
+        clauses.append("(last_seen_at < ? or (last_seen_at = ? and request_id < ?))")
+        params.extend([marker["last_seen_at"], marker["last_seen_at"], marker["request_id"]])
+    if search is not None:
+        clauses.append(
+            "(lower(artifact_name) like lower(?)"
+            " or lower(artifact_id) like lower(?)"
+            " or lower(coalesce(risk_summary, '')) like lower(?)"
+            " or lower(coalesce(launch_target, '')) like lower(?)"
+            " or lower(coalesce(action_identity, '')) like lower(?)"
+            " or lower(coalesce(action_envelope_json, '')) like lower(?)"
+            " or lower(coalesce(decision_v2_json, '')) like lower(?)"
+            " or lower(config_path) like lower(?))"
+        )
+        pattern = f"%{search}%"
+        params.extend([pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern])
+    where_clause = f"where {' and '.join(clauses)}" if clauses else ""
+    return where_clause, params
+
+
+def _row_to_approval_summary(row: sqlite3.Row) -> dict[str, object]:
+    return {
+        "request_id": str(row["request_id"]),
+        "harness": str(row["harness"]),
+        "artifact_id": str(row["artifact_id"]),
+        "artifact_name": str(row["artifact_name"]),
+        "artifact_type": str(row["artifact_type"]),
+        "policy_action": str(row["policy_action"]),
+        "changed_fields": _safe_json_list(row["changed_fields_json"]),
+        "source_scope": str(row["source_scope"]),
+        "config_path": str(row["config_path"]),
+        "workspace": row["workspace"],
+        "launch_target": row["launch_target"],
+        "risk_summary": row["risk_summary"],
+        "risk_headline": row["risk_headline"],
+        "action_identity": row["action_identity"],
+        "queue_group_id": row["queue_group_id"],
+        "dedupe_count": int(row["dedupe_count"] or 1),
+        "created_at": str(row["created_at"]),
+        "last_seen_at": row["last_seen_at"],
+        "display_status": str(row["status"]),
+    }
+
+
+def list_approval_request_summary_rows(
+    connection: sqlite3.Connection,
+    *,
+    status: str | None = "pending",
+    harness: str | None = None,
+    limit: int | None = 50,
+    cursor: str | None = None,
+    search: str | None = None,
+) -> list[dict[str, object]]:
+    where_clause, params = _approval_summary_where_clause(
+        status=status,
+        harness=harness,
+        cursor=cursor,
+        search=search,
+    )
+    query = f"""
+        select request_id, harness, artifact_id, artifact_name, artifact_type, policy_action,
+               changed_fields_json, source_scope, config_path, workspace, launch_target,
+               risk_summary, risk_headline, action_identity, queue_group_id, dedupe_count,
+               created_at, last_seen_at, status
+        from approval_requests
+        {where_clause}
+        order by last_seen_at desc, request_id desc
+    """
+    if limit is None:
+        rows = connection.execute(query, params).fetchall()
+    else:
+        rows = connection.execute(f"{query}\nlimit ?", (*params, limit)).fetchall()
+    return [_row_to_approval_summary(row) for row in rows]
 
 
 def list_approval_request_page(
@@ -664,9 +759,10 @@ def list_approval_request_page(
     cursor: str | None = None,
     harness: str | None = None,
     search: str | None = None,
+    include_totals: bool = True,
 ) -> dict[str, object]:
     page_limit = min(MAX_APPROVAL_PAGE_LIMIT, max(1, limit))
-    rows = list_approval_requests(
+    rows = list_approval_request_summary_rows(
         connection,
         status=status,
         harness=harness,
@@ -676,13 +772,62 @@ def list_approval_request_page(
     )
     items = rows[:page_limit]
     next_cursor = _encode_page_cursor(items[-1]) if len(rows) > page_limit and items else None
-    return {
-        "items": [_approval_summary(item) for item in items],
+    payload: dict[str, object] = {
+        "items": items,
         "next_cursor": next_cursor,
-        "total_pending_count": count_approval_requests(connection, status="pending", harness=harness, search=search),
-        "total_count": count_approval_requests(connection, status=status, harness=harness, search=search),
         "status": status or "all",
     }
+    if include_totals:
+        if status == "pending":
+            pending_total = count_approval_requests(
+                connection,
+                status="pending",
+                harness=harness,
+                search=search,
+            )
+            payload["total_pending_count"] = pending_total
+            payload["total_count"] = pending_total
+        elif status == "resolved":
+            resolved_total = count_approval_requests(
+                connection,
+                status="resolved",
+                harness=harness,
+                search=search,
+            )
+            payload["total_count"] = resolved_total
+            payload["total_pending_count"] = count_approval_requests(
+                connection,
+                status="pending",
+                harness=harness,
+                search=search,
+            )
+        elif status is None:
+            payload["total_count"] = count_approval_requests(
+                connection,
+                status=None,
+                harness=harness,
+                search=search,
+            )
+            payload["total_pending_count"] = count_approval_requests(
+                connection,
+                status="pending",
+                harness=harness,
+                search=search,
+            )
+        else:
+            payload["total_pending_count"] = count_approval_requests(
+                connection,
+                status="pending",
+                harness=harness,
+                search=search,
+            )
+            payload["total_count"] = count_approval_requests(
+                connection,
+                status=status,
+                harness=harness,
+                search=search,
+            )
+    return payload
 
 
 def get_next_pending_request(

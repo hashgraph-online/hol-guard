@@ -1,4 +1,4 @@
-const SUPPORTED_APPS_BRIEF = "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Gemini, Hermes, and OpenClaw.";
+const SUPPORTED_APPS_BRIEF = "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Gemini, Hermes, OpenClaw, and Kimi.";
 const APP_STATUS_LABELS = {
   active: "Active",
   partial: "Partial setup",
