@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import builtins
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 from codex_plugin_scanner.guard.aibom_trust_metadata import trust_resolution_from_domain
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.runtime.trust_attestation import (
+    GuardTrustAttestationVerificationKey,
+    build_trust_attestation_payload,
+    verify_trust_attestation,
+)
 from codex_plugin_scanner.trust_models import TrustDomainScore
 
 
@@ -44,6 +52,32 @@ def _trust_layer_types(item_metadata: dict[str, object]) -> set[str]:
         for layer in layers
         if isinstance(layer, dict) and isinstance(layer.get("layerType"), str)
     }
+
+
+def _install_test_attestation_key(monkeypatch) -> GuardTrustAttestationVerificationKey:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode("utf-8")
+    public_key_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("utf-8")
+        .strip()
+    )
+    fingerprint = __import__("hashlib").sha256(public_key_pem.encode("utf-8")).hexdigest()
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_KEY_ID", "guard-test-key-1")
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_PRIVATE_KEY", private_key_pem)
+    return GuardTrustAttestationVerificationKey(
+        key_id="guard-test-key-1",
+        public_key_pem=public_key_pem,
+        fingerprint_sha256=fingerprint,
+    )
 
 
 def test_trust_resolution_captured_at_uses_utc_z_suffix() -> None:
@@ -128,14 +162,14 @@ def test_inventory_skill_trust_enrichment_disables_cisco_scan(
 
     def _guard_import(
         name: str,
-        globals: Mapping[str, object] | None = None,
-        locals: Mapping[str, object] | None = None,
+        global_vars: Mapping[str, object] | None = None,
+        local_vars: Mapping[str, object] | None = None,
         fromlist: tuple[str, ...] = (),
         level: int = 0,
     ) -> object:
         if name == "skill_scanner" or name.startswith("skill_scanner."):
             raise AssertionError("inventory trust enrichment must not import skill_scanner")
-        return original_import(name, globals, locals, fromlist, level)
+        return original_import(name, global_vars, local_vars, fromlist, level)
 
     def _record_cisco_mode(**kwargs: object) -> object:
         from codex_plugin_scanner.integrations.cisco_skill_scanner import (
@@ -287,6 +321,83 @@ def test_inventory_snapshot_attaches_local_mcp_trust_resolution(tmp_path: Path) 
     assert isinstance(metadata, dict)
     assert metadata.get("trustDomain") == "mcp"
     assert "local_baseline" in _trust_layer_types(mcp_item.metadata)
+
+
+def test_inventory_snapshot_signs_local_trust_metadata_when_configured(monkeypatch, tmp_path: Path) -> None:
+    verification_key = _install_test_attestation_key(monkeypatch)
+    plugin_dir = tmp_path
+    _write_good_plugin(plugin_dir)
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(str(plugin_dir / ".codex-plugin" / "plugin.json"),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:project:plugin:trust-demo",
+                name="trust-demo",
+                harness="codex",
+                artifact_type="plugin",
+                source_scope="project",
+                config_path=str(plugin_dir),
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=plugin_dir,
+    )
+    plugin_item = next(item for item in snapshot.items if item.item_kind == "plugin")
+    trust = plugin_item.metadata.get("trustResolution")
+    assert isinstance(trust, dict)
+    metadata = trust.get("metadata")
+    assert isinstance(metadata, dict)
+    assert metadata.get("attestationStatus") == "signed"
+    attestation = metadata.get("attestation")
+    assert isinstance(attestation, dict)
+    verify_trust_attestation(
+        payload=build_trust_attestation_payload(
+            agent_id=snapshot.agent_id,
+            item_id=plugin_item.item_id,
+            item_kind=plugin_item.item_kind,
+            content_hash=plugin_item.content_hash,
+            captured_at=str(trust.get("capturedAt")),
+            evidence_hash=str(metadata.get("evidenceHash")),
+            scope="trust_resolution",
+        ),
+        envelope=attestation,
+        trusted_keys=(verification_key,),
+    )
+    trust_layers = plugin_item.metadata.get("trustLayers")
+    assert isinstance(trust_layers, list)
+    local_layer = next(
+        layer
+        for layer in trust_layers
+        if isinstance(layer, dict) and layer.get("layerType") == "local_baseline"
+    )
+    layer_metadata = local_layer.get("metadata")
+    assert isinstance(layer_metadata, dict)
+    assert layer_metadata.get("attestationStatus") == "signed"
+    layer_attestation = layer_metadata.get("attestation")
+    assert isinstance(layer_attestation, dict)
+    verify_trust_attestation(
+        payload=build_trust_attestation_payload(
+            agent_id=snapshot.agent_id,
+            item_id=plugin_item.item_id,
+            item_kind=plugin_item.item_kind,
+            content_hash=plugin_item.content_hash,
+            captured_at=str(local_layer.get("capturedAt")),
+            evidence_hash=str(layer_metadata.get("evidenceHash")),
+            scope="trust_layer",
+            layer_id=str(local_layer.get("layerId")),
+            layer_type=str(local_layer.get("layerType")),
+        ),
+        envelope=layer_attestation,
+        trusted_keys=(verification_key,),
+    )
 
 
 def test_registry_identified_skill_still_gets_local_baseline(tmp_path: Path) -> None:
