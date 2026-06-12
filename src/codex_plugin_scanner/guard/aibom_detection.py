@@ -12,7 +12,14 @@ from .codex_skill_config import load_codex_skill_config_rules, resolve_codex_ski
 from .inventory_contract import fingerprint_mapping, fingerprint_path_tree, fingerprint_text
 from .models import GuardArtifact, HarnessDetection
 
-InstructionRole = Literal["agents_md", "cursor_rules", "claude_md", "mcp_json"]
+InstructionRole = Literal[
+    "agents_md",
+    "cursor_rules",
+    "claude_md",
+    "design_md",
+    "mcp_json",
+    "product_md",
+]
 INVENTORY_ITEM_KINDS: tuple[str, ...] = (
     "agent",
     "daemon_plugin",
@@ -38,6 +45,12 @@ _READ_CHUNK_BYTES = 65536
 _CURSOR_RULE_PATTERNS = ("*.mdc", "*.md")
 _CODEX_WORKSPACE_SKILL_ROOTS = (".agents/skills",)
 _CODEX_HOME_SKILL_ROOTS = (".codex/skills", ".agents/skills")
+_STANDARDS_CONTEXT_ROOTS = (".", ".agents/context", "docs")
+_STANDARDS_INSTRUCTION_FILES: tuple[tuple[str, InstructionRole], ...] = (
+    ("PRODUCT.md", "product_md"),
+    ("DESIGN.md", "design_md"),
+    ("CLAUDE.md", "claude_md"),
+)
 
 
 def file_content_hash(path: Path, *, max_bytes: int | None = None) -> str | None:
@@ -102,6 +115,10 @@ def instruction_role_for_path(path: Path) -> InstructionRole | None:
         return "agents_md"
     if name == "claude.md":
         return "claude_md"
+    if name == "design.md":
+        return "design_md"
+    if name == "product.md":
+        return "product_md"
     if name == "mcp.json":
         return "mcp_json"
     if path.suffix.lower() in {".md", ".mdc"}:
@@ -126,6 +143,7 @@ def discover_shared_workspace_aibom_artifacts(
         return ()
     artifacts: list[GuardArtifact] = []
     artifacts.extend(_discover_agents_md(harness, workspace_dir=workspace_dir))
+    artifacts.extend(_discover_standards_context_files(harness, workspace_dir=workspace_dir))
     artifacts.extend(_discover_cursor_rules(harness, workspace_dir=workspace_dir))
     if harness != "codex":
         artifacts.extend(
@@ -149,6 +167,45 @@ def _discover_agents_md(harness: str, *, workspace_dir: Path) -> list[GuardArtif
     if not resolves_within_root(workspace_dir, agents_md, require_exists=True):
         return []
     return [_instruction_artifact(harness, agents_md, role="agents_md", scope="project")]
+
+
+def _discover_standards_context_files(harness: str, *, workspace_dir: Path) -> list[GuardArtifact]:
+    artifacts: list[GuardArtifact] = []
+    seen_paths: set[str] = set()
+    for relative_root in _STANDARDS_CONTEXT_ROOTS:
+        search_root = workspace_dir if relative_root == "." else workspace_dir / relative_root
+        if relative_root != "." and not search_root.is_dir():
+            continue
+        if not resolves_within_root(workspace_dir, search_root, require_exists=True):
+            continue
+        for filename, role in _STANDARDS_INSTRUCTION_FILES:
+            path = search_root / filename
+            if path.is_symlink() or not path.is_file():
+                continue
+            if not resolves_within_root(workspace_dir, path, require_exists=True):
+                continue
+            normalized_path = path.resolve().as_posix()
+            if normalized_path in seen_paths:
+                continue
+            seen_paths.add(normalized_path)
+            relative_id = path.relative_to(workspace_dir).as_posix()
+            display_name = path.name if relative_root == "." else f"{path.name} ({relative_root})"
+            artifact_suffix = relative_id.replace("/", ":")
+            legacy_artifact_id: str | None = None
+            if harness == "claude-code" and relative_id == "CLAUDE.md":
+                legacy_artifact_id = f"{harness}:project:instruction:claude-md"
+            artifacts.append(
+                _instruction_artifact(
+                    harness,
+                    path,
+                    role=role,
+                    scope="project",
+                    display_name=display_name,
+                    artifact_name=artifact_suffix,
+                    artifact_id=legacy_artifact_id,
+                )
+            )
+    return artifacts
 
 
 def _discover_cursor_rules(harness: str, *, workspace_dir: Path) -> list[GuardArtifact]:
@@ -361,11 +418,15 @@ def _instruction_artifact(
     role: InstructionRole,
     scope: str,
     display_name: str | None = None,
+    artifact_name: str | None = None,
+    artifact_id: str | None = None,
 ) -> GuardArtifact:
     content_hash = file_content_hash(path) or fingerprint_text(path.name)
     name = display_name or path.name
+    artifact_suffix = artifact_name or name
+    resolved_artifact_id = artifact_id or f"{harness}:{scope}:instruction:{role}:{artifact_suffix}"
     return GuardArtifact(
-        artifact_id=f"{harness}:{scope}:instruction:{role}:{name}",
+        artifact_id=resolved_artifact_id,
         name=name,
         harness=harness,
         artifact_type="instruction",

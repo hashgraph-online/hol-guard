@@ -70,6 +70,49 @@ def test_discover_agents_md_and_cursor_rules(tmp_path: Path) -> None:
     assert "cursor_rules" in roles
 
 
+def test_instruction_role_for_path_recognizes_standards_files() -> None:
+    assert instruction_role_for_path(Path("PRODUCT.md")) == "product_md"
+    assert instruction_role_for_path(Path("DESIGN.md")) == "design_md"
+    assert instruction_role_for_path(Path("CLAUDE.md")) == "claude_md"
+    assert instruction_role_for_path(Path("docs/PRODUCT.md")) == "product_md"
+
+
+def test_discover_standards_context_files_in_root_and_fallback_dirs(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    (workspace / "PRODUCT.md").write_text("# Product\n", encoding="utf-8")
+    (workspace / "DESIGN.md").write_text("# Design\n", encoding="utf-8")
+    (workspace / "CLAUDE.md").write_text("# Claude\n", encoding="utf-8")
+
+    context_dir = workspace / ".agents" / "context"
+    context_dir.mkdir(parents=True)
+    (context_dir / "PRODUCT.md").write_text("# Product context\n", encoding="utf-8")
+
+    docs_dir = workspace / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "DESIGN.md").write_text("# Design docs\n", encoding="utf-8")
+
+    artifacts = discover_shared_workspace_aibom_artifacts(
+        "codex",
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+    )
+    roles = {
+        artifact.metadata.get("instructionRole")
+        for artifact in artifacts
+        if artifact.artifact_type == "instruction" and isinstance(artifact.metadata, dict)
+    }
+    names = {
+        artifact.name
+        for artifact in artifacts
+        if artifact.artifact_type == "instruction"
+    }
+
+    assert roles == {"product_md", "design_md", "claude_md"}
+    assert "PRODUCT.md (.agents/context)" in names
+    assert "DESIGN.md (docs)" in names
+
+
 def test_discover_codex_skills_and_marketplace_plugins(tmp_path: Path) -> None:
     workspace = tmp_path / "repo"
     plugin_dir = workspace / "plugins" / "demo"

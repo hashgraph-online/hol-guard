@@ -453,23 +453,6 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                         name_for_path=lambda artifact_path, _base_dir: artifact_path.stem,
                     )
                 )
-            project_claude_md = context.workspace_dir / "CLAUDE.md"
-            if project_claude_md.is_file() and resolves_within_root(
-                context.workspace_dir,
-                project_claude_md,
-                require_exists=True,
-            ):
-                artifacts.append(
-                    GuardArtifact(
-                        artifact_id="claude-code:project:instruction:claude-md",
-                        name="CLAUDE.md",
-                        harness=self.harness,
-                        artifact_type="instruction",
-                        source_scope="project",
-                        config_path=str(project_claude_md),
-                        metadata=_metadata_with_digest(project_claude_md),
-                    )
-                )
         resolved_executable = self.resolved_executable(context)
         detection = HarnessDetection(
             harness=self.harness,
