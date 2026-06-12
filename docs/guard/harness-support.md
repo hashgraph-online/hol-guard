@@ -83,6 +83,13 @@ Current Guard support in this repo:
   - blocks dangerous tool calls and prompts by returning exit code `2` and a JSON `permissionDecision: "deny"` response in `hookSpecificOutput`
   - fails open if a hook crashes or times out, so Kimi Code keeps working when Guard is unreachable
   - uses the same JSON stdin/stdout wire protocol as Codex and Claude Code
+- `grok`
+  - detects the `grok` executable, `~/.grok/config.toml`, `~/.grok/managed_config.toml`, `~/.grok/hooks/`, skills, plugins, and project `.grok/` surfaces
+  - installs Guard-owned `PreToolUse` hooks for `Bash`, `Read`, `Edit`, `Grep`, `MCPTool`, and `WebFetch` plus `UserPromptSubmit` prompt screening in `~/.grok/hooks/hol-guard-*.json`
+  - installs Guard-managed deny rules in `~/.grok/managed_config.toml` without touching user `~/.grok/config.toml` or `~/.grok/auth`
+  - blocks by returning exit code `2` and Grok-native stdout JSON `{"decision":"deny","reason":"..."}` with approval-center copy in stderr
+  - surfaces `--always-approve`, `bypassPermissions`, and sandbox `off` as degraded protection states when detected in Grok config
+  - fails open if a hook crashes or times out, so Grok keeps working when Guard is unreachable
 
 Approval tiers:
 
@@ -142,3 +149,4 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 | `openclaw` | `openclaw` | ❌ | ✅ | ❌ | mcp_tool |
 | `antigravity` | `antigravity` | ❌ | ✅ | ❌ | mcp_tool, prompt |
 | `kimi` | `kimi`, `kimi-code`, `kimi-cli` | ❌ | ✅ | ❌ | shell, prompt |
+| `grok` | `grok`, `grok-build`, `grok-build-cli`, `xai-grok` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read |

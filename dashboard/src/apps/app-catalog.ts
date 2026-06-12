@@ -8,15 +8,16 @@ export const SUPPORTED_APP_SLUGS = [
   "hermes",
   "openclaw",
   "kimi",
+  "grok",
 ] as const;
 
 export type SupportedAppSlug = (typeof SUPPORTED_APP_SLUGS)[number];
 
 export const SUPPORTED_APPS_BRIEF =
-  "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Gemini, Hermes, OpenClaw, and Kimi.";
+  "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Gemini, Hermes, OpenClaw, Kimi, and Grok.";
 
 export const SUPPORTED_APPS_FULL =
-  "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Gemini, Hermes, OpenClaw, Kimi, and more. Run your AI app once and Guard will detect it automatically.";
+  "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Gemini, Hermes, OpenClaw, Kimi, Grok, and more. Run your AI app once and Guard will detect it automatically.";
 
 export type AppInstallStatus = "active" | "partial" | "observed" | "not_installed";
 

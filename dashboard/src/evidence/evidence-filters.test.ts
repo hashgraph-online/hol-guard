@@ -201,6 +201,11 @@ assert(scopeWs.length === 1 && scopeWs[0].receipt_id === "r1", "sourceScope: wor
 const scopeEmpty = filterBySourceScope(ALL, "");
 assert(scopeEmpty.length === ALL.length, "sourceScope: empty returns all");
 
+const rGrok = makeReceipt("rgrok", { harness: "grok", policy_decision: "block", artifact_name: "grok-bash" });
+const grokFiltered = filterByHarness([...ALL, rGrok], "grok");
+assert(grokFiltered.every((r) => r.harness === "grok"), "harness: grok filter keeps grok receipts only");
+assert(grokFiltered.length === 1, "harness: grok filter returns one receipt");
+
 // filterEvidence combined
 const filters: EvidenceFilterState = {
   ...DEFAULT_FILTER_STATE,

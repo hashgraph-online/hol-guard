@@ -119,6 +119,19 @@ assert(
   "T760: harness setup fallback command should use real hol-guard apps connect command"
 );
 assert(
+  formatHarnessCommand(["hol-guard", "apps", "connect", "grok"]) === "hol-guard apps connect grok",
+  "T760b: grok setup command formats correctly"
+);
+assert(
+  formatHarnessCommand(["hol-guard", "apps", "repair", "grok"]) === "hol-guard apps repair grok",
+  "grok repair command formats correctly"
+);
+assert(
+  formatHarnessCommand(["hol-guard", "apps", "disconnect", "grok", "--confirm", "disconnect-grok"])
+    === "hol-guard apps disconnect grok --confirm disconnect-grok",
+  "grok disconnect command formats correctly"
+);
+assert(
   formatHarnessCommand(["hol-guard", "apps", "connect", "claude code"]) === 'hol-guard apps connect "claude code"',
   "T760: harness setup fallback command should quote spaced args"
 );

@@ -4,7 +4,7 @@ Guard lives inside `codex_plugin_scanner` and is the local product surface for h
 
 The runtime is split into:
 
-- `guard/adapters`: harness discovery for Codex, Claude Code, Copilot CLI, Cursor, Gemini, Kimi, and OpenCode
+- `guard/adapters`: harness discovery for Codex, Claude Code, Copilot CLI, Cursor, Gemini, Grok, Kimi, and OpenCode
 - `guard/shims`: local launcher shims that route harness launches through Guard
 - `guard/consumer`: orchestration for detection, policy evaluation, and consumer-mode scan output
 - `guard/policy`: local action resolution for allow, review, warn, and block decisions

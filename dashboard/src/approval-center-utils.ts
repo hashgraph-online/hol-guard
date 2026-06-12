@@ -455,7 +455,7 @@ function normalizeDuplicateReviewText(value: string): string {
 
 function stripDuplicateReviewContextPrefix(value: string): string | null {
   const stripped = value.replace(
-    /^\s*(codex|claude|claude code|claudecode|copilot|opencode|gemini)?\s*(prompt|command|tool)\s+for\s+[`"']?[^:`"']+[`"']?\s*:\s*/i,
+    /^\s*(codex|claude|claude code|claudecode|copilot|opencode|gemini|grok|kimi)?\s*(prompt|command|tool)\s+for\s+[`"']?[^:`"']+[`"']?\s*:\s*/i,
     "",
   );
   return stripped === value ? null : stripped;
@@ -552,6 +552,8 @@ export function harnessDisplayName(harness: string): string {
       return "OpenClaw";
     case "kimi":
       return "Kimi";
+    case "grok":
+      return "Grok";
     default:
       return capitalizeHarness(normalized);
   }
