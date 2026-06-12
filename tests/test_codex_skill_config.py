@@ -34,7 +34,7 @@ def test_load_codex_skill_config_rules_merges_home_and_workspace(tmp_path: Path)
     rules = load_codex_skill_config_rules(home_dir=home, workspace_dir=workspace)
 
     assert len(rules) == 2
-    assert rules[0].path == "home-skill"
+    assert rules[0].path == str((home / "home-skill").resolve())
     assert rules[0].enabled is False
     assert rules[1].name == "workspace-skill"
     assert rules[1].enabled is False
@@ -85,6 +85,31 @@ def test_resolve_codex_skill_enabled_matches_path_and_name(tmp_path: Path) -> No
         rules=disabled_by_name,
         home_dir=home,
     )
+
+
+def test_workspace_skill_path_rules_resolve_against_workspace_dir(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    home.mkdir()
+    workspace.mkdir()
+    (home / ".codex").mkdir()
+    (workspace / ".codex").mkdir()
+    project_skill = workspace / ".agents" / "skills" / "workspace-skill"
+    project_skill.mkdir(parents=True)
+    skill_md = project_skill / "SKILL.md"
+    skill_md.write_text("# workspace\n", encoding="utf-8")
+    (workspace / ".codex" / "config.toml").write_text(
+        f'[[skills.config]]\npath = "{project_skill}"\nenabled = false\n',
+        encoding="utf-8",
+    )
+
+    artifacts = discover_codex_skill_artifacts(
+        "codex",
+        home_dir=home,
+        workspace_dir=workspace,
+    )
+    by_name = {artifact.name: artifact for artifact in artifacts}
+    assert by_name["workspace-skill"].metadata["enabled"] is False
 
 
 def test_discover_codex_skill_artifacts_applies_enablement(tmp_path: Path) -> None:
