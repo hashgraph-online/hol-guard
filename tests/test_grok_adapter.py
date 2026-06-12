@@ -362,3 +362,20 @@ class TestGrokInventoryAndResponses:
         payload = grok_hook_response_from_guard(policy_action="block", reason="Grok tried to read a credential file.")
         assert payload["decision"] == "deny"
         assert "{" not in str(payload["reason"])
+
+
+class TestGrokFixtureHygiene:
+    _FORBIDDEN_PATTERNS = (
+        "XAI_API_KEY",
+        "/" + "Users" + "/",
+        "/" + "home" + "/",
+        "sk-",
+        "g0_",
+    )
+
+    def test_grok_fixtures_do_not_contain_secrets_or_local_paths(self) -> None:
+        fixture_dir = Path(__file__).parent / "fixtures" / "grok"
+        for fixture_path in sorted(fixture_dir.glob("*.json")):
+            contents = fixture_path.read_text(encoding="utf-8")
+            for pattern in self._FORBIDDEN_PATTERNS:
+                assert pattern not in contents, f"{fixture_path.name} contains forbidden pattern {pattern!r}"

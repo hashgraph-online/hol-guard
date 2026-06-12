@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -14,7 +15,14 @@ from codex_plugin_scanner.guard.cli.install_commands import (
     build_harness_verification,
     uninstall_confirmation_token,
 )
+from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
+from codex_plugin_scanner.guard.store_approvals import (
+    add_approval_request,
+    approval_index_statements,
+    approval_schema_statement,
+    resolve_request_with_queue_result,
+)
 
 
 def _ctx(tmp_path: Path) -> HarnessContext:
@@ -106,3 +114,60 @@ def test_normalize_harness_payload_supports_grok_secret_read(tmp_path: Path) -> 
     assert envelope.harness == "grok"
     assert envelope.action_type == "file_read"
     assert any(".env" in path for path in envelope.target_paths)
+
+
+def _approval_connection() -> sqlite3.Connection:
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    connection.execute(approval_schema_statement())
+    for statement in approval_index_statements():
+        connection.execute(statement)
+    return connection
+
+
+def _grok_approval_request(request_id: str, *, command: str, harness: str = "grok") -> GuardApprovalRequest:
+    artifact_id = f"{harness}:project:{request_id}"
+    return GuardApprovalRequest(
+        request_id=request_id,
+        harness=harness,
+        artifact_id=artifact_id,
+        artifact_name=artifact_id.rsplit(":", maxsplit=1)[-1],
+        artifact_hash=f"hash-{request_id}",
+        policy_action="require-reapproval",
+        recommended_scope="artifact",
+        changed_fields=("args",),
+        source_scope="project",
+        config_path=".grok/managed_config.toml",
+        workspace="workspace-a",
+        launch_target=command,
+        action_envelope_json={
+            "action_type": "shell_command",
+            "tool_name": "run_terminal_command",
+            "command": command,
+            "target_paths": [],
+            "network_hosts": [],
+        },
+        review_command=f"hol-guard approvals approve {request_id}",
+        approval_url=f"http://127.0.0.1/pending/{request_id}",
+    )
+
+
+def test_scoped_grok_approval_keeps_unrelated_queue() -> None:
+    connection = _approval_connection()
+    grok_active = _grok_approval_request("grok-active", command="cat .env")
+    codex_pending = _grok_approval_request("codex-pending", command="cat .npmrc", harness="codex")
+    add_approval_request(connection, codex_pending, "2026-06-12T10:00:00+00:00")
+    add_approval_request(connection, grok_active, "2026-06-12T10:01:00+00:00")
+
+    result = resolve_request_with_queue_result(
+        connection,
+        "grok-active",
+        resolution_action="allow",
+        resolution_scope="artifact",
+        reason="reviewed",
+        resolved_at="2026-06-12T10:02:00+00:00",
+    )
+
+    assert result["resolved"] is True
+    assert result["remaining_pending_count"] == 1
+    assert result["remaining_pending_summaries"][0]["request_id"] == "codex-pending"
