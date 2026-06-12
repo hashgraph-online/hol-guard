@@ -284,3 +284,50 @@ PLUGIN_TRUST_SPEC = TrustSpecDefinition(
         ),
     ),
 )
+
+INSTRUCTION_TRUST_SPEC = TrustSpecDefinition(
+    spec_id="HOL-HCS-INSTRUCTION-TRUST-DRAFT",
+    version="0.1.0",
+    label="Instruction Trust",
+    spec_path="docs/trust/instruction-trust-draft.md",
+    derived_from=("HCS-26", "HCS-28"),
+    profile_id="hol-instruction-trust/baseline",
+    profile_version="0.1",
+    adapters=(
+        TrustAdapterSpec(
+            adapter_id="instruction.structure",
+            label="Instruction Structure",
+            weight=0.25,
+            component_keys=("score",),
+            contribution_mode="universal",
+        ),
+        TrustAdapterSpec(
+            adapter_id="instruction.scope-clarity",
+            label="Scope Clarity",
+            weight=0.20,
+            component_keys=("score",),
+            contribution_mode="universal",
+        ),
+        TrustAdapterSpec(
+            adapter_id="instruction.operational-boundaries",
+            label="Operational Boundaries",
+            weight=0.25,
+            component_keys=("score",),
+            contribution_mode="conditional",
+        ),
+        TrustAdapterSpec(
+            adapter_id="instruction.governance",
+            label="Governance",
+            weight=0.15,
+            component_keys=("score",),
+            contribution_mode="universal",
+        ),
+        TrustAdapterSpec(
+            adapter_id="instruction.provenance",
+            label="Provenance",
+            weight=0.15,
+            component_keys=("score",),
+            contribution_mode="universal",
+        ),
+    ),
+)

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Literal
 
 from ..checks.skill_security import resolve_skill_security_context
 from ..models import ScanOptions
+from ..trust_instruction_scoring import build_instruction_domain
 from ..trust_mcp_scoring import build_mcp_domain
 from ..trust_models import TrustAdapterScore, TrustComponentScore, TrustDomainScore
 from ..trust_plugin_scoring import build_plugin_domain
@@ -35,6 +38,8 @@ InventoryItemKind = Literal[
     "skill",
 ]
 
+TrustLayerType = Literal["local_baseline", "cisco_skill_scanner", "cisco_mcp_scanner"]
+
 
 def trust_resolution_from_domain(
     domain: TrustDomainScore,
@@ -43,20 +48,38 @@ def trust_resolution_from_domain(
 ) -> dict[str, object]:
     from .inventory_contract import _normalize_inventory_datetime
 
+    trust_components = _trust_components_from_domain(domain)
+    normalized_captured_at = _normalize_inventory_datetime(captured_at)
+    metadata = {
+        "profileId": domain.profile_id,
+        "profileVersion": domain.profile_version,
+        "scorer": "hol-guard-local",
+        "specId": domain.spec_id,
+        "specVersion": domain.spec_version,
+        "trustDomain": domain.domain,
+        "attestationStatus": "unsigned",
+        "evidenceHash": _trust_evidence_hash(
+            {
+                "capturedAt": normalized_captured_at,
+                "resolutionSource": "local",
+                "status": "local",
+                "trustScore": round(domain.score),
+                "trustComponents": trust_components,
+                "trustDomain": domain.domain,
+            }
+        ),
+    }
+
+    trust_components = _trust_components_from_domain(domain)
+    normalized_captured_at = _normalize_inventory_datetime(captured_at)
+
     return {
         "resolutionSource": "local",
         "status": "local",
         "trustScore": round(domain.score),
-        "trustComponents": _trust_components_from_domain(domain),
-        "capturedAt": _normalize_inventory_datetime(captured_at),
-        "metadata": {
-            "profileId": domain.profile_id,
-            "profileVersion": domain.profile_version,
-            "scorer": "hol-guard-local",
-            "specId": domain.spec_id,
-            "specVersion": domain.spec_version,
-            "trustDomain": domain.domain,
-        },
+        "trustComponents": trust_components,
+        "capturedAt": normalized_captured_at,
+        "metadata": metadata,
     }
 
 
@@ -67,24 +90,37 @@ def apply_local_trust_metadata(
     item_kind: InventoryItemKind,
     metadata: dict[str, object],
     workspace_dir: Path | None,
+    cisco_runs: tuple[object, ...] = (),
 ) -> dict[str, object]:
-    if item_kind not in {"skill", "plugin", "mcp_server"}:
-        return metadata
-    if isinstance(metadata.get("trustResolution"), dict):
-        return metadata
-    if isinstance(metadata.get("registryIdentity"), dict):
-        return metadata
-
-    domain = _local_trust_domain_for_artifact(
-        artifact,
-        item_kind=item_kind,
-        workspace_dir=workspace_dir,
-    )
-    if domain is None:
-        return metadata
-
     enriched = dict(metadata)
-    enriched["trustResolution"] = trust_resolution_from_domain(domain, captured_at=captured_at)
+    trust_layers: list[dict[str, object]] = []
+
+    if item_kind in {"skill", "plugin", "mcp_server", "overlay", "policy", "prompt_pack"} and not isinstance(
+        metadata.get("trustResolution"),
+        dict,
+    ):
+        domain = _local_trust_domain_for_artifact(
+            artifact,
+            item_kind=item_kind,
+            metadata=metadata,
+            workspace_dir=workspace_dir,
+        )
+        if domain is not None:
+            enriched["trustResolution"] = trust_resolution_from_domain(domain, captured_at=captured_at)
+            trust_layers.append(_trust_layer_from_domain(domain, captured_at=captured_at))
+
+    trust_layers.extend(
+        _cisco_trust_layers_for_artifact(
+            artifact,
+            item_kind=item_kind,
+            captured_at=captured_at,
+            cisco_runs=cisco_runs,
+            workspace_dir=workspace_dir,
+        )
+    )
+
+    if trust_layers:
+        enriched["trustLayers"] = _merge_trust_layers(metadata.get("trustLayers"), trust_layers)
     return enriched
 
 
@@ -92,6 +128,7 @@ def _local_trust_domain_for_artifact(
     artifact: object,
     *,
     item_kind: InventoryItemKind,
+    metadata: dict[str, object],
     workspace_dir: Path | None,
 ) -> TrustDomainScore | None:
     trust_root = _trust_root_for_artifact(artifact, item_kind=item_kind, workspace_dir=workspace_dir)
@@ -104,6 +141,10 @@ def _local_trust_domain_for_artifact(
         return build_skill_domain(trust_root, context)
     if item_kind == "mcp_server":
         return build_mcp_domain(trust_root, ())
+    if item_kind in {"overlay", "policy", "prompt_pack"}:
+        role = metadata.get("instructionRole")
+        normalized_role = role if isinstance(role, str) and role else "unknown_instruction"
+        return build_instruction_domain(trust_root, role=normalized_role, item_kind=item_kind)
     return None
 
 
@@ -140,7 +181,267 @@ def _trust_root_for_artifact(
         parent = path.parent
         return parent if parent.is_dir() else None
 
+    if item_kind in {"overlay", "policy", "prompt_pack"}:
+        return path if path.is_file() else None
+
     return None
+
+
+def _trust_layer_from_domain(
+    domain: TrustDomainScore,
+    *,
+    captured_at: str,
+) -> dict[str, object]:
+    from .inventory_contract import _normalize_inventory_datetime
+
+    trust_components = _trust_components_from_domain(domain)
+    normalized_captured_at = _normalize_inventory_datetime(captured_at)
+
+    trust_components = _trust_components_from_domain(domain)
+    normalized_captured_at = _normalize_inventory_datetime(captured_at)
+
+    return {
+        "layerId": "local_baseline",
+        "layerType": "local_baseline",
+        "status": "local",
+        "trustScore": round(domain.score),
+        "trustComponents": trust_components,
+        "capturedAt": normalized_captured_at,
+        "metadata": {
+            "profileId": domain.profile_id,
+            "profileVersion": domain.profile_version,
+            "scorer": "hol-guard-local",
+            "specId": domain.spec_id,
+            "specVersion": domain.spec_version,
+            "trustDomain": domain.domain,
+            "attestationStatus": "unsigned",
+            "evidenceHash": _trust_evidence_hash(
+                {
+                    "capturedAt": normalized_captured_at,
+                    "layerId": "local_baseline",
+                    "layerType": "local_baseline",
+                    "status": "local",
+                    "trustScore": round(domain.score),
+                    "trustComponents": trust_components,
+                    "trustDomain": domain.domain,
+                }
+            ),
+        },
+    }
+
+
+def _merge_trust_layers(
+    existing: object,
+    additions: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    merged: dict[str, dict[str, object]] = {}
+    if isinstance(existing, list):
+        for raw_layer in existing:
+            if not isinstance(raw_layer, dict):
+                continue
+            layer_type = raw_layer.get("layerType")
+            if isinstance(layer_type, str) and layer_type:
+                merged[layer_type] = dict(raw_layer)
+    for layer in additions:
+        layer_type = layer.get("layerType")
+        if isinstance(layer_type, str) and layer_type:
+            merged[layer_type] = layer
+    return list(merged.values())
+
+
+def _cisco_trust_layers_for_artifact(
+    artifact: object,
+    *,
+    item_kind: InventoryItemKind,
+    captured_at: str,
+    cisco_runs: tuple[object, ...],
+    workspace_dir: Path | None,
+) -> list[dict[str, object]]:
+    layers: list[dict[str, object]] = []
+    for run in cisco_runs:
+        source = getattr(run, "source", None)
+        if source == "cisco-skill-scanner" and item_kind in {"skill", "plugin"}:
+            if _matches_skill_cisco_run(artifact, item_kind=item_kind, run=run, workspace_dir=workspace_dir):
+                layers.append(
+                    _cisco_trust_layer(
+                        run,
+                        captured_at=captured_at,
+                        layer_id="cisco_skill_scanner",
+                        component_id="cisco.skill.score",
+                        label="Cisco Skill Scanner",
+                    )
+                )
+        if source == "cisco-mcp-scanner" and item_kind == "mcp_server":
+            if _matches_mcp_cisco_run(artifact, run=run):
+                layers.append(
+                    _cisco_trust_layer(
+                        run,
+                        captured_at=captured_at,
+                        layer_id="cisco_mcp_scanner",
+                        component_id="cisco.mcp.score",
+                        label="Cisco MCP Scanner",
+                    )
+                )
+    return layers
+
+
+def _matches_skill_cisco_run(
+    artifact: object,
+    *,
+    item_kind: InventoryItemKind,
+    run: object,
+    workspace_dir: Path | None,
+) -> bool:
+    run_target = _cisco_run_target_path(run)
+    if run_target is None:
+        return False
+    trust_root = _trust_root_for_artifact(artifact, item_kind=item_kind, workspace_dir=workspace_dir)
+    if trust_root is None:
+        return False
+    return _paths_related(trust_root, run_target)
+
+
+def _matches_mcp_cisco_run(artifact: object, *, run: object) -> bool:
+    run_target = _cisco_run_target_path(run)
+    config_path = getattr(artifact, "config_path", None)
+    if run_target is None or not isinstance(config_path, str) or not config_path.strip():
+        return False
+    path = Path(config_path)
+    if path.is_file() and (_paths_related(path, run_target) or _paths_related(path.parent, run_target)):
+        return True
+    return _paths_related(path, run_target)
+
+
+def _paths_related(left: Path, right: Path) -> bool:
+    try:
+        left_resolved = left.resolve()
+        right_resolved = right.resolve()
+    except OSError:
+        return False
+    return (
+        left_resolved == right_resolved
+        or left_resolved in right_resolved.parents
+        or right_resolved in left_resolved.parents
+    )
+
+
+def _cisco_run_target_path(run: object) -> Path | None:
+    metadata = getattr(run, "metadata", None)
+    if not isinstance(metadata, dict):
+        return None
+    target = metadata.get("target")
+    if not isinstance(target, str) or not target.strip() or target == "missing":
+        return None
+    return Path(target)
+
+
+def _cisco_trust_layer(
+    run: object,
+    *,
+    captured_at: str,
+    layer_id: TrustLayerType,
+    component_id: str,
+    label: str,
+) -> dict[str, object]:
+    from .inventory_contract import _normalize_inventory_datetime
+
+    status = str(getattr(run, "status", "unknown"))
+    message = str(getattr(run, "message", ""))
+    severity_counts = _cisco_severity_counts(run)
+    trust_score = _cisco_layer_score(severity_counts) if status == "enabled" else None
+    trust_components: list[dict[str, object]] = []
+    if trust_score is not None:
+        component_status = "positive"
+        if trust_score < 40:
+            component_status = "critical"
+        elif trust_score < 70:
+            component_status = "warning"
+        trust_components.append(
+            {
+                "componentId": component_id,
+                "confidence": 90,
+                "label": label,
+                "score": trust_score,
+                "status": component_status,
+                "summary": message or f"{label} completed with {sum(severity_counts.values())} findings.",
+                "weight": 1.0,
+            }
+        )
+
+    run_metadata = getattr(run, "metadata", None)
+    safe_metadata: dict[str, object] = {
+        "scannerSource": str(getattr(run, "source", "unknown")),
+        "message": message,
+        "durationMs": getattr(run, "duration_ms", None) if isinstance(getattr(run, "duration_ms", None), int) else None,
+        "totalFindings": sum(severity_counts.values()),
+        "findingsBySeverity": severity_counts,
+    }
+    if isinstance(run_metadata, dict):
+        for key in (
+            "analyzersUsed",
+            "policyName",
+            "scanMode",
+            "mode",
+            "targetsScanned",
+            "skillsScanned",
+            "skillsSkipped",
+        ):
+            value = run_metadata.get(key)
+            if value is not None:
+                safe_metadata[key] = value
+    safe_metadata["attestationStatus"] = "unsigned"
+    safe_metadata["evidenceHash"] = _trust_evidence_hash(
+        {
+            "capturedAt": _normalize_inventory_datetime(captured_at),
+            "layerId": layer_id,
+            "layerType": layer_id,
+            "status": status,
+            "trustScore": trust_score,
+            "trustComponents": trust_components,
+            "metadata": {
+                key: value
+                for key, value in safe_metadata.items()
+                if key not in {"attestationStatus", "evidenceHash"}
+            },
+        }
+    )
+
+    return {
+        "layerId": layer_id,
+        "layerType": layer_id,
+        "status": status,
+        "trustScore": trust_score,
+        "trustComponents": trust_components,
+        "capturedAt": _normalize_inventory_datetime(captured_at),
+        "metadata": safe_metadata,
+    }
+
+
+def _cisco_severity_counts(run: object) -> dict[str, int]:
+    counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    metadata = getattr(run, "metadata", None)
+    if isinstance(metadata, dict):
+        raw_counts = metadata.get("findingsBySeverity")
+        if isinstance(raw_counts, dict):
+            for key in counts:
+                value = raw_counts.get(key)
+                counts[key] = value if isinstance(value, int) and value >= 0 else 0
+            return counts
+    for finding in tuple(getattr(run, "findings", ()) or ()):
+        severity = getattr(getattr(finding, "severity", None), "value", getattr(finding, "severity", None))
+        if isinstance(severity, str) and severity in counts:
+            counts[severity] += 1
+    return counts
+
+
+def _cisco_layer_score(severity_counts: dict[str, int]) -> int:
+    raw_score = 100 - (
+        30 * severity_counts["critical"]
+        + 12 * severity_counts["high"]
+        + 4 * severity_counts["medium"]
+        + severity_counts["low"]
+    )
+    return max(0, min(100, raw_score))
 
 
 def _trust_components_from_domain(domain: TrustDomainScore) -> list[dict[str, object]]:
@@ -180,3 +481,8 @@ def _trust_component_row(
     if component.evidence:
         payload["evidence"] = {"lines": list(component.evidence)}
     return payload
+
+
+def _trust_evidence_hash(payload: dict[str, object]) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()

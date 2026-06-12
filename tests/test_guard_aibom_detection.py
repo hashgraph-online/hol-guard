@@ -279,6 +279,35 @@ def test_instruction_role_ignores_unrelated_rules_paths(tmp_path: Path) -> None:
     assert instruction_role_for_path(cursor_rule) == "cursor_rules"
 
 
+def test_discover_named_instruction_docs(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    (workspace / "DESIGN.md").write_text("# Design\n", encoding="utf-8")
+    (workspace / "SECURITY.md").write_text("# Security\n", encoding="utf-8")
+    standards_dir = workspace / "docs" / "standards"
+    standards_dir.mkdir(parents=True)
+    (standards_dir / "api.md").write_text("# Standards\n", encoding="utf-8")
+    policies_dir = workspace / "docs" / "policies"
+    policies_dir.mkdir(parents=True)
+    (policies_dir / "access.md").write_text("# Policy\n", encoding="utf-8")
+
+    artifacts = discover_shared_workspace_aibom_artifacts(
+        "cursor",
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+    )
+    roles = {
+        artifact.metadata.get("instructionRole")
+        for artifact in artifacts
+        if isinstance(artifact.metadata, dict)
+    }
+
+    assert "design_md" in roles
+    assert "security_md" in roles
+    assert "standards_md" in roles
+    assert "policy_md" in roles
+
+
 def test_marketplace_escape_path_does_not_read_outside_workspace(tmp_path: Path) -> None:
     workspace = tmp_path / "repo"
     outside = tmp_path / "outside"
