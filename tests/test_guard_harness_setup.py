@@ -28,6 +28,8 @@ SUPPORTED_HARNESSES = (
     "cursor",
     "hermes",
     "openclaw",
+    "kimi",
+    "grok",
 )
 
 
@@ -511,6 +513,31 @@ def test_apps_disconnect_confirmation_phrase_is_visible(
     payload = json.loads(output)
     assert payload["confirmation_phrase"] == "disconnect-codex"
     assert payload["confirm_command"] == "hol-guard apps disconnect codex --confirm disconnect-codex"
+
+
+def test_apps_disconnect_grok_confirmation_phrase_is_visible(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    args = argparse.Namespace(
+        guard_command="apps",
+        apps_command="disconnect",
+        harness="grok",
+        confirm=None,
+        home=str(tmp_path / "home"),
+        guard_home=str(tmp_path / "guard-home"),
+        workspace=str(tmp_path / "workspace"),
+        json=True,
+    )
+
+    exit_code = run_guard_command(args)
+
+    assert exit_code == 2
+    output = capsys.readouterr().out
+    assert "disconnect-grok" in output
+    payload = json.loads(output)
+    assert payload["confirmation_phrase"] == "disconnect-grok"
+    assert payload["confirm_command"] == "hol-guard apps disconnect grok --confirm disconnect-grok"
 
 
 def test_apps_safe_setup_does_not_read_skill_env_files(
