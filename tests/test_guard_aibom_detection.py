@@ -9,6 +9,7 @@ from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
 from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
 from codex_plugin_scanner.guard.aibom_detection import (
     INVENTORY_ITEM_KINDS,
+    discover_codex_skill_artifacts,
     discover_shared_workspace_aibom_artifacts,
     extend_detection_with_workspace_aibom,
     file_content_hash,
@@ -92,15 +93,19 @@ def test_discover_codex_skills_and_marketplace_plugins(tmp_path: Path) -> None:
     skill_root.mkdir(parents=True)
     (skill_root / "SKILL.md").write_text("---\nname: lint\n---\n", encoding="utf-8")
 
-    artifacts = discover_shared_workspace_aibom_artifacts(
+    shared_artifacts = discover_shared_workspace_aibom_artifacts(
         "codex",
         home_dir=tmp_path,
         workspace_dir=workspace,
     )
-    artifact_types = {artifact.artifact_type for artifact in artifacts}
+    skill_artifacts = discover_codex_skill_artifacts(
+        "codex",
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+    )
 
-    assert "skill" in artifact_types
-    assert "plugin" in artifact_types
+    assert "plugin" in {artifact.artifact_type for artifact in shared_artifacts}
+    assert "skill" in {artifact.artifact_type for artifact in skill_artifacts}
 
 
 def test_content_hash_detects_tail_changes_beyond_one_mebibyte(tmp_path: Path) -> None:
