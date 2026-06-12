@@ -1,4 +1,10 @@
-"""Incremental receipt rollups for fast analytics and counts."""
+"""Incremental receipt rollups for fast analytics and counts.
+
+Rollups use four tables aligned to analytics query shapes (global totals,
+daily trend, per-harness, per-artifact top-N). A single composite-key table
+would mix key semantics and widen every upsert on receipt insert; separate
+tables keep incremental updates O(1) per dimension.
+"""
 
 from __future__ import annotations
 
