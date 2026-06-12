@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -35,6 +36,14 @@ def _json_payload(path: Path) -> dict[str, object]:
 
 def _command_available(command: str) -> bool:
     return shutil.which(command) is not None
+
+
+def _shell_command(command: tuple[str, ...], *, windows: bool | None = None) -> str:
+    """Return a shell-escaped command string appropriate for the target OS."""
+    is_windows = os.name == "nt" if windows is None else windows
+    if is_windows:
+        return subprocess.list2cmdline(list(command))
+    return shlex.join(command)
 
 
 def _resolve_command(command: str, candidates: tuple[Path, ...] = ()) -> str | None:
