@@ -18,7 +18,7 @@ from codex_plugin_scanner.guard.aibom_detection import (
 )
 from codex_plugin_scanner.guard.consumer.service import artifact_hash, diff_artifact
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
-from codex_plugin_scanner.guard.models import HarnessDetection
+from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 
 
 def test_inventory_item_kinds_align_with_portal_contract() -> None:
@@ -311,6 +311,43 @@ def test_marketplace_escape_path_does_not_read_outside_workspace(tmp_path: Path)
 
     assert len(evil_plugins) == 1
     assert "content_hash" not in evil_plugins[0].metadata
+
+
+def test_extend_detection_replaces_legacy_rules_collision_with_workspace_claude_md(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    root_claude_md = workspace / "CLAUDE.md"
+    root_claude_md.write_text("# root instructions\n", encoding="utf-8")
+    legacy_rule = workspace / ".claude" / "rules" / "claude-md.md"
+    legacy_rule.parent.mkdir(parents=True)
+    legacy_rule.write_text("# legacy rule id\n", encoding="utf-8")
+
+    base = HarnessDetection(
+        harness="claude-code",
+        installed=True,
+        command_available=True,
+        config_paths=(str(legacy_rule),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="claude-code:project:instruction:claude-md",
+                name="claude-md",
+                harness="claude-code",
+                artifact_type="instruction",
+                source_scope="project",
+                config_path=str(legacy_rule),
+                metadata={"instructionRole": "cursor_rules"},
+            ),
+        ),
+    )
+    extended = extend_detection_with_workspace_aibom(
+        base,
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+    )
+    artifacts = {artifact.artifact_id: artifact for artifact in extended.artifacts}
+
+    assert artifacts["claude-code:project:instruction:claude-md"].config_path == str(root_claude_md)
+    assert artifacts["claude-code:project:instruction:claude-md"].metadata.get("instructionRole") == "claude_md"
 
 
 def test_extend_detection_does_not_replace_colliding_mcp_server_with_claude_md(tmp_path: Path) -> None:

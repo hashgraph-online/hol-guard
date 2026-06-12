@@ -476,6 +476,10 @@ def _is_claude_rules_instruction_replacement_target(
     existing: GuardArtifact,
     workspace_dir: Path,
 ) -> bool:
+    # Defense-in-depth: only Claude rules markdown may be replaced by workspace-root
+    # CLAUDE.md when IDs collide. MCP servers are namespaced under mcp:, and current
+    # rule discovery uses rules-{stem}, but legacy inventories may still carry the
+    # pre-prefix rules ID at the CLAUDE.md legacy artifact_id.
     if existing.artifact_type != "instruction" or existing.harness != "claude-code":
         return False
     config_path = getattr(existing, "config_path", None)
