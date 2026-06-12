@@ -12802,6 +12802,9 @@ function HiMiniCodeBracket(props) {
 function HiMiniCloud(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M1 12.5A4.5 4.5 0 0 0 5.5 17H15a4 4 0 0 0 1.866-7.539 3.504 3.504 0 0 0-4.504-4.272A4.5 4.5 0 0 0 4.06 8.235 4.502 4.502 0 0 0 1 12.5Z" }, "child": [] }] })(props);
 }
+function HiMiniCloudArrowUp(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M5.5 17a4.5 4.5 0 0 1-1.44-8.765 4.5 4.5 0 0 1 8.302-3.046 3.5 3.5 0 0 1 4.504 4.272A4 4 0 0 1 15 17H5.5Zm3.75-2.75a.75.75 0 0 0 1.5 0V9.66l1.95 2.1a.75.75 0 1 0 1.1-1.02l-3.25-3.5a.75.75 0 0 0-1.1 0l-3.25 3.5a.75.75 0 1 0 1.1 1.02l1.95-2.1v4.59Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniClock(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -25448,7 +25451,7 @@ export {
   clearReviewQueue as Z,
   revokeApprovalGateCooldown as _,
   EvidenceActivityHeatmapMini as a,
-  HiMiniSignal as a$,
+  HiMiniBarsArrowDown as a$,
   enrollApprovalGateTotp as a0,
   verifyApprovalGateTotp as a1,
   clearEvidence as a2,
@@ -25478,14 +25481,14 @@ export {
   HiMiniDocumentMagnifyingGlass as aQ,
   HiMiniShieldExclamation as aR,
   HiMiniComputerDesktop as aS,
-  HiMiniInformationCircle as aT,
-  fetchReceipts as aU,
-  HiMiniArrowRight as aV,
-  runAuditRemediation as aW,
-  HiMiniDocumentText as aX,
-  guardAwareHref as aY,
-  HiMiniBarsArrowUp as aZ,
-  HiMiniBarsArrowDown as a_,
+  HiMiniArrowRight as aT,
+  HiMiniCloudArrowUp as aU,
+  HiMiniInformationCircle as aV,
+  fetchReceipts as aW,
+  runAuditRemediation as aX,
+  HiMiniDocumentText as aY,
+  guardAwareHref as aZ,
+  HiMiniBarsArrowUp as a_,
   HiMiniMagnifyingGlass as aa,
   approvalGateCooldownLabel as ab,
   fetchApprovalPage as ac,
@@ -25513,6 +25516,7 @@ export {
   WorkspacePageHeader as ay,
   __vitePreload as az,
   EmptyState as b,
+  HiMiniSignal as b0,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,
