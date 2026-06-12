@@ -136,6 +136,8 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
   Guard authors package-level policy while OpenCode keeps native once, always, or reject prompts for managed MCP tools.
 - `kimi`
   Guard installs managed `PreToolUse` and `UserPromptSubmit` hooks in `~/.kimi-code/config.toml`, blocks with exit code `2` and a JSON `permissionDecision: "deny"` response, and fails open on hook crash or timeout.
+- `grok`
+  Guard installs managed Grok hook JSON under `~/.grok/hooks/` plus permission deny rules in `~/.grok/managed_config.toml`, blocks with exit code `2` and a Grok-native `{"decision":"deny"}` response, and never reads `~/.grok/auth`.
 - `hermes`
   Guard installs a managed Hermes overlay bundle, routes MCP servers through Guard proxies, and prefers native-or-center delivery for blocked requests.
 - `gemini`

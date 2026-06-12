@@ -395,6 +395,25 @@ def normalize_cursor_hook_payload(
     )
 
 
+def normalize_grok_hook_payload(
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    """Normalize a Grok Build CLI hook payload into a typed action envelope."""
+
+    from ..adapters.grok_hooks import prepare_grok_hook_payload
+
+    return _normalize_action_payload(
+        prepare_grok_hook_payload(payload),
+        harness="grok",
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+
+
 def normalize_harness_payload(
     harness: str,
     event_name: str,
@@ -416,6 +435,7 @@ def normalize_harness_payload(
         "hermes": normalize_hermes_payload,
         "openclaw": normalize_openclaw_payload,
         "cursor": normalize_cursor_hook_payload,
+        "grok": normalize_grok_hook_payload,
     }
     normalizer = normalizers.get(normalized_harness)
     if normalizer is None:

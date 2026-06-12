@@ -334,6 +334,10 @@ Current strategy:
   installs Guard-owned `PreToolUse` and `UserPromptSubmit` hooks in `~/.kimi-code/config.toml`, blocks dangerous tool
   calls and prompts with exit code `2` plus a JSON `permissionDecision: "deny"` response, and fails open on hook crash
   or timeout
+- `grok`
+  installs Guard-owned Grok hook JSON in `~/.grok/hooks/` and permission deny rules in `~/.grok/managed_config.toml`,
+  blocks with Grok-native stdout JSON `{"decision":"deny"}` plus approval-center copy, never reads `~/.grok/auth`, and
+  treats `--always-approve` or `bypassPermissions` as degraded protection when detected
 
 Guard does not claim VS Code Copilot extension-host interception in this pass. A VS Code inline tool prompt by itself is
 not proof that Guard blocked the action, because that prompt can come from VS Code's own permission surface. For Copilot,

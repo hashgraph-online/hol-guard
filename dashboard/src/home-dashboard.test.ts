@@ -140,6 +140,7 @@ const displayNames = [
   { harness: "hermes", expected: "Hermes" },
   { harness: "openclaw", expected: "OpenClaw" },
   { harness: "kimi", expected: "Kimi" },
+  { harness: "grok", expected: "Grok" },
 ];
 
 for (const { harness, expected } of displayNames) {

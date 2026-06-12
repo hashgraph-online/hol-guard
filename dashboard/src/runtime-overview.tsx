@@ -2,7 +2,7 @@ import { ActionButton, Badge, KeyValueGrid, SectionLabel, Surface, Tag, ProofStr
 import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
 import type { GuardCloudSyncHealth, GuardInventoryItem, GuardProofStatus, GuardReceipt, GuardRuntimeDevice, GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-types";
 
-const WATCHED_HARNESSES = ["codex", "claude-code", "opencode", "copilot", "gemini", "cursor", "hermes", "openclaw", "kimi"] as const;
+const WATCHED_HARNESSES = ["codex", "claude-code", "opencode", "copilot", "gemini", "cursor", "hermes", "openclaw", "kimi", "grok"] as const;
 
 type WatchedHarnessName = (typeof WATCHED_HARNESSES)[number];
 
