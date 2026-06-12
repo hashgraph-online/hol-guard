@@ -4264,7 +4264,7 @@ clearer UX and an implementation plan with technical references.
         event = {
             "event": "PreToolUse",
             "tool_name": "workspace-tools",
-            "artifact_id": "claude-code:project:workspace-tools",
+            "artifact_id": "claude-code:project:mcp:workspace-tools",
             "artifact_name": "workspace-tools",
             "policy_action": "require-reapproval",
             "changed_capabilities": ["tool_name"],
@@ -4298,7 +4298,7 @@ clearer UX and an implementation plan with technical references.
         message = "HOL Guard blocked this launch because the action matched a sensitive local secret path."
         event = {
             "event": "PreToolUse",
-            "artifact_id": "claude-code:project:workspace-tools",
+            "artifact_id": "claude-code:project:mcp:workspace-tools",
             "artifact_name": "workspace-tools",
             "policy_action": "block",
             "decision_v2_json": {
@@ -4401,7 +4401,7 @@ clearer UX and an implementation plan with technical references.
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert output["artifact_id"] == "claude-code:project:workspace-tools"
+        assert output["artifact_id"] == "claude-code:project:mcp:workspace-tools"
 
     def test_guard_hook_uses_copilot_repo_hook_runtime_path(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
@@ -11898,7 +11898,7 @@ def test_guard_run_headless_redetects_before_persisted_resume(tmp_path, monkeypa
 
     store = GuardStore(home_dir)
     baseline = GuardArtifact(
-        artifact_id="claude-code:project:workspace-tools",
+        artifact_id="claude-code:project:mcp:workspace-tools",
         name="workspace-tools",
         harness="claude-code",
         artifact_type="mcp_server",
@@ -12020,7 +12020,7 @@ def test_guard_headless_blocked_run_persists_receipts_and_diffs(tmp_path, monkey
     _build_guard_fixture(home_dir, workspace_dir)
     store = GuardStore(home_dir)
     baseline = GuardArtifact(
-        artifact_id="claude-code:project:workspace-tools",
+        artifact_id="claude-code:project:mcp:workspace-tools",
         name="workspace-tools",
         harness="claude-code",
         artifact_type="mcp_server",
@@ -12176,7 +12176,7 @@ def test_guard_hook_invalid_policy_action_falls_back_to_reapproval(tmp_path, cap
     event = {
         "event": "PreToolUse",
         "tool_name": "workspace-tools",
-        "artifact_id": "claude-code:project:workspace-tools",
+        "artifact_id": "claude-code:project:mcp:workspace-tools",
         "policy_action": "require_reapproval",
         "source_scope": "project",
     }
