@@ -82,9 +82,25 @@ def grok_hook_response_from_guard(*, policy_action: str, reason: str) -> dict[st
     """Translate Guard policy action into Grok PreToolUse stdout JSON."""
 
     if policy_action in {"block", "sandbox-required", "require-reapproval"}:
-        cleaned_reason = reason.strip() if isinstance(reason, str) else "Blocked by HOL Guard."
-        return {"decision": "deny", "reason": cleaned_reason or "Blocked by HOL Guard."}
+        cleaned_reason = _dedupe_grok_block_reason(reason.strip() if isinstance(reason, str) else "")
+        return {
+            "decision": "deny",
+            "reason": cleaned_reason or "Blocked by HOL Guard.",
+        }
     return {"decision": "allow"}
+
+
+def _dedupe_grok_block_reason(reason: str) -> str:
+    if not reason:
+        return reason
+    marker = "Open HOL Guard to approve or keep this blocked:"
+    first = reason.find(marker)
+    if first == -1:
+        return reason
+    second = reason.find(marker, first + len(marker))
+    if second == -1:
+        return reason
+    return reason[:second].rstrip()
 
 
 def emit_grok_hook_response(

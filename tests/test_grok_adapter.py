@@ -13,10 +13,13 @@ from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter, _remove_managed_block
 from codex_plugin_scanner.guard.adapters.grok_hooks import (
+    _dedupe_grok_block_reason,
     emit_grok_hook_response,
     grok_hook_response_from_guard,
     prepare_grok_hook_payload,
 )
+from codex_plugin_scanner.guard.inventory_contract import _agent_type, inventory_snapshot_from_detection
+from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.runtime.actions import normalize_grok_hook_payload
 
 
@@ -222,3 +225,135 @@ class TestGrokFixturesAreRedacted:
         for path in fixture_dir.glob("*.json"):
             contents = path.read_text(encoding="utf-8")
             assert forbidden.search(contents) is None
+
+
+class TestGrokHookPayloadFixtures:
+    def test_edit_fixture_normalizes_to_edit_tool(self) -> None:
+        normalized = prepare_grok_hook_payload(_fixture("pretooluse_edit.json"))
+        assert normalized["tool_name"] == "Edit"
+
+    def test_mcp_fixture_preserves_server_metadata(self) -> None:
+        normalized = prepare_grok_hook_payload(_fixture("pretooluse_mcp.json"))
+        assert normalized["tool_name"] == "MCPTool"
+
+    def test_webfetch_fixture_normalizes_tool(self) -> None:
+        normalized = prepare_grok_hook_payload(_fixture("pretooluse_webfetch.json"))
+        assert normalized["tool_name"] == "WebFetch"
+
+    def test_unknown_tool_is_preserved(self) -> None:
+        normalized = prepare_grok_hook_payload(_fixture("pretooluse_unknown_tool.json"))
+        assert normalized["tool_name"] == "custom_plugin_action"
+
+    def test_prompt_fixture_normalizes_event(self) -> None:
+        normalized = prepare_grok_hook_payload(_fixture("user_prompt_submit.json"))
+        assert normalized["hook_event_name"] == "UserPromptSubmit"
+
+    def test_malformed_payload_is_handled_safely(self) -> None:
+        normalized = prepare_grok_hook_payload({})
+        assert normalized == {}
+
+
+class TestGrokActionEnvelopes:
+    def test_read_secret_maps_to_file_read(self, tmp_path: Path) -> None:
+        envelope = normalize_grok_hook_payload(
+            _fixture("pretooluse_read_secret.json"),
+            workspace=tmp_path / "ws",
+            home_dir=tmp_path,
+        )
+        assert envelope.action_type == "file_read"
+        assert ".env" in envelope.target_paths[0]
+
+    def test_safe_grep_maps_to_shell_command(self, tmp_path: Path) -> None:
+        envelope = normalize_grok_hook_payload(
+            _fixture("pretooluse_grep_safe.json"),
+            workspace=tmp_path / "ws",
+            home_dir=tmp_path,
+        )
+        assert envelope.action_type in {"shell_command", "file_read", "config_change"}
+
+    def test_session_id_is_preserved(self, tmp_path: Path) -> None:
+        envelope = normalize_grok_hook_payload(
+            _fixture("pretooluse_bash.json"),
+            workspace=tmp_path / "ws",
+            home_dir=tmp_path,
+        )
+        assert envelope.raw_payload_redacted.get("session_id") == "session-redacted-001"
+
+    def test_workspace_label_is_redacted(self, tmp_path: Path) -> None:
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        fixture = dict(_fixture("pretooluse_bash.json"))
+        fixture["workspaceRoot"] = str(workspace)
+        envelope = normalize_grok_hook_payload(fixture, workspace=workspace, home_dir=tmp_path)
+        assert str(workspace) not in (envelope.workspace or "")
+
+
+class TestGrokDetectExtended:
+    def test_detects_mcp_servers_from_config(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        config = ctx.home_dir / ".grok" / "config.toml"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text(
+            """
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+        result = GrokHarnessAdapter().detect(ctx)
+        mcp = [artifact for artifact in result.artifacts if artifact.artifact_type == "mcp_server"]
+        assert any(artifact.name == "github" for artifact in mcp)
+
+    def test_detects_degraded_always_approve_signal(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        config = ctx.home_dir / ".grok" / "config.toml"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text('sandbox = "off"\n', encoding="utf-8")
+        result = GrokHarnessAdapter().detect(ctx)
+        assert any("degraded" in warning.lower() or "sandbox" in warning.lower() for warning in result.warnings)
+
+    def test_install_preserves_user_config(self, tmp_path: Path, monkeypatch) -> None:
+        ctx = _ctx(tmp_path)
+        user_config = ctx.home_dir / ".grok" / "config.toml"
+        user_config.parent.mkdir(parents=True, exist_ok=True)
+        user_config.write_text("[ui]\nsimple_mode = true\n", encoding="utf-8")
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.grok.install_guard_shim",
+            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
+        )
+        GrokHarnessAdapter().install(ctx)
+        assert user_config.read_text(encoding="utf-8") == "[ui]\nsimple_mode = true\n"
+
+
+class TestGrokInventoryAndResponses:
+    def test_inventory_agent_type_is_grok(self) -> None:
+        assert _agent_type("grok") == "grok"
+
+    def test_inventory_snapshot_serializes_grok_harness(self, tmp_path: Path) -> None:
+        detection = HarnessDetection(
+            harness="grok",
+            installed=True,
+            command_available=True,
+            config_paths=(str(tmp_path / ".grok" / "config.toml"),),
+            artifacts=(),
+            warnings=(),
+        )
+        snapshot = inventory_snapshot_from_detection(detection, home_dir=tmp_path, generated_at="2026-06-12T00:00:00Z")
+        assert snapshot.agent_type == "grok"
+
+    def test_dedupe_block_reason_removes_repeated_approval_copy(self) -> None:
+        reason = (
+            "Blocked. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:8080/x. "
+            "After you choose, retry the same Grok action. "
+            "Open HOL Guard to approve or keep this blocked: http://127.0.0.1:8080/x. "
+            "After you choose, retry the same Grok action."
+        )
+        deduped = _dedupe_grok_block_reason(reason)
+        assert deduped.count("Open HOL Guard to approve or keep this blocked:") == 1
+
+    def test_deny_response_uses_plain_language_not_raw_json(self) -> None:
+        payload = grok_hook_response_from_guard(policy_action="block", reason="Grok tried to read a credential file.")
+        assert payload["decision"] == "deny"
+        assert "{" not in str(payload["reason"])

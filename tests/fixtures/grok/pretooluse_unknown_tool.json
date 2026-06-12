@@ -1,0 +1,10 @@
+{
+  "hookEventName": "pre_tool_use",
+  "sessionId": "session-redacted-008",
+  "cwd": "<workspace>",
+  "workspaceRoot": "<workspace>",
+  "toolName": "custom_plugin_action",
+  "toolInput": {
+    "payload": "opaque"
+  }
+}
