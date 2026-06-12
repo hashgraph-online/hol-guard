@@ -71,9 +71,7 @@ def load_codex_skill_config_rules(
     merged: list[CodexSkillConfigRule] = []
     merged.extend(_rules_from_payload(_read_toml(home_dir / ".codex" / "config.toml"), base_dir=home_dir))
     if workspace_dir is not None:
-        merged.extend(
-            _rules_from_payload(_read_toml(workspace_dir / ".codex" / "config.toml"), base_dir=workspace_dir)
-        )
+        merged.extend(_rules_from_payload(_read_toml(workspace_dir / ".codex" / "config.toml"), base_dir=workspace_dir))
     return tuple(merged)
 
 
