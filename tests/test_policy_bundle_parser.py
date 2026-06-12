@@ -14,6 +14,9 @@ from codex_plugin_scanner.guard.policy_bundle_parser import (
     payload_hash_for_policy_bundle,
     validated_policy_bundle_payload,
 )
+from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
+    policy_bundle_verification_key_from_public_key,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -69,17 +72,24 @@ def _sample_policy_bundle(*, bundle_hash: str | None = None) -> dict[str, object
     return bundle
 
 
-def _signed_policy_bundle() -> dict[str, object]:
+def _signed_policy_bundle(
+    *,
+    key_id: str = "guard-policy-bundle-test-key",
+) -> tuple[dict[str, object], tuple[object, ...]]:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     public_key_pem = private_key.public_key().public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     ).decode('utf-8')
+    trusted_key = policy_bundle_verification_key_from_public_key(
+        key_id=key_id,
+        public_key_pem=public_key_pem,
+    )
     bundle = _sample_policy_bundle()
     bundle['workspaceId'] = 'workspace-1'
     verifier = dict(bundle['verifier']) if isinstance(bundle['verifier'], dict) else {}
     verifier['algorithm'] = 'rsa-pss-sha256'
-    verifier['keyId'] = 'guard-policy-bundle-test-key'
+    verifier['keyId'] = key_id
     verifier['publicKeyPem'] = public_key_pem
     verifier['signature'] = None
     bundle['verifier'] = verifier
@@ -93,7 +103,7 @@ def _signed_policy_bundle() -> dict[str, object]:
         )
     ).decode('utf-8')
     bundle['verifier'] = verifier
-    return bundle
+    return bundle, (trusted_key,)
 
 
 def test_hgc071_valid_policy_bundle_parses() -> None:
@@ -109,9 +119,12 @@ def test_hgc071_valid_policy_bundle_parses() -> None:
 
 
 def test_hgc071_signed_policy_bundle_parses() -> None:
-    bundle = _signed_policy_bundle()
+    bundle, trusted_keys = _signed_policy_bundle()
 
-    validated_bundle, reason = validated_policy_bundle_payload(bundle)
+    validated_bundle, reason = validated_policy_bundle_payload(
+        bundle,
+        trusted_verification_keys=trusted_keys,
+    )
 
     assert reason is None
     assert validated_bundle is not None
@@ -123,20 +136,23 @@ def test_hgc071_signed_policy_bundle_parses() -> None:
 
 
 def test_hgc073_signed_policy_bundle_rejects_invalid_signature() -> None:
-    bundle = _signed_policy_bundle()
+    bundle, trusted_keys = _signed_policy_bundle()
     verifier = dict(bundle["verifier"]) if isinstance(bundle["verifier"], dict) else {}
     verifier["signature"] = base64.b64encode(b"tampered-signature").decode('utf-8')
     bundle["verifier"] = verifier
 
-    validated_bundle, reason = validated_policy_bundle_payload(bundle)
+    validated_bundle, reason = validated_policy_bundle_payload(
+        bundle,
+        trusted_verification_keys=trusted_keys,
+    )
 
     assert validated_bundle is None
     assert reason == "bundle_signature_invalid"
 
 
 def test_hgc073_bundle_hash_ignores_public_key_rotation() -> None:
-    first_bundle = _signed_policy_bundle()
-    second_bundle = _signed_policy_bundle()
+    first_bundle, _ = _signed_policy_bundle()
+    second_bundle, _ = _signed_policy_bundle()
     first_verifier = first_bundle["verifier"]
     second_verifier = second_bundle["verifier"]
 
@@ -249,6 +265,49 @@ def test_hgc075_preserves_last_known_good_policy_on_invalid_update(tmp_path: Pat
     assert store.get_sync_payload("policy_bundle_last_error") == {
         "reason": "missing_required_field",
     }
+
+
+def test_signed_policy_bundle_rejects_attacker_self_signed_key() -> None:
+    attacker_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    attacker_public_key_pem = attacker_private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    ).decode("utf-8")
+    bundle = _sample_policy_bundle()
+    bundle["workspaceId"] = "workspace-1"
+    verifier = dict(bundle["verifier"]) if isinstance(bundle["verifier"], dict) else {}
+    verifier["algorithm"] = "rsa-pss-sha256"
+    verifier["keyId"] = "guard-policy-bundle-v1"
+    verifier["publicKeyPem"] = attacker_public_key_pem
+    verifier["signature"] = None
+    bundle["verifier"] = verifier
+    bundle["bundleHash"] = computed_policy_bundle_hash(bundle)
+    bundle["payloadHash"] = payload_hash_for_policy_bundle(bundle)
+    verifier["signature"] = base64.b64encode(
+        attacker_private_key.sign(
+            canonical_policy_bundle_payload(bundle),
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+            hashes.SHA256(),
+        )
+    ).decode("utf-8")
+    bundle["verifier"] = verifier
+
+    validated_bundle, reason = validated_policy_bundle_payload(bundle)
+
+    assert validated_bundle is None
+    assert reason == "untrusted_signing_key"
+
+
+def test_signed_policy_bundle_accepts_trusted_sync_verification_keys() -> None:
+    bundle, trusted_keys = _signed_policy_bundle()
+
+    validated_bundle, reason = validated_policy_bundle_payload(
+        bundle,
+        trusted_verification_keys=trusted_keys,
+    )
+
+    assert reason is None
+    assert validated_bundle is not None
 
 
 def test_hgc075_updates_last_known_good_on_valid_replacement(tmp_path: Path) -> None:

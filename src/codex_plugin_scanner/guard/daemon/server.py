@@ -106,6 +106,10 @@ from ..package_firewall_entitlement import (
 from ..package_firewall_receipts import package_firewall_receipt_metadata
 from ..package_shim_status import record_package_shim_audit_result
 from ..receipts.manager import build_receipt
+from ..policy_bundle_trusted_keys import (
+    policy_bundle_keyring_payload,
+    validate_synced_policy_bundle,
+)
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncNotAvailableError,
@@ -115,7 +119,6 @@ from ..runtime.runner import (
     _guard_device_metadata,
     _policy_bundle_acknowledgement_payload,
     _policy_bundle_is_version_downgrade,
-    _validated_policy_bundle_payload,
     sync_local_guard_cloud_proof,
     sync_supply_chain_bundle,
 )
@@ -1803,7 +1806,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "missing_policy_memory"}, status=400)
             return
         if policy_bundle:
-            validated_policy_bundle, rejection_reason = _validated_policy_bundle_payload(policy_bundle)
+            validated_policy_bundle, rejection_reason, trusted_policy_bundle_keys = validate_synced_policy_bundle(
+                policy_bundle,
+                stored_keyring=self.server.store.get_sync_payload("policy_bundle_keyring"),  # type: ignore[attr-defined]
+                sync_payload=payload if isinstance(payload, dict) else None,
+            )
             existing_policy_bundle_payload = self.server.store.get_sync_payload("policy_bundle")  # type: ignore[attr-defined]
             existing_policy_bundle = (
                 existing_policy_bundle_payload if isinstance(existing_policy_bundle_payload, dict) else None
@@ -1820,6 +1827,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             applied_at = _now()
             self.server.store.set_sync_payload("policy_bundle", validated_policy_bundle, applied_at)  # type: ignore[attr-defined]
             self.server.store.set_sync_payload("policy_bundle_last_good", validated_policy_bundle, applied_at)  # type: ignore[attr-defined]
+            self.server.store.set_sync_payload(  # type: ignore[attr-defined]
+                "policy_bundle_keyring",
+                policy_bundle_keyring_payload(
+                    trusted_policy_bundle_keys,
+                    workspace_id=self.server.store.get_cloud_workspace_id(),  # type: ignore[attr-defined]
+                ),
+                applied_at,
+            )
             device_id, device_name = _guard_device_metadata(self.server.store)  # type: ignore[attr-defined]
             self.server.store.set_sync_payload(  # type: ignore[attr-defined]
                 "policy_bundle_ack",
