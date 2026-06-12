@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from .trust_helpers import build_adapter_score, build_domain_score
@@ -8,14 +9,15 @@ from .trust_models import TrustDomainScore
 from .trust_specs import INSTRUCTION_TRUST_SPEC
 
 _BOUNDARY_TERMS = (
-    "must",
     "must not",
     "never",
-    "only",
     "do not",
     "allowed",
     "forbidden",
     "required",
+    "read-only",
+    "write access",
+    "network access",
 )
 _CAPABILITY_TERMS = (
     "shell",
@@ -25,7 +27,7 @@ _CAPABILITY_TERMS = (
     "write",
     "delete",
     "execute",
-    "model",
+    "remote code",
 )
 _SECRET_TERMS = ("secret", "token", "password", "credential", "api key")
 _SCOPE_TERMS = (
@@ -40,9 +42,10 @@ _GOVERNANCE_TERMS = (
     "review",
     "approval",
     "owner",
-    "version",
-    "change",
     "maintainer",
+    "change control",
+    "versioned",
+    "reviewed by",
 )
 _PROVENANCE_TERMS = (
     "source",
@@ -183,7 +186,18 @@ def _is_valid_json(text: str) -> bool:
 
 
 def _matched_terms(text: str, terms: tuple[str, ...]) -> list[str]:
-    return [term for term in terms if term in text]
+    matches: list[str] = []
+    for term in terms:
+        if _term_matches(text, term):
+            matches.append(term)
+    return matches
+
+
+def _term_matches(text: str, term: str) -> bool:
+    if " " in term or "-" in term:
+        return term in text
+    pattern = rf"\b{re.escape(term)}\b"
+    return re.search(pattern, text) is not None
 
 
 def _append_unique(values: list[str], value: str) -> list[str]:

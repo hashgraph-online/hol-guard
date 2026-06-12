@@ -70,9 +70,6 @@ def trust_resolution_from_domain(
         ),
     }
 
-    trust_components = _trust_components_from_domain(domain)
-    normalized_captured_at = _normalize_inventory_datetime(captured_at)
-
     return {
         "resolutionSource": "local",
         "status": "local",
@@ -193,9 +190,6 @@ def _trust_layer_from_domain(
     captured_at: str,
 ) -> dict[str, object]:
     from .inventory_contract import _normalize_inventory_datetime
-
-    trust_components = _trust_components_from_domain(domain)
-    normalized_captured_at = _normalize_inventory_datetime(captured_at)
 
     trust_components = _trust_components_from_domain(domain)
     normalized_captured_at = _normalize_inventory_datetime(captured_at)
