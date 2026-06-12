@@ -42,6 +42,7 @@ from codex_plugin_scanner.guard.models import (
     PolicyDecision,
 )
 from codex_plugin_scanner.guard.policy import decide_action, decide_action_with_v2
+from codex_plugin_scanner.guard.policy_bundle_parser import validated_policy_bundle_payload
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
 from codex_plugin_scanner.guard.proxy import stdio as stdio_proxy_module
 from codex_plugin_scanner.guard.receipts import build_receipt
@@ -16808,7 +16809,7 @@ def test_policy_bundle_validation_rejects_tampered_hash():
         "acknowledgements": [],
     }
 
-    validated_bundle, reason = guard_runner_module._validated_policy_bundle_payload(bundle)
+    validated_bundle, reason = validated_policy_bundle_payload(bundle)
 
     assert validated_bundle is None
     assert reason == "bundle_hash_mismatch"
@@ -16870,7 +16871,7 @@ def test_policy_bundle_validation_rejects_missing_rules_field():
         "acknowledgements": [],
     }
 
-    validated_bundle, reason = guard_runner_module._validated_policy_bundle_payload(bundle)
+    validated_bundle, reason = validated_policy_bundle_payload(bundle)
 
     assert validated_bundle is None
     assert reason == "missing_required_field"
