@@ -64,7 +64,7 @@ export function EvidenceInsightsShareSheet({ publicUrl, onClose }: EvidenceInsig
           <p className="mt-1 text-xs text-slate-500">
             Visitors who sign up through it get 20% off HOL Guard Pro or Team for 12 months. Track referrals and payouts in the{" "}
             <a
-              href="https://hol.org/guard/affiliate"
+              href="https://hol.org/guard/affiliates"
               target="_blank"
               rel="noopener noreferrer"
               className="font-medium text-brand-blue hover:underline"
