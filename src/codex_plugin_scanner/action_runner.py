@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 
 from . import __version__
-from .cli import _scan_with_policy
+from ._scanner_commands import _scan_with_policy
 from .cli_ui import build_plain_text, build_verification_text
 from .config import ConfigError, load_scanner_config
 from .github_reporting import (
