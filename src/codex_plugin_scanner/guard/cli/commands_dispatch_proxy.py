@@ -1,0 +1,285 @@
+"""Guard CLI command dispatch helpers."""
+
+# fmt: off
+# ruff: noqa: F403, F405, I001
+
+from __future__ import annotations
+
+from ._commands_shared import *
+from .commands_parser_helpers import *
+
+def _run_guard_codex_mcp_proxy_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    proxy = CodexMcpGuardProxy(
+        server_name=args.server_name,
+        command=[args.server_command, *list(args.server_args)],
+        context=context,
+        store=store,
+        config=config,
+        source_scope=args.source_scope,
+        config_path=args.config_path,
+        transport=args.transport,
+        server_id=args.server_id,
+        server_env_keys=tuple(args.server_env_keys),
+    )
+    return proxy.serve()
+
+def _run_guard_cursor_mcp_proxy_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    proxy = CursorMcpGuardProxy(
+        server_name=args.server_name,
+        command=[args.server_command, *list(args.server_args)],
+        context=context,
+        store=store,
+        config=config,
+        source_scope=args.source_scope,
+        config_path=args.config_path,
+        transport=args.transport,
+        server_id=args.server_id,
+        server_env_keys=tuple(args.server_env_keys),
+    )
+    return proxy.serve()
+
+def _run_guard_opencode_mcp_proxy_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    proxy = OpenCodeMcpGuardProxy(
+        server_name=args.server_name,
+        command=[args.server_command, *list(args.server_args)],
+        context=context,
+        store=store,
+        config=config,
+        source_scope=args.source_scope,
+        config_path=args.config_path,
+        transport=args.transport,
+        server_id=args.server_id,
+        server_env_keys=tuple(args.server_env_keys),
+    )
+    return proxy.serve()
+
+def _run_guard_copilot_mcp_proxy_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    proxy = CopilotMcpGuardProxy(
+        server_name=args.server_name,
+        command=[args.server_command, *list(args.server_args)],
+        context=context,
+        store=store,
+        config=config,
+        source_scope=args.source_scope,
+        config_path=args.config_path,
+        transport=args.transport,
+        server_id=args.server_id,
+        server_env_keys=tuple(args.server_env_keys),
+    )
+    return proxy.serve()
+
+def _run_guard_hermes_mcp_proxy_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    return _run_hermes_mcp_proxy(args=args, context=context, store=store, config=config)
+
+def _run_guard_uninstall_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    try:
+        payload = apply_managed_install(
+            "uninstall",
+            args.harness,
+            bool(getattr(args, "all", False)),
+            context,
+            store,
+            str(workspace) if workspace else None,
+            _now(),
+        )
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    _emit("uninstall", payload, getattr(args, "json", False))
+    return 0
+
+def _run_guard_package_shims_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    requested_managers = tuple(
+        manager
+        for manager in getattr(args, "package_shim_managers", [])
+        if isinstance(manager, str) and manager.strip()
+    )
+    shim_command = getattr(args, "package_shims_command", "status")
+    entitlement = resolve_package_firewall_entitlement_with_refresh(store)
+    current_status = package_shim_status(context)
+    if shim_command == "status":
+        payload = current_status
+        payload["actions"] = package_firewall_action_states(
+            entitlement,
+            has_installed_managers=bool(current_status.get("installed_managers")),
+        )
+        payload["entitlement"] = entitlement
+        payload["generated_at"] = _now()
+        _emit("package-shims", payload, getattr(args, "json", False))
+        return 0
+    if shim_command not in {"repair", "uninstall"} and not bool(entitlement["allowed"]):
+        _status, payload = _package_firewall_block_payload(
+            entitlement=entitlement,
+            has_installed_managers=bool(current_status.get("installed_managers")),
+            operation="remove" if shim_command == "uninstall" else shim_command,
+        )
+        payload["generated_at"] = _now()
+        _emit("package-shims", payload, getattr(args, "json", False))
+        return 2
+    try:
+        if shim_command in {"install", "repair", "uninstall"}:
+            gate_input = _package_firewall_cli_gate_input(args, store.guard_home)
+            require_high_risk(
+                store.guard_home,
+                purpose="supply_chain_firewall",
+                approval_gate_input=gate_input,
+            )
+        if shim_command == "install":
+            payload = activate_package_shims(context, managers=requested_managers or None)
+        elif shim_command == "repair":
+            payload = activate_package_shims(
+                context,
+                managers=requested_managers or None,
+                repair=True,
+            )
+        elif shim_command == "uninstall":
+            payload = uninstall_package_shims(context, managers=requested_managers or None)
+        else:
+            payload = package_shim_status(context)
+    except ApprovalGateError as error:
+        _emit("package-shims", approval_gate_cli_payload(error), getattr(args, "json", False))
+        return 2
+    payload["entitlement"] = entitlement
+    payload["generated_at"] = _now()
+    _emit("package-shims", payload, getattr(args, "json", False))
+    return 0
+
+def _run_guard_run_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    _refresh_cloud_policy_bundle(store)
+    config = overlay_synced_guard_policy(config, _synced_policy_payload(store))
+    interactive_resolver = None
+    blocked_resolver = None
+    if (
+        not getattr(args, "json", False)
+        and not bool(args.dry_run)
+        and config.mode == "prompt"
+        and sys.stdin.isatty()
+    ):
+        from .prompt import build_prompt_artifacts, resolve_interactive_decisions
+
+        def interactive_resolver(detection, payload):
+            return resolve_interactive_decisions(
+                store=store,
+                evaluation=payload,
+                prompt_artifacts=build_prompt_artifacts(
+                    harness=detection.harness,
+                    artifacts=list(detection.artifacts),
+                    evaluation_artifacts=[item for item in payload.get("artifacts", []) if isinstance(item, dict)],
+                ),
+                workspace=str(workspace) if workspace else None,
+                now=_now(),
+            )
+    elif not bool(args.dry_run) and config.mode == "prompt":
+        blocked_resolver = _headless_approval_resolver(args=args, context=context, store=store, config=config)
+
+    payload = guard_run(
+        args.harness,
+        context=context,
+        store=store,
+        config=config,
+        dry_run=bool(args.dry_run),
+        passthrough_args=list(args.passthrough_args),
+        default_action=args.default_action,
+        interactive_resolver=interactive_resolver,
+        blocked_resolver=blocked_resolver,
+    )
+    payload["dry_run"] = bool(args.dry_run)
+    payload["rerun_command"] = _guard_rerun_command(args)
+    payload["diff_command"] = _guard_diff_command(args)
+    payload["approvals_command"] = _guard_approvals_command(args)
+    _emit("run", payload, getattr(args, "json", False))
+    if payload.get("blocked"):
+        return 1
+    return_code = payload.get("return_code")
+    return int(return_code) if isinstance(return_code, int) else 0
+
+__all__ = [
+    "_run_guard_codex_mcp_proxy_command",
+    "_run_guard_copilot_mcp_proxy_command",
+    "_run_guard_cursor_mcp_proxy_command",
+    "_run_guard_hermes_mcp_proxy_command",
+    "_run_guard_opencode_mcp_proxy_command",
+    "_run_guard_package_shims_command",
+    "_run_guard_run_command",
+    "_run_guard_uninstall_command",
+]
