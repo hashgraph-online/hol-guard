@@ -641,7 +641,9 @@ def test_claude_detect_discovers_nested_hooks_skills_commands_and_rules(tmp_path
     assert "claude-code:project:skill:review" in artifacts
     assert "claude-code:project:command:deploy" in artifacts
     assert "claude-code:project:instruction:secrets" in artifacts
-    assert "claude-code:project:instruction:claude-md" in artifacts
+    claude_instruction = artifacts.get("claude-code:project:instruction:claude_md:CLAUDE.md")
+    assert claude_instruction is not None
+    assert claude_instruction.metadata.get("instructionRole") == "claude_md"
 
 
 def test_claude_detect_tolerates_unreadable_markdown_artifacts(monkeypatch, tmp_path):
