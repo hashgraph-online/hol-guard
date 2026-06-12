@@ -224,6 +224,10 @@ def _claude_digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _claude_mcp_artifact_id(scope: str, server_name: str) -> str:
+    return f"claude-code:{scope}:mcp:{server_name}"
+
+
 def _metadata_with_digest(path: Path) -> dict[str, object]:
     try:
         digest = _claude_digest(path)
@@ -318,7 +322,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                     url = server_config.get("url")
                     artifacts.append(
                         GuardArtifact(
-                            artifact_id=f"claude-code:{scope}:{name}",
+                            artifact_id=_claude_mcp_artifact_id(scope, name),
                             name=name,
                             harness=self.harness,
                             artifact_type="mcp_server",

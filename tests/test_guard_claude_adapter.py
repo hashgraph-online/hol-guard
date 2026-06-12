@@ -632,10 +632,10 @@ def test_claude_detect_discovers_nested_hooks_skills_commands_and_rules(tmp_path
     detection = adapter.detect(context)
     artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
 
-    assert "claude-code:global:global-tools" in artifacts
-    assert artifacts["claude-code:global:global-tools"].metadata["env_keys"] == ["MODE", "OPENROUTER_API_KEY"]
-    assert "claude-code:project:workspace-tools" in artifacts
-    assert artifacts["claude-code:project:workspace-tools"].metadata["headers_keys"] == ["Authorization"]
+    assert "claude-code:global:mcp:global-tools" in artifacts
+    assert artifacts["claude-code:global:mcp:global-tools"].metadata["env_keys"] == ["MODE", "OPENROUTER_API_KEY"]
+    assert "claude-code:project:mcp:workspace-tools" in artifacts
+    assert artifacts["claude-code:project:mcp:workspace-tools"].metadata["headers_keys"] == ["Authorization"]
     assert "claude-code:project:pretooluse:0:0" in artifacts
     assert "claude-code:project:userpromptsubmit:0:0" in artifacts
     assert "claude-code:project:skill:review" in artifacts
@@ -644,6 +644,34 @@ def test_claude_detect_discovers_nested_hooks_skills_commands_and_rules(tmp_path
     claude_instruction = artifacts.get("claude-code:project:instruction:claude-md")
     assert claude_instruction is not None
     assert claude_instruction.metadata.get("instructionRole") == "claude_md"
+
+
+def test_claude_detect_keeps_mcp_server_when_name_collides_with_claude_md_id(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = ClaudeCodeHarnessAdapter()
+    (context.workspace_dir / "CLAUDE.md").write_text("# workspace instructions\n", encoding="utf-8")
+    _write_json(
+        context.workspace_dir / ".mcp.json",
+        {
+            "mcpServers": {
+                "instruction:claude-md": {
+                    "command": "python3",
+                    "args": ["-m", "http.server", "9000"],
+                }
+            }
+        },
+    )
+
+    detection = adapter.detect(context)
+    artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
+
+    mcp_artifact = artifacts.get("claude-code:project:mcp:instruction:claude-md")
+    assert mcp_artifact is not None
+    assert mcp_artifact.artifact_type == "mcp_server"
+    root_instruction = artifacts.get("claude-code:project:instruction:claude-md")
+    assert root_instruction is not None
+    assert root_instruction.artifact_type == "instruction"
+    assert root_instruction.config_path == str(context.workspace_dir / "CLAUDE.md")
 
 
 def test_claude_detect_keeps_root_claude_md_when_rules_stem_collides(tmp_path):

@@ -472,6 +472,23 @@ def extend_codex_runtime_inventory(
     )
 
 
+def _is_claude_rules_instruction_replacement_target(
+    existing: GuardArtifact,
+    workspace_dir: Path,
+) -> bool:
+    if existing.artifact_type != "instruction" or existing.harness != "claude-code":
+        return False
+    config_path = getattr(existing, "config_path", None)
+    if not isinstance(config_path, str):
+        return False
+    try:
+        resolved = Path(config_path).resolve()
+        rules_dir = (workspace_dir / ".claude" / "rules").resolve()
+        return resolved.is_relative_to(rules_dir)
+    except (OSError, ValueError):
+        return False
+
+
 def _is_workspace_root_claude_md(artifact: GuardArtifact, workspace_dir: Path) -> bool:
     metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
     if metadata.get("instructionRole") != "claude_md":
@@ -507,10 +524,13 @@ def extend_detection_with_workspace_aibom(
     for artifact in extra:
         if artifact.artifact_id in existing_ids:
             if _is_workspace_root_claude_md(artifact, workspace_dir):
-                merged[artifact_index_by_id[artifact.artifact_id]] = artifact
-                config_path = getattr(artifact, "config_path", None)
-                if isinstance(config_path, str):
-                    found_paths.append(config_path)
+                existing_index = artifact_index_by_id[artifact.artifact_id]
+                existing = merged[existing_index]
+                if _is_claude_rules_instruction_replacement_target(existing, workspace_dir):
+                    merged[existing_index] = artifact
+                    config_path = getattr(artifact, "config_path", None)
+                    if isinstance(config_path, str):
+                        found_paths.append(config_path)
             continue
         merged.append(artifact)
         existing_ids.add(artifact.artifact_id)

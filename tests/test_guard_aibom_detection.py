@@ -313,6 +313,33 @@ def test_marketplace_escape_path_does_not_read_outside_workspace(tmp_path: Path)
     assert "content_hash" not in evil_plugins[0].metadata
 
 
+def test_extend_detection_does_not_replace_colliding_mcp_server_with_claude_md(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    (workspace / "CLAUDE.md").write_text("# root instructions\n", encoding="utf-8")
+    mcp_config = workspace / ".mcp.json"
+    mcp_config.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "instruction:claude-md": {
+                        "command": "python3",
+                        "args": ["-m", "http.server", "9000"],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    context = HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=tmp_path / ".hol-guard")
+    detection = ClaudeCodeHarnessAdapter().detect(context)
+    artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
+
+    assert artifacts["claude-code:project:mcp:instruction:claude-md"].artifact_type == "mcp_server"
+    assert artifacts["claude-code:project:instruction:claude-md"].artifact_type == "instruction"
+
+
 def test_extend_detection_prefers_workspace_root_claude_md_on_legacy_id_collision(tmp_path: Path) -> None:
     workspace = tmp_path / "repo"
     workspace.mkdir()
