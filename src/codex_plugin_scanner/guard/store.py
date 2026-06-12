@@ -1110,6 +1110,13 @@ class GuardStore:
             )
             """,
             """
+            create table if not exists guard_remote_once_receipts (
+              receipt_id text primary key,
+              request_id text not null,
+              claimed_at text not null
+            )
+            """,
+            """
             create table if not exists guard_cloud_events (
               event_id text primary key,
               idempotency_key text not null unique,
@@ -3472,6 +3479,42 @@ class GuardStore:
                 """,
                 (event_name, json.dumps(payload), now),
             )
+
+    def claim_remote_once_receipt(
+        self,
+        receipt_id: str,
+        *,
+        request_id: str,
+        claimed_at: str,
+    ) -> bool:
+        with self._connect() as connection:
+            connection.execute("begin immediate")
+            try:
+                connection.execute(
+                    """
+                    insert into guard_remote_once_receipts (receipt_id, request_id, claimed_at)
+                    values (?, ?, ?)
+                    """,
+                    (receipt_id, request_id, claimed_at),
+                )
+            except sqlite3.IntegrityError:
+                return False
+            return True
+
+    def release_remote_once_receipt(self, receipt_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "delete from guard_remote_once_receipts where receipt_id = ?",
+                (receipt_id,),
+            )
+
+    def has_remote_once_receipt(self, receipt_id: str) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "select 1 from guard_remote_once_receipts where receipt_id = ?",
+                (receipt_id,),
+            ).fetchone()
+        return row is not None
 
     def list_events(self, limit: int = 100, event_name: str | None = None) -> list[dict[str, object]]:
         query = """
