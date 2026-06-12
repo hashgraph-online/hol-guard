@@ -57,6 +57,49 @@ def test_finalize_guard_connect_payload_keeps_first_sync_pending_on_transient_sy
     assert latest_state["milestone"] == "first_sync_pending"
 
 
+def test_finalize_guard_connect_payload_keeps_first_sync_pending_on_sync_lock_timeout(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    connect_url = "https://hol.org/guard/connect"
+    now = "2026-06-04T12:00:00+00:00"
+
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+    monkeypatch.setattr(
+        store,
+        "get_oauth_local_credential_health",
+        lambda: {"configured": True, "state": "healthy"},
+    )
+
+    def _raise_timeout_error(
+        _store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        assert auth_context is None
+        raise TimeoutError("Timed out waiting for Guard Cloud sync lock.")
+
+    monkeypatch.setattr(guard_commands_module, "sync_local_guard_cloud_proof", _raise_timeout_error)
+
+    payload = guard_commands_module._finalize_guard_connect_payload(
+        store=store,
+        connect_url=connect_url,
+        payload={"status": "connected"},
+        now=now,
+    )
+
+    assert payload["status"] == "connected"
+    assert payload["milestone"] == "first_sync_pending"
+    assert payload["sync_succeeded"] is False
+    assert payload["sync_error"] == "Timed out waiting for Guard Cloud sync lock."
+    assert "retry automatically" in str(payload["repair_message"])
+
+
 def test_finalize_guard_connect_payload_uses_fresh_oauth_access_token_once(tmp_path, monkeypatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
     connect_url = "https://hol.org/guard/connect"
@@ -172,6 +215,73 @@ def test_daemon_finalize_guard_connect_payload_uses_fresh_oauth_access_token_onc
         }
     ]
     assert CONNECT_SYNC_AUTH_CONTEXT_KEY not in payload
+
+
+def test_daemon_finalize_guard_connect_payload_keeps_first_sync_pending_on_sync_lock_timeout(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    connect_url = "https://hol.org/guard/connect"
+    now = "2026-06-04T12:00:00+00:00"
+
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+    monkeypatch.setattr(
+        store,
+        "get_oauth_local_credential_health",
+        lambda: {"configured": True, "state": "healthy"},
+    )
+
+    def _raise_timeout_error(
+        _store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        assert auth_context is None
+        raise TimeoutError("Timed out waiting for Guard Cloud sync lock.")
+
+    monkeypatch.setattr(daemon_server_module, "sync_local_guard_cloud_proof", _raise_timeout_error)
+
+    payload = daemon_server_module._finalize_daemon_guard_connect_payload(
+        store=store,
+        connect_url=connect_url,
+        payload={"status": "connected"},
+        now=now,
+    )
+
+    assert payload["status"] == "connected"
+    assert payload["milestone"] == "first_sync_pending"
+    assert payload["sync_succeeded"] is False
+    assert payload["sync_error"] == "Timed out waiting for Guard Cloud sync lock."
+    assert "retry while the daemon is running" in str(payload["repair_message"])
+
+
+def test_queue_headless_cloud_sync_respects_same_process_in_flight_marker(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+
+    store_key = daemon_server_module._headless_cloud_sync_store_key(store)
+    with daemon_server_module._HEADLESS_CLOUD_SYNC_STATE_LOCK:
+        daemon_server_module._HEADLESS_CLOUD_SYNC_IN_FLIGHT.add(store_key)
+    try:
+        payload = daemon_server_module._queue_headless_cloud_sync(store=store)
+    finally:
+        with daemon_server_module._HEADLESS_CLOUD_SYNC_STATE_LOCK:
+            daemon_server_module._HEADLESS_CLOUD_SYNC_IN_FLIGHT.discard(store_key)
+
+    assert payload == {
+        "status": "in_progress",
+        "message": "Guard Cloud sync already running.",
+    }
 
 
 def test_queue_headless_cloud_sync_respects_cross_process_sync_lock(tmp_path, monkeypatch) -> None:
