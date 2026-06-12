@@ -38,6 +38,27 @@ def test_guard_connect_render_clarifies_paid_plan_pending_state(capsys) -> None:
     assert "Upgrade to sync this device to Guard Cloud" in output
 
 
+def test_guard_connect_render_clarifies_unauthorized_pending_state(capsys) -> None:
+    emit_guard_payload(
+        "connect",
+        {
+            "connected": True,
+            "browser_opened": True,
+            "status": "connected",
+            "milestone": "first_sync_pending",
+            "reason": "HTTP Error 401: Unauthorized",
+            "completed_at": "2026-04-17T00:00:00Z",
+            "connect_url": "https://hol.org/guard/connect",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "This device is protected locally" in output
+    assert "Sign in to finish Guard Cloud setup" in output
+
+
 def test_guard_render_redacts_sensitive_values_before_rich_renderer(monkeypatch) -> None:
     captured: dict[str, object] = {}
 

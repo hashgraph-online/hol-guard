@@ -1420,6 +1420,9 @@ def _connect_reason_requires_login(reason: str) -> bool:
             "logged out",
             "login",
             "logout",
+            "unauthorized",
+            "401",
+            "reauthoriz",
         )
     )
 

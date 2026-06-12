@@ -122,6 +122,34 @@ def test_connect_repair_copy_points_to_device_code(tmp_path: Path) -> None:
     assert "guardPairSecret" not in rendered
 
 
+def test_connect_status_requires_retry_when_oauth_not_configured(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-06-11T22:11:11+00:00",
+        request_id="connect-401",
+    )
+    store.record_latest_guard_connect_sync_result(
+        status="connected",
+        milestone="first_sync_pending",
+        now="2026-06-11T22:11:11+00:00",
+        reason="HTTP Error 401: Unauthorized",
+    )
+
+    payload = build_connect_status_payload(
+        store=store,
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        connect_url="https://hol.org/guard/connect",
+        action="status",
+    )
+
+    assert payload["status"] == "retry_required"
+    assert payload["milestone"] == "first_sync_failed"
+    assert payload["recovery_command"] == "hol-guard connect"
+    assert payload["repair_message"] == "Run hol-guard connect again to repair local Guard Cloud authorization."
+
+
 def test_browser_connect_caches_paid_package_firewall_entitlement(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
 
