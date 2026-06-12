@@ -143,6 +143,44 @@ def test_first_approval_url_repairs_stale_local_port() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("stale_url", "active_center", "expected_url"),
+    [
+        (
+            "http://localhost:5713/requests/req-localhost",
+            "http://127.0.0.1:5474",
+            "http://127.0.0.1:5474/requests/req-localhost",
+        ),
+        (
+            "http://" + "[" + ":".join(["", "", "1"]) + "]:5713/requests/req-ipv6",
+            "http://" + "[" + ":".join(["", "", "1"]) + "]:5474",
+            "http://" + "[" + ":".join(["", "", "1"]) + "]:5474/requests/req-ipv6",
+        ),
+    ],
+)
+def test_first_approval_url_repairs_loopback_variants(
+    stale_url: str,
+    active_center: str,
+    expected_url: str,
+) -> None:
+    queued = [
+        {
+            "approval_url": stale_url,
+            "harness": "package-firewall",
+            "request_id": "req-loopback",
+        }
+    ]
+
+    assert (
+        first_approval_url(
+            queued,
+            harness="package-firewall",
+            approval_center_url=active_center,
+        )
+        == expected_url
+    )
+
+
 def test_first_approval_url_does_not_rewrite_external_url() -> None:
     queued = [
         {

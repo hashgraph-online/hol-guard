@@ -9,7 +9,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 
 from .adapters import get_adapter
 from .adapters.base import HarnessContext
@@ -172,13 +172,11 @@ def _canonical_local_approval_url(approval_url: str, *, approval_center_url: str
     except ValueError:
         return approval_url
     loopback_hosts = {"127.0.0.1", "::1", "localhost"}
-    approval_host = parsed_approval.netloc.rsplit("@", 1)[-1].rsplit(":", 1)[0].strip("[]")
-    center_host = parsed_center.netloc.rsplit("@", 1)[-1].rsplit(":", 1)[0].strip("[]")
+    approval_host = _parsed_url_host(parsed_approval)
+    center_host = _parsed_url_host(parsed_center)
     if parsed_approval.scheme not in {"http", "https"} or approval_host not in loopback_hosts:
         return approval_url
     if parsed_center.scheme not in {"http", "https"} or center_host not in loopback_hosts:
-        return approval_url
-    if not parsed_center.netloc:
         return approval_url
     return urlunparse(
         parsed_approval._replace(
@@ -186,6 +184,17 @@ def _canonical_local_approval_url(approval_url: str, *, approval_center_url: str
             netloc=parsed_center.netloc,
         )
     )
+
+
+def _parsed_url_host(parsed: ParseResult) -> str:
+    host_port = parsed.netloc.rsplit("@", 1)[-1]
+    if host_port.startswith("["):
+        host, _separator, _rest = host_port[1:].partition("]")
+        return host
+    if host_port.count(":") == 1:
+        host, _port = host_port.rsplit(":", 1)
+        return host
+    return host_port
 
 
 def queue_blocked_approvals(
