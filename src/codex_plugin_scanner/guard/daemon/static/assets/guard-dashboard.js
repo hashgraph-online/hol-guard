@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js","assets/chunks/supply-chain-hub-workspace.js","assets/chunks/supply-chain-workspace-layout.js","assets/chunks/policy-workspace-page.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -12727,6 +12727,9 @@ function HiMiniRocketLaunch(props) {
 function HiMiniQuestionMarkCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.94 6.94a.75.75 0 1 1-1.061-1.061 3 3 0 1 1 2.871 5.026v.345a.75.75 0 0 1-1.5 0v-.5c0-.72.57-1.172 1.081-1.287A1.5 1.5 0 1 0 8.94 6.94ZM10 15a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniPlus(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" }, "child": [] }] })(props);
+}
 function HiMiniPencilSquare(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "m5.433 13.917 1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0 0 10 3H4.75A2.75 2.75 0 0 0 2 5.75v9.5A2.75 2.75 0 0 0 4.75 18h9.5A2.75 2.75 0 0 0 17 15.25V10a.75.75 0 0 0-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5Z" }, "child": [] }] })(props);
 }
@@ -12858,12 +12861,6 @@ function HiMiniBellAlert(props) {
 }
 function HiMiniBeaker(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8.5 3.528v4.644c0 .729-.29 1.428-.805 1.944l-1.217 1.216a8.75 8.75 0 0 1 3.55.621l.502.201a7.25 7.25 0 0 0 4.178.365l-2.403-2.403a2.75 2.75 0 0 1-.805-1.944V3.528a40.205 40.205 0 0 0-3 0Zm4.5.084.19.015a.75.75 0 1 0 .12-1.495 41.364 41.364 0 0 0-6.62 0 .75.75 0 0 0 .12 1.495L7 3.612v4.56c0 .331-.132.649-.366.883L2.6 13.09c-1.496 1.496-.817 4.15 1.403 4.475C5.961 17.852 7.963 18 10 18s4.039-.148 5.997-.436c2.22-.325 2.9-2.979 1.403-4.475l-4.034-4.034A1.25 1.25 0 0 1 13 8.172v-4.56Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniBarsArrowUp(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 3.75A.75.75 0 0 1 2.75 3h11.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 3.75ZM2 7.5a.75.75 0 0 1 .75-.75h6.365a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 7.5ZM14 7a.75.75 0 0 1 .55.24l3.25 3.5a.75.75 0 1 1-1.1 1.02l-1.95-2.1v6.59a.75.75 0 0 1-1.5 0V9.66l-1.95 2.1a.75.75 0 1 1-1.1-1.02l3.25-3.5A.75.75 0 0 1 14 7ZM2 11.25a.75.75 0 0 1 .75-.75H7A.75.75 0 0 1 7 12H2.75a.75.75 0 0 1-.75-.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniBarsArrowDown(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 3.75A.75.75 0 0 1 2.75 3h11.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 3.75ZM2 7.5a.75.75 0 0 1 .75-.75h7.508a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 7.5ZM14 7a.75.75 0 0 1 .75.75v6.59l1.95-2.1a.75.75 0 1 1 1.1 1.02l-3.25 3.5a.75.75 0 0 1-1.1 0l-3.25-3.5a.75.75 0 1 1 1.1-1.02l1.95 2.1V7.75A.75.75 0 0 1 14 7ZM2 11.25a.75.75 0 0 1 .75-.75h4.562a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniArrowUp(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 17a.75.75 0 0 1-.75-.75V5.612L5.29 9.77a.75.75 0 0 1-1.08-1.04l5.25-5.5a.75.75 0 0 1 1.08 0l5.25 5.5a.75.75 0 1 1-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0 1 10 17Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -13406,7 +13403,7 @@ function normalizeDuplicateReviewText(value) {
 }
 function stripDuplicateReviewContextPrefix(value) {
   const stripped = value.replace(
-    /^\s*(codex|claude|claude code|claudecode|copilot|opencode|gemini)?\s*(prompt|command|tool)\s+for\s+[`"']?[^:`"']+[`"']?\s*:\s*/i,
+    /^\s*(codex|claude|claude code|claudecode|copilot|opencode|gemini|grok|kimi)?\s*(prompt|command|tool)\s+for\s+[`"']?[^:`"']+[`"']?\s*:\s*/i,
     ""
   );
   return stripped === value ? null : stripped;
@@ -13498,6 +13495,8 @@ function harnessDisplayName(harness) {
       return "OpenClaw";
     case "kimi":
       return "Kimi";
+    case "grok":
+      return "Grok";
     default:
       return capitalizeHarness(normalized);
   }
@@ -15094,7 +15093,7 @@ async function publishInsightsShare(input) {
     return {
       slug: "demo-share",
       publicUrl: "https://hol.org/guard/insights/demo-share",
-      ogImageUrl: "https://hol.org/api/og/guard/insights/demo-share",
+      ogImageUrl: "https://hol.org/hol-og-image.jpg",
       expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1e3).toISOString()
     };
   }
@@ -15177,6 +15176,19 @@ async function fetchPolicies() {
   }
   const payload = await readJson("/v1/policy");
   return payload.items;
+}
+async function savePolicyDecision(input) {
+  if (isGuardDemoMode()) {
+    return { saved: true };
+  }
+  return readJson("/v1/policy/decisions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify(input)
+  });
 }
 async function clearPolicy(input) {
   if (isGuardDemoMode()) {
@@ -16211,8 +16223,8 @@ const sidebarLinks = [
   { href: "/inbox", label: "Inbox", view: "inbox", icon: HiMiniInbox },
   { href: "/protect", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
   { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
-  { href: "/policy", label: "Policy", view: "policy", icon: HiMiniClipboardDocumentList },
   { href: "/supply-chain", label: "Supply chain", view: "supply-chain", icon: HiMiniSquares2X2 },
+  { href: "/policy", label: "Policy", view: "policy", icon: HiMiniClipboardDocumentList },
   { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal },
   { href: "/about", label: "About", view: "about", icon: HiMiniInformationCircle }
 ];
@@ -19082,6 +19094,27 @@ function resolveConnectSteps(connectFlow, purpose = "package_firewall") {
     }
   ];
 }
+function resolveMinimalHelperText(input) {
+  if (input.running) {
+    return "Finish sign-in in your browser to publish a public share link.";
+  }
+  if (input.failed) {
+    return "Connect did not finish. Try again or open sign-in manually.";
+  }
+  if (input.mode === "repair") {
+    return "Reconnect Guard Cloud to restore public sharing from this machine.";
+  }
+  return "One quick sign-in unlocks public sharing from this machine.";
+}
+function resolveConnectPrimaryLabel(input) {
+  if (input.running) {
+    return "Waiting for browser approval";
+  }
+  if (input.failed) {
+    return "Try connect again";
+  }
+  return input.actionLabel;
+}
 function isMacClient() {
   if (typeof navigator === "undefined") {
     return false;
@@ -19092,6 +19125,7 @@ function isMacClient() {
 }
 function ConnectFlowCard({
   compact = false,
+  minimal = false,
   connectError,
   connectStarting,
   connectFlow,
@@ -19104,11 +19138,33 @@ function ConnectFlowCard({
   const running = connectFlow.state === "running";
   const failed = connectFlow.state === "failed";
   const primaryBusy = connectStarting || running;
-  const primaryLabel = running ? "Waiting for browser approval" : failed ? "Try connect again" : connectFlow.action_label;
+  const primaryLabel = resolveConnectPrimaryLabel({
+    actionLabel: connectFlow.action_label,
+    failed,
+    running
+  });
   const steps = resolveConnectSteps(connectFlow, purpose);
   const statusTone = running ? "blue" : mode === "repair" ? "attention" : "blue";
   const statusLabel = running ? "Waiting for approval" : mode === "repair" ? "Repair required" : "Connection required";
   const showManualLink = connectFlow.authorize_url !== null || running || failed;
+  if (minimal) {
+    const helperText = resolveMinimalHelperText({ failed, mode, running });
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-5 py-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap items-center gap-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: statusTone, children: statusLabel }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-slate-600", children: helperText }),
+      connectError !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "alert", children: connectError }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "primary", onClick: onStartConnect, disabled: primaryBusy, children: [
+          primaryBusy ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "mr-1.5 h-3.5 w-3.5 animate-spin", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "mr-1.5 h-3.5 w-3.5", "aria-hidden": "true" }),
+          primaryLabel
+        ] }),
+        showManualLink ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: manualHref, variant: "outline", children: [
+          "Open sign-in",
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "ml-1.5 h-3.5 w-3.5", "aria-hidden": "true" })
+        ] }) : null
+      ] })
+    ] });
+  }
   if (compact) {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
@@ -19665,22 +19721,22 @@ function EvidenceInsightsShareModal({
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-b border-slate-100 px-5 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "Share publicly" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Publish a redacted stats card to HOL Guard Cloud with a link and preview image." })
+        cloudConnected ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Publish a redacted stats card with a public link and preview image." }) : null
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onClose, className: "text-sm font-medium text-slate-500 hover:text-brand-dark", children: "Close" })
     ] }) }),
-    !cloudConnected ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-5 py-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+    !cloudConnected ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       ConnectFlowCard,
       {
-        compact: true,
-        connectError,
-        connectStarting,
-        connectFlow: activeConnectFlow,
-        mode: connectMode,
+        minimal: true,
         purpose: "insights_share",
+        mode: connectMode,
+        connectFlow: activeConnectFlow,
+        connectStarting,
+        connectError,
         onStartConnect: handleStartConnect
       }
-    ) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    ) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-5 py-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overflow-hidden rounded-2xl border border-slate-200 bg-white", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-3 gap-px bg-slate-100", children: [
@@ -19762,10 +19818,17 @@ function EvidenceInsightsShareModal({
           ),
           "Include top recurring action labels (redacted)"
         ] }),
-        error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `rounded-xl border px-3 py-2 text-sm ${errorIsReauth ? "border-amber-200 bg-amber-50 text-amber-900" : "border-rose-200 bg-rose-50 text-rose-900"}`, role: "alert", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: error }),
-          errorIsReauth ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleStartConnect, className: "mt-2 w-full", children: "Reconnect Guard Cloud" }) : null
-        ] }) : null
+        error ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: `rounded-xl border px-3 py-2 text-sm ${errorIsReauth ? "border-amber-200 bg-amber-50 text-amber-900" : "border-rose-200 bg-rose-50 text-rose-900"}`,
+            role: "alert",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: error }),
+              errorIsReauth ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleStartConnect, className: "mt-2 w-full", children: "Reconnect Guard Cloud" }) : null
+            ]
+          }
+        ) : null
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onClose, children: "Cancel" }),
@@ -23854,7 +23917,7 @@ function ApprovalCenterLayout(props) {
         onClearEvidence: props.onClearEvidence,
         onNavigate: props.onNavigate
       }
-    ) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "about" ? props.aboutContent ?? null : props.view === "supply-chain" || props.view === "audit" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "policy" ? props.policyContent ?? null : props.view === "inbox" ? renderInboxContent(props) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+    ) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "about" ? props.aboutContent ?? null : props.view === "policy" ? props.policyContent ?? null : props.view === "supply-chain" || props.view === "audit" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "inbox" ? renderInboxContent(props) : /* @__PURE__ */ jsxRuntimeExports.jsx(
       QueueWorkspace,
       {
         requests: props.requests,
@@ -25538,10 +25601,10 @@ const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./
 const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js"), true ? __vite__mapDeps([5,6]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.s), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = reactExports.lazy(
-  () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? __vite__mapDeps([7,6]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? [] : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = reactExports.lazy(
   () => __vitePreload(() => import("./chunks/about-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AboutWorkspace }))
@@ -25846,6 +25909,7 @@ function App() {
   const handleOpenInsights = reactExports.useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenSettings = reactExports.useCallback(() => navigate("/settings"), []);
   const handleOpenSupplyChain = reactExports.useCallback(() => navigate("/supply-chain"), []);
+  reactExports.useCallback(() => navigate("/policy"), []);
   const handleOpenHelp = reactExports.useCallback(() => setHelpOpen(true), []);
   const handleCloseHelp = reactExports.useCallback(() => setHelpOpen(false), []);
   const handleGoHome = reactExports.useCallback(() => navigate("/"), []);
@@ -25942,6 +26006,13 @@ function App() {
       });
     }
   }, [setRuntime, setRequests, setPolicies]);
+  const handleRefreshPolicies = reactExports.useCallback(async () => {
+    try {
+      const items = await fetchPolicies();
+      setPolicies({ kind: "ready", items });
+    } catch {
+    }
+  }, []);
   const handleClearPolicy = reactExports.useCallback(async (policy) => {
     await clearPolicy(buildClearPayload(policy));
     const [inboxResult, policiesResult] = await Promise.allSettled([fetchInboxState(), fetchPolicies()]);
@@ -26076,6 +26147,35 @@ function App() {
       }
     );
   }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateAfterAction]);
+  const policyContent = reactExports.useMemo(() => {
+    if (runtime.kind !== "ready") {
+      return null;
+    }
+    if (policies.kind === "ready") {
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        PolicyWorkspacePage,
+        {
+          snapshot: runtime.snapshot,
+          policies: policies.items,
+          onClearPolicy: handleClearPolicy,
+          onOpenSettings: handleOpenSettings,
+          onOpenInbox: handleOpenInbox,
+          onRefreshPolicies: handleRefreshPolicies
+        }
+      ) });
+    }
+    if (policies.kind === "error") {
+      return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm text-red-700", children: policies.message });
+    }
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {});
+  }, [
+    runtime,
+    policies,
+    handleClearPolicy,
+    handleOpenSettings,
+    handleOpenInbox,
+    handleRefreshPolicies
+  ]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "a",
@@ -26151,23 +26251,16 @@ function App() {
             activeView: view,
             snapshot: runtime.snapshot,
             receipts: receipts.kind === "ready" ? receipts.items : [],
+            policies: policies.kind === "ready" ? policies.items : [],
             approvalGate,
+            onClearPolicy: handleClearPolicy,
             onOpenSettings: handleOpenSettings,
             onGoHome: handleGoHome,
             onNavigate: navigate,
             onRuntimeRefresh: refreshStateAfterAction
           }
         ) }) : null,
-        policyContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          PolicyWorkspacePage,
-          {
-            policies: policies.kind === "ready" ? policies.items : [],
-            snapshot: runtime.snapshot,
-            onClearPolicy: handleClearPolicy,
-            onOpenSettings: handleOpenSettings,
-            onOpenInbox: handleOpenInbox
-          }
-        ) }) : null,
+        policyContent,
         aboutContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(AboutWorkspace, { runtimeSummary: runtime.kind === "ready" ? {
           // TODO: GuardRuntimeSnapshot does not yet expose guard_version or protected_app_count.
           // When those fields are added, populate them here instead of null/0.
@@ -26293,11 +26386,11 @@ export {
   HiMiniDocumentText as b4,
   guardAwareHref as b5,
   HiMiniSignal as b6,
-  HiMiniInbox as b7,
-  HiMiniBarsArrowUp as b8,
-  HiMiniBarsArrowDown as b9,
-  policyActionLabel as ba,
-  scopeLabel as bb,
+  savePolicyDecision as b7,
+  HiMiniChevronLeft as b8,
+  policyActionLabel as b9,
+  scopeLabel as ba,
+  HiMiniPlus as bb,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,

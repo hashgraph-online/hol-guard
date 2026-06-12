@@ -1585,6 +1585,30 @@ export async function fetchPolicies(): Promise<GuardPolicyDecision[]> {
   return payload.items;
 }
 
+export async function savePolicyDecision(input: {
+  harness: string;
+  scope: DecisionScope;
+  action: string;
+  artifact_id?: string;
+  workspace?: string;
+  publisher?: string;
+  reason?: string;
+  approval_password?: string;
+  approval_totp_code?: string;
+}): Promise<{ saved: boolean }> {
+  if (isGuardDemoMode()) {
+    return { saved: true };
+  }
+  return readJson<{ saved: boolean }>("/v1/policy/decisions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders(),
+    },
+    body: JSON.stringify(input),
+  });
+}
+
 export async function clearPolicy(input: {
   harness?: string;
   all?: boolean;

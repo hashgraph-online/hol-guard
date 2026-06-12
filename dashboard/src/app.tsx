@@ -433,6 +433,7 @@ export function App() {
   const handleOpenInsights = useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenSettings = useCallback(() => navigate("/settings"), []);
   const handleOpenSupplyChain = useCallback(() => navigate("/supply-chain"), []);
+  const handleOpenPolicy = useCallback(() => navigate("/policy"), []);
   const handleOpenHelp = useCallback(() => setHelpOpen(true), []);
   const handleCloseHelp = useCallback(() => setHelpOpen(false), []);
   const handleGoHome = useCallback(() => navigate("/"), []);
@@ -536,6 +537,15 @@ export function App() {
       });
     }
   }, [setRuntime, setRequests, setPolicies]);
+
+  const handleRefreshPolicies = useCallback(async () => {
+    try {
+      const items = await fetchPolicies();
+      setPolicies({ kind: "ready", items });
+    } catch {
+      // Keep the current policy list when refresh fails.
+    }
+  }, []);
 
   const handleClearPolicy = useCallback(async (policy: GuardPolicyDecision) => {
     await clearPolicy(buildClearPayload(policy));
@@ -703,6 +713,41 @@ export function App() {
     );
   }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateAfterAction]);
 
+  const policyContent = useMemo(() => {
+    if (runtime.kind !== "ready") {
+      return null;
+    }
+    if (policies.kind === "ready") {
+      return (
+        <Suspense fallback={<LazyFallback />}>
+          <PolicyWorkspacePage
+            snapshot={runtime.snapshot}
+            policies={policies.items}
+            onClearPolicy={handleClearPolicy}
+            onOpenSettings={handleOpenSettings}
+            onOpenInbox={handleOpenInbox}
+            onRefreshPolicies={handleRefreshPolicies}
+          />
+        </Suspense>
+      );
+    }
+    if (policies.kind === "error") {
+      return (
+        <div className="rounded-2xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm text-red-700">
+          {policies.message}
+        </div>
+      );
+    }
+    return <LazyFallback />;
+  }, [
+    runtime,
+    policies,
+    handleClearPolicy,
+    handleOpenSettings,
+    handleOpenInbox,
+    handleRefreshPolicies,
+  ]);
+
   return (
     <>
       <a
@@ -792,7 +837,9 @@ export function App() {
 	              activeView={view}
 	              snapshot={runtime.snapshot}
 	              receipts={receipts.kind === "ready" ? receipts.items : []}
+	              policies={policies.kind === "ready" ? policies.items : []}
 	              approvalGate={approvalGate}
+	              onClearPolicy={handleClearPolicy}
 	              onOpenSettings={handleOpenSettings}
 	              onGoHome={handleGoHome}
               onNavigate={navigate}
@@ -801,19 +848,7 @@ export function App() {
           </Suspense>
         ) : null
       }
-      policyContent={
-        runtime.kind === "ready" ? (
-          <Suspense fallback={<LazyFallback />}>
-            <PolicyWorkspacePage
-              policies={policies.kind === "ready" ? policies.items : []}
-              snapshot={runtime.snapshot}
-              onClearPolicy={handleClearPolicy}
-              onOpenSettings={handleOpenSettings}
-              onOpenInbox={handleOpenInbox}
-            />
-          </Suspense>
-        ) : null
-      }
+      policyContent={policyContent}
       aboutContent={
         <Suspense fallback={<LazyFallback />}>
           <AboutWorkspace runtimeSummary={

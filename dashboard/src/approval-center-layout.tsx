@@ -344,10 +344,10 @@ export function ApprovalCenterLayout(props: LayoutProps) {
               props.settingsContent
             ) : props.view === "about" ? (
               props.aboutContent ?? null
-            ) : props.view === "supply-chain" || props.view === "audit" || props.view === "feed-health" ? (
-              props.supplyChainHubContent ?? null
             ) : props.view === "policy" ? (
               props.policyContent ?? null
+            ) : props.view === "supply-chain" || props.view === "audit" || props.view === "feed-health" ? (
+              props.supplyChainHubContent ?? null
             ) : props.view === "inbox" ? (
               renderInboxContent(props)
             ) : (

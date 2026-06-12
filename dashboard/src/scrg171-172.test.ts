@@ -251,12 +251,7 @@ assert(
   hubTitleForTab("supply-chain") === "Supply Chain" &&
     hubTitleForTab("audit") === "Audit" &&
     hubTitleForTab("feed-health") === "Feed Health",
-  "SCRG171-H3: supply chain hub header mirrors remaining hub tabs",
-);
-
-assert(
-  hubTitleForTab("policy") === "Supply Chain",
-  "SCRG171-H4: policy is no longer a supply chain hub tab",
+  "SCRG171-H3: hub header mirrors active Trust Center tab",
 );
 
 assert(
