@@ -273,11 +273,7 @@ def _cisco_trust_layers_for_artifact(
                     label="Cisco Skill Scanner",
                 )
             )
-        if (
-            source == "cisco-mcp-scanner"
-            and item_kind == "mcp_server"
-            and _matches_mcp_cisco_run(artifact, run=run)
-        ):
+        if source == "cisco-mcp-scanner" and item_kind == "mcp_server" and _matches_mcp_cisco_run(artifact, run=run):
             layers.append(
                 _cisco_trust_layer(
                     run,
@@ -404,9 +400,7 @@ def _cisco_trust_layer(
             "trustScore": trust_score,
             "trustComponents": trust_components,
             "metadata": {
-                key: value
-                for key, value in safe_metadata.items()
-                if key not in {"attestationStatus", "evidenceHash"}
+                key: value for key, value in safe_metadata.items() if key not in {"attestationStatus", "evidenceHash"}
             },
         }
     )
