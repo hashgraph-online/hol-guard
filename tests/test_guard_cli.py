@@ -6710,8 +6710,13 @@ url = http://127.0.0.1:8787/guard-canary
                 "workspace_id": "workspace-123",
             }
 
-        def fake_sync_local_guard_cloud_proof(store: GuardStore) -> dict[str, object]:
+        def fake_sync_local_guard_cloud_proof(
+            store: GuardStore,
+            *,
+            auth_context: dict[str, object] | None = None,
+        ) -> dict[str, object]:
             del store
+            assert auth_context is None
             sync_calls.append("first-proof")
             return {
                 "synced_at": "2026-06-04T18:31:00+00:00",
