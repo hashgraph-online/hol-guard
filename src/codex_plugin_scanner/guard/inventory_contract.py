@@ -577,6 +577,15 @@ def _item_from_artifact(
         }
     )
     content_hash = _resolve_item_content_hash(safe_metadata, semantic_text)
+    from .runtime.trust_attestation import apply_trust_attestation_metadata
+
+    safe_metadata = apply_trust_attestation_metadata(
+        safe_metadata,
+        agent_id=f"{harness}:local",
+        item_id=artifact_id,
+        item_kind=item_kind,
+        content_hash=content_hash,
+    )
     return GuardAgentInventoryItem(
         item_id=artifact_id,
         item_kind=item_kind,
@@ -643,7 +652,8 @@ def _mcp_tool_items_from_artifact(
                     {
                         **layer,
                         "metadata": {
-                            **layer_metadata,
+                            **{key: value for key, value in layer_metadata.items() if key != "attestation"},
+                            "attestationStatus": "unsigned",
                             "inheritedFromServerItemId": server_item.item_id,
                         },
                     }
