@@ -8,6 +8,7 @@ from typing import Literal
 
 from ..marketplace_support import extract_marketplace_source, load_marketplace_context
 from ..path_support import is_safe_relative_path, iter_safe_matching_files, resolves_within_root
+from .codex_skill_config import load_codex_skill_config_rules, resolve_codex_skill_enabled
 from .inventory_contract import fingerprint_mapping, fingerprint_path_tree, fingerprint_text
 from .models import GuardArtifact, HarnessDetection
 
@@ -35,7 +36,8 @@ INVENTORY_ITEM_KINDS: tuple[str, ...] = (
 
 _READ_CHUNK_BYTES = 65536
 _CURSOR_RULE_PATTERNS = ("*.mdc", "*.md")
-_CODEX_SKILL_ROOTS = (".agents/skills",)
+_CODEX_WORKSPACE_SKILL_ROOTS = (".agents/skills",)
+_CODEX_HOME_SKILL_ROOTS = (".codex/skills", ".agents/skills")
 
 
 def file_content_hash(path: Path, *, max_bytes: int | None = None) -> str | None:
@@ -125,7 +127,16 @@ def discover_shared_workspace_aibom_artifacts(
     artifacts: list[GuardArtifact] = []
     artifacts.extend(_discover_agents_md(harness, workspace_dir=workspace_dir))
     artifacts.extend(_discover_cursor_rules(harness, workspace_dir=workspace_dir))
-    artifacts.extend(_discover_codex_skills(harness, workspace_dir=workspace_dir, home_dir=home_dir))
+    artifacts.extend(
+        _discover_codex_skills(
+            harness,
+            workspace_dir=workspace_dir,
+            home_dir=home_dir,
+            skill_roots=_CODEX_WORKSPACE_SKILL_ROOTS,
+            source_scope="project",
+            artifact_scope="project",
+        )
+    )
     artifacts.extend(_discover_codex_marketplace_plugins(harness, workspace_dir=workspace_dir))
     return tuple(artifacts)
 
@@ -158,9 +169,78 @@ def _discover_cursor_rules(harness: str, *, workspace_dir: Path) -> list[GuardAr
     return artifacts
 
 
-def _discover_codex_skills(harness: str, *, workspace_dir: Path, home_dir: Path) -> list[GuardArtifact]:
+def discover_codex_skill_artifacts(
+    harness: str,
+    *,
+    home_dir: Path,
+    workspace_dir: Path | None,
+) -> tuple[GuardArtifact, ...]:
     artifacts: list[GuardArtifact] = []
-    for relative_root in _CODEX_SKILL_ROOTS:
+    if workspace_dir is not None:
+        artifacts.extend(
+            _discover_codex_skills(
+                harness,
+                workspace_dir=workspace_dir,
+                home_dir=home_dir,
+                skill_roots=_CODEX_WORKSPACE_SKILL_ROOTS,
+                source_scope="project",
+                artifact_scope="project",
+            )
+        )
+    artifacts.extend(
+        _discover_codex_skills(
+            harness,
+            workspace_dir=home_dir,
+            home_dir=home_dir,
+            skill_roots=_CODEX_HOME_SKILL_ROOTS,
+            source_scope="global",
+            artifact_scope="global",
+        )
+    )
+    rules = load_codex_skill_config_rules(home_dir=home_dir, workspace_dir=workspace_dir)
+    if not rules:
+        return tuple(artifacts)
+    enriched: list[GuardArtifact] = []
+    for artifact in artifacts:
+        if artifact.artifact_type != "skill":
+            enriched.append(artifact)
+            continue
+        metadata = dict(artifact.metadata)
+        metadata["enabled"] = resolve_codex_skill_enabled(
+            config_path=artifact.config_path,
+            display_name=artifact.name,
+            rules=rules,
+            home_dir=home_dir,
+        )
+        enriched.append(
+            GuardArtifact(
+                artifact_id=artifact.artifact_id,
+                name=artifact.name,
+                harness=artifact.harness,
+                artifact_type=artifact.artifact_type,
+                source_scope=artifact.source_scope,
+                config_path=artifact.config_path,
+                command=artifact.command,
+                args=artifact.args,
+                url=artifact.url,
+                transport=artifact.transport,
+                metadata=metadata,
+            )
+        )
+    return tuple(enriched)
+
+
+def _discover_codex_skills(
+    harness: str,
+    *,
+    workspace_dir: Path,
+    home_dir: Path,
+    skill_roots: tuple[str, ...],
+    source_scope: str,
+    artifact_scope: str,
+) -> list[GuardArtifact]:
+    artifacts: list[GuardArtifact] = []
+    for relative_root in skill_roots:
         skill_root = workspace_dir / relative_root
         if not skill_root.is_dir() or not resolves_within_root(workspace_dir, skill_root, require_exists=True):
             continue
@@ -174,6 +254,7 @@ def _discover_codex_skills(harness: str, *, workspace_dir: Path, home_dir: Path)
             content_hash = directory_content_hash(skill_dir, home_dir=home_dir)
             digest = file_content_hash(skill_md)
             metadata: dict[str, object] = {
+                "enabled": True,
                 "skill_root": relative_root,
                 "content_hash": digest,
                 "directory_hash": content_hash,
@@ -181,11 +262,11 @@ def _discover_codex_skills(harness: str, *, workspace_dir: Path, home_dir: Path)
             }
             artifacts.append(
                 GuardArtifact(
-                    artifact_id=f"{harness}:project:skill:{relative_root}:{relative_id or skill_dir.name}",
+                    artifact_id=f"{harness}:{artifact_scope}:skill:{relative_root}:{relative_id or skill_dir.name}",
                     name=relative_id or skill_dir.name,
                     harness=harness,
                     artifact_type="skill",
-                    source_scope="project",
+                    source_scope=source_scope,
                     config_path=str(skill_md),
                     metadata=metadata,
                 )
@@ -227,6 +308,7 @@ def _discover_codex_marketplace_plugins(harness: str, *, workspace_dir: Path) ->
             plugin_name = f"plugin_{index}"
         source_ref, source_path = extract_marketplace_source(entry)
         metadata: dict[str, object] = {
+            "enabled": entry.get("enabled", True) is not False,
             "marketplace_index": index,
             "source_ref": source_ref,
             "source_path": source_path,
@@ -293,6 +375,38 @@ def _instruction_artifact(
             "content_hash": content_hash,
             **version_info_metadata(content_hash=content_hash, version_label=name),
         },
+    )
+
+
+def extend_codex_runtime_inventory(
+    detection: HarnessDetection,
+    *,
+    home_dir: Path,
+    workspace_dir: Path | None,
+) -> HarnessDetection:
+    """Replace Codex skill inventory with home + workspace discovery and enablement rules."""
+
+    if detection.harness != "codex":
+        return detection
+    skill_artifacts = discover_codex_skill_artifacts(
+        detection.harness,
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+    )
+    merged = [artifact for artifact in detection.artifacts if artifact.artifact_type != "skill"]
+    found_paths = list(detection.config_paths)
+    for artifact in skill_artifacts:
+        merged.append(artifact)
+        config_path = getattr(artifact, "config_path", None)
+        if isinstance(config_path, str):
+            found_paths.append(config_path)
+    return HarnessDetection(
+        harness=detection.harness,
+        installed=detection.installed,
+        command_available=detection.command_available,
+        config_paths=tuple(dict.fromkeys(found_paths)),
+        artifacts=tuple(merged),
+        warnings=detection.warnings,
     )
 
 
