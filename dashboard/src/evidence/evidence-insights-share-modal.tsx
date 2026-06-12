@@ -1,8 +1,15 @@
-import { useCallback, useState } from "react";
-import type { GuardReceiptAnalytics, GuardRuntimeSnapshot } from "../guard-types";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { GuardCloudConnectFlow, GuardReceiptAnalytics, GuardRuntimeSnapshot } from "../guard-types";
 import { ActionButton } from "../approval-center-primitives";
 import { GuardModalLayer } from "../guard-modal-layer";
-import { publishInsightsShare, type GuardInsightsShareResult } from "../guard-api";
+import {
+  fetchGuardCloudConnectStatus,
+  fetchRuntimeSnapshot,
+  publishInsightsShare,
+  startGuardCloudConnect,
+  type GuardInsightsShareResult,
+} from "../guard-api";
+import { ConnectFlowCard } from "../supply-chain-firewall-views";
 import { EvidenceInsightsShareSheet } from "./evidence-insights-share-sheet";
 import { GuardStatMetric } from "./guard-stat-metric";
 import { HomeInsightsMetrics } from "./evidence-insights-headline-bento";
@@ -16,11 +23,22 @@ interface EvidenceInsightsShareModalProps {
   onClose: () => void;
 }
 
+function insightsShareCloudReady(runtime: GuardRuntimeSnapshot | null): boolean {
+  if (runtime === null) {
+    return false;
+  }
+  if (runtime.cloud_state === "paired_active") {
+    return true;
+  }
+  return runtime.sync_configured;
+}
+
 export function EvidenceInsightsShareModal({
   analytics,
-  runtime,
+  runtime: initialRuntime,
   onClose,
 }: EvidenceInsightsShareModalProps) {
+  const [runtime, setRuntime] = useState<GuardRuntimeSnapshot | null>(initialRuntime);
   const [includeTopArtifacts, setIncludeTopArtifacts] = useState(false);
   const [showDisplayName, setShowDisplayName] = useState(true);
   const [displayName, setDisplayName] = useState("");
@@ -28,13 +46,63 @@ export function EvidenceInsightsShareModal({
   const [error, setError] = useState<string | null>(null);
   const [rawError, setRawError] = useState<string | null>(null);
   const [shareResult, setShareResult] = useState<GuardInsightsShareResult | null>(null);
+  const [connectFlow, setConnectFlow] = useState<GuardCloudConnectFlow | null>(null);
+  const [connectStarting, setConnectStarting] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
 
-  const cloudConnected = runtime?.cloud_state === "paired_active";
-  const connectUrl = runtime?.connect_url ?? "https://hol.org/guard/connect";
+  const cloudConnected = insightsShareCloudReady(runtime);
+  const connectMode =
+    runtime?.cloud_state === "local_only" || runtime?.cloud_state === "paired_waiting" ? "connect" : "repair";
 
-  const handleReauth = useCallback(() => {
-    window.open(connectUrl, "_blank", "noopener,noreferrer");
-  }, [connectUrl]);
+  const refreshConnectState = useCallback(async () => {
+    const [connectStatus, runtimeSnapshot] = await Promise.all([
+      fetchGuardCloudConnectStatus(),
+      fetchRuntimeSnapshot({ includeItems: false }),
+    ]);
+    setRuntime(runtimeSnapshot);
+    setConnectFlow(connectStatus.connect_flow);
+    return connectStatus;
+  }, []);
+
+  useEffect(() => {
+    if (cloudConnected) {
+      setConnectFlow(null);
+      return;
+    }
+    void refreshConnectState().catch((refreshError) => {
+      setConnectError(
+        refreshError instanceof Error ? refreshError.message : "Unable to load Guard Cloud connect status.",
+      );
+    });
+  }, [cloudConnected, refreshConnectState]);
+
+  useEffect(() => {
+    if (connectFlow?.state !== "running") {
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void refreshConnectState().catch(() => undefined);
+    }, connectFlow.poll_after_ms ?? 1500);
+    return () => window.clearTimeout(handle);
+  }, [connectFlow, refreshConnectState]);
+
+  const handleStartConnect = useCallback(async () => {
+    setConnectStarting(true);
+    setConnectError(null);
+    try {
+      const status = await startGuardCloudConnect();
+      setConnectFlow(status.connect_flow);
+      if (!status.connect_required) {
+        await refreshConnectState();
+      }
+    } catch (startError) {
+      setConnectError(
+        startError instanceof Error ? startError.message : "Unable to start Guard Cloud connect.",
+      );
+    } finally {
+      setConnectStarting(false);
+    }
+  }, [refreshConnectState]);
 
   const handlePublish = useCallback(async () => {
     setPublishing(true);
@@ -55,6 +123,24 @@ export function EvidenceInsightsShareModal({
       setPublishing(false);
     }
   }, [displayName, includeTopArtifacts, showDisplayName]);
+
+  const activeConnectFlow = useMemo(() => {
+    if (connectFlow !== null) {
+      return connectFlow;
+    }
+    return {
+      state: "idle" as const,
+      title: "Connect Guard Cloud to publish insights",
+      detail:
+        "Guard keeps protecting this machine locally. Connect Guard Cloud here so the daemon can publish a public share link with preview image support.",
+      action_label: "Connect Guard Cloud",
+      connect_url: runtime?.connect_url ?? "https://hol.org/guard/connect",
+      authorize_url: null,
+      browser_opened: null,
+      request_id: null,
+      poll_after_ms: null,
+    };
+  }, [connectFlow, runtime?.connect_url]);
 
   const isScopeError = Boolean(rawError) && isInsightsShareScopeError(rawError ?? "");
   const errorIsReauth = isScopeError || (rawError?.toLowerCase().includes("unauthorized") ?? false);
@@ -89,17 +175,16 @@ export function EvidenceInsightsShareModal({
         </div>
 
         {!cloudConnected ? (
-          <div className="space-y-4 px-5 py-5">
-            <p className="text-sm text-slate-600">
-              Connect Guard Cloud to publish a public share link with preview image support.
-            </p>
-            <ActionButton
-              onClick={() => {
-                window.open(connectUrl, "_blank", "noopener,noreferrer");
-              }}
-            >
-              Connect Guard Cloud
-            </ActionButton>
+          <div className="px-5 py-5">
+            <ConnectFlowCard
+              compact
+              connectError={connectError}
+              connectStarting={connectStarting}
+              connectFlow={activeConnectFlow}
+              mode={connectMode}
+              purpose="insights_share"
+              onStartConnect={handleStartConnect}
+            />
           </div>
         ) : (
           <>
@@ -175,10 +260,10 @@ export function EvidenceInsightsShareModal({
               </label>
 
               {error ? (
-                <div className={`rounded-xl border px-3 py-2 text-sm ${errorIsReauth ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-rose-200 bg-rose-50 text-rose-900'}`} role="alert">
+                <div className={`rounded-xl border px-3 py-2 text-sm ${errorIsReauth ? "border-amber-200 bg-amber-50 text-amber-900" : "border-rose-200 bg-rose-50 text-rose-900"}`} role="alert">
                   <p>{error}</p>
                   {errorIsReauth ? (
-                    <ActionButton variant="outline" onClick={handleReauth} className="mt-2 w-full">
+                    <ActionButton variant="outline" onClick={handleStartConnect} className="mt-2 w-full">
                       Reconnect Guard Cloud
                     </ActionButton>
                   ) : null}

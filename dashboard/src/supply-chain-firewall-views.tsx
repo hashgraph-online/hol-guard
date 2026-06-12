@@ -62,6 +62,7 @@ type ConnectFlowCardProps = {
   localRecoveryHint?: string | null;
   mode: "connect" | "repair";
   onStartConnect: () => void;
+  purpose?: "package_firewall" | "insights_share";
 };
 
 type NavigatorWithUserAgentData = Navigator & {
@@ -106,10 +107,16 @@ function ConnectStep({ body, current, done, index, title }: ConnectStepProps) {
 
 function resolveConnectSteps(
   connectFlow: NonNullable<PackageFirewallStatusResponse["connect_flow"]>,
+  purpose: "package_firewall" | "insights_share" = "package_firewall",
 ): Array<{ body: string; current: boolean; done: boolean; title: string }> {
   const running = connectFlow.state === "running";
   const failed = connectFlow.state === "failed";
   const browserOpened = connectFlow.browser_opened === true;
+  const unlockTitle = purpose === "insights_share" ? "Unlock public sharing" : "Unlock firewall actions";
+  const unlockBody =
+    purpose === "insights_share"
+      ? "Guard verifies Cloud authorization before it publishes a public share link from this machine."
+      : "Guard verifies package-firewall access before it changes package-manager routing.";
   return [
     {
       title: "Start local connect",
@@ -128,8 +135,8 @@ function resolveConnectSteps(
       current: running,
     },
     {
-      title: "Unlock firewall actions",
-      body: "Guard verifies package-firewall access before it changes package-manager routing.",
+      title: unlockTitle,
+      body: unlockBody,
       done: false,
       current: false,
     },
@@ -154,6 +161,7 @@ export function ConnectFlowCard({
   localRecoveryHint,
   mode,
   onStartConnect,
+  purpose = "package_firewall",
 }: ConnectFlowCardProps) {
   const manualHref = connectFlow.authorize_url ?? connectFlow.connect_url;
   const running = connectFlow.state === "running";
@@ -164,7 +172,7 @@ export function ConnectFlowCard({
     : failed
     ? "Try connect again"
     : connectFlow.action_label;
-  const steps = resolveConnectSteps(connectFlow);
+  const steps = resolveConnectSteps(connectFlow, purpose);
   const statusTone = running ? "blue" : mode === "repair" ? "attention" : "blue";
   const statusLabel = running ? "Waiting for approval" : mode === "repair" ? "Repair required" : "Connection required";
   const showManualLink = connectFlow.authorize_url !== null || running || failed;
