@@ -2552,7 +2552,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "poll_after_ms": None,
             }
             _set_guard_cloud_connect_state(self.server, failure)  # type: ignore[arg-type]
-            self._write_json({"connect_required": True, "connect_flow": failure}, status=500)
+            self._write_json(
+                {"connect_required": True, "connect_flow": failure, "message": str(error)},
+                status=500,
+            )
             return
 
         request_id = f"guard-connect-{uuid.uuid4().hex}"
