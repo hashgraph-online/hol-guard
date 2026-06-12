@@ -46,8 +46,9 @@ from ..policy_bundle_parser import (
     computed_policy_bundle_hash,
     non_empty_string,
 )
-from ..policy_bundle_parser import (
-    validated_policy_bundle_payload as _validated_policy_bundle_payload,
+from ..policy_bundle_trusted_keys import (
+    policy_bundle_keyring_payload,
+    validate_synced_policy_bundle,
 )
 from ..redaction import redact_sensitive_text
 from ..shims import package_shim_cloud_coverage
@@ -1136,6 +1137,7 @@ def sync_receipts(
     exceptions_payload: list[dict[str, object]] = []
     policy_payload: dict[str, object] | None = None
     policy_bundle_payload: dict[str, object] | None = None
+    policy_bundle_sync_payload: dict[str, object] | None = None
     alert_preferences_payload: dict[str, object] | None = None
     team_policy_pack_payload: dict[str, object] | None = None
     remote_decisions: set[PolicyDecision] = set()
@@ -1204,6 +1206,7 @@ def sync_receipts(
         policy_bundle = payload.get("policyBundle")
         if isinstance(policy_bundle, dict) and (policy_bundle or policy_bundle_payload is None):
             policy_bundle_payload = policy_bundle
+            policy_bundle_sync_payload = payload
         alert_preferences = payload.get("alertPreferences")
         if isinstance(alert_preferences, dict) and (alert_preferences or alert_preferences_payload is None):
             alert_preferences_payload = alert_preferences
@@ -1231,8 +1234,13 @@ def sync_receipts(
     else:
         store.set_sync_payload("policy", {}, now)
     if policy_bundle_payload is not None:
-        validated_policy_bundle, policy_bundle_rejection_reason = _validated_policy_bundle_payload(
-            policy_bundle_payload
+        validated_policy_bundle, policy_bundle_rejection_reason, trusted_policy_bundle_keys = (
+            validate_synced_policy_bundle(
+                policy_bundle_payload,
+                stored_keyring=store.get_sync_payload("policy_bundle_keyring"),
+                sync_payload=policy_bundle_sync_payload,
+                supply_chain_keyring=store.get_sync_payload("supply_chain_bundle_keyring"),
+            )
         )
         existing_policy_bundle_payload = store.get_sync_payload("policy_bundle")
         existing_policy_bundle = (
@@ -1261,6 +1269,14 @@ def sync_receipts(
         if validated_policy_bundle is not None:
             store.set_sync_payload("policy_bundle", validated_policy_bundle, now)
             store.set_sync_payload("policy_bundle_last_good", validated_policy_bundle, now)
+            store.set_sync_payload(
+                "policy_bundle_keyring",
+                policy_bundle_keyring_payload(
+                    trusted_policy_bundle_keys,
+                    workspace_id=store.get_cloud_workspace_id(),
+                ),
+                now,
+            )
             store.set_sync_payload(
                 "policy_bundle_ack",
                 _policy_bundle_acknowledgement_payload(
