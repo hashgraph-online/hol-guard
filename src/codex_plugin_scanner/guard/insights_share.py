@@ -178,8 +178,10 @@ def publish_insights_share(
         _sync_http_error_message,
         _sync_url_error_message,
         _urlopen_json_with_timeout_retry,
+        prepare_guard_cloud_connect_authorization,
     )
 
+    prepare_guard_cloud_connect_authorization(store)
     analytics = store.receipt_analytics(activity_days=90, trend_days=7, top_limit=8)
     overview_stats = {
         "pending": store.count_approval_requests(),
