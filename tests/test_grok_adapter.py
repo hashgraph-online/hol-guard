@@ -115,6 +115,11 @@ class TestGrokInstallUninstall:
             "Grep",
             "MCPTool",
             "WebFetch",
+            "run_terminal_command",
+            "read_file",
+            "grep",
+            "web_fetch",
+            "web_search",
             "write",
             "search_replace",
         }
