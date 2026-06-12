@@ -22,6 +22,7 @@ function testSupportedAppsBriefMentionsAllApps(): void {
   assert(brief.includes("codex"), "SUPPORTED_APPS_BRIEF should mention Codex");
   assert(brief.includes("copilot"), "SUPPORTED_APPS_BRIEF should mention Copilot");
   assert(brief.includes("cursor"), "SUPPORTED_APPS_BRIEF should mention Cursor");
+  assert(brief.includes("grok"), "SUPPORTED_APPS_BRIEF should mention Grok");
   assert(SUPPORTED_APPS_BRIEF.length > 20, "SUPPORTED_APPS_BRIEF should be a non-trivial string");
 }
 
