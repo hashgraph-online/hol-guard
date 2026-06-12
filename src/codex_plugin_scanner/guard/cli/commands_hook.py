@@ -8,18 +8,18 @@ from __future__ import annotations
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
-from .commands_impl_hook_claude import (
+from .commands_hook_claude import (
     _run_hook_claude_permission_prompt_notification,
     _run_hook_claude_permission_request,
 )
-from .commands_impl_hook_copilot import (
+from .commands_hook_copilot import (
     _run_hook_copilot_permission_request,
     _run_hook_copilot_pretool,
 )
-from .commands_impl_hook_generic import _run_hook_generic_payload
-from .commands_impl_hook_runtime_eval import _evaluate_runtime_artifact_hook
-from .commands_impl_hook_runtime_finish import _finalize_runtime_artifact_hook
-from .commands_impl_hook_runtime_review import _review_runtime_artifact_hook
+from .commands_hook_generic import _run_hook_generic_payload
+from .commands_hook_runtime_eval import _evaluate_runtime_artifact_hook
+from .commands_hook_runtime_finish import _finalize_runtime_artifact_hook
+from .commands_hook_runtime_review import _review_runtime_artifact_hook
 
 
 def _run_guard_hook_command(

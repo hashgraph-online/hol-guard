@@ -1,7 +1,7 @@
 """Guard CLI helper definitions."""
 
 # fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405, I001, SIM905
 
 from __future__ import annotations
 
@@ -476,54 +476,24 @@ def _codex_command_targets_secret_like_source_name(command_text: str) -> bool:
             return True
     return False
 
-__all__ = [
-    "_CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN",
-    "_CODEX_BENIGN_SOURCE_DOTFILES",
-    "_CODEX_GIT_DIFF_BOOLEAN_OPTIONS",
-    "_CODEX_GIT_DIFF_DISALLOWED_OPTIONS",
-    "_CODEX_GIT_DIFF_OPTIONAL_VALUE_OPTIONS",
-    "_CODEX_GIT_DIFF_VALUE_OPTIONS",
-    "_CODEX_GIT_GLOBAL_VALUE_FLAGS",
-    "_CODEX_PRIVATE_KEY_FIXTURE_BODY_PATTERN",
-    "_CODEX_PRIVATE_KEY_FIXTURE_PATTERN",
-    "_CODEX_READ_ONLY_PIPE_FILTERS",
-    "_CODEX_READ_ONLY_SEARCH_COMMANDS",
-    "_CODEX_READ_ONLY_SEARCH_WRAPPERS",
-    "_CODEX_READ_ONLY_VIEW_COMMANDS",
-    "_CODEX_SAFE_GIT_GLOBAL_BOOLEAN_FLAGS",
-    "_CODEX_SEARCH_OPTION_VALUE_FLAGS",
-    "_CODEX_SEARCH_OPTION_VALUE_FLAGS_BY_EXECUTABLE",
-    "_CODEX_SEARCH_PATTERN_VALUE_FLAGS",
-    "_CODEX_SEARCH_UNSAFE_FLAGS",
-    "_CODEX_SEARCH_UNSAFE_SHORT_FLAGS_BY_EXECUTABLE",
-    "_CODEX_SENSITIVE_SEARCH_BASENAMES",
-    "_CODEX_SOURCE_SEARCH_EXTENSIONS",
-    "_CODEX_SOURCE_SEARCH_PREFIXES",
-    "_CodexSedReadOnlyArgs",
-    "_codex_command_part_is_local_reader",
-    "_codex_command_parts_are_environment_dump",
-    "_codex_command_parts_are_git_grep",
-    "_codex_command_parts_may_read_local_content",
-    "_codex_command_reads_environment_pipeline",
-    "_codex_command_references_benign_source_dotfile",
-    "_codex_command_segment_parts",
-    "_codex_command_sequence_is_read_only_source_inspection",
-    "_codex_command_sequence_starts_with_local_reader",
-    "_codex_command_start_indexes",
-    "_codex_command_targets_secret_like_source_name",
-    "_codex_env_args_clear_environment",
-    "_codex_env_assignment_uses_shell_expansion",
-    "_codex_local_secret_source_label",
-    "_codex_output_is_only_benign_secret_fixture",
-    "_codex_output_uses_placeholder_private_key_fixture",
-    "_codex_pipeline_segment_may_read_local_content",
-    "_codex_post_tool_command_is_read_only_source_inspection",
-    "_codex_post_tool_command_text",
-    "_codex_shell_split",
-    "_codex_source_inspection_can_skip_secret_output",
-    "_codex_strip_command_wrapper",
-    "_codex_strip_env_wrapper",
-    "_codex_tool_output_request_summary",
-    "_codex_tool_output_runtime_summary",
-    "_codex_unwrapped_command_parts",
-]
+__all__ = """
+_CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN _CODEX_BENIGN_SOURCE_DOTFILES _CODEX_GIT_DIFF_BOOLEAN_OPTIONS
+_CODEX_GIT_DIFF_DISALLOWED_OPTIONS _CODEX_GIT_DIFF_OPTIONAL_VALUE_OPTIONS _CODEX_GIT_DIFF_VALUE_OPTIONS
+_CODEX_GIT_GLOBAL_VALUE_FLAGS _CODEX_PRIVATE_KEY_FIXTURE_BODY_PATTERN _CODEX_PRIVATE_KEY_FIXTURE_PATTERN
+_CODEX_READ_ONLY_PIPE_FILTERS _CODEX_READ_ONLY_SEARCH_COMMANDS _CODEX_READ_ONLY_SEARCH_WRAPPERS
+_CODEX_READ_ONLY_VIEW_COMMANDS _CODEX_SAFE_GIT_GLOBAL_BOOLEAN_FLAGS _CODEX_SEARCH_OPTION_VALUE_FLAGS
+_CODEX_SEARCH_OPTION_VALUE_FLAGS_BY_EXECUTABLE _CODEX_SEARCH_PATTERN_VALUE_FLAGS _CODEX_SEARCH_UNSAFE_FLAGS
+_CODEX_SEARCH_UNSAFE_SHORT_FLAGS_BY_EXECUTABLE _CODEX_SENSITIVE_SEARCH_BASENAMES _CODEX_SOURCE_SEARCH_EXTENSIONS
+_CODEX_SOURCE_SEARCH_PREFIXES _CodexSedReadOnlyArgs _codex_command_part_is_local_reader
+_codex_command_parts_are_environment_dump _codex_command_parts_are_git_grep
+_codex_command_parts_may_read_local_content _codex_command_reads_environment_pipeline
+_codex_command_references_benign_source_dotfile _codex_command_segment_parts
+_codex_command_sequence_is_read_only_source_inspection _codex_command_sequence_starts_with_local_reader
+_codex_command_start_indexes _codex_command_targets_secret_like_source_name _codex_env_args_clear_environment
+_codex_env_assignment_uses_shell_expansion _codex_local_secret_source_label
+_codex_output_is_only_benign_secret_fixture _codex_output_uses_placeholder_private_key_fixture
+_codex_pipeline_segment_may_read_local_content _codex_post_tool_command_is_read_only_source_inspection
+_codex_post_tool_command_text _codex_shell_split _codex_source_inspection_can_skip_secret_output
+_codex_strip_command_wrapper _codex_strip_env_wrapper _codex_tool_output_request_summary
+_codex_tool_output_runtime_summary _codex_unwrapped_command_parts
+""".split()

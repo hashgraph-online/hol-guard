@@ -8,7 +8,7 @@ from __future__ import annotations
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
-from .commands_impl_hook_runtime_state import RuntimeArtifactHookState
+from .commands_hook_runtime_state import RuntimeArtifactHookState
 
 def _evaluate_runtime_artifact_hook(
     args: argparse.Namespace,
