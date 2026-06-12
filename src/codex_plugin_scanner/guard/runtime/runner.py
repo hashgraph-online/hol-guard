@@ -1246,6 +1246,18 @@ def sync_receipts(
         ):
             validated_policy_bundle = None
             policy_bundle_rejection_reason = "bundle_version_downgrade"
+        bundle_workspace_id = non_empty_string(
+            validated_policy_bundle.get("workspaceId") if isinstance(validated_policy_bundle, dict) else None
+        )
+        cloud_workspace_id = store.get_cloud_workspace_id()
+        if (
+            validated_policy_bundle is not None
+            and bundle_workspace_id is not None
+            and cloud_workspace_id is not None
+            and bundle_workspace_id != cloud_workspace_id
+        ):
+            validated_policy_bundle = None
+            policy_bundle_rejection_reason = "wrong_workspace"
         if validated_policy_bundle is not None:
             store.set_sync_payload("policy_bundle", validated_policy_bundle, now)
             store.set_sync_payload("policy_bundle_last_good", validated_policy_bundle, now)

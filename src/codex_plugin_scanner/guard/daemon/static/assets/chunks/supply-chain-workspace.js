@@ -1,6 +1,5 @@
-import { j as jsxRuntimeExports, a9 as Tag, A as ActionButton, at as HiMiniArrowPath, l as HiMiniShieldCheck, aB as HiMiniArrowTopRightOnSquare, r as reactExports, d as HiMiniCheckCircle, v as HiMiniExclamationTriangle, m as formatRelativeTime, D as HiMiniXCircle, aD as HiMiniClock, aE as IconActionButton, au as HiMiniTrash, C as HiMiniWrenchScrewdriver, aF as HiMiniBeaker, aa as HiMiniMagnifyingGlass, b as EmptyState, aG as HiMiniBugAnt, o as HiMiniXMark, aH as fetchPackageFirewallStatus, aI as runPackageFirewallAction, ar as GuardHarnessActionError, aJ as runPackageAudit, aK as runPackageSync, aL as startPackageFirewallConnect, aM as openPackageFirewallShell, S as SectionLabel, aN as HiMiniArrowDown, aO as HiMiniArrowUp, aP as fetchSupplyChainBundle, B as Badge, aQ as HiMiniDocumentMagnifyingGlass, aR as HiMiniShieldExclamation, aS as HiMiniComputerDesktop, s as HiMiniCloud, ae as HiMiniArrowLeft, aT as HiMiniArrowRight, aU as HiMiniCloudArrowUp, aV as HiMiniInformationCircle, aW as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, d as HiMiniCheckCircle, aw as HiMiniArrowPath, w as HiMiniExclamationTriangle, ac as Tag, m as formatRelativeTime, aG as HiMiniClock, aH as IconActionButton, I as HiMiniXCircle, ax as HiMiniTrash, l as HiMiniShieldCheck, F as HiMiniWrenchScrewdriver, aI as HiMiniBeaker, ad as HiMiniMagnifyingGlass, aJ as NextActionHero, aK as ActivationSummary, aL as ActionResultPanel, b as EmptyState, A as ActionButton, aM as HiMiniBugAnt, o as HiMiniXMark, aN as fetchPackageFirewallStatus, aO as runPackageFirewallAction, aP as parseInterceptProofSnapshot, au as GuardHarnessActionError, aQ as runPackageAudit, aR as runPackageSync, aS as startPackageFirewallConnect, aT as openPackageFirewallShell, S as SectionLabel, aU as EntitlementNotice, aV as HiMiniArrowDown, aW as HiMiniArrowUp, aX as fetchSupplyChainBundle, aE as HiMiniArrowTopRightOnSquare, B as Badge, aY as HiMiniDocumentMagnifyingGlass, aZ as HiMiniShieldExclamation, a_ as HiMiniComputerDesktop, t as HiMiniCloud, ah as HiMiniArrowLeft, a$ as HiMiniArrowRight, b0 as HiMiniCloudArrowUp, b1 as HiMiniInformationCircle, b2 as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
-import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
 import { resolveFeedStaleness } from "./feed-health-workspace.js";
 import { r as resolveHomeProtectionStatus } from "./home-protection-module.js";
 import { S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout.js";
@@ -18,31 +17,31 @@ const DECISION_RANK = {
   monitor: 1,
   allow: 0
 };
-function isRecord$2(value) {
+function isRecord$1(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function readString$1(value) {
+function readString(value) {
   if (typeof value !== "string") {
     return null;
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
-function readStringArray$1(value) {
+function readStringArray(value) {
   if (!Array.isArray(value)) {
     return [];
   }
   return value.filter((entry) => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim());
 }
 function normalizeSeverity(value) {
-  const raw = readString$1(value)?.toLowerCase();
+  const raw = readString(value)?.toLowerCase();
   if (raw === "critical" || raw === "high" || raw === "medium" || raw === "low") {
     return raw;
   }
   return "unknown";
 }
 function normalizeDecision(value) {
-  const raw = readString$1(value)?.toLowerCase();
+  const raw = readString(value)?.toLowerCase();
   if (raw === "block" || raw === "ask" || raw === "warn" || raw === "monitor" || raw === "allow") {
     return raw;
   }
@@ -70,21 +69,21 @@ function normalizeReasons(value) {
   }
   const reasons = [];
   for (const entry of value) {
-    if (!isRecord$2(entry)) {
+    if (!isRecord$1(entry)) {
       continue;
     }
-    const message = readString$1(entry.message) ?? readString$1(entry.summary) ?? "Flagged by Guard supply-chain policy.";
-    const advisoryId = readString$1(entry.advisoryId) ?? readString$1(entry.advisory_id);
+    const message = readString(entry.message) ?? readString(entry.summary) ?? "Flagged by Guard supply-chain policy.";
+    const advisoryId = readString(entry.advisoryId) ?? readString(entry.advisory_id);
     if (advisoryId !== null && !message.includes(advisoryId)) {
       reasons.push({
-        code: readString$1(entry.code) ?? "supply_chain",
+        code: readString(entry.code) ?? "supply_chain",
         message: `${message} (${advisoryId})`,
         severity: normalizeSeverity(entry.severity)
       });
       continue;
     }
     reasons.push({
-      code: readString$1(entry.code) ?? "supply_chain",
+      code: readString(entry.code) ?? "supply_chain",
       message,
       severity: normalizeSeverity(entry.severity)
     });
@@ -136,7 +135,7 @@ function readAdvisoryIdList(value) {
 }
 function buildAdvisoryAliasStubs(packageRecord, reasons) {
   const aliases = /* @__PURE__ */ new Set();
-  const packageAdvisoryId = readString$1(packageRecord.advisoryId) ?? readString$1(packageRecord.advisory_id);
+  const packageAdvisoryId = readString(packageRecord.advisoryId) ?? readString(packageRecord.advisory_id);
   if (packageAdvisoryId !== null) {
     addAdvisoryAlias(aliases, packageAdvisoryId);
   }
@@ -166,12 +165,12 @@ function buildAdvisoryAliasStubs(packageRecord, reasons) {
   return Array.from(aliases);
 }
 function normalizePackageFinding(packageRecord, index) {
-  const packageName = readString$1(packageRecord.name);
+  const packageName = readString(packageRecord.name);
   if (packageName === null) {
     return null;
   }
-  const ecosystem = readString$1(packageRecord.ecosystem) ?? "unknown";
-  const namespace = readString$1(packageRecord.namespace);
+  const ecosystem = readString(packageRecord.ecosystem) ?? "unknown";
+  const namespace = readString(packageRecord.namespace);
   const reasons = normalizeReasons(packageRecord.reasons);
   const decision = normalizeDecision(packageRecord.decision);
   const severity = resolveFindingSeverity(packageRecord, reasons);
@@ -185,7 +184,7 @@ function normalizePackageFinding(packageRecord, index) {
     severity,
     reasons,
     advisoryAliases: buildAdvisoryAliasStubs(packageRecord, reasons),
-    status: readString$1(packageRecord.status)
+    status: readString(packageRecord.status)
   };
 }
 function normalizePackageFindings(value) {
@@ -195,7 +194,7 @@ function normalizePackageFindings(value) {
   const findings = [];
   let index = 0;
   for (const entry of value) {
-    if (!isRecord$2(entry)) {
+    if (!isRecord$1(entry)) {
       continue;
     }
     const finding = normalizePackageFinding(entry, index);
@@ -217,27 +216,27 @@ function packageRecordsFromEvaluation(evaluation) {
   return normalizePackageFindings(evaluation.package_findings);
 }
 function isAuditEvidence(value) {
-  return isRecord$2(value) && value.operation === "audit";
+  return isRecord$1(value) && value.operation === "audit";
 }
 function normalizeSupplyChainAuditSnapshot(raw, receiptId = null) {
-  if (!isRecord$2(raw)) {
+  if (!isRecord$1(raw)) {
     return null;
   }
-  const evaluation = isRecord$2(raw.evaluation) ? raw.evaluation : null;
+  const evaluation = isRecord$1(raw.evaluation) ? raw.evaluation : null;
   const findingsFromEvidence = normalizePackageFindings(raw.package_findings);
   const findings = findingsFromEvidence.length > 0 ? findingsFromEvidence : packageRecordsFromEvaluation(evaluation);
-  const generatedAt = readString$1(raw.generated_at) ?? readString$1(raw.generatedAt) ?? (/* @__PURE__ */ new Date(0)).toISOString();
-  const inventory = normalizeInventory(isRecord$2(raw.inventory) ? raw.inventory : null);
+  const generatedAt = readString(raw.generated_at) ?? readString(raw.generatedAt) ?? (/* @__PURE__ */ new Date(0)).toISOString();
+  const inventory = normalizeInventory(isRecord$1(raw.inventory) ? raw.inventory : null);
   const decision = normalizeDecision(evaluation?.decision ?? raw.audit_decision);
-  const manifestPaths = readStringArray$1(raw.manifest_paths);
-  const lockfilePaths = readStringArray$1(raw.lockfile_paths);
+  const manifestPaths = readStringArray(raw.manifest_paths);
+  const lockfilePaths = readStringArray(raw.lockfile_paths);
   const hasAuditContext = findings.length > 0 || inventory.totalPackages > 0 || manifestPaths.length > 0 || lockfilePaths.length > 0 || evaluation !== null;
   if (!hasAuditContext) {
     return null;
   }
   return {
     generatedAt,
-    source: readString$1(raw.source),
+    source: readString(raw.source),
     decision,
     inventory,
     findings,
@@ -252,7 +251,7 @@ function derivePackageWorkbenchFromReceipts(receipts) {
   ).sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp));
   for (const receipt of auditReceipts) {
     const evidenceRaw = (receipt.scanner_evidence ?? []).find((entry) => isAuditEvidence(entry));
-    if (evidenceRaw === void 0 || !isRecord$2(evidenceRaw)) {
+    if (evidenceRaw === void 0 || !isRecord$1(evidenceRaw)) {
       continue;
     }
     const snapshot = normalizeSupplyChainAuditSnapshot(
@@ -333,546 +332,6 @@ function filterPackageWorkbenchFindings(findings, filters) {
 }
 function packageWorkbenchEcosystems(findings) {
   return Array.from(new Set(findings.map((finding) => finding.ecosystem))).sort();
-}
-function isRecord$1(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function readString(value) {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-function readStringArray(value) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.filter((entry) => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim());
-}
-function parseAuditActionResult(result) {
-  const evaluation = isRecord$1(result.evaluation) ? result.evaluation : null;
-  const decision = readString(evaluation?.decision) ?? readString(result.decision) ?? "monitor";
-  const manifestPaths = readStringArray(result.manifest_paths);
-  const lockfilePaths = readStringArray(result.lockfile_paths);
-  const inventory = isRecord$1(result.inventory) ? result.inventory : null;
-  const packageCount = typeof inventory?.packages === "number" ? inventory.packages : null;
-  const lockfileWarnings = Array.isArray(result.lockfile_warnings) ? result.lockfile_warnings.filter(isRecord$1) : [];
-  const lines = [];
-  if (manifestPaths.length > 0) {
-    lines.push(`Manifests scanned: ${manifestPaths.join(", ")}.`);
-  }
-  if (lockfilePaths.length > 0) {
-    lines.push(`Lockfiles scanned: ${lockfilePaths.join(", ")}.`);
-  }
-  if (packageCount !== null) {
-    lines.push(`${packageCount} dependency ${packageCount === 1 ? "entry" : "entries"} indexed.`);
-  }
-  for (const warning of lockfileWarnings.slice(0, 3)) {
-    const message = readString(warning.message);
-    if (message !== null) {
-      lines.push(message);
-    }
-  }
-  const emptyState = manifestPaths.length === 0 && lockfilePaths.length === 0;
-  if (emptyState) {
-    lines.push("No workspace manifests or lockfiles were found for this audit scope.");
-  }
-  return {
-    emptyState,
-    lines,
-    summary: `Workspace audit completed with ${decision} decision.`,
-    tone: decision === "block" || decision === "ask" ? "warning" : "success"
-  };
-}
-function parseSyncActionResult(result) {
-  const syncedAt = readString(result.synced_at) ?? readString(result.generated_at) ?? readString(result.updated_at);
-  const receiptsStored = typeof result.receipts_stored === "number" ? result.receipts_stored : null;
-  const bundleVersion = readString(result.bundle_version);
-  const tier = readString(result.tier);
-  const lines = [];
-  if (syncedAt !== null) {
-    lines.push(`Cloud sync marker: ${syncedAt}.`);
-  }
-  if (receiptsStored !== null) {
-    lines.push(`${receiptsStored} receipt${receiptsStored === 1 ? "" : "s"} stored locally.`);
-  }
-  if (bundleVersion !== null) {
-    lines.push(`Advisory bundle ${bundleVersion}${tier ? ` (${tier})` : ""} is now active.`);
-  }
-  return {
-    emptyState: lines.length === 0,
-    lines,
-    summary: syncedAt ? "Cloud intel sync completed. Feed freshness should update on the next status refresh." : "Cloud intel sync completed.",
-    tone: "success"
-  };
-}
-function parseTestActionResult(result) {
-  const interceptProved = result.intercept_proved === true;
-  const testedManagers = readStringArray(result.tested_managers);
-  const pathRepairRequired = readStringArray(result.path_repair_required);
-  const managerResults = Array.isArray(result.manager_results) ? result.manager_results.filter(isRecord$1) : [];
-  const lines = [];
-  for (const entry of managerResults) {
-    const manager = readString(entry.manager) ?? "manager";
-    if (entry.intercept_ran === true) {
-      lines.push(
-        `${manager}: intercept probe ran${entry.evaluator_invoked === true ? " with evaluator proof" : ""}.`
-      );
-      continue;
-    }
-    const skippedReason = readString(entry.skipped_reason);
-    if (skippedReason !== null) {
-      lines.push(`${manager}: skipped (${skippedReason.replaceAll("_", " ")}).`);
-      continue;
-    }
-    lines.push(`${manager}: no intercept proof recorded.`);
-  }
-  if (pathRepairRequired.length > 0) {
-    lines.push(`PATH repair still required for ${pathRepairRequired.join(", ")}.`);
-  }
-  if (lines.length === 0 && testedManagers.length > 0) {
-    lines.push(`Tested ${testedManagers.join(", ")}.`);
-  }
-  if (lines.length === 0) {
-    lines.push("Intercept test completed.");
-  }
-  return {
-    emptyState: false,
-    lines,
-    summary: interceptProved ? "Intercept test proved Guard blocked the package manager call." : "Intercept test finished without full proof. Review manager details below.",
-    tone: interceptProved ? "success" : "warning"
-  };
-}
-function parsePackageFirewallActionResult(op, body) {
-  if (!isRecord$1(body)) {
-    return null;
-  }
-  let result;
-  if (isRecord$1(body.result)) {
-    result = body.result;
-  } else if (isRecord$1(body.result_detail)) {
-    result = body.result_detail;
-  } else {
-    result = body;
-  }
-  if (!isRecord$1(result)) {
-    return null;
-  }
-  if (op === "audit") {
-    return parseAuditActionResult(result);
-  }
-  if (op === "sync") {
-    return parseSyncActionResult(result);
-  }
-  if (op === "test") {
-    return parseTestActionResult(result);
-  }
-  return null;
-}
-function readActionResultRecord(body) {
-  if (!isRecord$1(body)) {
-    return null;
-  }
-  if (isRecord$1(body.result_detail)) {
-    return body.result_detail;
-  }
-  if (isRecord$1(body.result)) {
-    return body.result;
-  }
-  return body;
-}
-function buildInterceptProofManagerResult(entry) {
-  const manager = readString(entry.manager) ?? "manager";
-  const interceptRan = entry.intercept_ran === true;
-  const evaluatorInvoked = entry.evaluator_invoked === true;
-  const skippedReason = readString(entry.skipped_reason);
-  let detail = `${manager}: no intercept proof recorded.`;
-  if (interceptRan) {
-    detail = evaluatorInvoked ? `${manager}: intercept probe ran with evaluator proof.` : `${manager}: intercept probe ran.`;
-  } else if (skippedReason !== null) {
-    detail = `${manager}: skipped (${skippedReason.replaceAll("_", " ")}).`;
-  }
-  return {
-    manager,
-    interceptRan,
-    evaluatorInvoked,
-    skippedReason,
-    detail
-  };
-}
-function parseInterceptProofSnapshot(body) {
-  const result = readActionResultRecord(body);
-  if (result === null) {
-    return null;
-  }
-  const managerResultsRaw = Array.isArray(result.manager_results) ? result.manager_results.filter(isRecord$1) : [];
-  const testedManagers = readStringArray(result.tested_managers);
-  const pathRepairRequired = readStringArray(result.path_repair_required);
-  const interceptProved = result.intercept_proved === true;
-  const managerResults = managerResultsRaw.map(buildInterceptProofManagerResult);
-  const hasProofContext = managerResults.length > 0 || testedManagers.length > 0 || pathRepairRequired.length > 0;
-  if (!hasProofContext && result.intercept_proved === void 0) {
-    return null;
-  }
-  const receipt = isRecord$1(body) && isRecord$1(body.receipt) ? body.receipt : null;
-  const receiptId = receipt !== null ? readString(receipt.id) : null;
-  const timestamp = receipt !== null ? readString(receipt.timestamp) : null;
-  const summary = interceptProved ? "Intercept test proved Guard blocked the package manager call." : "Intercept test finished without full proof. Review manager details below.";
-  return {
-    interceptProved,
-    testedManagers,
-    pathRepairRequired,
-    managerResults,
-    receiptId,
-    timestamp,
-    summary,
-    tone: interceptProved ? "success" : "warning"
-  };
-}
-function UpgradeCta({ entitlement }) {
-  const reconnectRequired = entitlement.reason === "guard_cloud_reconnect_required";
-  const upgradeUrl = reconnectRequired ? "https://hol.org/guard/connect" : entitlement.upgrade_url ?? "https://hol.org/guard/pricing";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 rounded-xl border border-brand-blue/20 bg-gradient-to-br from-brand-blue/[0.04] to-brand-dark/[0.02] px-4 py-4 sm:flex-row sm:items-center sm:justify-between", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-start gap-2.5", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        HiMiniShieldCheck,
-        {
-          className: "mt-0.5 h-5 w-5 shrink-0 text-brand-blue",
-          "aria-hidden": "true"
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: reconnectRequired ? "Reconnect to restore active protection" : "Upgrade to enable active protection" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs leading-relaxed text-slate-500", children: entitlement.upgrade_cta ?? entitlement.reason ?? "Package firewall actions require a Guard Cloud subscription." })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: upgradeUrl, variant: "primary", children: [
-      reconnectRequired ? "Reconnect" : "Upgrade",
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "ml-1.5 h-3.5 w-3.5", "aria-hidden": "true" })
-    ] })
-  ] });
-}
-function ConnectStep({ body, current, done, index, title }) {
-  const toneClass = done ? "border-brand-green/20 bg-brand-green/[0.04]" : current ? "border-brand-blue/20 bg-brand-blue/[0.04]" : "border-slate-200 bg-white/85";
-  const badgeClass = done ? "bg-brand-green/10 text-brand-green" : current ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-100 text-slate-500";
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `rounded-[18px] border px-3.5 py-3 ${toneClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${badgeClass}`, children: done ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : index }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: title }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-500", children: body })
-    ] })
-  ] }) });
-}
-function resolveConnectSteps(connectFlow) {
-  const running = connectFlow.state === "running";
-  const failed = connectFlow.state === "failed";
-  const browserOpened = connectFlow.browser_opened === true;
-  return [
-    {
-      title: "Start local connect",
-      body: failed ? "Guard started the local connect flow, but it needs another attempt." : "The local daemon opens a secure HOL Guard Cloud sign-in flow for this machine.",
-      done: running || failed,
-      current: !running && !failed
-    },
-    {
-      title: "Approve in browser",
-      body: browserOpened ? "Finish sign-in in the browser window Guard opened." : "If your browser did not open automatically, use the manual sign-in link below.",
-      done: false,
-      current: running
-    },
-    {
-      title: "Unlock firewall actions",
-      body: "Guard verifies package-firewall access before it changes package-manager routing.",
-      done: false,
-      current: false
-    }
-  ];
-}
-function isMacClient() {
-  if (typeof navigator === "undefined") {
-    return false;
-  }
-  const navigatorWithUserAgentData = navigator;
-  const platformHint = navigatorWithUserAgentData.userAgentData?.platform ?? navigator.userAgent ?? navigator.platform;
-  return platformHint.toLowerCase().includes("mac");
-}
-function ConnectFlowCard({
-  compact = false,
-  connectError,
-  connectStarting,
-  connectFlow,
-  localRecoveryHint,
-  mode,
-  onStartConnect
-}) {
-  const manualHref = connectFlow.authorize_url ?? connectFlow.connect_url;
-  const running = connectFlow.state === "running";
-  const failed = connectFlow.state === "failed";
-  const primaryBusy = connectStarting || running;
-  const primaryLabel = running ? "Waiting for browser approval" : failed ? "Try connect again" : connectFlow.action_label;
-  const steps = resolveConnectSteps(connectFlow);
-  const statusTone = running ? "blue" : mode === "repair" ? "attention" : "blue";
-  const statusLabel = running ? "Waiting for approval" : mode === "repair" ? "Repair required" : "Connection required";
-  const showManualLink = connectFlow.authorize_url !== null || running || failed;
-  if (compact) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue", children: "HOL Guard Cloud" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: statusTone, children: statusLabel })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base font-semibold tracking-[-0.02em] text-brand-dark", children: connectFlow.title }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-3xl text-sm leading-relaxed text-slate-500", children: connectFlow.detail })
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2 text-xs leading-relaxed text-slate-500 md:grid-cols-3", children: steps.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-semibold text-brand-dark", children: [
-          index + 1,
-          ". ",
-          step.title
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5", children: step.body })
-      ] }, step.title)) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-x-4 gap-y-1 text-xs leading-relaxed text-slate-500", children: [
-        localRecoveryHint !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: localRecoveryHint }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Guard changes routing only after this machine receives signed cloud access." })
-      ] }),
-      connectError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-relaxed text-brand-attention", children: connectError }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "primary", onClick: onStartConnect, disabled: primaryBusy, children: [
-          primaryBusy ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "mr-1.5 h-3.5 w-3.5 animate-spin", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "mr-1.5 h-3.5 w-3.5", "aria-hidden": "true" }),
-          primaryLabel
-        ] }),
-        showManualLink && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: manualHref, variant: "outline", children: [
-          "Open sign-in page",
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "ml-1.5 h-3.5 w-3.5", "aria-hidden": "true" })
-        ] })
-      ] })
-    ] });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2.5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue", children: "HOL Guard Cloud" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: statusTone, children: statusLabel })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base font-semibold tracking-[-0.02em] text-brand-dark", children: connectFlow.title }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-3xl text-sm leading-relaxed text-slate-500", children: connectFlow.detail })
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-slate-400", children: "Security" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-600", children: "Guard does not change package-manager routing until this machine receives signed cloud access." })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2.5 md:grid-cols-3", children: steps.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ConnectStep,
-      {
-        index: index + 1,
-        title: step.title,
-        body: step.body,
-        current: step.current,
-        done: step.done
-      },
-      step.title
-    )) }),
-    localRecoveryHint != null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-slate-400", children: "Available now" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-600", children: localRecoveryHint })
-    ] }),
-    connectError !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[18px] border border-brand-attention/25 bg-brand-attention/[0.05] px-3.5 py-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Guard could not start local connect" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-600", children: connectError })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "primary", onClick: onStartConnect, disabled: primaryBusy, children: [
-        primaryBusy ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "mr-1.5 h-3.5 w-3.5 animate-spin", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "mr-1.5 h-3.5 w-3.5", "aria-hidden": "true" }),
-        primaryLabel
-      ] }),
-      showManualLink && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: manualHref, variant: "outline", children: [
-        "Open sign-in page",
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "ml-1.5 h-3.5 w-3.5", "aria-hidden": "true" })
-      ] })
-    ] })
-  ] }) });
-}
-function CliFallback({ commands }) {
-  const items = Object.entries(commands);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer list-none text-xs font-semibold uppercase tracking-[0.18em] text-slate-400", children: "CLI fallback" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 space-y-1.5", children: items.map(([label, command]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mr-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400", children: label }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "break-all font-mono text-xs text-brand-dark", children: command })
-    ] }, label)) })
-  ] });
-}
-function EntitlementNotice({
-  connectError,
-  connectStarting,
-  data,
-  onStartConnect
-}) {
-  const connectRequired = data.entitlement.reason === "guard_cloud_connect_required" || data.entitlement.reason === "guard_cloud_reconnect_required";
-  const reconnectLikeState = data.entitlement.reason === "guard_cloud_reconnect_required" || data.entitlement.reason === "guard_cloud_connect_required" && (data.entitlement.tier !== "unknown" || data.package_shims.some((shim) => shim.installed));
-  const connectMode = reconnectLikeState ? "repair" : "connect";
-  const localRecoveryHint = data.package_shims.some((shim) => shim.installed) ? connectRequired ? "Existing shims on this machine can still be fixed or removed locally. Connect is only needed for new installs and cloud-gated verification." : null : null;
-  const compactConnectNotice = data.package_shims.some((shim) => shim.installed) || data.protection?.path_status === "restart_required";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-4 py-4", children: [
-    connectRequired && data.connect_flow !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ConnectFlowCard,
-      {
-        compact: compactConnectNotice,
-        connectError,
-        connectStarting,
-        connectFlow: data.connect_flow,
-        localRecoveryHint,
-        mode: connectMode,
-        onStartConnect
-      }
-    ) : /* @__PURE__ */ jsxRuntimeExports.jsx(UpgradeCta, { entitlement: data.entitlement }),
-    data.cli_fallback !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(CliFallback, { commands: data.cli_fallback })
-  ] });
-}
-function activationHeadline(protection) {
-  if (protection === null) return "Activation status unavailable";
-  if (protection.path_status === "in_path") return "Protection live now";
-  if (protection.path_status === "restart_required") return "Restart shell or apps to finish activation";
-  return "Fix PATH to finish activation";
-}
-function ActivationSummary({
-  activationAssistError,
-  lastAuditProofAt = null,
-  openingShell,
-  onOpenShell,
-  onRefreshStatus,
-  protection
-}) {
-  if (protection === null) {
-    return null;
-  }
-  const copy = resolvePackageManagerProtectionCopy(protection);
-  const Icon = protection.path_status === "in_path" ? HiMiniCheckCircle : protection.path_status === "restart_required" ? HiMiniArrowPath : HiMiniExclamationTriangle;
-  const toneClass = protection.path_status === "in_path" ? "border-brand-green/20 bg-brand-green/[0.04]" : protection.path_status === "restart_required" ? "border-brand-blue/20 bg-brand-blue/[0.04]" : "border-brand-attention/20 bg-brand-attention/[0.04]";
-  const iconClass = protection.path_status === "in_path" ? "text-brand-green" : protection.path_status === "restart_required" ? "text-brand-blue" : "text-brand-attention";
-  const canOpenShell = protection.path_status === "restart_required" && protection.shell_profile_configured && isMacClient();
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `rounded-xl border px-4 py-3 ${toneClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: `mt-0.5 h-4 w-4 shrink-0 ${iconClass}`, "aria-hidden": "true" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: activationHeadline(protection) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-600", children: copy.pathDetail }),
-      lastAuditProofAt !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-slate-500", children: [
-        "Last audit proof ",
-        formatRelativeTime(lastAuditProofAt)
-      ] }),
-      protection.path_status === "restart_required" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-2", children: [
-        canOpenShell && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: onOpenShell, disabled: openingShell, children: openingShell ? "Opening shell…" : "Open new shell" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRefreshStatus, disabled: openingShell, children: "Refresh after restart" })
-      ] }),
-      activationAssistError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-attention", children: activationAssistError })
-    ] })
-  ] }) });
-}
-function ReceiptProofCard({ receipt }) {
-  if (receipt === null) {
-    return null;
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", children: "Proof receipt" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 gap-1 sm:grid-cols-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-medium uppercase tracking-wide text-slate-400", children: "ID" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-mono text-xs text-brand-dark", children: receipt.id })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-medium uppercase tracking-wide text-slate-400", children: "Operation" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-xs text-brand-dark", children: receipt.operation })
-      ] })
-    ] })
-  ] });
-}
-function DismissButton({ onDismiss }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "button",
-    {
-      type: "button",
-      onClick: onDismiss,
-      "aria-label": "Dismiss result",
-      className: "shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-blue/30",
-      children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXCircle, { className: "h-4 w-4", "aria-hidden": "true" })
-    }
-  );
-}
-function NextActionHero({ action, anyPending, onRunAction }) {
-  const handleClick = reactExports.useCallback(() => {
-    if (action.op === null) {
-      return;
-    }
-    onRunAction(action.op, action.manager);
-  }, [action.manager, action.op, onRunAction]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.05] to-white px-4 py-4 sm:px-5 sm:py-5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-blue", children: "Next step" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-lg font-semibold text-brand-dark", children: action.label }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm leading-relaxed text-slate-600", children: action.detail }),
-    action.op !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: handleClick, disabled: anyPending, children: action.label }) })
-  ] });
-}
-function ActionResultPanel({ completed, onDismiss }) {
-  const { response } = completed;
-  const isOk = ["completed", "ok", "success", "succeeded"].includes(response.status);
-  const detail = response.result_detail;
-  const parsed = isOk ? parsePackageFirewallActionResult(completed.op, response) : null;
-  let resultMessage;
-  if (parsed?.summary != null) {
-    resultMessage = parsed.summary;
-  } else if (detail["activation_state"] === "restart_required") {
-    resultMessage = "Guard installed the shim and updated your shell profile. Open a new shell or restart AI apps to route package-manager commands through Guard.";
-  } else if (detail["activation_state"] === "in_path") {
-    resultMessage = "Guard installed the shim and protection is live in this session.";
-  } else {
-    resultMessage = response.result;
-  }
-  const resultLines = parsed?.lines ?? [];
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: `rounded-xl border px-4 py-3 ${isOk ? "border-brand-green/20 bg-brand-green/[0.04]" : "border-brand-attention/20 bg-brand-attention/[0.04]"}`,
-      role: "status",
-      "aria-live": "polite",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-start gap-2", children: [
-            isOk ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-              HiMiniCheckCircle,
-              {
-                className: "mt-0.5 h-4 w-4 shrink-0 text-brand-green",
-                "aria-hidden": "true"
-              }
-            ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-              HiMiniExclamationTriangle,
-              {
-                className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention",
-                "aria-hidden": "true"
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium capitalize text-brand-dark", children: [
-                completed.op,
-                completed.manager !== null ? ` — ${completed.manager}` : ""
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-600", children: resultMessage }),
-              resultLines.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1 text-xs text-slate-600", children: resultLines.map((line, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: line }, index)) })
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(DismissButton, { onDismiss })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptProofCard, { receipt: response.receipt })
-      ]
-    }
-  );
 }
 function resolvePackageFirewallNextAction(data) {
   if (data === null) {

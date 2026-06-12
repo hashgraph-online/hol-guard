@@ -1,5 +1,5 @@
 const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/policy-workspace.js","assets/guard-dashboard.js","assets/index.css"])))=>i.map(i=>d[i]);
-import { j as jsxRuntimeExports, r as reactExports, az as __vitePreload } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, r as reactExports, aC as __vitePreload } from "../guard-dashboard.js";
 import { S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout.js";
 const PolicyWorkspace = reactExports.lazy(
   () => __vitePreload(() => import("./policy-workspace.js"), true ? __vite__mapDeps([0,1,2]) : void 0).then((module) => ({ default: module.PolicyWorkspace }))

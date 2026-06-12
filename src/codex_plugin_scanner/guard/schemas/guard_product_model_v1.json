@@ -1,630 +1,644 @@
 {
-    "version": "guard-product-model.v1",
-    "personas": [
+  "version": "guard-product-model.v1",
+  "personas": [
+    "vibe_coder",
+    "solo",
+    "team_manager",
+    "security_lead",
+    "agent_operator"
+  ],
+  "activation_stages": [
+    "not_installed",
+    "installed_local",
+    "cloud_connected",
+    "team_started",
+    "agents_started",
+    "paid_value_ready"
+  ],
+  "guard_actions": [
+    "allow",
+    "warn",
+    "review",
+    "block",
+    "sandbox-required",
+    "require-reapproval"
+  ],
+  "decision_scopes": [
+    "global",
+    "harness",
+    "workspace",
+    "artifact",
+    "publisher"
+  ],
+  "canonical_harnesses": [
+    "codex",
+    "claude-code",
+    "opencode",
+    "copilot",
+    "cursor",
+    "gemini",
+    "hermes",
+    "openclaw"
+  ],
+  "supported_harnesses": [
+    "codex",
+    "claude-code",
+    "opencode",
+    "copilot",
+    "cursor",
+    "gemini",
+    "hermes",
+    "openclaw",
+    "antigravity",
+    "kimi"
+  ],
+  "action_categories": [
+    "secrets",
+    "network",
+    "destructive",
+    "mcp",
+    "skill",
+    "supply_chain",
+    "config",
+    "unknown"
+  ],
+  "severity_labels": {
+    "info": {
+      "label": "Info",
+      "plain": "For awareness"
+    },
+    "low": {
+      "label": "Low",
+      "plain": "Safe to review later"
+    },
+    "medium": {
+      "label": "Medium",
+      "plain": "Worth a look"
+    },
+    "high": {
+      "label": "High",
+      "plain": "Act soon"
+    },
+    "critical": {
+      "label": "Critical",
+      "plain": "Stop and review now"
+    }
+  },
+  "manager_fields": [
+    "team_members",
+    "roles",
+    "coverage",
+    "incidents",
+    "notifications",
+    "agent_risk"
+  ],
+  "vibe_coder_fields": [
+    "headline",
+    "safe_explanation",
+    "primary_action",
+    "learn_more"
+  ],
+  "paid_value_fields": [
+    "shared_memory",
+    "alerts",
+    "fleet",
+    "agents",
+    "incident_response",
+    "export"
+  ],
+  "redaction_forbidden_fields": [
+    "token",
+    "api_key",
+    "secret",
+    "password",
+    "credential",
+    "private_key",
+    "authorization",
+    "cookie",
+    "session"
+  ],
+  "stable_id_prefixes": {
+    "action": "sha256_hex",
+    "request": "uuid_hex",
+    "receipt": "guard-receipt",
+    "incident": "inc",
+    "agent_snapshot": "snap"
+  },
+  "settings_groups": [
+    "preset",
+    "custom",
+    "per_harness",
+    "per_category",
+    "per_secret_source"
+  ],
+  "external_intel_sources": [
+    "cve",
+    "advisory",
+    "cisco",
+    "openssf",
+    "slsa",
+    "trust_score"
+  ],
+  "runtime_models": {
+    "hermes": {
+      "runtime": "hermes",
+      "display_name": "Hermes",
+      "inventory": true,
+      "docker_proof": true,
+      "drift": true,
+      "messenger_channels": [
+        "telegram",
+        "terminal",
+        "api"
+      ],
+      "token_scopes": [
+        "runtime:sync",
+        "runtime:read",
+        "capabilities:read",
+        "messenger:bind"
+      ]
+    },
+    "openclaw": {
+      "runtime": "openclaw",
+      "display_name": "OpenClaw",
+      "inventory": true,
+      "docker_proof": true,
+      "drift": true,
+      "messenger_channels": [
+        "terminal",
+        "api"
+      ],
+      "token_scopes": [
+        "runtime:sync",
+        "runtime:read",
+        "capabilities:read",
+        "messenger:bind"
+      ]
+    }
+  },
+  "billing_plans": [
+    "free",
+    "pro",
+    "team",
+    "enterprise"
+  ],
+  "affiliate_fields": [
+    "affiliate",
+    "link",
+    "click",
+    "commission",
+    "payout",
+    "points",
+    "compliance",
+    "fraud"
+  ],
+  "seo_content_types": [
+    "warning",
+    "harness_page",
+    "cve_page",
+    "lab",
+    "shareable_report"
+  ],
+  "funnel_events": [
+    "ad_click",
+    "landing",
+    "signup",
+    "install",
+    "connect",
+    "first_block",
+    "upgrade"
+  ],
+  "event_privacy_tiers": [
+    "public",
+    "internal",
+    "redacted"
+  ],
+  "copy_lint_banned_terms": [
+    "artifact",
+    "daemon",
+    "receipt",
+    "attestation",
+    "provenance",
+    "SBOM"
+  ],
+  "brand_token_keys": [
+    "product_name",
+    "logo_mark",
+    "primary_color",
+    "accent_color",
+    "surface_color"
+  ],
+  "local_routes": [
+    {
+      "route": "/",
+      "persona": [
         "vibe_coder",
+        "solo"
+      ],
+      "auth_required": false,
+      "writes_state": false
+    },
+    {
+      "route": "/home",
+      "persona": [
+        "vibe_coder",
+        "solo"
+      ],
+      "auth_required": false,
+      "writes_state": false
+    },
+    {
+      "route": "/dashboard",
+      "persona": [
+        "vibe_coder",
+        "solo"
+      ],
+      "auth_required": false,
+      "writes_state": false
+    },
+    {
+      "route": "/inbox",
+      "persona": [
+        "vibe_coder",
+        "solo"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "route": "/requests",
+      "persona": [
+        "vibe_coder",
+        "solo"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "route": "/requests/{id}",
+      "persona": [
+        "vibe_coder",
+        "solo"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "route": "/approvals",
+      "persona": [
+        "vibe_coder",
+        "solo"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "route": "/approvals/{id}",
+      "persona": [
+        "vibe_coder",
+        "solo"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "route": "/protect",
+      "persona": [
         "solo",
-        "team_manager",
-        "security_lead",
-        "agent_operator"
-    ],
-    "activation_stages": [
-        "not_installed",
-        "installed_local",
-        "cloud_connected",
-        "team_started",
-        "agents_started",
-        "paid_value_ready"
-    ],
-    "guard_actions": [
-        "allow",
-        "warn",
-        "review",
-        "block",
-        "sandbox-required",
-        "require-reapproval"
-    ],
-    "decision_scopes": [
-        "global",
-        "harness",
-        "workspace",
-        "artifact",
-        "publisher"
-    ],
-    "canonical_harnesses": [
-        "codex",
-        "claude-code",
-        "opencode",
-        "copilot",
-        "cursor",
-        "gemini",
-        "hermes",
-        "openclaw"
-    ],
-    "supported_harnesses": [
-        "codex",
-        "claude-code",
-        "opencode",
-        "copilot",
-        "cursor",
-        "gemini",
-        "hermes",
-        "openclaw",
-        "antigravity",
-        "kimi"
-    ],
-    "action_categories": [
-        "secrets",
-        "network",
-        "destructive",
-        "mcp",
-        "skill",
-        "supply_chain",
-        "config",
-        "unknown"
-    ],
-    "severity_labels": {
-        "info": {
-            "label": "Info",
-            "plain": "For awareness"
-        },
-        "low": {
-            "label": "Low",
-            "plain": "Safe to review later"
-        },
-        "medium": {
-            "label": "Medium",
-            "plain": "Worth a look"
-        },
-        "high": {
-            "label": "High",
-            "plain": "Act soon"
-        },
-        "critical": {
-            "label": "Critical",
-            "plain": "Stop and review now"
-        }
+        "team_manager"
+      ],
+      "auth_required": true,
+      "writes_state": true
     },
-    "manager_fields": [
-        "team_members",
-        "roles",
-        "coverage",
-        "incidents",
-        "notifications",
-        "agent_risk"
-    ],
-    "vibe_coder_fields": [
-        "headline",
-        "safe_explanation",
-        "primary_action",
-        "learn_more"
-    ],
-    "paid_value_fields": [
-        "shared_memory",
-        "alerts",
-        "fleet",
-        "agents",
-        "incident_response",
-        "export"
-    ],
-    "redaction_forbidden_fields": [
-        "token",
-        "api_key",
-        "secret",
-        "password",
-        "credential",
-        "private_key",
-        "authorization",
-        "cookie",
-        "session"
-    ],
-    "stable_id_prefixes": {
-        "action": "sha256_hex",
-        "request": "uuid_hex",
-        "receipt": "guard-receipt",
-        "incident": "inc",
-        "agent_snapshot": "snap"
+    {
+      "route": "/apps/{slug}",
+      "persona": [
+        "solo",
+        "team_manager"
+      ],
+      "auth_required": true,
+      "writes_state": true
     },
-    "settings_groups": [
-        "preset",
-        "custom",
-        "per_harness",
-        "per_category",
-        "per_secret_source"
-    ],
-    "external_intel_sources": [
-        "cve",
-        "advisory",
-        "cisco",
-        "openssf",
-        "slsa",
-        "trust_score"
-    ],
-    "runtime_models": {
-        "hermes": {
-            "runtime": "hermes",
-            "display_name": "Hermes",
-            "inventory": true,
-            "docker_proof": true,
-            "drift": true,
-            "messenger_channels": [
-                "telegram",
-                "terminal",
-                "api"
-            ],
-            "token_scopes": [
-                "runtime:sync",
-                "runtime:read",
-                "capabilities:read",
-                "messenger:bind"
-            ]
-        },
-        "openclaw": {
-            "runtime": "openclaw",
-            "display_name": "OpenClaw",
-            "inventory": true,
-            "docker_proof": true,
-            "drift": true,
-            "messenger_channels": [
-                "terminal",
-                "api"
-            ],
-            "token_scopes": [
-                "runtime:sync",
-                "runtime:read",
-                "capabilities:read",
-                "messenger:bind"
-            ]
-        }
+    {
+      "route": "/evidence",
+      "persona": [
+        "solo",
+        "security_lead"
+      ],
+      "auth_required": true,
+      "writes_state": true
     },
-    "billing_plans": [
-        "free",
-        "pro",
-        "team",
-        "enterprise"
-    ],
-    "affiliate_fields": [
-        "affiliate",
-        "link",
-        "click",
-        "commission",
-        "payout",
-        "points",
-        "compliance",
-        "fraud"
-    ],
-    "seo_content_types": [
-        "warning",
-        "harness_page",
-        "cve_page",
-        "lab",
-        "shareable_report"
-    ],
-    "funnel_events": [
-        "ad_click",
-        "landing",
-        "signup",
-        "install",
-        "connect",
-        "first_block",
-        "upgrade"
-    ],
-    "event_privacy_tiers": [
-        "public",
-        "internal",
-        "redacted"
-    ],
-    "copy_lint_banned_terms": [
-        "artifact",
-        "daemon",
-        "receipt",
-        "attestation",
-        "provenance",
-        "SBOM"
-    ],
-    "brand_token_keys": [
-        "product_name",
-        "logo_mark",
-        "primary_color",
-        "accent_color",
-        "surface_color"
-    ],
-    "local_routes": [
-        {
-            "route": "/",
-            "persona": [
-                "vibe_coder",
-                "solo"
-            ],
-            "auth_required": false,
-            "writes_state": false
-        },
-        {
-            "route": "/home",
-            "persona": [
-                "vibe_coder",
-                "solo"
-            ],
-            "auth_required": false,
-            "writes_state": false
-        },
-        {
-            "route": "/dashboard",
-            "persona": [
-                "vibe_coder",
-                "solo"
-            ],
-            "auth_required": false,
-            "writes_state": false
-        },
-        {
-            "route": "/inbox",
-            "persona": [
-                "vibe_coder",
-                "solo"
-            ],
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "route": "/requests",
-            "persona": [
-                "vibe_coder",
-                "solo"
-            ],
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "route": "/requests/{id}",
-            "persona": [
-                "vibe_coder",
-                "solo"
-            ],
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "route": "/approvals",
-            "persona": [
-                "vibe_coder",
-                "solo"
-            ],
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "route": "/approvals/{id}",
-            "persona": [
-                "vibe_coder",
-                "solo"
-            ],
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "route": "/protect",
-            "persona": [
-                "solo",
-                "team_manager"
-            ],
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "route": "/apps/{slug}",
-            "persona": [
-                "solo",
-                "team_manager"
-            ],
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "route": "/evidence",
-            "persona": [
-                "solo",
-                "security_lead"
-            ],
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "route": "/supply-chain",
-            "persona": [
-                "solo",
-                "security_lead"
-            ],
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "route": "/audit",
-            "persona": [
-                "solo",
-                "security_lead"
-            ],
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "route": "/policy",
-            "persona": [
-                "solo",
-                "team_manager"
-            ],
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "route": "/feed-health",
-            "persona": [
-                "solo",
-                "team_manager"
-            ],
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "route": "/settings",
-            "persona": [
-                "solo"
-            ],
-            "auth_required": true,
-            "writes_state": true
-        }
-    ],
-    "local_apis": [
-        {
-            "path": "/v1/initialize",
-            "method": "POST",
-            "category": "config",
-            "auth_required": false,
-            "writes_state": true
-        },
-        {
-            "path": "/v1/connect/state",
-            "method": "GET",
-            "category": "config",
-            "auth_required": false,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/connect/requests",
-            "method": "POST",
-            "category": "config",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/connect/complete",
-            "method": "POST",
-            "category": "config",
-            "auth_required": false,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/connect/result",
-            "method": "POST",
-            "category": "config",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/runtime",
-            "method": "GET",
-            "category": "config",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/harnesses",
-            "method": "GET",
-            "category": "config",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/harnesses/{harness}/install",
-            "method": "POST",
-            "category": "supply_chain",
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "path": "/v1/harnesses/{harness}/verify",
-            "method": "POST",
-            "category": "config",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/harnesses/{harness}/repair",
-            "method": "POST",
-            "category": "config",
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "path": "/v1/harnesses/{harness}/uninstall",
-            "method": "POST",
-            "category": "config",
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "path": "/v1/inventory",
-            "method": "GET",
-            "category": "config",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/requests",
-            "method": "GET",
-            "category": "unknown",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/requests/{id}",
-            "method": "GET",
-            "category": "unknown",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/requests/{id}/approve",
-            "method": "POST",
-            "category": "unknown",
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "path": "/v1/requests/{id}/block",
-            "method": "POST",
-            "category": "unknown",
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "path": "/v1/approvals/{id}/decision",
-            "method": "POST",
-            "category": "unknown",
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "path": "/approvals/{id}/decision",
-            "method": "POST",
-            "category": "unknown",
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "path": "/v1/receipts",
-            "method": "GET",
-            "category": "unknown",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/receipts/analytics",
-            "method": "GET",
-            "category": "unknown",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/receipts/latest",
-            "method": "GET",
-            "category": "unknown",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/receipts/{id}",
-            "method": "GET",
-            "category": "unknown",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/policy",
-            "method": "GET",
-            "category": "config",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/policy/decisions",
-            "method": "POST",
-            "category": "config",
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "path": "/v1/policy/clear",
-            "method": "POST",
-            "category": "config",
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "path": "/v1/requests/clear",
-            "method": "POST",
-            "category": "destructive",
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "path": "/v1/artifacts/{id}/diff",
-            "method": "GET",
-            "category": "unknown",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/evidence",
-            "method": "GET",
-            "category": "unknown",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/evidence",
-            "method": "DELETE",
-            "category": "destructive",
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "path": "/v1/evidence/export",
-            "method": "GET",
-            "category": "unknown",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/daemon/repair",
-            "method": "POST",
-            "category": "config",
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "path": "/v1/settings",
-            "method": "GET",
-            "category": "config",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/settings",
-            "method": "POST",
-            "category": "config",
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "path": "/v1/settings/export",
-            "method": "GET",
-            "category": "config",
-            "auth_required": true,
-            "writes_state": false
-        },
-        {
-            "path": "/v1/settings/import",
-            "method": "POST",
-            "category": "config",
-            "auth_required": true,
-            "writes_state": true
-        },
-        {
-            "path": "/v1/settings/reset",
-            "method": "POST",
-            "category": "config",
-            "auth_required": true,
-            "writes_state": true
-        }
-    ]
+    {
+      "route": "/supply-chain",
+      "persona": [
+        "solo",
+        "security_lead"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "route": "/audit",
+      "persona": [
+        "solo",
+        "security_lead"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "route": "/policy",
+      "persona": [
+        "solo",
+        "team_manager"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "route": "/feed-health",
+      "persona": [
+        "solo",
+        "team_manager"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "route": "/settings",
+      "persona": [
+        "solo"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    }
+  ],
+  "local_apis": [
+    {
+      "path": "/v1/initialize",
+      "method": "POST",
+      "category": "config",
+      "auth_required": false,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/connect/state",
+      "method": "GET",
+      "category": "config",
+      "auth_required": false,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/connect/requests",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/connect/complete",
+      "method": "POST",
+      "category": "config",
+      "auth_required": false,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/connect/result",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/runtime",
+      "method": "GET",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/cloud/connect",
+      "method": "GET",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/cloud/connect",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/harnesses",
+      "method": "GET",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/harnesses/{harness}/install",
+      "method": "POST",
+      "category": "supply_chain",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/harnesses/{harness}/verify",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/harnesses/{harness}/repair",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/harnesses/{harness}/uninstall",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/inventory",
+      "method": "GET",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/requests",
+      "method": "GET",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/requests/{id}",
+      "method": "GET",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/requests/{id}/approve",
+      "method": "POST",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/requests/{id}/block",
+      "method": "POST",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/approvals/{id}/decision",
+      "method": "POST",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/approvals/{id}/decision",
+      "method": "POST",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/receipts",
+      "method": "GET",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/receipts/analytics",
+      "method": "GET",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/receipts/latest",
+      "method": "GET",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/receipts/{id}",
+      "method": "GET",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/policy",
+      "method": "GET",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/policy/decisions",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/policy/clear",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/requests/clear",
+      "method": "POST",
+      "category": "destructive",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/artifacts/{id}/diff",
+      "method": "GET",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/evidence",
+      "method": "GET",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/evidence",
+      "method": "DELETE",
+      "category": "destructive",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/evidence/export",
+      "method": "GET",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/daemon/repair",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/settings",
+      "method": "GET",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/settings",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/settings/export",
+      "method": "GET",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/settings/import",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/settings/reset",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": true
+    }
+  ]
 }

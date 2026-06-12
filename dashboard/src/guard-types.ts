@@ -695,6 +695,13 @@ export type PackageFirewallConnectFlow = {
   poll_after_ms: number | null;
 };
 
+export type GuardCloudConnectFlow = PackageFirewallConnectFlow;
+
+export type GuardCloudConnectStatusResponse = {
+  connect_required: boolean;
+  connect_flow: GuardCloudConnectFlow | null;
+};
+
 export type PackageFirewallStatusResponse = {
   operation: string;
   status: string;

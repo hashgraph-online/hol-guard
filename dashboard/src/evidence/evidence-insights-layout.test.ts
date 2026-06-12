@@ -40,5 +40,8 @@ assert(surfaceSource.includes("handleShareClose"), "insights surface: stable sha
 assert(heatmapSource.includes("if (!displayKey) return"), "insights heatmap: avoids idle global scroll listeners");
 assert(modalLayerSource.includes("onCloseRef"), "insights share modal: stable escape close handler");
 assert(modalLayerSource.includes("createPortal"), "insights share modal: portal layer renders to body");
+assert(shareModalSource.includes("startGuardCloudConnect"), "insights share modal: uses local daemon connect");
+assert(!shareModalSource.includes("window.open(connectUrl"), "insights share modal: does not open hol.org connect page");
+assert(shareModalSource.includes("ConnectFlowCard"), "insights share modal: reuses local connect flow card");
 
 console.log("evidence-insights-layout.test.ts: all tests passed");

@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, b as EmptyState, A as ActionButton, a$ as HiMiniInbox, Q as HiMiniCog6Tooth, aU as HiMiniCloudArrowUp, S as SectionLabel, a9 as Tag, d as HiMiniCheckCircle, b0 as HiMiniBarsArrowUp, b1 as HiMiniBarsArrowDown, r as reactExports, b2 as policyActionLabel, b3 as scopeLabel, h as harnessDisplayName, B as Badge, m as formatRelativeTime, aY as HiMiniDocumentText, aZ as guardAwareHref, au as HiMiniTrash, aa as HiMiniMagnifyingGlass } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, b as EmptyState, A as ActionButton, b7 as HiMiniInbox, U as HiMiniCog6Tooth, b0 as HiMiniCloudArrowUp, S as SectionLabel, ac as Tag, d as HiMiniCheckCircle, b8 as HiMiniBarsArrowUp, b9 as HiMiniBarsArrowDown, r as reactExports, ba as policyActionLabel, bb as scopeLabel, h as harnessDisplayName, B as Badge, m as formatRelativeTime, b4 as HiMiniDocumentText, b5 as guardAwareHref, ax as HiMiniTrash, ad as HiMiniMagnifyingGlass } from "../guard-dashboard.js";
 const CLOUD_POLICY_SOURCES = /* @__PURE__ */ new Set(["cloud-sync", "team-policy", "policy-bundle"]);
 function isCloudManagedPolicy(source) {
   return CLOUD_POLICY_SOURCES.has(source);

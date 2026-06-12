@@ -14164,7 +14164,7 @@ def test_guard_runtime_tool_action_policy_uses_network_egress_when_stricter(tmp_
         "global",
     ],
 )
-def test_guard_runtime_honors_broader_saved_allows_for_risky_tool_actions(
+def test_guard_runtime_honors_saved_allows_for_same_risky_tool_action(
     tmp_path: Path,
     scope: str,
 ) -> None:
@@ -14241,6 +14241,104 @@ def test_guard_runtime_honors_broader_saved_allows_for_risky_tool_actions(
             workspace=str(workspace),
         )
         == "allow"
+    )
+
+
+@pytest.mark.parametrize(
+    "scope",
+    [
+        "harness",
+        "global",
+    ],
+)
+def test_guard_runtime_rejects_saved_allows_for_different_risky_tool_action(
+    tmp_path: Path,
+    scope: str,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    workspace = tmp_path / "workspace"
+    request = GuardApprovalRequest(
+        request_id=f"req-opencode-{scope}",
+        harness="opencode",
+        artifact_id="opencode:project:tool-action:docker-compose-postgres",
+        artifact_name="Bash docker-sensitive command",
+        artifact_type="tool_action_request",
+        artifact_hash="hash-request",
+        publisher=None,
+        policy_action="require-reapproval",
+        recommended_scope="artifact",
+        changed_fields=("tool_action_request",),
+        source_scope="project",
+        config_path=str(workspace / "opencode.json"),
+        workspace=str(workspace),
+        launch_target="docker compose -f scripts/guard-cloud/docker-lab/docker-compose.yml up -d postgres",
+        review_command=f"hol-guard approvals approve req-opencode-{scope}",
+        approval_url=f"http://127.0.0.1:5474/requests/req-opencode-{scope}",
+        action_envelope_json={
+            "schema_version": 1,
+            "action_id": f"req-opencode-{scope}",
+            "harness": "opencode",
+            "event_name": "PreToolUse",
+            "action_type": "shell_command",
+            "workspace": str(workspace),
+            "workspace_hash": "workspace-hash",
+            "tool_name": "Bash",
+            "command": "docker compose -f scripts/guard-cloud/docker-lab/docker-compose.yml up -d postgres",
+            "prompt_excerpt": None,
+            "target_paths": [],
+            "network_hosts": [],
+            "mcp_server": None,
+            "mcp_tool": None,
+            "package_manager": None,
+            "package_name": None,
+            "script_name": None,
+            "raw_payload_redacted": {"tool_name": "Bash"},
+        },
+    )
+    store.add_approval_request(request, "2026-06-12T00:00:00+00:00")
+
+    apply_approval_resolution(
+        store=store,
+        request_id=request.request_id,
+        action="allow",
+        scope=scope,
+        workspace=request.workspace,
+        reason=f"saved for {scope}",
+        now="2026-06-12T00:01:00+00:00",
+    )
+
+    later_artifact = GuardArtifact(
+        artifact_id="opencode:project:tool-action:credential-upload",
+        name="Bash shell file upload command",
+        harness="opencode",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=request.config_path,
+        publisher=None,
+        metadata={"action_class": "shell file upload command"},
+    )
+    config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=None,
+        security_level="balanced",
+    )
+
+    assert (
+        guard_commands_module._runtime_stored_policy_action(
+            store=store,
+            harness="opencode",
+            artifact=later_artifact,
+            artifact_id=later_artifact.artifact_id,
+            artifact_hash="hash-later",
+            workspace=str(workspace),
+        )
+        is None
+    )
+    assert (
+        guard_commands_module._runtime_artifact_policy_action(
+            config, later_artifact, "opencode"
+        )
+        == "require-reapproval"
     )
 
 
@@ -17320,6 +17418,76 @@ def test_sync_receipts_uploads_policy_bundle_acknowledgement_to_sync_route(tmp_p
         "deviceName": guard_runner_module._guard_device_metadata(store)[1],
         "status": "synced",
     }
+
+
+def test_sync_receipts_rejects_policy_bundle_for_the_wrong_workspace(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "guard-live-token",
+        "2026-06-05T13:30:00+00:00",
+        workspace_id="workspace-a",
+    )
+    bundle = {
+        "contractVersion": "guard-policy-bundle.v1",
+        "bundleVersion": "policy-2026-06-05.5",
+        "bundleHash": "",
+        "issuedAt": "2026-06-05T13:30:00+00:00",
+        "expiresAt": None,
+        "verifier": {
+            "algorithm": "sha256",
+            "keyId": "guard-policy-bundle-v1",
+            "signature": None,
+        },
+        "rolloutState": "enforcing",
+        "workspaceId": "workspace-b",
+        "policyDefaults": {
+            "mode": "enforce",
+            "defaultAction": "warn",
+            "unknownPublisherAction": "review",
+            "changedHashAction": "require-reapproval",
+            "newNetworkDomainAction": "warn",
+            "subprocessAction": "block",
+            "telemetryEnabled": False,
+            "syncEnabled": True,
+        },
+        "rules": [],
+        "acknowledgements": [],
+    }
+    bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(bundle)
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        return _Response(
+            {
+                "syncedAt": "2026-06-05T13:30:01+00:00",
+                "receiptsStored": 0,
+                "policyBundle": bundle,
+            }
+        )
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+    guard_runner_module.sync_receipts(store)
+
+    assert store.get_sync_payload("policy_bundle") is None
+    assert store.get_sync_payload("policy_bundle_last_good") is None
+    assert store.get_sync_payload("policy_bundle_last_error") == {"reason": "wrong_workspace"}
 
 
 def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, monkeypatch):
