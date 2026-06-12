@@ -1,0 +1,307 @@
+"""Guard CLI Copilot hook helpers."""
+
+# fmt: off
+# ruff: noqa: F403, F405, I001
+
+from __future__ import annotations
+
+from ._commands_shared import *
+from .commands_parser_helpers import *
+
+def _run_hook_copilot_pretool(
+    args: argparse.Namespace,
+    *,
+    action_envelope: GuardActionEnvelope | None,
+    config: GuardConfig,
+    context: HarnessContext,
+    copilot_hook_stage: str | None,
+    copilot_runtime_tool_call: tuple[GuardArtifact, str, object] | None,
+    output_stream: TextIO | None = None,
+    payload: Mapping[str, object],
+    runtime_workspace: Path | None,
+    store: GuardStore,
+) -> int | None:
+    if copilot_runtime_tool_call is None or copilot_hook_stage != "pretooluse":
+        return None
+    runtime_artifact, runtime_artifact_hash, runtime_arguments = copilot_runtime_tool_call
+    decision = evaluate_tool_call(
+        store=store,
+        config=config,
+        artifact=runtime_artifact,
+        artifact_hash=runtime_artifact_hash,
+        arguments=runtime_arguments,
+    )
+    policy_action = {
+        "allow": "allow",
+        "warn": "allow",
+        "review": "require-reapproval",
+        "block": "block",
+        "sandbox-required": "sandbox-required",
+        "require-reapproval": "require-reapproval",
+    }.get(decision.action, "require-reapproval")
+    now = _now()
+    if policy_action == "allow":
+        allow_tool_call(
+            store=store,
+            artifact=runtime_artifact,
+            artifact_hash=runtime_artifact_hash,
+            decision_source="pre-tool-hook",
+            now=now,
+            signals=decision.signals,
+            risk_categories=decision.risk_categories,
+            remember=False,
+        )
+        if _should_emit_copilot_hook_response(args):
+            _record_harness_usage_for_hook(
+                store=store,
+                action_envelope=action_envelope,
+                payload=payload,
+                policy_action=policy_action,
+            )
+            _emit_copilot_hook_response(policy_action="allow", reason="", output_stream=output_stream)
+            return 0
+    else:
+        if policy_action in {"block", "sandbox-required"}:
+            block_tool_call(
+                store=store,
+                artifact=runtime_artifact,
+                artifact_hash=runtime_artifact_hash,
+                decision_source="pre-tool-hook",
+                now=now,
+                signals=decision.signals,
+                risk_categories=decision.risk_categories,
+            )
+        if _should_emit_copilot_hook_response(args):
+            _record_harness_usage_for_hook(
+                store=store,
+                action_envelope=action_envelope,
+                payload=payload,
+                policy_action=policy_action,
+            )
+            _emit_copilot_hook_response(
+                policy_action=policy_action,
+                reason=_copilot_hook_reason(decision.summary, runtime_artifact.name),
+                output_stream=output_stream,
+            )
+
+
+def _run_hook_copilot_permission_request(
+    args: argparse.Namespace,
+    *,
+    action_envelope: GuardActionEnvelope | None,
+    config: GuardConfig,
+    context: HarnessContext,
+    copilot_permission_request: tuple[GuardArtifact, str, object] | None,
+    guard_home: Path,
+    managed_install: object,
+    output_stream: TextIO | None = None,
+    payload: Mapping[str, object],
+    runtime_workspace: Path | None,
+    store: GuardStore,
+) -> int | None:
+    if copilot_permission_request is None:
+        return None
+        runtime_artifact, runtime_artifact_hash, runtime_arguments = copilot_permission_request
+        artifact_id = runtime_artifact.artifact_id
+        artifact_name = runtime_artifact.name
+        decision = evaluate_tool_call(
+            store=store,
+            config=config,
+            artifact=runtime_artifact,
+            artifact_hash=runtime_artifact_hash,
+            arguments=runtime_arguments,
+        )
+        policy_action = {
+            "allow": "allow",
+            "warn": "allow",
+            "review": "require-reapproval",
+            "block": "block",
+            "sandbox-required": "sandbox-required",
+            "require-reapproval": "require-reapproval",
+        }.get(decision.action, "require-reapproval")
+        runtime_detection = _runtime_detection(args.harness, runtime_artifact)
+        evaluation_payload = {
+            "artifacts": [
+                {
+                    "artifact_id": artifact_id,
+                    "artifact_name": artifact_name,
+                    "artifact_hash": runtime_artifact_hash,
+                    "policy_action": policy_action,
+                    "changed_fields": ["runtime_tool_call", *decision.signals],
+                    "artifact_type": runtime_artifact.artifact_type,
+                    "source_scope": runtime_artifact.source_scope,
+                    "config_path": runtime_artifact.config_path,
+                    "launch_target": json.dumps(runtime_arguments, sort_keys=True)
+                    if runtime_arguments is not None
+                    else runtime_artifact.command,
+                    "action_envelope_json": _action_envelope_json(action_envelope),
+                }
+            ]
+        }
+        now = _now()
+        response_payload = {
+            "recorded": True,
+            "harness": _canonical_harness_name(args.harness),
+            "artifact_id": artifact_id,
+            "artifact_name": artifact_name,
+            "artifact_type": runtime_artifact.artifact_type,
+            "policy_action": policy_action,
+            "risk_signals": list(decision.signals),
+            "risk_summary": decision.summary,
+            "launch_summary": json.dumps(runtime_arguments, sort_keys=True)
+            if runtime_arguments is not None
+            else runtime_artifact.command,
+        }
+        if policy_action == "allow":
+            allow_tool_call(
+                store=store,
+                artifact=runtime_artifact,
+                artifact_hash=runtime_artifact_hash,
+                decision_source=decision.source,
+                now=now,
+                signals=decision.signals,
+                risk_categories=decision.risk_categories,
+                remember=False,
+            )
+            if _should_emit_copilot_hook_response(args):
+                _record_harness_usage_for_hook(
+                    store=store,
+                    action_envelope=action_envelope,
+                    payload=payload,
+                    policy_action=policy_action,
+                )
+                _emit_copilot_permission_request_response(behavior="allow", output_stream=output_stream)
+                return 0
+            _record_harness_usage_for_hook(
+                store=store,
+                action_envelope=action_envelope,
+                payload=payload,
+                policy_action=policy_action,
+            )
+            _emit("hook", response_payload, getattr(args, "json", False))
+            return 0
+        block_tool_call(
+            store=store,
+            artifact=runtime_artifact,
+            artifact_hash=runtime_artifact_hash,
+            decision_source="permission-request-hook",
+            now=now,
+            signals=decision.signals,
+            risk_categories=decision.risk_categories,
+        )
+        approval_center_url = ensure_guard_daemon(guard_home)
+        approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
+        try:
+            daemon_client = load_guard_surface_daemon_client(guard_home)
+        except RuntimeError:
+            queued = queue_blocked_approvals(
+                detection=runtime_detection,
+                evaluation=evaluation_payload,
+                store=store,
+                approval_center_url=approval_center_url,
+                now=now,
+            )
+        else:
+            session = daemon_client.start_session(
+                harness=args.harness,
+                surface="harness-adapter",
+                workspace=str(runtime_workspace) if runtime_workspace else None,
+                client_name=f"{args.harness}-permission-hook",
+                client_title=f"{args.harness} permission hook",
+                client_version="1.0.0",
+                capabilities=["approval-resolution", "receipt-view"],
+            )
+            blocked_operation = daemon_client.queue_blocked_operation(
+                session_id=str(session["session_id"]),
+                operation_type="tool_call",
+                harness=args.harness,
+                metadata={
+                    "tool_name": str(payload.get("tool_name", "")),
+                    "hook_name": "permissionRequest",
+                    "hook_event_name": "PermissionRequest",
+                    **_codex_browser_wait_metadata(
+                        args=args,
+                        event_name="PermissionRequest",
+                        policy_action=policy_action,
+                        config=config,
+                        payload=payload,
+                    ),
+                    "command_text": _hook_command_text(payload),
+                    "workspace": str(runtime_workspace) if runtime_workspace else None,
+                    **codex_resume_metadata_from_hook_payload(payload),
+                },
+                detection=runtime_detection.to_dict(),
+                evaluation=evaluation_payload,
+                approval_center_url=approval_center_url,
+                approval_surface_policy=_approval_surface_policy_for_flow(
+                    config.approval_surface_policy,
+                    approval_flow,
+                ),
+                open_key=artifact_id,
+            )
+            operation = blocked_operation.get("operation")
+            if not isinstance(operation, dict):
+                operation = {}
+            queued = blocked_operation.get("approval_requests")
+            if not isinstance(queued, list):
+                queued = []
+            operation_id = _optional_string(operation.get("operation_id"))
+            if operation_id is not None:
+                response_payload["operation_id"] = operation_id
+            response_payload["operation"] = operation
+            approval_request_ids = operation.get("approval_request_ids")
+            if isinstance(approval_request_ids, list):
+                response_payload["approval_request_ids"] = approval_request_ids
+        response_payload["approval_requests"] = queued
+        _attach_primary_approval_link(
+            response_payload,
+            harness=_optional_string(args.harness) or args.harness,
+            approval_center_url=approval_center_url,
+        )
+        response_payload["approval_center_url"] = approval_center_url
+        response_payload["review_hint"] = approval_center_hint(
+            context=context,
+            harness=args.harness,
+            approval_center_url=approval_center_url,
+            queued=queued,
+            managed_install=managed_install,
+            request_id=_optional_string(response_payload.get("primary_approval_request_id")),
+            artifact_id=_optional_string(response_payload.get("artifact_id")),
+            review_url=_preferred_approval_review_url(response_payload, harness=args.harness),
+        )
+        _localize_pending_approval_copy(response_payload, harness=args.harness)
+        _record_harness_usage_for_hook(
+            store=store,
+            action_envelope=action_envelope,
+            payload=payload,
+            policy_action=policy_action,
+        )
+        if _should_emit_copilot_hook_response(args):
+            review_context = _native_approval_center_context(response_payload, harness=args.harness)
+            _emit_copilot_permission_request_response(
+                behavior="deny",
+                message=_copilot_hook_reason(
+                    f"HOL Guard blocked {artifact_name}. {decision.summary}",
+                    review_context,
+                ),
+                interrupt=True,
+                output_stream=output_stream,
+            )
+            return 0
+        _emit("hook", response_payload, getattr(args, "json", False))
+        return 1
+    data_flow_signals = _runtime_action_data_flow_signals(action_envelope, workspace=runtime_workspace)
+    runtime_artifact = _hook_runtime_artifact(
+        harness=args.harness,
+        payload=payload,
+        action_envelope=action_envelope,
+        data_flow_signals=data_flow_signals,
+        home_dir=context.home_dir,
+        guard_home=context.guard_home,
+        workspace=runtime_workspace,
+    )
+
+__all__ = [
+    "_run_hook_copilot_permission_request",
+    "_run_hook_copilot_pretool",
+]

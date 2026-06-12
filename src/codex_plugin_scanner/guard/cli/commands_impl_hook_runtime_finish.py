@@ -1,0 +1,156 @@
+"""Guard CLI runtime artifact hook final response flow."""
+
+# fmt: off
+# ruff: noqa: F403, F405, I001
+
+from __future__ import annotations
+
+from ._commands_shared import *
+from .commands_parser_helpers import *
+
+from .commands_impl_hook_runtime_state import RuntimeArtifactHookState
+
+def _finalize_runtime_artifact_hook(
+    state: RuntimeArtifactHookState,
+    args: argparse.Namespace,
+    *,
+    config: GuardConfig,
+    output_stream: TextIO | None = None,
+    payload: Mapping[str, object],
+    store: GuardStore,
+) -> int:
+    action_envelope = state.action_envelope
+    event_name = state.event_name
+    policy_action = state.policy_action
+    response_payload = state.response_payload
+    runtime_artifact = state.runtime_artifact
+    if _should_emit_copilot_hook_response(args):
+        _record_harness_usage_for_hook(
+            store=store,
+            action_envelope=action_envelope,
+            payload=payload,
+            policy_action=policy_action,
+        )
+        _emit_copilot_hook_response(
+            policy_action=policy_action,
+            reason=_copilot_hook_reason(
+                response_payload.get("why_now"),
+                response_payload.get("review_hint"),
+                response_payload.get("risk_headline"),
+            ),
+            output_stream=output_stream,
+        )
+        return 0
+    codex_browser_decision = _codex_browser_approval_decision(
+        args=args,
+        event_name=event_name,
+        policy_action=policy_action,
+        response_payload=response_payload,
+        store=store,
+        config=config,
+        daemon_client=state.browser_approval_daemon_client,
+    )
+    if codex_browser_decision == "allow":
+        if event_name != "PreToolUse":
+            _emit_native_hook_response(
+                harness=args.harness,
+                policy_action="allow",
+                event_name=event_name,
+                reason="",
+                output_stream=output_stream,
+            )
+        _record_harness_usage_for_hook(
+            store=store,
+            action_envelope=action_envelope,
+            payload=payload,
+            policy_action="allow",
+        )
+        return 0
+    if codex_browser_decision == "block":
+        policy_action = "block"
+    approval_context = _native_approval_center_context(response_payload, harness=args.harness)
+    raw_runtime_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
+    if _should_emit_native_hook_exit_block(args, event_name=event_name, policy_action=policy_action):
+        if _canonical_harness_name(args.harness) == "codex" and approval_context is not None:
+            native_block_reason = _native_hook_reason(raw_runtime_reason, approval_context)
+        else:
+            native_block_reason = _native_hook_reason_for_harness(
+                args.harness,
+                raw_runtime_reason,
+                approval_context,
+            )
+        _emit_native_hook_block_stderr(native_block_reason)
+        _record_harness_usage_for_hook(
+            store=store,
+            action_envelope=action_envelope,
+            payload=payload,
+            policy_action=policy_action,
+        )
+        return 2
+    if _canonical_harness_name(args.harness) == "codex" and (
+        event_name == "UserPromptSubmit" or approval_context is not None
+    ):
+        runtime_reason = _native_hook_reason(
+            raw_runtime_reason,
+            approval_context,
+        )
+    else:
+        runtime_reason = _native_hook_reason_for_harness(
+            args.harness,
+            raw_runtime_reason,
+            approval_context,
+        )
+    if _should_emit_claude_native_pretooluse_notice(
+        args,
+        event_name=event_name,
+        policy_action=policy_action,
+    ):
+        _emit_native_hook_notification_stderr(
+            _claude_native_pretooluse_terminal_notice(payload=payload, reason=runtime_reason)
+        )
+    if _should_emit_native_hook_response(args) or _should_emit_native_hook_json_response(
+        args,
+        event_name=event_name,
+        output_stream=output_stream,
+    ):
+        system_message = None
+        canonical_harness = _canonical_harness_name(args.harness)
+        if canonical_harness == "claude-code":
+            system_message = _claude_prompt_system_message(
+                event_name=event_name,
+                policy_action=policy_action,
+                artifact=runtime_artifact,
+                native_reason=runtime_reason,
+            )
+        elif canonical_harness == "codex" and event_name == "UserPromptSubmit":
+            system_message = _codex_prompt_block_system_message(
+                policy_action=policy_action,
+                native_reason=runtime_reason,
+            )
+        _emit_native_hook_response(
+            harness=args.harness,
+            policy_action=policy_action,
+            event_name=event_name,
+            reason=runtime_reason,
+            system_message=system_message,
+            output_stream=output_stream,
+        )
+        _record_harness_usage_for_hook(
+            store=store,
+            action_envelope=action_envelope,
+            payload=payload,
+            policy_action=policy_action,
+        )
+        return 0
+    _emit("hook", response_payload, getattr(args, "json", False))
+    _record_harness_usage_for_hook(
+        store=store,
+        action_envelope=action_envelope,
+        payload=payload,
+        policy_action=policy_action,
+    )
+    return 1 if policy_action in {"block", "require-reapproval"} else 0
+
+__all__ = [
+    "_finalize_runtime_artifact_hook",
+]

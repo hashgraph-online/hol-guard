@@ -12,45 +12,25 @@ from typing import Any, TextIO
 from . import commands_impl as _impl
 from . import commands_parser as _parser
 
-_SYNC_NAMES = (
-    "_open_approval_center",
-    "_prompt_init_step",
-    "_run_guard_browser_connect_flow",
-    "_run_guard_device_connect_flow",
-    "_emit_native_hook_notification_stderr",
-    "_runtime_action_data_flow_signals",
-    "GuardBridge",
-    "GuardStore",
-    "RemoteGuardProxy",
-    "StdioGuardProxy",
-    "apply_managed_install",
-    "cisco_risk_signal_v3_to_v2",
-    "desktop_notification_setup_supported",
-    "ensure_desktop_notification_setup",
-    "ensure_guard_daemon",
-    "evaluate_package_request_artifact",
-    "guard_run",
-    "load_guard_daemon_auth_token",
-    "load_guard_surface_daemon_client",
-    "policy_action_for_cisco_signals",
-    "resolve_risk_action",
-    "run_consumer_scan",
-    "run_guard_disconnect_command",
-    "run_guard_update",
-    "scan_action_for_cisco_evidence",
-    "sync_local_guard_cloud_proof",
-    "sync_receipts",
-    "sync_runtime_session",
-    "sync_supply_chain_bundle",
-    "wait_for_approval_requests",
-)
-
 _SYNCED_CALLS = {
+    "_run_hermes_mcp_proxy",
+}
+
+_FACADE_NAMES = {
+    "_SYNCED_CALLS",
+    "_EXPORTED_EXCLUSIONS",
     "_build_guard_device_connect_payload",
+    "_facade_module",
     "_finalize_guard_connect_payload",
     "_headless_approval_resolver",
+    "_iter_facade_overrides",
+    "_parser",
     "_refresh_cloud_policy_bundle",
-    "_run_hermes_mcp_proxy",
+    "_sync_impl_overrides",
+    "_impl",
+    "add_guard_parser",
+    "add_guard_root_parser",
+    "run_guard_command",
 }
 
 
@@ -58,11 +38,19 @@ def _facade_module() -> ModuleType:
     return sys.modules[__name__]
 
 
-def _sync_impl_overrides() -> None:
+def _iter_facade_overrides() -> dict[str, object]:
     module = _facade_module()
-    for name in _SYNC_NAMES:
-        if hasattr(module, name):
-            setattr(_impl, name, getattr(module, name))
+    overrides: dict[str, object] = {}
+    for name, value in vars(module).items():
+        if name.startswith("__") or name in _FACADE_NAMES:
+            continue
+        if hasattr(_impl, name):
+            overrides[name] = value
+    return overrides
+
+
+def _sync_impl_overrides() -> None:
+    _impl._apply_overrides(_iter_facade_overrides())
 
 
 def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -114,7 +102,9 @@ def __getattr__(name: str) -> Any:
         _wrapped.__doc__ = getattr(getattr(_impl, name), "__doc__", None)
         _wrapped.__module__ = __name__
         return _wrapped
-    return getattr(_impl, name)
+    if hasattr(_impl, name):
+        return getattr(_impl, name)
+    return getattr(_parser, name)
 
 
 def __dir__() -> list[str]:
