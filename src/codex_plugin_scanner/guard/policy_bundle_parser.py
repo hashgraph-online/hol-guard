@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
+
+from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
 _POLICY_BUNDLE_CORE_KEYS = (
     "contractVersion",
@@ -52,6 +58,18 @@ def computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
         if key not in policy_bundle:
             raise ValueError(f"missing_policy_bundle_key:{key}")
         bundle_core[key] = policy_bundle[key]
+    verifier = bundle_core.get("verifier")
+    if isinstance(verifier, dict):
+        normalized_verifier = dict(verifier)
+        if verifier.get("algorithm") == "rsa-pss-sha256":
+            normalized_verifier["publicKeyPem"] = None
+        else:
+            normalized_verifier.pop("publicKeyPem", None)
+        normalized_verifier["signature"] = None
+        bundle_core["verifier"] = normalized_verifier
+    workspace_id = policy_bundle.get("workspaceId")
+    if workspace_id is not None:
+        bundle_core["workspaceId"] = workspace_id
     min_daemon_version = _non_empty_string(policy_bundle.get("minDaemonVersion"))
     if min_daemon_version is not None:
         bundle_core["minDaemonVersion"] = min_daemon_version
@@ -75,6 +93,18 @@ def _policy_bundle_rule_is_valid(rule: object) -> bool:
         return False
     if not isinstance(rule.get("reason"), str):
         return False
+    source_receipt_id = rule.get("sourceReceiptId")
+    if source_receipt_id is not None and _non_empty_string(source_receipt_id) is None:
+        return False
+    source_local_request_id = rule.get("sourceLocalRequestId")
+    if source_local_request_id is not None and _non_empty_string(source_local_request_id) is None:
+        return False
+    source_receipt_ids = rule.get("sourceReceiptIds")
+    if source_receipt_ids is not None and not _policy_bundle_string_list(source_receipt_ids):
+        return False
+    audit_event_ids = rule.get("auditEventIds")
+    if audit_event_ids is not None and not _policy_bundle_string_list(audit_event_ids):
+        return False
     scope = rule.get("scope")
     return isinstance(scope, dict) and all(
         _policy_bundle_string_list(scope.get(key)) for key in _POLICY_BUNDLE_SCOPE_KEYS
@@ -95,6 +125,72 @@ def _policy_bundle_acknowledgement_is_valid(acknowledgement: object) -> bool:
     return acknowledgement.get("status") in {"pending", "synced", "failed", "offline"}
 
 
+def canonical_policy_bundle_payload(policy_bundle: dict[str, object]) -> bytes:
+    bundle_core: dict[str, object] = {}
+    for key in _POLICY_BUNDLE_CORE_KEYS:
+        if key not in policy_bundle:
+            raise ValueError(f"missing_policy_bundle_key:{key}")
+        bundle_core[key] = policy_bundle[key]
+    verifier = bundle_core.get("verifier")
+    if isinstance(verifier, dict):
+        normalized_verifier = dict(verifier)
+        normalized_verifier["signature"] = None
+        bundle_core["verifier"] = normalized_verifier
+    workspace_id = policy_bundle.get("workspaceId")
+    if workspace_id is not None:
+        bundle_core["workspaceId"] = workspace_id
+    acknowledgements = policy_bundle.get("acknowledgements")
+    if acknowledgements is None:
+        raise ValueError("missing_policy_bundle_key:acknowledgements")
+    bundle_core["acknowledgements"] = acknowledgements
+    min_daemon_version = _non_empty_string(policy_bundle.get("minDaemonVersion"))
+    if min_daemon_version is not None:
+        bundle_core["minDaemonVersion"] = min_daemon_version
+    return _stable_serialize(bundle_core).encode("utf-8")
+
+
+def payload_hash_for_policy_bundle(policy_bundle: dict[str, object]) -> str:
+    return hashlib.sha256(canonical_policy_bundle_payload(policy_bundle)).hexdigest()
+
+
+def _verify_policy_bundle_signature(
+    policy_bundle: dict[str, object],
+    canonical_payload: bytes,
+) -> str | None:
+    verifier = policy_bundle.get("verifier")
+    if not isinstance(verifier, dict):
+        return "invalid_verifier"
+    algorithm = verifier.get("algorithm")
+    if algorithm == "sha256":
+        return None
+    if algorithm != "rsa-pss-sha256":
+        return "invalid_verifier"
+    public_key_pem = _non_empty_string(verifier.get("publicKeyPem"))
+    signature = _non_empty_string(verifier.get("signature"))
+    if public_key_pem is None or signature is None:
+        return "invalid_verifier"
+    try:
+        public_key = serialization.load_pem_public_key(public_key_pem.encode("utf-8"))
+    except (UnsupportedAlgorithm, ValueError, TypeError):
+        return "invalid_verifier"
+    if not isinstance(public_key, RSAPublicKey):
+        return "invalid_verifier"
+    try:
+        signature_bytes = base64.b64decode(signature)
+    except Exception:
+        return "invalid_verifier"
+    try:
+        public_key.verify(
+            signature_bytes,
+            canonical_payload,
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.AUTO),
+            hashes.SHA256(),
+        )
+    except (InvalidSignature, ValueError, TypeError):
+        return "bundle_signature_invalid"
+    return None
+
+
 def validated_policy_bundle_payload(
     policy_bundle: dict[str, object],
 ) -> tuple[dict[str, object] | None, str | None]:
@@ -111,14 +207,18 @@ def validated_policy_bundle_payload(
     expires_at = policy_bundle.get("expiresAt")
     if expires_at is not None and _non_empty_string(expires_at) is None:
         return None, "invalid_expires_at"
+    workspace_id = policy_bundle.get("workspaceId")
+    if workspace_id is not None and _non_empty_string(workspace_id) is None:
+        return None, "invalid_workspace_id"
     verifier = policy_bundle.get("verifier")
     if not isinstance(verifier, dict):
         return None, "invalid_verifier"
-    if verifier.get("algorithm") != "sha256" or _non_empty_string(verifier.get("keyId")) is None:
+    if (
+        verifier.get("algorithm") not in {"sha256", "rsa-pss-sha256"}
+        or _non_empty_string(verifier.get("keyId")) is None
+    ):
         return None, "invalid_verifier"
     signature = verifier.get("signature")
-    # `signature` is forward-compatible bundle metadata today; the enforced integrity check is the
-    # stable bundle hash computed from the signed core fields below.
     if signature is not None and _non_empty_string(signature) is None:
         return None, "invalid_verifier"
     if policy_bundle.get("rolloutState") not in _POLICY_BUNDLE_ROLLOUT_STATES:
@@ -148,13 +248,20 @@ def validated_policy_bundle_payload(
         _policy_bundle_acknowledgement_is_valid(acknowledgement) for acknowledgement in acknowledgements
     ):
         return None, "invalid_acknowledgements"
+    canonical_payload = canonical_policy_bundle_payload(policy_bundle)
+    payload_hash = _non_empty_string(policy_bundle.get("payloadHash"))
+    if payload_hash is not None and payload_hash != hashlib.sha256(canonical_payload).hexdigest():
+        return None, "payload_hash_mismatch"
     bundle_hash = _non_empty_string(policy_bundle.get("bundleHash"))
     if bundle_hash is None:
         return None, "invalid_bundle_hash"
     computed_hash = computed_policy_bundle_hash(policy_bundle)
     if bundle_hash != computed_hash:
         return None, "bundle_hash_mismatch"
-    return {
+    signature_error = _verify_policy_bundle_signature(policy_bundle, canonical_payload)
+    if signature_error is not None:
+        return None, signature_error
+    payload = {
         "contractVersion": policy_bundle["contractVersion"],
         "bundleVersion": policy_bundle["bundleVersion"],
         "bundleHash": bundle_hash,
@@ -170,7 +277,12 @@ def validated_policy_bundle_payload(
         "policyDefaults": defaults,
         "rules": rules,
         "acknowledgements": acknowledgements,
-    }, None
+    }
+    if payload_hash is not None:
+        payload["payloadHash"] = payload_hash
+    if workspace_id is not None:
+        payload["workspaceId"] = workspace_id
+    return payload, None
 
 
 non_empty_string = _non_empty_string
