@@ -257,6 +257,17 @@ def _run_init_command(
                     step_payload = _run_guard_device_connect_flow(
                         store=store,
                         connect_url=args.connect_url,
+                        wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
+                        announce_copy=None
+                        if getattr(args, "json", False)
+                        else _announce_guard_device_connect_copy,
+                        open_browser=webbrowser.open,
+                    )
+                    step_payload = _finalize_guard_connect_payload(
+                        store=store,
+                        connect_url=args.connect_url,
+                        payload=step_payload,
+                        now=_now(),
                     )
                     step_payload["skipped"] = False
                 except Exception as error:
