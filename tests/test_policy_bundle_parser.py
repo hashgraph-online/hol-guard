@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.policy_bundle_parser import (
 )
 from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
     policy_bundle_verification_key_from_public_key,
+    validate_synced_policy_bundle,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -124,6 +125,7 @@ def test_hgc071_signed_policy_bundle_parses() -> None:
     validated_bundle, reason = validated_policy_bundle_payload(
         bundle,
         trusted_verification_keys=trusted_keys,
+        anchored_verification_keys=trusted_keys,
     )
 
     assert reason is None
@@ -144,6 +146,7 @@ def test_hgc073_signed_policy_bundle_rejects_invalid_signature() -> None:
     validated_bundle, reason = validated_policy_bundle_payload(
         bundle,
         trusted_verification_keys=trusted_keys,
+        anchored_verification_keys=trusted_keys,
     )
 
     assert validated_bundle is None
@@ -304,10 +307,64 @@ def test_signed_policy_bundle_accepts_trusted_sync_verification_keys() -> None:
     validated_bundle, reason = validated_policy_bundle_payload(
         bundle,
         trusted_verification_keys=trusted_keys,
+        anchored_verification_keys=trusted_keys,
     )
 
     assert reason is None
     assert validated_bundle is not None
+
+
+def test_signed_policy_bundle_rejects_sync_only_keys_without_anchor() -> None:
+    bundle, trusted_keys = _signed_policy_bundle()
+    sync_payload = {
+        "policyBundleVerificationKeys": [trusted_keys[0].to_dict()],
+    }
+
+    validated_bundle, reason, _ = validate_synced_policy_bundle(
+        bundle,
+        stored_keyring=None,
+        sync_payload=sync_payload,
+    )
+
+    assert validated_bundle is None
+    assert reason == "untrusted_signing_key"
+
+
+def test_validate_synced_policy_bundle_ignores_malformed_sync_keyring() -> None:
+    bundle, trusted_keys = _signed_policy_bundle()
+    stored_keyring = {
+        "keys": [trusted_keys[0].to_dict()],
+    }
+    sync_payload = {
+        "policyBundleVerificationKeys": ["not-a-key-object"],
+    }
+
+    validated_bundle, reason, _ = validate_synced_policy_bundle(
+        bundle,
+        stored_keyring=stored_keyring,
+        sync_payload=sync_payload,
+    )
+
+    assert reason is None
+    assert validated_bundle is not None
+
+
+def test_signed_policy_bundle_rejects_expired_signing_key() -> None:
+    bundle, trusted_keys = _signed_policy_bundle()
+    expired_key = policy_bundle_verification_key_from_public_key(
+        key_id=trusted_keys[0].key_id,
+        public_key_pem=trusted_keys[0].public_key_pem,
+        valid_until="2020-01-01T00:00:00Z",
+    )
+
+    validated_bundle, reason = validated_policy_bundle_payload(
+        bundle,
+        trusted_verification_keys=(expired_key,),
+        anchored_verification_keys=(expired_key,),
+    )
+
+    assert validated_bundle is None
+    assert reason == "untrusted_signing_key"
 
 
 def test_hgc075_updates_last_known_good_on_valid_replacement(tmp_path: Path) -> None:

@@ -15,6 +15,7 @@ from .policy_bundle_trusted_keys import (
     PolicyBundleVerificationKey,
     policy_bundle_key_fingerprint,
     resolve_policy_bundle_signing_key,
+    signing_key_is_current,
     signing_key_is_trusted,
 )
 
@@ -189,7 +190,7 @@ def _verify_policy_bundle_signature(
         bundled_fingerprint = policy_bundle_key_fingerprint(bundled_public_key_pem)
         if bundled_fingerprint != signing_key.fingerprint_sha256:
             return "untrusted_signing_key"
-    if signing_key.state == "revoked":
+    if not signing_key_is_current(signing_key):
         return "untrusted_signing_key"
     try:
         public_key = serialization.load_pem_public_key(signing_key.public_key_pem.encode("utf-8"))

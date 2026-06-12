@@ -46,9 +46,6 @@ from ..policy_bundle_parser import (
     computed_policy_bundle_hash,
     non_empty_string,
 )
-from ..policy_bundle_parser import (
-    validated_policy_bundle_payload as _validated_policy_bundle_payload,
-)
 from ..policy_bundle_trusted_keys import (
     policy_bundle_keyring_payload,
     validate_synced_policy_bundle,
@@ -1242,6 +1239,7 @@ def sync_receipts(
                 policy_bundle_payload,
                 stored_keyring=store.get_sync_payload("policy_bundle_keyring"),
                 sync_payload=policy_bundle_sync_payload,
+                supply_chain_keyring=store.get_sync_payload("supply_chain_bundle_keyring"),
             )
         )
         existing_policy_bundle_payload = store.get_sync_payload("policy_bundle")

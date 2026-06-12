@@ -1810,6 +1810,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 policy_bundle,
                 stored_keyring=self.server.store.get_sync_payload("policy_bundle_keyring"),  # type: ignore[attr-defined]
                 sync_payload=payload if isinstance(payload, dict) else None,
+                supply_chain_keyring=self.server.store.get_sync_payload("supply_chain_bundle_keyring"),  # type: ignore[attr-defined]
             )
             existing_policy_bundle_payload = self.server.store.get_sync_payload("policy_bundle")  # type: ignore[attr-defined]
             existing_policy_bundle = (

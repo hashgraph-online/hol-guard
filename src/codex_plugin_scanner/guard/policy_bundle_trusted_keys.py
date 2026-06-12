@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import time
 from dataclasses import dataclass
+
+from .runtime.supply_chain_bundle_base import _parse_iso_timestamp
 
 _VERIFICATION_KEY_STATES = frozenset({"active", "grace", "revoked"})
 
@@ -89,6 +92,32 @@ def load_policy_bundle_verification_keys(raw: object) -> tuple[PolicyBundleVerif
     return tuple(parsed)
 
 
+def safe_load_policy_bundle_verification_keys(raw: object) -> tuple[PolicyBundleVerificationKey, ...]:
+    try:
+        return load_policy_bundle_verification_keys(raw)
+    except ValueError:
+        return ()
+
+
+def policy_bundle_keys_from_supply_chain_keyring(raw: object) -> tuple[PolicyBundleVerificationKey, ...]:
+    from .runtime.supply_chain_bundle_runtime import load_supply_chain_verification_keys
+
+    try:
+        supply_chain_keys = load_supply_chain_verification_keys(raw)
+    except Exception:
+        return ()
+    return tuple(
+        PolicyBundleVerificationKey(
+            key_id=item.key_id,
+            public_key_pem=item.public_key_pem,
+            fingerprint_sha256=item.fingerprint_sha256,
+            state=item.state,
+            valid_until=item.valid_until,
+        )
+        for item in supply_chain_keys
+    )
+
+
 def builtin_policy_bundle_verification_keys() -> tuple[PolicyBundleVerificationKey, ...]:
     return ()
 
@@ -118,16 +147,33 @@ def signing_key_is_trusted(
     anchored_keys: tuple[PolicyBundleVerificationKey, ...],
 ) -> bool:
     if not anchored_keys:
-        return True
+        return False
     trusted_fingerprints = {item.fingerprint_sha256 for item in anchored_keys}
     return signing_key.fingerprint_sha256 in trusted_fingerprints
+
+
+def signing_key_is_current(
+    signing_key: PolicyBundleVerificationKey,
+    *,
+    now: float | None = None,
+) -> bool:
+    if signing_key.state == "revoked":
+        return False
+    if signing_key.valid_until is None:
+        return True
+    current_time = now if now is not None else time.time()
+    try:
+        expiry = _parse_iso_timestamp(signing_key.valid_until, field_name="validUntil")
+    except ValueError:
+        return False
+    return current_time <= expiry
 
 
 def load_policy_bundle_verification_keys_from_sync(payload: dict[str, object]) -> tuple[PolicyBundleVerificationKey, ...]:
     verification_keys = payload.get("policyBundleVerificationKeys")
     if verification_keys is None:
         return ()
-    return load_policy_bundle_verification_keys(verification_keys)
+    return safe_load_policy_bundle_verification_keys(verification_keys)
 
 
 def policy_bundle_keyring_payload(
@@ -147,12 +193,14 @@ def policy_bundle_verification_context(
     *,
     stored_keyring: object,
     sync_payload: dict[str, object] | None = None,
+    supply_chain_keyring: object = None,
 ) -> tuple[tuple[PolicyBundleVerificationKey, ...], tuple[PolicyBundleVerificationKey, ...]]:
     builtin_keys = builtin_policy_bundle_verification_keys()
-    stored_keys = load_policy_bundle_verification_keys(stored_keyring)
+    stored_keys = safe_load_policy_bundle_verification_keys(stored_keyring)
+    supply_chain_keys = policy_bundle_keys_from_supply_chain_keyring(supply_chain_keyring)
     sync_keys = load_policy_bundle_verification_keys_from_sync(sync_payload or {})
-    trusted_keys = merge_policy_bundle_trusted_keys(builtin_keys, stored_keys, sync_keys)
-    anchored_keys = merge_policy_bundle_trusted_keys(builtin_keys, stored_keys)
+    trusted_keys = merge_policy_bundle_trusted_keys(builtin_keys, stored_keys, supply_chain_keys, sync_keys)
+    anchored_keys = merge_policy_bundle_trusted_keys(builtin_keys, stored_keys, supply_chain_keys)
     return trusted_keys, anchored_keys
 
 
@@ -161,10 +209,12 @@ def validate_synced_policy_bundle(
     *,
     stored_keyring: object,
     sync_payload: dict[str, object] | None = None,
+    supply_chain_keyring: object = None,
 ) -> tuple[dict[str, object] | None, str | None, tuple[PolicyBundleVerificationKey, ...]]:
     trusted_keys, anchored_keys = policy_bundle_verification_context(
         stored_keyring=stored_keyring,
         sync_payload=sync_payload,
+        supply_chain_keyring=supply_chain_keyring,
     )
     from .policy_bundle_parser import validated_policy_bundle_payload
 
