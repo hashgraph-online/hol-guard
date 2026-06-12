@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from ..adapters.kimi_hooks import normalize_kimi_prompt
 
 def _emit_native_hook_response(
     *,
@@ -432,25 +433,8 @@ def _normalize_hook_payload(
         normalized["tool_input"] = arguments
         normalized["arguments"] = arguments
     if harness is not None and _canonical_harness_name(harness) == "kimi":
-        normalized["prompt"] = _normalize_kimi_prompt(normalized.get("prompt"))
+        normalized["prompt"] = normalize_kimi_prompt(normalized.get("prompt"))
     return normalized
-
-
-def _normalize_kimi_prompt(value: object | None) -> str | None:
-    """Flatten Kimi Code's ContentPart[] prompt into a single string."""
-    if value is None:
-        return None
-    if isinstance(value, str):
-        return value
-    if isinstance(value, list):
-        parts: list[str] = []
-        for item in value:
-            if isinstance(item, dict):
-                text = item.get("text")
-                if isinstance(text, str):
-                    parts.append(text)
-        return "\n".join(parts) if parts else None
-    return None
 
 def _normalize_hook_arguments(*values: object | None) -> object | None:
     for value in values:

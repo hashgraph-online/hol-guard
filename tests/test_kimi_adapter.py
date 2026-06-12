@@ -326,3 +326,11 @@ class TestKimiNativeHookBlocking:
         payload = {"prompt": [{"text": "Hello"}]}
         normalized = _normalize_hook_payload(payload, harness="codex")
         assert normalized["prompt"] == [{"text": "Hello"}]
+
+    def test_normalize_kimi_prompt_preserves_non_text_payloads(self) -> None:
+        from codex_plugin_scanner.guard.adapters.kimi_hooks import normalize_kimi_prompt
+
+        image_only = [{"image_url": "https://example.com/img.png"}]
+        assert normalize_kimi_prompt(image_only) is image_only
+        assert normalize_kimi_prompt("plain text") == "plain text"
+        assert normalize_kimi_prompt(None) is None
