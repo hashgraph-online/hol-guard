@@ -11,6 +11,14 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
+from .policy_bundle_trusted_keys import (
+    PolicyBundleVerificationKey,
+    policy_bundle_key_fingerprint,
+    resolve_policy_bundle_signing_key,
+    signing_key_is_current,
+    signing_key_is_trusted,
+)
+
 _POLICY_BUNDLE_CORE_KEYS = (
     "contractVersion",
     "bundleVersion",
@@ -156,6 +164,9 @@ def payload_hash_for_policy_bundle(policy_bundle: dict[str, object]) -> str:
 def _verify_policy_bundle_signature(
     policy_bundle: dict[str, object],
     canonical_payload: bytes,
+    *,
+    trusted_verification_keys: tuple[PolicyBundleVerificationKey, ...],
+    anchored_verification_keys: tuple[PolicyBundleVerificationKey, ...],
 ) -> str | None:
     verifier = policy_bundle.get("verifier")
     if not isinstance(verifier, dict):
@@ -165,12 +176,24 @@ def _verify_policy_bundle_signature(
         return None
     if algorithm != "rsa-pss-sha256":
         return "invalid_verifier"
-    public_key_pem = _non_empty_string(verifier.get("publicKeyPem"))
+    key_id = _non_empty_string(verifier.get("keyId"))
     signature = _non_empty_string(verifier.get("signature"))
-    if public_key_pem is None or signature is None:
+    if key_id is None or signature is None:
         return "invalid_verifier"
+    signing_key = resolve_policy_bundle_signing_key(key_id, trusted_verification_keys)
+    if signing_key is None:
+        return "untrusted_signing_key"
+    if not signing_key_is_trusted(signing_key, anchored_verification_keys):
+        return "untrusted_signing_key"
+    bundled_public_key_pem = _non_empty_string(verifier.get("publicKeyPem"))
+    if bundled_public_key_pem is not None:
+        bundled_fingerprint = policy_bundle_key_fingerprint(bundled_public_key_pem)
+        if bundled_fingerprint != signing_key.fingerprint_sha256:
+            return "untrusted_signing_key"
+    if not signing_key_is_current(signing_key):
+        return "untrusted_signing_key"
     try:
-        public_key = serialization.load_pem_public_key(public_key_pem.encode("utf-8"))
+        public_key = serialization.load_pem_public_key(signing_key.public_key_pem.encode("utf-8"))
     except (UnsupportedAlgorithm, ValueError, TypeError):
         return "invalid_verifier"
     if not isinstance(public_key, RSAPublicKey):
@@ -193,6 +216,9 @@ def _verify_policy_bundle_signature(
 
 def validated_policy_bundle_payload(
     policy_bundle: dict[str, object],
+    *,
+    trusted_verification_keys: tuple[PolicyBundleVerificationKey, ...] = (),
+    anchored_verification_keys: tuple[PolicyBundleVerificationKey, ...] = (),
 ) -> tuple[dict[str, object] | None, str | None]:
     required_top_level = (*_POLICY_BUNDLE_CORE_KEYS, "bundleHash", "acknowledgements")
     if any(key not in policy_bundle for key in required_top_level):
@@ -258,7 +284,12 @@ def validated_policy_bundle_payload(
     computed_hash = computed_policy_bundle_hash(policy_bundle)
     if bundle_hash != computed_hash:
         return None, "bundle_hash_mismatch"
-    signature_error = _verify_policy_bundle_signature(policy_bundle, canonical_payload)
+    signature_error = _verify_policy_bundle_signature(
+        policy_bundle,
+        canonical_payload,
+        trusted_verification_keys=trusted_verification_keys,
+        anchored_verification_keys=anchored_verification_keys,
+    )
     if signature_error is not None:
         return None, signature_error
     payload = {
