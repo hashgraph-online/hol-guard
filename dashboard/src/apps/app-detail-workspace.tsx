@@ -13,7 +13,6 @@ import {
   HiMiniCloud,
   HiMiniChartBar,
   HiMiniXMark,
-  HiMiniChevronDown,
   HiMiniShieldCheck,
   HiMiniRocketLaunch,
   HiMiniArrowPath,
@@ -39,7 +38,15 @@ import {
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
 import { buildClearPayload, clearLabelForScope, policyIdentityKey } from "../clear-policy-payload";
 import { useFocusTrap } from "../use-focus-trap";
-import { detectCategory, CATEGORIES } from "../evidence/categories";
+import { EvidenceActionList } from "../evidence/evidence-action-list";
+import { EvidenceActionDetail } from "../evidence/evidence-action-detail";
+import { EvidenceFilterBar } from "../evidence/evidence-filter-bar";
+import { EvidenceInsightStrip } from "../evidence/evidence-insight-strip";
+import { filterEvidence } from "../evidence/evidence-filters";
+import { sortEvidence } from "../evidence/evidence-sort";
+import { computeMetrics } from "../evidence/evidence-metrics";
+import { DEFAULT_FILTER_STATE } from "../evidence/evidence-url-state";
+import type { EvidenceFilterState, EvidenceSortKey } from "../evidence/evidence-types";
 import type {
   GuardApprovalRequest,
   GuardInventoryItem,
@@ -766,6 +773,8 @@ function firstRunIntro(harness: string): string {
   return `Guard writes the ${harnessDisplayName(harness)} local configuration through the daemon. After connecting, restart the app so protected hooks load before your next agent run.`;
 }
 
+const ACTIVITY_PAGE_SIZE = 50;
+
 function AppActivityTab(props: {
   harness: string;
   pendingItems: GuardApprovalRequest[];
@@ -774,97 +783,96 @@ function AppActivityTab(props: {
   queueError: string | null;
   onRetry: () => void;
 }) {
-  const [filter, setFilter] = useState<"all" | "pending" | "allowed" | "blocked">("all");
-  const [timeFilter, setTimeFilter] = useState<"all" | "today" | "week">("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("");
-  const [search, setSearch] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showPending, setShowPending] = useState(false);
+  const [filters, setFilters] = useState<EvidenceFilterState>(() => ({
+    ...DEFAULT_FILTER_STATE,
+    view: "actions",
+  }));
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === " " && document.activeElement?.tagName !== "INPUT") {
-        const focused = document.activeElement as HTMLElement | null;
-        if (focused?.closest('[role="listitem"]')) {
-          const checkbox = focused.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
-          if (checkbox) {
-            event.preventDefault();
-            checkbox.click();
-          }
-        }
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    const timer = setTimeout(() => setDebouncedSearch(filters.search), 300);
+    return () => clearTimeout(timer);
+  }, [filters.search]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, filters.time, filters.decision, filters.category, filters.sourceScope, filters.day]);
+
+  const { view, time, decision, category, sourceScope, day, sort, selectedId } = filters;
+  const effectiveFilters = useMemo(
+    () => ({
+      view,
+      time,
+      decision,
+      category,
+      sourceScope,
+      day,
+      sort,
+      selectedId,
+      search: debouncedSearch,
+      harness: props.harness,
+    }),
+    [view, time, decision, category, sourceScope, day, sort, selectedId, debouncedSearch, props.harness]
+  );
+
+  const filtered = useMemo(
+    () => filterEvidence(props.harnessReceipts, effectiveFilters),
+    [props.harnessReceipts, effectiveFilters]
+  );
+
+  const sorted = useMemo(
+    () => sortEvidence(filtered, filters.sort),
+    [filtered, filters.sort]
+  );
+
+  const metrics = useMemo(() => computeMetrics(filtered), [filtered]);
+
+  const selectedReceipt = useMemo(() => {
+    if (!filters.selectedId) return null;
+    return filtered.find((receipt) => receipt.receipt_id === filters.selectedId) ?? null;
+  }, [filtered, filters.selectedId]);
+
+  const handleFilterChange = useCallback((patch: Partial<EvidenceFilterState>) => {
+    setFilters((prev) => ({ ...prev, ...patch }));
   }, []);
 
-  const filteredReceipts = useMemo(() => {
-    let items = props.harnessReceipts;
-    if (filter === "allowed") items = items.filter((r) => r.policy_decision === "allow");
-    if (filter === "blocked") items = items.filter((r) => r.policy_decision === "block");
-    if (timeFilter === "today") {
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
-      items = items.filter((r) => new Date(r.timestamp) >= start);
-    }
-    if (timeFilter === "week") {
-      const start = new Date();
-      start.setDate(start.getDate() - 7);
-      items = items.filter((r) => new Date(r.timestamp) >= start);
-    }
-    if (categoryFilter) {
-      items = items.filter((r) => detectCategory(r) === categoryFilter);
-    }
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      items = items.filter((r) =>
-        (r.artifact_name ?? r.artifact_id).toLowerCase().includes(q)
-      );
-    }
-    return items;
-  }, [props.harnessReceipts, filter, timeFilter, search, categoryFilter]);
+  const handleSelectId = useCallback((id: string) => {
+    setFilters((prev) => ({
+      ...prev,
+      selectedId: prev.selectedId === id ? "" : id,
+    }));
+  }, []);
 
-  const groups = useMemo(() => {
-    const today: GuardReceipt[] = [];
-    const yesterday: GuardReceipt[] = [];
-    const thisWeek: GuardReceipt[] = [];
-    const earlier: GuardReceipt[] = [];
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfYesterday = new Date(startOfToday);
-    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
-    const startOfWeek = new Date(startOfToday);
-    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+  const handleCloseDetail = useCallback(() => {
+    setFilters((prev) => ({ ...prev, selectedId: "" }));
+  }, []);
 
-    filteredReceipts.forEach((r) => {
-      const d = new Date(r.timestamp);
-      if (d >= startOfToday) today.push(r);
-      else if (d >= startOfYesterday) yesterday.push(r);
-      else if (d >= startOfWeek) thisWeek.push(r);
-      else earlier.push(r);
-    });
-    return { today, yesterday, thisWeek, earlier };
-  }, [filteredReceipts]);
+  const handleFilterCategory = useCallback((category: string) => {
+    setFilters((prev) => ({ ...prev, category }));
+  }, []);
+
+  const handleSortChange = useCallback((sort: EvidenceSortKey) => {
+    handleFilterChange({ sort });
+  }, [handleFilterChange]);
+
+  const handleLoadMore = useCallback(() => {
+    setPage((prev) => prev + 1);
+  }, []);
+
+  const handleShowActions = useCallback(() => {
+    setShowPending(false);
+  }, []);
+
+  const handleShowPending = useCallback(() => {
+    setShowPending(true);
+    setFilters((prev) => ({ ...prev, selectedId: "" }));
+  }, []);
+
+  const noopHarnessFilter = useCallback((_harness: string) => {}, []);
 
   const hasPending = props.pendingItems.length > 0;
-  const allReceiptIds = useMemo(() => filteredReceipts.map((r) => r.receipt_id), [filteredReceipts]);
-  const selectedCount = selectedIds.size;
-
-  const toggleSelection = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const selectAll = useCallback(() => {
-    setSelectedIds(new Set(allReceiptIds));
-  }, [allReceiptIds]);
-
-  const clearSelection = useCallback(() => {
-    setSelectedIds(new Set());
-  }, []);
 
   return (
     <div className="space-y-6">
@@ -885,227 +893,98 @@ function AppActivityTab(props: {
           </div>
         </div>
       )}
-      <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
+
+      {hasPending && (
         <div className="flex flex-wrap items-center gap-2">
-          {(
-            [
-              { key: "all" as const, label: "All" },
-              { key: "pending" as const, label: `Pending (${props.pendingItems.length})` },
-              { key: "allowed" as const, label: "Allowed" },
-              { key: "blocked" as const, label: "Blocked" },
-            ] as const
-          ).map((c) => (
-            <button
-              key={c.key}
-              onClick={() => { setFilter(c.key); clearSelection(); }}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-                filter === c.key
-                  ? "bg-brand-blue text-white shadow-sm"
-                  : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"
-              }`}
-            >
-              {c.label}
-            </button>
-          ))}
-          <span className="mx-1 h-4 w-px bg-slate-200" />
-          {CATEGORIES.slice(0, 5).map((cat) => (
-            <button
-              key={cat.key}
-              onClick={() => { setCategoryFilter(categoryFilter === cat.key ? "" : cat.key); clearSelection(); }}
-              className={`rounded-full px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider transition-all ${
-                categoryFilter === cat.key
-                  ? `${cat.color} bg-slate-50 shadow-sm`
-                  : "border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
-          <div className="ml-auto flex gap-2">
-            {(
-              [
-                { key: "all" as const, label: "All time" },
-                { key: "today" as const, label: "Today" },
-                { key: "week" as const, label: "This week" },
-              ] as const
-            ).map((c) => (
+          <button
+            type="button"
+            onClick={handleShowActions}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+              !showPending
+                ? "bg-brand-blue text-white shadow-sm"
+                : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"
+            }`}
+          >
+            Actions
+          </button>
+          <button
+            type="button"
+            onClick={handleShowPending}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+              showPending
+                ? "bg-brand-blue text-white shadow-sm"
+                : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"
+            }`}
+          >
+            Pending ({props.pendingItems.length})
+          </button>
+        </div>
+      )}
+
+      {showPending ? (
+        hasPending ? (
+          <div className="space-y-3">
+            {props.pendingItems.map((item) => (
               <button
-                key={c.key}
-                onClick={() => { setTimeFilter(c.key); clearSelection(); }}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-                  timeFilter === c.key
-                    ? "bg-brand-dark text-white shadow-sm"
-                    : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"
-                }`}
+                key={item.request_id}
+                onClick={() => props.onOpenRequest(item.request_id)}
+                className="flex w-full items-center justify-between rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-3 text-left transition-shadow hover:shadow-sm"
               >
-                {c.label}
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-brand-dark">{item.artifact_name ?? item.artifact_id}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {item.artifact_type} · {formatRelativeTime(item.created_at)}
+                  </p>
+                </div>
+                <Badge tone="info">Pending</Badge>
               </button>
             ))}
           </div>
-        </div>
-
-        <input
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); clearSelection(); }}
-          placeholder="Search by name..."
-          className="mt-3 w-full rounded-xl border border-slate-200/70 bg-white px-4 py-2.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        ) : (
+          <EmptyState
+            title="No pending reviews"
+            body="Guard will surface blocked actions here when this app needs a decision."
+            tone="teach"
+          />
+        )
+      ) : props.harnessReceipts.length === 0 ? (
+        <EmptyState
+          title="No activity yet"
+          body="Guard has not recorded any decisions for this app yet. Allow or block an action and it will appear here."
+          tone="teach"
         />
-      </div>
-
-      {/* Batch selection bar */}
-      {filter !== "pending" && filteredReceipts.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={selectedCount === allReceiptIds.length ? clearSelection : selectAll}
-            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-brand-dark transition-colors hover:bg-slate-50"
-          >
-            {selectedCount === allReceiptIds.length ? "Deselect all" : "Select all"}
-          </button>
-          {selectedCount > 0 && (
-            <span className="text-xs text-muted-foreground">
-              {selectedCount} selected
-            </span>
-          )}
-        </div>
-      )}
-
-      {filter === "pending" && hasPending && (
-        <div className="space-y-3">
-          {props.pendingItems.map((item) => (
-            <button
-              key={item.request_id}
-              onClick={() => props.onOpenRequest(item.request_id)}
-              className="flex w-full items-center justify-between rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-3 text-left transition-shadow hover:shadow-sm"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-brand-dark">{item.artifact_name ?? item.artifact_id}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {item.artifact_type} · {formatRelativeTime(item.created_at)}
-                </p>
-              </div>
-              <Badge tone="info">Pending</Badge>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {filter !== "pending" && (
-        <div className="space-y-6">
-          {filteredReceipts.length === 0 ? (
-            <EmptyState
-              title="No activity yet"
-              body={
-                filter === "all"
-                  ? "Guard hasn't recorded any decisions for this app yet. Allow or block an action and it will appear here."
-                  : `No ${filter} decisions match your filters.`
-              }
-              tone="teach"
+      ) : (
+        <div className={selectedReceipt ? "grid grid-cols-1 gap-3 lg:grid-cols-[1fr_340px]" : ""}>
+          <div className="space-y-3">
+            <EvidenceFilterBar
+              filters={filters}
+              onChange={handleFilterChange}
+              totalCount={props.harnessReceipts.length}
+              filteredCount={filtered.length}
+              harnesses={[]}
+              hideHarnessFilter={true}
             />
-          ) : (
-            <>
-              <ReceiptGroup title="Today" items={groups.today} selectedIds={selectedIds} onToggle={toggleSelection} />
-              <ReceiptGroup title="Yesterday" items={groups.yesterday} selectedIds={selectedIds} onToggle={toggleSelection} />
-              <ReceiptGroup title="This week" items={groups.thisWeek} selectedIds={selectedIds} onToggle={toggleSelection} />
-              <ReceiptGroup title="Earlier" items={groups.earlier} selectedIds={selectedIds} onToggle={toggleSelection} />
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ReceiptGroup({ title, items, selectedIds, onToggle }: { title: string; items: GuardReceipt[]; selectedIds: Set<string>; onToggle: (id: string) => void }) {
-  if (items.length === 0) return null;
-  return (
-    <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
-      <div className="flex items-center justify-between">
-        <SectionLabel>{title}</SectionLabel>
-        <span className="text-xs text-muted-foreground">{items.length} events</span>
-      </div>
-      <div className="mt-4 space-y-3">
-        {items.map((receipt) => (
-          <ExpandableReceiptRow key={receipt.receipt_id} receipt={receipt} selected={selectedIds.has(receipt.receipt_id)} onToggle={onToggle} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ExpandableReceiptRow({ receipt, selected, onToggle }: { receipt: GuardReceipt; selected?: boolean; onToggle?: (id: string) => void }) {
-  const [expanded, setExpanded] = useState(false);
-  const decisionLabel = receipt.policy_decision === "allow" ? "Allowed" : "Blocked";
-  const name = receipt.artifact_name ?? receipt.artifact_id;
-  return (
-    <div className="rounded-xl border border-slate-200/70 bg-white overflow-hidden">
-      <div className="flex w-full items-start gap-2 px-4 py-3">
-        {onToggle !== undefined && (
-          <label className="flex items-center pt-0.5">
-            <input
-              type="checkbox"
-              checked={selected ?? false}
-              onChange={() => onToggle(receipt.receipt_id)}
-              className="h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue"
-              aria-label={`Select ${name}`}
-            />
-          </label>
-        )}
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex flex-1 items-start justify-between gap-3 text-left transition-colors hover:bg-slate-50 rounded-lg -m-1 p-1"
-          aria-expanded={expanded}
-        >
-          <div className="min-w-0">
-            <p className="text-sm text-brand-dark">
-              <span className="font-medium">{decisionLabel}</span>{" "}
-              <span className="font-mono text-xs">{name}</span>
-            </p>
-            {receipt.capabilities_summary && (
-              <p className="mt-1 text-xs text-muted-foreground">{receipt.capabilities_summary}</p>
-            )}
-            <p className="mt-1 text-[11px] text-muted-foreground">{formatRelativeTime(receipt.timestamp)}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Tag tone={receipt.policy_decision === "allow" ? "green" : "attention"}>
-              {receipt.policy_decision}
-            </Tag>
-            <HiMiniChevronDown
-              className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`}
-              aria-hidden="true"
+            <EvidenceInsightStrip metrics={metrics} />
+            <EvidenceActionList
+              receipts={sorted}
+              selectedId={filters.selectedId}
+              onSelectId={handleSelectId}
+              onFilterHarness={noopHarnessFilter}
+              onFilterCategory={handleFilterCategory}
+              sort={filters.sort}
+              onSortChange={handleSortChange}
+              page={page}
+              pageSize={ACTIVITY_PAGE_SIZE}
+              onLoadMore={handleLoadMore}
+              hideHarnessColumn={true}
+              tableLabel={`${harnessDisplayName(props.harness)} actions`}
             />
           </div>
-        </button>
-      </div>
-      {expanded && (
-        <div className="guard-fade-in border-t border-slate-200/70 bg-slate-50/60 px-4 py-3">
-          <dl className="grid grid-cols-1 gap-2 text-xs">
-            <div>
-              <dt className="text-muted-foreground">Action ID</dt>
-              <dd className="mt-0.5 font-mono text-brand-dark">{receipt.artifact_id}</dd>
+          {selectedReceipt && (
+            <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+              <EvidenceActionDetail receipt={selectedReceipt} onClose={handleCloseDetail} />
             </div>
-            {receipt.artifact_hash && (
-              <div>
-                <dt className="text-muted-foreground">Hash</dt>
-                <dd className="mt-0.5 font-mono text-brand-dark">{receipt.artifact_hash}</dd>
-              </div>
-            )}
-            {receipt.capabilities_summary && (
-              <div>
-                <dt className="text-muted-foreground">Capabilities</dt>
-                <dd className="mt-0.5 text-brand-dark">{receipt.capabilities_summary}</dd>
-              </div>
-            )}
-            {receipt.provenance_summary && (
-              <div>
-                <dt className="text-muted-foreground">Provenance</dt>
-                <dd className="mt-0.5 text-brand-dark">{receipt.provenance_summary}</dd>
-              </div>
-            )}
-            <div>
-              <dt className="text-muted-foreground">Time</dt>
-              <dd className="mt-0.5 font-mono text-brand-dark">{new Date(receipt.timestamp).toLocaleString()}</dd>
-            </div>
-          </dl>
+          )}
         </div>
       )}
     </div>

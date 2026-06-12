@@ -302,7 +302,7 @@
             "writes_state": true
         },
         {
-            "route": "/fleet",
+            "route": "/protect",
             "persona": [
                 "solo",
                 "team_manager"

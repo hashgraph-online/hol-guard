@@ -153,7 +153,7 @@ def _guard_cloud_urls_for_connect(connect_url: str) -> dict[str, str]:
         "sync_url": f"{allowed_origin}/api/guard/receipts/sync",
         "dashboard_url": dashboard_url,
         "inbox_url": f"{dashboard_url}/inbox",
-        "fleet_url": f"{dashboard_url}/fleet",
+        "fleet_url": f"{dashboard_url}/protect",
         "allowed_origin": allowed_origin,
     }
 

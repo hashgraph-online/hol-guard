@@ -166,7 +166,7 @@ const hubViews = new Set(["audit", "policy", "feed-health"]);
 const sidebarLinks = [
   { href: "/", label: "Home", view: "home", icon: HiMiniHome },
   { href: "/inbox", label: "Inbox", view: "inbox", icon: HiMiniInbox },
-  { href: "/fleet", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
+  { href: "/protect", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
   { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
   { href: "/supply-chain", label: "Supply chain", view: "supply-chain", icon: HiMiniSquares2X2 },
   { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal },

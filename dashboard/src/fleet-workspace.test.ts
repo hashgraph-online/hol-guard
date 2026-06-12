@@ -8,7 +8,7 @@ function assert(condition: boolean, message: string): void {
 }
 
 const urls = {
-  fleet_url: "https://hol.org/fleet",
+  fleet_url: "https://hol.org/guard/protect",
   dashboard_url: "http://localhost:7392",
   connect_url: "http://localhost:7392/connect",
 };

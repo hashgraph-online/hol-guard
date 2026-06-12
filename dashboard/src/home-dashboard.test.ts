@@ -374,7 +374,7 @@ const setupHomeState = deriveHomeState({
   watchedAppsCount: 0,
 });
 assert(
-  setupHomeState.heroStatus === "setup_gap" && setupHomeState.ctaTarget === "fleet",
+  setupHomeState.heroStatus === "setup_gap" && setupHomeState.ctaTarget === "protect",
   "GR177: first Home view routes setup gaps to Apps"
 );
 assert(
