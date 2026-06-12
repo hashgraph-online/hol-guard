@@ -98,9 +98,9 @@ from .store_receipt_rollups import (
     backfill_receipt_rollups,
     count_receipts_from_rollups,
     load_receipt_analytics,
-    receipt_rollups_need_backfill,
     receipt_rollup_index_statements,
     receipt_rollup_schema_statements,
+    receipt_rollups_need_backfill,
     record_receipt_insert,
     record_receipt_policy_decision_change,
 )

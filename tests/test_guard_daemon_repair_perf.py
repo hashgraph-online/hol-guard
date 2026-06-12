@@ -247,7 +247,13 @@ class TestReceiptAnalyticsIndexes:
             rows = connection.execute(
                 """
                 select name from sqlite_master
-                where type = 'table' and name like 'receipt_%rollup%'
+                where type = 'table'
+                  and name in (
+                    'receipt_aggregate_totals',
+                    'receipt_daily_rollups',
+                    'receipt_harness_rollups',
+                    'receipt_artifact_rollups'
+                  )
                 """
             ).fetchall()
         names = {str(row["name"]) for row in rows}

@@ -231,23 +231,66 @@ def backfill_receipt_rollups(connection: sqlite3.Connection) -> None:
     connection.execute("delete from receipt_daily_rollups")
     connection.execute("delete from receipt_harness_rollups")
     connection.execute("delete from receipt_artifact_rollups")
-    rows = connection.execute(
+
+    connection.execute(
         """
-        select harness, artifact_id, artifact_name, policy_decision, timestamp
-        from runtime_receipts
-        order by rowid asc
-        """
-    ).fetchall()
-    for row in rows:
-        _apply_receipt_delta(
-            connection,
-            harness=str(row["harness"]),
-            artifact_name=row["artifact_name"],
-            artifact_id=str(row["artifact_id"]),
-            policy_decision=str(row["policy_decision"]),
-            timestamp=str(row["timestamp"]),
-            multiplier=1,
+        insert into receipt_aggregate_totals (
+          totals_key, total, allowed, blocked, reviewed, first_activity_at, last_activity_at
         )
+        select
+          ?,
+          count(*),
+          coalesce(sum(case when policy_decision = 'allow' then 1 else 0 end), 0),
+          coalesce(sum(case when policy_decision = 'block' then 1 else 0 end), 0),
+          coalesce(sum(case when policy_decision not in ('allow', 'block') then 1 else 0 end), 0),
+          min(timestamp),
+          max(timestamp)
+        from runtime_receipts
+        """,
+        (_RECEIPT_TOTALS_KEY,),
+    )
+
+    connection.execute(
+        """
+        insert into receipt_daily_rollups (day_key, total, allowed, blocked, reviewed)
+        select
+          substr(timestamp, 1, 10),
+          count(*),
+          coalesce(sum(case when policy_decision = 'allow' then 1 else 0 end), 0),
+          coalesce(sum(case when policy_decision = 'block' then 1 else 0 end), 0),
+          coalesce(sum(case when policy_decision not in ('allow', 'block') then 1 else 0 end), 0)
+        from runtime_receipts
+        group by substr(timestamp, 1, 10)
+        """
+    )
+
+    connection.execute(
+        """
+        insert into receipt_harness_rollups (harness, total, allowed, blocked, reviewed)
+        select
+          harness,
+          count(*),
+          coalesce(sum(case when policy_decision = 'allow' then 1 else 0 end), 0),
+          coalesce(sum(case when policy_decision = 'block' then 1 else 0 end), 0),
+          coalesce(sum(case when policy_decision not in ('allow', 'block') then 1 else 0 end), 0)
+        from runtime_receipts
+        group by harness
+        """
+    )
+
+    connection.execute(
+        """
+        insert into receipt_artifact_rollups (artifact_key, total, allowed, blocked, reviewed)
+        select
+          lower(coalesce(nullif(trim(artifact_name), ''), artifact_id)),
+          count(*),
+          coalesce(sum(case when policy_decision = 'allow' then 1 else 0 end), 0),
+          coalesce(sum(case when policy_decision = 'block' then 1 else 0 end), 0),
+          coalesce(sum(case when policy_decision not in ('allow', 'block') then 1 else 0 end), 0)
+        from runtime_receipts
+        group by lower(coalesce(nullif(trim(artifact_name), ''), artifact_id))
+        """
+    )
 
 
 def receipt_rollups_need_backfill(connection: sqlite3.Connection) -> bool:
@@ -264,12 +307,16 @@ def receipt_rollups_need_backfill(connection: sqlite3.Connection) -> bool:
 
 
 def count_receipts_from_rollups(connection: sqlite3.Connection, *, harness: str | None = None) -> int | None:
+    global_row = connection.execute(
+        "select total from receipt_aggregate_totals where totals_key = ?",
+        (_RECEIPT_TOTALS_KEY,),
+    ).fetchone()
+    if global_row is None:
+        return None
+
     if harness is None:
-        row = connection.execute(
-            "select total from receipt_aggregate_totals where totals_key = ?",
-            (_RECEIPT_TOTALS_KEY,),
-        ).fetchone()
-        return int(row["total"]) if row is not None else None
+        return int(global_row["total"])
+
     row = connection.execute(
         "select total from receipt_harness_rollups where harness = ?",
         (harness,),
