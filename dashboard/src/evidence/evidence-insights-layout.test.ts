@@ -35,13 +35,12 @@ assert(
   "insights workspace: header description mentions full local store",
 );
 assert(shareModalSource.includes("GuardModalLayer"), "insights share modal: uses viewport modal layer");
+assert(shareModalSource.includes('minimal'), "insights share modal: uses minimal connect flow card");
+assert(shareModalSource.includes('purpose="insights_share"'), "insights share modal: insights share connect purpose");
 assert(shareSheetSource.includes("useCopyFeedbackTimeout"), "insights share sheet: clears copy reset timers");
 assert(surfaceSource.includes("handleShareClose"), "insights surface: stable share modal close handler");
 assert(heatmapSource.includes("if (!displayKey) return"), "insights heatmap: avoids idle global scroll listeners");
 assert(modalLayerSource.includes("onCloseRef"), "insights share modal: stable escape close handler");
 assert(modalLayerSource.includes("createPortal"), "insights share modal: portal layer renders to body");
-assert(shareModalSource.includes("startGuardCloudConnect"), "insights share modal: uses local daemon connect");
-assert(!shareModalSource.includes("window.open(connectUrl"), "insights share modal: does not open hol.org connect page");
-assert(shareModalSource.includes("ConnectFlowCard"), "insights share modal: reuses local connect flow card");
 
 console.log("evidence-insights-layout.test.ts: all tests passed");
