@@ -691,15 +691,18 @@ def _set_guard_cloud_connect_state(server: _GuardDaemonHttpServer, state: dict[s
         server.guard_cloud_connect_state = dict(state) if isinstance(state, dict) else None
 
 
-def _guard_cloud_connect_repair_mode(store: GuardStore) -> bool:
-    oauth_health = store.get_oauth_local_credential_health()
+def _guard_cloud_connect_repair_mode_from_health(oauth_health: dict[str, object]) -> bool:
     return bool(oauth_health.get("configured")) and str(oauth_health.get("state") or "") == "degraded"
 
 
+def _guard_cloud_connect_repair_mode(store: GuardStore) -> bool:
+    return _guard_cloud_connect_repair_mode_from_health(store.get_oauth_local_credential_health())
+
+
 def _guard_cloud_connect_required_for_insights(store: GuardStore) -> bool:
-    if _guard_cloud_connect_repair_mode(store):
-        return True
     oauth_health = store.get_oauth_local_credential_health()
+    if _guard_cloud_connect_repair_mode_from_health(oauth_health):
+        return True
     if bool(oauth_health.get("configured")) and str(oauth_health.get("state") or "") == "healthy":
         return store.get_cloud_sync_profile() is None
     return True

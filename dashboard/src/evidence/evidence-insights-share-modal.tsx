@@ -51,7 +51,8 @@ export function EvidenceInsightsShareModal({
   const [connectError, setConnectError] = useState<string | null>(null);
 
   const cloudConnected = insightsShareCloudReady(runtime);
-  const connectMode = runtime?.cloud_state === "local_only" ? "connect" : "repair";
+  const connectMode =
+    runtime?.cloud_state === "local_only" || runtime?.cloud_state === "paired_waiting" ? "connect" : "repair";
 
   const refreshConnectState = useCallback(async () => {
     const [connectStatus, runtimeSnapshot] = await Promise.all([
