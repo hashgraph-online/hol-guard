@@ -9,7 +9,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 
 from .adapters import get_adapter
 from .adapters.base import HarnessContext
@@ -151,13 +151,50 @@ def primary_approval_url(
         return None
     approval_url = request.get("approval_url")
     if isinstance(approval_url, str) and approval_url.strip():
-        return approval_url.strip().replace("/approvals/", "/requests/")
+        return _canonical_local_approval_url(
+            approval_url.strip().replace("/approvals/", "/requests/"),
+            approval_center_url=approval_center_url,
+        )
     request_id = request.get("request_id")
     if isinstance(request_id, str) and request_id.strip() and isinstance(approval_center_url, str):
         center = approval_center_url.strip()
         if center:
             return build_approval_request_url(center, request_id.strip())
     return None
+
+
+def _canonical_local_approval_url(approval_url: str, *, approval_center_url: str | None) -> str:
+    if not isinstance(approval_center_url, str) or not approval_center_url.strip():
+        return approval_url
+    try:
+        parsed_approval = urlparse(approval_url)
+        parsed_center = urlparse(approval_center_url.strip())
+    except ValueError:
+        return approval_url
+    loopback_hosts = {"127.0.0.1", "::1", "localhost"}
+    approval_host = _parsed_url_host(parsed_approval)
+    center_host = _parsed_url_host(parsed_center)
+    if parsed_approval.scheme not in {"http", "https"} or approval_host not in loopback_hosts:
+        return approval_url
+    if parsed_center.scheme not in {"http", "https"} or center_host not in loopback_hosts:
+        return approval_url
+    return urlunparse(
+        parsed_approval._replace(
+            scheme=parsed_center.scheme,
+            netloc=parsed_center.netloc,
+        )
+    )
+
+
+def _parsed_url_host(parsed: ParseResult) -> str:
+    host_port = parsed.netloc.rsplit("@", 1)[-1]
+    if host_port.startswith("["):
+        host, _separator, _rest = host_port[1:].partition("]")
+        return host
+    if host_port.count(":") == 1:
+        host, _port = host_port.rsplit(":", 1)
+        return host
+    return host_port
 
 
 def queue_blocked_approvals(
