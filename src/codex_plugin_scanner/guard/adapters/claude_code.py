@@ -228,6 +228,40 @@ def _claude_mcp_artifact_id(scope: str, server_name: str) -> str:
     return f"claude-code:{scope}:mcp:{server_name}"
 
 
+_CLAUDE_BUILTIN_HOOK_TOOL_NAMES = frozenset(
+    {
+        "bash",
+        "shell",
+        "sh",
+        "zsh",
+        "terminal",
+        "run_command",
+        "run_terminal_command",
+        "read",
+        "read_file",
+        "open_file",
+        "view",
+        "view_file",
+        "cat_file",
+        "write",
+        "edit",
+        "multiedit",
+        "write_file",
+        "edit_file",
+        "webfetch",
+        "websearch",
+        "askuserquestion",
+    }
+)
+
+
+def claude_hook_fallback_artifact_id(scope: str, tool_name: str) -> str:
+    normalized_tool = tool_name.strip()
+    if normalized_tool.lower() in _CLAUDE_BUILTIN_HOOK_TOOL_NAMES:
+        return f"claude-code:{scope}:{normalized_tool}"
+    return _claude_mcp_artifact_id(scope, normalized_tool)
+
+
 def _metadata_with_digest(path: Path) -> dict[str, object]:
     try:
         digest = _claude_digest(path)
