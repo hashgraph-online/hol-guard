@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, a9 as Tag, A as ActionButton, at as HiMiniArrowPath, l as HiMiniShieldCheck, aB as HiMiniArrowTopRightOnSquare, r as reactExports, d as HiMiniCheckCircle, v as HiMiniExclamationTriangle, m as formatRelativeTime, D as HiMiniXCircle, aD as HiMiniClock, aE as IconActionButton, au as HiMiniTrash, C as HiMiniWrenchScrewdriver, aF as HiMiniBeaker, aa as HiMiniMagnifyingGlass, b as EmptyState, aG as HiMiniBugAnt, o as HiMiniXMark, aH as fetchPackageFirewallStatus, aI as runPackageFirewallAction, ar as GuardHarnessActionError, aJ as runPackageAudit, aK as runPackageSync, aL as startPackageFirewallConnect, aM as openPackageFirewallShell, S as SectionLabel, aN as HiMiniArrowDown, aO as HiMiniArrowUp, aP as fetchSupplyChainBundle, B as Badge, aQ as HiMiniDocumentMagnifyingGlass, aR as HiMiniShieldExclamation, aS as HiMiniComputerDesktop, s as HiMiniCloud, aT as HiMiniInformationCircle, aU as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, a9 as Tag, A as ActionButton, at as HiMiniArrowPath, l as HiMiniShieldCheck, aB as HiMiniArrowTopRightOnSquare, r as reactExports, d as HiMiniCheckCircle, v as HiMiniExclamationTriangle, m as formatRelativeTime, D as HiMiniXCircle, aD as HiMiniClock, aE as IconActionButton, au as HiMiniTrash, C as HiMiniWrenchScrewdriver, aF as HiMiniBeaker, aa as HiMiniMagnifyingGlass, b as EmptyState, aG as HiMiniBugAnt, o as HiMiniXMark, aH as fetchPackageFirewallStatus, aI as runPackageFirewallAction, ar as GuardHarnessActionError, aJ as runPackageAudit, aK as runPackageSync, aL as startPackageFirewallConnect, aM as openPackageFirewallShell, S as SectionLabel, aN as HiMiniArrowDown, aO as HiMiniArrowUp, aP as fetchSupplyChainBundle, B as Badge, aQ as HiMiniDocumentMagnifyingGlass, aR as HiMiniShieldExclamation, aS as HiMiniComputerDesktop, s as HiMiniCloud, ae as HiMiniArrowLeft, aT as HiMiniArrowRight, aU as HiMiniCloudArrowUp, aV as HiMiniInformationCircle, aW as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
 import { resolveFeedStaleness } from "./feed-health-workspace.js";
@@ -1713,8 +1713,9 @@ function RefreshButton({ disabled, spinning, onRefresh }) {
     }
   );
 }
-function PackageFirewallPanel(props) {
+const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPanel2(props, ref) {
   const { approvalGate, onStateChanged, onAuditCompleted, onAuditRunningChange, runAuditRef } = props;
+  const rootRef = reactExports.useRef(null);
   const [panelLoad, setPanelLoad] = reactExports.useState({ phase: "loading" });
   const [pendingOp, setPendingOp] = reactExports.useState(null);
   const [lastCompleted, setLastCompleted] = reactExports.useState(null);
@@ -1915,9 +1916,34 @@ function PackageFirewallPanel(props) {
   const handleCloseInterceptProof = reactExports.useCallback(() => {
     setInterceptProof(null);
   }, []);
+  reactExports.useImperativeHandle(
+    ref,
+    () => ({
+      scrollIntoView: () => {
+        rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      },
+      focusUnprotected: () => {
+        setStatusFilter("unprotected");
+        setManagerFilter("");
+      },
+      focusActionable: () => {
+        setStatusFilter("actionable");
+        setManagerFilter("");
+      },
+      runAudit: () => {
+        handleAudit();
+      },
+      runSync: () => {
+        handleSync();
+      },
+      startConnect: handleStartConnect,
+      openShell: handleOpenShell
+    }),
+    [handleAudit, handleOpenShell, handleStartConnect, handleSync]
+  );
   const managerDrawerShim = panelLoad.phase === "loaded" && managerDrawerTarget !== null ? panelLoad.data.package_shims.find((entry) => entry.manager === managerDrawerTarget) : void 0;
   const anyPending = pendingOp !== null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: rootRef, className: "rounded-2xl border border-slate-100 bg-white shadow-sm", "data-testid": "package-firewall-panel", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Package manager firewall" }),
@@ -1997,7 +2023,7 @@ function PackageFirewallPanel(props) {
     ),
     interceptProof !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(InterceptProofModal, { proof: interceptProof, onClose: handleCloseInterceptProof })
   ] });
-}
+});
 const decisionTone = (decision) => {
   if (decision === "block") {
     return "destructive";
@@ -2743,23 +2769,6 @@ function SupplyChainEvidenceRail({ rail }) {
     }
   );
 }
-function SupplyChainCloudDegradedBanner({ state }) {
-  if (!state.active) {
-    return null;
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: "rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3",
-      role: "status",
-      "data-testid": "supply-chain-cloud-degraded",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-amber-950", children: state.title }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-amber-900/90", children: state.detail })
-      ]
-    }
-  );
-}
 const LOCAL_FREE_CAPABILITIES = [
   { label: "Block risky package installs on this device", available: true },
   { label: "Install and repair package tool protection", available: true },
@@ -3062,77 +3071,113 @@ function buildSupplyChainStats(snapshot) {
     unprotectedManagers
   };
 }
-function resolveSupplyChainPostureAlerts(snapshot) {
-  const alerts = [];
+function resolveSupplyChainIssues(snapshot) {
+  const issues = [];
   const protection = snapshot.supply_chain?.package_manager_protection;
   const stats = buildSupplyChainStats(snapshot);
   const protectionStatus = resolveHomeProtectionStatus(snapshot);
+  const cloudDegraded = resolveSupplyChainCloudDegradedState(snapshot);
+  if (cloudDegraded.active) {
+    issues.push({
+      id: "cloud_connect",
+      title: cloudDegraded.title,
+      detail: cloudDegraded.detail.trim().length > 0 ? cloudDegraded.detail : "Connect Guard Cloud for live package warnings, synced policy, and cross-device evidence.",
+      tone: "attention",
+      actionLabel: "Connect Guard Cloud",
+      action: { kind: "connect" }
+    });
+  }
   if (protection?.path_status === "missing_from_path") {
-    alerts.push({
-      kind: "path_repair",
+    issues.push({
+      id: "path_missing",
       title: "Package installs are not being checked yet",
-      detail: "Guard has not hooked into your shell path yet. Turn on protection in the firewall panel below, then open a new terminal.",
-      tone: "attention"
+      detail: "Guard has not hooked into your shell path yet. Turn on protection for your package tools, then open a new terminal.",
+      tone: "attention",
+      actionLabel: "Protect package tools",
+      action: { kind: "firewall_unprotected" }
     });
   } else if (stats.repairRequiredManagers > 0) {
     const managers = protection !== void 0 ? protection.installed_managers.filter(
       (manager) => !protection.protected_managers.includes(manager)
     ) : [];
     const managerLabel = managers.length > 0 ? managers.join(", ") : "installed tools";
-    alerts.push({
-      kind: "path_repair",
+    issues.push({
+      id: "path_repair",
       title: "Fix your shell path before installs can be blocked",
-      detail: `Guard set up protection for ${managerLabel}, but your shell path still needs a quick repair. Tap Fix PATH in the firewall panel, then open a new terminal.`,
-      tone: "attention"
+      detail: `Guard set up protection for ${managerLabel}, but your shell path still needs a quick repair.`,
+      tone: "attention",
+      actionLabel: "Repair PATH in firewall",
+      action: { kind: "firewall_repair" }
     });
   } else if (protection?.path_status === "restart_required" || stats.stagedManagers > 0) {
-    alerts.push({
-      kind: "path_repair",
+    issues.push({
+      id: "path_restart",
       title: "Open a new terminal to finish setup",
       detail: "Guard updated your shell profile. Open a new terminal or restart your AI apps before running a protection test.",
-      tone: "blue"
+      tone: "blue",
+      actionLabel: "Open new shell",
+      action: { kind: "open_shell" }
     });
   }
   if (protectionStatus === "partial" && protection !== void 0 && protection.protected_managers.length > 0 && protection.unprotected_managers.length > 0) {
-    alerts.push({
-      kind: "partial_protection",
+    issues.push({
+      id: "partial_protection",
       title: "Some package tools are still open",
-      detail: `${protection.protected_managers.length} protected, ${protection.unprotected_managers.length} still open: ${protection.unprotected_managers.join(", ")}. Turn on protection for the remaining tools to close the gap.`,
-      tone: "attention"
+      detail: `${protection.protected_managers.length} protected, ${protection.unprotected_managers.length} still open: ${protection.unprotected_managers.join(", ")}.`,
+      tone: "attention",
+      actionLabel: "Review open tools",
+      action: { kind: "firewall_unprotected" }
+    });
+  } else if (protectionStatus === "unprotected" && protection !== void 0 && protection.unprotected_managers.length > 0) {
+    issues.push({
+      id: "unprotected_tools",
+      title: "Package installs are not protected yet",
+      detail: `Turn on protection for ${protection.unprotected_managers.join(", ")} to block risky installs before they run.`,
+      tone: "attention",
+      actionLabel: "Protect package tools",
+      action: { kind: "firewall_unprotected" }
     });
   }
   if (snapshot.cloud_state !== "local_only") {
     const feedStaleness = resolveFeedStaleness(snapshot);
     if (feedStaleness.stale) {
-      alerts.push({
-        kind: "stale_intel",
+      issues.push({
+        id: "stale_intel",
         title: "Safety check data looks old on this device",
         detail: `${feedStaleness.ageLabel}. Sync policy or run a workspace audit so Guard evaluates packages against current warnings.`,
-        tone: "attention"
+        tone: "attention",
+        actionLabel: "Run workspace audit",
+        action: { kind: "firewall_audit" }
       });
     }
   }
-  return alerts;
+  return issues;
 }
-function alertToneClass(tone) {
+function issueSurfaceClass(tone) {
   if (tone === "blue") {
-    return "border-brand-blue/20 bg-brand-blue/[0.04]";
+    return "border-brand-blue/25 bg-gradient-to-b from-brand-blue/[0.07] to-white";
   }
   if (tone === "attention") {
-    return "border-amber-200 bg-amber-50/70";
+    return "border-amber-200/90 bg-gradient-to-b from-amber-50/90 to-white";
   }
-  return "border-slate-200 bg-slate-50/80";
+  return "border-slate-200 bg-gradient-to-b from-slate-50/90 to-white";
 }
-function alertIcon(alert) {
-  if (alert.kind === "partial_protection") {
+function issueIcon(issue) {
+  if (issue.id.startsWith("cloud")) {
+    return HiMiniCloudArrowUp;
+  }
+  if (issue.id.startsWith("path")) {
+    return issue.tone === "blue" ? HiMiniInformationCircle : HiMiniWrenchScrewdriver;
+  }
+  if (issue.id === "stale_intel") {
+    return HiMiniArrowPath;
+  }
+  if (issue.id.includes("protection") || issue.id.includes("unprotected")) {
     return HiMiniShieldExclamation;
   }
-  if (alert.kind === "path_repair") {
-    return alert.tone === "blue" ? HiMiniInformationCircle : HiMiniExclamationTriangle;
-  }
-  return HiMiniArrowPath;
+  return HiMiniExclamationTriangle;
 }
-function alertIconClass(tone) {
+function issueIconClass(tone) {
   if (tone === "blue") {
     return "text-brand-blue";
   }
@@ -3141,37 +3186,111 @@ function alertIconClass(tone) {
   }
   return "text-slate-500";
 }
-function PostureBanner({ alert }) {
-  const Icon = alertIcon(alert);
-  const textClass = alert.tone === "attention" ? "text-amber-900/90" : "text-slate-600";
-  const titleClass = alert.tone === "attention" ? "text-amber-950" : "text-brand-dark";
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "div",
-    {
-      className: `rounded-2xl border px-4 py-3 ${alertToneClass(alert.tone)}`,
-      role: "status",
-      "data-testid": `supply-chain-posture-${alert.kind}`,
-      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: `mt-0.5 h-4 w-4 shrink-0 ${alertIconClass(alert.tone)}`, "aria-hidden": "true" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 break-words", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-sm font-medium ${titleClass}`, children: alert.title }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-1 text-xs leading-relaxed ${textClass}`, children: alert.detail })
-        ] })
-      ] })
+function SupplyChainIssueFocus({
+  issues,
+  onIssueAction,
+  actionPending = false
+}) {
+  const [activeIndex, setActiveIndex] = reactExports.useState(0);
+  reactExports.useEffect(() => {
+    if (activeIndex >= issues.length) {
+      setActiveIndex(Math.max(0, issues.length - 1));
     }
-  );
-}
-function SupplyChainPostureBanners({ alerts }) {
-  if (alerts.length === 0) {
+  }, [activeIndex, issues.length]);
+  const goPrevious = reactExports.useCallback(() => {
+    setActiveIndex((index) => index <= 0 ? issues.length - 1 : index - 1);
+  }, [issues.length]);
+  const goNext = reactExports.useCallback(() => {
+    setActiveIndex((index) => index >= issues.length - 1 ? 0 : index + 1);
+  }, [issues.length]);
+  if (issues.length === 0) {
     return null;
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+  const issue = issues[activeIndex] ?? issues[0];
+  const Icon = issueIcon(issue);
+  const titleClass = issue.tone === "attention" ? "text-amber-950" : "text-brand-dark";
+  const detailClass = issue.tone === "attention" ? "text-amber-900/85" : "text-slate-600";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "section",
     {
-      className: "space-y-3",
-      "aria-label": "Supply chain posture alerts",
-      "data-testid": "supply-chain-posture-banners",
-      children: alerts.map((alert) => /* @__PURE__ */ jsxRuntimeExports.jsx(PostureBanner, { alert }, alert.kind))
+      className: `overflow-hidden rounded-2xl border shadow-sm ${issueSurfaceClass(issue.tone)}`,
+      "aria-label": "Supply chain next steps",
+      "data-testid": "supply-chain-issue-focus",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3 border-b border-black/[0.04] px-4 py-3 sm:px-5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: [
+            "Next step ",
+            activeIndex + 1,
+            " of ",
+            issues.length
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: goPrevious,
+                className: "inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200/80 bg-white/80 text-slate-600 transition-colors hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue",
+                "aria-label": "Previous issue",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowLeft, { className: "h-4 w-4", "aria-hidden": "true" })
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: goNext,
+                className: "inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200/80 bg-white/80 text-slate-600 transition-colors hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue",
+                "aria-label": "Next issue",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { className: "h-4 w-4", "aria-hidden": "true" })
+              }
+            )
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 py-5 sm:px-6 sm:py-6", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "span",
+              {
+                className: `inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/90 ring-1 ring-black/[0.05] ${issueIconClass(issue.tone)}`,
+                "aria-hidden": "true",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-5 w-5" })
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: `text-lg font-semibold tracking-tight sm:text-xl ${titleClass}`, children: issue.title }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-2 max-w-2xl text-sm leading-relaxed ${detailClass}`, children: issue.detail })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ActionButton,
+              {
+                variant: "primary",
+                onClick: () => onIssueAction(issue.action),
+                disabled: actionPending,
+                "aria-busy": actionPending,
+                children: issue.actionLabel
+              }
+            ),
+            issues.length > 1 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-2", role: "tablist", "aria-label": "Issue progress", children: issues.map((entry, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                role: "tab",
+                "aria-selected": index === activeIndex,
+                "aria-label": `Issue ${index + 1}: ${entry.title}`,
+                onClick: () => setActiveIndex(index),
+                className: [
+                  "h-2.5 rounded-full transition-all",
+                  index === activeIndex ? "w-7 bg-brand-blue" : "w-2.5 bg-slate-300/80"
+                ].join(" ")
+              },
+              entry.id
+            )) }) : null
+          ] })
+        ] })
+      ]
     }
   );
 }
@@ -3228,10 +3347,22 @@ function cloudLabel(snapshot) {
   }
   return label.trim().length > 0 ? label : "On this device only";
 }
-function resolveSupplyChainWorkspaceHero(snapshot) {
+function resolveSupplyChainWorkspaceHero(snapshot, options) {
   const protectionStatus = resolveHomeProtectionStatus(snapshot);
   const stats = buildSupplyChainStats(snapshot);
   const preventedLabel = stats.preventedInstalls > 0 ? `${stats.preventedInstalls} blocked install${stats.preventedInstalls === 1 ? "" : "s"}` : "No blocked installs yet";
+  const openIssueCount = options?.openIssueCount ?? 0;
+  if (openIssueCount > 0) {
+    return {
+      cloudMode: snapshot.cloud_state,
+      cloudLabel: cloudLabel(snapshot),
+      protectionStatus,
+      title: "Work through the steps below",
+      detail: `${openIssueCount} setup step${openIssueCount === 1 ? "" : "s"} need attention on this device.`,
+      tone: protectionTone(protectionStatus),
+      statLine: `${stats.protectedManagers} protected · ${stats.unprotectedManagers} open · ${preventedLabel}`
+    };
+  }
   return {
     cloudMode: snapshot.cloud_state,
     cloudLabel: cloudLabel(snapshot),
@@ -3287,7 +3418,7 @@ function cloudTagTone(mode) {
   }
   return "attention";
 }
-function SupplyChainWorkspaceHero({ hero }) {
+function SupplyChainWorkspaceHero({ hero, compact = false }) {
   const Icon = heroIcon(hero);
   const titleClass = hero.tone === "attention" ? "text-amber-950" : "text-brand-dark";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -3304,13 +3435,13 @@ function SupplyChainWorkspaceHero({ hero }) {
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: hero.statLine })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex items-start gap-2.5", children: [
+        !compact ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex items-start gap-2.5", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: `mt-0.5 h-5 w-5 shrink-0 ${heroIconClass(hero.tone)}`, "aria-hidden": "true" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: `text-lg font-semibold tracking-tight ${titleClass}`, children: hero.title }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm leading-relaxed text-slate-600", children: hero.detail })
           ] })
-        ] })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-600", children: hero.detail })
       ]
     }
   );
@@ -3374,15 +3505,52 @@ function SupplyChainWorkspace({
   const [evidenceRail, setEvidenceRail] = reactExports.useState(null);
   const [auditRunning, setAuditRunning] = reactExports.useState(false);
   const runAuditRef = reactExports.useRef(null);
-  const cloudDegraded = reactExports.useMemo(
-    () => resolveSupplyChainCloudDegradedState(snapshot),
-    [snapshot]
+  const firewallPanelRef = reactExports.useRef(null);
+  const [issueActionPending, setIssueActionPending] = reactExports.useState(false);
+  const handleIssueAction = reactExports.useCallback(
+    async (action) => {
+      const panel = firewallPanelRef.current;
+      if (panel === null) {
+        return;
+      }
+      setIssueActionPending(true);
+      try {
+        panel.scrollIntoView();
+        if (action.kind === "connect") {
+          await panel.startConnect();
+          await onRuntimeRefresh?.();
+          return;
+        }
+        if (action.kind === "firewall_unprotected") {
+          panel.focusUnprotected();
+          return;
+        }
+        if (action.kind === "firewall_repair") {
+          panel.focusActionable();
+          return;
+        }
+        if (action.kind === "firewall_audit") {
+          panel.runAudit();
+          return;
+        }
+        if (action.kind === "open_shell") {
+          await panel.openShell();
+          return;
+        }
+        if (action.kind === "sync") {
+          panel.runSync();
+        }
+      } finally {
+        setIssueActionPending(false);
+      }
+    },
+    [onRuntimeRefresh]
   );
-  const postureAlerts = reactExports.useMemo(
-    () => resolveSupplyChainPostureAlerts(snapshot),
-    [snapshot]
+  const supplyChainIssues = reactExports.useMemo(() => resolveSupplyChainIssues(snapshot), [snapshot]);
+  const workspaceHero = reactExports.useMemo(
+    () => resolveSupplyChainWorkspaceHero(snapshot, { openIssueCount: supplyChainIssues.length }),
+    [snapshot, supplyChainIssues.length]
   );
-  const workspaceHero = reactExports.useMemo(() => resolveSupplyChainWorkspaceHero(snapshot), [snapshot]);
   const cloudCapabilities = reactExports.useMemo(
     () => resolveSupplyChainCloudCapabilities(snapshot),
     [snapshot]
@@ -3421,10 +3589,18 @@ function SupplyChainWorkspace({
   }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS, "data-testid": "supply-chain-workspace", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap items-start justify-end gap-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", onClick: onGoHome, children: "Back to Home" }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainWorkspaceHero, { hero: workspaceHero }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainCloudDegradedBanner, { state: cloudDegraded }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainPostureBanners, { alerts: postureAlerts }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainCloudCapabilitiesPanel, { state: cloudCapabilities }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainWorkspaceHero, { hero: workspaceHero, compact: supplyChainIssues.length > 0 }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SupplyChainIssueFocus,
+      {
+        issues: supplyChainIssues,
+        onIssueAction: (action) => {
+          void handleIssueAction(action);
+        },
+        actionPending: issueActionPending
+      }
+    ),
+    supplyChainIssues.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainCloudCapabilitiesPanel, { state: cloudCapabilities }) : null,
     evidenceRail !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainEvidenceRail, { rail: evidenceRail }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       SupplyChainAuditFindingsSummary,
@@ -3438,6 +3614,7 @@ function SupplyChainWorkspace({
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       PackageFirewallPanel,
       {
+        ref: firewallPanelRef,
         approvalGate,
         onStateChanged: onRuntimeRefresh,
         onAuditCompleted: handleAuditCompleted,
@@ -3479,11 +3656,11 @@ function SupplyChainWorkspace({
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Safety check source" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-500", children: "Whether this device uses sample data or live Guard Cloud updates." })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(FeedHealthPanel, { snapshot })
+      /* @__PURE__ */ jsxRuntimeExports.jsx(FeedHealthPanel, { snapshot, hideLocalOnlyWarning: supplyChainIssues.some((issue) => issue.id === "cloud_connect") })
     ] })
   ] });
 }
-function FeedHealthPanel({ snapshot }) {
+function FeedHealthPanel({ snapshot, hideLocalOnlyWarning = false }) {
   const cloudState = snapshot.cloud_state;
   const isSample = cloudState === "local_only";
   const isStale = snapshot.latest_receipts.length > 0 && Date.now() - new Date(snapshot.latest_receipts[0].timestamp).getTime() > 7 * 24 * 60 * 60 * 1e3;
@@ -3498,7 +3675,7 @@ function FeedHealthPanel({ snapshot }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: isStale ? "attention" : "green", children: isStale ? "Older than 7 days" : "Recent" })
       ] })
     ] }),
-    isSample && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5", children: [
+    isSample && !hideLocalOnlyWarning && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         HiMiniExclamationTriangle,
         {

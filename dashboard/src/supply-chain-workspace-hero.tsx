@@ -10,6 +10,7 @@ import { Tag } from "./approval-center-primitives";
 
 type SupplyChainWorkspaceHeroProps = {
   hero: SupplyChainWorkspaceHeroState;
+  compact?: boolean;
 };
 
 function heroSurfaceClass(tone: SupplyChainWorkspaceHeroState["tone"]): string {
@@ -61,7 +62,7 @@ function cloudTagTone(mode: SupplyChainWorkspaceHeroState["cloudMode"]): "green"
   return "attention";
 }
 
-export function SupplyChainWorkspaceHero({ hero }: SupplyChainWorkspaceHeroProps) {
+export function SupplyChainWorkspaceHero({ hero, compact = false }: SupplyChainWorkspaceHeroProps) {
   const Icon = heroIcon(hero);
   const titleClass = hero.tone === "attention" ? "text-amber-950" : "text-brand-dark";
 
@@ -82,13 +83,17 @@ export function SupplyChainWorkspaceHero({ hero }: SupplyChainWorkspaceHeroProps
         </Tag>
         <span className="text-xs text-slate-500">{hero.statLine}</span>
       </div>
-      <div className="mt-3 flex items-start gap-2.5">
-        <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${heroIconClass(hero.tone)}`} aria-hidden="true" />
-        <div className="min-w-0">
-          <h2 className={`text-lg font-semibold tracking-tight ${titleClass}`}>{hero.title}</h2>
-          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-600">{hero.detail}</p>
+      {!compact ? (
+        <div className="mt-3 flex items-start gap-2.5">
+          <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${heroIconClass(hero.tone)}`} aria-hidden="true" />
+          <div className="min-w-0">
+            <h2 className={`text-lg font-semibold tracking-tight ${titleClass}`}>{hero.title}</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-600">{hero.detail}</p>
+          </div>
         </div>
-      </div>
+      ) : (
+        <p className="mt-2 text-sm text-slate-600">{hero.detail}</p>
+      )}
     </section>
   );
 }
