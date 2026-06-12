@@ -284,7 +284,6 @@ class KeychainSecretStore:
     def set_secret(self, secret_id: str, value: str) -> None:
         if not self._is_available():
             raise RuntimeError("macOS keychain command is not available")
-        prompt_payload = f"{value}\n{value}\n"
         subprocess.run(
             [
                 "/usr/bin/security",
@@ -295,11 +294,11 @@ class KeychainSecretStore:
                 self.service_name,
                 "-U",
                 "-w",
+                value,
             ],
             check=True,
             capture_output=True,
             text=True,
-            input=prompt_payload,
         )
 
     def get_secret(self, secret_id: str) -> str | None:

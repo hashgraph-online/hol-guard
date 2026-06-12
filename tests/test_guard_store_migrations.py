@@ -581,6 +581,54 @@ def _install_fake_sync_keychain(monkeypatch) -> dict[tuple[str, str], str]:
     return secrets
 
 
+def test_keychain_secret_store_passes_password_as_argument(monkeypatch):
+    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
+    calls: list[dict[str, object]] = []
+
+    def fake_run(
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(
+            {
+                "args": args,
+                "check": check,
+                "capture_output": capture_output,
+                "text": text,
+                "kwargs": kwargs,
+            }
+        )
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    KeychainSecretStore("hol-guard.sync").set_secret("guard-token", "secret-value")
+
+    assert calls == [
+        {
+            "args": [
+                "/usr/bin/security",
+                "add-generic-password",
+                "-a",
+                "guard-token",
+                "-s",
+                "hol-guard.sync",
+                "-U",
+                "-w",
+                "secret-value",
+            ],
+            "check": True,
+            "capture_output": True,
+            "text": True,
+            "kwargs": {},
+        }
+    ]
+
+
 def test_secret_store_prefers_encrypted_file_backend_when_keychain_is_available_outside_macos(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
