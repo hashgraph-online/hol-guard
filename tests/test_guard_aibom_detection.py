@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
 from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
@@ -310,6 +311,23 @@ def test_marketplace_escape_path_does_not_read_outside_workspace(tmp_path: Path)
 
     assert len(evil_plugins) == 1
     assert "content_hash" not in evil_plugins[0].metadata
+
+
+def test_extend_detection_prefers_workspace_root_claude_md_on_legacy_id_collision(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    root_claude_md = workspace / "CLAUDE.md"
+    root_claude_md.write_text("# root instructions\n", encoding="utf-8")
+    colliding_rule = workspace / ".claude" / "rules" / "claude-md.md"
+    colliding_rule.parent.mkdir(parents=True)
+    colliding_rule.write_text("# colliding rule\n", encoding="utf-8")
+
+    context = HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=tmp_path / ".hol-guard")
+    detection = ClaudeCodeHarnessAdapter().detect(context)
+    artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
+
+    assert artifacts["claude-code:project:instruction:claude-md"].config_path == str(root_claude_md)
+    assert artifacts["claude-code:project:instruction:rules-claude-md"].config_path == str(colliding_rule)
 
 
 def test_extend_detection_does_not_mark_harness_installed_from_workspace_files(tmp_path: Path) -> None:

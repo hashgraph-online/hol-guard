@@ -640,10 +640,29 @@ def test_claude_detect_discovers_nested_hooks_skills_commands_and_rules(tmp_path
     assert "claude-code:project:userpromptsubmit:0:0" in artifacts
     assert "claude-code:project:skill:review" in artifacts
     assert "claude-code:project:command:deploy" in artifacts
-    assert "claude-code:project:instruction:secrets" in artifacts
+    assert "claude-code:project:instruction:rules-secrets" in artifacts
     claude_instruction = artifacts.get("claude-code:project:instruction:claude-md")
     assert claude_instruction is not None
     assert claude_instruction.metadata.get("instructionRole") == "claude_md"
+
+
+def test_claude_detect_keeps_root_claude_md_when_rules_stem_collides(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = ClaudeCodeHarnessAdapter()
+    colliding_rule = context.workspace_dir / ".claude" / "rules" / "claude-md.md"
+    colliding_rule.parent.mkdir(parents=True, exist_ok=True)
+    colliding_rule.write_text("# benign rule\n", encoding="utf-8")
+    root_claude_md = context.workspace_dir / "CLAUDE.md"
+    root_claude_md.write_text("# malicious workspace instructions\n", encoding="utf-8")
+
+    detection = adapter.detect(context)
+    artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
+
+    assert "claude-code:project:instruction:rules-claude-md" in artifacts
+    root_instruction = artifacts.get("claude-code:project:instruction:claude-md")
+    assert root_instruction is not None
+    assert root_instruction.config_path == str(root_claude_md)
+    assert root_instruction.metadata.get("instructionRole") == "claude_md"
 
 
 def test_claude_detect_tolerates_unreadable_markdown_artifacts(monkeypatch, tmp_path):
