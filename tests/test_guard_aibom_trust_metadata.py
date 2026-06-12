@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import builtins
+import hashlib
 import json
 from collections.abc import Mapping
 from pathlib import Path
@@ -70,7 +71,7 @@ def _install_test_attestation_key(monkeypatch) -> GuardTrustAttestationVerificat
         .decode("utf-8")
         .strip()
     )
-    fingerprint = __import__("hashlib").sha256(public_key_pem.encode("utf-8")).hexdigest()
+    fingerprint = hashlib.sha256(public_key_pem.encode("utf-8")).hexdigest()
     monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_KEY_ID", "guard-test-key-1")
     monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_PRIVATE_KEY", private_key_pem)
     return GuardTrustAttestationVerificationKey(

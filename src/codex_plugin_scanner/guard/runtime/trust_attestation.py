@@ -102,6 +102,92 @@ def build_trust_attestation_payload(
     return payload
 
 
+def apply_trust_attestation_metadata(
+    metadata: dict[str, object],
+    *,
+    agent_id: str,
+    item_id: str,
+    item_kind: str,
+    content_hash: str,
+) -> dict[str, object]:
+    config = resolve_trust_attestation_signing_config()
+    if config is None:
+        return metadata
+
+    enriched = dict(metadata)
+
+    raw_trust_resolution = enriched.get("trustResolution")
+    if isinstance(raw_trust_resolution, dict):
+        trust_resolution = dict(raw_trust_resolution)
+        raw_resolution_metadata = trust_resolution.get("metadata")
+        resolution_metadata = dict(raw_resolution_metadata) if isinstance(raw_resolution_metadata, dict) else {}
+        evidence_hash = resolution_metadata.get("evidenceHash")
+        captured_at = trust_resolution.get("capturedAt")
+        if isinstance(evidence_hash, str) and evidence_hash and isinstance(captured_at, str) and captured_at:
+            resolution_metadata["attestation"] = sign_trust_attestation(
+                payload=build_trust_attestation_payload(
+                    agent_id=agent_id,
+                    item_id=item_id,
+                    item_kind=item_kind,
+                    content_hash=content_hash,
+                    captured_at=captured_at,
+                    evidence_hash=evidence_hash,
+                    scope="trust_resolution",
+                ),
+                config=config,
+                signed_at=captured_at,
+            )
+            resolution_metadata["attestationStatus"] = "signed"
+            trust_resolution["metadata"] = resolution_metadata
+            enriched["trustResolution"] = trust_resolution
+
+    raw_trust_layers = enriched.get("trustLayers")
+    if isinstance(raw_trust_layers, list):
+        signed_layers: list[object] = []
+        for raw_layer in raw_trust_layers:
+            if not isinstance(raw_layer, dict):
+                signed_layers.append(raw_layer)
+                continue
+            layer = dict(raw_layer)
+            raw_layer_metadata = layer.get("metadata")
+            layer_metadata = dict(raw_layer_metadata) if isinstance(raw_layer_metadata, dict) else {}
+            evidence_hash = layer_metadata.get("evidenceHash")
+            captured_at = layer.get("capturedAt")
+            layer_id = layer.get("layerId")
+            layer_type = layer.get("layerType")
+            if (
+                isinstance(evidence_hash, str)
+                and evidence_hash
+                and isinstance(captured_at, str)
+                and captured_at
+                and isinstance(layer_id, str)
+                and layer_id
+                and isinstance(layer_type, str)
+                and layer_type
+            ):
+                layer_metadata["attestation"] = sign_trust_attestation(
+                    payload=build_trust_attestation_payload(
+                        agent_id=agent_id,
+                        item_id=item_id,
+                        item_kind=item_kind,
+                        content_hash=content_hash,
+                        captured_at=captured_at,
+                        evidence_hash=evidence_hash,
+                        scope="trust_layer",
+                        layer_id=layer_id,
+                        layer_type=layer_type,
+                    ),
+                    config=config,
+                    signed_at=captured_at,
+                )
+                layer_metadata["attestationStatus"] = "signed"
+                layer["metadata"] = layer_metadata
+            signed_layers.append(layer)
+        enriched["trustLayers"] = signed_layers
+
+    return enriched
+
+
 def sign_trust_attestation(
     *,
     payload: Mapping[str, object],
@@ -109,13 +195,18 @@ def sign_trust_attestation(
     signed_at: str,
 ) -> dict[str, object]:
     private_key = _load_private_key(config.private_key_pem)
-    canonical_payload = canonical_trust_attestation_payload(payload)
+    canonical_payload = canonical_trust_attestation_payload(
+        _payload_with_signed_at(payload, signed_at)
+    )
     signature = private_key.sign(
         canonical_payload,
         padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
         hashes.SHA256(),
     )
-    verification_key = build_trust_attestation_verification_key(config)
+    verification_key = _verification_key_from_private_key(
+        private_key,
+        key_id=config.active_key_id,
+    )
     return {
         "payloadVersion": GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION,
         "payloadHash": hashlib.sha256(canonical_payload).hexdigest(),
@@ -160,7 +251,9 @@ def verify_trust_attestation(
     signature: str = raw_signature
     if signature_algorithm != GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM:
         raise ValueError("Unsupported trust attestation signature algorithm")
-    canonical_payload = canonical_trust_attestation_payload(payload)
+    canonical_payload = canonical_trust_attestation_payload(
+        _payload_with_signed_at(payload, envelope.get("signedAt"))
+    )
     if hashlib.sha256(canonical_payload).hexdigest() != payload_hash:
         raise ValueError("Trust attestation payload hash mismatch")
     if _public_key_fingerprint(public_key_pem) != fingerprint_sha256:
@@ -191,6 +284,37 @@ def _load_private_key(private_key_pem: str) -> RSAPrivateKey:
     if not isinstance(private_key, RSAPrivateKey):
         raise ValueError("Trust attestation private key must be RSA")
     return private_key
+
+
+def _verification_key_from_private_key(
+    private_key: RSAPrivateKey,
+    *,
+    key_id: str,
+) -> GuardTrustAttestationVerificationKey:
+    public_key_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("utf-8")
+        .strip()
+    )
+    return GuardTrustAttestationVerificationKey(
+        key_id=key_id,
+        public_key_pem=public_key_pem,
+        fingerprint_sha256=_public_key_fingerprint(public_key_pem),
+    )
+
+
+def _payload_with_signed_at(
+    payload: Mapping[str, object],
+    signed_at: object,
+) -> dict[str, object]:
+    enriched = dict(payload)
+    if isinstance(signed_at, str) and signed_at:
+        enriched["signedAt"] = signed_at
+    return enriched
 
 
 def _public_key_fingerprint(public_key_pem: str) -> str:
