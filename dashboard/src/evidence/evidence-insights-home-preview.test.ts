@@ -41,6 +41,9 @@ assert(modalLayerSource.includes("previousCount"), "modal layer: reference count
 assert(heatmapSource.includes("isGuardModalOpen"), "heatmap: suppresses tooltips while modal is open");
 assert(shareModalSource.includes("GuardModalLayer"), "share modal: uses viewport modal layer");
 assert(shareSheetSource.includes("GuardModalLayer"), "share sheet: uses viewport modal layer");
+assert(shareSheetSource.includes("useCopyFeedbackTimeout"), "share sheet: clears copy reset timers");
+assert(modalLayerSource.includes("onCloseRef"), "modal layer: stable escape handler");
+assert(heatmapSource.includes("if (!displayKey) return"), "heatmap: avoids global scroll listeners without active tooltip");
 assert(!shareModalSource.includes('className="fixed inset-0 z-50'), "share modal: no inline fixed overlay");
 
 console.log("evidence-insights-home-preview.test.ts: all tests passed");

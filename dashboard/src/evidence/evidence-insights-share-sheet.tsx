@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { FiCheck, FiCopy, FiShare2 } from "react-icons/fi";
 import { GuardModalLayer } from "../guard-modal-layer";
+import { useCopyFeedbackTimeout } from "../use-copy-feedback-timeout";
 
 interface EvidenceInsightsShareSheetProps {
   publicUrl: string;
@@ -10,17 +11,16 @@ interface EvidenceInsightsShareSheetProps {
 }
 
 export function EvidenceInsightsShareSheet({ publicUrl, onClose }: EvidenceInsightsShareSheetProps) {
-  const [copied, setCopied] = useState(false);
+  const { copied, flashCopied, resetCopied } = useCopyFeedbackTimeout(2000);
 
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(publicUrl);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      flashCopied();
     } catch {
-      setCopied(false);
+      resetCopied();
     }
-  }, [publicUrl]);
+  }, [flashCopied, publicUrl, resetCopied]);
 
   const handleNativeShare = useCallback(async () => {
     if (typeof navigator !== "undefined" && navigator.share) {
