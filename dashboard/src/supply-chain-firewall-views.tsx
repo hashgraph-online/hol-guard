@@ -56,6 +56,7 @@ export function UpgradeCta({ entitlement }: UpgradeCtaProps) {
 
 type ConnectFlowCardProps = {
   compact?: boolean;
+  minimal?: boolean;
   connectError: string | null;
   connectStarting: boolean;
   connectFlow: NonNullable<PackageFirewallStatusResponse["connect_flow"]>;
@@ -143,6 +144,37 @@ function resolveConnectSteps(
   ];
 }
 
+function resolveMinimalHelperText(input: {
+  failed: boolean;
+  mode: "connect" | "repair";
+  running: boolean;
+}): string {
+  if (input.running) {
+    return "Finish sign-in in your browser to publish a public share link.";
+  }
+  if (input.failed) {
+    return "Connect did not finish. Try again or open sign-in manually.";
+  }
+  if (input.mode === "repair") {
+    return "Reconnect Guard Cloud to restore public sharing from this machine.";
+  }
+  return "One quick sign-in unlocks public sharing from this machine.";
+}
+
+function resolveConnectPrimaryLabel(input: {
+  actionLabel: string;
+  failed: boolean;
+  running: boolean;
+}): string {
+  if (input.running) {
+    return "Waiting for browser approval";
+  }
+  if (input.failed) {
+    return "Try connect again";
+  }
+  return input.actionLabel;
+}
+
 function isMacClient(): boolean {
   if (typeof navigator === "undefined") {
     return false;
@@ -155,6 +187,7 @@ function isMacClient(): boolean {
 
 export function ConnectFlowCard({
   compact = false,
+  minimal = false,
   connectError,
   connectStarting,
   connectFlow,
@@ -167,15 +200,47 @@ export function ConnectFlowCard({
   const running = connectFlow.state === "running";
   const failed = connectFlow.state === "failed";
   const primaryBusy = connectStarting || running;
-  const primaryLabel = running
-    ? "Waiting for browser approval"
-    : failed
-    ? "Try connect again"
-    : connectFlow.action_label;
+  const primaryLabel = resolveConnectPrimaryLabel({
+    actionLabel: connectFlow.action_label,
+    failed,
+    running,
+  });
   const steps = resolveConnectSteps(connectFlow, purpose);
   const statusTone = running ? "blue" : mode === "repair" ? "attention" : "blue";
   const statusLabel = running ? "Waiting for approval" : mode === "repair" ? "Repair required" : "Connection required";
   const showManualLink = connectFlow.authorize_url !== null || running || failed;
+  if (minimal) {
+    const helperText = resolveMinimalHelperText({ failed, mode, running });
+    return (
+      <div className="space-y-4 px-5 py-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <Tag tone={statusTone}>{statusLabel}</Tag>
+        </div>
+        <p className="text-sm leading-relaxed text-slate-600">{helperText}</p>
+        {connectError !== null ? (
+          <p className="text-sm text-brand-attention" role="alert">
+            {connectError}
+          </p>
+        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <ActionButton variant="primary" onClick={onStartConnect} disabled={primaryBusy}>
+            {primaryBusy ? (
+              <HiMiniArrowPath className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <HiMiniShieldCheck className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {primaryLabel}
+          </ActionButton>
+          {showManualLink ? (
+            <ActionButton href={manualHref} variant="outline">
+              Open sign-in
+              <HiMiniArrowTopRightOnSquare className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
+            </ActionButton>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
   if (compact) {
     return (
       <div className="space-y-3">

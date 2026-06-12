@@ -1486,7 +1486,7 @@ export async function publishInsightsShare(input: {
     return {
       slug: "demo-share",
       publicUrl: "https://hol.org/guard/insights/demo-share",
-      ogImageUrl: "https://hol.org/api/og/guard/insights/demo-share",
+      ogImageUrl: "https://hol.org/hol-og-image.jpg",
       expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
     };
   }
