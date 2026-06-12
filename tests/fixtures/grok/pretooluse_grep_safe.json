@@ -1,0 +1,12 @@
+{
+  "hookEventName": "pre_tool_use",
+  "sessionId": "session-redacted-003",
+  "cwd": "<workspace>",
+  "workspaceRoot": "<workspace>",
+  "toolName": "grep",
+  "toolInput": {
+    "pattern": "export function",
+    "path": "<workspace>/src"
+  },
+  "timestamp": "2026-06-11T12:02:00Z"
+}

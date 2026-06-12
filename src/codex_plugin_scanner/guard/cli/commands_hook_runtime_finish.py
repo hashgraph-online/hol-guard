@@ -87,6 +87,14 @@ def _finalize_runtime_artifact_hook(
                 reason=native_block_reason,
                 output_stream=output_stream,
             )
+        elif _canonical_harness_name(args.harness) == "grok":
+            from ..adapters.grok_hooks import emit_grok_hook_response
+
+            emit_grok_hook_response(
+                policy_action=policy_action,
+                reason=native_block_reason,
+                output_stream=output_stream,
+            )
         # Kimi surfaces stderr to the user as the blocking explanation.
         _emit_native_hook_block_stderr(native_block_reason)
         _record_harness_usage_for_hook(
@@ -136,6 +144,21 @@ def _finalize_runtime_artifact_hook(
                 policy_action=policy_action,
                 native_reason=runtime_reason,
             )
+        if canonical_harness == "grok":
+            from ..adapters.grok_hooks import emit_grok_hook_response
+
+            emit_grok_hook_response(
+                policy_action=policy_action,
+                reason=runtime_reason,
+                output_stream=output_stream,
+            )
+            _record_harness_usage_for_hook(
+                store=store,
+                action_envelope=action_envelope,
+                payload=payload,
+                policy_action=policy_action,
+            )
+            return 0 if policy_action not in {"block", "sandbox-required", "require-reapproval"} else 2
         _emit_native_hook_response(
             harness=args.harness,
             policy_action=policy_action,

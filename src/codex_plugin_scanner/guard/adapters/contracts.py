@@ -138,6 +138,7 @@ _DISPLAY_NAMES = {
     "openclaw": "OpenClaw",
     "antigravity": "Antigravity",
     "kimi": "Kimi",
+    "grok": "Grok",
 }
 
 
@@ -294,6 +295,24 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
             "Hooks run in parallel and fail open on crash or timeout."
         ),
         smoke_command="hol-guard install kimi --dry-run",
+    ),
+    HarnessProtectionContract(
+        harness="grok",
+        install_aliases=("grok", "grok-build", "grok-build-cli", "xai-grok"),
+        config_paths=(
+            "~/.grok/config.toml",
+            "~/.grok/managed_config.toml",
+            "~/.grok/hooks/",
+        ),
+        event_surfaces=("shell", "prompt", "mcp_tool", "file_read"),
+        native_approval=False,
+        browser_fallback=True,
+        resume_support=False,
+        known_blind_spots=(
+            "Grok hooks fail open on crash or timeout. --always-approve and bypassPermissions weaken "
+            "prompt policy but PreToolUse hooks still run when installed."
+        ),
+        smoke_command="hol-guard install grok --dry-run",
     ),
 )
 

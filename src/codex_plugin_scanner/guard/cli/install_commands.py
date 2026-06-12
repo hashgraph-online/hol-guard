@@ -206,6 +206,8 @@ def build_harness_verification(
     }
     if adapter.harness == "opencode":
         verification.update(_opencode_protection_checks(context, store))
+    if adapter.harness == "grok":
+        verification.update(_grok_protection_checks(context))
     payload: dict[str, object] = {
         "harness": adapter.harness,
         "safe": True,
@@ -309,6 +311,38 @@ def _opencode_protection_checks(context: HarnessContext, store: GuardStore | Non
         "mcp_proxy_configured": mcp_proxy_configured,
         "launch_shim_installed": shim_path.is_file(),
         "managed_install_active": bool(managed and managed.get("active")),
+        "warnings": warnings,
+        "ready": not warnings,
+    }
+
+
+def _grok_protection_checks(context: HarnessContext) -> dict[str, object]:
+    from ..adapters.grok import GrokHarnessAdapter
+
+    adapter = GrokHarnessAdapter()
+    hooks_dir = adapter._hooks_dir(context)
+    managed_config = adapter._managed_config_path(context)
+    pretool_hook = hooks_dir / "hol-guard-pretooluse.json"
+    prompt_hook = hooks_dir / "hol-guard-prompt.json"
+    warnings: list[str] = []
+    if not pretool_hook.is_file() or not prompt_hook.is_file():
+        warnings.append("Grok Guard hook files are missing from ~/.grok/hooks/. Re-run `hol-guard apps connect grok`.")
+    if not managed_config.is_file() or "BEGIN HOL GUARD MANAGED GROK" not in managed_config.read_text(encoding="utf-8"):
+        warnings.append(
+            "Grok managed permission rules are missing from ~/.grok/managed_config.toml. "
+            "Re-run `hol-guard apps connect grok`."
+        )
+    shim_path = context.guard_home / "bin" / "guard-grok"
+    if not shim_path.is_file():
+        warnings.append(
+            f"guard-grok launcher shim is missing. Add {context.guard_home / 'bin'} to PATH or launch with "
+            "`hol-guard run grok` for pre-launch checks."
+        )
+    return {
+        "pretool_hook_installed": pretool_hook.is_file(),
+        "prompt_hook_installed": prompt_hook.is_file(),
+        "managed_config_installed": managed_config.is_file(),
+        "launch_shim_installed": shim_path.is_file(),
         "warnings": warnings,
         "ready": not warnings,
     }
