@@ -79,7 +79,16 @@ def _finalize_runtime_artifact_hook(
                 raw_runtime_reason,
                 approval_context,
             )
-        _emit_native_hook_block_stderr(native_block_reason)
+        if _canonical_harness_name(args.harness) == "kimi":
+            _emit_native_hook_response(
+                harness=args.harness,
+                policy_action=policy_action,
+                event_name=event_name,
+                reason=native_block_reason,
+                output_stream=output_stream,
+            )
+        else:
+            _emit_native_hook_block_stderr(native_block_reason)
         _record_harness_usage_for_hook(
             store=store,
             action_envelope=action_envelope,
