@@ -20,7 +20,6 @@ assert(resolveView("/apps/opencode") === "app-detail", "valid app route opens ap
 assert(resolveView("/apps/*") === "fleet", "wildcard app route falls back to fleet");
 assert(resolveView("/apps/%2A") === "fleet", "encoded wildcard app route falls back to fleet");
 assert(resolveView(PROTECT_ROUTE) === "fleet", "/protect resolves to protect workspace view");
-assert(resolveView("/fleet") === "fleet", "legacy /fleet resolves to protect workspace view");
 assert(resolveView("/about") === "about", "/about resolves to about view");
 assert(viewTitle("about") === "About", "about view title is About");
 

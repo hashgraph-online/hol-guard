@@ -92,7 +92,6 @@ class TestGuardSurfaceServer:
                 "/",
                 "/home",
                 "/inbox",
-                "/fleet",
                 "/protect",
                 "/evidence",
                 "/supply-chain",

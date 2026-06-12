@@ -800,9 +800,21 @@ function AppActivityTab(props: {
     setPage(0);
   }, [debouncedSearch, filters.time, filters.decision, filters.category, filters.sourceScope, filters.day]);
 
+  const { view, time, decision, category, sourceScope, day, sort, selectedId } = filters;
   const effectiveFilters = useMemo(
-    () => ({ ...filters, search: debouncedSearch, harness: props.harness }),
-    [filters, debouncedSearch, props.harness]
+    () => ({
+      view,
+      time,
+      decision,
+      category,
+      sourceScope,
+      day,
+      sort,
+      selectedId,
+      search: debouncedSearch,
+      harness: props.harness,
+    }),
+    [view, time, decision, category, sourceScope, day, sort, selectedId, debouncedSearch, props.harness]
   );
 
   const filtered = useMemo(

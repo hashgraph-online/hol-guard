@@ -555,9 +555,21 @@ function AppActivityTab(props) {
   reactExports.useEffect(() => {
     setPage(0);
   }, [debouncedSearch, filters.time, filters.decision, filters.category, filters.sourceScope, filters.day]);
+  const { view, time, decision, category, sourceScope, day, sort, selectedId } = filters;
   const effectiveFilters = reactExports.useMemo(
-    () => ({ ...filters, search: debouncedSearch, harness: props.harness }),
-    [filters, debouncedSearch, props.harness]
+    () => ({
+      view,
+      time,
+      decision,
+      category,
+      sourceScope,
+      day,
+      sort,
+      selectedId,
+      search: debouncedSearch,
+      harness: props.harness
+    }),
+    [view, time, decision, category, sourceScope, day, sort, selectedId, debouncedSearch, props.harness]
   );
   const filtered = reactExports.useMemo(
     () => filterEvidence(props.harnessReceipts, effectiveFilters),
@@ -584,11 +596,11 @@ function AppActivityTab(props) {
   const handleCloseDetail = reactExports.useCallback(() => {
     setFilters((prev) => ({ ...prev, selectedId: "" }));
   }, []);
-  const handleFilterCategory = reactExports.useCallback((category) => {
-    setFilters((prev) => ({ ...prev, category }));
+  const handleFilterCategory = reactExports.useCallback((category2) => {
+    setFilters((prev) => ({ ...prev, category: category2 }));
   }, []);
-  const handleSortChange = reactExports.useCallback((sort) => {
-    handleFilterChange({ sort });
+  const handleSortChange = reactExports.useCallback((sort2) => {
+    handleFilterChange({ sort: sort2 });
   }, [handleFilterChange]);
   const handleLoadMore = reactExports.useCallback(() => {
     setPage((prev) => prev + 1);

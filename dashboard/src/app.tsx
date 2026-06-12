@@ -123,7 +123,6 @@ function parseRequestId(pathname: string): string | null {
 }
 
 export const PROTECT_ROUTE = "/protect";
-const LEGACY_FLEET_ROUTE = "/fleet";
 
 type AppView = "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health" | "about";
 
@@ -163,7 +162,7 @@ export function resolveView(pathname: string): AppView {
   if (pathname === "/settings") {
     return "settings";
   }
-  if (pathname === PROTECT_ROUTE || pathname === LEGACY_FLEET_ROUTE) {
+  if (pathname === PROTECT_ROUTE) {
     return "fleet";
   }
   if (pathname === "/evidence") {
@@ -220,16 +219,6 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
 export function App() {
   const pathname = usePathname();
   const view = resolveView(pathname);
-
-  useEffect(() => {
-    if (pathname !== LEGACY_FLEET_ROUTE) {
-      return;
-    }
-    const next = new URL(window.location.href);
-    next.pathname = PROTECT_ROUTE;
-    window.history.replaceState({}, "", next.toString());
-    window.dispatchEvent(new PopStateEvent("popstate"));
-  }, [pathname]);
   useRouteFocus(view);
   const requestId = parseRequestId(pathname);
   const appDetailHarness = parseAppDetail(pathname);

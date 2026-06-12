@@ -24807,7 +24807,6 @@ function parseRequestId(pathname) {
   return null;
 }
 const PROTECT_ROUTE = "/protect";
-const LEGACY_FLEET_ROUTE = "/fleet";
 function viewTitle(view) {
   if (view === "home") return "Home";
   if (view === "inbox") return "Inbox";
@@ -24842,7 +24841,7 @@ function resolveView(pathname) {
   if (pathname === "/settings") {
     return "settings";
   }
-  if (pathname === PROTECT_ROUTE || pathname === LEGACY_FLEET_ROUTE) {
+  if (pathname === PROTECT_ROUTE) {
     return "fleet";
   }
   if (pathname === "/evidence") {
@@ -24891,15 +24890,6 @@ async function loadDetail(requestId) {
 function App() {
   const pathname = usePathname();
   const view = resolveView(pathname);
-  reactExports.useEffect(() => {
-    if (pathname !== LEGACY_FLEET_ROUTE) {
-      return;
-    }
-    const next = new URL(window.location.href);
-    next.pathname = PROTECT_ROUTE;
-    window.history.replaceState({}, "", next.toString());
-    window.dispatchEvent(new PopStateEvent("popstate"));
-  }, [pathname]);
   useRouteFocus(view);
   const requestId = parseRequestId(pathname);
   const appDetailHarness = parseAppDetail(pathname);

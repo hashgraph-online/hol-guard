@@ -4334,7 +4334,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/home",
             "/dashboard",
             "/inbox",
-            "/fleet",
             "/protect",
             "/evidence",
             "/supply-chain",
