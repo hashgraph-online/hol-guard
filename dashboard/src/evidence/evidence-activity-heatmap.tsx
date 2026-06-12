@@ -322,6 +322,7 @@ export function EvidenceActivityHeatmap({
   }, [displayKey, updateTooltipForKey, weeks]);
 
   useEffect(() => {
+    if (!displayKey) return;
     const onScrollOrResize = () => updateTooltipForKey(displayKey);
     window.addEventListener("scroll", onScrollOrResize, true);
     window.addEventListener("resize", onScrollOrResize);
