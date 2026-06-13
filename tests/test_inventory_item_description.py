@@ -53,3 +53,17 @@ def test_resolve_inventory_item_description_truncates_long_text() -> None:
 
     assert len(result) == 500
     assert result.endswith("…")
+
+
+def test_resolve_inventory_item_description_falls_back_when_redacted() -> None:
+    result = resolve_inventory_item_description(
+        harness="cursor",
+        item_kind="mcp_tool",
+        display_name="read_file",
+        metadata={},
+        explicit_description="Reads files under /Users/agent/workspace",
+    )
+
+    assert "read_file" in result
+    assert "MCP tool" in result
+    assert "[REDACTED]" not in result

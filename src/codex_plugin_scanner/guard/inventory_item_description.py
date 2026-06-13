@@ -84,7 +84,11 @@ def resolve_inventory_item_description(
     home_dir: Path | None = None,
     workspace_dir: Path | None = None,
 ) -> str:
-    from .inventory_contract import _safe_finding_text, _sanitize_serializer_string
+    from .inventory_contract import (
+        _SAFE_SERIALIZED_MARKERS,
+        _safe_finding_text,
+        _sanitize_serializer_string,
+    )
 
     candidate = explicit_description or _metadata_description(metadata)
     if candidate:
@@ -96,7 +100,7 @@ def resolve_inventory_item_description(
                 workspace_dir=workspace_dir,
             )
         cleaned = _clean_description_text(sanitized)
-        if cleaned and cleaned != "redacted":
+        if cleaned and cleaned not in _SAFE_SERIALIZED_MARKERS:
             return cleaned
 
     return _clean_description_text(

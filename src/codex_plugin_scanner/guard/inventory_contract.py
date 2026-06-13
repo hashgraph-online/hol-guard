@@ -394,7 +394,15 @@ def inventory_snapshot_from_detection(
             follow_unsafe_symlinks=follow_unsafe_symlinks,
         )
         items.append(item)
-        items.extend(_mcp_tool_items_from_artifact(harness, artifact, item))
+        items.extend(
+            _mcp_tool_items_from_artifact(
+                harness,
+                artifact,
+                item,
+                home_dir=home_dir,
+                workspace_dir=workspace_dir,
+            )
+        )
     config_paths = tuple(dict.fromkeys(str(path) for path in getattr(detection, "config_paths", ())))
     config_sources = tuple(
         GuardInventorySource(
@@ -618,6 +626,9 @@ def _mcp_tool_items_from_artifact(
     harness: str,
     artifact: object,
     server_item: GuardAgentInventoryItem,
+    *,
+    home_dir: Path,
+    workspace_dir: Path | None,
 ) -> tuple[GuardAgentInventoryItem, ...]:
     artifact_type = str(getattr(artifact, "artifact_type", "unknown"))
     if artifact_type != "mcp_server":
@@ -693,6 +704,8 @@ def _mcp_tool_items_from_artifact(
             display_name=display_name,
             metadata=metadata,
             explicit_description=description or None,
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
         )
         items.append(
             GuardAgentInventoryItem(

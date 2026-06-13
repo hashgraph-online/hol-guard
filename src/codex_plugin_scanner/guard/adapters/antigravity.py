@@ -211,7 +211,9 @@ class AntigravityHarnessAdapter(HarnessAdapter):
             if manifest_payload:
                 self._append_found_path(found_paths, manifest_path)
             publisher = (
-                manifest_payload.get("publisher") if isinstance(manifest_payload.get("publisher"), str) else None
+                manifest_payload.get("publisher")
+                if manifest_payload is not None and isinstance(manifest_payload.get("publisher"), str)
+                else None
             )
             if publisher is None and isinstance(metadata, dict):
                 publisher_display_name = metadata.get("publisherDisplayName")
@@ -219,12 +221,12 @@ class AntigravityHarnessAdapter(HarnessAdapter):
                     publisher = publisher_display_name
             display_name = (
                 manifest_payload.get("displayName")
-                if isinstance(manifest_payload.get("displayName"), str)
+                if manifest_payload is not None and isinstance(manifest_payload.get("displayName"), str)
                 else None
             )
             manifest_description = (
                 manifest_payload.get("description")
-                if isinstance(manifest_payload.get("description"), str)
+                if manifest_payload is not None and isinstance(manifest_payload.get("description"), str)
                 else None
             )
             artifacts.append(
