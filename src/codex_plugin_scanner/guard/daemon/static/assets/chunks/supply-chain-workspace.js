@@ -1077,9 +1077,9 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     }, flow.poll_after_ms ?? 1500);
     return () => window.clearTimeout(handle);
   }, [panelLoad, refreshAfterOp]);
-  const openAuditConnectGate = reactExports.useCallback((resumeAfterConnect2) => {
+  const openAuditConnectGate = reactExports.useCallback((resumeAfterConnect) => {
     setAuditConnectGateActive(true);
-    setResumeAuditAfterConnect(resumeAfterConnect2);
+    setResumeAuditAfterConnect(resumeAfterConnect);
     setLastFailed(null);
     rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
@@ -1144,7 +1144,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       return;
     }
     const gate = resolveSupplyChainAuditConnectGate(panelLoad.data, {
-      resumeAfterConnect
+      resumeAfterConnect: resumeAuditAfterConnect
     });
     if (gate === null || panelLoad.data.connect_flow === null) {
       onAuditConnectGateChange?.(null);
@@ -1340,7 +1340,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     [handleAudit, handleOpenShell, handleStartConnect]
   );
   const managerDrawerShim = panelLoad.phase === "loaded" && managerDrawerTarget !== null ? panelLoad.data.package_shims.find((entry) => entry.manager === managerDrawerTarget) : void 0;
-  const auditConnectGate = panelLoad.phase === "loaded" && auditConnectGateActive ? resolveSupplyChainAuditConnectGate(panelLoad.data, { resumeAfterConnect }) : null;
+  const auditConnectGate = panelLoad.phase === "loaded" && auditConnectGateActive ? resolveSupplyChainAuditConnectGate(panelLoad.data, { resumeAfterConnect: resumeAuditAfterConnect }) : null;
   const anyPending = pendingOp !== null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: rootRef, className: "rounded-2xl border border-slate-100 bg-white shadow-sm", "data-testid": "package-firewall-panel", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3", children: [

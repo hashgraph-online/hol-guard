@@ -288,7 +288,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       return;
     }
     const gate = resolveSupplyChainAuditConnectGate(panelLoad.data, {
-      resumeAfterConnect,
+      resumeAfterConnect: resumeAuditAfterConnect,
     });
     if (gate === null || panelLoad.data.connect_flow === null) {
       onAuditConnectGateChange?.(null);
@@ -512,7 +512,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
 
   const auditConnectGate =
     panelLoad.phase === "loaded" && auditConnectGateActive
-      ? resolveSupplyChainAuditConnectGate(panelLoad.data, { resumeAfterConnect })
+      ? resolveSupplyChainAuditConnectGate(panelLoad.data, { resumeAfterConnect: resumeAuditAfterConnect })
       : null;
 
   const anyPending = pendingOp !== null;

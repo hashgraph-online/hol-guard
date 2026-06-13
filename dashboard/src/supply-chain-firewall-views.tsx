@@ -108,6 +108,28 @@ function ConnectStep({ body, current, done, index, title }: ConnectStepProps) {
   );
 }
 
+function resolveConnectUnlockCopy(purpose: "package_firewall" | "insights_share" | "audit"): {
+  body: string;
+  title: string;
+} {
+  if (purpose === "insights_share") {
+    return {
+      title: "Unlock public sharing",
+      body: "Guard verifies Cloud authorization before it publishes a public share link from this machine.",
+    };
+  }
+  if (purpose === "audit") {
+    return {
+      title: "Run workspace audit",
+      body: "After sign-in finishes, Guard scans workspace packages and lists flagged findings in Audit findings.",
+    };
+  }
+  return {
+    title: "Unlock firewall actions",
+    body: "Guard verifies package-firewall access before it changes package-manager routing.",
+  };
+}
+
 function resolveConnectSteps(
   connectFlow: NonNullable<PackageFirewallStatusResponse["connect_flow"]>,
   purpose: "package_firewall" | "insights_share" | "audit" = "package_firewall",
@@ -115,18 +137,7 @@ function resolveConnectSteps(
   const running = connectFlow.state === "running";
   const failed = connectFlow.state === "failed";
   const browserOpened = connectFlow.browser_opened === true;
-  const unlockTitle =
-    purpose === "insights_share"
-      ? "Unlock public sharing"
-      : purpose === "audit"
-      ? "Run workspace audit"
-      : "Unlock firewall actions";
-  const unlockBody =
-    purpose === "insights_share"
-      ? "Guard verifies Cloud authorization before it publishes a public share link from this machine."
-      : purpose === "audit"
-      ? "After sign-in finishes, Guard scans workspace packages and lists flagged findings in Audit findings."
-      : "Guard verifies package-firewall access before it changes package-manager routing.";
+  const unlockCopy = resolveConnectUnlockCopy(purpose);
   return [
     {
       title: "Start local connect",
@@ -145,8 +156,8 @@ function resolveConnectSteps(
       current: running,
     },
     {
-      title: unlockTitle,
-      body: unlockBody,
+      title: unlockCopy.title,
+      body: unlockCopy.body,
       done: false,
       current: false,
     },
@@ -163,7 +174,10 @@ function resolveMinimalHelperText(input: {
     if (input.purpose === "audit") {
       return "Finish sign-in in your browser. Guard will run the workspace audit as soon as Cloud access is ready.";
     }
-    return "Finish sign-in in your browser to publish a public share link.";
+    if (input.purpose === "insights_share") {
+      return "Finish sign-in in your browser to publish a public share link.";
+    }
+    return "Finish sign-in in your browser. Guard will unlock package firewall actions as soon as Cloud access is ready.";
   }
   if (input.failed) {
     return "Connect did not finish. Try again or open sign-in manually.";
