@@ -334,12 +334,8 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     if (succeeded) {
       return;
     }
-    if (auditRecoveryGate === null) {
-      setAuditRecoveryPhase("failed");
-      return;
-    }
-    setAuditRecoveryPhase("ready");
-  }, [auditRecoveryGate, runAuditOperation]);
+    setAuditRecoveryPhase((currentPhase) => (currentPhase === "failed" ? "failed" : "ready"));
+  }, [runAuditOperation]);
 
   const runRecoverySync = useCallback(async () => {
     setAuditRecoveryPhase("syncing");
@@ -356,25 +352,13 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       setAuditRecoveryPhase("ready");
     } catch (err) {
       if (isSupplyChainAuditConnectError(err)) {
-        setAuditRecoveryGate({
-          obstacle: "cloud_auth",
-          headline: "Reconnect Guard Cloud before auditing",
-          detail:
-            "Guard Cloud sign-in is missing or stale on this machine. Reconnect once, then Guard can sync intel and rerun the audit.",
-          steps: [
-            {
-              title: "Reconnect Cloud",
-              body: "Approve Guard Cloud access in your browser on this device.",
-            },
-            {
-              title: "Sync and audit",
-              body: "Guard refreshes supply-chain intel, then reruns the workspace audit.",
-            },
-          ],
-          primaryAction: "connect",
-          primaryLabel: "Reconnect Guard Cloud",
-          autoRetryAuditAfterPrimary: true,
+        const connectGate = resolveSupplyChainAuditRecoveryGate({
+          audit_status: "incomplete",
+          audit_outcome: "not_connected",
         });
+        if (connectGate !== null) {
+          setAuditRecoveryGate(connectGate);
+        }
         setAuditRecoveryPhase("ready");
         setAuditRecoveryError(null);
         return;

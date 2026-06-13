@@ -1,4 +1,4 @@
-import { aG as isSupplyChainAuditIncomplete, au as GuardHarnessActionError, r as reactExports, j as jsxRuntimeExports, d as HiMiniCheckCircle, aw as HiMiniArrowPath, w as HiMiniExclamationTriangle, ac as Tag, m as formatRelativeTime, aH as HiMiniClock, aI as IconActionButton, I as HiMiniXCircle, ax as HiMiniTrash, l as HiMiniShieldCheck, F as HiMiniWrenchScrewdriver, aJ as HiMiniBeaker, aK as ActivationSummary, aL as ActionResultPanel, ad as HiMiniMagnifyingGlass, b as EmptyState, A as ActionButton, aM as HiMiniBugAnt, o as HiMiniXMark, aN as GuardModalLayer, aO as ConnectFlowCard, aE as HiMiniArrowTopRightOnSquare, aP as HiMiniCloudArrowDown, aQ as fetchPackageFirewallStatus, aR as runPackageAudit, aS as resolveSupplyChainAuditFailure, aT as runPackageSync, aU as startPackageFirewallConnect, aV as runPackageFirewallAction, aW as parseInterceptProofSnapshot, aX as openPackageFirewallShell, S as SectionLabel, aY as EntitlementNotice, aZ as fetchSupplyChainBundle, B as Badge, a_ as HiMiniDocumentMagnifyingGlass, a$ as HiMiniShieldExclamation, b0 as HiMiniComputerDesktop, t as HiMiniCloud, b1 as HiMiniArrowDown, b2 as HiMiniArrowUp, ah as HiMiniArrowLeft, b3 as HiMiniArrowRight, b4 as HiMiniCloudArrowUp, b5 as HiMiniInformationCircle, b6 as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
+import { aG as isSupplyChainAuditIncomplete, au as GuardHarnessActionError, r as reactExports, j as jsxRuntimeExports, d as HiMiniCheckCircle, aw as HiMiniArrowPath, w as HiMiniExclamationTriangle, ac as Tag, m as formatRelativeTime, aH as HiMiniClock, aI as IconActionButton, I as HiMiniXCircle, ax as HiMiniTrash, l as HiMiniShieldCheck, F as HiMiniWrenchScrewdriver, aJ as HiMiniBeaker, aK as ActivationSummary, aL as ActionResultPanel, ad as HiMiniMagnifyingGlass, b as EmptyState, A as ActionButton, aM as HiMiniBugAnt, o as HiMiniXMark, aN as readString$1, aO as isRecord$2, aP as GuardModalLayer, aQ as ConnectFlowCard, aE as HiMiniArrowTopRightOnSquare, aR as HiMiniCloudArrowDown, aS as fetchPackageFirewallStatus, aT as runPackageAudit, aU as resolveSupplyChainAuditFailure, aV as runPackageSync, aW as startPackageFirewallConnect, aX as runPackageFirewallAction, aY as parseInterceptProofSnapshot, aZ as openPackageFirewallShell, S as SectionLabel, a_ as EntitlementNotice, a$ as fetchSupplyChainBundle, B as Badge, b0 as HiMiniDocumentMagnifyingGlass, b1 as HiMiniShieldExclamation, b2 as HiMiniComputerDesktop, t as HiMiniCloud, b3 as HiMiniArrowDown, b4 as HiMiniArrowUp, ah as HiMiniArrowLeft, b5 as HiMiniArrowRight, b6 as HiMiniCloudArrowUp, b7 as HiMiniInformationCircle, b8 as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal, b as buildSupplyChainStats } from "./supply-chain-protection-stats.js";
 import { resolveFeedStaleness } from "./feed-health-workspace.js";
 import { r as resolveHomeProtectionStatus } from "./home-protection-module.js";
@@ -17,10 +17,10 @@ const DECISION_RANK = {
   monitor: 1,
   allow: 0
 };
-function isRecord$2(value) {
+function isRecord$1(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function readString$1(value) {
+function readString(value) {
   if (typeof value !== "string") {
     return null;
   }
@@ -34,14 +34,14 @@ function readStringArray(value) {
   return value.filter((entry) => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim());
 }
 function normalizeSeverity(value) {
-  const raw = readString$1(value)?.toLowerCase();
+  const raw = readString(value)?.toLowerCase();
   if (raw === "critical" || raw === "high" || raw === "medium" || raw === "low") {
     return raw;
   }
   return "unknown";
 }
 function normalizeDecision(value) {
-  const raw = readString$1(value)?.toLowerCase();
+  const raw = readString(value)?.toLowerCase();
   if (raw === "block" || raw === "ask" || raw === "warn" || raw === "monitor" || raw === "allow") {
     return raw;
   }
@@ -69,21 +69,21 @@ function normalizeReasons(value) {
   }
   const reasons = [];
   for (const entry of value) {
-    if (!isRecord$2(entry)) {
+    if (!isRecord$1(entry)) {
       continue;
     }
-    const message = readString$1(entry.message) ?? readString$1(entry.summary) ?? "Flagged by Guard supply-chain policy.";
-    const advisoryId = readString$1(entry.advisoryId) ?? readString$1(entry.advisory_id);
+    const message = readString(entry.message) ?? readString(entry.summary) ?? "Flagged by Guard supply-chain policy.";
+    const advisoryId = readString(entry.advisoryId) ?? readString(entry.advisory_id);
     if (advisoryId !== null && !message.includes(advisoryId)) {
       reasons.push({
-        code: readString$1(entry.code) ?? "supply_chain",
+        code: readString(entry.code) ?? "supply_chain",
         message: `${message} (${advisoryId})`,
         severity: normalizeSeverity(entry.severity)
       });
       continue;
     }
     reasons.push({
-      code: readString$1(entry.code) ?? "supply_chain",
+      code: readString(entry.code) ?? "supply_chain",
       message,
       severity: normalizeSeverity(entry.severity)
     });
@@ -135,7 +135,7 @@ function readAdvisoryIdList(value) {
 }
 function buildAdvisoryAliasStubs(packageRecord, reasons) {
   const aliases = /* @__PURE__ */ new Set();
-  const packageAdvisoryId = readString$1(packageRecord.advisoryId) ?? readString$1(packageRecord.advisory_id);
+  const packageAdvisoryId = readString(packageRecord.advisoryId) ?? readString(packageRecord.advisory_id);
   if (packageAdvisoryId !== null) {
     addAdvisoryAlias(aliases, packageAdvisoryId);
   }
@@ -165,12 +165,12 @@ function buildAdvisoryAliasStubs(packageRecord, reasons) {
   return Array.from(aliases);
 }
 function normalizePackageFinding(packageRecord, index) {
-  const packageName = readString$1(packageRecord.name);
+  const packageName = readString(packageRecord.name);
   if (packageName === null) {
     return null;
   }
-  const ecosystem = readString$1(packageRecord.ecosystem) ?? "unknown";
-  const namespace = readString$1(packageRecord.namespace);
+  const ecosystem = readString(packageRecord.ecosystem) ?? "unknown";
+  const namespace = readString(packageRecord.namespace);
   const reasons = normalizeReasons(packageRecord.reasons);
   const decision = normalizeDecision(packageRecord.decision);
   const severity = resolveFindingSeverity(packageRecord, reasons);
@@ -184,7 +184,7 @@ function normalizePackageFinding(packageRecord, index) {
     severity,
     reasons,
     advisoryAliases: buildAdvisoryAliasStubs(packageRecord, reasons),
-    status: readString$1(packageRecord.status)
+    status: readString(packageRecord.status)
   };
 }
 function normalizePackageFindings(value) {
@@ -194,7 +194,7 @@ function normalizePackageFindings(value) {
   const findings = [];
   let index = 0;
   for (const entry of value) {
-    if (!isRecord$2(entry)) {
+    if (!isRecord$1(entry)) {
       continue;
     }
     const finding = normalizePackageFinding(entry, index);
@@ -216,20 +216,20 @@ function packageRecordsFromEvaluation(evaluation) {
   return normalizePackageFindings(evaluation.package_findings);
 }
 function isAuditEvidence(value) {
-  return isRecord$2(value) && value.operation === "audit";
+  return isRecord$1(value) && value.operation === "audit";
 }
 function normalizeSupplyChainAuditSnapshot(raw, receiptId = null) {
-  if (!isRecord$2(raw)) {
+  if (!isRecord$1(raw)) {
     return null;
   }
   if (isSupplyChainAuditIncomplete(raw)) {
     return null;
   }
-  const evaluation = isRecord$2(raw.evaluation) ? raw.evaluation : null;
+  const evaluation = isRecord$1(raw.evaluation) ? raw.evaluation : null;
   const findingsFromEvidence = normalizePackageFindings(raw.package_findings);
   const findings = findingsFromEvidence.length > 0 ? findingsFromEvidence : packageRecordsFromEvaluation(evaluation);
-  const generatedAt = readString$1(raw.generated_at) ?? readString$1(raw.generatedAt) ?? (/* @__PURE__ */ new Date(0)).toISOString();
-  const inventory = normalizeInventory(isRecord$2(raw.inventory) ? raw.inventory : null);
+  const generatedAt = readString(raw.generated_at) ?? readString(raw.generatedAt) ?? (/* @__PURE__ */ new Date(0)).toISOString();
+  const inventory = normalizeInventory(isRecord$1(raw.inventory) ? raw.inventory : null);
   const decision = normalizeDecision(evaluation?.decision ?? raw.audit_decision);
   const manifestPaths = readStringArray(raw.manifest_paths);
   const lockfilePaths = readStringArray(raw.lockfile_paths);
@@ -239,7 +239,7 @@ function normalizeSupplyChainAuditSnapshot(raw, receiptId = null) {
   }
   return {
     generatedAt,
-    source: readString$1(raw.source),
+    source: readString(raw.source),
     decision,
     inventory,
     findings,
@@ -254,7 +254,7 @@ function derivePackageWorkbenchFromReceipts(receipts) {
   ).sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp));
   for (const receipt of auditReceipts) {
     const evidenceRaw = (receipt.scanner_evidence ?? []).find((entry) => isAuditEvidence(entry));
-    if (evidenceRaw === void 0 || !isRecord$2(evidenceRaw)) {
+    if (evidenceRaw === void 0 || !isRecord$1(evidenceRaw)) {
       continue;
     }
     const snapshot = normalizeSupplyChainAuditSnapshot(
@@ -1013,16 +1013,6 @@ function SupplyChainManagerDrawer({
     }
   );
 }
-function isRecord$1(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function readString(value) {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
 const SYNC_RECOVERY_STEPS = [
   {
     title: "Sync intel",
@@ -1037,10 +1027,10 @@ function resolveSupplyChainAuditRecoveryGate(detail) {
   if (!isSupplyChainAuditIncomplete(detail)) {
     return null;
   }
-  const outcome = readString(detail.audit_outcome);
-  const message = readString(detail.message);
-  const supplyChain = isRecord$1(detail.supply_chain) ? detail.supply_chain : null;
-  const supplyStatus = readString(supplyChain?.status);
+  const outcome = readString$1(detail.audit_outcome);
+  const message = readString$1(detail.message);
+  const supplyChain = isRecord$2(detail.supply_chain) ? detail.supply_chain : null;
+  const supplyStatus = readString$1(supplyChain?.status);
   if (outcome === "sync_required" || supplyStatus === "sync_required") {
     return {
       obstacle: "sync_required",
@@ -1165,7 +1155,10 @@ function resolveActiveStepIndex(gate, phase) {
   if (phase === "auditing") {
     return gate.steps.length;
   }
-  if (phase === "syncing" || phase === "connecting") {
+  if (phase === "syncing") {
+    return gate.obstacle === "cloud_auth" ? 2 : 1;
+  }
+  if (phase === "connecting") {
     return 1;
   }
   return 0;
@@ -1478,12 +1471,8 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     if (succeeded) {
       return;
     }
-    if (auditRecoveryGate === null) {
-      setAuditRecoveryPhase("failed");
-      return;
-    }
-    setAuditRecoveryPhase("ready");
-  }, [auditRecoveryGate, runAuditOperation]);
+    setAuditRecoveryPhase((currentPhase) => currentPhase === "failed" ? "failed" : "ready");
+  }, [runAuditOperation]);
   const runRecoverySync = reactExports.useCallback(async () => {
     setAuditRecoveryPhase("syncing");
     setAuditRecoveryError(null);
@@ -1499,24 +1488,13 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       setAuditRecoveryPhase("ready");
     } catch (err) {
       if (isSupplyChainAuditConnectError(err)) {
-        setAuditRecoveryGate({
-          obstacle: "cloud_auth",
-          headline: "Reconnect Guard Cloud before auditing",
-          detail: "Guard Cloud sign-in is missing or stale on this machine. Reconnect once, then Guard can sync intel and rerun the audit.",
-          steps: [
-            {
-              title: "Reconnect Cloud",
-              body: "Approve Guard Cloud access in your browser on this device."
-            },
-            {
-              title: "Sync and audit",
-              body: "Guard refreshes supply-chain intel, then reruns the workspace audit."
-            }
-          ],
-          primaryAction: "connect",
-          primaryLabel: "Reconnect Guard Cloud",
-          autoRetryAuditAfterPrimary: true
+        const connectGate = resolveSupplyChainAuditRecoveryGate({
+          audit_status: "incomplete",
+          audit_outcome: "not_connected"
         });
+        if (connectGate !== null) {
+          setAuditRecoveryGate(connectGate);
+        }
         setAuditRecoveryPhase("ready");
         setAuditRecoveryError(null);
         return;

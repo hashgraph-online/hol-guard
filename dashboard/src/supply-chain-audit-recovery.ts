@@ -1,16 +1,4 @@
-import { isSupplyChainAuditIncomplete } from "./supply-chain-audit-result";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readString(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
+import { isRecord, isSupplyChainAuditIncomplete, readString } from "./supply-chain-audit-result";
 
 export type SupplyChainAuditRecoveryAction = "sync" | "connect" | "retry_audit";
 
