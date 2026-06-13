@@ -60,10 +60,12 @@ type ConnectFlowCardProps = {
   connectError: string | null;
   connectStarting: boolean;
   connectFlow: NonNullable<PackageFirewallStatusResponse["connect_flow"]>;
+  detail?: string;
+  headline?: string;
   localRecoveryHint?: string | null;
   mode: "connect" | "repair";
   onStartConnect: () => void;
-  purpose?: "package_firewall" | "insights_share";
+  purpose?: "package_firewall" | "insights_share" | "audit";
 };
 
 type NavigatorWithUserAgentData = Navigator & {
@@ -106,18 +108,36 @@ function ConnectStep({ body, current, done, index, title }: ConnectStepProps) {
   );
 }
 
+function resolveConnectUnlockCopy(purpose: "package_firewall" | "insights_share" | "audit"): {
+  body: string;
+  title: string;
+} {
+  if (purpose === "insights_share") {
+    return {
+      title: "Unlock public sharing",
+      body: "Guard verifies Cloud authorization before it publishes a public share link from this machine.",
+    };
+  }
+  if (purpose === "audit") {
+    return {
+      title: "Run workspace audit",
+      body: "After sign-in finishes, Guard scans workspace packages and lists flagged findings in Audit findings.",
+    };
+  }
+  return {
+    title: "Unlock firewall actions",
+    body: "Guard verifies package-firewall access before it changes package-manager routing.",
+  };
+}
+
 function resolveConnectSteps(
   connectFlow: NonNullable<PackageFirewallStatusResponse["connect_flow"]>,
-  purpose: "package_firewall" | "insights_share" = "package_firewall",
+  purpose: "package_firewall" | "insights_share" | "audit" = "package_firewall",
 ): Array<{ body: string; current: boolean; done: boolean; title: string }> {
   const running = connectFlow.state === "running";
   const failed = connectFlow.state === "failed";
   const browserOpened = connectFlow.browser_opened === true;
-  const unlockTitle = purpose === "insights_share" ? "Unlock public sharing" : "Unlock firewall actions";
-  const unlockBody =
-    purpose === "insights_share"
-      ? "Guard verifies Cloud authorization before it publishes a public share link from this machine."
-      : "Guard verifies package-firewall access before it changes package-manager routing.";
+  const unlockCopy = resolveConnectUnlockCopy(purpose);
   return [
     {
       title: "Start local connect",
@@ -136,8 +156,8 @@ function resolveConnectSteps(
       current: running,
     },
     {
-      title: unlockTitle,
-      body: unlockBody,
+      title: unlockCopy.title,
+      body: unlockCopy.body,
       done: false,
       current: false,
     },
@@ -147,16 +167,29 @@ function resolveConnectSteps(
 function resolveMinimalHelperText(input: {
   failed: boolean;
   mode: "connect" | "repair";
+  purpose: "package_firewall" | "insights_share" | "audit";
   running: boolean;
 }): string {
   if (input.running) {
-    return "Finish sign-in in your browser to publish a public share link.";
+    if (input.purpose === "audit") {
+      return "Finish sign-in in your browser. Guard will run the workspace audit as soon as Cloud access is ready.";
+    }
+    if (input.purpose === "insights_share") {
+      return "Finish sign-in in your browser to publish a public share link.";
+    }
+    return "Finish sign-in in your browser. Guard will unlock package firewall actions as soon as Cloud access is ready.";
   }
   if (input.failed) {
     return "Connect did not finish. Try again or open sign-in manually.";
   }
   if (input.mode === "repair") {
+    if (input.purpose === "audit") {
+      return "Reconnect Guard Cloud to restore workspace audit access on this machine.";
+    }
     return "Reconnect Guard Cloud to restore public sharing from this machine.";
+  }
+  if (input.purpose === "audit") {
+    return "One quick sign-in unlocks workspace package audits on this machine.";
   }
   return "One quick sign-in unlocks public sharing from this machine.";
 }
@@ -191,6 +224,8 @@ export function ConnectFlowCard({
   connectError,
   connectStarting,
   connectFlow,
+  detail,
+  headline,
   localRecoveryHint,
   mode,
   onStartConnect,
@@ -209,8 +244,10 @@ export function ConnectFlowCard({
   const statusTone = running ? "blue" : mode === "repair" ? "attention" : "blue";
   const statusLabel = running ? "Waiting for approval" : mode === "repair" ? "Repair required" : "Connection required";
   const showManualLink = connectFlow.authorize_url !== null || running || failed;
+  const titleCopy = headline ?? connectFlow.title;
+  const detailCopy = detail ?? connectFlow.detail;
   if (minimal) {
-    const helperText = resolveMinimalHelperText({ failed, mode, running });
+    const helperText = resolveMinimalHelperText({ failed, mode, purpose, running });
     return (
       <div className="space-y-4 px-5 py-5">
         <div className="flex flex-wrap items-center gap-2">
@@ -253,10 +290,10 @@ export function ConnectFlowCard({
           </div>
           <div className="space-y-1">
             <p className="text-base font-semibold tracking-[-0.02em] text-brand-dark">
-              {connectFlow.title}
+              {titleCopy}
             </p>
             <p className="max-w-3xl text-sm leading-relaxed text-slate-500">
-              {connectFlow.detail}
+              {detailCopy}
             </p>
           </div>
         </div>
@@ -313,10 +350,10 @@ export function ConnectFlowCard({
             </div>
             <div className="space-y-1">
               <p className="text-base font-semibold tracking-[-0.02em] text-brand-dark">
-                {connectFlow.title}
+                {titleCopy}
               </p>
               <p className="max-w-3xl text-sm leading-relaxed text-slate-500">
-                {connectFlow.detail}
+                {detailCopy}
               </p>
             </div>
           </div>
@@ -407,15 +444,21 @@ export function CliFallback({ commands }: CliFallbackProps) {
 
 type EntitlementNoticeProps = {
   connectError: string | null;
+  connectPurpose?: "package_firewall" | "audit";
   connectStarting: boolean;
   data: PackageFirewallStatusResponse;
+  detail?: string;
+  headline?: string;
   onStartConnect: () => void;
 };
 
 export function EntitlementNotice({
   connectError,
+  connectPurpose = "package_firewall",
   connectStarting,
   data,
+  detail,
+  headline,
   onStartConnect,
 }: EntitlementNoticeProps) {
   const connectRequired =
@@ -442,9 +485,12 @@ export function EntitlementNotice({
           connectError={connectError}
           connectStarting={connectStarting}
           connectFlow={data.connect_flow}
+          detail={detail}
+          headline={headline}
           localRecoveryHint={localRecoveryHint}
           mode={connectMode}
           onStartConnect={onStartConnect}
+          purpose={connectPurpose}
         />
       ) : (
         <UpgradeCta entitlement={data.entitlement} />
