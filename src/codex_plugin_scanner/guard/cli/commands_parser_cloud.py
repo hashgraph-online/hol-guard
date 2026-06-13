@@ -104,6 +104,23 @@ def _configure_guard_cloud_parsers(
     sync_parser.add_argument("--guard-home")
     sync_parser.add_argument("--json", action="store_true")
 
+    commands_parser = guard_subparsers.add_parser(
+        "commands",
+        help="Inspect Guard Cloud command queue state",
+    )
+    _add_guard_common_args(commands_parser)
+    commands_subparsers = commands_parser.add_subparsers(
+        dest="commands_command",
+        required=True,
+        parser_class=FriendlyArgumentParser,
+    )
+    commands_status_parser = commands_subparsers.add_parser(
+        "status",
+        help="Show local Guard Cloud command queue status",
+    )
+    _add_guard_common_args(commands_status_parser)
+    commands_status_parser.add_argument("--json", action="store_true")
+
     cloud_parser = guard_subparsers.add_parser(
         "cloud",
         help="Sync Guard Cloud supply-chain intelligence and diagnostics",

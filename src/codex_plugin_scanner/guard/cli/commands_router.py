@@ -62,6 +62,7 @@ _COMMON_HANDLERS = {
     "supply-chain": "_run_guard_supply_chain_command",
     "service": "_run_guard_service_command",
     "device": "_run_guard_device_command",
+    "commands": "_run_guard_commands_command",
     "daemon": "_run_guard_daemon_command",
     "hook": "_run_guard_hook_command",
 }
