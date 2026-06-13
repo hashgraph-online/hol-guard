@@ -3335,11 +3335,10 @@ def _cloud_sync_receipt_payload(
     explicit_changed_since_last_approval = receipt.get("changedSinceLastApproval")
     if not isinstance(explicit_changed_since_last_approval, bool):
         explicit_changed_since_last_approval = receipt.get("changed_since_last_approval")
-    changed_since_last_approval = (
-        explicit_changed_since_last_approval
-        if isinstance(explicit_changed_since_last_approval, bool)
-        else False
-    ) or policy_decision in {"review", "require-reapproval", "sandbox-required"}
+    changed_since_last_approval = explicit_changed_since_last_approval is True
+    # Review-tier decisions always remain changed, even if an explicit false is present.
+    if policy_decision in {"review", "require-reapproval", "sandbox-required"}:
+        changed_since_last_approval = True
     payload: dict[str, object] = {
         "receiptId": _optional_string(receipt.get("receipt_id")) or f"guard-receipt-{receipt_fingerprint}",
         "artifactId": artifact_id,
