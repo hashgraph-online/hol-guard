@@ -21,8 +21,11 @@ import {
   packageWorkbenchEcosystems,
   sortPackageWorkbenchFindings,
 } from "./supply-chain-audit-normalize";
+import { ConnectFlowCard } from "./supply-chain-firewall-views";
+import type { AuditConnectGateViewState } from "./supply-chain-firewall-panel";
 
 type PackageWorkbenchPanelProps = {
+  auditConnectGate?: AuditConnectGateViewState | null;
   auditSnapshot: SupplyChainAuditSnapshot | null;
   onRunAudit?: () => void;
   auditRunning?: boolean;
@@ -329,15 +332,32 @@ function EcosystemChip({ ecosystem, active, onSelect }: EcosystemChipProps) {
 }
 
 type WorkbenchEmptyStateProps = {
+  auditConnectGate?: AuditConnectGateViewState | null;
   onRunAudit?: () => void;
   auditRunning?: boolean;
 };
 
-function WorkbenchEmptyState({ onRunAudit, auditRunning }: WorkbenchEmptyStateProps) {
+function WorkbenchEmptyState({ auditConnectGate, onRunAudit, auditRunning }: WorkbenchEmptyStateProps) {
+  if (auditConnectGate !== null && auditConnectGate !== undefined) {
+    return (
+      <ConnectFlowCard
+        compact
+        connectError={auditConnectGate.connectError}
+        connectStarting={auditConnectGate.connectStarting}
+        connectFlow={auditConnectGate.connectFlow}
+        detail={auditConnectGate.gate.detail}
+        headline={auditConnectGate.gate.headline}
+        mode={auditConnectGate.gate.mode}
+        onStartConnect={auditConnectGate.onStartConnect}
+        purpose="audit"
+      />
+    );
+  }
+
   return (
     <EmptyState
       title="No workspace audit yet"
-      body="Run a package audit from the firewall panel to index dependencies and surface flagged packages here."
+      body="Run a package audit to index dependencies and surface flagged packages here."
       tone="teach"
       action={
         onRunAudit !== undefined ? (
@@ -352,6 +372,7 @@ function WorkbenchEmptyState({ onRunAudit, auditRunning }: WorkbenchEmptyStatePr
 }
 
 export function PackageWorkbenchPanel({
+  auditConnectGate = null,
   auditSnapshot,
   onRunAudit,
   auditRunning = false,
@@ -439,7 +460,11 @@ export function PackageWorkbenchPanel({
 
       {auditSnapshot === null && (
         <div className="px-4 py-6">
-          <WorkbenchEmptyState onRunAudit={onRunAudit} auditRunning={auditRunning} />
+          <WorkbenchEmptyState
+            auditConnectGate={auditConnectGate}
+            onRunAudit={onRunAudit}
+            auditRunning={auditRunning}
+          />
         </div>
       )}
       {auditSnapshot !== null && findings.length === 0 && (

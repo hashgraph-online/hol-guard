@@ -15941,7 +15941,7 @@ async function runAuditRemediation(input) {
   return normalizePackageFirewallAction(payload);
 }
 async function runPackageAudit() {
-  const response = await readJson("/v1/supply-chain/audit", {
+  const response = await fetchGuardApi("/v1/supply-chain/audit", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -15949,10 +15949,17 @@ async function runPackageAudit() {
     },
     body: JSON.stringify({})
   });
-  return normalizePackageFirewallAction(response);
+  const payloadBody = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null
+    );
+  }
+  return normalizePackageFirewallAction(payloadBody);
 }
 async function runPackageSync() {
-  const response = await readJson("/v1/supply-chain/sync", {
+  const response = await fetchGuardApi("/v1/supply-chain/sync", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -15960,7 +15967,14 @@ async function runPackageSync() {
     },
     body: JSON.stringify({})
   });
-  return normalizePackageFirewallAction(response);
+  const payloadBody = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null
+    );
+  }
+  return normalizePackageFirewallAction(payloadBody);
 }
 const UPDATE_STATUS_POLL_MS = 6e4;
 const RECONNECT_POLL_MS = 1500;
@@ -19067,12 +19081,29 @@ function ConnectStep({ body, current, done, index, title }) {
     ] })
   ] }) });
 }
+function resolveConnectUnlockCopy(purpose) {
+  if (purpose === "insights_share") {
+    return {
+      title: "Unlock public sharing",
+      body: "Guard verifies Cloud authorization before it publishes a public share link from this machine."
+    };
+  }
+  if (purpose === "audit") {
+    return {
+      title: "Run workspace audit",
+      body: "After sign-in finishes, Guard scans workspace packages and lists flagged findings in Audit findings."
+    };
+  }
+  return {
+    title: "Unlock firewall actions",
+    body: "Guard verifies package-firewall access before it changes package-manager routing."
+  };
+}
 function resolveConnectSteps(connectFlow, purpose = "package_firewall") {
   const running = connectFlow.state === "running";
   const failed = connectFlow.state === "failed";
   const browserOpened = connectFlow.browser_opened === true;
-  const unlockTitle = purpose === "insights_share" ? "Unlock public sharing" : "Unlock firewall actions";
-  const unlockBody = purpose === "insights_share" ? "Guard verifies Cloud authorization before it publishes a public share link from this machine." : "Guard verifies package-firewall access before it changes package-manager routing.";
+  const unlockCopy = resolveConnectUnlockCopy(purpose);
   return [
     {
       title: "Start local connect",
@@ -19087,8 +19118,8 @@ function resolveConnectSteps(connectFlow, purpose = "package_firewall") {
       current: running
     },
     {
-      title: unlockTitle,
-      body: unlockBody,
+      title: unlockCopy.title,
+      body: unlockCopy.body,
       done: false,
       current: false
     }
@@ -19096,13 +19127,25 @@ function resolveConnectSteps(connectFlow, purpose = "package_firewall") {
 }
 function resolveMinimalHelperText(input) {
   if (input.running) {
-    return "Finish sign-in in your browser to publish a public share link.";
+    if (input.purpose === "audit") {
+      return "Finish sign-in in your browser. Guard will run the workspace audit as soon as Cloud access is ready.";
+    }
+    if (input.purpose === "insights_share") {
+      return "Finish sign-in in your browser to publish a public share link.";
+    }
+    return "Finish sign-in in your browser. Guard will unlock package firewall actions as soon as Cloud access is ready.";
   }
   if (input.failed) {
     return "Connect did not finish. Try again or open sign-in manually.";
   }
   if (input.mode === "repair") {
+    if (input.purpose === "audit") {
+      return "Reconnect Guard Cloud to restore workspace audit access on this machine.";
+    }
     return "Reconnect Guard Cloud to restore public sharing from this machine.";
+  }
+  if (input.purpose === "audit") {
+    return "One quick sign-in unlocks workspace package audits on this machine.";
   }
   return "One quick sign-in unlocks public sharing from this machine.";
 }
@@ -19129,6 +19172,8 @@ function ConnectFlowCard({
   connectError,
   connectStarting,
   connectFlow,
+  detail,
+  headline,
   localRecoveryHint,
   mode,
   onStartConnect,
@@ -19147,8 +19192,10 @@ function ConnectFlowCard({
   const statusTone = running ? "blue" : mode === "repair" ? "attention" : "blue";
   const statusLabel = running ? "Waiting for approval" : mode === "repair" ? "Repair required" : "Connection required";
   const showManualLink = connectFlow.authorize_url !== null || running || failed;
+  const titleCopy = headline ?? connectFlow.title;
+  const detailCopy = detail ?? connectFlow.detail;
   if (minimal) {
-    const helperText = resolveMinimalHelperText({ failed, mode, running });
+    const helperText = resolveMinimalHelperText({ failed, mode, purpose, running });
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-5 py-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap items-center gap-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: statusTone, children: statusLabel }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-slate-600", children: helperText }),
@@ -19173,8 +19220,8 @@ function ConnectFlowCard({
           /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: statusTone, children: statusLabel })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base font-semibold tracking-[-0.02em] text-brand-dark", children: connectFlow.title }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-3xl text-sm leading-relaxed text-slate-500", children: connectFlow.detail })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base font-semibold tracking-[-0.02em] text-brand-dark", children: titleCopy }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-3xl text-sm leading-relaxed text-slate-500", children: detailCopy })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2 text-xs leading-relaxed text-slate-500 md:grid-cols-3", children: steps.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
@@ -19210,8 +19257,8 @@ function ConnectFlowCard({
           /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: statusTone, children: statusLabel })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base font-semibold tracking-[-0.02em] text-brand-dark", children: connectFlow.title }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-3xl text-sm leading-relaxed text-slate-500", children: connectFlow.detail })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base font-semibold tracking-[-0.02em] text-brand-dark", children: titleCopy }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-3xl text-sm leading-relaxed text-slate-500", children: detailCopy })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-3", children: [
@@ -19262,8 +19309,11 @@ function CliFallback({ commands }) {
 }
 function EntitlementNotice({
   connectError,
+  connectPurpose = "package_firewall",
   connectStarting,
   data,
+  detail,
+  headline,
   onStartConnect
 }) {
   const connectRequired = data.entitlement.reason === "guard_cloud_connect_required" || data.entitlement.reason === "guard_cloud_reconnect_required";
@@ -19279,9 +19329,12 @@ function EntitlementNotice({
         connectError,
         connectStarting,
         connectFlow: data.connect_flow,
+        detail,
+        headline,
         localRecoveryHint,
         mode: connectMode,
-        onStartConnect
+        onStartConnect,
+        purpose: connectPurpose
       }
     ) : /* @__PURE__ */ jsxRuntimeExports.jsx(UpgradeCta, { entitlement: data.entitlement }),
     data.cli_fallback !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(CliFallback, { commands: data.cli_fallback })
@@ -26318,7 +26371,7 @@ export {
   fetchRuntimeSnapshot as Z,
   updateSettings as _,
   EvidenceActivityHeatmapMini as a,
-  HiMiniCloudArrowUp as a$,
+  HiMiniArrowRight as a$,
   clearReviewQueue as a0,
   revokeApprovalGateCooldown as a1,
   disableApprovalGateTotp as a2,
@@ -26342,20 +26395,20 @@ export {
   ActionResultPanel as aK,
   HiMiniBugAnt as aL,
   fetchPackageFirewallStatus as aM,
-  runPackageFirewallAction as aN,
-  parseInterceptProofSnapshot as aO,
-  runPackageAudit as aP,
-  runPackageSync as aQ,
-  startPackageFirewallConnect as aR,
+  runPackageAudit as aN,
+  startPackageFirewallConnect as aO,
+  runPackageFirewallAction as aP,
+  parseInterceptProofSnapshot as aQ,
+  runPackageSync as aR,
   openPackageFirewallShell as aS,
   EntitlementNotice as aT,
   fetchSupplyChainBundle as aU,
   HiMiniDocumentMagnifyingGlass as aV,
   HiMiniShieldExclamation as aW,
   HiMiniComputerDesktop as aX,
-  HiMiniArrowDown as aY,
-  HiMiniArrowUp as aZ,
-  HiMiniArrowRight as a_,
+  ConnectFlowCard as aY,
+  HiMiniArrowDown as aZ,
+  HiMiniArrowUp as a_,
   resetSettings as aa,
   setupDesktopNotifications as ab,
   Tag as ac,
@@ -26383,17 +26436,18 @@ export {
   clearLabelForScope as ay,
   formatHarnessCommand as az,
   EmptyState as b,
-  HiMiniInformationCircle as b0,
-  fetchReceipts as b1,
-  runAuditRemediation as b2,
-  HiMiniDocumentText as b3,
-  guardAwareHref as b4,
-  HiMiniSignal as b5,
-  savePolicyDecision as b6,
-  HiMiniChevronLeft as b7,
-  policyActionLabel as b8,
-  scopeLabel as b9,
-  HiMiniPlus as ba,
+  HiMiniCloudArrowUp as b0,
+  HiMiniInformationCircle as b1,
+  fetchReceipts as b2,
+  runAuditRemediation as b3,
+  HiMiniDocumentText as b4,
+  guardAwareHref as b5,
+  HiMiniSignal as b6,
+  savePolicyDecision as b7,
+  HiMiniChevronLeft as b8,
+  policyActionLabel as b9,
+  scopeLabel as ba,
+  HiMiniPlus as bb,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,

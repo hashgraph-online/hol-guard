@@ -17,8 +17,14 @@ import {
   runPackageSync,
   startPackageFirewallConnect,
 } from "./guard-api";
-import { EntitlementNotice } from "./supply-chain-firewall-views";
+import { EntitlementNotice, ConnectFlowCard } from "./supply-chain-firewall-views";
 import type { CompletedOp } from "./supply-chain-firewall-views";
+import {
+  isSupplyChainAuditConnectError,
+  packageAuditNeedsCloudConnect,
+  resolveSupplyChainAuditConnectGate,
+  type SupplyChainAuditConnectGate,
+} from "./supply-chain-audit-connect";
 import {
   FirewallControlsView,
   type FirewallFailedOp,
@@ -124,9 +130,18 @@ function RefreshButton({ disabled, spinning, onRefresh }: RefreshButtonProps) {
   );
 }
 
+export type AuditConnectGateViewState = {
+  gate: SupplyChainAuditConnectGate;
+  connectError: string | null;
+  connectStarting: boolean;
+  connectFlow: NonNullable<PackageFirewallStatusResponse["connect_flow"]>;
+  onStartConnect: () => void;
+};
+
 export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   props: {
   approvalGate: GuardApprovalGatePublicConfig | null;
+  onAuditConnectGateChange?: (state: AuditConnectGateViewState | null) => void;
   onStateChanged?: () => Promise<void> | void;
   onAuditCompleted?: (resultDetail: Record<string, unknown>) => void;
   onAuditRunningChange?: (running: boolean) => void;
@@ -134,7 +149,14 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
 },
   ref,
 ) {
-  const { approvalGate, onStateChanged, onAuditCompleted, onAuditRunningChange, runAuditRef } = props;
+  const {
+    approvalGate,
+    onAuditConnectGateChange,
+    onStateChanged,
+    onAuditCompleted,
+    onAuditRunningChange,
+    runAuditRef,
+  } = props;
   const rootRef = useRef<HTMLDivElement>(null);
   const [panelLoad, setPanelLoad] = useState<PanelLoadState>({ phase: "loading" });
   const [pendingOp, setPendingOp] = useState<PendingOp | null>(null);
@@ -150,6 +172,8 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   const [managerFilter, setManagerFilter] = useState("");
   const [interceptProof, setInterceptProof] = useState<InterceptProofSnapshot | null>(null);
   const [managerDrawerTarget, setManagerDrawerTarget] = useState<string | null>(null);
+  const [auditConnectGateActive, setAuditConnectGateActive] = useState(false);
+  const [resumeAuditAfterConnect, setResumeAuditAfterConnect] = useState(false);
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(approvalGate);
 
   const load = useCallback(async () => {
@@ -192,6 +216,113 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     }, flow.poll_after_ms ?? 1500);
     return () => window.clearTimeout(handle);
   }, [panelLoad, refreshAfterOp]);
+
+  const openAuditConnectGate = useCallback((resumeAfterConnect: boolean) => {
+    setAuditConnectGateActive(true);
+    setResumeAuditAfterConnect(resumeAfterConnect);
+    setLastFailed(null);
+    rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  const clearAuditConnectGate = useCallback(() => {
+    setAuditConnectGateActive(false);
+    setResumeAuditAfterConnect(false);
+  }, []);
+
+  const runAuditOperation = useCallback(
+    async () => {
+      setPendingOp({ op: "audit", manager: null });
+      setLastFailed(null);
+      setConnectError(null);
+      setActivationAssistError(null);
+      onAuditRunningChange?.(true);
+      try {
+        const response = await runPackageAudit();
+        setLastCompleted({ op: "audit", manager: null, response });
+        onAuditCompleted?.(response.result_detail);
+        clearAuditConnectGate();
+        await refreshAfterOp();
+        await onStateChanged?.();
+      } catch (err) {
+        if (isSupplyChainAuditConnectError(err)) {
+          openAuditConnectGate(true);
+          return;
+        }
+        const message = err instanceof Error ? err.message : "Operation failed.";
+        setLastFailed({ op: "audit", manager: null, message });
+      } finally {
+        onAuditRunningChange?.(false);
+        setPendingOp(null);
+      }
+    },
+    [
+      clearAuditConnectGate,
+      onAuditCompleted,
+      onAuditRunningChange,
+      onStateChanged,
+      openAuditConnectGate,
+      refreshAfterOp,
+    ],
+  );
+
+  const handleStartConnect = useCallback(async () => {
+    setStartingConnect(true);
+    setConnectError(null);
+    setActivationAssistError(null);
+    try {
+      await startPackageFirewallConnect();
+      await refreshAfterOp();
+      await onStateChanged?.();
+    } catch (error) {
+      setConnectError(
+        error instanceof Error ? error.message : "Unable to start Guard Cloud connect.",
+      );
+    } finally {
+      setStartingConnect(false);
+    }
+  }, [onStateChanged, refreshAfterOp]);
+
+  useEffect(() => {
+    if (panelLoad.phase !== "loaded" || !auditConnectGateActive) {
+      onAuditConnectGateChange?.(null);
+      return;
+    }
+    const gate = resolveSupplyChainAuditConnectGate(panelLoad.data, {
+      resumeAfterConnect: resumeAuditAfterConnect,
+    });
+    if (gate === null || panelLoad.data.connect_flow === null) {
+      onAuditConnectGateChange?.(null);
+      return;
+    }
+    onAuditConnectGateChange?.({
+      gate,
+      connectError,
+      connectStarting: startingConnect,
+      connectFlow: panelLoad.data.connect_flow,
+      onStartConnect: () => {
+        void handleStartConnect();
+      },
+    });
+  }, [
+    auditConnectGateActive,
+    connectError,
+    handleStartConnect,
+    onAuditConnectGateChange,
+    panelLoad,
+    resumeAuditAfterConnect,
+    startingConnect,
+  ]);
+
+  useEffect(() => {
+    if (panelLoad.phase !== "loaded" || !resumeAuditAfterConnect) {
+      return;
+    }
+    if (!panelLoad.data.entitlement.allowed || packageAuditNeedsCloudConnect(panelLoad.data)) {
+      return;
+    }
+    setResumeAuditAfterConnect(false);
+    void runAuditOperation();
+  }, [panelLoad, resumeAuditAfterConnect, runAuditOperation]);
 
   const handleAction = useCallback(
     async (
@@ -237,32 +368,31 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
 
   const handleGlobalOp = useCallback(
     async (op: "audit" | "sync") => {
+      if (op === "audit") {
+        if (panelLoad.phase === "loaded" && packageAuditNeedsCloudConnect(panelLoad.data)) {
+          openAuditConnectGate(true);
+          return;
+        }
+        await runAuditOperation();
+        return;
+      }
       setPendingOp({ op, manager: null });
       setLastFailed(null);
       setConnectError(null);
       setActivationAssistError(null);
-      if (op === "audit") {
-        onAuditRunningChange?.(true);
-      }
       try {
-        const response = op === "audit" ? await runPackageAudit() : await runPackageSync();
+        const response = await runPackageSync();
         setLastCompleted({ op, manager: null, response });
-        if (op === "audit") {
-          onAuditCompleted?.(response.result_detail);
-        }
         await refreshAfterOp();
         await onStateChanged?.();
       } catch (err) {
         const message = err instanceof Error ? err.message : "Operation failed.";
         setLastFailed({ op, manager: null, message });
       } finally {
-        if (op === "audit") {
-          onAuditRunningChange?.(false);
-        }
         setPendingOp(null);
       }
     },
-    [onAuditCompleted, onAuditRunningChange, onStateChanged, refreshAfterOp],
+    [onStateChanged, openAuditConnectGate, panelLoad, refreshAfterOp, runAuditOperation],
   );
 
   const handleInstall = useCallback(
@@ -289,7 +419,13 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     [handleAction],
   );
   const handleRemoveCancel = useCallback(() => setConfirmRemoveManager(null), []);
-  const handleAudit = useCallback(() => void handleGlobalOp("audit"), [handleGlobalOp]);
+  const handleAudit = useCallback(() => {
+    if (panelLoad.phase === "loaded" && packageAuditNeedsCloudConnect(panelLoad.data)) {
+      openAuditConnectGate(true);
+      return;
+    }
+    void runAuditOperation();
+  }, [openAuditConnectGate, panelLoad, runAuditOperation]);
   const handleSync = useCallback(() => void handleGlobalOp("sync"), [handleGlobalOp]);
 
   useEffect(() => {
@@ -303,22 +439,6 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   }, [handleAudit, runAuditRef]);
   const handleDismissResult = useCallback(() => setLastCompleted(null), []);
   const handleRetry = useCallback(() => void load(), [load]);
-  const handleStartConnect = useCallback(async () => {
-    setStartingConnect(true);
-    setConnectError(null);
-    setActivationAssistError(null);
-    try {
-      await startPackageFirewallConnect();
-      await refreshAfterOp();
-      await onStateChanged?.();
-    } catch (error) {
-      setConnectError(
-        error instanceof Error ? error.message : "Unable to start Guard Cloud connect.",
-      );
-    } finally {
-      setStartingConnect(false);
-    }
-  }, [onStateChanged, refreshAfterOp]);
   const handleOpenShell = useCallback(async () => {
     setOpeningShell(true);
     setActivationAssistError(null);
@@ -390,6 +510,11 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       ? panelLoad.data.package_shims.find((entry) => entry.manager === managerDrawerTarget)
       : undefined;
 
+  const auditConnectGate =
+    panelLoad.phase === "loaded" && auditConnectGateActive
+      ? resolveSupplyChainAuditConnectGate(panelLoad.data, { resumeAfterConnect: resumeAuditAfterConnect })
+      : null;
+
   const anyPending = pendingOp !== null;
   return (
     <div ref={rootRef} className="rounded-2xl border border-slate-100 bg-white shadow-sm" data-testid="package-firewall-panel">
@@ -417,8 +542,11 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
             <div className="border-b border-slate-100">
               <EntitlementNotice
                 connectError={connectError}
+                connectPurpose={auditConnectGateActive ? "audit" : "package_firewall"}
                 connectStarting={startingConnect}
                 data={panelLoad.data}
+                headline={auditConnectGate?.headline}
+                detail={auditConnectGate?.detail}
                 onStartConnect={handleStartConnect}
               />
             </div>
