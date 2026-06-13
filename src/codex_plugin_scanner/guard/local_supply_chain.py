@@ -558,15 +558,11 @@ def _incomplete_audit_receipt_metadata(
     outcome = str(result.get("audit_outcome") or "incomplete")
     manifest_raw = result.get("manifest_paths")
     manifest_paths = (
-        [str(path) for path in manifest_raw if isinstance(path, str)]
-        if isinstance(manifest_raw, (list, tuple))
-        else []
+        [str(path) for path in manifest_raw if isinstance(path, str)] if isinstance(manifest_raw, (list, tuple)) else []
     )
     lockfile_raw = result.get("lockfile_paths")
     lockfile_paths = (
-        [str(path) for path in lockfile_raw if isinstance(path, str)]
-        if isinstance(lockfile_raw, (list, tuple))
-        else []
+        [str(path) for path in lockfile_raw if isinstance(path, str)] if isinstance(lockfile_raw, (list, tuple)) else []
     )
     path_hashes = workspace_audit_path_hashes(workspace_dir, manifest_paths, lockfile_paths)
     policy_decision = "ask" if outcome in {"sync_required", "inventory_empty", "no_project_files"} else "monitor"
