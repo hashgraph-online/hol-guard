@@ -1958,6 +1958,7 @@ class GuardStore:
             approval_gate_grant=approval_gate_grant,
             now=now,
         )
+        _validate_scoped_policy_artifact_target(decision.scope, decision.artifact_id)
         artifact_id, artifact_hash, workspace, publisher = self._normalized_policy_keys(decision)
         with self._connect() as connection:
             connection.execute(
@@ -2013,6 +2014,7 @@ class GuardStore:
                 "delete from policy_decisions where source in ('cloud-sync', 'team-policy', 'policy-bundle')"
             )
             for decision in decisions:
+                _validate_scoped_policy_artifact_target(decision.scope, decision.artifact_id)
                 artifact_id, artifact_hash, workspace, publisher = self._normalized_policy_keys(decision)
                 connection.execute(
                     """
@@ -5094,6 +5096,24 @@ def _stored_workspace_policy_key(workspace: str) -> str:
         msg = "Workspace policy key cannot be empty"
         raise ValueError(msg)
     return policy_key
+
+
+def _validate_scoped_policy_artifact_target(scope: str, artifact_id: str | None) -> None:
+    if scope not in {"harness", "global"}:
+        return
+    if artifact_id is None or not artifact_id.strip():
+        return
+    if _artifact_family_key(artifact_id) is None:
+        msg = "unsupported_scoped_policy_family"
+        raise ValueError(msg)
+
+
+def scoped_policy_artifact_target_is_valid(scope: str, artifact_id: str | None) -> bool:
+    try:
+        _validate_scoped_policy_artifact_target(scope, artifact_id)
+    except ValueError:
+        return False
+    return True
 
 
 def _artifact_family_key(artifact_id: str | None) -> str | None:

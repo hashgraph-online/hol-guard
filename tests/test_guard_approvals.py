@@ -1741,6 +1741,39 @@ class TestGuardApprovals:
         assert status == 400
         assert payload["error"] == "missing_scope_target"
 
+    def test_guard_daemon_policy_upsert_rejects_unsupported_harness_family(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/policy/decisions",
+                data=json.dumps(
+                    {
+                        "harness": "codex",
+                        "scope": "harness",
+                        "action": "allow",
+                        "artifact_id": "family:tool-output",
+                        "reason": "allow command output review",
+                    }
+                ).encode("utf-8"),
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=5)
+            except urllib.error.HTTPError as error:
+                payload = json.loads(error.read().decode("utf-8"))
+                status = error.code
+            else:
+                raise AssertionError("expected HTTPError for unsupported harness family")
+        finally:
+            daemon.stop()
+
+        assert status == 400
+        assert payload["error"] == "missing_scope_target"
+
     def test_guard_daemon_policy_upsert_requires_auth_token(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)

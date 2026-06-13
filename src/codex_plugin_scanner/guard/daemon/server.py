@@ -131,7 +131,7 @@ from ..shims import (
     uninstall_package_shims,
 )
 from ..stable_digest import stable_digest_hex
-from ..store import GuardStore
+from ..store import GuardStore, scoped_policy_artifact_target_is_valid
 from ..store_approvals import InvalidApprovalCursorError
 from ..store_evidence import (
     clear_evidence,
@@ -4310,6 +4310,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             payload["saved"] = False
             self._write_json(payload, status=error.status)
             return
+        except ValueError as error:
+            self._write_json({"saved": False, "error": str(error)}, status=400)
+            return
         self._write_json({"saved": True, "decision": record})
 
     @staticmethod
@@ -4454,7 +4457,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         publisher: str | None,
     ) -> bool:
         if scope in {"global", "harness"}:
-            return True
+            return scoped_policy_artifact_target_is_valid(scope, artifact_id)
         if scope == "artifact":
             return artifact_id is not None
         if scope == "workspace":
