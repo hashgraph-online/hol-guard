@@ -289,6 +289,31 @@ def test_workspace_audit_returns_evaluation_not_posture_only(
     assert payload["inventory"]["total_packages"] >= 1
 
 
+def test_workspace_audit_block_exit_code_does_not_mark_incomplete(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = _audit_payload_for_workspace(
+        tmp_path,
+        files={
+            "package.json": '{"dependencies":{"minimist":"^1.2.0"}}',
+            "package-lock.json": json.dumps(
+                {
+                    "packages": {
+                        "": {"dependencies": {"minimist": "^1.2.0"}},
+                        "node_modules/minimist": {"version": "1.2.8"},
+                    }
+                }
+            ),
+        },
+        monkeypatch=monkeypatch,
+    )
+    assert payload.get("audit_status") != "incomplete"
+    evaluation = payload["evaluation"]
+    assert isinstance(evaluation, dict)
+    assert evaluation.get("decision") == "block"
+
+
 def test_workspace_audit_inference_uses_current_directory_with_markers(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -631,3 +656,62 @@ def test_audit_receipt_metadata_includes_prioritized_package_findings() -> None:
     assert isinstance(findings, list)
     assert len(findings) == 1
     assert findings[0]["name"] == "risky-lib"
+
+
+def test_workspace_audit_without_inventory_marks_incomplete_and_sync_required(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package-lock.json", "{}")
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_premium_entitlement(store)
+    config = load_guard_config(store.guard_home)
+    payload, exit_code = build_workspace_audit_payload(
+        command_name="audit",
+        config=config,
+        now=WORKSPACE_AUDIT_NOW,
+        sbom_paths=(),
+        store=store,
+        workspace_dir=workspace_dir,
+    )
+    assert exit_code == 1
+    assert payload["audit_status"] == "incomplete"
+    assert payload["audit_outcome"] == "sync_required"
+    assert payload["lockfile_paths"] == ["package-lock.json"]
+    metadata = audit_receipt_metadata(payload, workspace_dir=workspace_dir)
+    evidence = metadata["scanner_evidence"]
+    assert isinstance(evidence, dict)
+    assert evidence["audit_status"] == "incomplete"
+    assert evidence["total_packages"] == 0
+
+
+def test_workspace_audit_daemon_reports_incomplete_status_for_empty_inventory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package-lock.json", "{}")
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_premium_entitlement(store)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/audit",
+                token=token,
+                payload={"workspace_dir": str(workspace_dir)},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["status"] == "incomplete"
+    assert payload["result"]["audit_status"] == "incomplete"
+    assert payload["result"]["exit_code"] == 1

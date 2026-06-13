@@ -174,4 +174,27 @@ assert(
   "SCSR154-G: blocked audit receipts still surface in audit slot",
 );
 
+const incompleteAuditReceipt: GuardReceipt = {
+  ...auditReceipt,
+  receipt_id: "receipt-audit-incomplete-1",
+  policy_decision: "ask",
+  capabilities_summary: "Sync Guard supply-chain intel on this device before auditing workspace packages.",
+  timestamp: "2026-06-09T16:00:00.000Z",
+  scanner_evidence: [
+    {
+      operation: "audit",
+      audit_status: "incomplete",
+      audit_decision: "monitor",
+      blocked_package_count: 0,
+      total_packages: 0,
+    },
+  ] as unknown as GuardReceipt["scanner_evidence"],
+};
+const incompleteRail = deriveSupplyChainEvidenceRail([incompleteAuditReceipt]);
+assert(
+  incompleteRail.audit.title === "Workspace audit did not complete",
+  "SCSR154-H: incomplete audit receipts surface warning copy on evidence rail",
+);
+assert(incompleteRail.audit.tone === "attention", "SCSR154-I: incomplete audit receipts use attention tone");
+
 console.log("scsr-phase09c-evidence-rail.test.ts: all assertions passed");

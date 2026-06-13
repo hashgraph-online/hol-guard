@@ -4,6 +4,7 @@ import {
   normalizeSupplyChainAuditSnapshot,
   sortPackageWorkbenchFindings,
 } from "./supply-chain-audit-normalize";
+import { isSupplyChainAuditIncomplete } from "./supply-chain-audit-result";
 import type { GuardReceipt } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
@@ -141,6 +142,22 @@ assert(derived!.findings.length === 3, "SCSR175: receipt package_findings hydrat
 assert(
   normalizeSupplyChainAuditSnapshot({ generated_at: "2026-06-09T12:00:00.000Z" }) === null,
   "SCSR175-B: empty audit payload returns null snapshot",
+);
+assert(
+  normalizeSupplyChainAuditSnapshot({
+    generated_at: "2026-06-09T12:00:00.000Z",
+    lockfile_paths: ["package-lock.json"],
+    audit_status: "incomplete",
+  }) === null,
+  "SCSR175-C: incomplete lockfile-only audit does not masquerade as clean findings",
+);
+assert(
+  isSupplyChainAuditIncomplete({
+    generated_at: "2026-06-09T12:00:00.000Z",
+    exit_code: 2,
+    evaluation: { decision: "block", packages: [{ name: "risky-lib", decision: "block" }] },
+  }) === false,
+  "SCSR175-D: blocked completed audits are not treated as incomplete",
 );
 
 console.log("scsr-phase10-package-workbench.test.ts: all assertions passed");

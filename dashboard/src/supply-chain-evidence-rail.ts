@@ -115,6 +115,24 @@ function auditRailItem(receipt: GuardReceipt): SupplyChainEvidenceRailItem {
   const evidence = (receipt.scanner_evidence ?? []).find(
     (entry) => readOperation(entry) === "audit",
   );
+  const auditStatus =
+    isRecord(evidence) && typeof evidence.audit_status === "string"
+      ? evidence.audit_status
+      : null;
+  if (auditStatus === "incomplete") {
+    return {
+      kind: "audit",
+      timestamp: receipt.timestamp,
+      title: "Workspace audit did not complete",
+      detail:
+        receipt.capabilities_summary.trim().length > 0
+          ? receipt.capabilities_summary
+          : "Guard could not index workspace packages for audit.",
+      receiptId: receipt.receipt_id,
+      harness: receipt.harness,
+      tone: "attention",
+    };
+  }
   const decision =
     isRecord(evidence) && typeof evidence.audit_decision === "string"
       ? evidence.audit_decision
