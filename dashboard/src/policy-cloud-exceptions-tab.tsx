@@ -1,4 +1,3 @@
-import { useCallback } from "react";
 import { HiMiniCloudArrowUp } from "react-icons/hi2";
 import { ActionButton, EmptyState, SectionLabel } from "./approval-center-primitives";
 import type { GuardRuntimeSnapshot } from "./guard-types";
@@ -21,10 +20,6 @@ export function PolicyCloudExceptionsTab({
   const cloudConnected = resolveCloudExceptionsConnected(snapshot);
   const connectUrl = snapshot.connect_url?.trim() || null;
 
-  const handleRequestCloudException = useCallback(() => {
-    onRequestCloudException?.();
-  }, [onRequestCloudException]);
-
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-5 shadow-sm">
@@ -42,7 +37,7 @@ export function PolicyCloudExceptionsTab({
       <div className="flex flex-wrap items-center gap-2">
         <ActionButton
           variant="primary"
-          onClick={handleRequestCloudException}
+          onClick={onRequestCloudException}
           disabled={!cloudConnected || onRequestCloudException === undefined}
         >
           Request cloud exception

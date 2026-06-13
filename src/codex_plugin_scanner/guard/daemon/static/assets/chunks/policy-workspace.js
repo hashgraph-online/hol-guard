@@ -1,4 +1,4 @@
-import { b9 as policyActionLabel, h as harnessDisplayName, ba as scopeLabel, j as jsxRuntimeExports, r as reactExports, S as SectionLabel, A as ActionButton, b2 as HiMiniCloudArrowUp, b as EmptyState, ac as Tag, p as HiMiniChevronUp, q as HiMiniChevronDown, B as Badge, m as formatRelativeTime, b7 as guardAwareHref, ax as HiMiniTrash, ad as HiMiniMagnifyingGlass } from "../guard-dashboard.js";
+import { b9 as policyActionLabel, h as harnessDisplayName, ba as scopeLabel, j as jsxRuntimeExports, S as SectionLabel, A as ActionButton, b2 as HiMiniCloudArrowUp, b as EmptyState, r as reactExports, ac as Tag, p as HiMiniChevronUp, q as HiMiniChevronDown, B as Badge, m as formatRelativeTime, b7 as guardAwareHref, ax as HiMiniTrash, ad as HiMiniMagnifyingGlass } from "../guard-dashboard.js";
 const MATCHER_FAMILY_LABELS = {
   "package-request": "package install",
   "tool-action": "shell or tool command",
@@ -284,9 +284,6 @@ function PolicyCloudExceptionsTab({
   const cloudControlsUrl = resolveCloudPolicyControlsUrl(snapshot);
   const cloudConnected = resolveCloudExceptionsConnected(snapshot);
   const connectUrl = snapshot.connect_url?.trim() || null;
-  const handleRequestCloudException = reactExports.useCallback(() => {
-    onRequestCloudException?.();
-  }, [onRequestCloudException]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-5 shadow-sm", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Cloud risk acceptances" }),
@@ -298,7 +295,7 @@ function PolicyCloudExceptionsTab({
         ActionButton,
         {
           variant: "primary",
-          onClick: handleRequestCloudException,
+          onClick: onRequestCloudException,
           disabled: !cloudConnected || onRequestCloudException === void 0,
           children: "Request cloud exception"
         }
@@ -705,7 +702,7 @@ function PolicyWorkspace({
         }
       )
     ] }) : null,
-    activeView === "exceptions" ? /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyCloudExceptionsTab, { snapshot, onRequestCloudException: handleRequestCloudException }) : null,
+    activeView === "exceptions" ? /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyCloudExceptionsTab, { snapshot, onRequestCloudException: cloudControlsUrl ? handleRequestCloudException : void 0 }) : null,
     activeView === "strict" ? /* @__PURE__ */ jsxRuntimeExports.jsx(StrictModeView, { snapshot, onOpenSettings, onOpenInbox }) : null
   ] });
 }

@@ -253,7 +253,7 @@ export function PolicyWorkspace({
       ) : null}
 
       {activeView === "exceptions" ? (
-        <PolicyCloudExceptionsTab snapshot={snapshot} onRequestCloudException={handleRequestCloudException} />
+        <PolicyCloudExceptionsTab snapshot={snapshot} onRequestCloudException={cloudControlsUrl ? handleRequestCloudException : undefined} />
       ) : null}
 
       {activeView === "strict" ? (
