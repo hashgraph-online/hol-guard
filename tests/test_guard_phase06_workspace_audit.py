@@ -289,6 +289,31 @@ def test_workspace_audit_returns_evaluation_not_posture_only(
     assert payload["inventory"]["total_packages"] >= 1
 
 
+def test_workspace_audit_block_exit_code_does_not_mark_incomplete(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = _audit_payload_for_workspace(
+        tmp_path,
+        files={
+            "package.json": '{"dependencies":{"minimist":"^1.2.0"}}',
+            "package-lock.json": json.dumps(
+                {
+                    "packages": {
+                        "": {"dependencies": {"minimist": "^1.2.0"}},
+                        "node_modules/minimist": {"version": "1.2.8"},
+                    }
+                }
+            ),
+        },
+        monkeypatch=monkeypatch,
+    )
+    assert payload.get("audit_status") != "incomplete"
+    evaluation = payload["evaluation"]
+    assert isinstance(evaluation, dict)
+    assert evaluation.get("decision") == "block"
+
+
 def test_workspace_audit_inference_uses_current_directory_with_markers(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

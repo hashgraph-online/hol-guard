@@ -13978,18 +13978,13 @@ function readString$1(value) {
   return trimmed.length > 0 ? trimmed : null;
 }
 function isSupplyChainAuditIncomplete(detail) {
-  const auditStatus = readString$1(detail.audit_status);
-  if (auditStatus === "incomplete") {
-    return true;
+  if (!isRecord$2(detail)) {
+    return false;
   }
-  const exitCode = typeof detail.exit_code === "number" ? detail.exit_code : null;
-  if (exitCode !== null && exitCode !== 0) {
-    return true;
-  }
-  return false;
+  return readString$1(detail.audit_status) === "incomplete";
 }
 function resolveSupplyChainAuditFailure(detail) {
-  if (!isSupplyChainAuditIncomplete(detail)) {
+  if (!isRecord$2(detail) || !isSupplyChainAuditIncomplete(detail)) {
     return null;
   }
   const outcome = readString$1(detail.audit_outcome);

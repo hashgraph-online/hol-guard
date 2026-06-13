@@ -10,20 +10,15 @@ function readString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export function isSupplyChainAuditIncomplete(detail: Record<string, unknown>): boolean {
-  const auditStatus = readString(detail.audit_status);
-  if (auditStatus === "incomplete") {
-    return true;
+export function isSupplyChainAuditIncomplete(detail: unknown): boolean {
+  if (!isRecord(detail)) {
+    return false;
   }
-  const exitCode = typeof detail.exit_code === "number" ? detail.exit_code : null;
-  if (exitCode !== null && exitCode !== 0) {
-    return true;
-  }
-  return false;
+  return readString(detail.audit_status) === "incomplete";
 }
 
-export function resolveSupplyChainAuditFailure(detail: Record<string, unknown>): string | null {
-  if (!isSupplyChainAuditIncomplete(detail)) {
+export function resolveSupplyChainAuditFailure(detail: unknown): string | null {
+  if (!isRecord(detail) || !isSupplyChainAuditIncomplete(detail)) {
     return null;
   }
   const outcome = readString(detail.audit_outcome);
