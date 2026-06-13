@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/use-resolved-approval-gate.js","assets/chunks/feed-health-workspace.js","assets/chunks/home-protection-module.js","assets/chunks/audit-workspace.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/supply-chain-protection-stats.js","assets/chunks/feed-health-workspace.js","assets/chunks/home-protection-module.js","assets/chunks/audit-workspace.js"])))=>i.map(i=>d[i]);
 import { r as reactExports, j as jsxRuntimeExports, aB as WorkspacePageHeader, aC as __vitePreload } from "../guard-dashboard.js";
 const SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS = "min-w-0 max-w-full space-y-6 overflow-x-hidden";
 const SupplyChainWorkspace = reactExports.lazy(
