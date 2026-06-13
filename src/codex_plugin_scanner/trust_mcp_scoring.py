@@ -136,15 +136,6 @@ def build_mcp_surface_domain(
     stdio_like = normalized_transport == "stdio"
     transport_declared = bool(normalized_transport)
 
-    if stdio_like and has_command:
-        execution_score = 90.0
-    elif secure_endpoint:
-        execution_score = 80.0
-    elif has_endpoint:
-        execution_score = 35.0
-    else:
-        execution_score = 45.0 if has_command else 0.0
-
     if stdio_like:
         transport_score = 100.0
     elif secure_endpoint:
@@ -165,20 +156,21 @@ def build_mcp_surface_domain(
     adapters = (
         build_adapter_score(
             spec_by_id["verification.config-integrity"],
-            component_scores={"score": 100.0} if has_command or has_endpoint else None,
+            component_scores=None,
             rationales={
                 "score": (
-                    "The MCP server definition declares a concrete command or endpoint in the agent config."
-                    if has_command or has_endpoint
-                    else "No command or endpoint could be recovered from the MCP server definition."
+                    "Config-defined MCP fallback does not claim config-integrity without a parseable .mcp.json payload."
                 )
             },
         ),
         build_adapter_score(
             spec_by_id["verification.execution-safety"],
-            component_scores={"score": round_trust_score(execution_score)} if execution_score > 0 else None,
+            component_scores=None,
             rationales={
-                "score": ("Execution safety was inferred from the MCP transport and local command/endpoint shape.")
+                "score": (
+                    "Config-defined MCP fallback does not infer execution-safety "
+                    "without scanner or payload-backed evidence."
+                )
             },
         ),
         build_adapter_score(

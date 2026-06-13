@@ -43,7 +43,10 @@ def _skill_files(plugin_dir: Path, manifest: dict[str, object] | None) -> tuple[
     skills_dir = plugin_dir / skills_root
     if not skills_dir.is_dir():
         return (standalone_skill,) if standalone_skill.is_file() else ()
-    return tuple(iter_safe_matching_files(plugin_dir, skills_dir, "**/SKILL.md"))
+    skill_files = tuple(iter_safe_matching_files(plugin_dir, skills_dir, "**/SKILL.md"))
+    if skill_files:
+        return skill_files
+    return (standalone_skill,) if standalone_skill.is_file() else ()
 
 
 def _normalized_skill_metadata(
@@ -140,6 +143,7 @@ def build_skill_domain(
     languages = normalized["languages"]
     repository = normalized["repository"]
     homepage = normalized["homepage"]
+    commit = normalized["commit"]
     has_author = (
         isinstance(manifest, dict)
         and isinstance(manifest.get("author"), dict)
@@ -184,11 +188,11 @@ def build_skill_domain(
             True,
         ),
         "verification.repo-commit-integrity": (
-            {"score": 100.0} if normalized["repository"] and normalized["commit"] else None,
+            {"score": 100.0} if repository and commit else None,
             {
                 "score": (
                     "The bundled skill metadata declares both a repository URL and an immutable commit reference."
-                    if normalized["repository"] and normalized["commit"]
+                    if repository and commit
                     else (
                         "Repo-commit integrity requires both a repository URL and "
                         "a commit reference in local bundled-skill metadata."
