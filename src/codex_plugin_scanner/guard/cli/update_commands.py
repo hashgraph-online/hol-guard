@@ -35,6 +35,13 @@ _PYPI_JSON_URL = "https://pypi.org/pypi/hol-guard/json"
 _PYPI_TIMEOUT_SECONDS = 3.0
 
 
+def _read_direct_url_dir_info(direct_url: dict[str, object] | None) -> dict[str, object]:
+    if direct_url is None:
+        return {}
+    dir_info = direct_url.get("dir_info")
+    return dir_info if isinstance(dir_info, dict) else {}
+
+
 def run_guard_update(
     *,
     dry_run: bool,
@@ -55,7 +62,7 @@ def run_guard_update(
     }
     if direct_url is not None:
         payload["direct_url"] = direct_url
-        is_editable = bool(direct_url.get("dir_info", {}).get("editable"))
+        is_editable = bool(_read_direct_url_dir_info(direct_url).get("editable"))
         payload["editable_install"] = is_editable
         if local_source_install is not None:
             payload["source_install"] = local_source_install
@@ -118,11 +125,6 @@ def run_guard_update(
     payload["return_code"] = result.returncode
     importlib.invalidate_caches()
     payload["resulting_version"] = _current_version_from_subprocess()
-    if result.returncode != 0:
-        payload["status"] = "failed"
-        payload["changed"] = False
-        payload["message"] = "HOL Guard update failed."
-        return payload, 1
     initial_version_check = payload.get("version_check")
     resulting_version = str(payload.get("resulting_version") or current_version)
     post_version_check = _version_check_payload(resulting_version)
@@ -132,6 +134,19 @@ def run_guard_update(
         post_version_check,
         resulting_version,
     )
+    nonzero_success_note: str | None = None
+    if result.returncode != 0:
+        if _version_changed(current_version, resulting_version):
+            nonzero_success_note = (
+                "Installer exited with code "
+                f"{result.returncode} after version changed. "
+                "Review stderr for any follow-up action."
+            )
+        payload["status"] = "failed"
+        payload["changed"] = False
+        payload["message"] = "HOL Guard update failed."
+        if nonzero_success_note is None:
+            return payload, 1
     payload["status"] = _success_status(payload)
     payload["changed"] = _version_changed(current_version, resulting_version) or payload["status"] == "updated"
     stale_retry_command = _stale_retry_command(payload)
@@ -145,6 +160,8 @@ def run_guard_update(
         retry_command=stale_retry_command,
     )
     notes = _success_notes(payload)
+    if nonzero_success_note is not None:
+        notes = [*notes, nonzero_success_note]
     if notes:
         payload["notes"] = notes
     repaired_installs, repair_notes = _repair_supported_harnesses(
@@ -166,9 +183,10 @@ def run_guard_update(
         if dashboard_sync:
             payload["dashboard_sync"] = dashboard_sync
             sync_notes = dashboard_sync.get("notes")
-            if sync_notes:
-                existing = payload.get("notes") or []
-                payload["notes"] = [*existing, *sync_notes]
+            if isinstance(sync_notes, list) and sync_notes:
+                existing = payload.get("notes")
+                existing_notes = existing if isinstance(existing, list) else []
+                payload["notes"] = [*existing_notes, *sync_notes]
     return payload, 0
 
 
@@ -670,7 +688,7 @@ def build_guard_update_status_payload() -> dict[str, object]:
     blocked_reason: str | None = None
 
     if isinstance(direct_url, dict):
-        if bool(direct_url.get("dir_info", {}).get("editable")):
+        if bool(_read_direct_url_dir_info(direct_url).get("editable")):
             auto_updatable = False
             blocked_reason = (
                 "This install was set up from local source code. Re-run your usual local install command instead."
