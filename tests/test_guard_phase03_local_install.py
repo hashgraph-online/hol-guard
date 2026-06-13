@@ -213,6 +213,7 @@ def test_update_treats_nonzero_pipx_repair_as_updated_when_version_changed(
         "which",
         lambda name: "/mock-home/.local/bin/hol-guard" if name == "hol-guard" else None,
     )
+    monkeypatch.setattr(update_commands, "_sync_dashboard_assets", lambda: {"notes": ["synced dashboard"]})
 
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         assert command == ["pipx", "install", "--force", "hol-guard"]
