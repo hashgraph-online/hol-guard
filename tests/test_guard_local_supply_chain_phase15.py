@@ -522,6 +522,8 @@ def test_guard_supply_chain_scan_without_supported_manifests_returns_nonzero(tmp
     assert rc == 1
     assert output["manifest_paths"] == []
     assert output["lockfile_paths"] == []
+    assert output["audit_status"] == "incomplete"
+    assert output["audit_outcome"] == "no_project_files"
     assert output["message"] == "No supported manifests or lockfiles found in this workspace."
 
 

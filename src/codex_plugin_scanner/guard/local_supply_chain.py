@@ -523,6 +523,63 @@ def workspace_audit_path_hashes(
     }
 
 
+def _resolve_empty_audit_outcome(
+    *,
+    manifest_paths: Sequence[str],
+    lockfile_paths: Sequence[str],
+    posture: dict[str, object],
+) -> tuple[str, str]:
+    supply_status = str(posture.get("status") or "")
+    supply_detail = str(posture.get("detail") or _posture_detail(supply_status))
+    if supply_status == "sync_required":
+        return (
+            "sync_required",
+            "Sync Guard supply-chain intel on this device before auditing workspace packages.",
+        )
+    if supply_status in {"not_connected", "workspace_required", "expired", "degraded"}:
+        return (supply_status, supply_detail)
+    if lockfile_paths or manifest_paths:
+        return (
+            "inventory_empty",
+            "Guard found project files but could not index any packages for audit.",
+        )
+    return (
+        "no_project_files",
+        "No supported manifests or lockfiles found in this workspace.",
+    )
+
+
+def _incomplete_audit_receipt_metadata(
+    result: dict[str, object],
+    *,
+    workspace_dir: Path | None = None,
+) -> dict[str, object]:
+    message = str(result.get("message") or "Workspace audit did not complete.")
+    outcome = str(result.get("audit_outcome") or "incomplete")
+    manifest_paths = [str(path) for path in result.get("manifest_paths") or () if isinstance(path, str)]
+    lockfile_paths = [str(path) for path in result.get("lockfile_paths") or () if isinstance(path, str)]
+    path_hashes = workspace_audit_path_hashes(workspace_dir, manifest_paths, lockfile_paths)
+    policy_decision = "ask" if outcome in {"sync_required", "inventory_empty", "no_project_files"} else "monitor"
+    return {
+        "policy_decision": policy_decision,
+        "capabilities_summary": message,
+        "artifact_name": "Workspace supply-chain audit",
+        "scanner_evidence": {
+            "operation": "audit",
+            "audit_status": "incomplete",
+            "audit_outcome": outcome,
+            "audit_decision": "monitor",
+            "blocked_package_count": 0,
+            "total_packages": 0,
+            "manifest_paths": manifest_paths,
+            "lockfile_paths": lockfile_paths,
+            "manifest_hashes": path_hashes["manifest_hashes"],
+            "lockfile_hashes": path_hashes["lockfile_hashes"],
+            "package_findings": [],
+        },
+    }
+
+
 def audit_receipt_metadata(
     result: dict[str, object],
     *,
@@ -530,7 +587,7 @@ def audit_receipt_metadata(
 ) -> dict[str, object]:
     evaluation = result.get("evaluation")
     if not isinstance(evaluation, dict):
-        return {}
+        return _incomplete_audit_receipt_metadata(result, workspace_dir=workspace_dir)
     decision = str(evaluation.get("decision") or "monitor")
     packages = evaluation.get("packages")
     package_items = [item for item in packages if isinstance(item, dict)] if isinstance(packages, list) else []
@@ -612,6 +669,11 @@ def build_workspace_audit_payload(
             sbom_paths=sbom_paths,
         )
     if not inventory:
+        audit_outcome, message = _resolve_empty_audit_outcome(
+            manifest_paths=manifest_paths,
+            lockfile_paths=lockfile_paths,
+            posture=posture,
+        )
         return (
             {
                 "generated_at": now,
@@ -619,7 +681,9 @@ def build_workspace_audit_payload(
                 "manifest_paths": list(manifest_paths),
                 "lockfile_paths": list(lockfile_paths),
                 "sbom_paths": list(resolved_sbom_paths),
-                "message": "No supported manifests or lockfiles found in this workspace.",
+                "audit_outcome": audit_outcome,
+                "audit_status": "incomplete",
+                "message": message,
                 "supply_chain": posture,
             },
             1,

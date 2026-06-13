@@ -494,7 +494,7 @@ function requireReact_production() {
   react_production.useTransition = function() {
     return ReactSharedInternals.H.useTransition();
   };
-  react_production.version = "19.2.5";
+  react_production.version = "19.2.7";
   return react_production;
 }
 var hasRequiredReact;
@@ -516,7 +516,7 @@ var hasRequiredScheduler_production;
 function requireScheduler_production() {
   if (hasRequiredScheduler_production) return scheduler_production;
   hasRequiredScheduler_production = 1;
-  (function(exports$1) {
+  (function(exports) {
     function push(heap, node) {
       var index = heap.length;
       heap.push(node);
@@ -550,15 +550,15 @@ function requireScheduler_production() {
       var diff = a.sortIndex - b.sortIndex;
       return 0 !== diff ? diff : a.id - b.id;
     }
-    exports$1.unstable_now = void 0;
+    exports.unstable_now = void 0;
     if ("object" === typeof performance && "function" === typeof performance.now) {
       var localPerformance = performance;
-      exports$1.unstable_now = function() {
+      exports.unstable_now = function() {
         return localPerformance.now();
       };
     } else {
       var localDate = Date, initialTime = localDate.now();
-      exports$1.unstable_now = function() {
+      exports.unstable_now = function() {
         return localDate.now() - initialTime;
       };
     }
@@ -585,12 +585,12 @@ function requireScheduler_production() {
     }
     var isMessageLoopRunning = false, taskTimeoutID = -1, frameInterval = 5, startTime = -1;
     function shouldYieldToHost() {
-      return needsPaint ? true : exports$1.unstable_now() - startTime < frameInterval ? false : true;
+      return needsPaint ? true : exports.unstable_now() - startTime < frameInterval ? false : true;
     }
     function performWorkUntilDeadline() {
       needsPaint = false;
       if (isMessageLoopRunning) {
-        var currentTime = exports$1.unstable_now();
+        var currentTime = exports.unstable_now();
         startTime = currentTime;
         var hasMoreWork = true;
         try {
@@ -610,7 +610,7 @@ function requireScheduler_production() {
                     var continuationCallback = callback(
                       currentTask.expirationTime <= currentTime
                     );
-                    currentTime = exports$1.unstable_now();
+                    currentTime = exports.unstable_now();
                     if ("function" === typeof continuationCallback) {
                       currentTask.callback = continuationCallback;
                       advanceTimers(currentTime);
@@ -660,27 +660,27 @@ function requireScheduler_production() {
       };
     function requestHostTimeout(callback, ms) {
       taskTimeoutID = localSetTimeout(function() {
-        callback(exports$1.unstable_now());
+        callback(exports.unstable_now());
       }, ms);
     }
-    exports$1.unstable_IdlePriority = 5;
-    exports$1.unstable_ImmediatePriority = 1;
-    exports$1.unstable_LowPriority = 4;
-    exports$1.unstable_NormalPriority = 3;
-    exports$1.unstable_Profiling = null;
-    exports$1.unstable_UserBlockingPriority = 2;
-    exports$1.unstable_cancelCallback = function(task) {
+    exports.unstable_IdlePriority = 5;
+    exports.unstable_ImmediatePriority = 1;
+    exports.unstable_LowPriority = 4;
+    exports.unstable_NormalPriority = 3;
+    exports.unstable_Profiling = null;
+    exports.unstable_UserBlockingPriority = 2;
+    exports.unstable_cancelCallback = function(task) {
       task.callback = null;
     };
-    exports$1.unstable_forceFrameRate = function(fps) {
+    exports.unstable_forceFrameRate = function(fps) {
       0 > fps || 125 < fps ? console.error(
         "forceFrameRate takes a positive int between 0 and 125, forcing frame rates higher than 125 fps is not supported"
       ) : frameInterval = 0 < fps ? Math.floor(1e3 / fps) : 5;
     };
-    exports$1.unstable_getCurrentPriorityLevel = function() {
+    exports.unstable_getCurrentPriorityLevel = function() {
       return currentPriorityLevel;
     };
-    exports$1.unstable_next = function(eventHandler) {
+    exports.unstable_next = function(eventHandler) {
       switch (currentPriorityLevel) {
         case 1:
         case 2:
@@ -698,10 +698,10 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports$1.unstable_requestPaint = function() {
+    exports.unstable_requestPaint = function() {
       needsPaint = true;
     };
-    exports$1.unstable_runWithPriority = function(priorityLevel, eventHandler) {
+    exports.unstable_runWithPriority = function(priorityLevel, eventHandler) {
       switch (priorityLevel) {
         case 1:
         case 2:
@@ -720,8 +720,8 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports$1.unstable_scheduleCallback = function(priorityLevel, callback, options) {
-      var currentTime = exports$1.unstable_now();
+    exports.unstable_scheduleCallback = function(priorityLevel, callback, options) {
+      var currentTime = exports.unstable_now();
       "object" === typeof options && null !== options ? (options = options.delay, options = "number" === typeof options && 0 < options ? currentTime + options : currentTime) : options = currentTime;
       switch (priorityLevel) {
         case 1:
@@ -751,8 +751,8 @@ function requireScheduler_production() {
       options > currentTime ? (priorityLevel.sortIndex = options, push(timerQueue, priorityLevel), null === peek(taskQueue) && priorityLevel === peek(timerQueue) && (isHostTimeoutScheduled ? (localClearTimeout(taskTimeoutID), taskTimeoutID = -1) : isHostTimeoutScheduled = true, requestHostTimeout(handleTimeout, options - currentTime))) : (priorityLevel.sortIndex = timeout, push(taskQueue, priorityLevel), isHostCallbackScheduled || isPerformingWork || (isHostCallbackScheduled = true, isMessageLoopRunning || (isMessageLoopRunning = true, schedulePerformWorkUntilDeadline())));
       return priorityLevel;
     };
-    exports$1.unstable_shouldYield = shouldYieldToHost;
-    exports$1.unstable_wrapCallback = function(callback) {
+    exports.unstable_shouldYield = shouldYieldToHost;
+    exports.unstable_wrapCallback = function(callback) {
       var parentPriorityLevel = currentPriorityLevel;
       return function() {
         var previousPriorityLevel = currentPriorityLevel;
@@ -922,7 +922,7 @@ function requireReactDom_production() {
   reactDom_production.useFormStatus = function() {
     return ReactSharedInternals.H.useHostTransitionStatus();
   };
-  reactDom_production.version = "19.2.5";
+  reactDom_production.version = "19.2.7";
   return reactDom_production;
 }
 var hasRequiredReactDom;
@@ -12366,12 +12366,12 @@ function requireReactDomClient_production() {
     }
   };
   var isomorphicReactPackageVersion$jscomp$inline_1840 = React2.version;
-  if ("19.2.5" !== isomorphicReactPackageVersion$jscomp$inline_1840)
+  if ("19.2.7" !== isomorphicReactPackageVersion$jscomp$inline_1840)
     throw Error(
       formatProdErrorMessage(
         527,
         isomorphicReactPackageVersion$jscomp$inline_1840,
-        "19.2.5"
+        "19.2.7"
       )
     );
   ReactDOMSharedInternals.findDOMNode = function(componentOrElement) {
@@ -12389,10 +12389,10 @@ function requireReactDomClient_production() {
   };
   var internals$jscomp$inline_2347 = {
     bundleType: 0,
-    version: "19.2.5",
+    version: "19.2.7",
     rendererPackageName: "react-dom",
     currentDispatcherRef: ReactSharedInternals,
-    reconcilerVersion: "19.2.5"
+    reconcilerVersion: "19.2.7"
   };
   if ("undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__) {
     var hook$jscomp$inline_2348 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
@@ -12459,7 +12459,7 @@ function requireReactDomClient_production() {
     listenToAllSupportedEvents(container2);
     return new ReactDOMHydrationRoot(initialChildren);
   };
-  reactDomClient_production.version = "19.2.5";
+  reactDomClient_production.version = "19.2.7";
   return reactDomClient_production;
 }
 var hasRequiredClient;
@@ -13966,6 +13966,49 @@ function getDemoDiff(artifactId, harness) {
     return null;
   }
   return demoDiff;
+}
+function isRecord$2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function readString$1(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+function isSupplyChainAuditIncomplete(detail) {
+  const auditStatus = readString$1(detail.audit_status);
+  if (auditStatus === "incomplete") {
+    return true;
+  }
+  const exitCode = typeof detail.exit_code === "number" ? detail.exit_code : null;
+  if (exitCode !== null && exitCode !== 0) {
+    return true;
+  }
+  return false;
+}
+function resolveSupplyChainAuditFailure(detail) {
+  if (!isSupplyChainAuditIncomplete(detail)) {
+    return null;
+  }
+  const outcome = readString$1(detail.audit_outcome);
+  const message = readString$1(detail.message);
+  const supplyChain = isRecord$2(detail.supply_chain) ? detail.supply_chain : null;
+  const supplyStatus = readString$1(supplyChain?.status);
+  if (outcome === "sync_required" || supplyStatus === "sync_required") {
+    return message ?? "Guard supply-chain intel is not synced on this device. Run Sync, then audit again.";
+  }
+  if (outcome === "inventory_empty") {
+    return message ?? "Guard found project files but could not index any packages for audit.";
+  }
+  if (outcome === "no_project_files") {
+    return message ?? "No supported manifests or lockfiles were found in the audit workspace.";
+  }
+  if (message !== null) {
+    return message;
+  }
+  return "Workspace audit did not complete. Review supply-chain status and try again.";
 }
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
@@ -18784,6 +18827,27 @@ function readStringArray(value) {
   return value.filter((entry) => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim());
 }
 function parseAuditActionResult(result) {
+  if (isSupplyChainAuditIncomplete(result)) {
+    const failureMessage = resolveSupplyChainAuditFailure(result);
+    const manifestPaths2 = readStringArray(result.manifest_paths);
+    const lockfilePaths2 = readStringArray(result.lockfile_paths);
+    const lines2 = [];
+    if (manifestPaths2.length > 0) {
+      lines2.push(`Manifests found: ${manifestPaths2.join(", ")}.`);
+    }
+    if (lockfilePaths2.length > 0) {
+      lines2.push(`Lockfiles found: ${lockfilePaths2.join(", ")}.`);
+    }
+    if (failureMessage !== null) {
+      lines2.push(failureMessage);
+    }
+    return {
+      emptyState: false,
+      lines: lines2,
+      summary: "Workspace audit did not complete.",
+      tone: "warning"
+    };
+  }
   const evaluation = isRecord(result.evaluation) ? result.evaluation : null;
   const decision = readString(evaluation?.decision) ?? readString(result.decision) ?? "monitor";
   const manifestPaths = readStringArray(result.manifest_paths);
@@ -26385,12 +26449,12 @@ export {
   HiMiniExclamationCircle as J,
   HiMiniClipboardDocumentCheck as K,
   HiMiniClipboard as L,
-  requireReact as M,
-  getDefaultExportFromCjs as N,
-  HiMiniKey as O,
+  getDefaultExportFromCjs as M,
+  HiMiniKey as N,
+  HiMiniLockClosed as O,
   ProofStrip as P,
-  HiMiniLockClosed as Q,
-  HiMiniBellAlert as R,
+  HiMiniBellAlert as Q,
+  React as R,
   SectionLabel as S,
   HiMiniAdjustmentsHorizontal as T,
   HiMiniCog6Tooth as U,
@@ -26401,7 +26465,7 @@ export {
   fetchRuntimeSnapshot as Z,
   updateSettings as _,
   EvidenceActivityHeatmapMini as a,
-  HiMiniArrowRight as a$,
+  HiMiniArrowDown as a$,
   clearReviewQueue as a0,
   revokeApprovalGateCooldown as a1,
   disableApprovalGateTotp as a2,
@@ -26418,27 +26482,27 @@ export {
   Surface as aD,
   HiMiniArrowTopRightOnSquare as aE,
   HiMiniCheckBadge as aF,
-  HiMiniClock as aG,
-  IconActionButton as aH,
-  HiMiniBeaker as aI,
-  ActivationSummary as aJ,
-  ActionResultPanel as aK,
-  HiMiniBugAnt as aL,
-  fetchPackageFirewallStatus as aM,
-  runPackageAudit as aN,
-  startPackageFirewallConnect as aO,
-  runPackageFirewallAction as aP,
-  parseInterceptProofSnapshot as aQ,
-  runPackageSync as aR,
-  openPackageFirewallShell as aS,
-  EntitlementNotice as aT,
-  fetchSupplyChainBundle as aU,
-  HiMiniDocumentMagnifyingGlass as aV,
-  HiMiniShieldExclamation as aW,
-  HiMiniComputerDesktop as aX,
-  ConnectFlowCard as aY,
-  HiMiniArrowDown as aZ,
-  HiMiniArrowUp as a_,
+  isSupplyChainAuditIncomplete as aG,
+  HiMiniClock as aH,
+  IconActionButton as aI,
+  HiMiniBeaker as aJ,
+  ActivationSummary as aK,
+  ActionResultPanel as aL,
+  HiMiniBugAnt as aM,
+  fetchPackageFirewallStatus as aN,
+  runPackageAudit as aO,
+  resolveSupplyChainAuditFailure as aP,
+  startPackageFirewallConnect as aQ,
+  runPackageFirewallAction as aR,
+  parseInterceptProofSnapshot as aS,
+  runPackageSync as aT,
+  openPackageFirewallShell as aU,
+  EntitlementNotice as aV,
+  fetchSupplyChainBundle as aW,
+  HiMiniDocumentMagnifyingGlass as aX,
+  HiMiniShieldExclamation as aY,
+  HiMiniComputerDesktop as aZ,
+  ConnectFlowCard as a_,
   resetSettings as aa,
   setupDesktopNotifications as ab,
   Tag as ac,
@@ -26466,18 +26530,20 @@ export {
   clearLabelForScope as ay,
   formatHarnessCommand as az,
   EmptyState as b,
-  HiMiniCloudArrowUp as b0,
-  HiMiniInformationCircle as b1,
-  fetchReceipts as b2,
-  runAuditRemediation as b3,
-  HiMiniDocumentText as b4,
-  guardAwareHref as b5,
-  HiMiniSignal as b6,
-  savePolicyDecision as b7,
-  HiMiniChevronLeft as b8,
-  policyActionLabel as b9,
-  scopeLabel as ba,
-  HiMiniPlus as bb,
+  HiMiniArrowUp as b0,
+  HiMiniArrowRight as b1,
+  HiMiniCloudArrowUp as b2,
+  HiMiniInformationCircle as b3,
+  fetchReceipts as b4,
+  runAuditRemediation as b5,
+  HiMiniDocumentText as b6,
+  guardAwareHref as b7,
+  HiMiniSignal as b8,
+  savePolicyDecision as b9,
+  HiMiniChevronLeft as ba,
+  policyActionLabel as bb,
+  scopeLabel as bc,
+  HiMiniPlus as bd,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,
