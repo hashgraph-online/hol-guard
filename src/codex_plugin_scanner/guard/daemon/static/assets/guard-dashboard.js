@@ -15796,6 +15796,7 @@ function normalizePackageFirewallStatus(value) {
   const protectedManagers = packageShims.filter((shim) => shim.activation_state === "protected").map((shim) => shim.manager);
   const protectedSet = new Set(protectedManagers);
   const lastAuditProofAt = stringValue(readPackageShimField(shimStatus, "last_audit_proof_at", "lastAuditProofAt")) ?? null;
+  const auditWorkspaceDir = stringValue(record.audit_workspace_dir) ?? null;
   const shellProfilePath = readPackageShimField(shimStatus, "shell_profile_path", "shellProfilePath");
   const protection = {
     path_status: rawPathStatus,
@@ -15813,6 +15814,7 @@ function normalizePackageFirewallStatus(value) {
   };
   return {
     actions: normalizePackageFirewallActions(record.actions),
+    audit_workspace_dir: auditWorkspaceDir,
     cli_fallback: normalizePackageFirewallCliFallback(record.cli_fallback),
     connect_flow: normalizePackageFirewallConnectFlow(record.connect_flow),
     detected_managers: detectedManagers,
@@ -15940,14 +15942,19 @@ async function runAuditRemediation(input) {
   }
   return normalizePackageFirewallAction(payload);
 }
-async function runPackageAudit() {
+async function runPackageAudit(input) {
+  const workspaceDir = input?.workspaceDir?.trim() ?? null;
+  const body = {};
+  if (workspaceDir) {
+    body.workspace_dir = workspaceDir;
+  }
   const response = await fetchGuardApi("/v1/supply-chain/audit", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...guardAuthHeaders()
     },
-    body: JSON.stringify({})
+    body: JSON.stringify(body)
   });
   const payloadBody = await response.json().catch(() => null);
   if (!response.ok) {

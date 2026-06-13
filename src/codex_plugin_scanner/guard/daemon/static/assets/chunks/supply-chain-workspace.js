@@ -377,6 +377,54 @@ function resolveSupplyChainAuditConnectGate(data, options) {
     resumeAfterConnect: options?.resumeAfterConnect ?? false
   };
 }
+function supplyChainAuditConnectUserMessage(error) {
+  if (!isSupplyChainAuditConnectError(error)) {
+    return null;
+  }
+  const code = error.payload?.error;
+  if (code === "guard_cloud_reconnect_required") {
+    return "Reconnect HOL Guard Cloud, then run the workspace audit again.";
+  }
+  return "Sign in to HOL Guard Cloud on this machine, then run the workspace audit.";
+}
+function supplyChainAuditUserMessage(error) {
+  if (error instanceof GuardHarnessActionError) {
+    if (error.payload?.error === "workspace_dir_required") {
+      return error.payload.message ?? "Guard needs a connected app project folder with package manifests before it can run the workspace audit.";
+    }
+    return supplyChainAuditConnectUserMessage(error);
+  }
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+  return null;
+}
+function resolveSupplyChainAuditWorkspaceDir(managedInstalls) {
+  const ordered = [...managedInstalls].sort((left, right) => {
+    if (left.active !== right.active) {
+      return left.active ? -1 : 1;
+    }
+    return right.updated_at.localeCompare(left.updated_at);
+  });
+  for (const install of ordered) {
+    const workspace = install.workspace?.trim();
+    if (workspace) {
+      return workspace;
+    }
+  }
+  return null;
+}
+function resolveSupplyChainAuditWorkspaceTarget(input) {
+  const managed = input.managedWorkspaceDir?.trim();
+  if (managed) {
+    return managed;
+  }
+  const status = input.statusWorkspaceDir?.trim();
+  if (status) {
+    return status;
+  }
+  return null;
+}
 function resolveShimStatus(shim) {
   if (!shim) {
     return { label: "Unprotected", tone: "attention", icon: "warning" };
@@ -1018,7 +1066,9 @@ function RefreshButton({ disabled, spinning, onRefresh }) {
 const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPanel2(props, ref) {
   const {
     approvalGate,
+    auditWorkspaceDir,
     onAuditConnectGateChange,
+    onAuditErrorChange,
     onStateChanged,
     onAuditCompleted,
     onAuditRunningChange,
@@ -1093,12 +1143,19 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       setLastFailed(null);
       setConnectError(null);
       setActivationAssistError(null);
+      onAuditErrorChange?.(null);
       onAuditRunningChange?.(true);
+      const statusWorkspaceDir = panelLoad.phase === "loaded" ? panelLoad.data.audit_workspace_dir ?? null : null;
+      const workspaceDir = resolveSupplyChainAuditWorkspaceTarget({
+        managedWorkspaceDir: auditWorkspaceDir,
+        statusWorkspaceDir
+      });
       try {
-        const response = await runPackageAudit();
+        const response = await runPackageAudit({ workspaceDir });
         setLastCompleted({ op: "audit", manager: null, response });
         onAuditCompleted?.(response.result_detail);
         clearAuditConnectGate();
+        onAuditErrorChange?.(null);
         await refreshAfterOp();
         await onStateChanged?.();
       } catch (err) {
@@ -1106,19 +1163,23 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
           openAuditConnectGate(true);
           return;
         }
-        const message = err instanceof Error ? err.message : "Operation failed.";
+        const message = supplyChainAuditUserMessage(err) ?? "Operation failed.";
         setLastFailed({ op: "audit", manager: null, message });
+        onAuditErrorChange?.(message);
       } finally {
         onAuditRunningChange?.(false);
         setPendingOp(null);
       }
     },
     [
+      auditWorkspaceDir,
       clearAuditConnectGate,
       onAuditCompleted,
+      onAuditErrorChange,
       onAuditRunningChange,
       onStateChanged,
       openAuditConnectGate,
+      panelLoad,
       refreshAfterOp
     ]
   );
@@ -2152,7 +2213,25 @@ function EcosystemChip({ ecosystem, active, onSelect }) {
   }, [ecosystem, onSelect]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: ecosystem, active, onSelect: handleSelect });
 }
-function WorkbenchEmptyState({ auditConnectGate, onRunAudit, auditRunning }) {
+function WorkbenchAuditErrorBanner({ message }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "mb-4 flex items-start gap-2 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.04] px-3 py-2.5",
+      role: "alert",
+      "aria-live": "assertive",
+      "data-testid": "workbench-audit-error",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Workspace audit could not start" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs leading-relaxed text-slate-600", children: message })
+        ] })
+      ]
+    }
+  );
+}
+function WorkbenchEmptyState({ auditConnectGate, auditError, onRunAudit, auditRunning }) {
   if (auditConnectGate !== null && auditConnectGate !== void 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       ConnectFlowCard,
@@ -2169,21 +2248,25 @@ function WorkbenchEmptyState({ auditConnectGate, onRunAudit, auditRunning }) {
       }
     );
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    EmptyState,
-    {
-      title: "No workspace audit yet",
-      body: "Run a package audit to index dependencies and surface flagged packages here.",
-      tone: "teach",
-      action: onRunAudit !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: onRunAudit, disabled: auditRunning, "aria-busy": auditRunning, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
-        "Run audit"
-      ] }) : void 0
-    }
-  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    auditError ? /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchAuditErrorBanner, { message: auditError }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EmptyState,
+      {
+        title: "No workspace audit yet",
+        body: "Run a package audit to index dependencies and surface flagged packages here.",
+        tone: "teach",
+        action: onRunAudit !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: onRunAudit, disabled: auditRunning, "aria-busy": auditRunning, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
+          "Run audit"
+        ] }) : void 0
+      }
+    )
+  ] });
 }
 function PackageWorkbenchPanel({
   auditConnectGate = null,
+  auditError = null,
   auditSnapshot,
   onRunAudit,
   auditRunning = false
@@ -2254,6 +2337,7 @@ function PackageWorkbenchPanel({
       WorkbenchEmptyState,
       {
         auditConnectGate,
+        auditError,
         onRunAudit,
         auditRunning
       }
@@ -2388,85 +2472,6 @@ function resolveSupplyChainIssues(snapshot) {
     }
   }
   return issues;
-}
-function protectionTitle(status) {
-  if (status === "protected") {
-    return "Package installs are protected on this device";
-  }
-  if (status === "partial") {
-    return "Protection is only partly set up";
-  }
-  if (status === "staged") {
-    return "Finish setup in a new terminal";
-  }
-  if (status === "unprotected") {
-    return "Package installs are not protected yet";
-  }
-  return "Checking package protection on this device";
-}
-function protectionDetail(snapshot, status) {
-  const protection = snapshot.supply_chain?.package_manager_protection;
-  if (status === "protected" && protection) {
-    return `${protection.protected_managers.length} package tool${protection.protected_managers.length === 1 ? "" : "s"} active. Guard can block risky installs before they run.`;
-  }
-  if (status === "partial" && protection) {
-    return `${protection.unprotected_managers.length} tool${protection.unprotected_managers.length === 1 ? "" : "s"} still open: ${protection.unprotected_managers.join(", ")}.`;
-  }
-  if (status === "staged") {
-    return "Guard updated your shell profile. Open a new terminal, then run a protection test.";
-  }
-  if (status === "unprotected") {
-    return "Turn on protection for npm, pip, and other tools in the firewall panel below.";
-  }
-  return "Refresh status after installing package tools on this machine.";
-}
-function protectionTone(status) {
-  if (status === "protected") {
-    return "green";
-  }
-  if (status === "staged") {
-    return "blue";
-  }
-  if (status === "partial" || status === "unprotected") {
-    return "attention";
-  }
-  return "slate";
-}
-function cloudLabel(snapshot) {
-  const label = snapshot.cloud_state_label ?? "";
-  if (snapshot.cloud_state === "paired_active") {
-    return label.trim().length > 0 ? label : "Guard Cloud connected";
-  }
-  if (snapshot.cloud_state === "paired_waiting") {
-    return label.trim().length > 0 ? label : "Pairing in progress";
-  }
-  return label.trim().length > 0 ? label : "On this device only";
-}
-function resolveSupplyChainWorkspaceHero(snapshot, options) {
-  const protectionStatus = resolveHomeProtectionStatus(snapshot);
-  const stats = buildSupplyChainStats(snapshot);
-  const preventedLabel = stats.preventedInstalls > 0 ? `${stats.preventedInstalls} blocked install${stats.preventedInstalls === 1 ? "" : "s"}` : "No blocked installs yet";
-  const openIssueCount = options?.openIssueCount ?? 0;
-  if (openIssueCount > 0) {
-    return {
-      cloudMode: snapshot.cloud_state,
-      cloudLabel: cloudLabel(snapshot),
-      protectionStatus,
-      title: "Work through the steps below",
-      detail: `${openIssueCount} setup step${openIssueCount === 1 ? "" : "s"} need attention on this device.`,
-      tone: protectionTone(protectionStatus),
-      statLine: `${stats.protectedManagers} protected · ${stats.unprotectedManagers} open · ${preventedLabel}`
-    };
-  }
-  return {
-    cloudMode: snapshot.cloud_state,
-    cloudLabel: cloudLabel(snapshot),
-    protectionStatus,
-    title: protectionTitle(protectionStatus),
-    detail: protectionDetail(snapshot, protectionStatus),
-    tone: protectionTone(protectionStatus),
-    statLine: `${stats.protectedManagers} protected · ${stats.unprotectedManagers} open · ${preventedLabel}`
-  };
 }
 function supplyChainCloudTagTone(mode) {
   if (mode === "paired_active") {
@@ -2762,6 +2767,7 @@ function SupplyChainWorkspace({
   const [auditSnapshot, setAuditSnapshot] = reactExports.useState(null);
   const [evidenceRail, setEvidenceRail] = reactExports.useState(null);
   const [auditRunning, setAuditRunning] = reactExports.useState(false);
+  const [auditError, setAuditError] = reactExports.useState(null);
   const [auditConnectGate, setAuditConnectGate] = reactExports.useState(null);
   const runAuditRef = reactExports.useRef(null);
   const firewallPanelRef = reactExports.useRef(null);
@@ -2803,6 +2809,10 @@ function SupplyChainWorkspace({
     },
     [onRuntimeRefresh]
   );
+  const auditWorkspaceDir = reactExports.useMemo(
+    () => resolveSupplyChainAuditWorkspaceDir(managedInstalls),
+    [managedInstalls]
+  );
   const supplyChainIssues = reactExports.useMemo(() => resolveSupplyChainIssues(snapshot), [snapshot]);
   const workspaceHero = reactExports.useMemo(
     () => resolveSupplyChainWorkspaceHero(snapshot, { openIssueCount: supplyChainIssues.length }),
@@ -2837,6 +2847,10 @@ function SupplyChainWorkspace({
   const handleAuditCompleted = reactExports.useCallback((resultDetail) => {
     const normalized = normalizeSupplyChainAuditSnapshot(resultDetail);
     setAuditSnapshot(normalized);
+    setAuditError(null);
+  }, []);
+  const handleAuditErrorChange = reactExports.useCallback((message) => {
+    setAuditError(message);
   }, []);
   const handleAuditRunningChange = reactExports.useCallback((running) => {
     setAuditRunning(running);
@@ -2863,6 +2877,7 @@ function SupplyChainWorkspace({
       PackageWorkbenchPanel,
       {
         auditConnectGate,
+        auditError,
         auditSnapshot,
         auditRunning,
         onRunAudit: handleRunAudit
@@ -2874,7 +2889,9 @@ function SupplyChainWorkspace({
       {
         ref: firewallPanelRef,
         approvalGate,
+        auditWorkspaceDir,
         onAuditConnectGateChange: setAuditConnectGate,
+        onAuditErrorChange: handleAuditErrorChange,
         onStateChanged: onRuntimeRefresh,
         onAuditCompleted: handleAuditCompleted,
         onAuditRunningChange: handleAuditRunningChange,

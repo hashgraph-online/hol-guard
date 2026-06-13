@@ -6,6 +6,7 @@ import {
   packageAuditNeedsCloudConnect,
   resolveSupplyChainAuditConnectGate,
   supplyChainAuditConnectUserMessage,
+  supplyChainAuditUserMessage,
 } from "./supply-chain-audit-connect";
 import type { PackageFirewallStatusResponse } from "./guard-types";
 
@@ -75,6 +76,21 @@ assert(isSupplyChainAuditConnectError(connectError), "structured audit connect e
 assert(
   supplyChainAuditConnectUserMessage(connectError)?.includes("Sign in"),
   "audit connect user message should guide sign-in before retry",
+);
+
+const workspaceError = new GuardHarnessActionError(400, {
+  error: "workspace_dir_required",
+  message:
+    "Guard needs a project folder with package manifests before it can run the workspace audit.",
+  operation: "audit",
+});
+assert(
+  supplyChainAuditUserMessage(workspaceError)?.includes("project folder"),
+  "workspace audit errors should surface actionable copy instead of raw codes",
+);
+assert(
+  !isSupplyChainAuditConnectError(workspaceError),
+  "workspace_dir_required should not be treated as a cloud connect gate",
 );
 
 const auditConnectMarkup = renderToStaticMarkup(

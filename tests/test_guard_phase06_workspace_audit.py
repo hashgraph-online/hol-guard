@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.local_supply_chain import (
     audit_receipt_metadata,
     build_workspace_audit_payload,
+    managed_install_audit_workspace_dirs,
     resolve_supply_chain_audit_workspace_dir,
 )
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
@@ -318,6 +319,74 @@ def test_workspace_audit_inference_accepts_workspace_alias(
         allowed_roots=allowed_roots,
     )
     assert resolved == workspace_dir.resolve()
+
+
+def test_workspace_audit_inference_uses_active_managed_install_workspace(
+    tmp_path: Path,
+) -> None:
+    active_dir = tmp_path / "active-workspace"
+    active_dir.mkdir()
+    _write_text(active_dir / "package.json", '{"name":"active"}')
+
+    inactive_dir = tmp_path / "inactive-workspace"
+    inactive_dir.mkdir()
+    _write_text(inactive_dir / "package.json", '{"name":"inactive"}')
+
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_managed_install("cursor", False, str(inactive_dir), {}, "2026-06-08T13:00:00.000Z")
+    store.set_managed_install("codex", True, str(active_dir), {}, "2026-06-08T12:00:00.000Z")
+    allowed_roots = (tmp_path.resolve(),)
+    resolved = resolve_supply_chain_audit_workspace_dir(
+        workspace_dir_value=None,
+        workspace_value=None,
+        allowed_roots=allowed_roots,
+        managed_workspace_dirs=managed_install_audit_workspace_dirs(store),
+    )
+    assert resolved == active_dir.resolve()
+
+
+def test_daemon_workspace_audit_uses_managed_install_workspace_when_cwd_is_not_a_project(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    empty_dir = tmp_path / "empty"
+    empty_dir.mkdir()
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo","dependencies":{"minimist":"^1.2.0"}}')
+    _write_text(
+        workspace_dir / "package-lock.json",
+        json.dumps(
+            {
+                "packages": {
+                    "": {"dependencies": {"minimist": "^1.2.0"}},
+                    "node_modules/minimist": {"version": "1.2.8"},
+                }
+            }
+        ),
+    )
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_managed_install("codex", True, str(workspace_dir), {}, WORKSPACE_AUDIT_NOW)
+    _seed_premium_entitlement(store)
+    monkeypatch.chdir(empty_dir)
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/audit",
+                token=token,
+                payload={},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["operation"] == "audit"
 
 
 def test_workspace_audit_never_reads_env_files(
