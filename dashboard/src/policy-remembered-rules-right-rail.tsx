@@ -1,4 +1,3 @@
-import { useCallback } from "react";
 import { scopeLabel } from "./approval-center-utils";
 
 const REVIEW_SCOPE_LADDER = [
@@ -16,10 +15,6 @@ type PolicyRememberedRulesRightRailProps = {
 export function PolicyRememberedRulesRightRail({
   onOpenCloudExceptions,
 }: PolicyRememberedRulesRightRailProps) {
-  const handleOpenCloudExceptions = useCallback(() => {
-    onOpenCloudExceptions();
-  }, [onOpenCloudExceptions]);
-
   return (
     <aside className="space-y-4 lg:sticky lg:top-4">
       <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
@@ -31,7 +26,7 @@ export function PolicyRememberedRulesRightRail({
         </ul>
         <button
           type="button"
-          onClick={handleOpenCloudExceptions}
+          onClick={onOpenCloudExceptions}
           className="mt-3 text-sm font-medium text-brand-blue hover:underline"
         >
           Open Cloud exceptions tab

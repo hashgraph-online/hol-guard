@@ -552,9 +552,6 @@ const REVIEW_SCOPE_LADDER = [
 function PolicyRememberedRulesRightRail({
   onOpenCloudExceptions
 }) {
-  const handleOpenCloudExceptions = reactExports.useCallback(() => {
-    onOpenCloudExceptions();
-  }, [onOpenCloudExceptions]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "space-y-4 lg:sticky lg:top-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: "Remembered rules vs Cloud exceptions" }),
@@ -567,7 +564,7 @@ function PolicyRememberedRulesRightRail({
         "button",
         {
           type: "button",
-          onClick: handleOpenCloudExceptions,
+          onClick: onOpenCloudExceptions,
           className: "mt-3 text-sm font-medium text-brand-blue hover:underline",
           children: "Open Cloud exceptions tab"
         }
