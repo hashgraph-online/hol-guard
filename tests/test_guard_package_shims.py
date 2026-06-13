@@ -834,9 +834,17 @@ def test_guard_package_shim_status_reports_foreign_shim_bypass(
     assert status_payload["bypasses"] == [
         {
             "manager": "npm",
-            "reason": "foreign_shim_bypass",
+            "reason": "path_inactive",
         }
     ]
+    npm_detail = next(
+        (entry for entry in status_payload["manager_details"] if entry["manager"] == "npm"),
+        None,
+    )
+    assert npm_detail is not None
+    path_status = npm_detail["path_status"]
+    assert isinstance(path_status, dict)
+    assert path_status["foreign_shim_bypass"] is True
 
 
 @pytest.mark.parametrize(

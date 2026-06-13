@@ -577,11 +577,10 @@ def package_shim_status(context: HarnessContext) -> dict[str, object]:
         if exists and bool(path_status.get("shim_precedes_real")):
             protected_managers.append(manager)
         elif exists:
-            bypass_reason = "foreign_shim_bypass" if bool(path_status.get("foreign_shim_bypass")) else "path_inactive"
             bypasses.append(
                 {
                     "manager": manager,
-                    "reason": bypass_reason,
+                    "reason": "path_inactive",
                 }
             )
     profile_status = _package_shim_profile_status(context)
