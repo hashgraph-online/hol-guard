@@ -2258,8 +2258,11 @@ function buildPackageShimPathSummary(detail: Record<string, unknown> | null): st
   }
   const shimPath = stringValue(detail.shim_path);
   const realBinaryPath = stringValue(detail.real_binary_path);
+  const pathActive = booleanValue(detail.path_active);
   if (shimPath !== null && realBinaryPath !== null) {
-    return `${shimPath} precedes ${realBinaryPath}`;
+    return pathActive
+      ? `${shimPath} precedes ${realBinaryPath}`
+      : `${realBinaryPath} precedes ${shimPath}`;
   }
   if (shimPath !== null) {
     return shimPath;
@@ -2301,15 +2304,19 @@ function normalizePackageShimEntry(
   const integrity = stringValue(detail?.integrity) ?? "uninstalled";
   const installed = detail !== null && integrity !== "missing";
   const active = booleanValue(detail?.path_active);
-  const pathBroken = coverage.pathBroken || detail?.path_broken === true;
+  const pathBroken =
+    pathStatus !== "restart_required" &&
+    (coverage.pathBroken || detail?.path_broken === true);
   const activation_state = !installed
     ? "uninstalled"
-    : integrity === "tampered" || pathBroken
+    : integrity === "tampered"
     ? "repair_required"
     : active
     ? "protected"
     : pathStatus === "restart_required"
     ? "restart_required"
+    : pathBroken
+    ? "repair_required"
     : "repair_required";
   return {
     active,

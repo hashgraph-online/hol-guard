@@ -435,14 +435,14 @@ function resolveShimStatus(shim) {
   if (!shim.installed) {
     return { label: "Unprotected", tone: "attention", icon: "warning" };
   }
-  if (shim.path_broken) {
-    return { label: "PATH broken", tone: "attention", icon: "warning" };
-  }
   if (shim.activation_state === "protected") {
     return { label: "Protected", tone: "green", icon: "check" };
   }
   if (shim.activation_state === "restart_required") {
     return { label: "Restart required", tone: "blue", icon: "restart" };
+  }
+  if (shim.path_broken) {
+    return { label: "PATH broken", tone: "attention", icon: "warning" };
   }
   if (shim.activation_state === "repair_required") {
     return { label: "Needs PATH repair", tone: "attention", icon: "warning" };
@@ -594,7 +594,7 @@ function ManagerRow({
       ] })
     ] }),
     shim?.activation_state === "restart_required" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: cardLayout ? "mt-2" : "px-4 pb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Guard updated your shell profile. Open a new shell or restart AI apps to activate this shim." }) }),
-    shim?.activation_state === "repair_required" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: cardLayout ? "mt-2" : "px-4 pb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Guard can add the shim directory to your shell profile automatically, then this manager will be ready after a restart." }) }),
+    shim?.activation_state === "repair_required" && !shim.path_broken && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: cardLayout ? "mt-2" : "px-4 pb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Guard can add the shim directory to your shell profile automatically, then this manager will be ready after a restart." }) }),
     shim?.path_broken && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: cardLayout ? "mt-2" : "px-4 pb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-attention", children: "Restart your shell after repair so PATH exports reload." }) })
   ] });
 }

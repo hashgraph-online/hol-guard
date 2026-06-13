@@ -91,6 +91,43 @@ class TestScrg265PathOrderVerification:
         result = get_path_order_status(ctx, manager="npm", path_env=shim_dir)
         assert result["real_binary_found"] is False
 
+    def test_stale_package_shim_dirs_are_ignored_on_path(self, tmp_path: Path) -> None:
+        ctx = _make_context(tmp_path)
+        install_package_shims(ctx, managers=("npm",))
+        shim_dir = str(ctx.guard_home / "package-shims" / "bin")
+        stale_home = tmp_path / "pytest-guard-home"
+        stale_shim_dir = stale_home / "package-shims" / "bin"
+        stale_shim_dir.mkdir(parents=True)
+        stale_shim = stale_shim_dir / "npm"
+        stale_shim.write_text("#!/bin/sh\nstale shim", encoding="utf-8")
+        stale_shim.chmod(0o755)
+        real_dir = str(tmp_path / "usr" / "bin")
+        Path(real_dir).mkdir(parents=True, exist_ok=True)
+        real_binary = Path(real_dir) / "npm"
+        real_binary.write_text("#!/bin/sh\nnpm $@", encoding="utf-8")
+        real_binary.chmod(0o755)
+        fake_path = f"{shim_dir}:{stale_shim_dir}:{real_dir}"
+        result = get_path_order_status(ctx, manager="npm", path_env=fake_path)
+        assert result["shim_precedes_real"] is True
+        assert result["path_broken"] is False
+        assert result["real_binary_path"] == str(real_binary)
+
+    def test_only_stale_package_shim_before_canonical_is_not_path_broken(self, tmp_path: Path) -> None:
+        ctx = _make_context(tmp_path)
+        install_package_shims(ctx, managers=("npm",))
+        shim_dir = str(ctx.guard_home / "package-shims" / "bin")
+        stale_home = tmp_path / "pytest-guard-home"
+        stale_shim_dir = stale_home / "package-shims" / "bin"
+        stale_shim_dir.mkdir(parents=True)
+        stale_shim = stale_shim_dir / "npm"
+        stale_shim.write_text("#!/bin/sh\nstale shim", encoding="utf-8")
+        stale_shim.chmod(0o755)
+        fake_path = f"{stale_shim_dir}:{shim_dir}"
+        result = get_path_order_status(ctx, manager="npm", path_env=fake_path)
+        assert result["shim_precedes_real"] is True
+        assert result["path_broken"] is False
+        assert result["real_binary_found"] is False
+
 
 class TestScrg268RealBinaryInfo:
     """SCRG268: real binary info recorded safely (hash, mtime), no private path in Cloud."""
