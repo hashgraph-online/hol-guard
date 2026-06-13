@@ -9,7 +9,7 @@ from codex_plugin_scanner.guard.daemon.command_queue_worker import (
     CommandQueueWorker,
     start_command_queue_worker,
 )
-from codex_plugin_scanner.guard.runtime import command_queue
+from codex_plugin_scanner.guard.runtime import command_executors, command_queue
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -79,7 +79,7 @@ def test_poll_once_leases_heartbeats_executes_and_posts_result(
     monkeypatch.setattr(command_queue, "_resolve_guard_sync_auth_context", fake_auth_context)
     monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
     monkeypatch.setattr(
-        command_queue,
+        command_executors,
         "package_shim_status",
         lambda context: {"active_managers": ["npm"]},
     )
@@ -95,8 +95,8 @@ def test_poll_once_leases_heartbeats_executes_and_posts_result(
             "deviceId": "machine-1",
             "daemonVersion": command_queue.__version__,
             "capabilities": {
-                "operations": ["guard.packageShims.status"],
-                "schemaVersions": {"guard.packageShims.status": 1},
+                "operations": list(command_executors.SUPPORTED_COMMAND_OPERATIONS),
+                "schemaVersions": dict(command_executors.COMMAND_OPERATION_SCHEMA_VERSIONS),
             },
             "maxJobs": 1,
             "waitMs": 25000,
@@ -124,7 +124,7 @@ def test_poll_once_persists_result_retry_when_result_upload_fails(
         "_resolve_guard_sync_auth_context",
         lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
     )
-    monkeypatch.setattr(command_queue, "package_shim_status", lambda context: {"active_managers": []})
+    monkeypatch.setattr(command_executors, "package_shim_status", lambda context: {"active_managers": []})
 
     def fake_json_request(
         auth_context: dict[str, object],
@@ -211,7 +211,7 @@ def test_poll_once_posts_failed_result_when_execution_raises(tmp_path: Path, mon
         lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
     )
     monkeypatch.setattr(
-        command_queue,
+        command_executors,
         "package_shim_status",
         lambda context: (_ for _ in ()).throw(RuntimeError("shim status failed")),
     )
@@ -445,4 +445,87 @@ def test_commands_status_outputs_command_queue_state(tmp_path: Path, capsys, mon
     payload = json.loads(capsys.readouterr().out)
     assert payload["state"] == "idle"
     assert payload["enabled"] is True
-    assert payload["supported_operations"] == ["guard.packageShims.status"]
+    assert payload["supported_operations"] == list(command_executors.SUPPORTED_COMMAND_OPERATIONS)
+
+
+def test_doctor_repair_clears_malformed_command_queue_state(tmp_path: Path, capsys) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    store.set_sync_payload(
+        command_queue.COMMAND_QUEUE_STATE_KEY,
+        {"state": "result_pending", "active_job": "bad", "pending_result": {"job": "bad"}},
+        "2026-06-13T00:00:00+00:00",
+    )
+
+    rc = main(["guard", "doctor", "--guard-home", str(guard_home), "--repair", "--json"])
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    repair = payload["command_queue"]["repair"]
+    assert repair["repaired_count"] == 2
+    assert sorted(repair["repaired"]) == ["active_job", "pending_result"]
+    state = store.get_sync_payload(command_queue.COMMAND_QUEUE_STATE_KEY)
+    assert isinstance(state, dict)
+    assert state["state"] == "idle"
+    assert "active_job" not in state
+    assert "pending_result" not in state
+
+
+def test_executor_rejects_duplicate_package_managers(tmp_path: Path) -> None:
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.packageShims.install",
+            "payload": {"managers": ["npm", "npm"]},
+        },
+        context=_context(tmp_path),
+        store=FakeStore(tmp_path / "guard-home"),  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert result["failureCode"] == "duplicate_manager"
+
+
+def test_executor_dispatches_app_connect(tmp_path: Path, monkeypatch) -> None:
+    calls: list[tuple[str, str | None, str | None]] = []
+
+    def fake_apply_managed_install(
+        command: str,
+        requested_harness: str | None,
+        install_all: bool,
+        context: HarnessContext,
+        store: object,
+        workspace: str | None,
+        now: str,
+        *,
+        surface: str | None = None,
+    ) -> dict[str, object]:
+        assert install_all is False
+        calls.append((command, requested_harness, surface))
+        return {"managed_install": {"harness": requested_harness}, "surface": surface}
+
+    monkeypatch.setattr(command_executors, "apply_managed_install", fake_apply_managed_install)
+
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.app.connect",
+            "payload": {"harness": "codex", "surface": "cli"},
+        },
+        context=_context(tmp_path),
+        store=FakeStore(tmp_path / "guard-home"),  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert calls == [("install", "codex", "cli")]
+    assert result["generatedAt"] == "2026-06-13T00:00:00+00:00"
+    assert isinstance(result["data"], dict)
+
+
+def test_executor_rejects_approval_resolve_until_inbox_phase(tmp_path: Path) -> None:
+    result = command_executors.execute_guard_command_job(
+        {"operation": "guard.approval.resolve", "payload": {"requestId": "request-1", "action": "allow_once"}},
+        context=_context(tmp_path),
+        store=FakeStore(tmp_path / "guard-home"),  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert result["failureCode"] == "unsupported_operation"
