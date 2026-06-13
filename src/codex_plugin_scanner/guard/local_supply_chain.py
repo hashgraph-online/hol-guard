@@ -378,11 +378,36 @@ def _workspace_has_project_markers(workspace_dir: Path) -> bool:
     return any((resolved / marker).exists() for marker in _MANIFEST_CANDIDATES)
 
 
+def managed_install_audit_workspace_dirs(store: GuardStore) -> tuple[str, ...]:
+    installs = store.list_managed_installs()
+    ordered = sorted(
+        installs,
+        key=lambda item: (
+            0 if bool(item.get("active")) else 1,
+            str(item.get("updated_at") or ""),
+        ),
+        reverse=True,
+    )
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for install in ordered:
+        workspace = install.get("workspace")
+        if not isinstance(workspace, str):
+            continue
+        normalized = workspace.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        candidates.append(normalized)
+    return tuple(candidates)
+
+
 def resolve_supply_chain_audit_workspace_dir(
     *,
     workspace_dir_value: object,
     workspace_value: object,
     allowed_roots: tuple[Path, ...],
+    managed_workspace_dirs: Sequence[str] | None = None,
 ) -> Path | None:
     for candidate in (workspace_dir_value, workspace_value):
         if isinstance(candidate, str):
@@ -405,12 +430,19 @@ def resolve_supply_chain_audit_workspace_dir(
     try:
         cwd = Path.cwd().resolve()
     except OSError:
-        return None
-    if not _workspace_has_project_markers(cwd):
-        return None
-    for root in allowed_roots:
-        if resolves_within_root(root, cwd, require_exists=True):
-            return cwd
+        cwd = None
+    if cwd is not None and _workspace_has_project_markers(cwd):
+        for root in allowed_roots:
+            if resolves_within_root(root, cwd, require_exists=True):
+                return cwd
+    for managed_workspace in managed_workspace_dirs or ():
+        resolved = resolve_path_within_allowed_roots(
+            managed_workspace,
+            allowed_roots,
+            require_exists=True,
+        )
+        if resolved is not None and _workspace_has_project_markers(resolved):
+            return resolved
     return None
 
 

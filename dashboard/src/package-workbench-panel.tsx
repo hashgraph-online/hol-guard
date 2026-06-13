@@ -4,6 +4,7 @@ import {
   HiMiniArrowDown,
   HiMiniArrowUp,
   HiMiniBugAnt,
+  HiMiniExclamationTriangle,
   HiMiniMagnifyingGlass,
 } from "react-icons/hi2";
 import { SectionLabel, Tag, ActionButton, EmptyState } from "./approval-center-primitives";
@@ -26,6 +27,7 @@ import type { AuditConnectGateViewState } from "./supply-chain-firewall-panel";
 
 type PackageWorkbenchPanelProps = {
   auditConnectGate?: AuditConnectGateViewState | null;
+  auditError?: string | null;
   auditSnapshot: SupplyChainAuditSnapshot | null;
   onRunAudit?: () => void;
   auditRunning?: boolean;
@@ -333,11 +335,29 @@ function EcosystemChip({ ecosystem, active, onSelect }: EcosystemChipProps) {
 
 type WorkbenchEmptyStateProps = {
   auditConnectGate?: AuditConnectGateViewState | null;
+  auditError?: string | null;
   onRunAudit?: () => void;
   auditRunning?: boolean;
 };
 
-function WorkbenchEmptyState({ auditConnectGate, onRunAudit, auditRunning }: WorkbenchEmptyStateProps) {
+function WorkbenchAuditErrorBanner({ message }: { message: string }) {
+  return (
+    <div
+      className="mb-4 flex items-start gap-2 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.04] px-3 py-2.5"
+      role="alert"
+      aria-live="assertive"
+      data-testid="workbench-audit-error"
+    >
+      <HiMiniExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0 text-brand-attention" aria-hidden="true" />
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-brand-dark">Workspace audit could not start</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-slate-600">{message}</p>
+      </div>
+    </div>
+  );
+}
+
+function WorkbenchEmptyState({ auditConnectGate, auditError, onRunAudit, auditRunning }: WorkbenchEmptyStateProps) {
   if (auditConnectGate !== null && auditConnectGate !== undefined) {
     return (
       <ConnectFlowCard
@@ -355,24 +375,28 @@ function WorkbenchEmptyState({ auditConnectGate, onRunAudit, auditRunning }: Wor
   }
 
   return (
-    <EmptyState
-      title="No workspace audit yet"
-      body="Run a package audit to index dependencies and surface flagged packages here."
-      tone="teach"
-      action={
-        onRunAudit !== undefined ? (
-          <ActionButton variant="outline" onClick={onRunAudit} disabled={auditRunning} aria-busy={auditRunning}>
-            <HiMiniBugAnt className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Run audit
-          </ActionButton>
-        ) : undefined
-      }
-    />
+    <>
+      {auditError ? <WorkbenchAuditErrorBanner message={auditError} /> : null}
+      <EmptyState
+        title="No workspace audit yet"
+        body="Run a package audit to index dependencies and surface flagged packages here."
+        tone="teach"
+        action={
+          onRunAudit !== undefined ? (
+            <ActionButton variant="outline" onClick={onRunAudit} disabled={auditRunning} aria-busy={auditRunning}>
+              <HiMiniBugAnt className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              Run audit
+            </ActionButton>
+          ) : undefined
+        }
+      />
+    </>
   );
 }
 
 export function PackageWorkbenchPanel({
   auditConnectGate = null,
+  auditError = null,
   auditSnapshot,
   onRunAudit,
   auditRunning = false,
@@ -462,6 +486,7 @@ export function PackageWorkbenchPanel({
         <div className="px-4 py-6">
           <WorkbenchEmptyState
             auditConnectGate={auditConnectGate}
+            auditError={auditError}
             onRunAudit={onRunAudit}
             auditRunning={auditRunning}
           />

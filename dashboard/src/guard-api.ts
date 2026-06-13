@@ -2423,6 +2423,7 @@ export function normalizePackageFirewallStatus(value: unknown): PackageFirewallS
   const protectedSet = new Set(protectedManagers);
   const lastAuditProofAt =
     stringValue(readPackageShimField(shimStatus, "last_audit_proof_at", "lastAuditProofAt")) ?? null;
+  const auditWorkspaceDir = stringValue(record.audit_workspace_dir) ?? null;
   const shellProfilePath = readPackageShimField(shimStatus, "shell_profile_path", "shellProfilePath");
   const protection: PackageManagerProtection = {
     path_status: rawPathStatus,
@@ -2443,6 +2444,7 @@ export function normalizePackageFirewallStatus(value: unknown): PackageFirewallS
   };
   return {
     actions: normalizePackageFirewallActions(record.actions),
+    audit_workspace_dir: auditWorkspaceDir,
     cli_fallback: normalizePackageFirewallCliFallback(record.cli_fallback),
     connect_flow: normalizePackageFirewallConnectFlow(record.connect_flow),
     detected_managers: detectedManagers,
@@ -2595,14 +2597,21 @@ export async function runAuditRemediation(input: AuditRemediationInput): Promise
   return normalizePackageFirewallAction(payload);
 }
 
-export async function runPackageAudit(): Promise<PackageFirewallActionResponse> {
+export async function runPackageAudit(input?: {
+  workspaceDir?: string | null;
+}): Promise<PackageFirewallActionResponse> {
+  const workspaceDir = input?.workspaceDir?.trim() ?? null;
+  const body: Record<string, string> = {};
+  if (workspaceDir) {
+    body.workspace_dir = workspaceDir;
+  }
   const response = await fetchGuardApi("/v1/supply-chain/audit", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...guardAuthHeaders(),
     },
-    body: JSON.stringify({}),
+    body: JSON.stringify(body),
   });
   const payloadBody = (await response.json().catch(() => null)) as unknown;
   if (!response.ok) {

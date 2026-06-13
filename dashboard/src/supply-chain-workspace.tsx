@@ -31,7 +31,7 @@ import { resolveSupplyChainCloudCapabilities } from "./supply-chain-cloud-capabi
 import { SupplyChainCloudCapabilitiesPanel } from "./supply-chain-cloud-capabilities-panel";
 import { PackageWorkbenchPanel } from "./package-workbench-panel";
 import { resolveSupplyChainIssues, type SupplyChainIssueAction } from "./supply-chain-issues";
-import { resolveSupplyChainWorkspaceHero } from "./supply-chain-workspace-hero-state";
+import { resolveSupplyChainAuditWorkspaceDir } from "./supply-chain-audit-workspace";
 import { SupplyChainStatusHeader } from "./supply-chain-status-header";
 import { SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout";
 
@@ -128,6 +128,7 @@ export function SupplyChainWorkspace({
   const [auditSnapshot, setAuditSnapshot] = useState<SupplyChainAuditSnapshot | null>(null);
   const [evidenceRail, setEvidenceRail] = useState<SupplyChainEvidenceRailSnapshot | null>(null);
   const [auditRunning, setAuditRunning] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
   const [auditConnectGate, setAuditConnectGate] = useState<AuditConnectGateViewState | null>(null);
   const runAuditRef = useRef<(() => void) | null>(null);
   const firewallPanelRef = useRef<PackageFirewallPanelHandle>(null);
@@ -173,6 +174,10 @@ export function SupplyChainWorkspace({
   );
 
 
+  const auditWorkspaceDir = useMemo(
+    () => resolveSupplyChainAuditWorkspaceDir(managedInstalls),
+    [managedInstalls],
+  );
   const supplyChainIssues = useMemo(() => resolveSupplyChainIssues(snapshot), [snapshot]);
   const workspaceHero = useMemo(
     () => resolveSupplyChainWorkspaceHero(snapshot, { openIssueCount: supplyChainIssues.length }),
@@ -209,6 +214,11 @@ export function SupplyChainWorkspace({
   const handleAuditCompleted = useCallback((resultDetail: Record<string, unknown>) => {
     const normalized = normalizeSupplyChainAuditSnapshot(resultDetail);
     setAuditSnapshot(normalized);
+    setAuditError(null);
+  }, []);
+
+  const handleAuditErrorChange = useCallback((message: string | null) => {
+    setAuditError(message);
   }, []);
 
   const handleAuditRunningChange = useCallback((running: boolean) => {
@@ -244,6 +254,7 @@ export function SupplyChainWorkspace({
 
       <PackageWorkbenchPanel
         auditConnectGate={auditConnectGate}
+        auditError={auditError}
         auditSnapshot={auditSnapshot}
         auditRunning={auditRunning}
         onRunAudit={handleRunAudit}
@@ -254,7 +265,9 @@ export function SupplyChainWorkspace({
       <PackageFirewallPanel
         ref={firewallPanelRef}
         approvalGate={approvalGate}
+        auditWorkspaceDir={auditWorkspaceDir}
         onAuditConnectGateChange={setAuditConnectGate}
+        onAuditErrorChange={handleAuditErrorChange}
         onStateChanged={onRuntimeRefresh}
         onAuditCompleted={handleAuditCompleted}
         onAuditRunningChange={handleAuditRunningChange}

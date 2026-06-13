@@ -708,6 +708,7 @@ export type PackageFirewallStatusResponse = {
   supported_managers: string[];
   detected_managers: string[];
   last_audit_proof_at: string | null;
+  audit_workspace_dir?: string | null;
   protection: PackageManagerProtection | null;
   package_shims: PackageShimEntry[];
   entitlement: PackageFirewallEntitlement;

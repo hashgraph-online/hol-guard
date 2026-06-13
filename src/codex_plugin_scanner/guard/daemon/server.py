@@ -93,6 +93,7 @@ from ..local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE, build_lo
 from ..local_supply_chain import (
     build_workspace_audit_payload,
     resolve_package_firewall_entitlement_with_refresh,
+    managed_install_audit_workspace_dirs,
     resolve_supply_chain_audit_workspace_dir,
 )
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
@@ -2144,11 +2145,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _handle_supply_chain_package_firewall_status(self) -> None:
         entitlement = self._supply_chain_entitlement()
         status = package_shim_status(self._harness_context({}))
+        audit_workspace_dir = self._resolve_supply_chain_workspace_dir({})
         self._write_json(
             {
                 "actions": package_firewall_action_states(
                     entitlement,
                     has_installed_managers=bool(status.get("installed_managers")),
+                ),
+                "audit_workspace_dir": (
+                    str(audit_workspace_dir) if audit_workspace_dir is not None else None
                 ),
                 "cli_fallback": {
                     "connect": "hol-guard connect",
@@ -2215,7 +2220,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_approval_gate_error(error)
             return
         except ValueError as error:
-            self._write_json({"error": str(error), "operation": operation}, status=400)
+            error_code = str(error)
+            error_payload: dict[str, object] = {"error": error_code, "operation": operation}
+            if error_code == "workspace_dir_required":
+                error_payload["message"] = (
+                    "Guard needs a project folder with package manifests before it can run "
+                    "the workspace audit. Open Guard from a connected app workspace or pass "
+                    "workspace_dir in the audit request."
+                )
+            self._write_json(error_payload, status=400)
             return
         receipt_overrides = package_firewall_receipt_metadata(
             operation=operation,
@@ -2292,17 +2305,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return sync_supply_chain_bundle(self.server.store)  # type: ignore[attr-defined]
         raise ValueError("unsupported_supply_chain_operation")
 
-    @staticmethod
-    def _resolve_supply_chain_workspace_dir(payload: dict[str, object]) -> Path | None:
+    def _resolve_supply_chain_workspace_dir(self, payload: dict[str, object]) -> Path | None:
         allowed_roots = (
             Path.home().resolve(),
             Path.cwd().resolve(),
             Path(tempfile.gettempdir()).resolve(),
         )
+        managed_workspace_dirs = managed_install_audit_workspace_dirs(self.server.store)  # type: ignore[attr-defined]
         return resolve_supply_chain_audit_workspace_dir(
             workspace_dir_value=payload.get("workspace_dir"),
             workspace_value=payload.get("workspace"),
             allowed_roots=allowed_roots,
+            managed_workspace_dirs=managed_workspace_dirs,
         )
 
     def _supply_chain_context(self, payload: dict[str, object]) -> HarnessContext:
