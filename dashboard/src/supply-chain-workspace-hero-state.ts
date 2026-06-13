@@ -110,3 +110,15 @@ export function resolveSupplyChainWorkspaceHero(
     statLine: `${stats.protectedManagers} protected · ${stats.unprotectedManagers} open · ${preventedLabel}`,
   };
 }
+
+export function supplyChainCloudTagTone(
+  mode: SupplyChainWorkspaceHeroState["cloudMode"],
+): "green" | "blue" | "attention" {
+  if (mode === "paired_active") {
+    return "green";
+  }
+  if (mode === "paired_waiting") {
+    return "blue";
+  }
+  return "attention";
+}

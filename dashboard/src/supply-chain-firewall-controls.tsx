@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import type { ChangeEvent } from "react";
 import {
   HiMiniArrowPath,
@@ -11,10 +11,8 @@ import type { PackageFirewallActionType, PackageFirewallStatusResponse } from ".
 import {
   ActionResultPanel,
   ActivationSummary,
-  NextActionHero,
   type CompletedOp,
 } from "./supply-chain-firewall-views";
-import { resolvePackageFirewallNextAction } from "./supply-chain-firewall-next-action";
 import { ManagerRow, resolveShimStatus } from "./supply-chain-firewall-manager-row";
 
 export type FirewallOpKey = PackageFirewallActionType | "audit" | "sync";
@@ -135,31 +133,6 @@ export function FirewallControlsView({
   onOpenManagerDetails,
 }: FirewallControlsViewProps) {
   const anyPending = pendingOp !== null;
-  const nextAction = useMemo(() => resolvePackageFirewallNextAction(data), [data]);
-  const handleNextAction = useCallback(
-    (op: "install" | "repair" | "test" | "sync", manager: string | null) => {
-      if (op === "install" && manager !== null) {
-        onInstall(manager);
-        return;
-      }
-      if (op === "repair" && manager !== null) {
-        onRepair(manager);
-        return;
-      }
-      if (op === "test") {
-        if (manager !== null) {
-          onTest(manager);
-          return;
-        }
-        onOpenShell();
-        return;
-      }
-      if (op === "sync") {
-        onSync();
-      }
-    },
-    [onInstall, onOpenShell, onRepair, onSync, onTest],
-  );
 
   const noDetectedManagers = data.detected_managers.length === 0;
   const filteredManagers = useMemo(() => {
@@ -197,10 +170,13 @@ export function FirewallControlsView({
 
   return (
     <div className="space-y-4 px-4 py-4">
-      <NextActionHero action={nextAction} anyPending={anyPending} onRunAction={handleNextAction} />
-
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-medium text-brand-dark">Per-manager controls</p>
+        <div>
+          <p className="text-sm font-medium text-brand-dark">Package tools on this device</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+            Detect, protect, test, and repair each package manager Guard can watch.
+          </p>
+        </div>
         {showGlobalActions && (
           <GlobalActionsBar
             anyPending={anyPending}
@@ -276,55 +252,29 @@ export function FirewallControlsView({
           tone="teach"
         />
       ) : (
-        <div role="table" aria-label="Package manager firewall status">
-          <div
-            className="hidden sm:flex sm:items-center sm:justify-between border-b border-slate-100 bg-slate-50 px-4 py-2"
-            role="row"
-          >
-            <span
-              className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400"
-              role="columnheader"
-            >
-              Manager
-            </span>
-            <div className="flex items-center gap-3">
-              <span
-                className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400"
-                role="columnheader"
-              >
-                Status
-              </span>
-              <span
-                className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400"
-                role="columnheader"
-              >
-                Actions
-              </span>
-            </div>
-          </div>
-          <div role="rowgroup">
-            {filteredManagers.map((manager) => {
-              const shim = data.package_shims.find((s) => s.manager === manager);
-              return (
-                <ManagerRow
-                  key={manager}
-                  manager={manager}
-                  shim={shim}
-                  actions={data.actions}
-                  anyPending={anyPending}
-                  isMine={pendingOp?.manager === manager}
-                  isConfirmingRemove={confirmRemoveManager === manager}
-                  onInstall={onInstall}
-                  onRepair={onRepair}
-                  onTest={onTest}
-                  onRemoveRequest={onRemoveRequest}
-                  onRemoveConfirm={onRemoveConfirm}
-                  onRemoveCancel={onRemoveCancel}
-                  onOpenDetails={onOpenManagerDetails}
-                />
-              );
-            })}
-          </div>
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3" role="list" aria-label="Package manager controls">
+          {filteredManagers.map((manager) => {
+            const shim = data.package_shims.find((s) => s.manager === manager);
+            return (
+              <ManagerRow
+                key={manager}
+                layout="card"
+                manager={manager}
+                shim={shim}
+                actions={data.actions}
+                anyPending={anyPending}
+                isMine={pendingOp?.manager === manager}
+                isConfirmingRemove={confirmRemoveManager === manager}
+                onInstall={onInstall}
+                onRepair={onRepair}
+                onTest={onTest}
+                onRemoveRequest={onRemoveRequest}
+                onRemoveConfirm={onRemoveConfirm}
+                onRemoveCancel={onRemoveCancel}
+                onOpenDetails={onOpenManagerDetails}
+              />
+            );
+          })}
         </div>
       )}
     </div>

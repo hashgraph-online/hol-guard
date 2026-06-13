@@ -28,11 +28,10 @@ import {
 } from "./supply-chain-evidence-rail-panel";
 import { resolveSupplyChainCloudCapabilities } from "./supply-chain-cloud-capabilities";
 import { SupplyChainCloudCapabilitiesPanel } from "./supply-chain-cloud-capabilities-panel";
-import { SupplyChainAuditFindingsSummary } from "./supply-chain-audit-findings-summary";
+import { PackageWorkbenchPanel } from "./package-workbench-panel";
 import { resolveSupplyChainIssues, type SupplyChainIssueAction } from "./supply-chain-issues";
-import { SupplyChainIssueFocus } from "./supply-chain-issue-focus";
 import { resolveSupplyChainWorkspaceHero } from "./supply-chain-workspace-hero-state";
-import { SupplyChainWorkspaceHero } from "./supply-chain-workspace-hero";
+import { SupplyChainStatusHeader } from "./supply-chain-status-header";
 import { SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout";
 
 export { buildSupplyChainStats } from "./supply-chain-protection-stats";
@@ -214,6 +213,10 @@ export function SupplyChainWorkspace({
     setAuditRunning(running);
   }, []);
 
+  const handleRunAudit = useCallback(() => {
+    runAuditRef.current?.();
+  }, []);
+
   return (
     <div className={SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS} data-testid="supply-chain-workspace">
       <div className="flex flex-wrap items-start justify-end gap-3">
@@ -222,28 +225,13 @@ export function SupplyChainWorkspace({
         </ActionButton>
       </div>
 
-      {supplyChainIssues.length === 0 ? (
-        <SupplyChainWorkspaceHero hero={workspaceHero} />
-      ) : null}
-
-      <SupplyChainIssueFocus
+      <SupplyChainStatusHeader
+        hero={workspaceHero}
         issues={supplyChainIssues}
         onIssueAction={(action) => {
           void handleIssueAction(action);
         }}
         actionPending={issueActionPending}
-        tagline={
-          <div className="flex flex-wrap items-center gap-2">
-            <Tag tone={(() => {
-              if (workspaceHero.cloudMode === "paired_active") return "green" as const;
-              if (workspaceHero.cloudMode === "paired_waiting") return "blue" as const;
-              return "attention" as const;
-            })()}>
-              {workspaceHero.cloudLabel}
-            </Tag>
-            <span className="text-xs text-slate-500">{workspaceHero.statLine}</span>
-          </div>
-        }
       />
 
       {supplyChainIssues.length === 0 ? (
@@ -252,9 +240,10 @@ export function SupplyChainWorkspace({
 
       {evidenceRail !== null ? <SupplyChainEvidenceRail rail={evidenceRail} /> : null}
 
-      <SupplyChainAuditFindingsSummary
+      <PackageWorkbenchPanel
         auditSnapshot={auditSnapshot}
         auditRunning={auditRunning}
+        onRunAudit={handleRunAudit}
       />
 
       <SupplyChainBundlePanel />
@@ -335,24 +324,24 @@ function FeedHealthPanel({ snapshot, hideLocalOnlyWarning = false }: { snapshot:
         </div>
       </div>
       {isSample && !hideLocalOnlyWarning && (
-        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5">
+        <div className="flex items-start gap-2 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2.5">
           <HiMiniExclamationTriangle
-            className="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
+            className="mt-0.5 h-4 w-4 shrink-0 text-brand-attention"
             aria-hidden="true"
           />
-          <p className="text-xs leading-relaxed text-amber-800">
+          <p className="text-xs leading-relaxed text-slate-600">
             This device is using sample safety data. Connect Guard Cloud for live package warnings and
             protection across your machines.
           </p>
         </div>
       )}
       {isStale && !isSample && (
-        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5">
+        <div className="flex items-start gap-2 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2.5">
           <HiMiniArrowPath
-            className="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
+            className="mt-0.5 h-4 w-4 shrink-0 text-brand-attention"
             aria-hidden="true"
           />
-          <p className="text-xs leading-relaxed text-amber-800">
+          <p className="text-xs leading-relaxed text-slate-600">
             Safety checks have not refreshed recently. Make sure Guard is running, then sync policy or
             run an audit.
           </p>

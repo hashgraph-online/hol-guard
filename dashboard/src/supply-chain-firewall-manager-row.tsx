@@ -48,6 +48,7 @@ function actionIsAvailable(state: string | undefined): boolean {
 }
 
 type ManagerRowProps = {
+  layout?: "row" | "card";
   manager: string;
   shim: PackageShimEntry | undefined;
   actions: PackageFirewallStatusResponse["actions"];
@@ -64,6 +65,7 @@ type ManagerRowProps = {
 };
 
 export function ManagerRow({
+  layout = "row",
   manager,
   shim,
   actions,
@@ -103,10 +105,15 @@ export function ManagerRow({
   const handleRemoveConfirm = useCallback(() => onRemoveConfirm(manager), [onRemoveConfirm, manager]);
   const handleOpenDetails = useCallback(() => onOpenDetails(manager), [onOpenDetails, manager]);
 
+  const cardLayout = layout === "card";
+  const outerClass = cardLayout
+    ? "min-w-0 rounded-xl border border-slate-100 bg-white p-4 shadow-sm"
+    : "border-b border-slate-100 last:border-b-0";
+
   return (
-    <div className="border-b border-slate-100 last:border-b-0" role="row">
-      <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 flex-col gap-1 sm:flex-1" role="cell">
+    <div className={outerClass} role={cardLayout ? "listitem" : "row"}>
+      <div className={cardLayout ? "flex flex-col gap-3" : "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"}>
+        <div className={`flex min-w-0 flex-col gap-1 ${cardLayout ? "" : "sm:flex-1"}`} role="cell">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             {status.icon === "check" ? (
               <HiMiniCheckCircle className="h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
@@ -132,24 +139,24 @@ export function ManagerRow({
             )}
           </div>
           {shim?.path_summary !== null && shim?.path_summary !== undefined && (
-            <p className="break-all font-mono text-[11px] leading-relaxed text-slate-500 sm:pl-6">
+            <p className={`break-all font-mono text-[11px] leading-relaxed text-slate-500 ${cardLayout ? "" : "sm:pl-6"}`}>
               Shell path: {shim.path_summary}
             </p>
           )}
           {shim?.last_intercept_proof_at !== null && shim?.last_intercept_proof_at !== undefined ? (
-            <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 sm:pl-6">
+            <p className={`flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 ${cardLayout ? "" : "sm:pl-6"}`}>
               <HiMiniCheckCircle className="h-3.5 w-3.5 shrink-0 text-brand-green" aria-hidden="true" />
               Last protection test {formatRelativeTime(shim.last_intercept_proof_at)}
             </p>
           ) : shim?.installed ? (
-            <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 sm:pl-6">
+            <p className={`flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 ${cardLayout ? "" : "sm:pl-6"}`}>
               <HiMiniClock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               No protection test recorded yet
             </p>
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3" role="cell">
+        <div className={`flex flex-wrap items-center gap-2 ${cardLayout ? "justify-between" : "sm:gap-3"}`} role="cell">
           <div className="shrink-0">
             <Tag tone={status.tone}>{status.label}</Tag>
           </div>
@@ -217,7 +224,7 @@ export function ManagerRow({
       </div>
 
       {shim?.activation_state === "restart_required" && (
-        <div className="px-4 pb-2">
+        <div className={cardLayout ? "mt-2" : "px-4 pb-2"}>
           <p className="text-xs text-slate-500">
             Guard updated your shell profile. Open a new shell or restart AI apps to activate this shim.
           </p>
@@ -225,7 +232,7 @@ export function ManagerRow({
       )}
 
       {shim?.activation_state === "repair_required" && (
-        <div className="px-4 pb-2">
+        <div className={cardLayout ? "mt-2" : "px-4 pb-2"}>
           <p className="text-xs text-slate-500">
             Guard can add the shim directory to your shell profile automatically, then this manager will be ready after a restart.
           </p>
@@ -233,7 +240,7 @@ export function ManagerRow({
       )}
 
       {shim?.path_broken && (
-        <div className="px-4 pb-2">
+        <div className={cardLayout ? "mt-2" : "px-4 pb-2"}>
           <p className="text-xs text-brand-attention">
             Restart your shell after repair so PATH exports reload.
           </p>
