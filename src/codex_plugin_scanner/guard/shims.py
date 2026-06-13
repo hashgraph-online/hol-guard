@@ -280,12 +280,25 @@ def get_real_binary_info(
     }
 
 
-def _is_package_shim_binary(candidate: Path) -> bool:
-    """Return True when candidate lives under any Guard package-shims/bin directory."""
-
+def _has_package_shim_layout(candidate: Path) -> bool:
     parent = candidate.parent
     grandparent = parent.parent
     return parent.name == "bin" and grandparent.name == "package-shims"
+
+
+def _is_trusted_package_shim_binary(candidate: Path, trusted_shim_dir: Path) -> bool:
+    try:
+        candidate.resolve().relative_to(trusted_shim_dir.resolve())
+    except ValueError:
+        return False
+    return candidate.is_file()
+
+
+def _is_foreign_package_shim_binary(candidate: Path, trusted_shim_dir: Path) -> bool:
+    return _has_package_shim_layout(candidate) and not _is_trusted_package_shim_binary(
+        candidate,
+        trusted_shim_dir,
+    )
 
 
 def get_path_order_status(
@@ -303,6 +316,8 @@ def get_path_order_status(
     path_dirs = (path_env or os.environ.get("PATH", "")).split(os.pathsep)
     shim_dir_index: int | None = None
     real_dir_index: int | None = None
+    foreign_shim_index: int | None = None
+    foreign_shim_path: str | None = None
     real_binary_path: str | None = None
     for idx, dir_entry in enumerate(path_dirs):
         d = Path(dir_entry).expanduser().resolve()
@@ -310,15 +325,21 @@ def get_path_order_status(
             shim_dir_index = idx
             continue
         candidate = d / command
-        if (
-            candidate.exists()
-            and candidate.is_file()
-            and candidate != shim_path
-            and not _is_package_shim_binary(candidate)
-            and real_dir_index is None
-        ):
+        if not candidate.exists() or not candidate.is_file() or candidate == shim_path:
+            continue
+        if _is_foreign_package_shim_binary(candidate, shim_dir):
+            if foreign_shim_index is None:
+                foreign_shim_index = idx
+                foreign_shim_path = str(candidate)
+            continue
+        if _is_trusted_package_shim_binary(candidate, shim_dir):
+            continue
+        if real_dir_index is None:
             real_dir_index = idx
             real_binary_path = str(candidate)
+    foreign_shim_precedes_trusted = (
+        foreign_shim_index is not None and shim_dir_index is not None and foreign_shim_index < shim_dir_index
+    )
     if shim_dir_index is None:
         return {
             "shim_precedes_real": False,
@@ -328,6 +349,23 @@ def get_path_order_status(
             "shim_in_path": False,
             "shim_path_index": None,
             "path_broken": True,
+            "foreign_shim_bypass": foreign_shim_index is not None,
+            "foreign_shim_path": foreign_shim_path,
+            "foreign_shim_path_index": foreign_shim_index,
+            "shim_dir": str(shim_dir),
+        }
+    if foreign_shim_precedes_trusted:
+        return {
+            "shim_precedes_real": False,
+            "real_binary_found": real_dir_index is not None,
+            "real_binary_path": real_binary_path,
+            "real_binary_path_index": real_dir_index,
+            "shim_in_path": True,
+            "shim_path_index": shim_dir_index,
+            "path_broken": True,
+            "foreign_shim_bypass": True,
+            "foreign_shim_path": foreign_shim_path,
+            "foreign_shim_path_index": foreign_shim_index,
             "shim_dir": str(shim_dir),
         }
     if real_dir_index is None:
@@ -339,6 +377,9 @@ def get_path_order_status(
             "shim_in_path": True,
             "shim_path_index": shim_dir_index,
             "path_broken": False,
+            "foreign_shim_bypass": False,
+            "foreign_shim_path": foreign_shim_path,
+            "foreign_shim_path_index": foreign_shim_index,
             "shim_dir": str(shim_dir),
         }
     precedes = shim_dir_index < real_dir_index
@@ -350,6 +391,9 @@ def get_path_order_status(
         "shim_in_path": True,
         "shim_path_index": shim_dir_index,
         "path_broken": not precedes,
+        "foreign_shim_bypass": False,
+        "foreign_shim_path": foreign_shim_path,
+        "foreign_shim_path_index": foreign_shim_index,
         "shim_dir": str(shim_dir),
     }
 

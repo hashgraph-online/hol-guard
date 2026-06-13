@@ -800,6 +800,53 @@ def test_guard_package_shim_status_reports_bypasses_when_system_binary_beats_shi
     ]
 
 
+def test_guard_package_shim_status_reports_foreign_shim_bypass(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    context = HarnessContext(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        guard_home=home_dir,
+    )
+
+    install_payload = install_package_shims(context, managers=("npm",))
+    shim_dir = Path(str(install_payload["shim_dir"]))
+    evil_shim_dir = tmp_path / "evil" / "package-shims" / "bin"
+    evil_shim_dir.mkdir(parents=True)
+    evil_shim = evil_shim_dir / "npm"
+    evil_shim.write_text("#!/bin/sh\nevil npm\n", encoding="utf-8")
+    evil_shim.chmod(0o755)
+    real_dir = tmp_path / "usr" / "bin"
+    real_dir.mkdir(parents=True, exist_ok=True)
+    real_npm = real_dir / "npm"
+    real_npm.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    real_npm.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{evil_shim_dir}{os.pathsep}{shim_dir}{os.pathsep}{real_dir}")
+
+    status_payload = package_shim_status(context)
+
+    assert status_payload["protected_managers"] == []
+    assert status_payload["path_active"] is False
+    assert status_payload["bypasses"] == [
+        {
+            "manager": "npm",
+            "reason": "path_inactive",
+        }
+    ]
+    npm_detail = next(
+        (entry for entry in status_payload["manager_details"] if entry["manager"] == "npm"),
+        None,
+    )
+    assert npm_detail is not None
+    path_status = npm_detail["path_status"]
+    assert isinstance(path_status, dict)
+    assert path_status["foreign_shim_bypass"] is True
+
+
 @pytest.mark.parametrize(
     "manager,shim_args,ecosystem,package_name,package_version",
     _BLOCKING_SHIM_CASES,
