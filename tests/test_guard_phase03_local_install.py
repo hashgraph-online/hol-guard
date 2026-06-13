@@ -192,6 +192,52 @@ def test_update_repairs_missing_pipx_local_source_install(monkeypatch: pytest.Mo
     assert payload["message"] == "Updated HOL Guard from 2.0.345 to 2.0.489."
 
 
+def test_update_treats_nonzero_pipx_repair_as_updated_when_version_changed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    missing_dir = tmp_path / "missing-src-install"
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.345")
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: "2.0.628")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.628")
+    monkeypatch.setattr(
+        update_commands,
+        "_direct_url_payload",
+        lambda: {"dir_info": {}, "url": missing_dir.as_uri()},
+    )
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(
+        update_commands.shutil,
+        "which",
+        lambda name: "/mock-home/.local/bin/hol-guard" if name == "hol-guard" else None,
+    )
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert command == ["pipx", "install", "--force", "hol-guard"]
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            "hol-guard 2.0.628 installed",
+            "TypeError: expected string or bytes-like object, got 'NoneType'",
+        )
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False)
+
+    assert exit_code == 0
+    assert payload["status"] == "updated"
+    assert payload["changed"] is True
+    assert payload["resulting_version"] == "2.0.628"
+    assert payload["message"] == "Updated HOL Guard from 2.0.345 to 2.0.628."
+    notes = payload.get("notes")
+    assert isinstance(notes, list)
+    assert any(
+        "Installer exited with code 1 after version changed." in str(note)
+        for note in notes
+    )
+
+
 def test_update_repairs_missing_pip_local_source_install(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     missing_dir = tmp_path / "missing-src-install"
     monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.489")
