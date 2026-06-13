@@ -2307,17 +2307,18 @@ function normalizePackageShimEntry(
   const pathBroken =
     pathStatus !== "restart_required" &&
     (coverage.pathBroken || detail?.path_broken === true);
-  const activation_state = !installed
-    ? "uninstalled"
-    : integrity === "tampered"
-    ? "repair_required"
-    : active
-    ? "protected"
-    : pathStatus === "restart_required"
-    ? "restart_required"
-    : pathBroken
-    ? "repair_required"
-    : "repair_required";
+  let activation_state: PackageShimEntry["activation_state"];
+  if (!installed) {
+    activation_state = "uninstalled";
+  } else if (integrity === "tampered") {
+    activation_state = "repair_required";
+  } else if (active) {
+    activation_state = "protected";
+  } else if (pathStatus === "restart_required") {
+    activation_state = "restart_required";
+  } else {
+    activation_state = "repair_required";
+  }
   return {
     active,
     activation_state,

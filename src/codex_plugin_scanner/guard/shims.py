@@ -298,14 +298,14 @@ def get_path_order_status(
     command = _PACKAGE_SHIM_COMMANDS.get(manager)
     if not command:
         return {"shim_precedes_real": False, "real_binary_found": False, "path_broken": True, "shim_dir": None}
-    shim_dir = (context.guard_home / "package-shims" / "bin").expanduser()
+    shim_dir = (context.guard_home / "package-shims" / "bin").expanduser().resolve()
     shim_path = shim_dir / command
     path_dirs = (path_env or os.environ.get("PATH", "")).split(os.pathsep)
     shim_dir_index: int | None = None
     real_dir_index: int | None = None
     real_binary_path: str | None = None
     for idx, dir_entry in enumerate(path_dirs):
-        d = Path(dir_entry).expanduser()
+        d = Path(dir_entry).expanduser().resolve()
         if d == shim_dir and shim_dir_index is None:
             shim_dir_index = idx
             continue
