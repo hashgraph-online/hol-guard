@@ -1,5 +1,5 @@
 import { au as GuardHarnessActionError, r as reactExports, j as jsxRuntimeExports, d as HiMiniCheckCircle, aw as HiMiniArrowPath, w as HiMiniExclamationTriangle, ac as Tag, m as formatRelativeTime, aG as HiMiniClock, aH as IconActionButton, I as HiMiniXCircle, ax as HiMiniTrash, l as HiMiniShieldCheck, F as HiMiniWrenchScrewdriver, aI as HiMiniBeaker, aJ as ActivationSummary, aK as ActionResultPanel, ad as HiMiniMagnifyingGlass, b as EmptyState, A as ActionButton, aL as HiMiniBugAnt, o as HiMiniXMark, aM as fetchPackageFirewallStatus, aN as runPackageAudit, aO as startPackageFirewallConnect, aP as runPackageFirewallAction, aQ as parseInterceptProofSnapshot, aR as runPackageSync, aS as openPackageFirewallShell, S as SectionLabel, aT as EntitlementNotice, aU as fetchSupplyChainBundle, aE as HiMiniArrowTopRightOnSquare, B as Badge, aV as HiMiniDocumentMagnifyingGlass, aW as HiMiniShieldExclamation, aX as HiMiniComputerDesktop, t as HiMiniCloud, aY as ConnectFlowCard, aZ as HiMiniArrowDown, a_ as HiMiniArrowUp, ah as HiMiniArrowLeft, a$ as HiMiniArrowRight, b0 as HiMiniCloudArrowUp, b1 as HiMiniInformationCircle, b2 as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
-import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
+import { u as useResolvedApprovalGate, A as ApprovalProofModal, b as buildSupplyChainStats } from "./supply-chain-protection-stats.js";
 import { resolveFeedStaleness } from "./feed-health-workspace.js";
 import { r as resolveHomeProtectionStatus } from "./home-protection-module.js";
 import { S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-hub-workspace.js";
@@ -2306,47 +2306,6 @@ function PackageWorkbenchPanel({
       selectedFinding !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(FindingDetailPanel, { finding: selectedFinding })
     ] })
   ] });
-}
-function resolveManagerCoverageStatus(protection, manager) {
-  if (protection === void 0) {
-    return "unprotected";
-  }
-  if (protection.protected_managers.includes(manager)) {
-    return "protected";
-  }
-  if (protection.installed_managers.includes(manager)) {
-    if (protection.path_status === "restart_required") {
-      return "restart_required";
-    }
-    return "path_repair";
-  }
-  return "unprotected";
-}
-function buildSupplyChainStats(snapshot) {
-  const managedInstalls = snapshot.managed_installs ?? [];
-  const protection = snapshot.supply_chain?.package_manager_protection;
-  const supportedManagers = protection?.supported_managers ?? [];
-  const protectedManagers = supportedManagers.filter(
-    (manager) => resolveManagerCoverageStatus(protection, manager) === "protected"
-  ).length;
-  const stagedManagers = supportedManagers.filter(
-    (manager) => resolveManagerCoverageStatus(protection, manager) === "restart_required"
-  ).length;
-  const repairRequiredManagers = supportedManagers.filter(
-    (manager) => resolveManagerCoverageStatus(protection, manager) === "path_repair"
-  ).length;
-  const unprotectedManagers = supportedManagers.filter(
-    (manager) => resolveManagerCoverageStatus(protection, manager) === "unprotected"
-  ).length;
-  return {
-    totalApps: managedInstalls.length,
-    activeApps: managedInstalls.filter((install) => install.active).length,
-    preventedInstalls: managedInstalls.filter((install) => !install.active).length,
-    protectedManagers,
-    stagedManagers,
-    repairRequiredManagers,
-    unprotectedManagers
-  };
 }
 function resolveSupplyChainIssues(snapshot) {
   const issues = [];
