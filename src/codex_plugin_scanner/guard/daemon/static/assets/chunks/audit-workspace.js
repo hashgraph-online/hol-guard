@@ -1,5 +1,5 @@
-import { r as reactExports, b2 as runAuditRemediation, au as GuardHarnessActionError, j as jsxRuntimeExports, B as Badge, S as SectionLabel, ad as HiMiniMagnifyingGlass, b as EmptyState, d as HiMiniCheckCircle, I as HiMiniXCircle, w as HiMiniExclamationTriangle, h as harnessDisplayName, m as formatRelativeTime, y as HiMiniChevronRight, A as ActionButton, b3 as HiMiniDocumentText, b4 as guardAwareHref, aH as IconActionButton, aw as HiMiniArrowPath, l as HiMiniShieldCheck } from "../guard-dashboard.js";
-import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
+import { r as reactExports, b3 as runAuditRemediation, au as GuardHarnessActionError, j as jsxRuntimeExports, B as Badge, S as SectionLabel, ad as HiMiniMagnifyingGlass, b as EmptyState, d as HiMiniCheckCircle, I as HiMiniXCircle, w as HiMiniExclamationTriangle, h as harnessDisplayName, m as formatRelativeTime, y as HiMiniChevronRight, A as ActionButton, b4 as HiMiniDocumentText, b5 as guardAwareHref, aH as IconActionButton, aw as HiMiniArrowPath, l as HiMiniShieldCheck } from "../guard-dashboard.js";
+import { u as useResolvedApprovalGate, A as ApprovalProofModal, r as resolveManagerCoverageStatus } from "./supply-chain-protection-stats.js";
 function isSupplyChainAuditEvidence(value) {
   return typeof value === "object" && value !== null && value.operation === "audit";
 }
@@ -33,29 +33,72 @@ function workspaceAuditRemediation(decision, blockedCount) {
   }
   return "Re-run workspace audit after dependency changes.";
 }
+function buildPackageManagerAuditResult(manager, protection, generatedAt) {
+  const coverage = resolveManagerCoverageStatus(protection, manager);
+  if (coverage === "protected") {
+    return null;
+  }
+  if (coverage === "restart_required") {
+    return {
+      id: `unprotected-${manager}`,
+      severity: "medium",
+      title: `${manager} is waiting for restart`,
+      detail: `Guard already updated your shell profile for ${manager}. Open a new shell or restart AI apps so ${manager} resolves through Guard.`,
+      harness: "global",
+      workspace: null,
+      timestamp: generatedAt,
+      remediation: "Open a new shell or restart AI apps to finish package-manager interception.",
+      remediationAction: null,
+      resolved: false,
+      evidenceHref: null
+    };
+  }
+  if (coverage === "path_repair") {
+    return {
+      id: `unprotected-${manager}`,
+      severity: "medium",
+      title: `${manager} shim is installed but PATH still needs repair`,
+      detail: `Guard already installed the ${manager} shim on this machine. Repair PATH so ${manager} commands resolve through Guard before package installs run.`,
+      harness: "global",
+      workspace: null,
+      timestamp: generatedAt,
+      remediation: "Repair PATH from Supply chain or run hol-guard package-shims repair for this manager.",
+      remediationAction: {
+        action: "package_shim_path",
+        manager,
+        label: "Repair PATH"
+      },
+      resolved: false,
+      evidenceHref: `/evidence?harness=global&search=${encodeURIComponent(manager)}`
+    };
+  }
+  return {
+    id: `unprotected-${manager}`,
+    severity: "high",
+    title: `${manager} is not intercepted by Guard`,
+    detail: `The ${manager} shim is missing from PATH. Installs via ${manager} bypass Guard's supply chain protection.`,
+    harness: "global",
+    workspace: null,
+    timestamp: generatedAt,
+    remediation: `Guard can install the shim and update PATH for ${manager} from this dashboard.`,
+    remediationAction: {
+      action: "package_shim_path",
+      manager,
+      label: "Install Guard"
+    },
+    resolved: false,
+    evidenceHref: `/evidence?harness=global&search=${encodeURIComponent(manager)}`
+  };
+}
 function deriveFrontendAuditResults(receipts, snapshot) {
   const results = [];
   const protection = snapshot.supply_chain?.package_manager_protection;
   if (protection && protection.unprotected_managers.length > 0) {
     for (const mgr of protection.unprotected_managers) {
-      const restartRequired = protection.path_status === "restart_required" && protection.installed_managers.includes(mgr);
-      results.push({
-        id: `unprotected-${mgr}`,
-        severity: restartRequired ? "medium" : "high",
-        title: restartRequired ? `${mgr} is waiting for restart` : `${mgr} is not intercepted by Guard`,
-        detail: restartRequired ? `Guard already updated your shell profile for ${mgr}. Open a new shell or restart AI apps so ${mgr} resolves through Guard.` : `The ${mgr} shim is missing from PATH. Installs via ${mgr} bypass Guard's supply chain protection.`,
-        harness: "global",
-        workspace: null,
-        timestamp: snapshot.generated_at,
-        remediation: restartRequired ? "Open a new shell or restart AI apps to finish package-manager interception." : `Guard can install the shim and update PATH for ${mgr} from this dashboard.`,
-        remediationAction: restartRequired ? null : {
-          action: "package_shim_path",
-          manager: mgr,
-          label: "Install Guard"
-        },
-        resolved: false,
-        evidenceHref: restartRequired ? null : `/evidence?harness=global&search=${encodeURIComponent(mgr)}`
-      });
+      const auditResult = buildPackageManagerAuditResult(mgr, protection, snapshot.generated_at);
+      if (auditResult !== null) {
+        results.push(auditResult);
+      }
     }
   }
   const blockedReceipts = receipts.filter((r) => r.policy_decision === "block");

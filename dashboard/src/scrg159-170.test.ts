@@ -246,6 +246,61 @@ assert(pipIssue !== undefined, "SCRG162-D: unprotected pip should be flagged");
 assert(pipIssue!.severity === "high", "SCRG162-E: unprotected manager should be high severity");
 assert(pipIssue!.remediation.includes("Guard"), "SCRG162-F: remediation should point back to Guard action");
 
+const auditWithInstalledUnprotected = deriveFrontendAuditResults(
+  [],
+  {
+    ...baseSnapshot,
+    supply_chain: {
+      package_manager_protection: {
+        ...makeProtection([], ["npm", "pnpm"]),
+        installed_managers: ["npm", "pnpm"],
+        active_managers: [],
+        path_status: "missing_from_path",
+        path_contains_shim_dir: false,
+      },
+    },
+  },
+);
+const installedNpmIssue = auditWithInstalledUnprotected.find((r) => r.id === "unprotected-npm");
+assert(installedNpmIssue !== undefined, "SCRG162-F2: installed npm should still appear in audit");
+assert(
+  installedNpmIssue!.title.includes("PATH still needs repair"),
+  "SCRG162-F3: installed manager should not claim shim is missing",
+);
+assert(
+  installedNpmIssue!.remediationAction?.label === "Repair PATH",
+  "SCRG162-F4: installed manager remediation should repair PATH instead of install",
+);
+assert(
+  installedNpmIssue!.remediationAction?.label !== "Install Guard",
+  "SCRG162-F5: installed manager should not offer Install Guard",
+);
+
+const auditWithRestartInstalled = deriveFrontendAuditResults(
+  [],
+  {
+    ...baseSnapshot,
+    supply_chain: {
+      package_manager_protection: {
+        ...makeProtection([], ["pnpm"]),
+        installed_managers: ["pnpm"],
+        path_status: "restart_required",
+        restart_shell_required: true,
+      },
+    },
+  },
+);
+const restartPnpmIssue = auditWithRestartInstalled.find((r) => r.id === "unprotected-pnpm");
+assert(restartPnpmIssue !== undefined, "SCRG162-F6: restart-required installed manager should appear");
+assert(
+  restartPnpmIssue!.title.includes("waiting for restart"),
+  "SCRG162-F7: restart-required manager should prompt for restart",
+);
+assert(
+  restartPnpmIssue!.remediationAction === null,
+  "SCRG162-F8: restart-required manager should not expose install remediation",
+);
+
 const receiptNow = new Date().toISOString();
 const blockedReceipt = makeReceipt("block", receiptNow);
 const auditWithBlocked = deriveFrontendAuditResults([blockedReceipt], baseSnapshot);

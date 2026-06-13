@@ -22,6 +22,7 @@ import { GuardHarnessActionError, runAuditRemediation, guardAwareHref } from "./
 import type { AuditRemediationAction } from "./guard-api";
 import type { GuardApprovalGatePublicConfig, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
+import { resolveManagerCoverageStatus } from "./supply-chain-protection-stats";
 
 export type AuditSeverity = "critical" | "high" | "medium" | "low" | "info";
 
@@ -89,6 +90,71 @@ export type AuditFilterState = {
   searchQuery: string;
 };
 
+function buildPackageManagerAuditResult(
+  manager: string,
+  protection: NonNullable<GuardRuntimeSnapshot["supply_chain"]>["package_manager_protection"],
+  generatedAt: string,
+): AuditResult | null {
+  const coverage = resolveManagerCoverageStatus(protection, manager);
+  if (coverage === "protected") {
+    return null;
+  }
+
+  if (coverage === "restart_required") {
+    return {
+      id: `unprotected-${manager}`,
+      severity: "medium",
+      title: `${manager} is waiting for restart`,
+      detail: `Guard already updated your shell profile for ${manager}. Open a new shell or restart AI apps so ${manager} resolves through Guard.`,
+      harness: "global",
+      workspace: null,
+      timestamp: generatedAt,
+      remediation: "Open a new shell or restart AI apps to finish package-manager interception.",
+      remediationAction: null,
+      resolved: false,
+      evidenceHref: null,
+    };
+  }
+
+  if (coverage === "path_repair") {
+    return {
+      id: `unprotected-${manager}`,
+      severity: "medium",
+      title: `${manager} shim is installed but PATH still needs repair`,
+      detail: `Guard already installed the ${manager} shim on this machine. Repair PATH so ${manager} commands resolve through Guard before package installs run.`,
+      harness: "global",
+      workspace: null,
+      timestamp: generatedAt,
+      remediation: "Repair PATH from Supply chain or run hol-guard package-shims repair for this manager.",
+      remediationAction: {
+        action: "package_shim_path",
+        manager,
+        label: "Repair PATH",
+      },
+      resolved: false,
+      evidenceHref: `/evidence?harness=global&search=${encodeURIComponent(manager)}`,
+    };
+  }
+
+  return {
+    id: `unprotected-${manager}`,
+    severity: "high",
+    title: `${manager} is not intercepted by Guard`,
+    detail: `The ${manager} shim is missing from PATH. Installs via ${manager} bypass Guard's supply chain protection.`,
+    harness: "global",
+    workspace: null,
+    timestamp: generatedAt,
+    remediation: `Guard can install the shim and update PATH for ${manager} from this dashboard.`,
+    remediationAction: {
+      action: "package_shim_path",
+      manager,
+      label: "Install Guard",
+    },
+    resolved: false,
+    evidenceHref: `/evidence?harness=global&search=${encodeURIComponent(manager)}`,
+  };
+}
+
 export function deriveFrontendAuditResults(
   receipts: GuardReceipt[],
   snapshot: GuardRuntimeSnapshot,
@@ -98,34 +164,10 @@ export function deriveFrontendAuditResults(
   const protection = snapshot.supply_chain?.package_manager_protection;
   if (protection && protection.unprotected_managers.length > 0) {
     for (const mgr of protection.unprotected_managers) {
-      const restartRequired =
-        protection.path_status === "restart_required" &&
-        protection.installed_managers.includes(mgr);
-      results.push({
-        id: `unprotected-${mgr}`,
-        severity: restartRequired ? "medium" : "high",
-        title: restartRequired ? `${mgr} is waiting for restart` : `${mgr} is not intercepted by Guard`,
-        detail: restartRequired
-          ? `Guard already updated your shell profile for ${mgr}. Open a new shell or restart AI apps so ${mgr} resolves through Guard.`
-          : `The ${mgr} shim is missing from PATH. Installs via ${mgr} bypass Guard's supply chain protection.`,
-        harness: "global",
-        workspace: null,
-        timestamp: snapshot.generated_at,
-        remediation: restartRequired
-          ? "Open a new shell or restart AI apps to finish package-manager interception."
-          : `Guard can install the shim and update PATH for ${mgr} from this dashboard.`,
-        remediationAction: restartRequired
-          ? null
-          : {
-              action: "package_shim_path",
-              manager: mgr,
-              label: "Install Guard",
-            },
-        resolved: false,
-        evidenceHref: restartRequired
-          ? null
-          : `/evidence?harness=global&search=${encodeURIComponent(mgr)}`,
-      });
+      const auditResult = buildPackageManagerAuditResult(mgr, protection, snapshot.generated_at);
+      if (auditResult !== null) {
+        results.push(auditResult);
+      }
     }
   }
 
