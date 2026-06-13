@@ -2250,12 +2250,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 else None
             ),
         )
+        response_status = "completed"
+        if operation == "audit":
+            audit_status = result.get("audit_status")
+            if audit_status == "incomplete":
+                response_status = "incomplete"
         response_payload: dict[str, object] = {
             "entitlement": entitlement,
             "operation": operation,
             "receipt": receipt,
             "result": result,
-            "status": "completed",
+            "status": response_status,
         }
         if operation == "audit":
             cloud_sync = _queue_headless_cloud_sync(store=self.server.store)  # type: ignore[attr-defined]

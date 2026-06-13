@@ -17,6 +17,7 @@ import type {
   SupplyChainAuditSnapshot,
 } from "./guard-types";
 import { derivePackageWorkbenchFromReceipts, fetchReceipts, normalizeSupplyChainAuditSnapshot } from "./guard-api";
+import { resolveSupplyChainAuditFailure } from "./supply-chain-audit-connect";
 import { PackageFirewallPanel, type PackageFirewallPanelHandle } from "./supply-chain-firewall-panel";
 import type { AuditConnectGateViewState } from "./supply-chain-firewall-panel";
 import { SupplyChainBundlePanel } from "./supply-chain-bundle-panel";
@@ -213,6 +214,12 @@ export function SupplyChainWorkspace({
   }, [snapshot.generated_at, snapshot.receipt_count]);
 
   const handleAuditCompleted = useCallback((resultDetail: Record<string, unknown>) => {
+    const failureMessage = resolveSupplyChainAuditFailure(resultDetail);
+    if (failureMessage !== null) {
+      setAuditSnapshot(null);
+      setAuditError(failureMessage);
+      return;
+    }
     const normalized = normalizeSupplyChainAuditSnapshot(resultDetail);
     setAuditSnapshot(normalized);
     setAuditError(null);

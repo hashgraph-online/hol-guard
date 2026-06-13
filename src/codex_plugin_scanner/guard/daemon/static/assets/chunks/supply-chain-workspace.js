@@ -1,4 +1,4 @@
-import { au as GuardHarnessActionError, r as reactExports, j as jsxRuntimeExports, d as HiMiniCheckCircle, aw as HiMiniArrowPath, w as HiMiniExclamationTriangle, ac as Tag, m as formatRelativeTime, aG as HiMiniClock, aH as IconActionButton, I as HiMiniXCircle, ax as HiMiniTrash, l as HiMiniShieldCheck, F as HiMiniWrenchScrewdriver, aI as HiMiniBeaker, aJ as ActivationSummary, aK as ActionResultPanel, ad as HiMiniMagnifyingGlass, b as EmptyState, A as ActionButton, aL as HiMiniBugAnt, o as HiMiniXMark, aM as fetchPackageFirewallStatus, aN as runPackageAudit, aO as startPackageFirewallConnect, aP as runPackageFirewallAction, aQ as parseInterceptProofSnapshot, aR as runPackageSync, aS as openPackageFirewallShell, S as SectionLabel, aT as EntitlementNotice, aU as fetchSupplyChainBundle, aE as HiMiniArrowTopRightOnSquare, B as Badge, aV as HiMiniDocumentMagnifyingGlass, aW as HiMiniShieldExclamation, aX as HiMiniComputerDesktop, t as HiMiniCloud, aY as ConnectFlowCard, aZ as HiMiniArrowDown, a_ as HiMiniArrowUp, ah as HiMiniArrowLeft, a$ as HiMiniArrowRight, b0 as HiMiniCloudArrowUp, b1 as HiMiniInformationCircle, b2 as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
+import { aG as isSupplyChainAuditIncomplete, au as GuardHarnessActionError, r as reactExports, j as jsxRuntimeExports, d as HiMiniCheckCircle, aw as HiMiniArrowPath, w as HiMiniExclamationTriangle, ac as Tag, m as formatRelativeTime, aH as HiMiniClock, aI as IconActionButton, I as HiMiniXCircle, ax as HiMiniTrash, l as HiMiniShieldCheck, F as HiMiniWrenchScrewdriver, aJ as HiMiniBeaker, aK as ActivationSummary, aL as ActionResultPanel, ad as HiMiniMagnifyingGlass, b as EmptyState, A as ActionButton, aM as HiMiniBugAnt, o as HiMiniXMark, aN as fetchPackageFirewallStatus, aO as runPackageAudit, aP as resolveSupplyChainAuditFailure, aQ as startPackageFirewallConnect, aR as runPackageFirewallAction, aS as parseInterceptProofSnapshot, aT as runPackageSync, aU as openPackageFirewallShell, S as SectionLabel, aV as EntitlementNotice, aW as fetchSupplyChainBundle, aE as HiMiniArrowTopRightOnSquare, B as Badge, aX as HiMiniDocumentMagnifyingGlass, aY as HiMiniShieldExclamation, aZ as HiMiniComputerDesktop, t as HiMiniCloud, a_ as ConnectFlowCard, a$ as HiMiniArrowDown, b0 as HiMiniArrowUp, ah as HiMiniArrowLeft, b1 as HiMiniArrowRight, b2 as HiMiniCloudArrowUp, b3 as HiMiniInformationCircle, b4 as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal, b as buildSupplyChainStats } from "./supply-chain-protection-stats.js";
 import { resolveFeedStaleness } from "./feed-health-workspace.js";
 import { r as resolveHomeProtectionStatus } from "./home-protection-module.js";
@@ -222,6 +222,9 @@ function normalizeSupplyChainAuditSnapshot(raw, receiptId = null) {
   if (!isRecord$1(raw)) {
     return null;
   }
+  if (isSupplyChainAuditIncomplete(raw)) {
+    return null;
+  }
   const evaluation = isRecord$1(raw.evaluation) ? raw.evaluation : null;
   const findingsFromEvidence = normalizePackageFindings(raw.package_findings);
   const findings = findingsFromEvidence.length > 0 ? findingsFromEvidence : packageRecordsFromEvaluation(evaluation);
@@ -230,7 +233,7 @@ function normalizeSupplyChainAuditSnapshot(raw, receiptId = null) {
   const decision = normalizeDecision(evaluation?.decision ?? raw.audit_decision);
   const manifestPaths = readStringArray(raw.manifest_paths);
   const lockfilePaths = readStringArray(raw.lockfile_paths);
-  const hasAuditContext = findings.length > 0 || inventory.totalPackages > 0 || manifestPaths.length > 0 || lockfilePaths.length > 0 || evaluation !== null;
+  const hasAuditContext = findings.length > 0 || inventory.totalPackages > 0 || evaluation !== null;
   if (!hasAuditContext) {
     return null;
   }
@@ -257,6 +260,7 @@ function derivePackageWorkbenchFromReceipts(receipts) {
     const snapshot = normalizeSupplyChainAuditSnapshot(
       {
         generated_at: receipt.timestamp,
+        audit_status: evidenceRaw.audit_status,
         evaluation: {
           decision: evidenceRaw.audit_decision,
           packages: evidenceRaw.package_findings
@@ -1152,6 +1156,16 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       });
       try {
         const response = await runPackageAudit({ workspaceDir });
+        const failureMessage = resolveSupplyChainAuditFailure(response.result_detail);
+        if (failureMessage !== null) {
+          setLastFailed({ op: "audit", manager: null, message: failureMessage });
+          setLastCompleted(null);
+          onAuditErrorChange?.(failureMessage);
+          clearAuditConnectGate();
+          await refreshAfterOp();
+          await onStateChanged?.();
+          return;
+        }
         setLastCompleted({ op: "audit", manager: null, response });
         onAuditCompleted?.(response.result_detail);
         clearAuditConnectGate();
@@ -1744,6 +1758,18 @@ function auditRailItem(receipt) {
   const evidence = (receipt.scanner_evidence ?? []).find(
     (entry) => readOperation(entry) === "audit"
   );
+  const auditStatus = isRecord(evidence) && typeof evidence.audit_status === "string" ? evidence.audit_status : null;
+  if (auditStatus === "incomplete") {
+    return {
+      kind: "audit",
+      timestamp: receipt.timestamp,
+      title: "Workspace audit did not complete",
+      detail: receipt.capabilities_summary.trim().length > 0 ? receipt.capabilities_summary : "Guard could not index workspace packages for audit.",
+      receiptId: receipt.receipt_id,
+      harness: receipt.harness,
+      tone: "attention"
+    };
+  }
   const decision = isRecord(evidence) && typeof evidence.audit_decision === "string" ? evidence.audit_decision : receipt.policy_decision;
   const blockedCount = isRecord(evidence) && typeof evidence.blocked_package_count === "number" ? evidence.blocked_package_count : 0;
   const totalPackages = isRecord(evidence) && typeof evidence.total_packages === "number" ? evidence.total_packages : blockedCount;
@@ -2924,6 +2950,12 @@ function SupplyChainWorkspace({
     };
   }, [snapshot.generated_at, snapshot.receipt_count]);
   const handleAuditCompleted = reactExports.useCallback((resultDetail) => {
+    const failureMessage = resolveSupplyChainAuditFailure(resultDetail);
+    if (failureMessage !== null) {
+      setAuditSnapshot(null);
+      setAuditError(failureMessage);
+      return;
+    }
     const normalized = normalizeSupplyChainAuditSnapshot(resultDetail);
     setAuditSnapshot(normalized);
     setAuditError(null);

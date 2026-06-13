@@ -23,6 +23,7 @@ import {
   isSupplyChainAuditConnectError,
   packageAuditNeedsCloudConnect,
   resolveSupplyChainAuditConnectGate,
+  resolveSupplyChainAuditFailure,
   supplyChainAuditUserMessage,
   type SupplyChainAuditConnectGate,
 } from "./supply-chain-audit-connect";
@@ -251,6 +252,16 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       });
       try {
         const response = await runPackageAudit({ workspaceDir });
+        const failureMessage = resolveSupplyChainAuditFailure(response.result_detail);
+        if (failureMessage !== null) {
+          setLastFailed({ op: "audit", manager: null, message: failureMessage });
+          setLastCompleted(null);
+          onAuditErrorChange?.(failureMessage);
+          clearAuditConnectGate();
+          await refreshAfterOp();
+          await onStateChanged?.();
+          return;
+        }
         setLastCompleted({ op: "audit", manager: null, response });
         onAuditCompleted?.(response.result_detail);
         clearAuditConnectGate();

@@ -9,6 +9,7 @@ import type {
   SupplyChainAuditSeverity,
   SupplyChainAuditSnapshot,
 } from "./guard-types";
+import { isSupplyChainAuditIncomplete } from "./supply-chain-audit-result";
 
 const SEVERITY_RANK: Record<SupplyChainAuditSeverity, number> = {
   critical: 4,
@@ -264,6 +265,9 @@ export function normalizeSupplyChainAuditSnapshot(
   if (!isRecord(raw)) {
     return null;
   }
+  if (isSupplyChainAuditIncomplete(raw)) {
+    return null;
+  }
   const evaluation = isRecord(raw.evaluation) ? raw.evaluation : null;
   const findingsFromEvidence = normalizePackageFindings(raw.package_findings);
   const findings =
@@ -277,8 +281,6 @@ export function normalizeSupplyChainAuditSnapshot(
   const hasAuditContext =
     findings.length > 0 ||
     inventory.totalPackages > 0 ||
-    manifestPaths.length > 0 ||
-    lockfilePaths.length > 0 ||
     evaluation !== null;
   if (!hasAuditContext) {
     return null;
@@ -310,6 +312,7 @@ export function derivePackageWorkbenchFromReceipts(receipts: GuardReceipt[]): Su
     const snapshot = normalizeSupplyChainAuditSnapshot(
       {
         generated_at: receipt.timestamp,
+        audit_status: evidenceRaw.audit_status,
         evaluation: {
           decision: evidenceRaw.audit_decision,
           packages: evidenceRaw.package_findings,

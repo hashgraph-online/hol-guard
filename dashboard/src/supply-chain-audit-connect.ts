@@ -1,5 +1,8 @@
 import { GuardHarnessActionError } from "./guard-api";
 import type { PackageFirewallStatusResponse } from "./guard-types";
+import { isSupplyChainAuditIncomplete, resolveSupplyChainAuditFailure } from "./supply-chain-audit-result";
+
+export { isSupplyChainAuditIncomplete, resolveSupplyChainAuditFailure };
 
 export const SUPPLY_CHAIN_AUDIT_CONNECT_ERROR_CODES = [
   "guard_cloud_connect_required",
