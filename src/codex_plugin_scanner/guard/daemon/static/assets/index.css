@@ -1396,6 +1396,10 @@
     resize: both;
   }
 
+  .list-disc {
+    list-style-type: disc;
+  }
+
   .list-none {
     list-style-type: none;
   }
@@ -3562,6 +3566,10 @@
 
   .pl-4 {
     padding-left: calc(var(--spacing) * 4);
+  }
+
+  .pl-5 {
+    padding-left: calc(var(--spacing) * 5);
   }
 
   .pl-7 {
