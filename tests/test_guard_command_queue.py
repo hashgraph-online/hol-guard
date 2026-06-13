@@ -1,0 +1,448 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.daemon.command_queue_worker import (
+    CommandQueueWorker,
+    start_command_queue_worker,
+)
+from codex_plugin_scanner.guard.runtime import command_queue
+from codex_plugin_scanner.guard.store import GuardStore
+
+
+class FakeStore:
+    def __init__(self, guard_home: Path) -> None:
+        self.guard_home = guard_home
+        self.payloads: dict[str, dict[str, object] | list[object]] = {}
+
+    def get_sync_payload(self, key: str) -> dict[str, object] | list[object] | None:
+        return self.payloads.get(key)
+
+    def set_sync_payload(self, key: str, payload: dict[str, object] | list[object], now: str) -> None:
+        self.payloads[key] = payload
+
+    def get_cloud_sync_profile(self) -> dict[str, str]:
+        return {
+            "auth_mode": "oauth",
+            "sync_url": "https://hol.test/api/guard/receipts/sync",
+            "workspace_id": "workspace-1",
+        }
+
+    def get_oauth_local_credentials(self, *, allow_primary: bool = False) -> dict[str, object]:
+        return {
+            "grant_id": "grant-1",
+            "machine_id": "machine-1",
+            "workspace_id": "workspace-1",
+        }
+
+
+def _context(tmp_path: Path) -> HarnessContext:
+    return HarnessContext(
+        home_dir=tmp_path,
+        workspace_dir=None,
+        guard_home=tmp_path / "guard-home",
+    )
+
+
+def test_poll_once_leases_heartbeats_executes_and_posts_result(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    calls: list[tuple[str, str, dict[str, object]]] = []
+
+    def fake_auth_context(current_store: object) -> dict[str, object]:
+        assert current_store is store
+        return {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"}
+
+    def fake_json_request(
+        auth_context: dict[str, object],
+        *,
+        method: str,
+        path: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        calls.append((method, path, payload))
+        if path == "/lease":
+            return {
+                "item": {
+                    "id": "job-1",
+                    "leaseId": "lease-1",
+                    "operation": "guard.packageShims.status",
+                }
+            }
+        return {"ok": True}
+
+    monkeypatch.setattr(command_queue, "_resolve_guard_sync_auth_context", fake_auth_context)
+    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+    monkeypatch.setattr(
+        command_queue,
+        "package_shim_status",
+        lambda context: {"active_managers": ["npm"]},
+    )
+
+    status = command_queue.poll_command_queue_once(store, _context(tmp_path))
+
+    assert status["state"] == "idle"
+    assert calls[0] == (
+        "POST",
+        "/lease",
+        {
+            "workspaceId": "workspace-1",
+            "deviceId": "machine-1",
+            "daemonVersion": command_queue.__version__,
+            "capabilities": {
+                "operations": ["guard.packageShims.status"],
+                "schemaVersions": {"guard.packageShims.status": 1},
+            },
+            "maxJobs": 1,
+            "waitMs": 25000,
+        },
+    )
+    assert calls[1] == ("POST", "/job-1/heartbeat", {"leaseId": "lease-1"})
+    assert calls[2] == ("POST", "/job-1/heartbeat", {"leaseId": "lease-1"})
+    assert calls[3][0:2] == ("POST", "/job-1/result")
+    assert calls[3][2]["status"] == "succeeded"
+    assert calls[3][2]["leaseId"] == "lease-1"
+    assert "machineInstallationId" not in calls[0][2]
+    assert "machineInstallationId" not in calls[1][2]
+    assert "machineInstallationId" not in calls[2][2]
+    assert "machineInstallationId" not in calls[3][2]
+
+
+def test_poll_once_persists_result_retry_when_result_upload_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+
+    monkeypatch.setattr(
+        command_queue,
+        "_resolve_guard_sync_auth_context",
+        lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
+    )
+    monkeypatch.setattr(command_queue, "package_shim_status", lambda context: {"active_managers": []})
+
+    def fake_json_request(
+        auth_context: dict[str, object],
+        *,
+        method: str,
+        path: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        if path == "/lease":
+            return {
+                "item": {
+                    "id": "job-2",
+                    "leaseId": "lease-2",
+                    "operation": "guard.packageShims.status",
+                }
+            }
+        if path.endswith("/result"):
+            raise OSError("upload failed")
+        return {"ok": True}
+
+    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+
+    try:
+        command_queue.poll_command_queue_once(store, _context(tmp_path))
+    except OSError:
+        pass
+    else:
+        raise AssertionError("result upload should fail")
+
+    state = store.get_sync_payload(command_queue.COMMAND_QUEUE_STATE_KEY)
+    assert isinstance(state, dict)
+    assert state["state"] == "result_pending"
+    assert isinstance(state["pending_result"], dict)
+
+
+def test_poll_once_clears_active_job_when_heartbeat_fails(tmp_path: Path, monkeypatch) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    monkeypatch.setattr(
+        command_queue,
+        "_resolve_guard_sync_auth_context",
+        lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
+    )
+
+    def fake_json_request(
+        auth_context: dict[str, object],
+        *,
+        method: str,
+        path: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        if path == "/lease":
+            return {
+                "item": {
+                    "id": "job-2",
+                    "leaseId": "lease-2",
+                    "operation": "guard.packageShims.status",
+                }
+            }
+        if path.endswith("/heartbeat"):
+            raise OSError("heartbeat failed")
+        return {"ok": True}
+
+    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+
+    try:
+        command_queue.poll_command_queue_once(store, _context(tmp_path))
+    except OSError:
+        pass
+    else:
+        raise AssertionError("heartbeat should fail")
+
+    state = store.get_sync_payload(command_queue.COMMAND_QUEUE_STATE_KEY)
+    assert isinstance(state, dict)
+    assert state["state"] == "error"
+    assert "active_job" not in state
+
+
+def test_poll_once_posts_failed_result_when_execution_raises(tmp_path: Path, monkeypatch) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    result_payloads: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        command_queue,
+        "_resolve_guard_sync_auth_context",
+        lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
+    )
+    monkeypatch.setattr(
+        command_queue,
+        "package_shim_status",
+        lambda context: (_ for _ in ()).throw(RuntimeError("shim status failed")),
+    )
+
+    def fake_json_request(
+        auth_context: dict[str, object],
+        *,
+        method: str,
+        path: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        if path == "/lease":
+            return {
+                "item": {
+                    "id": "job-5",
+                    "leaseId": "lease-5",
+                    "operation": "guard.packageShims.status",
+                }
+            }
+        if path.endswith("/result"):
+            result_payloads.append(payload)
+        return {"ok": True}
+
+    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+
+    status = command_queue.poll_command_queue_once(store, _context(tmp_path))
+
+    assert status["state"] == "idle"
+    assert result_payloads[0]["status"] == "failed"
+    assert result_payloads[0]["failureCode"] == "execution_error"
+    assert "shim status failed" in str(result_payloads[0]["failureMessage"])
+
+
+def test_poll_once_retries_pending_result_before_leasing(tmp_path: Path, monkeypatch) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    store.set_sync_payload(
+        command_queue.COMMAND_QUEUE_STATE_KEY,
+        {
+            "state": "result_pending",
+            "pending_result": {
+                "job": {"id": "job-3", "leaseId": "lease-3"},
+                "payload": {
+                    "leaseId": "lease-3",
+                    "idempotencyKey": "job-3:lease-3:succeeded",
+                    "status": "succeeded",
+                    "result": {"data": {}},
+                },
+            },
+        },
+        "2026-06-13T00:00:00+00:00",
+    )
+    calls: list[str] = []
+    monkeypatch.setattr(
+        command_queue,
+        "_resolve_guard_sync_auth_context",
+        lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
+    )
+
+    def fake_json_request(
+        auth_context: dict[str, object],
+        *,
+        method: str,
+        path: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        calls.append(path)
+        return {"ok": True}
+
+    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+
+    status = command_queue.poll_command_queue_once(store, _context(tmp_path))
+
+    assert status["state"] == "idle"
+    assert calls == ["/job-3/result"]
+    assert status["pending_result"] is None
+
+
+def test_poll_once_clears_active_job_for_malformed_pending_result(tmp_path: Path, monkeypatch) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    store.set_sync_payload(
+        command_queue.COMMAND_QUEUE_STATE_KEY,
+        {
+            "state": "result_pending",
+            "active_job": {"id": "job-4", "leaseId": "lease-4"},
+            "pending_result": {"job": "bad", "payload": {}},
+        },
+        "2026-06-13T00:00:00+00:00",
+    )
+    calls: list[str] = []
+    monkeypatch.setattr(
+        command_queue,
+        "_resolve_guard_sync_auth_context",
+        lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
+    )
+
+    def fake_json_request(
+        auth_context: dict[str, object],
+        *,
+        method: str,
+        path: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        calls.append(path)
+        return {"item": None}
+
+    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+
+    command_queue.poll_command_queue_once(store, _context(tmp_path))
+
+    state = store.get_sync_payload(command_queue.COMMAND_QUEUE_STATE_KEY)
+    assert isinstance(state, dict)
+    assert "active_job" not in state
+    assert "pending_result" not in state
+    assert calls == ["/lease"]
+
+
+def test_command_queue_loop_backs_off_after_empty_polls(tmp_path: Path, monkeypatch) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    waits: list[float] = []
+
+    class StopAfterThreeWaits:
+        def is_set(self) -> bool:
+            return False
+
+        def wait(self, seconds: float) -> bool:
+            waits.append(seconds)
+            return len(waits) >= 3
+
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, "1")
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_POLL_INTERVAL_ENV, "1")
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ERROR_BACKOFF_ENV, "8")
+
+    def fake_poll_once(current_store: object, context: HarnessContext) -> dict[str, object]:
+        return {"last_poll_was_empty": True}
+
+    monkeypatch.setattr(command_queue, "poll_command_queue_once", fake_poll_once)
+
+    command_queue.command_queue_loop(
+        store,
+        _context(tmp_path),
+        stop_event=StopAfterThreeWaits(),
+    )
+
+    assert waits == [1, 2, 4]
+
+
+def test_start_worker_replaces_stopped_alive_worker(tmp_path: Path, monkeypatch) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+
+    class FakeThread:
+        def __init__(self) -> None:
+            self.started = False
+
+        def is_alive(self) -> bool:
+            return True
+
+        def start(self) -> None:
+            self.started = True
+
+    class FakeEvent:
+        def __init__(self, stopped: bool = False) -> None:
+            self.stopped = stopped
+
+        def is_set(self) -> bool:
+            return self.stopped
+
+    created_threads: list[FakeThread] = []
+
+    def fake_thread(*args: object, **kwargs: object) -> FakeThread:
+        thread = FakeThread()
+        created_threads.append(thread)
+        return thread
+
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, "1")
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.command_queue_worker.threading.Thread", fake_thread)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.command_queue_worker.threading.Event",
+        lambda: FakeEvent(False),
+    )
+    existing = CommandQueueWorker(thread=FakeThread(), stop_event=FakeEvent(True))  # type: ignore[arg-type]
+
+    worker = start_command_queue_worker(store, existing)  # type: ignore[arg-type]
+
+    assert worker is not existing
+    assert created_threads[0].started is True
+
+
+def test_command_queue_loop_backs_off_after_errors(tmp_path: Path, monkeypatch) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    waits: list[float] = []
+
+    class StopAfterThreeWaits:
+        def is_set(self) -> bool:
+            return False
+
+        def wait(self, seconds: float) -> bool:
+            waits.append(seconds)
+            return len(waits) >= 3
+
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, "1")
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_POLL_INTERVAL_ENV, "1")
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ERROR_BACKOFF_ENV, "8")
+    monkeypatch.setattr(
+        command_queue,
+        "poll_command_queue_once",
+        lambda current_store, context: (_ for _ in ()).throw(OSError("network down")),
+    )
+
+    command_queue.command_queue_loop(
+        store,
+        _context(tmp_path),
+        stop_event=StopAfterThreeWaits(),
+    )
+
+    assert waits == [1, 2, 4]
+
+
+def test_commands_status_outputs_command_queue_state(tmp_path: Path, capsys, monkeypatch) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    store.set_sync_payload(
+        command_queue.COMMAND_QUEUE_STATE_KEY,
+        {"state": "idle", "last_poll_at": "2026-06-13T00:00:00+00:00"},
+        "2026-06-13T00:00:00+00:00",
+    )
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, "1")
+
+    rc = main(["guard", "commands", "status", "--guard-home", str(guard_home), "--json"])
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["state"] == "idle"
+    assert payload["enabled"] is True
+    assert payload["supported_operations"] == ["guard.packageShims.status"]
