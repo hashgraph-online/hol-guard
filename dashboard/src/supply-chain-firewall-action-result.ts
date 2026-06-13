@@ -1,3 +1,8 @@
+import {
+  isSupplyChainAuditIncomplete,
+  resolveSupplyChainAuditFailure,
+} from "./supply-chain-audit-result";
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -27,6 +32,28 @@ export type PackageFirewallActionResultDetail = {
 };
 
 function parseAuditActionResult(result: Record<string, unknown>): PackageFirewallActionResultDetail {
+  if (isSupplyChainAuditIncomplete(result)) {
+    const failureMessage = resolveSupplyChainAuditFailure(result);
+    const manifestPaths = readStringArray(result.manifest_paths);
+    const lockfilePaths = readStringArray(result.lockfile_paths);
+    const lines: string[] = [];
+    if (manifestPaths.length > 0) {
+      lines.push(`Manifests found: ${manifestPaths.join(", ")}.`);
+    }
+    if (lockfilePaths.length > 0) {
+      lines.push(`Lockfiles found: ${lockfilePaths.join(", ")}.`);
+    }
+    if (failureMessage !== null) {
+      lines.push(failureMessage);
+    }
+    return {
+      emptyState: false,
+      lines,
+      summary: "Workspace audit did not complete.",
+      tone: "warning",
+    };
+  }
+
   const evaluation = isRecord(result.evaluation) ? result.evaluation : null;
   const decision = readString(evaluation?.decision) ?? readString(result.decision) ?? "monitor";
   const manifestPaths = readStringArray(result.manifest_paths);

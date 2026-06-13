@@ -142,5 +142,14 @@ assert(
   normalizeSupplyChainAuditSnapshot({ generated_at: "2026-06-09T12:00:00.000Z" }) === null,
   "SCSR175-B: empty audit payload returns null snapshot",
 );
+assert(
+  normalizeSupplyChainAuditSnapshot({
+    generated_at: "2026-06-09T12:00:00.000Z",
+    lockfile_paths: ["package-lock.json"],
+    audit_status: "incomplete",
+    exit_code: 1,
+  }) === null,
+  "SCSR175-C: incomplete lockfile-only audit does not masquerade as clean findings",
+);
 
 console.log("scsr-phase10-package-workbench.test.ts: all assertions passed");
