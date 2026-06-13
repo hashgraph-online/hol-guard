@@ -5103,7 +5103,10 @@ def _validate_scoped_policy_artifact_target(scope: str, artifact_id: str | None)
         return
     if artifact_id is None or not artifact_id.strip():
         return
-    if _artifact_family_key(artifact_id) is None:
+    if not artifact_id.startswith("family:"):
+        return
+    family = artifact_id.removeprefix("family:").strip().lower()
+    if family not in _SCOPED_HARNESS_FAMILIES:
         msg = "unsupported_scoped_policy_family"
         raise ValueError(msg)
 
