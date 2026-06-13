@@ -21213,26 +21213,36 @@ function CategoryTabRaw({ receipts, onFilterCategory }) {
   ] });
 }
 const CategoryTab = reactExports.memo(CategoryTabRaw);
-function WorkspacePageHeader({
-  eyebrow,
-  title,
-  description,
-  tabs,
-  activeTab,
-  onTabChange,
-  actions
-}) {
-  const hasTabs = tabs !== void 0 && activeTab !== void 0 && onTabChange !== void 0;
+function WorkspacePageHeaderToolbar(props) {
+  if (!props.tabConfig && !props.actions) {
+    return null;
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-start sm:justify-end sm:gap-4", children: [
+    props.tabConfig ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full min-w-0 sm:w-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      TabBar,
+      {
+        tabs: props.tabConfig.tabs,
+        active: props.tabConfig.activeTab,
+        onChange: props.tabConfig.onTabChange
+      }
+    ) }) : null,
+    props.actions ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex shrink-0 flex-wrap items-center justify-end gap-2", children: props.actions }) : null
+  ] });
+}
+function WorkspacePageHeader(props) {
+  const { eyebrow, title, description, actions } = props;
+  const tabConfig = props.tabs !== void 0 ? {
+    tabs: props.tabs,
+    activeTab: props.activeTab,
+    onTabChange: props.onTabChange
+  } : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-400", children: eyebrow }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-semibold tracking-tight text-brand-dark", children: title }),
       description ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: description }) : null
     ] }),
-    hasTabs || actions ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-start sm:justify-end sm:gap-4", children: [
-      hasTabs ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full min-w-0 sm:w-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TabBar, { tabs, active: activeTab, onChange: onTabChange }) }) : null,
-      actions ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex shrink-0 flex-wrap items-center justify-end gap-2", children: actions }) : null
-    ] }) : null
+    /* @__PURE__ */ jsxRuntimeExports.jsx(WorkspacePageHeaderToolbar, { tabConfig, actions })
   ] });
 }
 const PAGE_SIZE = 50;
