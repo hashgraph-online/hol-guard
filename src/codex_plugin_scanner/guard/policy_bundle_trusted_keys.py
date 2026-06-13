@@ -226,9 +226,9 @@ def validate_synced_policy_bundle(
         anchored_verification_keys=anchored_keys,
     )
     if validated_bundle is None:
-        return None, rejection_reason, trusted_keys
+        return None, rejection_reason, anchored_keys
     updated_keys = persistable_policy_bundle_keyring(
-        trusted_keys=trusted_keys,
+        anchored_keys=anchored_keys,
         policy_bundle=validated_bundle,
     )
     return validated_bundle, None, updated_keys
@@ -236,18 +236,18 @@ def validate_synced_policy_bundle(
 
 def persistable_policy_bundle_keyring(
     *,
-    trusted_keys: tuple[PolicyBundleVerificationKey, ...],
+    anchored_keys: tuple[PolicyBundleVerificationKey, ...],
     policy_bundle: dict[str, object],
 ) -> tuple[PolicyBundleVerificationKey, ...]:
     verifier = policy_bundle.get("verifier")
     if not isinstance(verifier, dict):
-        return trusted_keys
+        return anchored_keys
     if verifier.get("algorithm") != "rsa-pss-sha256":
-        return trusted_keys
+        return anchored_keys
     key_id = verifier.get("keyId")
     if not isinstance(key_id, str) or not key_id.strip():
-        return trusted_keys
-    signing_key = resolve_policy_bundle_signing_key(key_id.strip(), trusted_keys)
+        return anchored_keys
+    signing_key = resolve_policy_bundle_signing_key(key_id.strip(), anchored_keys)
     if signing_key is None:
-        return trusted_keys
-    return merge_policy_bundle_trusted_keys(trusted_keys, (signing_key,))
+        return anchored_keys
+    return merge_policy_bundle_trusted_keys(anchored_keys, (signing_key,))
