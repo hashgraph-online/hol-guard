@@ -134,33 +134,19 @@ def run_guard_update(
         post_version_check,
         resulting_version,
     )
+    nonzero_success_note: str | None = None
     if result.returncode != 0:
         if _version_changed(current_version, resulting_version):
-            payload["status"] = _success_status(payload)
-            payload["changed"] = True
-            stale_retry_command = _stale_retry_command(payload)
-            if stale_retry_command:
-                payload["retry_command"] = stale_retry_command
-            payload["message"] = _success_message(
-                status=str(payload["status"]),
-                current_version=current_version,
-                resulting_version=resulting_version,
-                version_check=payload.get("version_check"),
-                retry_command=stale_retry_command,
-            )
-            notes = _success_notes(payload)
-            payload_notes = [*notes]
-            payload_notes.append(
+            nonzero_success_note = (
                 "Installer exited with code "
                 f"{result.returncode} after version changed. "
                 "Review stderr for any follow-up action."
             )
-            payload["notes"] = payload_notes
-            return payload, 0
         payload["status"] = "failed"
         payload["changed"] = False
         payload["message"] = "HOL Guard update failed."
-        return payload, 1
+        if nonzero_success_note is None:
+            return payload, 1
     payload["status"] = _success_status(payload)
     payload["changed"] = _version_changed(current_version, resulting_version) or payload["status"] == "updated"
     stale_retry_command = _stale_retry_command(payload)
@@ -174,6 +160,8 @@ def run_guard_update(
         retry_command=stale_retry_command,
     )
     notes = _success_notes(payload)
+    if nonzero_success_note is not None:
+        notes = [*notes, nonzero_success_note]
     if notes:
         payload["notes"] = notes
     repaired_installs, repair_notes = _repair_supported_harnesses(

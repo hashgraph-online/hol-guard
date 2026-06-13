@@ -123,6 +123,8 @@ def test_update_binary_diagnostics_treats_pipx_shim_as_healthy(monkeypatch: pyte
         "which",
         lambda name: "/mock-home/.local/bin/hol-guard" if name == "hol-guard" else None,
     )
+    monkeypatch.setattr(update_commands, "_sync_dashboard_assets", lambda: {"notes": ["synced dashboard"]})
+    monkeypatch.setattr(update_commands, "_repair_supported_harnesses", lambda **_: ([], ["repaired codex hooks"]))
 
     payload, exit_code = update_commands.run_guard_update(dry_run=True)
 
@@ -230,6 +232,7 @@ def test_update_treats_nonzero_pipx_repair_as_updated_when_version_changed(
     assert payload["changed"] is True
     assert payload["resulting_version"] == "2.0.628"
     assert payload["message"] == "Updated HOL Guard from 2.0.345 to 2.0.628."
+    assert "dashboard_sync" in payload
     notes = payload.get("notes")
     assert isinstance(notes, list)
     assert any(
