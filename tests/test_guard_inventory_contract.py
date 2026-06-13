@@ -9,6 +9,7 @@ from codex_plugin_scanner.guard.inventory_contract import (
     GuardAgentInventoryFinding,
     GuardAgentInventoryItem,
     GuardAgentInventorySnapshot,
+    _agent_type,
     classify_endpoint_host,
     fingerprint_mapping,
     fingerprint_path_tree,
@@ -710,3 +711,7 @@ def test_inventory_snapshot_maps_cisco_findings_to_redacted_inventory_evidence(t
     assert payload["sources"][-1]["sourceType"] == "scanner"
     assert "fixture_secretvalue" not in encoded
     assert str(tmp_path) not in encoded
+
+
+def test_inventory_agent_type_is_antigravity() -> None:
+    assert _agent_type("antigravity") == "antigravity"
