@@ -90,8 +90,37 @@ assert(
   "SCSR151: restart_required path status maps to restart activation state",
 );
 assert(
+  nestedNpm?.path_broken === false,
+  "SCSR151: restart_required clears path broken after profile repair",
+);
+assert(
   nestedNpm?.last_intercept_proof_at === "2026-06-07T10:00:00Z",
   "SCSR151: snake_case intercept proof map is read",
+);
+
+const pathBrokenSummaryPayload = normalizePackageFirewallStatus({
+  supported_managers: ["npm"],
+  package_shims: {
+    detected_managers: ["npm"],
+    installed_managers: ["npm"],
+    tested_managers: [],
+    path_broken_managers: ["npm"],
+    path_status: "missing_from_path",
+    manager_details: [
+      {
+        manager: "npm",
+        integrity: "ok",
+        path_active: false,
+        shim_path: "/guard-home/package-shims/bin/npm",
+        real_binary_path: "/usr/local/bin/npm",
+      },
+    ],
+  },
+});
+const brokenNpm = pathBrokenSummaryPayload.package_shims.find((entry) => entry.manager === "npm");
+assert(
+  brokenNpm?.path_summary === "/usr/local/bin/npm precedes /guard-home/package-shims/bin/npm",
+  "SCSR151: path summary reflects real binary preceding shim when inactive",
 );
 
 const hiddenManagerPayload = normalizePackageFirewallStatus({

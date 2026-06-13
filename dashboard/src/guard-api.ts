@@ -2258,8 +2258,11 @@ function buildPackageShimPathSummary(detail: Record<string, unknown> | null): st
   }
   const shimPath = stringValue(detail.shim_path);
   const realBinaryPath = stringValue(detail.real_binary_path);
+  const pathActive = booleanValue(detail.path_active);
   if (shimPath !== null && realBinaryPath !== null) {
-    return `${shimPath} precedes ${realBinaryPath}`;
+    return pathActive
+      ? `${shimPath} precedes ${realBinaryPath}`
+      : `${realBinaryPath} precedes ${shimPath}`;
   }
   if (shimPath !== null) {
     return shimPath;
@@ -2301,16 +2304,21 @@ function normalizePackageShimEntry(
   const integrity = stringValue(detail?.integrity) ?? "uninstalled";
   const installed = detail !== null && integrity !== "missing";
   const active = booleanValue(detail?.path_active);
-  const pathBroken = coverage.pathBroken || detail?.path_broken === true;
-  const activation_state = !installed
-    ? "uninstalled"
-    : integrity === "tampered" || pathBroken
-    ? "repair_required"
-    : active
-    ? "protected"
-    : pathStatus === "restart_required"
-    ? "restart_required"
-    : "repair_required";
+  const pathBroken =
+    pathStatus !== "restart_required" &&
+    (coverage.pathBroken || detail?.path_broken === true);
+  let activation_state: PackageShimEntry["activation_state"];
+  if (!installed) {
+    activation_state = "uninstalled";
+  } else if (integrity === "tampered") {
+    activation_state = "repair_required";
+  } else if (active) {
+    activation_state = "protected";
+  } else if (pathStatus === "restart_required") {
+    activation_state = "restart_required";
+  } else {
+    activation_state = "repair_required";
+  }
   return {
     active,
     activation_state,

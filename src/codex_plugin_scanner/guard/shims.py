@@ -280,6 +280,14 @@ def get_real_binary_info(
     }
 
 
+def _is_package_shim_binary(candidate: Path) -> bool:
+    """Return True when candidate lives under any Guard package-shims/bin directory."""
+
+    parent = candidate.parent
+    grandparent = parent.parent
+    return parent.name == "bin" and grandparent.name == "package-shims"
+
+
 def get_path_order_status(
     context: HarnessContext,
     *,
@@ -290,21 +298,27 @@ def get_path_order_status(
     command = _PACKAGE_SHIM_COMMANDS.get(manager)
     if not command:
         return {"shim_precedes_real": False, "real_binary_found": False, "path_broken": True, "shim_dir": None}
-    shim_dir = context.guard_home / "package-shims" / "bin"
+    shim_dir = (context.guard_home / "package-shims" / "bin").expanduser().resolve()
     shim_path = shim_dir / command
     path_dirs = (path_env or os.environ.get("PATH", "")).split(os.pathsep)
     shim_dir_index: int | None = None
     real_dir_index: int | None = None
     real_binary_path: str | None = None
     for idx, dir_entry in enumerate(path_dirs):
-        d = Path(dir_entry)
+        d = Path(dir_entry).expanduser().resolve()
         if d == shim_dir and shim_dir_index is None:
             shim_dir_index = idx
-        else:
-            candidate = d / command
-            if candidate.exists() and candidate.is_file() and candidate != shim_path and real_dir_index is None:
-                real_dir_index = idx
-                real_binary_path = str(candidate)
+            continue
+        candidate = d / command
+        if (
+            candidate.exists()
+            and candidate.is_file()
+            and candidate != shim_path
+            and not _is_package_shim_binary(candidate)
+            and real_dir_index is None
+        ):
+            real_dir_index = idx
+            real_binary_path = str(candidate)
     if shim_dir_index is None:
         return {
             "shim_precedes_real": False,

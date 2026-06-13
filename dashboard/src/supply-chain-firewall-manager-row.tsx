@@ -28,14 +28,14 @@ export function resolveShimStatus(shim: PackageShimEntry | undefined): {
   if (!shim.installed) {
     return { label: "Unprotected", tone: "attention", icon: "warning" };
   }
-  if (shim.path_broken) {
-    return { label: "PATH broken", tone: "attention", icon: "warning" };
-  }
   if (shim.activation_state === "protected") {
     return { label: "Protected", tone: "green", icon: "check" };
   }
   if (shim.activation_state === "restart_required") {
     return { label: "Restart required", tone: "blue", icon: "restart" };
+  }
+  if (shim.path_broken) {
+    return { label: "PATH broken", tone: "attention", icon: "warning" };
   }
   if (shim.activation_state === "repair_required") {
     return { label: "Needs PATH repair", tone: "attention", icon: "warning" };
@@ -231,7 +231,7 @@ export function ManagerRow({
         </div>
       )}
 
-      {shim?.activation_state === "repair_required" && (
+      {shim?.activation_state === "repair_required" && !shim.path_broken && (
         <div className={cardLayout ? "mt-2" : "px-4 pb-2"}>
           <p className="text-xs text-slate-500">
             Guard can add the shim directory to your shell profile automatically, then this manager will be ready after a restart.
