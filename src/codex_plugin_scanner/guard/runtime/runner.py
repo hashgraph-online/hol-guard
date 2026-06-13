@@ -3332,6 +3332,14 @@ def _cloud_sync_receipt_payload(
         or f"Guard recorded a {policy_decision} decision."
     )
     summary = _cloud_sync_sanitize_text(summary_input, fallback=f"Guard recorded a {policy_decision} decision.")
+    explicit_changed_since_last_approval = receipt.get("changedSinceLastApproval")
+    if not isinstance(explicit_changed_since_last_approval, bool):
+        explicit_changed_since_last_approval = receipt.get("changed_since_last_approval")
+    changed_since_last_approval = (
+        explicit_changed_since_last_approval
+        if isinstance(explicit_changed_since_last_approval, bool)
+        else False
+    ) or policy_decision in {"review", "require-reapproval", "sandbox-required"}
     payload: dict[str, object] = {
         "receiptId": _optional_string(receipt.get("receipt_id")) or f"guard-receipt-{receipt_fingerprint}",
         "artifactId": artifact_id,
@@ -3342,8 +3350,7 @@ def _cloud_sync_receipt_payload(
         or hashlib.sha256(artifact_id.encode("utf-8")).hexdigest(),
         "capabilities": capabilities,
         "capturedAt": _optional_string(receipt.get("timestamp")) or _now(),
-        "changedSinceLastApproval": bool(changed_capabilities)
-        or policy_decision in {"review", "require-reapproval", "sandbox-required"},
+        "changedSinceLastApproval": changed_since_last_approval,
         "deviceId": device_id,
         "deviceName": device_name,
         "harness": _optional_string(receipt.get("harness")) or "unknown",
