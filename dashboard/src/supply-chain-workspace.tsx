@@ -18,6 +18,7 @@ import type {
 } from "./guard-types";
 import { derivePackageWorkbenchFromReceipts, fetchReceipts, normalizeSupplyChainAuditSnapshot } from "./guard-api";
 import { PackageFirewallPanel, type PackageFirewallPanelHandle } from "./supply-chain-firewall-panel";
+import type { AuditConnectGateViewState } from "./supply-chain-firewall-panel";
 import { SupplyChainBundlePanel } from "./supply-chain-bundle-panel";
 import {
   deriveSupplyChainEvidenceRail,
@@ -127,6 +128,7 @@ export function SupplyChainWorkspace({
   const [auditSnapshot, setAuditSnapshot] = useState<SupplyChainAuditSnapshot | null>(null);
   const [evidenceRail, setEvidenceRail] = useState<SupplyChainEvidenceRailSnapshot | null>(null);
   const [auditRunning, setAuditRunning] = useState(false);
+  const [auditConnectGate, setAuditConnectGate] = useState<AuditConnectGateViewState | null>(null);
   const runAuditRef = useRef<(() => void) | null>(null);
   const firewallPanelRef = useRef<PackageFirewallPanelHandle>(null);
   const [issueActionPending, setIssueActionPending] = useState(false);
@@ -241,6 +243,7 @@ export function SupplyChainWorkspace({
       {evidenceRail !== null ? <SupplyChainEvidenceRail rail={evidenceRail} /> : null}
 
       <PackageWorkbenchPanel
+        auditConnectGate={auditConnectGate}
         auditSnapshot={auditSnapshot}
         auditRunning={auditRunning}
         onRunAudit={handleRunAudit}
@@ -251,6 +254,7 @@ export function SupplyChainWorkspace({
       <PackageFirewallPanel
         ref={firewallPanelRef}
         approvalGate={approvalGate}
+        onAuditConnectGateChange={setAuditConnectGate}
         onStateChanged={onRuntimeRefresh}
         onAuditCompleted={handleAuditCompleted}
         onAuditRunningChange={handleAuditRunningChange}

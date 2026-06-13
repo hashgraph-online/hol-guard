@@ -2596,7 +2596,7 @@ export async function runAuditRemediation(input: AuditRemediationInput): Promise
 }
 
 export async function runPackageAudit(): Promise<PackageFirewallActionResponse> {
-  const response = await readJson<unknown>("/v1/supply-chain/audit", {
+  const response = await fetchGuardApi("/v1/supply-chain/audit", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -2604,11 +2604,18 @@ export async function runPackageAudit(): Promise<PackageFirewallActionResponse> 
     },
     body: JSON.stringify({}),
   });
-  return normalizePackageFirewallAction(response);
+  const payloadBody = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null,
+    );
+  }
+  return normalizePackageFirewallAction(payloadBody);
 }
 
 export async function runPackageSync(): Promise<PackageFirewallActionResponse> {
-  const response = await readJson<unknown>("/v1/supply-chain/sync", {
+  const response = await fetchGuardApi("/v1/supply-chain/sync", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -2616,7 +2623,14 @@ export async function runPackageSync(): Promise<PackageFirewallActionResponse> {
     },
     body: JSON.stringify({}),
   });
-  return normalizePackageFirewallAction(response);
+  const payloadBody = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null,
+    );
+  }
+  return normalizePackageFirewallAction(payloadBody);
 }
 
 export type EvidencePageData = {
