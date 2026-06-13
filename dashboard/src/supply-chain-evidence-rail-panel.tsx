@@ -108,12 +108,12 @@ export function SupplyChainCloudDegradedBanner({ state }: SupplyChainCloudDegrad
 
   return (
     <div
-      className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3"
+      className="rounded-2xl border border-brand-attention/20 bg-brand-attention/[0.04] px-4 py-3"
       role="status"
       data-testid="supply-chain-cloud-degraded"
     >
-      <p className="text-sm font-medium text-amber-950">{state.title}</p>
-      <p className="mt-1 text-xs leading-relaxed text-amber-900/90">{state.detail}</p>
+      <p className="text-sm font-medium text-brand-dark">{state.title}</p>
+      <p className="mt-1 text-xs leading-relaxed text-slate-600">{state.detail}</p>
     </div>
   );
 }

@@ -15,7 +15,7 @@ function alertToneClass(tone: SupplyChainPostureAlert["tone"]): string {
     return "border-brand-blue/20 bg-brand-blue/[0.04]";
   }
   if (tone === "attention") {
-    return "border-amber-200 bg-amber-50/70";
+    return "border-brand-attention/20 bg-brand-attention/[0.04]";
   }
   return "border-slate-200 bg-slate-50/80";
 }
@@ -35,15 +35,15 @@ function alertIconClass(tone: SupplyChainPostureAlert["tone"]): string {
     return "text-brand-blue";
   }
   if (tone === "attention") {
-    return "text-amber-600";
+    return "text-brand-attention";
   }
   return "text-slate-500";
 }
 
 function PostureBanner({ alert }: { alert: SupplyChainPostureAlert }) {
   const Icon = alertIcon(alert);
-  const textClass = alert.tone === "attention" ? "text-amber-900/90" : "text-slate-600";
-  const titleClass = alert.tone === "attention" ? "text-amber-950" : "text-brand-dark";
+  const textClass = "text-slate-600";
+  const titleClass = "text-brand-dark";
 
   return (
     <div

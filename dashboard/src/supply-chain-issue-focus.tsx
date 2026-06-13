@@ -3,30 +3,33 @@ import {
   HiMiniArrowLeft,
   HiMiniArrowRight,
   HiMiniArrowPath,
+  HiMiniCloud,
   HiMiniCloudArrowUp,
+  HiMiniComputerDesktop,
   HiMiniExclamationTriangle,
   HiMiniInformationCircle,
   HiMiniShieldExclamation,
   HiMiniWrenchScrewdriver,
 } from "react-icons/hi2";
-import { ActionButton } from "./approval-center-primitives";
+import { ActionButton, Tag } from "./approval-center-primitives";
+import type { SupplyChainWorkspaceHeroState } from "./supply-chain-workspace-hero-state";
 import type { SupplyChainIssue, SupplyChainIssueAction } from "./supply-chain-issues";
 
 type SupplyChainIssueFocusProps = {
+  hero: SupplyChainWorkspaceHeroState;
   issues: SupplyChainIssue[];
   onIssueAction: (action: SupplyChainIssueAction) => void;
   actionPending?: boolean;
-  tagline?: React.ReactNode;
 };
 
 function issueSurfaceClass(tone: SupplyChainIssue["tone"]): string {
   if (tone === "blue") {
-    return "border-brand-blue/25 bg-gradient-to-b from-brand-blue/[0.07] to-white";
+    return "border-brand-blue/20 bg-brand-blue/[0.04]";
   }
   if (tone === "attention") {
-    return "border-amber-200/90 bg-gradient-to-b from-amber-50/90 to-white";
+    return "border-brand-attention/20 bg-brand-attention/[0.04]";
   }
-  return "border-slate-200 bg-gradient-to-b from-slate-50/90 to-white";
+  return "border-slate-200 bg-slate-50/80";
 }
 
 function issueIcon(issue: SupplyChainIssue) {
@@ -50,16 +53,26 @@ function issueIconClass(tone: SupplyChainIssue["tone"]): string {
     return "text-brand-blue";
   }
   if (tone === "attention") {
-    return "text-amber-600";
+    return "text-brand-attention";
   }
   return "text-slate-500";
 }
 
+function cloudTagTone(mode: SupplyChainWorkspaceHeroState["cloudMode"]): "green" | "blue" | "attention" {
+  if (mode === "paired_active") {
+    return "green";
+  }
+  if (mode === "paired_waiting") {
+    return "blue";
+  }
+  return "attention";
+}
+
 export function SupplyChainIssueFocus({
+  hero,
   issues,
   onIssueAction,
   actionPending = false,
-  tagline,
 }: SupplyChainIssueFocusProps) {
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -83,18 +96,29 @@ export function SupplyChainIssueFocus({
 
   const issue = issues[activeIndex] ?? issues[0];
   const Icon = issueIcon(issue);
-  const titleClass = issue.tone === "attention" ? "text-amber-950" : "text-brand-dark";
-  const detailClass = issue.tone === "attention" ? "text-amber-900/85" : "text-slate-600";
+  const titleClass = "text-brand-dark";
+  const detailClass = "text-slate-600";
 
   return (
     <section
       className={`overflow-hidden rounded-2xl border shadow-sm ${issueSurfaceClass(issue.tone)}`}
-      aria-label="Supply chain next steps"
+      aria-label="Supply chain status"
       data-testid="supply-chain-issue-focus"
     >
-      <div className="flex items-center justify-between gap-3 border-b border-black/[0.04] px-4 py-3 sm:px-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100/80 px-4 py-3 sm:px-5">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Tag tone={cloudTagTone(hero.cloudMode)}>
+            {hero.cloudMode === "local_only" ? (
+              <HiMiniComputerDesktop className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />
+            ) : (
+              <HiMiniCloud className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {hero.cloudLabel}
+          </Tag>
+          <span className="text-xs text-slate-500">{hero.statLine}</span>
+        </div>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-          {issues.length === 1 ? "Next step" : `Next step ${activeIndex + 1} of ${issues.length}`}
+          {issues.length === 1 ? "Next step" : `Step ${activeIndex + 1} of ${issues.length}`}
         </p>
         {issues.length > 1 ? (
           <div className="flex items-center gap-1.5">
@@ -117,12 +141,6 @@ export function SupplyChainIssueFocus({
           </div>
         ) : null}
       </div>
-
-      {tagline ? (
-        <div className="border-b border-black/[0.04] px-4 py-2.5 sm:px-5 bg-white/60">
-          {tagline}
-        </div>
-      ) : null}
 
       <div className="px-4 py-5 sm:px-6 sm:py-6">
         <div className="flex items-start gap-3">

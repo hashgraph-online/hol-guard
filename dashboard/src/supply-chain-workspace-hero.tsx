@@ -21,7 +21,7 @@ function heroSurfaceClass(tone: SupplyChainWorkspaceHeroState["tone"]): string {
     return "border-brand-blue/20 bg-brand-blue/[0.04]";
   }
   if (tone === "attention") {
-    return "border-amber-200 bg-amber-50/70";
+    return "border-brand-attention/20 bg-brand-attention/[0.04]";
   }
   return "border-slate-200 bg-slate-50/80";
 }
@@ -47,7 +47,7 @@ function heroIconClass(tone: SupplyChainWorkspaceHeroState["tone"]): string {
     return "text-brand-blue";
   }
   if (tone === "attention") {
-    return "text-amber-600";
+    return "text-brand-attention";
   }
   return "text-slate-500";
 }
@@ -64,7 +64,7 @@ function cloudTagTone(mode: SupplyChainWorkspaceHeroState["cloudMode"]): "green"
 
 export function SupplyChainWorkspaceHero({ hero, compact = false }: SupplyChainWorkspaceHeroProps) {
   const Icon = heroIcon(hero);
-  const titleClass = hero.tone === "attention" ? "text-amber-950" : "text-brand-dark";
+  const titleClass = "text-brand-dark";
 
   return (
     <section
