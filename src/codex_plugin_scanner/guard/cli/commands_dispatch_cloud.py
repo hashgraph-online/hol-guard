@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from ..runtime.command_queue import command_queue_status
 
 def _run_guard_login_command(
     args: argparse.Namespace,
@@ -428,9 +429,28 @@ def _run_guard_daemon_command(
     _emit("doctor", {"daemon_url": f"http://127.0.0.1:{daemon.port}"}, getattr(args, "json", False))
     return 0
 
+def _run_guard_commands_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    commands_command = getattr(args, "commands_command", None)
+    if commands_command == "status":
+        _emit("commands", command_queue_status(store), getattr(args, "json", False))
+        return 0
+    print("commands subcommand is required", file=sys.stderr)
+    return 2
+
 __all__ = [
     "_run_guard_bridge_command",
     "_run_guard_cloud_command",
+    "_run_guard_commands_command",
     "_run_guard_connect_command",
     "_run_guard_daemon_command",
     "_run_guard_device_command",

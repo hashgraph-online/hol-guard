@@ -50,7 +50,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
             "{start,status,dashboard,init,apps,bootstrap,detect,install,update,uninstall,package-shims,run,protect,preflight,scan,diff,"
             "receipts,inventory,abom,aibom,approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,connect,"
             "remote-pair,disconnect,"
-            "login,sync,device,bridge}"
+            "login,sync,device,commands,bridge}"
         ),
     )
     _configure_guard_local_parsers(guard_subparsers)

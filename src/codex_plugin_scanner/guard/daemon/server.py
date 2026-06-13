@@ -142,6 +142,7 @@ from ..store_evidence import (
     export_evidence_json,
     list_evidence,
 )
+from .command_queue_worker import CommandQueueWorker, start_command_queue_worker, stop_command_queue_worker
 from .dashboard_update import merge_dashboard_update_progress, schedule_guard_dashboard_update
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
@@ -4714,6 +4715,7 @@ class GuardDaemonServer:
         self._bundle_refresh_backoff_seconds = bundle_refresh_backoff_seconds
         self._bundle_refresh_interval_seconds = bundle_refresh_interval_seconds
         self._bundle_refresh_thread: threading.Thread | None = None
+        self._command_queue_worker: CommandQueueWorker | None = None
         self._thread: threading.Thread | None = None
         self._watchdog_thread: threading.Thread | None = None
         self._shutdown_started = threading.Event()
@@ -4743,6 +4745,7 @@ class GuardDaemonServer:
         if self._bundle_refresh_thread is not None:
             self._bundle_refresh_thread.join(timeout=5)
             self._bundle_refresh_thread = None
+        self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
 
     def _begin_service(self) -> None:
         self._shutdown_started.clear()
@@ -4757,6 +4760,7 @@ class GuardDaemonServer:
         )
         self._start_watchdog()
         self._start_supply_chain_bundle_refresh()
+        self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
 
     def _serve_forever(self) -> None:
         try:
