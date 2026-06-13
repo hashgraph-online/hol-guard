@@ -162,8 +162,11 @@ export function deriveFrontendAuditResults(
   const results: AuditResult[] = [];
 
   const protection = snapshot.supply_chain?.package_manager_protection;
-  if (protection && protection.unprotected_managers.length > 0) {
-    for (const mgr of protection.unprotected_managers) {
+  if (protection) {
+    const managersNeedingAttention = protection.supported_managers.filter(
+      (manager) => resolveManagerCoverageStatus(protection, manager) !== "protected",
+    );
+    for (const mgr of managersNeedingAttention) {
       const auditResult = buildPackageManagerAuditResult(mgr, protection, snapshot.generated_at);
       if (auditResult !== null) {
         results.push(auditResult);

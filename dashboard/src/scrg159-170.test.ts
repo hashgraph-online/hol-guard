@@ -271,10 +271,6 @@ assert(
   installedNpmIssue!.remediationAction?.label === "Repair PATH",
   "SCRG162-F4: installed manager remediation should repair PATH instead of install",
 );
-assert(
-  installedNpmIssue!.remediationAction?.label !== "Install Guard",
-  "SCRG162-F5: installed manager should not offer Install Guard",
-);
 
 const auditWithRestartInstalled = deriveFrontendAuditResults(
   [],

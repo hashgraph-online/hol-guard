@@ -1,5 +1,5 @@
 import { r as reactExports, b3 as runAuditRemediation, au as GuardHarnessActionError, j as jsxRuntimeExports, B as Badge, S as SectionLabel, ad as HiMiniMagnifyingGlass, b as EmptyState, d as HiMiniCheckCircle, I as HiMiniXCircle, w as HiMiniExclamationTriangle, h as harnessDisplayName, m as formatRelativeTime, y as HiMiniChevronRight, A as ActionButton, b4 as HiMiniDocumentText, b5 as guardAwareHref, aH as IconActionButton, aw as HiMiniArrowPath, l as HiMiniShieldCheck } from "../guard-dashboard.js";
-import { u as useResolvedApprovalGate, A as ApprovalProofModal, r as resolveManagerCoverageStatus } from "./supply-chain-protection-stats.js";
+import { u as useResolvedApprovalGate, r as resolveManagerCoverageStatus, A as ApprovalProofModal } from "./supply-chain-protection-stats.js";
 function isSupplyChainAuditEvidence(value) {
   return typeof value === "object" && value !== null && value.operation === "audit";
 }
@@ -93,8 +93,11 @@ function buildPackageManagerAuditResult(manager, protection, generatedAt) {
 function deriveFrontendAuditResults(receipts, snapshot) {
   const results = [];
   const protection = snapshot.supply_chain?.package_manager_protection;
-  if (protection && protection.unprotected_managers.length > 0) {
-    for (const mgr of protection.unprotected_managers) {
+  if (protection) {
+    const managersNeedingAttention = protection.supported_managers.filter(
+      (manager) => resolveManagerCoverageStatus(protection, manager) !== "protected"
+    );
+    for (const mgr of managersNeedingAttention) {
       const auditResult = buildPackageManagerAuditResult(mgr, protection, snapshot.generated_at);
       if (auditResult !== null) {
         results.push(auditResult);
