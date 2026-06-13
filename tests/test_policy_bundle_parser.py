@@ -330,6 +330,69 @@ def test_signed_policy_bundle_rejects_sync_only_keys_without_anchor() -> None:
     assert reason == "untrusted_signing_key"
 
 
+def test_validate_synced_policy_bundle_does_not_persist_unanchored_sync_keys() -> None:
+    bundle, anchored_keys = _signed_policy_bundle(key_id="legitimate-anchor-key")
+    attacker_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    attacker_public_key_pem = attacker_private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    ).decode("utf-8")
+    attacker_key = policy_bundle_verification_key_from_public_key(
+        key_id="attacker-sync-key",
+        public_key_pem=attacker_public_key_pem,
+    )
+    stored_keyring = {
+        "keys": [anchored_keys[0].to_dict()],
+    }
+    sync_payload = {
+        "policyBundleVerificationKeys": [
+            anchored_keys[0].to_dict(),
+            attacker_key.to_dict(),
+        ],
+    }
+
+    validated_bundle, reason, persistable_keys = validate_synced_policy_bundle(
+        bundle,
+        stored_keyring=stored_keyring,
+        sync_payload=sync_payload,
+    )
+
+    assert reason is None
+    assert validated_bundle is not None
+    assert {key.key_id for key in persistable_keys} == {"legitimate-anchor-key"}
+
+    attacker_bundle = _sample_policy_bundle()
+    attacker_bundle["workspaceId"] = "workspace-1"
+    attacker_verifier = (
+        dict(attacker_bundle["verifier"]) if isinstance(attacker_bundle["verifier"], dict) else {}
+    )
+    attacker_verifier["algorithm"] = "rsa-pss-sha256"
+    attacker_verifier["keyId"] = attacker_key.key_id
+    attacker_verifier["publicKeyPem"] = attacker_public_key_pem
+    attacker_verifier["signature"] = None
+    attacker_bundle["verifier"] = attacker_verifier
+    attacker_bundle["bundleHash"] = computed_policy_bundle_hash(attacker_bundle)
+    attacker_bundle["payloadHash"] = payload_hash_for_policy_bundle(attacker_bundle)
+    attacker_verifier["signature"] = base64.b64encode(
+        attacker_private_key.sign(
+            canonical_policy_bundle_payload(attacker_bundle),
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+            hashes.SHA256(),
+        )
+    ).decode("utf-8")
+    attacker_bundle["verifier"] = attacker_verifier
+
+    promoted_keyring = {"keys": [item.to_dict() for item in persistable_keys]}
+    promoted_bundle, promoted_reason, _ = validate_synced_policy_bundle(
+        attacker_bundle,
+        stored_keyring=promoted_keyring,
+        sync_payload=None,
+    )
+
+    assert promoted_bundle is None
+    assert promoted_reason == "untrusted_signing_key"
+
+
 def test_validate_synced_policy_bundle_ignores_malformed_sync_keyring() -> None:
     bundle, trusted_keys = _signed_policy_bundle()
     stored_keyring = {
