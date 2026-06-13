@@ -96,7 +96,10 @@ function resolveActiveStepIndex(
   if (phase === "auditing") {
     return gate.steps.length;
   }
-  if (phase === "syncing" || phase === "connecting") {
+  if (phase === "syncing") {
+    return gate.obstacle === "cloud_auth" ? 2 : 1;
+  }
+  if (phase === "connecting") {
     return 1;
   }
   return 0;

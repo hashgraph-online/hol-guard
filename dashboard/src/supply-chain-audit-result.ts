@@ -1,8 +1,8 @@
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function readString(value: unknown): string | null {
+export function readString(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
   }
