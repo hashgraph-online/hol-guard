@@ -27,7 +27,7 @@ export function PolicyWorkspacePage(props: {
       <WorkspacePageHeader
         eyebrow="Policy"
         title="Remembered rules and exceptions"
-        description="See what Guard will do next time, in plain language. Remove local rules or add custom exceptions here."
+        description="See what Guard will do next time, in plain language. Remove local remembered rules here or request Cloud exceptions when Guard Cloud is connected."
       />
       <Suspense fallback={<PolicyFallback />}>
         <PolicyWorkspace

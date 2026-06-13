@@ -56,7 +56,7 @@ const POLICY_SLICE_MARKERS = [
 ];
 
 // Phase 1 removes local exception authoring. Flip this flag in that PR.
-const PHASE0_EXPECT_LOCAL_EXCEPTION_AUTHORING = true;
+const PHASE0_EXPECT_LOCAL_EXCEPTION_AUTHORING = false;
 
 const primitivesSource = readDashboardSource("approval-center-primitives.tsx");
 for (const label of EXPECTED_SIDEBAR_LABELS) {
