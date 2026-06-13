@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash as compute_artifact_hash
 from codex_plugin_scanner.guard.consumer import evaluate_detection
@@ -216,6 +218,26 @@ class TestPolicyScopePersistence:
         )
         result = store.resolve_policy("codex", "codex:project:any_tool", "hash-y")
         assert result == "allow"
+
+    def test_harness_unsupported_family_is_rejected_without_policy_row(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+        with pytest.raises(ValueError, match="unsupported_scoped_policy_family"):
+            store.upsert_policy(
+                PolicyDecision(
+                    harness="codex",
+                    scope="harness",
+                    action="allow",
+                    artifact_id="family:tool-output",
+                ),
+                "2026-01-01T00:00:00+00:00",
+            )
+        assert store.list_policy_decisions("codex") == []
+        for artifact_id in (
+            "codex:project:tool-output:stdout",
+            "codex:project:tool-action:run-shell",
+            "codex:project:file-read:.npmrc",
+        ):
+            assert store.resolve_policy("codex", artifact_id, "hash") is None
 
     def test_global_scope_resolves_for_any_harness(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)

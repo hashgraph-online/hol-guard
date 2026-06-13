@@ -4310,6 +4310,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             payload["saved"] = False
             self._write_json(payload, status=error.status)
             return
+        except ValueError as error:
+            self._write_json({"saved": False, "error": str(error)}, status=400)
+            return
         self._write_json({"saved": True, "decision": record})
 
     @staticmethod
