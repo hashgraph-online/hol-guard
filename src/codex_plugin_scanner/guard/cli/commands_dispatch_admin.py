@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from ..runtime.command_queue import command_queue_status, repair_command_queue_state
 
 def _run_guard_exceptions_command(
     args: argparse.Namespace,
@@ -294,6 +295,10 @@ def _run_guard_doctor_command(
             package_shims_payload["repair"] = {"nothing_to_repair": True, "repaired": [], "repaired_count": 0}
     package_shims_payload["issues"] = package_shim_issues
     payload["package_shims"] = package_shims_payload
+    command_queue_payload = command_queue_status(store)
+    if getattr(args, "repair", False):
+        command_queue_payload["repair"] = repair_command_queue_state(store)
+    payload["command_queue"] = command_queue_payload
     payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
     payload["aibom"] = build_aibom_status_payload(store, context, generated_at=_now())
     _emit("doctor", payload, getattr(args, "json", False))
