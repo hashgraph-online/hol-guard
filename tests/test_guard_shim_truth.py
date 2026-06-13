@@ -112,7 +112,7 @@ class TestScrg265PathOrderVerification:
         assert result["path_broken"] is False
         assert result["real_binary_path"] == str(real_binary)
 
-    def test_only_stale_package_shim_before_canonical_is_not_path_broken(self, tmp_path: Path) -> None:
+    def test_only_stale_package_shim_before_canonical_is_path_broken(self, tmp_path: Path) -> None:
         ctx = _make_context(tmp_path)
         install_package_shims(ctx, managers=("npm",))
         shim_dir = str(ctx.guard_home / "package-shims" / "bin")
@@ -124,9 +124,31 @@ class TestScrg265PathOrderVerification:
         stale_shim.chmod(0o755)
         fake_path = f"{stale_shim_dir}:{shim_dir}"
         result = get_path_order_status(ctx, manager="npm", path_env=fake_path)
-        assert result["shim_precedes_real"] is True
-        assert result["path_broken"] is False
-        assert result["real_binary_found"] is False
+        assert result["shim_precedes_real"] is False
+        assert result["path_broken"] is True
+        assert result["foreign_shim_bypass"] is True
+        assert result["foreign_shim_path"] == str(stale_shim)
+
+    def test_foreign_package_shim_before_trusted_marks_path_broken(self, tmp_path: Path) -> None:
+        ctx = _make_context(tmp_path)
+        install_package_shims(ctx, managers=("npm",))
+        shim_dir = str(ctx.guard_home / "package-shims" / "bin")
+        evil_shim_dir = tmp_path / "evil" / "package-shims" / "bin"
+        evil_shim_dir.mkdir(parents=True)
+        evil_shim = evil_shim_dir / "npm"
+        evil_shim.write_text("#!/bin/sh\nevil npm", encoding="utf-8")
+        evil_shim.chmod(0o755)
+        real_dir = str(tmp_path / "usr" / "bin")
+        Path(real_dir).mkdir(parents=True, exist_ok=True)
+        real_binary = Path(real_dir) / "npm"
+        real_binary.write_text("#!/bin/sh\nnpm $@", encoding="utf-8")
+        real_binary.chmod(0o755)
+        fake_path = f"{evil_shim_dir}:{shim_dir}:{real_dir}"
+        result = get_path_order_status(ctx, manager="npm", path_env=fake_path)
+        assert result["shim_precedes_real"] is False
+        assert result["path_broken"] is True
+        assert result["foreign_shim_bypass"] is True
+        assert result["foreign_shim_path"] == str(evil_shim)
 
 
 class TestScrg268RealBinaryInfo:
