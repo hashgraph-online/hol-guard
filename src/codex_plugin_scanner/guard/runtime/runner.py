@@ -3316,14 +3316,14 @@ def _cloud_sync_receipt_payload(
     artifact_id = _optional_string(receipt.get("artifact_id")) or f"guard:local-receipt:{receipt_fingerprint[:24]}"
     artifact_name = _optional_string(receipt.get("artifact_name")) or artifact_id
     policy_decision = _optional_string(receipt.get("policy_decision")) or "review"
-    changed_capabilities = [str(item) for item in receipt.get("changed_capabilities", []) if isinstance(item, str)]
     capabilities_summary = _optional_string(receipt.get("capabilities_summary"))
-    if changed_capabilities:
+    explicit_capabilities = receipt.get("capabilities")
+    if isinstance(explicit_capabilities, list):
         capabilities = [
-            _cloud_sync_sanitize_text(item, fallback="redacted-capability") for item in changed_capabilities
+            _cloud_sync_sanitize_text(item, fallback="redacted-capability")
+            for item in explicit_capabilities
+            if isinstance(item, str)
         ]
-    elif capabilities_summary is not None:
-        capabilities = [_cloud_sync_sanitize_text(capabilities_summary, fallback="redacted-capability")]
     else:
         capabilities = []
     summary_input = (
