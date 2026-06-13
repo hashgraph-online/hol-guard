@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TypedDict
 
 from .checks.manifest import load_manifest
 from .checks.skill_security import SkillSecurityContext
@@ -21,6 +22,15 @@ from .trust_models import TrustDomainScore
 from .trust_specs import SKILL_TRUST_SPEC
 
 
+class NormalizedSkillMetadata(TypedDict):
+    descriptions: tuple[str, ...]
+    repository: str
+    homepage: str
+    commit: str
+    tags: tuple[str, ...]
+    languages: tuple[str, ...]
+
+
 def _skill_files(plugin_dir: Path, manifest: dict[str, object] | None) -> tuple[Path, ...]:
     standalone_skill = plugin_dir / "SKILL.md"
     if manifest is None:
@@ -33,13 +43,13 @@ def _skill_files(plugin_dir: Path, manifest: dict[str, object] | None) -> tuple[
     skills_dir = plugin_dir / skills_root
     if not skills_dir.is_dir():
         return (standalone_skill,) if standalone_skill.is_file() else ()
-    return iter_safe_matching_files(plugin_dir, skills_dir, "**/SKILL.md")
+    return tuple(iter_safe_matching_files(plugin_dir, skills_dir, "**/SKILL.md"))
 
 
 def _normalized_skill_metadata(
     manifest: dict[str, object] | None,
     frontmatters: tuple[dict[str, object], ...],
-) -> dict[str, object]:
+) -> NormalizedSkillMetadata:
     descriptions = [
         str(payload.get("description", "")).strip() for payload in frontmatters if payload.get("description")
     ]
@@ -125,22 +135,11 @@ def build_skill_domain(
 
     frontmatters = tuple(payload for payload in (parse_skill_frontmatter(path) for path in skill_files) if payload)
     normalized = _normalized_skill_metadata(manifest, frontmatters)
-    raw_descriptions = normalized.get("descriptions")
-    descriptions = (
-        tuple(description for description in raw_descriptions if isinstance(description, str))
-        if isinstance(raw_descriptions, tuple)
-        else ()
-    )
-    raw_tags = normalized.get("tags")
-    tags = tuple(tag for tag in raw_tags if isinstance(tag, str)) if isinstance(raw_tags, tuple) else ()
-    raw_languages = normalized.get("languages")
-    languages = (
-        tuple(language for language in raw_languages if isinstance(language, str))
-        if isinstance(raw_languages, tuple)
-        else ()
-    )
-    repository = str(normalized.get("repository") or "")
-    homepage = str(normalized.get("homepage") or "")
+    descriptions = normalized["descriptions"]
+    tags = normalized["tags"]
+    languages = normalized["languages"]
+    repository = normalized["repository"]
+    homepage = normalized["homepage"]
     has_author = (
         isinstance(manifest, dict)
         and isinstance(manifest.get("author"), dict)
@@ -153,9 +152,7 @@ def build_skill_domain(
     repo_host = url_host(repository or None)
     home_host = url_host(homepage or None)
     description_length = (
-        sum(len(description) for description in descriptions) / len(descriptions)
-        if descriptions
-        else 0
+        sum(len(description) for description in descriptions) / len(descriptions) if descriptions else 0
     )
     tag_count = len(tags)
     language_count = len(languages)

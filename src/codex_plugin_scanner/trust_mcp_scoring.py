@@ -45,11 +45,7 @@ def build_mcp_domain(plugin_dir: Path, categories: tuple[CategoryResult, ...]) -
             args_valid = args_value is None or (
                 isinstance(args_value, list) and all(isinstance(value, str) for value in args_value)
             )
-            if not (
-                isinstance(config.get("command"), str)
-                and bool(config.get("command"))
-                and args_valid
-            ):
+            if not (isinstance(config.get("command"), str) and bool(config.get("command")) and args_valid):
                 local_commands_valid = False
                 break
     config_shape = payload_state.parse_valid and (
@@ -182,17 +178,13 @@ def build_mcp_surface_domain(
             spec_by_id["verification.execution-safety"],
             component_scores={"score": round_trust_score(execution_score)} if execution_score > 0 else None,
             rationales={
-                "score": (
-                    "Execution safety was inferred from the MCP transport and local command/endpoint shape."
-                )
+                "score": ("Execution safety was inferred from the MCP transport and local command/endpoint shape.")
             },
         ),
         build_adapter_score(
             spec_by_id["verification.transport-security"],
             component_scores={"score": round_trust_score(transport_score)} if transport_score > 0 else None,
-            rationales={
-                "score": "Transport security was inferred from the MCP transport and endpoint protocol."
-            },
+            rationales={"score": "Transport security was inferred from the MCP transport and endpoint protocol."},
         ),
         build_adapter_score(
             spec_by_id["metadata.server-naming"],
@@ -221,8 +213,7 @@ def build_mcp_surface_domain(
             component_scores={"score": round_trust_score(config_shape_score)} if config_shape_score > 0 else None,
             rationales={
                 "score": (
-                    "The MCP server definition has enough structure to infer command, "
-                    "endpoint, and transport shape."
+                    "The MCP server definition has enough structure to infer command, endpoint, and transport shape."
                 )
             },
         ),
