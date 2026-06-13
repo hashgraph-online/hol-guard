@@ -112,7 +112,7 @@ export function ManagerRow({
 
   return (
     <div className={outerClass} role={cardLayout ? "listitem" : "row"}>
-      <div className={`flex flex-col gap-3 ${cardLayout ? "" : "gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"}`}>
+      <div className={cardLayout ? "flex flex-col gap-3" : "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"}>
         <div className={`flex min-w-0 flex-col gap-1 ${cardLayout ? "" : "sm:flex-1"}`} role="cell">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             {status.icon === "check" ? (

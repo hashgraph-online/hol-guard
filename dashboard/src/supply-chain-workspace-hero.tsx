@@ -5,7 +5,7 @@ import {
   HiMiniExclamationTriangle,
   HiMiniArrowPath,
 } from "react-icons/hi2";
-import type { SupplyChainWorkspaceHeroState } from "./supply-chain-workspace-hero-state";
+import { supplyChainCloudTagTone, type SupplyChainWorkspaceHeroState } from "./supply-chain-workspace-hero-state";
 import { Tag } from "./approval-center-primitives";
 
 type SupplyChainWorkspaceHeroProps = {
@@ -52,15 +52,6 @@ function heroIconClass(tone: SupplyChainWorkspaceHeroState["tone"]): string {
   return "text-slate-500";
 }
 
-function cloudTagTone(mode: SupplyChainWorkspaceHeroState["cloudMode"]): "green" | "blue" | "attention" {
-  if (mode === "paired_active") {
-    return "green";
-  }
-  if (mode === "paired_waiting") {
-    return "blue";
-  }
-  return "attention";
-}
 
 export function SupplyChainWorkspaceHero({ hero, compact = false }: SupplyChainWorkspaceHeroProps) {
   const Icon = heroIcon(hero);
@@ -73,7 +64,7 @@ export function SupplyChainWorkspaceHero({ hero, compact = false }: SupplyChainW
       data-testid="supply-chain-workspace-hero"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <Tag tone={cloudTagTone(hero.cloudMode)}>
+        <Tag tone={supplyChainCloudTagTone(hero.cloudMode)}>
           {hero.cloudMode === "local_only" ? (
             <HiMiniComputerDesktop className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />
           ) : (

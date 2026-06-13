@@ -398,7 +398,7 @@ function ManagerRow({
   const cardLayout = layout === "card";
   const outerClass = cardLayout ? "min-w-0 rounded-xl border border-slate-100 bg-white p-4 shadow-sm" : "border-b border-slate-100 last:border-b-0";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: outerClass, role: cardLayout ? "listitem" : "row", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex flex-col gap-3 ${cardLayout ? "" : "gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"}`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: cardLayout ? "flex flex-col gap-3" : "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex min-w-0 flex-col gap-1 ${cardLayout ? "" : "sm:flex-1"}`, role: "cell", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 flex-wrap items-center gap-2", children: [
           status.icon === "check" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }) : status.icon === "restart" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }),
@@ -2338,6 +2338,15 @@ function resolveSupplyChainWorkspaceHero(snapshot, options) {
     statLine: `${stats.protectedManagers} protected · ${stats.unprotectedManagers} open · ${preventedLabel}`
   };
 }
+function supplyChainCloudTagTone(mode) {
+  if (mode === "paired_active") {
+    return "green";
+  }
+  if (mode === "paired_waiting") {
+    return "blue";
+  }
+  return "attention";
+}
 function issueSurfaceClass(tone) {
   if (tone === "blue") {
     return "border-brand-blue/20 bg-brand-blue/[0.04]";
@@ -2370,15 +2379,6 @@ function issueIconClass(tone) {
     return "text-brand-attention";
   }
   return "text-slate-500";
-}
-function cloudTagTone$1(mode) {
-  if (mode === "paired_active") {
-    return "green";
-  }
-  if (mode === "paired_waiting") {
-    return "blue";
-  }
-  return "attention";
 }
 function SupplyChainIssueFocus({
   hero,
@@ -2414,7 +2414,7 @@ function SupplyChainIssueFocus({
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 border-b border-slate-100/80 px-4 py-3 sm:px-5", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 flex-wrap items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: cloudTagTone$1(hero.cloudMode), children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: supplyChainCloudTagTone(hero.cloudMode), children: [
               hero.cloudMode === "local_only" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniComputerDesktop, { className: "mr-1 inline h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "mr-1 inline h-3.5 w-3.5", "aria-hidden": "true" }),
               hero.cloudLabel
             ] }),
@@ -2527,15 +2527,6 @@ function heroIconClass(tone) {
   }
   return "text-slate-500";
 }
-function cloudTagTone(mode) {
-  if (mode === "paired_active") {
-    return "green";
-  }
-  if (mode === "paired_waiting") {
-    return "blue";
-  }
-  return "attention";
-}
 function SupplyChainWorkspaceHero({ hero, compact = false }) {
   const Icon = heroIcon(hero);
   const titleClass = "text-brand-dark";
@@ -2547,7 +2538,7 @@ function SupplyChainWorkspaceHero({ hero, compact = false }) {
       "data-testid": "supply-chain-workspace-hero",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: cloudTagTone(hero.cloudMode), children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: supplyChainCloudTagTone(hero.cloudMode), children: [
             hero.cloudMode === "local_only" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniComputerDesktop, { className: "mr-1 inline h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "mr-1 inline h-3.5 w-3.5", "aria-hidden": "true" }),
             hero.cloudLabel
           ] }),
