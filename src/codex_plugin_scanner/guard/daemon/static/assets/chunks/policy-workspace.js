@@ -1,4 +1,4 @@
-import { bd as policyActionLabel, h as harnessDisplayName, be as scopeLabel, j as jsxRuntimeExports, r as reactExports, S as SectionLabel, A as ActionButton, b6 as HiMiniCloudArrowUp, b as EmptyState, ac as Tag, p as HiMiniChevronUp, q as HiMiniChevronDown, B as Badge, m as formatRelativeTime, bb as guardAwareHref, ax as HiMiniTrash, ad as HiMiniMagnifyingGlass } from "../guard-dashboard.js";
+import { bd as policyActionLabel, h as harnessDisplayName, be as scopeLabel, j as jsxRuntimeExports, S as SectionLabel, A as ActionButton, b6 as HiMiniCloudArrowUp, b as EmptyState, r as reactExports, ac as Tag, p as HiMiniChevronUp, q as HiMiniChevronDown, B as Badge, m as formatRelativeTime, bb as guardAwareHref, ax as HiMiniTrash, ad as HiMiniMagnifyingGlass } from "../guard-dashboard.js";
 const MATCHER_FAMILY_LABELS = {
   "package-request": "package install",
   "tool-action": "shell or tool command",
@@ -284,9 +284,6 @@ function PolicyCloudExceptionsTab({
   const cloudControlsUrl = resolveCloudPolicyControlsUrl(snapshot);
   const cloudConnected = resolveCloudExceptionsConnected(snapshot);
   const connectUrl = snapshot.connect_url?.trim() || null;
-  const handleRequestCloudException = reactExports.useCallback(() => {
-    onRequestCloudException?.();
-  }, [onRequestCloudException]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-5 shadow-sm", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Cloud risk acceptances" }),
@@ -298,7 +295,7 @@ function PolicyCloudExceptionsTab({
         ActionButton,
         {
           variant: "primary",
-          onClick: handleRequestCloudException,
+          onClick: onRequestCloudException,
           disabled: !cloudConnected || onRequestCloudException === void 0,
           children: "Request cloud exception"
         }
@@ -326,16 +323,6 @@ function PolicyCloudExceptionsTab({
     )
   ] });
 }
-function PolicyRememberedRulesHelper() {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: "Remembered approvals vs Cloud exceptions" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "mt-2 list-disc space-y-1 pl-5", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Review and Inbox keep fast allow/block decisions for the work in front of you." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Remembered rules on this tab explain what Guard will do next time for matching actions." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Cloud exceptions are separate governed risk acceptances managed in Guard Cloud." })
-    ] })
-  ] });
-}
 const PAGE_SIZE = 30;
 function resolveActionTone(action) {
   if (action === "allow") {
@@ -359,6 +346,7 @@ function PolicyRuleCard({ policy, cloudControlsUrl, onClear }) {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: resolveActionTone(policy.action), children: policyActionLabel(policy.action) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: cloudManaged ? "blue" : "green", children: resolvePolicySourceLabel(policy.source) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: scopeLabel(policy.scope) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: harnessDisplayName(policy.harness) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-base font-semibold leading-snug text-brand-dark", children: display.headline }),
@@ -518,40 +506,98 @@ function groupPoliciesByFamily(policies) {
   }
   return counts;
 }
-function resolvePolicyViewLabel(view) {
-  if (view === "rules") {
-    return "Remembered rules";
-  }
-  if (view === "exceptions") {
-    return "Cloud exceptions";
-  }
-  return "Strict config";
-}
-function PolicyWorkspace({
+function PolicyRememberedCloudRules({
   policies,
-  snapshot,
-  onClearPolicy,
-  onOpenSettings,
-  onOpenInbox
+  cloudControlsUrl
 }) {
-  const [activeView, setActiveView] = reactExports.useState("rules");
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    GroupedPolicySection,
+    {
+      title: "From Guard Cloud",
+      description: "Synced team rules are read-only here. Edit them in Guard Cloud Controls.",
+      policies,
+      cloudControlsUrl,
+      emptyTitle: "No Guard Cloud rules synced",
+      emptyBody: "Connect Guard Cloud to sync shared policy bundles.",
+      defaultOpen: policies.length > 0
+    }
+  );
+}
+function PolicyRememberedLocalRules({
+  policies,
+  cloudControlsUrl,
+  onClearPolicy
+}) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    GroupedPolicySection,
+    {
+      title: "Remembered on this device",
+      description: "Choices you saved from Inbox. Each card explains what Guard will do next time.",
+      policies,
+      cloudControlsUrl,
+      onClearPolicy,
+      emptyTitle: "No local remembered rules yet",
+      emptyBody: "Approve or block in Inbox and Guard remembers the decision here in plain language.",
+      defaultOpen: true
+    }
+  );
+}
+const REVIEW_SCOPE_LADDER = [
+  { scope: "artifact", detail: "Guard remembers only the next matching retry." },
+  { scope: "workspace", detail: "Guard remembers the same action in this project folder." },
+  { scope: "publisher", detail: "Guard remembers actions from the same source in this app." },
+  { scope: "harness", detail: "Guard remembers the action across this app." },
+  { scope: "global", detail: "Guard remembers the action on every project on this device." }
+];
+function PolicyRememberedRulesRightRail({
+  onOpenCloudExceptions
+}) {
+  const handleOpenCloudExceptions = reactExports.useCallback(() => {
+    onOpenCloudExceptions();
+  }, [onOpenCloudExceptions]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "space-y-4 lg:sticky lg:top-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: "Remembered rules vs Cloud exceptions" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "mt-2 list-disc space-y-1 pl-5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Review and Inbox keep fast allow/block decisions for the work in front of you." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Remembered rules on this tab explain what Guard will do next time for matching actions." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Cloud exceptions are separate governed risk acceptances managed in Guard Cloud." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: handleOpenCloudExceptions,
+          className: "mt-3 text-sm font-medium text-brand-blue hover:underline",
+          children: "Open Cloud exceptions tab"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: "Review scope ladder" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-500", children: "When you approve in Inbox, you pick how broadly Guard should remember the decision. Wider scopes apply to more future actions." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "mt-3 space-y-2.5", children: REVIEW_SCOPE_LADDER.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex gap-2.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-[11px] font-semibold text-brand-blue", children: index + 1 }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: scopeLabel(step.scope) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-relaxed text-slate-500", children: step.detail })
+        ] })
+      ] }, step.scope)) })
+    ] })
+  ] });
+}
+function PolicyRememberedRulesTab({
+  policies,
+  cloudControlsUrl,
+  onClearPolicy,
+  onOpenCloudExceptions
+}) {
   const [searchQuery, setSearchQuery] = reactExports.useState("");
   const [appFilter, setAppFilter] = reactExports.useState("");
   const [familyFilter, setFamilyFilter] = reactExports.useState("");
   const handleSearchChange = reactExports.useCallback((event) => {
     setSearchQuery(event.target.value);
   }, []);
-  const handleViewChange = reactExports.useCallback((view) => {
-    setActiveView(view);
-  }, []);
-  const cloudControlsUrl = reactExports.useMemo(() => resolveCloudPolicyControlsUrl(snapshot), [snapshot]);
-  const handleRequestCloudException = reactExports.useCallback(() => {
-    if (cloudControlsUrl) {
-      window.open(cloudControlsUrl, "_blank", "noopener,noreferrer");
-    }
-  }, [cloudControlsUrl]);
-  const modeCopy = reactExports.useMemo(() => resolveSecurityModeCopy(snapshot.security_level), [snapshot.security_level]);
-  const cloudBundleCopy = reactExports.useMemo(() => resolveCloudPolicyBundleCopy(snapshot), [snapshot]);
   const filteredPolicies = reactExports.useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return policies.filter((policy) => {
@@ -601,35 +647,8 @@ function PolicyWorkspace({
     [policies]
   );
   const familyCounts = reactExports.useMemo(() => groupPoliciesByFamily(rememberedRules), [rememberedRules]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    cloudBundleCopy ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: resolveCloudBundleSurfaceClass(cloudBundleCopy.tone), children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-2 flex flex-wrap items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Guard Cloud bundle" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: cloudBundleCopy.tone, children: cloudBundleCopy.label })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/75", children: cloudBundleCopy.detail })
-    ] }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-5 shadow-sm", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-2 flex flex-wrap items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Active mode" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: modeCopy.tone, children: modeCopy.label })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/75", children: modeCopy.description }),
-      onOpenSettings ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "secondary", onClick: onOpenSettings, children: "Open security settings" }) }) : null
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-2 border-b border-slate-100 pb-3", children: ["rules", "exceptions", "strict"].map((view) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
-      {
-        type: "button",
-        onClick: () => handleViewChange(view),
-        "aria-pressed": activeView === view,
-        className: `rounded-full px-4 py-1.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${activeView === view ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`,
-        children: resolvePolicyViewLabel(view)
-      },
-      view
-    )) }),
-    activeView === "rules" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyRememberedRulesHelper, {}),
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-1 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "h-4 w-4 shrink-0 text-slate-400", "aria-hidden": "true" }),
@@ -680,32 +699,86 @@ function PolicyWorkspace({
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
-        GroupedPolicySection,
+        PolicyRememberedLocalRules,
         {
-          title: "Remembered on this device",
-          description: "Choices you saved from Inbox. Each card explains what Guard will do next time.",
           policies: localRules,
           cloudControlsUrl,
-          onClearPolicy,
-          emptyTitle: "No local remembered rules yet",
-          emptyBody: "Approve or block in Inbox and Guard remembers the decision here in plain language.",
-          defaultOpen: true
+          onClearPolicy
         }
       ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        GroupedPolicySection,
-        {
-          title: "From Guard Cloud",
-          description: "Synced team rules are read-only here. Edit them in Guard Cloud Controls.",
-          policies: cloudRules,
-          cloudControlsUrl,
-          emptyTitle: "No Guard Cloud rules synced",
-          emptyBody: "Connect Guard Cloud to sync shared policy bundles.",
-          defaultOpen: cloudRules.length > 0
-        }
-      )
+      /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyRememberedCloudRules, { policies: cloudRules, cloudControlsUrl })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyRememberedRulesRightRail, { onOpenCloudExceptions })
+  ] });
+}
+function resolvePolicyViewLabel(view) {
+  if (view === "rules") {
+    return "Remembered rules";
+  }
+  if (view === "exceptions") {
+    return "Cloud exceptions";
+  }
+  return "Strict config";
+}
+function PolicyWorkspace({
+  policies,
+  snapshot,
+  onClearPolicy,
+  onOpenSettings,
+  onOpenInbox
+}) {
+  const [activeView, setActiveView] = reactExports.useState("rules");
+  const handleViewChange = reactExports.useCallback((view) => {
+    setActiveView(view);
+  }, []);
+  const handleOpenCloudExceptions = reactExports.useCallback(() => {
+    setActiveView("exceptions");
+  }, []);
+  const cloudControlsUrl = reactExports.useMemo(() => resolveCloudPolicyControlsUrl(snapshot), [snapshot]);
+  const handleRequestCloudException = reactExports.useCallback(() => {
+    if (cloudControlsUrl) {
+      window.open(cloudControlsUrl, "_blank", "noopener,noreferrer");
+    }
+  }, [cloudControlsUrl]);
+  const modeCopy = reactExports.useMemo(() => resolveSecurityModeCopy(snapshot.security_level), [snapshot.security_level]);
+  const cloudBundleCopy = reactExports.useMemo(() => resolveCloudPolicyBundleCopy(snapshot), [snapshot]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    cloudBundleCopy ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: resolveCloudBundleSurfaceClass(cloudBundleCopy.tone), children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-2 flex flex-wrap items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Guard Cloud bundle" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: cloudBundleCopy.tone, children: cloudBundleCopy.label })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/75", children: cloudBundleCopy.detail })
     ] }) : null,
-    activeView === "exceptions" ? /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyCloudExceptionsTab, { snapshot, onRequestCloudException: handleRequestCloudException }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-5 shadow-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-2 flex flex-wrap items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Active mode" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: modeCopy.tone, children: modeCopy.label })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/75", children: modeCopy.description }),
+      onOpenSettings ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "secondary", onClick: onOpenSettings, children: "Open security settings" }) }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-2 border-b border-slate-100 pb-3", children: ["rules", "exceptions", "strict"].map((view) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: () => handleViewChange(view),
+        "aria-pressed": activeView === view,
+        className: `rounded-full px-4 py-1.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${activeView === view ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`,
+        children: resolvePolicyViewLabel(view)
+      },
+      view
+    )) }),
+    activeView === "rules" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PolicyRememberedRulesTab,
+      {
+        policies,
+        cloudControlsUrl,
+        onClearPolicy,
+        onOpenCloudExceptions: handleOpenCloudExceptions
+      }
+    ) : null,
+    activeView === "exceptions" ? /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyCloudExceptionsTab, { snapshot, onRequestCloudException: cloudControlsUrl ? handleRequestCloudException : void 0 }) : null,
     activeView === "strict" ? /* @__PURE__ */ jsxRuntimeExports.jsx(StrictModeView, { snapshot, onOpenSettings, onOpenInbox }) : null
   ] });
 }

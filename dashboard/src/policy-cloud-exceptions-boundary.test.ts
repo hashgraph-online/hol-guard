@@ -33,6 +33,10 @@ const POLICY_SOURCE_FILES = [
   "policy-workspace-views.tsx",
   "policy-workspace-helpers.ts",
   "policy-exception-form.tsx",
+  "policy-remembered-local-rules.tsx",
+  "policy-remembered-cloud-rules.tsx",
+  "policy-remembered-rules-tab.tsx",
+  "policy-remembered-rules-right-rail.tsx",
 ];
 
 const FORBIDDEN_FIXTURE_PATTERNS = [

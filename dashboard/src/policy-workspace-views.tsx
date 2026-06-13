@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { HiMiniTrash, HiMiniCloudArrowUp, HiMiniChevronDown, HiMiniChevronUp } from "react-icons/hi2";
 import { Badge, Tag, EmptyState } from "./approval-center-primitives";
-import { harnessDisplayName, formatRelativeTime, policyActionLabel } from "./approval-center-utils";
+import { harnessDisplayName, formatRelativeTime, policyActionLabel, scopeLabel } from "./approval-center-utils";
 import { guardAwareHref } from "./guard-api";
 import type { GuardPolicyDecision } from "./guard-types";
 import {
@@ -49,6 +49,7 @@ export function PolicyRuleCard({ policy, cloudControlsUrl, onClear }: PolicyRule
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={resolveActionTone(policy.action)}>{policyActionLabel(policy.action)}</Badge>
             <Tag tone={cloudManaged ? "blue" : "green"}>{resolvePolicySourceLabel(policy.source)}</Tag>
+            <Tag tone="slate">{scopeLabel(policy.scope)}</Tag>
             <span className="text-xs text-slate-400">{harnessDisplayName(policy.harness)}</span>
           </div>
           <h3 className="text-base font-semibold leading-snug text-brand-dark">{display.headline}</h3>

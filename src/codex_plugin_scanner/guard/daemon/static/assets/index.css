@@ -5452,6 +5452,10 @@
       position: sticky;
     }
 
+    .lg\:top-4 {
+      top: calc(var(--spacing) * 4);
+    }
+
     .lg\:top-6 {
       top: calc(var(--spacing) * 6);
     }
