@@ -17,6 +17,7 @@ from ..store import GuardStore
 from .command_executors import (
     COMMAND_OPERATION_SCHEMA_VERSIONS,
     SUPPORTED_COMMAND_OPERATIONS,
+    command_job_operation,
     execute_guard_command_job,
 )
 from .runner import (
@@ -196,11 +197,6 @@ def _lease_payload(store: GuardStore) -> dict[str, object]:
     }
 
 
-def _job_operation(job: dict[str, object]) -> str:
-    operation = job.get("operation")
-    return operation if isinstance(operation, str) else ""
-
-
 def _job_id(job: dict[str, object]) -> str:
     job_id = job.get("id")
     if not isinstance(job_id, str) or not job_id:
@@ -338,7 +334,7 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
         _save_state(store, state)
         raise
     try:
-        _LOGGER.info("Guard command leased: job_id=%s operation=%s", _job_id(item), _job_operation(item))
+        _LOGGER.info("Guard command leased: job_id=%s operation=%s", _job_id(item), command_job_operation(item))
         execution = _execute_job(item, context, store)
     except Exception as error:
         _LOGGER.warning("Guard command execution failed: job_id=%s error=%s", _job_id(item), _redacted_error(error))

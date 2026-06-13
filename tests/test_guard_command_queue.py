@@ -485,6 +485,23 @@ def test_executor_rejects_duplicate_package_managers(tmp_path: Path) -> None:
     assert result["failureCode"] == "duplicate_manager"
 
 
+def test_executor_status_ignores_speculative_managers_field(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(command_executors, "package_shim_status", lambda context: {"active_managers": []})
+
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.packageShims.status",
+            "payload": {"managers": ["not-a-manager"]},
+        },
+        context=_context(tmp_path),
+        store=FakeStore(tmp_path / "guard-home"),  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert result["generatedAt"] == "2026-06-13T00:00:00+00:00"
+    assert result["data"] == {"active_managers": []}
+
+
 def test_executor_dispatches_app_connect(tmp_path: Path, monkeypatch) -> None:
     calls: list[tuple[str, str | None, str | None]] = []
 

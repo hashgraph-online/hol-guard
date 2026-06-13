@@ -57,7 +57,7 @@ def execute_guard_command_job(
     store: GuardStore,
     now: Callable[[], str] | None = None,
 ) -> dict[str, object]:
-    operation = _job_operation(job)
+    operation = command_job_operation(job)
     generated_at = now() if now is not None else _now()
     payload = _job_payload(job)
     try:
@@ -97,20 +97,23 @@ def _execute_package_shim_operation(
     store: GuardStore,
     generated_at: str,
 ) -> dict[str, object]:
-    managers = _package_shim_managers(payload)
     command_context = _package_shim_context(payload, base_context=context, store=store)
     if operation == "guard.packageShims.status":
         return _result(package_shim_status(command_context), generated_at=generated_at)
     if operation == "guard.packageShims.install":
+        managers = _package_shim_managers(payload)
         return _result(activate_package_shims(command_context, managers=managers), generated_at=generated_at)
     if operation == "guard.packageShims.repair":
+        managers = _package_shim_managers(payload)
         return _result(
             activate_package_shims(command_context, managers=managers, repair=True),
             generated_at=generated_at,
         )
     if operation == "guard.packageShims.remove":
+        managers = _package_shim_managers(payload)
         return _result(uninstall_package_shims(command_context, managers=managers), generated_at=generated_at)
     if operation == "guard.packageShims.test":
+        managers = _package_shim_managers(payload)
         return _result(
             probe_package_shim_intercepts(
                 command_context,
@@ -245,7 +248,7 @@ def _package_shim_managers(payload: dict[str, object]) -> tuple[str, ...] | None
     return normalized
 
 
-def _job_operation(job: dict[str, object]) -> str:
+def command_job_operation(job: dict[str, object]) -> str:
     operation = job.get("operation")
     return operation if isinstance(operation, str) else ""
 
