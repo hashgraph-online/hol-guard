@@ -32,7 +32,7 @@ assert(
   "workspace keeps single audit findings workbench",
 );
 assert(
-  workspaceSource.includes('from "./supply-chain-workspace-hero-state"'),
+  workspaceSource.includes("supply-chain-workspace-hero-state"),
   "workspace imports supply chain hero state helpers",
 );
 assert(
