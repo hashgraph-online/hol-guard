@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import urllib.error
 from datetime import datetime, timezone
@@ -12,8 +13,13 @@ from urllib.parse import urlparse, urlunparse
 
 from ...version import __version__
 from ..adapters.base import HarnessContext
-from ..shims import package_shim_status
 from ..store import GuardStore
+from .command_executors import (
+    COMMAND_OPERATION_SCHEMA_VERSIONS,
+    SUPPORTED_COMMAND_OPERATIONS,
+    command_job_operation,
+    execute_guard_command_job,
+)
 from .runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncNotConfiguredError,
@@ -35,7 +41,7 @@ _DEFAULT_POLL_INTERVAL_SECONDS = 2.0
 _DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
 _REQUEST_TIMEOUT_SECONDS = 35
 _RETRY_TIMEOUT_SECONDS = 60
-_SUPPORTED_OPERATIONS = ("guard.packageShims.status",)
+_LOGGER = logging.getLogger(__name__)
 
 
 def _now() -> str:
@@ -132,7 +138,34 @@ def command_queue_status(store: GuardStore) -> dict[str, object]:
         "last_poll_was_empty": bool(state.get("last_poll_was_empty")),
         "active_job": state.get("active_job"),
         "pending_result": state.get("pending_result"),
-        "supported_operations": list(_SUPPORTED_OPERATIONS),
+        "supported_operations": list(SUPPORTED_COMMAND_OPERATIONS),
+    }
+
+
+def repair_command_queue_state(store: GuardStore) -> dict[str, object]:
+    state = _load_state(store)
+    repaired: list[str] = []
+    active_job = state.get("active_job")
+    if active_job is not None and not isinstance(active_job, dict):
+        state.pop("active_job", None)
+        repaired.append("active_job")
+    pending_result = state.get("pending_result")
+    if pending_result is not None:
+        pending_valid = (
+            isinstance(pending_result, dict)
+            and isinstance(pending_result.get("job"), dict)
+            and isinstance(pending_result.get("payload"), dict)
+        )
+        if not pending_valid:
+            state.pop("pending_result", None)
+            repaired.append("pending_result")
+    if repaired:
+        state.update({"state": "idle", "last_error": None})
+        _save_state(store, state)
+    return {
+        "repaired": repaired,
+        "repaired_count": len(repaired),
+        "status": command_queue_status(store),
     }
 
 
@@ -156,17 +189,12 @@ def _lease_payload(store: GuardStore) -> dict[str, object]:
         "deviceId": machine_id,
         "daemonVersion": __version__,
         "capabilities": {
-            "operations": list(_SUPPORTED_OPERATIONS),
-            "schemaVersions": {"guard.packageShims.status": 1},
+            "operations": list(SUPPORTED_COMMAND_OPERATIONS),
+            "schemaVersions": dict(COMMAND_OPERATION_SCHEMA_VERSIONS),
         },
         "maxJobs": 1,
         "waitMs": _env_int(COMMAND_QUEUE_LEASE_WAIT_MS_ENV, _DEFAULT_LEASE_WAIT_MS),
     }
-
-
-def _job_operation(job: dict[str, object]) -> str:
-    operation = job.get("operation")
-    return operation if isinstance(operation, str) else ""
 
 
 def _job_id(job: dict[str, object]) -> str:
@@ -183,17 +211,8 @@ def _lease_id(job: dict[str, object]) -> str:
     return lease_id
 
 
-def _execute_job(job: dict[str, object], context: HarnessContext) -> dict[str, object]:
-    operation = _job_operation(job)
-    if operation == "guard.packageShims.status":
-        return {
-            "data": package_shim_status(context),
-            "generatedAt": _now(),
-        }
-    return {
-        "failureCode": "unsupported_operation",
-        "failureMessage": f"Unsupported Guard command operation: {operation or 'unknown'}",
-    }
+def _execute_job(job: dict[str, object], context: HarnessContext, store: GuardStore) -> dict[str, object]:
+    return execute_guard_command_job(job, context=context, store=store, now=_now)
 
 
 def _heartbeat(auth_context: dict[str, object], job: dict[str, object]) -> None:
@@ -315,8 +334,10 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
         _save_state(store, state)
         raise
     try:
-        execution = _execute_job(item, context)
+        _LOGGER.info("Guard command leased: job_id=%s operation=%s", _job_id(item), command_job_operation(item))
+        execution = _execute_job(item, context, store)
     except Exception as error:
+        _LOGGER.warning("Guard command execution failed: job_id=%s error=%s", _job_id(item), _redacted_error(error))
         execution = {
             "failureCode": "execution_error",
             "failureMessage": _redacted_error(error),
@@ -326,6 +347,7 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
         _heartbeat(auth_context, item)
         _post_result(auth_context, item, payload)
     except Exception:
+        _LOGGER.warning("Guard command result upload failed: job_id=%s", _job_id(item))
         state.update(
             {
                 "state": "result_pending",
@@ -338,6 +360,7 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
     state.pop("pending_result", None)
     state.update({"state": "idle", "last_result_at": _now(), "last_poll_was_empty": False})
     _save_state(store, state)
+    _LOGGER.info("Guard command completed: job_id=%s status=%s", _job_id(item), payload.get("status"))
     return command_queue_status(store)
 
 
