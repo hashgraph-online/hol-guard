@@ -494,7 +494,7 @@ function requireReact_production() {
   react_production.useTransition = function() {
     return ReactSharedInternals.H.useTransition();
   };
-  react_production.version = "19.2.7";
+  react_production.version = "19.2.5";
   return react_production;
 }
 var hasRequiredReact;
@@ -516,7 +516,7 @@ var hasRequiredScheduler_production;
 function requireScheduler_production() {
   if (hasRequiredScheduler_production) return scheduler_production;
   hasRequiredScheduler_production = 1;
-  (function(exports) {
+  (function(exports$1) {
     function push(heap, node) {
       var index = heap.length;
       heap.push(node);
@@ -550,15 +550,15 @@ function requireScheduler_production() {
       var diff = a.sortIndex - b.sortIndex;
       return 0 !== diff ? diff : a.id - b.id;
     }
-    exports.unstable_now = void 0;
+    exports$1.unstable_now = void 0;
     if ("object" === typeof performance && "function" === typeof performance.now) {
       var localPerformance = performance;
-      exports.unstable_now = function() {
+      exports$1.unstable_now = function() {
         return localPerformance.now();
       };
     } else {
       var localDate = Date, initialTime = localDate.now();
-      exports.unstable_now = function() {
+      exports$1.unstable_now = function() {
         return localDate.now() - initialTime;
       };
     }
@@ -585,12 +585,12 @@ function requireScheduler_production() {
     }
     var isMessageLoopRunning = false, taskTimeoutID = -1, frameInterval = 5, startTime = -1;
     function shouldYieldToHost() {
-      return needsPaint ? true : exports.unstable_now() - startTime < frameInterval ? false : true;
+      return needsPaint ? true : exports$1.unstable_now() - startTime < frameInterval ? false : true;
     }
     function performWorkUntilDeadline() {
       needsPaint = false;
       if (isMessageLoopRunning) {
-        var currentTime = exports.unstable_now();
+        var currentTime = exports$1.unstable_now();
         startTime = currentTime;
         var hasMoreWork = true;
         try {
@@ -610,7 +610,7 @@ function requireScheduler_production() {
                     var continuationCallback = callback(
                       currentTask.expirationTime <= currentTime
                     );
-                    currentTime = exports.unstable_now();
+                    currentTime = exports$1.unstable_now();
                     if ("function" === typeof continuationCallback) {
                       currentTask.callback = continuationCallback;
                       advanceTimers(currentTime);
@@ -660,27 +660,27 @@ function requireScheduler_production() {
       };
     function requestHostTimeout(callback, ms) {
       taskTimeoutID = localSetTimeout(function() {
-        callback(exports.unstable_now());
+        callback(exports$1.unstable_now());
       }, ms);
     }
-    exports.unstable_IdlePriority = 5;
-    exports.unstable_ImmediatePriority = 1;
-    exports.unstable_LowPriority = 4;
-    exports.unstable_NormalPriority = 3;
-    exports.unstable_Profiling = null;
-    exports.unstable_UserBlockingPriority = 2;
-    exports.unstable_cancelCallback = function(task) {
+    exports$1.unstable_IdlePriority = 5;
+    exports$1.unstable_ImmediatePriority = 1;
+    exports$1.unstable_LowPriority = 4;
+    exports$1.unstable_NormalPriority = 3;
+    exports$1.unstable_Profiling = null;
+    exports$1.unstable_UserBlockingPriority = 2;
+    exports$1.unstable_cancelCallback = function(task) {
       task.callback = null;
     };
-    exports.unstable_forceFrameRate = function(fps) {
+    exports$1.unstable_forceFrameRate = function(fps) {
       0 > fps || 125 < fps ? console.error(
         "forceFrameRate takes a positive int between 0 and 125, forcing frame rates higher than 125 fps is not supported"
       ) : frameInterval = 0 < fps ? Math.floor(1e3 / fps) : 5;
     };
-    exports.unstable_getCurrentPriorityLevel = function() {
+    exports$1.unstable_getCurrentPriorityLevel = function() {
       return currentPriorityLevel;
     };
-    exports.unstable_next = function(eventHandler) {
+    exports$1.unstable_next = function(eventHandler) {
       switch (currentPriorityLevel) {
         case 1:
         case 2:
@@ -698,10 +698,10 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports.unstable_requestPaint = function() {
+    exports$1.unstable_requestPaint = function() {
       needsPaint = true;
     };
-    exports.unstable_runWithPriority = function(priorityLevel, eventHandler) {
+    exports$1.unstable_runWithPriority = function(priorityLevel, eventHandler) {
       switch (priorityLevel) {
         case 1:
         case 2:
@@ -720,8 +720,8 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports.unstable_scheduleCallback = function(priorityLevel, callback, options) {
-      var currentTime = exports.unstable_now();
+    exports$1.unstable_scheduleCallback = function(priorityLevel, callback, options) {
+      var currentTime = exports$1.unstable_now();
       "object" === typeof options && null !== options ? (options = options.delay, options = "number" === typeof options && 0 < options ? currentTime + options : currentTime) : options = currentTime;
       switch (priorityLevel) {
         case 1:
@@ -751,8 +751,8 @@ function requireScheduler_production() {
       options > currentTime ? (priorityLevel.sortIndex = options, push(timerQueue, priorityLevel), null === peek(taskQueue) && priorityLevel === peek(timerQueue) && (isHostTimeoutScheduled ? (localClearTimeout(taskTimeoutID), taskTimeoutID = -1) : isHostTimeoutScheduled = true, requestHostTimeout(handleTimeout, options - currentTime))) : (priorityLevel.sortIndex = timeout, push(taskQueue, priorityLevel), isHostCallbackScheduled || isPerformingWork || (isHostCallbackScheduled = true, isMessageLoopRunning || (isMessageLoopRunning = true, schedulePerformWorkUntilDeadline())));
       return priorityLevel;
     };
-    exports.unstable_shouldYield = shouldYieldToHost;
-    exports.unstable_wrapCallback = function(callback) {
+    exports$1.unstable_shouldYield = shouldYieldToHost;
+    exports$1.unstable_wrapCallback = function(callback) {
       var parentPriorityLevel = currentPriorityLevel;
       return function() {
         var previousPriorityLevel = currentPriorityLevel;
@@ -922,7 +922,7 @@ function requireReactDom_production() {
   reactDom_production.useFormStatus = function() {
     return ReactSharedInternals.H.useHostTransitionStatus();
   };
-  reactDom_production.version = "19.2.7";
+  reactDom_production.version = "19.2.5";
   return reactDom_production;
 }
 var hasRequiredReactDom;
@@ -12366,12 +12366,12 @@ function requireReactDomClient_production() {
     }
   };
   var isomorphicReactPackageVersion$jscomp$inline_1840 = React2.version;
-  if ("19.2.7" !== isomorphicReactPackageVersion$jscomp$inline_1840)
+  if ("19.2.5" !== isomorphicReactPackageVersion$jscomp$inline_1840)
     throw Error(
       formatProdErrorMessage(
         527,
         isomorphicReactPackageVersion$jscomp$inline_1840,
-        "19.2.7"
+        "19.2.5"
       )
     );
   ReactDOMSharedInternals.findDOMNode = function(componentOrElement) {
@@ -12389,10 +12389,10 @@ function requireReactDomClient_production() {
   };
   var internals$jscomp$inline_2347 = {
     bundleType: 0,
-    version: "19.2.7",
+    version: "19.2.5",
     rendererPackageName: "react-dom",
     currentDispatcherRef: ReactSharedInternals,
-    reconcilerVersion: "19.2.7"
+    reconcilerVersion: "19.2.5"
   };
   if ("undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__) {
     var hook$jscomp$inline_2348 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
@@ -12459,7 +12459,7 @@ function requireReactDomClient_production() {
     listenToAllSupportedEvents(container2);
     return new ReactDOMHydrationRoot(initialChildren);
   };
-  reactDomClient_production.version = "19.2.7";
+  reactDomClient_production.version = "19.2.5";
   return reactDomClient_production;
 }
 var hasRequiredClient;
@@ -12807,6 +12807,9 @@ function HiMiniCloud(props) {
 }
 function HiMiniCloudArrowUp(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M5.5 17a4.5 4.5 0 0 1-1.44-8.765 4.5 4.5 0 0 1 8.302-3.046 3.5 3.5 0 0 1 4.504 4.272A4 4 0 0 1 15 17H5.5Zm3.75-2.75a.75.75 0 0 0 1.5 0V9.66l1.95 2.1a.75.75 0 1 0 1.1-1.02l-3.25-3.5a.75.75 0 0 0-1.1 0l-3.25 3.5a.75.75 0 1 0 1.1 1.02l1.95-2.1v4.59Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniCloudArrowDown(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M5.5 17a4.5 4.5 0 0 1-1.44-8.765 4.5 4.5 0 0 1 8.302-3.046 3.5 3.5 0 0 1 4.504 4.272A4 4 0 0 1 15 17H5.5Zm5.25-9.25a.75.75 0 0 0-1.5 0v4.59l-1.95-2.1a.75.75 0 1 0-1.1 1.02l3.25 3.5a.75.75 0 0 0 1.1 0l3.25-3.5a.75.75 0 1 0-1.1-1.02l-1.95 2.1V7.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniClock(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -26444,12 +26447,12 @@ export {
   HiMiniExclamationCircle as J,
   HiMiniClipboardDocumentCheck as K,
   HiMiniClipboard as L,
-  getDefaultExportFromCjs as M,
-  HiMiniKey as N,
-  HiMiniLockClosed as O,
+  requireReact as M,
+  getDefaultExportFromCjs as N,
+  HiMiniKey as O,
   ProofStrip as P,
-  HiMiniBellAlert as Q,
-  React as R,
+  HiMiniLockClosed as Q,
+  HiMiniBellAlert as R,
   SectionLabel as S,
   HiMiniAdjustmentsHorizontal as T,
   HiMiniCog6Tooth as U,
@@ -26460,7 +26463,7 @@ export {
   fetchRuntimeSnapshot as Z,
   updateSettings as _,
   EvidenceActivityHeatmapMini as a,
-  HiMiniArrowDown as a$,
+  HiMiniShieldExclamation as a$,
   clearReviewQueue as a0,
   revokeApprovalGateCooldown as a1,
   disableApprovalGateTotp as a2,
@@ -26484,20 +26487,20 @@ export {
   ActivationSummary as aK,
   ActionResultPanel as aL,
   HiMiniBugAnt as aM,
-  fetchPackageFirewallStatus as aN,
-  runPackageAudit as aO,
-  resolveSupplyChainAuditFailure as aP,
-  startPackageFirewallConnect as aQ,
-  runPackageFirewallAction as aR,
-  parseInterceptProofSnapshot as aS,
+  GuardModalLayer as aN,
+  ConnectFlowCard as aO,
+  HiMiniCloudArrowDown as aP,
+  fetchPackageFirewallStatus as aQ,
+  runPackageAudit as aR,
+  resolveSupplyChainAuditFailure as aS,
   runPackageSync as aT,
-  openPackageFirewallShell as aU,
-  EntitlementNotice as aV,
-  fetchSupplyChainBundle as aW,
-  HiMiniDocumentMagnifyingGlass as aX,
-  HiMiniShieldExclamation as aY,
-  HiMiniComputerDesktop as aZ,
-  ConnectFlowCard as a_,
+  startPackageFirewallConnect as aU,
+  runPackageFirewallAction as aV,
+  parseInterceptProofSnapshot as aW,
+  openPackageFirewallShell as aX,
+  EntitlementNotice as aY,
+  fetchSupplyChainBundle as aZ,
+  HiMiniDocumentMagnifyingGlass as a_,
   resetSettings as aa,
   setupDesktopNotifications as ab,
   Tag as ac,
@@ -26525,20 +26528,22 @@ export {
   clearLabelForScope as ay,
   formatHarnessCommand as az,
   EmptyState as b,
-  HiMiniArrowUp as b0,
-  HiMiniArrowRight as b1,
-  HiMiniCloudArrowUp as b2,
-  HiMiniInformationCircle as b3,
-  fetchReceipts as b4,
-  runAuditRemediation as b5,
-  HiMiniDocumentText as b6,
-  guardAwareHref as b7,
-  HiMiniSignal as b8,
-  savePolicyDecision as b9,
-  HiMiniChevronLeft as ba,
-  policyActionLabel as bb,
-  scopeLabel as bc,
-  HiMiniPlus as bd,
+  HiMiniComputerDesktop as b0,
+  HiMiniArrowDown as b1,
+  HiMiniArrowUp as b2,
+  HiMiniArrowRight as b3,
+  HiMiniCloudArrowUp as b4,
+  HiMiniInformationCircle as b5,
+  fetchReceipts as b6,
+  runAuditRemediation as b7,
+  HiMiniDocumentText as b8,
+  guardAwareHref as b9,
+  HiMiniSignal as ba,
+  savePolicyDecision as bb,
+  HiMiniChevronLeft as bc,
+  policyActionLabel as bd,
+  scopeLabel as be,
+  HiMiniPlus as bf,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,
