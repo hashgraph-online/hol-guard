@@ -38,6 +38,11 @@ import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 import { parseInterceptProofSnapshot, type InterceptProofSnapshot } from "./supply-chain-firewall-action-result";
 import { InterceptProofModal } from "./supply-chain-intercept-proof-modal";
 import { SupplyChainManagerDrawer } from "./supply-chain-manager-drawer";
+import { resolveSupplyChainAuditRecoveryGate, type SupplyChainAuditRecoveryGate } from "./supply-chain-audit-recovery";
+import {
+  AuditRecoveryModal,
+  type AuditRecoveryModalPhase,
+} from "./supply-chain-audit-recovery-modal";
 
 type PanelLoadState =
   | { phase: "loading" }
@@ -165,6 +170,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     runAuditRef,
   } = props;
   const rootRef = useRef<HTMLDivElement>(null);
+  const recoveryConnectHandledRef = useRef(false);
   const [panelLoad, setPanelLoad] = useState<PanelLoadState>({ phase: "loading" });
   const [pendingOp, setPendingOp] = useState<PendingOp | null>(null);
   const [lastCompleted, setLastCompleted] = useState<CompletedOp | null>(null);
@@ -181,7 +187,16 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   const [managerDrawerTarget, setManagerDrawerTarget] = useState<string | null>(null);
   const [auditConnectGateActive, setAuditConnectGateActive] = useState(false);
   const [resumeAuditAfterConnect, setResumeAuditAfterConnect] = useState(false);
+  const [auditRecoveryGate, setAuditRecoveryGate] = useState<SupplyChainAuditRecoveryGate | null>(null);
+  const [auditRecoveryPhase, setAuditRecoveryPhase] = useState<AuditRecoveryModalPhase>("ready");
+  const [auditRecoveryError, setAuditRecoveryError] = useState<string | null>(null);
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(approvalGate);
+
+  const closeAuditRecovery = useCallback(() => {
+    setAuditRecoveryGate(null);
+    setAuditRecoveryPhase("ready");
+    setAuditRecoveryError(null);
+  }, []);
 
   const load = useCallback(async () => {
     setPanelLoad({ phase: "loading" });
@@ -237,7 +252,8 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   }, []);
 
   const runAuditOperation = useCallback(
-    async () => {
+    async (options?: { openRecoveryModal?: boolean }) => {
+      const openRecoveryModal = options?.openRecoveryModal ?? true;
       setPendingOp({ op: "audit", manager: null });
       setLastFailed(null);
       setConnectError(null);
@@ -252,30 +268,46 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       });
       try {
         const response = await runPackageAudit({ workspaceDir });
+        const recoveryGate = resolveSupplyChainAuditRecoveryGate(response.result_detail);
         const failureMessage = resolveSupplyChainAuditFailure(response.result_detail);
         if (failureMessage !== null) {
+          if (openRecoveryModal && recoveryGate !== null) {
+            setAuditRecoveryGate(recoveryGate);
+            setAuditRecoveryPhase("ready");
+            setAuditRecoveryError(null);
+            onAuditErrorChange?.(null);
+            clearAuditConnectGate();
+            await refreshAfterOp();
+            await onStateChanged?.();
+            return false;
+          }
           setLastFailed({ op: "audit", manager: null, message: failureMessage });
           setLastCompleted(null);
           onAuditErrorChange?.(failureMessage);
           clearAuditConnectGate();
           await refreshAfterOp();
           await onStateChanged?.();
-          return;
+          return false;
         }
         setLastCompleted({ op: "audit", manager: null, response });
         onAuditCompleted?.(response.result_detail);
         clearAuditConnectGate();
+        closeAuditRecovery();
         onAuditErrorChange?.(null);
         await refreshAfterOp();
         await onStateChanged?.();
+        return true;
       } catch (err) {
         if (isSupplyChainAuditConnectError(err)) {
           openAuditConnectGate(true);
-          return;
+          return false;
         }
         const message = supplyChainAuditUserMessage(err) ?? "Operation failed.";
         setLastFailed({ op: "audit", manager: null, message });
         onAuditErrorChange?.(message);
+        setAuditRecoveryPhase("failed");
+        setAuditRecoveryError(message);
+        return false;
       } finally {
         onAuditRunningChange?.(false);
         setPendingOp(null);
@@ -284,6 +316,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     [
       auditWorkspaceDir,
       clearAuditConnectGate,
+      closeAuditRecovery,
       onAuditCompleted,
       onAuditErrorChange,
       onAuditRunningChange,
@@ -293,6 +326,49 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       refreshAfterOp,
     ],
   );
+
+  const continueAuditAfterRecovery = useCallback(async () => {
+    setAuditRecoveryPhase("auditing");
+    setAuditRecoveryError(null);
+    const succeeded = await runAuditOperation({ openRecoveryModal: true });
+    if (succeeded) {
+      return;
+    }
+    setAuditRecoveryPhase((currentPhase) => (currentPhase === "failed" ? "failed" : "ready"));
+  }, [runAuditOperation]);
+
+  const runRecoverySync = useCallback(async () => {
+    setAuditRecoveryPhase("syncing");
+    setAuditRecoveryError(null);
+    try {
+      const response = await runPackageSync();
+      setLastCompleted({ op: "sync", manager: null, response });
+      await refreshAfterOp();
+      await onStateChanged?.();
+      if (auditRecoveryGate?.autoRetryAuditAfterPrimary) {
+        await continueAuditAfterRecovery();
+        return;
+      }
+      setAuditRecoveryPhase("ready");
+    } catch (err) {
+      if (isSupplyChainAuditConnectError(err)) {
+        const connectGate = resolveSupplyChainAuditRecoveryGate({
+          audit_status: "incomplete",
+          audit_outcome: "not_connected",
+        });
+        if (connectGate !== null) {
+          setAuditRecoveryGate(connectGate);
+        }
+        setAuditRecoveryPhase("ready");
+        setAuditRecoveryError(null);
+        return;
+      }
+      const message = err instanceof Error ? err.message : "Sync failed.";
+      setAuditRecoveryError(message);
+      setAuditRecoveryPhase("failed");
+      setLastFailed({ op: "sync", manager: null, message });
+    }
+  }, [auditRecoveryGate, continueAuditAfterRecovery, onStateChanged, refreshAfterOp]);
 
   const handleStartConnect = useCallback(async () => {
     setStartingConnect(true);
@@ -310,6 +386,32 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       setStartingConnect(false);
     }
   }, [onStateChanged, refreshAfterOp]);
+
+  const handleRecoveryPrimary = useCallback(() => {
+    if (
+      auditRecoveryGate === null ||
+      (auditRecoveryPhase !== "ready" && auditRecoveryPhase !== "failed")
+    ) {
+      return;
+    }
+    if (auditRecoveryGate.primaryAction === "sync") {
+      void runRecoverySync();
+      return;
+    }
+    if (auditRecoveryGate.primaryAction === "connect") {
+      setAuditRecoveryPhase("connecting");
+      setAuditRecoveryError(null);
+      void handleStartConnect();
+      return;
+    }
+    void continueAuditAfterRecovery();
+  }, [
+    auditRecoveryGate,
+    auditRecoveryPhase,
+    continueAuditAfterRecovery,
+    handleStartConnect,
+    runRecoverySync,
+  ]);
 
   useEffect(() => {
     if (panelLoad.phase !== "loaded" || !auditConnectGateActive) {
@@ -352,6 +454,29 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     setResumeAuditAfterConnect(false);
     void runAuditOperation();
   }, [panelLoad, resumeAuditAfterConnect, runAuditOperation]);
+
+  useEffect(() => {
+    if (auditRecoveryPhase === "connecting") {
+      recoveryConnectHandledRef.current = false;
+    }
+  }, [auditRecoveryPhase]);
+
+  useEffect(() => {
+    if (panelLoad.phase !== "loaded" || auditRecoveryGate === null) {
+      return;
+    }
+    if (auditRecoveryPhase !== "connecting") {
+      return;
+    }
+    if (recoveryConnectHandledRef.current) {
+      return;
+    }
+    if (!panelLoad.data.entitlement.allowed || packageAuditNeedsCloudConnect(panelLoad.data)) {
+      return;
+    }
+    recoveryConnectHandledRef.current = true;
+    void runRecoverySync();
+  }, [auditRecoveryGate, auditRecoveryPhase, panelLoad, runRecoverySync]);
 
   const handleAction = useCallback(
     async (
@@ -640,6 +765,23 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       {interceptProof !== null && (
         <InterceptProofModal proof={interceptProof} onClose={handleCloseInterceptProof} />
       )}
+
+      {auditRecoveryGate !== null ? (
+        <AuditRecoveryModal
+          gate={auditRecoveryGate}
+          phase={auditRecoveryPhase}
+          error={auditRecoveryError}
+          connectError={connectError}
+          connectStarting={startingConnect}
+          connectFlow={panelLoad.phase === "loaded" ? panelLoad.data.connect_flow : null}
+          onClose={closeAuditRecovery}
+          onPrimaryAction={handleRecoveryPrimary}
+          onStartConnect={() => {
+            setAuditRecoveryPhase("connecting");
+            void handleStartConnect();
+          }}
+        />
+      ) : null}
     </div>
   );
 });

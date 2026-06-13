@@ -1,4 +1,4 @@
-import { aG as isSupplyChainAuditIncomplete, au as GuardHarnessActionError, r as reactExports, j as jsxRuntimeExports, d as HiMiniCheckCircle, aw as HiMiniArrowPath, w as HiMiniExclamationTriangle, ac as Tag, m as formatRelativeTime, aH as HiMiniClock, aI as IconActionButton, I as HiMiniXCircle, ax as HiMiniTrash, l as HiMiniShieldCheck, F as HiMiniWrenchScrewdriver, aJ as HiMiniBeaker, aK as ActivationSummary, aL as ActionResultPanel, ad as HiMiniMagnifyingGlass, b as EmptyState, A as ActionButton, aM as HiMiniBugAnt, o as HiMiniXMark, aN as fetchPackageFirewallStatus, aO as runPackageAudit, aP as resolveSupplyChainAuditFailure, aQ as startPackageFirewallConnect, aR as runPackageFirewallAction, aS as parseInterceptProofSnapshot, aT as runPackageSync, aU as openPackageFirewallShell, S as SectionLabel, aV as EntitlementNotice, aW as fetchSupplyChainBundle, aE as HiMiniArrowTopRightOnSquare, B as Badge, aX as HiMiniDocumentMagnifyingGlass, aY as HiMiniShieldExclamation, aZ as HiMiniComputerDesktop, t as HiMiniCloud, a_ as ConnectFlowCard, a$ as HiMiniArrowDown, b0 as HiMiniArrowUp, ah as HiMiniArrowLeft, b1 as HiMiniArrowRight, b2 as HiMiniCloudArrowUp, b3 as HiMiniInformationCircle, b4 as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
+import { aG as isSupplyChainAuditIncomplete, au as GuardHarnessActionError, r as reactExports, j as jsxRuntimeExports, d as HiMiniCheckCircle, aw as HiMiniArrowPath, w as HiMiniExclamationTriangle, ac as Tag, m as formatRelativeTime, aH as HiMiniClock, aI as IconActionButton, I as HiMiniXCircle, ax as HiMiniTrash, l as HiMiniShieldCheck, F as HiMiniWrenchScrewdriver, aJ as HiMiniBeaker, aK as ActivationSummary, aL as ActionResultPanel, ad as HiMiniMagnifyingGlass, b as EmptyState, A as ActionButton, aM as HiMiniBugAnt, o as HiMiniXMark, aN as readString$1, aO as isRecord$2, aP as GuardModalLayer, aQ as ConnectFlowCard, aE as HiMiniArrowTopRightOnSquare, aR as HiMiniCloudArrowDown, aS as fetchPackageFirewallStatus, aT as runPackageAudit, aU as resolveSupplyChainAuditFailure, aV as runPackageSync, aW as startPackageFirewallConnect, aX as runPackageFirewallAction, aY as parseInterceptProofSnapshot, aZ as openPackageFirewallShell, S as SectionLabel, a_ as EntitlementNotice, a$ as fetchSupplyChainBundle, B as Badge, b0 as HiMiniDocumentMagnifyingGlass, b1 as HiMiniShieldExclamation, b2 as HiMiniComputerDesktop, t as HiMiniCloud, b3 as HiMiniArrowDown, b4 as HiMiniArrowUp, ah as HiMiniArrowLeft, b5 as HiMiniArrowRight, b6 as HiMiniCloudArrowUp, b7 as HiMiniInformationCircle, b8 as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal, b as buildSupplyChainStats } from "./supply-chain-protection-stats.js";
 import { resolveFeedStaleness } from "./feed-health-workspace.js";
 import { r as resolveHomeProtectionStatus } from "./home-protection-module.js";
@@ -1013,6 +1013,246 @@ function SupplyChainManagerDrawer({
     }
   );
 }
+const SYNC_RECOVERY_STEPS = [
+  {
+    title: "Sync intel",
+    body: "Guard downloads the latest signed supply-chain bundle on this device."
+  },
+  {
+    title: "Run audit",
+    body: "Guard scans workspace manifests and lists flagged packages automatically."
+  }
+];
+function resolveSupplyChainAuditRecoveryGate(detail) {
+  if (!isSupplyChainAuditIncomplete(detail)) {
+    return null;
+  }
+  const outcome = readString$1(detail.audit_outcome);
+  const message = readString$1(detail.message);
+  const supplyChain = isRecord$2(detail.supply_chain) ? detail.supply_chain : null;
+  const supplyStatus = readString$1(supplyChain?.status);
+  if (outcome === "sync_required" || supplyStatus === "sync_required") {
+    return {
+      obstacle: "sync_required",
+      headline: "Sync supply-chain intel before auditing",
+      detail: message ?? "Guard needs the latest signed package intelligence on this device. Sync once, then Guard reruns the workspace audit for you.",
+      steps: [...SYNC_RECOVERY_STEPS],
+      primaryAction: "sync",
+      primaryLabel: "Sync supply-chain intel",
+      autoRetryAuditAfterPrimary: true
+    };
+  }
+  if (outcome === "not_connected" || outcome === "expired" || outcome === "degraded" || supplyStatus === "not_connected" || supplyStatus === "expired" || supplyStatus === "degraded") {
+    return {
+      obstacle: "cloud_auth",
+      headline: "Reconnect Guard Cloud before auditing",
+      detail: message ?? "Guard Cloud sign-in is missing or stale on this machine. Reconnect once, then Guard can sync intel and rerun the audit.",
+      steps: [
+        {
+          title: "Reconnect Cloud",
+          body: "Approve Guard Cloud access in your browser on this device."
+        },
+        {
+          title: "Sync and audit",
+          body: "Guard refreshes supply-chain intel, then reruns the workspace audit."
+        }
+      ],
+      primaryAction: "connect",
+      primaryLabel: "Reconnect Guard Cloud",
+      autoRetryAuditAfterPrimary: true
+    };
+  }
+  if (outcome === "inventory_empty") {
+    return {
+      obstacle: "inventory_empty",
+      headline: "Refresh intel before auditing packages",
+      detail: message ?? "Guard found project files but could not index packages yet. Syncing intel often fixes stale inventory, then Guard reruns the audit.",
+      steps: [...SYNC_RECOVERY_STEPS],
+      primaryAction: "sync",
+      primaryLabel: "Sync and retry audit",
+      autoRetryAuditAfterPrimary: true
+    };
+  }
+  if (outcome === "no_project_files") {
+    return {
+      obstacle: "no_project_files",
+      headline: "Add project manifests before auditing",
+      detail: message ?? "Guard could not find supported manifests or lockfiles in the audit workspace. Open the connected project folder, add package files, then try the audit again.",
+      steps: [
+        {
+          title: "Open workspace",
+          body: "Use the connected app project folder with package.json, lockfiles, or Python manifests."
+        },
+        {
+          title: "Run audit",
+          body: "Guard indexes dependencies and surfaces flagged packages."
+        }
+      ],
+      primaryAction: "retry_audit",
+      primaryLabel: "Run audit again",
+      autoRetryAuditAfterPrimary: false
+    };
+  }
+  return {
+    obstacle: "unknown",
+    headline: "Finish setup before auditing",
+    detail: message ?? "The workspace audit did not complete. Sync supply-chain intel, then try the audit again.",
+    steps: [...SYNC_RECOVERY_STEPS],
+    primaryAction: "sync",
+    primaryLabel: "Sync supply-chain intel",
+    autoRetryAuditAfterPrimary: true
+  };
+}
+function resolvePhaseLabel(phase) {
+  if (phase === "syncing") {
+    return "Syncing intel";
+  }
+  if (phase === "connecting") {
+    return "Waiting for Cloud";
+  }
+  if (phase === "auditing") {
+    return "Running audit";
+  }
+  if (phase === "failed") {
+    return "Needs attention";
+  }
+  return "Setup required";
+}
+function resolvePhaseTone(phase) {
+  if (phase === "failed") {
+    return "attention";
+  }
+  if (phase === "auditing") {
+    return "green";
+  }
+  return "blue";
+}
+function resolvePrimaryIcon(gate, phase) {
+  if (phase === "auditing") {
+    return HiMiniBugAnt;
+  }
+  if (gate.primaryAction === "connect") {
+    return HiMiniShieldCheck;
+  }
+  if (gate.primaryAction === "retry_audit") {
+    return HiMiniBugAnt;
+  }
+  return HiMiniCloudArrowDown;
+}
+function resolvePrimaryLabel(gate, phase) {
+  if (phase === "syncing") {
+    return "Syncing supply-chain intel";
+  }
+  if (phase === "connecting") {
+    return "Waiting for Guard Cloud";
+  }
+  if (phase === "auditing") {
+    return "Running workspace audit";
+  }
+  return gate.primaryLabel;
+}
+function resolveActiveStepIndex(gate, phase) {
+  if (phase === "auditing") {
+    return gate.steps.length;
+  }
+  if (phase === "syncing") {
+    return gate.obstacle === "cloud_auth" ? 2 : 1;
+  }
+  if (phase === "connecting") {
+    return 1;
+  }
+  return 0;
+}
+function AuditRecoveryModal({
+  gate,
+  phase,
+  error,
+  connectError,
+  connectStarting,
+  connectFlow,
+  onClose,
+  onPrimaryAction,
+  onStartConnect
+}) {
+  const activeStep = resolveActiveStepIndex(gate, phase);
+  const primaryBusy = phase === "syncing" || phase === "connecting" || phase === "auditing";
+  const PrimaryIcon = resolvePrimaryIcon(gate, phase);
+  const showConnectFlow = gate.primaryAction === "connect" && connectFlow !== null && phase !== "auditing";
+  const handlePrimaryClick = reactExports.useCallback(() => {
+    if (primaryBusy) {
+      return;
+    }
+    onPrimaryAction();
+  }, [onPrimaryAction, primaryBusy]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: "Finish workspace audit setup", onClose, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white shadow-xl", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-b border-slate-100 px-5 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 space-y-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue", children: "Workspace audit" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: resolvePhaseTone(phase), children: resolvePhaseLabel(phase) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold tracking-[-0.02em] text-brand-dark", children: gate.headline }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-xl text-sm leading-relaxed text-slate-600", children: gate.detail })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: onClose,
+          className: "shrink-0 text-sm font-medium text-slate-500 hover:text-brand-dark",
+          children: "Close"
+        }
+      )
+    ] }) }),
+    showConnectFlow ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ConnectFlowCard,
+      {
+        minimal: true,
+        purpose: "audit",
+        mode: "repair",
+        connectFlow,
+        connectStarting,
+        connectError,
+        headline: gate.headline,
+        detail: gate.detail,
+        onStartConnect
+      }
+    ) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5 px-5 py-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "grid gap-3 sm:grid-cols-2", children: gate.steps.map((step, index) => {
+        const stepNumber = index + 1;
+        const isActive = stepNumber === activeStep;
+        const isComplete = stepNumber < activeStep;
+        return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "li",
+          {
+            className: `rounded-xl border px-3 py-3 ${isActive ? "border-brand-blue/25 bg-brand-blue/[0.04]" : isComplete ? "border-slate-200 bg-slate-50/80" : "border-slate-200 bg-white"}`,
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-slate-500", children: [
+                "Step ",
+                stepNumber,
+                isComplete ? " · Done" : isActive ? " · In progress" : ""
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm font-semibold text-brand-dark", children: step.title }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs leading-relaxed text-slate-600", children: step.body })
+            ]
+          },
+          step.title
+        );
+      }) }),
+      error !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "alert", children: error }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "primary", onClick: handlePrimaryClick, disabled: primaryBusy, children: [
+          primaryBusy ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "mr-1.5 h-4 w-4 animate-spin", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryIcon, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
+          resolvePrimaryLabel(gate, phase)
+        ] }),
+        gate.primaryAction === "connect" && connectFlow?.authorize_url ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: connectFlow.authorize_url, variant: "outline", children: [
+          "Open sign-in",
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "ml-1.5 h-3.5 w-3.5", "aria-hidden": "true" })
+        ] }) : null
+      ] })
+    ] })
+  ] }) });
+}
 function actionLabel(op) {
   return op.charAt(0).toUpperCase() + op.slice(1);
 }
@@ -1079,6 +1319,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     runAuditRef
   } = props;
   const rootRef = reactExports.useRef(null);
+  const recoveryConnectHandledRef = reactExports.useRef(false);
   const [panelLoad, setPanelLoad] = reactExports.useState({ phase: "loading" });
   const [pendingOp, setPendingOp] = reactExports.useState(null);
   const [lastCompleted, setLastCompleted] = reactExports.useState(null);
@@ -1095,7 +1336,15 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
   const [managerDrawerTarget, setManagerDrawerTarget] = reactExports.useState(null);
   const [auditConnectGateActive, setAuditConnectGateActive] = reactExports.useState(false);
   const [resumeAuditAfterConnect, setResumeAuditAfterConnect] = reactExports.useState(false);
+  const [auditRecoveryGate, setAuditRecoveryGate] = reactExports.useState(null);
+  const [auditRecoveryPhase, setAuditRecoveryPhase] = reactExports.useState("ready");
+  const [auditRecoveryError, setAuditRecoveryError] = reactExports.useState(null);
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(approvalGate);
+  const closeAuditRecovery = reactExports.useCallback(() => {
+    setAuditRecoveryGate(null);
+    setAuditRecoveryPhase("ready");
+    setAuditRecoveryError(null);
+  }, []);
   const load = reactExports.useCallback(async () => {
     setPanelLoad({ phase: "loading" });
     try {
@@ -1142,7 +1391,8 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     setResumeAuditAfterConnect(false);
   }, []);
   const runAuditOperation = reactExports.useCallback(
-    async () => {
+    async (options) => {
+      const openRecoveryModal = options?.openRecoveryModal ?? true;
       setPendingOp({ op: "audit", manager: null });
       setLastFailed(null);
       setConnectError(null);
@@ -1156,30 +1406,46 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       });
       try {
         const response = await runPackageAudit({ workspaceDir });
+        const recoveryGate = resolveSupplyChainAuditRecoveryGate(response.result_detail);
         const failureMessage = resolveSupplyChainAuditFailure(response.result_detail);
         if (failureMessage !== null) {
+          if (openRecoveryModal && recoveryGate !== null) {
+            setAuditRecoveryGate(recoveryGate);
+            setAuditRecoveryPhase("ready");
+            setAuditRecoveryError(null);
+            onAuditErrorChange?.(null);
+            clearAuditConnectGate();
+            await refreshAfterOp();
+            await onStateChanged?.();
+            return false;
+          }
           setLastFailed({ op: "audit", manager: null, message: failureMessage });
           setLastCompleted(null);
           onAuditErrorChange?.(failureMessage);
           clearAuditConnectGate();
           await refreshAfterOp();
           await onStateChanged?.();
-          return;
+          return false;
         }
         setLastCompleted({ op: "audit", manager: null, response });
         onAuditCompleted?.(response.result_detail);
         clearAuditConnectGate();
+        closeAuditRecovery();
         onAuditErrorChange?.(null);
         await refreshAfterOp();
         await onStateChanged?.();
+        return true;
       } catch (err) {
         if (isSupplyChainAuditConnectError(err)) {
           openAuditConnectGate(true);
-          return;
+          return false;
         }
         const message = supplyChainAuditUserMessage(err) ?? "Operation failed.";
         setLastFailed({ op: "audit", manager: null, message });
         onAuditErrorChange?.(message);
+        setAuditRecoveryPhase("failed");
+        setAuditRecoveryError(message);
+        return false;
       } finally {
         onAuditRunningChange?.(false);
         setPendingOp(null);
@@ -1188,6 +1454,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     [
       auditWorkspaceDir,
       clearAuditConnectGate,
+      closeAuditRecovery,
       onAuditCompleted,
       onAuditErrorChange,
       onAuditRunningChange,
@@ -1197,6 +1464,47 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       refreshAfterOp
     ]
   );
+  const continueAuditAfterRecovery = reactExports.useCallback(async () => {
+    setAuditRecoveryPhase("auditing");
+    setAuditRecoveryError(null);
+    const succeeded = await runAuditOperation({ openRecoveryModal: true });
+    if (succeeded) {
+      return;
+    }
+    setAuditRecoveryPhase((currentPhase) => currentPhase === "failed" ? "failed" : "ready");
+  }, [runAuditOperation]);
+  const runRecoverySync = reactExports.useCallback(async () => {
+    setAuditRecoveryPhase("syncing");
+    setAuditRecoveryError(null);
+    try {
+      const response = await runPackageSync();
+      setLastCompleted({ op: "sync", manager: null, response });
+      await refreshAfterOp();
+      await onStateChanged?.();
+      if (auditRecoveryGate?.autoRetryAuditAfterPrimary) {
+        await continueAuditAfterRecovery();
+        return;
+      }
+      setAuditRecoveryPhase("ready");
+    } catch (err) {
+      if (isSupplyChainAuditConnectError(err)) {
+        const connectGate = resolveSupplyChainAuditRecoveryGate({
+          audit_status: "incomplete",
+          audit_outcome: "not_connected"
+        });
+        if (connectGate !== null) {
+          setAuditRecoveryGate(connectGate);
+        }
+        setAuditRecoveryPhase("ready");
+        setAuditRecoveryError(null);
+        return;
+      }
+      const message = err instanceof Error ? err.message : "Sync failed.";
+      setAuditRecoveryError(message);
+      setAuditRecoveryPhase("failed");
+      setLastFailed({ op: "sync", manager: null, message });
+    }
+  }, [auditRecoveryGate, continueAuditAfterRecovery, onStateChanged, refreshAfterOp]);
   const handleStartConnect = reactExports.useCallback(async () => {
     setStartingConnect(true);
     setConnectError(null);
@@ -1213,6 +1521,28 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       setStartingConnect(false);
     }
   }, [onStateChanged, refreshAfterOp]);
+  const handleRecoveryPrimary = reactExports.useCallback(() => {
+    if (auditRecoveryGate === null || auditRecoveryPhase !== "ready" && auditRecoveryPhase !== "failed") {
+      return;
+    }
+    if (auditRecoveryGate.primaryAction === "sync") {
+      void runRecoverySync();
+      return;
+    }
+    if (auditRecoveryGate.primaryAction === "connect") {
+      setAuditRecoveryPhase("connecting");
+      setAuditRecoveryError(null);
+      void handleStartConnect();
+      return;
+    }
+    void continueAuditAfterRecovery();
+  }, [
+    auditRecoveryGate,
+    auditRecoveryPhase,
+    continueAuditAfterRecovery,
+    handleStartConnect,
+    runRecoverySync
+  ]);
   reactExports.useEffect(() => {
     if (panelLoad.phase !== "loaded" || !auditConnectGateActive) {
       onAuditConnectGateChange?.(null);
@@ -1253,6 +1583,27 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     setResumeAuditAfterConnect(false);
     void runAuditOperation();
   }, [panelLoad, resumeAuditAfterConnect, runAuditOperation]);
+  reactExports.useEffect(() => {
+    if (auditRecoveryPhase === "connecting") {
+      recoveryConnectHandledRef.current = false;
+    }
+  }, [auditRecoveryPhase]);
+  reactExports.useEffect(() => {
+    if (panelLoad.phase !== "loaded" || auditRecoveryGate === null) {
+      return;
+    }
+    if (auditRecoveryPhase !== "connecting") {
+      return;
+    }
+    if (recoveryConnectHandledRef.current) {
+      return;
+    }
+    if (!panelLoad.data.entitlement.allowed || packageAuditNeedsCloudConnect(panelLoad.data)) {
+      return;
+    }
+    recoveryConnectHandledRef.current = true;
+    void runRecoverySync();
+  }, [auditRecoveryGate, auditRecoveryPhase, panelLoad, runRecoverySync]);
   const handleAction = reactExports.useCallback(
     async (op, manager, credentials) => {
       setPendingOp({ op, manager });
@@ -1498,7 +1849,24 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
         onClose: handleCloseManagerDrawer
       }
     ),
-    interceptProof !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(InterceptProofModal, { proof: interceptProof, onClose: handleCloseInterceptProof })
+    interceptProof !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(InterceptProofModal, { proof: interceptProof, onClose: handleCloseInterceptProof }),
+    auditRecoveryGate !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      AuditRecoveryModal,
+      {
+        gate: auditRecoveryGate,
+        phase: auditRecoveryPhase,
+        error: auditRecoveryError,
+        connectError,
+        connectStarting: startingConnect,
+        connectFlow: panelLoad.phase === "loaded" ? panelLoad.data.connect_flow : null,
+        onClose: closeAuditRecovery,
+        onPrimaryAction: handleRecoveryPrimary,
+        onStartConnect: () => {
+          setAuditRecoveryPhase("connecting");
+          void handleStartConnect();
+        }
+      }
+    ) : null
   ] });
 });
 function SeverityBadge({ severity }) {
