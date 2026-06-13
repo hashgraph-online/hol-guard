@@ -9,7 +9,6 @@ from codex_plugin_scanner.guard.inventory_contract import (
     GuardAgentInventoryFinding,
     GuardAgentInventoryItem,
     GuardAgentInventorySnapshot,
-    _agent_type,
     classify_endpoint_host,
     fingerprint_mapping,
     fingerprint_path_tree,
@@ -713,5 +712,21 @@ def test_inventory_snapshot_maps_cisco_findings_to_redacted_inventory_evidence(t
     assert str(tmp_path) not in encoded
 
 
-def test_inventory_agent_type_is_antigravity() -> None:
-    assert _agent_type("antigravity") == "antigravity"
+def test_inventory_snapshot_preserves_antigravity_agent_type(tmp_path: Path) -> None:
+    detection = HarnessDetection(
+        harness="antigravity",
+        installed=True,
+        command_available=True,
+        config_paths=(str(tmp_path / ".gemini" / "antigravity" / "mcp_config.json"),),
+        artifacts=(),
+        warnings=(),
+    )
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-06-13T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    payload = cast(dict[str, Any], serialize_inventory_snapshot(snapshot))
+
+    assert snapshot.agent_type == "antigravity"
+    assert payload["agentType"] == "antigravity"
