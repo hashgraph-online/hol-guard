@@ -383,7 +383,7 @@ def managed_install_audit_workspace_dirs(store: GuardStore) -> tuple[str, ...]:
     ordered = sorted(
         installs,
         key=lambda item: (
-            0 if bool(item.get("active")) else 1,
+            1 if bool(item.get("active")) else 0,
             str(item.get("updated_at") or ""),
         ),
         reverse=True,

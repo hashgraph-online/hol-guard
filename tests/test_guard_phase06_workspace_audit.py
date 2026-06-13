@@ -324,11 +324,17 @@ def test_workspace_audit_inference_accepts_workspace_alias(
 def test_workspace_audit_inference_uses_active_managed_install_workspace(
     tmp_path: Path,
 ) -> None:
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    _write_text(workspace_dir / "package.json", '{"name":"demo"}')
+    active_dir = tmp_path / "active-workspace"
+    active_dir.mkdir()
+    _write_text(active_dir / "package.json", '{"name":"active"}')
+
+    inactive_dir = tmp_path / "inactive-workspace"
+    inactive_dir.mkdir()
+    _write_text(inactive_dir / "package.json", '{"name":"inactive"}')
+
     store = GuardStore(tmp_path / "guard-home")
-    store.set_managed_install("codex", True, str(workspace_dir), {}, WORKSPACE_AUDIT_NOW)
+    store.set_managed_install("cursor", False, str(inactive_dir), {}, "2026-06-08T13:00:00.000Z")
+    store.set_managed_install("codex", True, str(active_dir), {}, "2026-06-08T12:00:00.000Z")
     allowed_roots = (tmp_path.resolve(),)
     resolved = resolve_supply_chain_audit_workspace_dir(
         workspace_dir_value=None,
@@ -336,7 +342,7 @@ def test_workspace_audit_inference_uses_active_managed_install_workspace(
         allowed_roots=allowed_roots,
         managed_workspace_dirs=managed_install_audit_workspace_dirs(store),
     )
-    assert resolved == workspace_dir.resolve()
+    assert resolved == active_dir.resolve()
 
 
 def test_daemon_workspace_audit_uses_managed_install_workspace_when_cwd_is_not_a_project(

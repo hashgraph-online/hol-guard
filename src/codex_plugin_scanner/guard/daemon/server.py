@@ -92,8 +92,8 @@ from ..insights_share import publish_insights_share
 from ..local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE, build_local_dashboard_session_token
 from ..local_supply_chain import (
     build_workspace_audit_payload,
-    resolve_package_firewall_entitlement_with_refresh,
     managed_install_audit_workspace_dirs,
+    resolve_package_firewall_entitlement_with_refresh,
     resolve_supply_chain_audit_workspace_dir,
 )
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision

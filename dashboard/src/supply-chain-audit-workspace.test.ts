@@ -16,14 +16,14 @@ const installs: GuardManagedInstall[] = [
     active: false,
     workspace: "workspace/inactive",
     manifest: {},
-    updated_at: "2026-06-08T10:00:00.000Z",
+    updated_at: "2026-06-08T11:00:00.000Z",
   },
   {
     harness: "cursor",
     active: true,
     workspace: "workspace/active-project",
     manifest: {},
-    updated_at: "2026-06-08T11:00:00.000Z",
+    updated_at: "2026-06-08T10:00:00.000Z",
   },
 ];
 
