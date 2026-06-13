@@ -6,9 +6,9 @@ export interface WorkspacePageHeaderProps<T extends string> {
   eyebrow: string;
   title: string;
   description?: string;
-  tabs: Array<{ value: T; label: string; id?: string }>;
-  activeTab: T;
-  onTabChange: (value: T) => void;
+  tabs?: Array<{ value: T; label: string; id?: string }>;
+  activeTab?: T;
+  onTabChange?: (value: T) => void;
   actions?: ReactNode;
 }
 
@@ -21,6 +21,8 @@ export function WorkspacePageHeader<T extends string>({
   onTabChange,
   actions,
 }: WorkspacePageHeaderProps<T>) {
+  const hasTabs = tabs !== undefined && activeTab !== undefined && onTabChange !== undefined;
+
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="space-y-1">
@@ -28,12 +30,16 @@ export function WorkspacePageHeader<T extends string>({
         <h1 className="text-2xl font-semibold tracking-tight text-brand-dark">{title}</h1>
         {description ? <p className="text-sm text-slate-500">{description}</p> : null}
       </div>
-      <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-start sm:justify-end sm:gap-4">
-        <div className="w-full min-w-0 sm:w-auto">
-          <TabBar tabs={tabs} active={activeTab} onChange={onTabChange} />
+      {hasTabs || actions ? (
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-start sm:justify-end sm:gap-4">
+          {hasTabs ? (
+            <div className="w-full min-w-0 sm:w-auto">
+              <TabBar tabs={tabs} active={activeTab} onChange={onTabChange} />
+            </div>
+          ) : null}
+          {actions ? <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{actions}</div> : null}
         </div>
-        {actions ? <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{actions}</div> : null}
-      </div>
+      ) : null}
     </div>
   );
 }
