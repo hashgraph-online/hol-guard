@@ -2152,9 +2152,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     entitlement,
                     has_installed_managers=bool(status.get("installed_managers")),
                 ),
-                "audit_workspace_dir": (
-                    str(audit_workspace_dir) if audit_workspace_dir is not None else None
-                ),
+                "audit_workspace_dir": (str(audit_workspace_dir) if audit_workspace_dir is not None else None),
                 "cli_fallback": {
                     "connect": "hol-guard connect",
                     "install": "hol-guard package-shims install --json",
