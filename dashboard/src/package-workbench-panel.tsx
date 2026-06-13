@@ -426,9 +426,9 @@ export function PackageWorkbenchPanel({
   return (
     <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
       <div className="border-b border-slate-100 px-4 py-3">
-        <SectionLabel>Package findings workbench</SectionLabel>
+        <SectionLabel>Audit findings</SectionLabel>
         <p className="mt-0.5 text-sm text-slate-500">
-          Review workspace audit inventory, filter flagged packages, and inspect advisory detail.
+          Review flagged packages from the latest workspace audit. Filter, sort, and inspect advisory detail.
         </p>
         {auditSnapshot !== null && (
           <div className="mt-2">

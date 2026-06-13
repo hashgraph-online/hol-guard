@@ -174,9 +174,7 @@ class TestGuardSurfaceServer:
         finally:
             daemon.stop()
 
-        runtime_overview_chunk = (
-            daemon_server_module._STATIC_DIR / "assets" / "chunks" / "runtime-overview.js"
-        ).read_text(encoding="utf-8")
+        runtime_overview_chunk = dashboard_bundle
         feed_health_chunk = (
             daemon_server_module._STATIC_DIR / "assets" / "chunks" / "feed-health-workspace.js"
         ).read_text(encoding="utf-8")

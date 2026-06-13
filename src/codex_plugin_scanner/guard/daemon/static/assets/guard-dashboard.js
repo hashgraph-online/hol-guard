@@ -19356,20 +19356,6 @@ function DismissButton({ onDismiss }) {
     }
   );
 }
-function NextActionHero({ action, anyPending, onRunAction }) {
-  const handleClick = reactExports.useCallback(() => {
-    if (action.op === null) {
-      return;
-    }
-    onRunAction(action.op, action.manager);
-  }, [action.manager, action.op, onRunAction]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.05] to-white px-4 py-4 sm:px-5 sm:py-5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-blue", children: "Next step" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-lg font-semibold text-brand-dark", children: action.label }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm leading-relaxed text-slate-600", children: action.detail }),
-    action.op !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: handleClick, disabled: anyPending, children: action.label }) })
-  ] });
-}
 function ActionResultPanel({ completed, onDismiss }) {
   const { response } = completed;
   const isOk = ["completed", "ok", "success", "succeeded"].includes(response.status);
@@ -19498,6 +19484,24 @@ function EvidenceInsightsShareSheet({ publicUrl, onClose }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onClose, className: "text-sm font-medium text-slate-500 hover:text-brand-dark", children: "Close" })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 break-all", children: publicUrl }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 rounded-xl border border-brand-blue/10 bg-gradient-to-br from-white to-[#f0f6ff] px-4 py-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "A referral link is shown on your public stats page." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-slate-500", children: [
+        "Visitors who sign up through it get 20% off HOL Guard Pro or Team for 12 months. Track referrals and payouts in the",
+        " ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "a",
+          {
+            href: "https://hol.org/guard/affiliates",
+            target: "_blank",
+            rel: "noopener noreferrer",
+            className: "font-medium text-brand-blue hover:underline",
+            children: "affiliate dashboard"
+          }
+        ),
+        "."
+      ] })
+    ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "button",
@@ -26314,7 +26318,7 @@ export {
   fetchRuntimeSnapshot as Z,
   updateSettings as _,
   EvidenceActivityHeatmapMini as a,
-  HiMiniArrowRight as a$,
+  HiMiniCloudArrowUp as a$,
   clearReviewQueue as a0,
   revokeApprovalGateCooldown as a1,
   disableApprovalGateTotp as a2,
@@ -26334,24 +26338,24 @@ export {
   HiMiniClock as aG,
   IconActionButton as aH,
   HiMiniBeaker as aI,
-  NextActionHero as aJ,
-  ActivationSummary as aK,
-  ActionResultPanel as aL,
-  HiMiniBugAnt as aM,
-  fetchPackageFirewallStatus as aN,
-  runPackageFirewallAction as aO,
-  parseInterceptProofSnapshot as aP,
-  runPackageAudit as aQ,
-  runPackageSync as aR,
-  startPackageFirewallConnect as aS,
-  openPackageFirewallShell as aT,
-  EntitlementNotice as aU,
-  HiMiniArrowDown as aV,
-  HiMiniArrowUp as aW,
-  fetchSupplyChainBundle as aX,
-  HiMiniDocumentMagnifyingGlass as aY,
-  HiMiniShieldExclamation as aZ,
-  HiMiniComputerDesktop as a_,
+  ActivationSummary as aJ,
+  ActionResultPanel as aK,
+  HiMiniBugAnt as aL,
+  fetchPackageFirewallStatus as aM,
+  runPackageFirewallAction as aN,
+  parseInterceptProofSnapshot as aO,
+  runPackageAudit as aP,
+  runPackageSync as aQ,
+  startPackageFirewallConnect as aR,
+  openPackageFirewallShell as aS,
+  EntitlementNotice as aT,
+  fetchSupplyChainBundle as aU,
+  HiMiniDocumentMagnifyingGlass as aV,
+  HiMiniShieldExclamation as aW,
+  HiMiniComputerDesktop as aX,
+  HiMiniArrowDown as aY,
+  HiMiniArrowUp as aZ,
+  HiMiniArrowRight as a_,
   resetSettings as aa,
   setupDesktopNotifications as ab,
   Tag as ac,
@@ -26379,18 +26383,17 @@ export {
   clearLabelForScope as ay,
   formatHarnessCommand as az,
   EmptyState as b,
-  HiMiniCloudArrowUp as b0,
-  HiMiniInformationCircle as b1,
-  fetchReceipts as b2,
-  runAuditRemediation as b3,
-  HiMiniDocumentText as b4,
-  guardAwareHref as b5,
-  HiMiniSignal as b6,
-  savePolicyDecision as b7,
-  HiMiniChevronLeft as b8,
-  policyActionLabel as b9,
-  scopeLabel as ba,
-  HiMiniPlus as bb,
+  HiMiniInformationCircle as b0,
+  fetchReceipts as b1,
+  runAuditRemediation as b2,
+  HiMiniDocumentText as b3,
+  guardAwareHref as b4,
+  HiMiniSignal as b5,
+  savePolicyDecision as b6,
+  HiMiniChevronLeft as b7,
+  policyActionLabel as b8,
+  scopeLabel as b9,
+  HiMiniPlus as ba,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,
