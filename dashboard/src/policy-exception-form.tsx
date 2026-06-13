@@ -9,10 +9,22 @@ import type { DecisionScope, GuardPolicyDecision } from "./guard-types";
 const ACTION_FAMILIES = [
   { id: "package-request", label: "Package installs", example: "npm, pip, pnpm installs" },
   { id: "tool-action", label: "Shell and tool commands", example: "terminal commands agents run" },
-  { id: "tool-output", label: "Command output", example: "reading prior command output" },
+  {
+    id: "tool-output",
+    label: "Command output",
+    example: "reading prior command output",
+    artifactScopeOnly: true as const,
+  },
   { id: "prompt", label: "Prompt submissions", example: "prompts sent to the model" },
   { id: "file-read", label: "File reads", example: "reading local files" },
 ] as const;
+
+type ActionFamilyId = (typeof ACTION_FAMILIES)[number]["id"];
+
+function familySupportsHarnessOrWorkspaceScope(familyId: ActionFamilyId): boolean {
+  const family = ACTION_FAMILIES.find((entry) => entry.id === familyId);
+  return family !== undefined && !("artifactScopeOnly" in family && family.artifactScopeOnly);
+}
 
 const RESPONSE_OPTIONS = [
   { id: "warn", label: "Warn me", description: "Show a warning but still allow unless I block it." },
@@ -52,6 +64,20 @@ export function PolicyExceptionForm({ policies, onSaved, onCancel }: PolicyExcep
     const defaults = ["codex", "cursor", "claude-code", "opencode", "copilot", "kimi"];
     return [...new Set([...fromPolicies, ...defaults])].sort();
   }, [policies]);
+
+  const scopeOptions = useMemo(() => {
+    if (familySupportsHarnessOrWorkspaceScope(family as ActionFamilyId)) {
+      return SCOPE_OPTIONS;
+    }
+    return SCOPE_OPTIONS.filter((option) => option.value === "artifact");
+  }, [family]);
+
+  const handleFamilySelect = useCallback((familyId: ActionFamilyId) => {
+    setFamily(familyId);
+    if (!familySupportsHarnessOrWorkspaceScope(familyId)) {
+      setScope("artifact");
+    }
+  }, []);
 
   const workspaceOptions = useMemo(() => {
     const fromPolicies = policies
@@ -207,7 +233,7 @@ export function PolicyExceptionForm({ policies, onSaved, onCancel }: PolicyExcep
               <button
                 key={option.id}
                 type="button"
-                onClick={() => setFamily(option.id)}
+                onClick={() => handleFamilySelect(option.id)}
                 aria-pressed={family === option.id}
                 className={`rounded-xl border px-3 py-3 text-left transition-colors ${
                   family === option.id
@@ -228,7 +254,7 @@ export function PolicyExceptionForm({ policies, onSaved, onCancel }: PolicyExcep
           <div className="space-y-2">
             <p className="text-sm font-medium text-brand-dark">How far should this reach?</p>
             <div className="grid gap-2">
-              {SCOPE_OPTIONS.map((option) => (
+              {scopeOptions.map((option) => (
                 <button
                   key={option.value}
                   type="button"

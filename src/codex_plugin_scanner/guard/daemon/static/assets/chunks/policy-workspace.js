@@ -2,10 +2,19 @@ import { r as reactExports, b7 as savePolicyDecision, j as jsxRuntimeExports, S 
 const ACTION_FAMILIES = [
   { id: "package-request", label: "Package installs", example: "npm, pip, pnpm installs" },
   { id: "tool-action", label: "Shell and tool commands", example: "terminal commands agents run" },
-  { id: "tool-output", label: "Command output", example: "reading prior command output" },
+  {
+    id: "tool-output",
+    label: "Command output",
+    example: "reading prior command output",
+    artifactScopeOnly: true
+  },
   { id: "prompt", label: "Prompt submissions", example: "prompts sent to the model" },
   { id: "file-read", label: "File reads", example: "reading local files" }
 ];
+function familySupportsHarnessOrWorkspaceScope(familyId) {
+  const family = ACTION_FAMILIES.find((entry) => entry.id === familyId);
+  return family !== void 0 && !("artifactScopeOnly" in family && family.artifactScopeOnly);
+}
 const RESPONSE_OPTIONS = [
   { id: "warn", label: "Warn me", description: "Show a warning but still allow unless I block it." },
   { id: "require-reapproval", label: "Require review each time", description: "Never auto-allow; always ask in Inbox." },
@@ -33,6 +42,18 @@ function PolicyExceptionForm({ policies, onSaved, onCancel }) {
     const defaults = ["codex", "cursor", "claude-code", "opencode", "copilot", "kimi"];
     return [.../* @__PURE__ */ new Set([...fromPolicies, ...defaults])].sort();
   }, [policies]);
+  const scopeOptions = reactExports.useMemo(() => {
+    if (familySupportsHarnessOrWorkspaceScope(family)) {
+      return SCOPE_OPTIONS;
+    }
+    return SCOPE_OPTIONS.filter((option) => option.value === "artifact");
+  }, [family]);
+  const handleFamilySelect = reactExports.useCallback((familyId) => {
+    setFamily(familyId);
+    if (!familySupportsHarnessOrWorkspaceScope(familyId)) {
+      setScope("artifact");
+    }
+  }, []);
   const workspaceOptions = reactExports.useMemo(() => {
     const fromPolicies = policies.map((policy) => policy.workspace).filter((value) => Boolean(value?.trim()));
     return [...new Set(fromPolicies)].sort();
@@ -162,7 +183,7 @@ function PolicyExceptionForm({ policies, onSaved, onCancel }) {
         "button",
         {
           type: "button",
-          onClick: () => setFamily(option.id),
+          onClick: () => handleFamilySelect(option.id),
           "aria-pressed": family === option.id,
           className: `rounded-xl border px-3 py-3 text-left transition-colors ${family === option.id ? "border-brand-blue bg-brand-blue/[0.06]" : "border-slate-200 hover:border-slate-300"}`,
           children: [
@@ -176,7 +197,7 @@ function PolicyExceptionForm({ policies, onSaved, onCancel }) {
     step === "response" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "How far should this reach?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2", children: SCOPE_OPTIONS.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2", children: scopeOptions.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
           {
             type: "button",
