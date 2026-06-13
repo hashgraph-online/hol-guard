@@ -211,27 +211,37 @@ class AntigravityHarnessAdapter(HarnessAdapter):
             if manifest_payload:
                 self._append_found_path(found_paths, manifest_path)
             publisher = (
-                manifest_payload.get("publisher") if isinstance(manifest_payload.get("publisher"), str) else None
+                manifest_payload.get("publisher")
+                if manifest_payload is not None and isinstance(manifest_payload.get("publisher"), str)
+                else None
             )
             if publisher is None and isinstance(metadata, dict):
                 publisher_display_name = metadata.get("publisherDisplayName")
                 if isinstance(publisher_display_name, str):
                     publisher = publisher_display_name
+            display_name = (
+                manifest_payload.get("displayName")
+                if manifest_payload is not None and isinstance(manifest_payload.get("displayName"), str)
+                else None
+            )
+            manifest_description = (
+                manifest_payload.get("description")
+                if manifest_payload is not None and isinstance(manifest_payload.get("description"), str)
+                else None
+            )
             artifacts.append(
                 GuardArtifact(
                     artifact_id=f"antigravity:global:{extension_id}",
-                    name=extension_id,
+                    name=display_name or extension_id,
                     harness=self.harness,
                     artifact_type="extension",
                     source_scope="global",
                     config_path=str(manifest_path if manifest_payload else Path(location_path)),
                     publisher=publisher,
                     metadata={
-                        "display_name": (
-                            manifest_payload.get("displayName")
-                            if isinstance(manifest_payload.get("displayName"), str)
-                            else None
-                        )
+                        "display_name": display_name,
+                        "description": manifest_description,
+                        "extension_id": extension_id,
                     },
                 )
             )
