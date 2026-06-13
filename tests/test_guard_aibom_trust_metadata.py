@@ -274,6 +274,47 @@ def test_inventory_snapshot_attaches_local_skill_trust_resolution(tmp_path: Path
     assert "local_baseline" in _trust_layer_types(skill_item.metadata)
 
 
+def test_inventory_snapshot_attaches_local_standalone_skill_trust_resolution(tmp_path: Path) -> None:
+    skill_dir = tmp_path / ".agents" / "skills" / "adapt"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: adapt\ndescription: Responsive helper\nrepo: https://github.com/hashgraph-online/test\n---\n",
+        encoding="utf-8",
+    )
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(str(skill_dir / "SKILL.md"),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:global:skill:.agents/skills:adapt",
+                name="adapt",
+                harness="codex",
+                artifact_type="skill",
+                source_scope="global",
+                config_path=str(skill_dir / "SKILL.md"),
+                metadata={"skill_root": ".agents/skills"},
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=tmp_path,
+    )
+    skill_item = next(item for item in snapshot.items if item.item_kind == "skill")
+    trust = skill_item.metadata.get("trustResolution")
+    assert isinstance(trust, dict)
+    assert trust.get("resolutionSource") == "local"
+    metadata = trust.get("metadata")
+    assert isinstance(metadata, dict)
+    assert metadata.get("trustDomain") == "skills"
+    assert "local_baseline" in _trust_layer_types(skill_item.metadata)
+
+
 def test_inventory_snapshot_attaches_local_mcp_trust_resolution(tmp_path: Path) -> None:
     plugin_dir = tmp_path
     _write_good_plugin(plugin_dir)
@@ -313,6 +354,48 @@ def test_inventory_snapshot_attaches_local_mcp_trust_resolution(tmp_path: Path) 
         generated_at="2026-06-10T12:00:00+00:00",
         home_dir=tmp_path,
         workspace_dir=plugin_dir,
+    )
+    mcp_item = next(item for item in snapshot.items if item.item_kind == "mcp_server")
+    trust = mcp_item.metadata.get("trustResolution")
+    assert isinstance(trust, dict)
+    assert trust.get("resolutionSource") == "local"
+    metadata = trust.get("metadata")
+    assert isinstance(metadata, dict)
+    assert metadata.get("trustDomain") == "mcp"
+    assert "local_baseline" in _trust_layer_types(mcp_item.metadata)
+
+
+def test_inventory_snapshot_attaches_local_config_defined_mcp_trust_resolution(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        '[mcp_servers.demo]\ncommand = "node"\nargs = ["server.js"]\n',
+        encoding="utf-8",
+    )
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(str(config_path),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:global:mcp:demo",
+                name="demo",
+                harness="codex",
+                artifact_type="mcp_server",
+                source_scope="global",
+                config_path=str(config_path),
+                command="node",
+                args=("server.js",),
+                transport="stdio",
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=tmp_path,
     )
     mcp_item = next(item for item in snapshot.items if item.item_kind == "mcp_server")
     trust = mcp_item.metadata.get("trustResolution")

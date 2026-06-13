@@ -12,6 +12,7 @@ from .trust_helpers import (
     check_percent,
     is_https_url,
     load_mcp_payload,
+    round_trust_score,
 )
 from .trust_models import TrustDomainScore
 from .trust_specs import MCP_TRUST_SPEC
@@ -34,22 +35,23 @@ def build_mcp_domain(plugin_dir: Path, categories: tuple[CategoryResult, ...]) -
         if remote_entries
         else True
     )
-    local_commands_valid = (
-        all(
-            isinstance(config, dict)
-            and isinstance(config.get("command"), str)
-            and bool(config.get("command"))
-            and (
-                "args" not in config
-                or (
-                    isinstance(config.get("args"), list) and all(isinstance(value, str) for value in config.get("args"))
-                )
+    local_commands_valid = True
+    if local_servers:
+        for config in local_servers.values():
+            if not isinstance(config, dict):
+                local_commands_valid = False
+                break
+            args_value = config.get("args")
+            args_valid = args_value is None or (
+                isinstance(args_value, list) and all(isinstance(value, str) for value in args_value)
             )
-            for config in local_servers.values()
-        )
-        if local_servers
-        else True
-    )
+            if not (
+                isinstance(config.get("command"), str)
+                and bool(config.get("command"))
+                and args_valid
+            ):
+                local_commands_valid = False
+                break
     config_shape = payload_state.parse_valid and (
         (remotes is None or isinstance(remotes, list)) and (servers is None or isinstance(servers, dict))
     )
@@ -109,6 +111,118 @@ def build_mcp_domain(plugin_dir: Path, categories: tuple[CategoryResult, ...]) -
                     "The top-level MCP config containers match the expected shape."
                     if config_shape
                     else "The MCP config containers do not match the expected shape."
+                )
+            },
+        ),
+    )
+    return build_domain_score(domain="mcp", spec=MCP_TRUST_SPEC, adapters=adapters)
+
+
+def build_mcp_surface_domain(
+    *,
+    name: str | None,
+    command: str | None,
+    url: str | None,
+    transport: str | None,
+) -> TrustDomainScore | None:
+    normalized_name = name.strip() if isinstance(name, str) else ""
+    normalized_command = command.strip() if isinstance(command, str) else ""
+    normalized_url = url.strip() if isinstance(url, str) else ""
+    normalized_transport = transport.strip().lower() if isinstance(transport, str) else ""
+
+    has_command = bool(normalized_command)
+    has_endpoint = bool(normalized_url)
+    has_surface = bool(normalized_name) or has_command or has_endpoint
+    if not has_surface:
+        return None
+
+    secure_endpoint = is_https_url(normalized_url)
+    stdio_like = normalized_transport == "stdio"
+    transport_declared = bool(normalized_transport)
+
+    if stdio_like and has_command:
+        execution_score = 90.0
+    elif secure_endpoint:
+        execution_score = 80.0
+    elif has_endpoint:
+        execution_score = 35.0
+    else:
+        execution_score = 45.0 if has_command else 0.0
+
+    if stdio_like:
+        transport_score = 100.0
+    elif secure_endpoint:
+        transport_score = 85.0
+    elif has_endpoint:
+        transport_score = 25.0
+    else:
+        transport_score = 40.0 if transport_declared else 0.0
+
+    if transport_declared and (has_command or has_endpoint):
+        config_shape_score = 100.0
+    elif has_command or has_endpoint:
+        config_shape_score = 60.0
+    else:
+        config_shape_score = 0.0
+
+    spec_by_id = {adapter.adapter_id: adapter for adapter in MCP_TRUST_SPEC.adapters}
+    adapters = (
+        build_adapter_score(
+            spec_by_id["verification.config-integrity"],
+            component_scores={"score": 100.0} if has_command or has_endpoint else None,
+            rationales={
+                "score": (
+                    "The MCP server definition declares a concrete command or endpoint in the agent config."
+                    if has_command or has_endpoint
+                    else "No command or endpoint could be recovered from the MCP server definition."
+                )
+            },
+        ),
+        build_adapter_score(
+            spec_by_id["verification.execution-safety"],
+            component_scores={"score": round_trust_score(execution_score)} if execution_score > 0 else None,
+            rationales={
+                "score": (
+                    "Execution safety was inferred from the MCP transport and local command/endpoint shape."
+                )
+            },
+        ),
+        build_adapter_score(
+            spec_by_id["verification.transport-security"],
+            component_scores={"score": round_trust_score(transport_score)} if transport_score > 0 else None,
+            rationales={
+                "score": "Transport security was inferred from the MCP transport and endpoint protocol."
+            },
+        ),
+        build_adapter_score(
+            spec_by_id["metadata.server-naming"],
+            component_scores={"score": 100.0} if normalized_name else None,
+            rationales={
+                "score": (
+                    "The MCP server definition provides an explicit server name."
+                    if normalized_name
+                    else "No MCP server name was available from the agent configuration."
+                )
+            },
+        ),
+        build_adapter_score(
+            spec_by_id["metadata.command-or-endpoint"],
+            component_scores={"score": 100.0} if has_command or has_endpoint else None,
+            rationales={
+                "score": (
+                    "The MCP server definition includes a concrete command or endpoint."
+                    if has_command or has_endpoint
+                    else "The MCP server definition is missing both command and endpoint details."
+                )
+            },
+        ),
+        build_adapter_score(
+            spec_by_id["metadata.config-shape"],
+            component_scores={"score": round_trust_score(config_shape_score)} if config_shape_score > 0 else None,
+            rationales={
+                "score": (
+                    "The MCP server definition has enough structure to infer command, "
+                    "endpoint, and transport shape."
                 )
             },
         ),

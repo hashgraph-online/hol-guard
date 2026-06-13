@@ -10,7 +10,7 @@ from typing import Literal
 from ..checks.skill_security import resolve_skill_security_context
 from ..models import ScanOptions
 from ..trust_instruction_scoring import build_instruction_domain
-from ..trust_mcp_scoring import build_mcp_domain
+from ..trust_mcp_scoring import build_mcp_domain, build_mcp_surface_domain
 from ..trust_models import TrustAdapterScore, TrustComponentScore, TrustDomainScore
 from ..trust_plugin_scoring import build_plugin_domain
 from ..trust_skill_scoring import build_skill_domain
@@ -137,7 +137,12 @@ def _local_trust_domain_for_artifact(
         context = resolve_skill_security_context(trust_root, _INVENTORY_TRUST_SCAN_OPTIONS)
         return build_skill_domain(trust_root, context)
     if item_kind == "mcp_server":
-        return build_mcp_domain(trust_root, ())
+        return build_mcp_domain(trust_root, ()) or build_mcp_surface_domain(
+            name=getattr(artifact, "name", None),
+            command=getattr(artifact, "command", None),
+            url=getattr(artifact, "url", None),
+            transport=getattr(artifact, "transport", None),
+        )
     if item_kind in {"overlay", "policy", "prompt_pack"}:
         role = metadata.get("instructionRole")
         normalized_role = role if isinstance(role, str) and role else "unknown_instruction"

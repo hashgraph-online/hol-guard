@@ -22,16 +22,17 @@ from .trust_specs import SKILL_TRUST_SPEC
 
 
 def _skill_files(plugin_dir: Path, manifest: dict[str, object] | None) -> tuple[Path, ...]:
+    standalone_skill = plugin_dir / "SKILL.md"
     if manifest is None:
-        return ()
+        return (standalone_skill,) if standalone_skill.is_file() else ()
     skills_root = manifest.get("skills")
     if not isinstance(skills_root, str) or not skills_root.strip():
-        return ()
+        return (standalone_skill,) if standalone_skill.is_file() else ()
     if not is_safe_relative_path(plugin_dir, skills_root):
-        return ()
+        return (standalone_skill,) if standalone_skill.is_file() else ()
     skills_dir = plugin_dir / skills_root
     if not skills_dir.is_dir():
-        return ()
+        return (standalone_skill,) if standalone_skill.is_file() else ()
     return iter_safe_matching_files(plugin_dir, skills_dir, "**/SKILL.md")
 
 
@@ -124,6 +125,22 @@ def build_skill_domain(
 
     frontmatters = tuple(payload for payload in (parse_skill_frontmatter(path) for path in skill_files) if payload)
     normalized = _normalized_skill_metadata(manifest, frontmatters)
+    raw_descriptions = normalized.get("descriptions")
+    descriptions = (
+        tuple(description for description in raw_descriptions if isinstance(description, str))
+        if isinstance(raw_descriptions, tuple)
+        else ()
+    )
+    raw_tags = normalized.get("tags")
+    tags = tuple(tag for tag in raw_tags if isinstance(tag, str)) if isinstance(raw_tags, tuple) else ()
+    raw_languages = normalized.get("languages")
+    languages = (
+        tuple(language for language in raw_languages if isinstance(language, str))
+        if isinstance(raw_languages, tuple)
+        else ()
+    )
+    repository = str(normalized.get("repository") or "")
+    homepage = str(normalized.get("homepage") or "")
     has_author = (
         isinstance(manifest, dict)
         and isinstance(manifest.get("author"), dict)
@@ -133,15 +150,15 @@ def build_skill_domain(
     all_frontmatter_valid = len(frontmatters) == len(skill_files) and all(
         has_required_skill_frontmatter(payload) for payload in frontmatters
     )
-    repo_host = url_host(str(normalized["repository"]) or None)
-    home_host = url_host(str(normalized["homepage"]) or None)
+    repo_host = url_host(repository or None)
+    home_host = url_host(homepage or None)
     description_length = (
-        sum(len(description) for description in normalized["descriptions"]) / len(normalized["descriptions"])
-        if normalized["descriptions"]
+        sum(len(description) for description in descriptions) / len(descriptions)
+        if descriptions
         else 0
     )
-    tag_count = len(normalized["tags"])
-    language_count = len(normalized["languages"])
+    tag_count = len(tags)
+    language_count = len(languages)
 
     adapter_inputs: dict[str, tuple[dict[str, float] | None, dict[str, str], bool]] = {
         "verification.review-status": (
