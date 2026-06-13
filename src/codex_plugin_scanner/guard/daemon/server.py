@@ -2252,8 +2252,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
         response_status = "completed"
         if operation == "audit":
-            exit_code = result.get("exit_code")
-            if isinstance(exit_code, int) and exit_code != 0:
+            audit_status = result.get("audit_status")
+            if audit_status == "incomplete":
                 response_status = "incomplete"
         response_payload: dict[str, object] = {
             "entitlement": entitlement,

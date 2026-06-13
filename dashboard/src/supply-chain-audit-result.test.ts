@@ -3,7 +3,6 @@ import {
   resolveSupplyChainAuditFailure,
 } from "./supply-chain-audit-result";
 import { normalizeSupplyChainAuditSnapshot } from "./supply-chain-audit-normalize";
-import { parsePackageFirewallActionResult } from "./supply-chain-firewall-action-result";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -18,7 +17,6 @@ const incompletePayload = {
   lockfile_paths: ["package-lock.json"],
   audit_outcome: "sync_required",
   audit_status: "incomplete",
-  exit_code: 1,
   message: "Sync Guard supply-chain intel on this device before auditing workspace packages.",
   supply_chain: {
     status: "sync_required",
@@ -39,11 +37,12 @@ assert(
   "incomplete audit does not hydrate a clean findings snapshot",
 );
 
-const parsed = parsePackageFirewallActionResult("audit", { result: incompletePayload });
-assert(parsed?.tone === "warning", "incomplete audit action result uses warning tone");
 assert(
-  parsed?.summary === "Workspace audit did not complete.",
-  "incomplete audit action result summary is explicit",
+  isSupplyChainAuditIncomplete({
+    exit_code: 2,
+    evaluation: { decision: "block" },
+  }) === false,
+  "blocked completed audits with non-zero exit code stay complete",
 );
 
 console.log("supply-chain-audit-result.test.ts: all assertions passed");

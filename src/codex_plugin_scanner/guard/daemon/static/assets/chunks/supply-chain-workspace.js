@@ -261,7 +261,6 @@ function derivePackageWorkbenchFromReceipts(receipts) {
       {
         generated_at: receipt.timestamp,
         audit_status: evidenceRaw.audit_status,
-        exit_code: evidenceRaw.audit_status === "incomplete" ? 1 : 0,
         evaluation: {
           decision: evidenceRaw.audit_decision,
           packages: evidenceRaw.package_findings
