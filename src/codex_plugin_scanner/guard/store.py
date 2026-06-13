@@ -5108,14 +5108,6 @@ def _validate_scoped_policy_artifact_target(scope: str, artifact_id: str | None)
         raise ValueError(msg)
 
 
-def scoped_policy_artifact_target_is_valid(scope: str, artifact_id: str | None) -> bool:
-    try:
-        _validate_scoped_policy_artifact_target(scope, artifact_id)
-    except ValueError:
-        return False
-    return True
-
-
 def _artifact_family_key(artifact_id: str | None) -> str | None:
     if artifact_id is None or not artifact_id.strip():
         return None

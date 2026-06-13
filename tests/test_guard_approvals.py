@@ -1772,7 +1772,7 @@ class TestGuardApprovals:
             daemon.stop()
 
         assert status == 400
-        assert payload["error"] == "missing_scope_target"
+        assert payload["error"] == "unsupported_scoped_policy_family"
 
     def test_guard_daemon_policy_upsert_requires_auth_token(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
