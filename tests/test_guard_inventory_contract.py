@@ -710,3 +710,23 @@ def test_inventory_snapshot_maps_cisco_findings_to_redacted_inventory_evidence(t
     assert payload["sources"][-1]["sourceType"] == "scanner"
     assert "fixture_secretvalue" not in encoded
     assert str(tmp_path) not in encoded
+
+
+def test_inventory_snapshot_preserves_antigravity_agent_type(tmp_path: Path) -> None:
+    detection = HarnessDetection(
+        harness="antigravity",
+        installed=True,
+        command_available=True,
+        config_paths=(str(tmp_path / ".gemini" / "antigravity" / "mcp_config.json"),),
+        artifacts=(),
+        warnings=(),
+    )
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-06-13T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    payload = cast(dict[str, Any], serialize_inventory_snapshot(snapshot))
+
+    assert snapshot.agent_type == "antigravity"
+    assert payload["agentType"] == "antigravity"

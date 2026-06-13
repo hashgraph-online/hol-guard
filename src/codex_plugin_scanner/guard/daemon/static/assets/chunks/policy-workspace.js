@@ -1,317 +1,4 @@
-import { r as reactExports, bd as savePolicyDecision, j as jsxRuntimeExports, S as SectionLabel, h as harnessDisplayName, A as ActionButton, be as HiMiniChevronLeft, y as HiMiniChevronRight, bf as policyActionLabel, bg as scopeLabel, b as EmptyState, ac as Tag, p as HiMiniChevronUp, q as HiMiniChevronDown, B as Badge, m as formatRelativeTime, bb as guardAwareHref, b6 as HiMiniCloudArrowUp, ax as HiMiniTrash, ad as HiMiniMagnifyingGlass, bh as HiMiniPlus } from "../guard-dashboard.js";
-const ACTION_FAMILIES = [
-  { id: "package-request", label: "Package installs", example: "npm, pip, pnpm installs" },
-  { id: "tool-action", label: "Shell and tool commands", example: "terminal commands agents run" },
-  {
-    id: "tool-output",
-    label: "Command output",
-    example: "reading prior command output",
-    artifactScopeOnly: true
-  },
-  { id: "prompt", label: "Prompt submissions", example: "prompts sent to the model" },
-  { id: "file-read", label: "File reads", example: "reading local files" }
-];
-function familySupportsHarnessOrWorkspaceScope(familyId) {
-  const family = ACTION_FAMILIES.find((entry) => entry.id === familyId);
-  return family !== void 0 && !("artifactScopeOnly" in family && family.artifactScopeOnly);
-}
-const RESPONSE_OPTIONS = [
-  { id: "warn", label: "Warn me", description: "Show a warning but still allow unless I block it." },
-  { id: "require-reapproval", label: "Require review each time", description: "Never auto-allow; always ask in Inbox." },
-  { id: "block", label: "Block", description: "Stop this action type in the chosen scope." },
-  { id: "allow", label: "Allow", description: "Skip future prompts for this action in the chosen scope." }
-];
-const SCOPE_OPTIONS = [
-  { value: "workspace", label: "This project", description: "Same action in the current project folder." },
-  { value: "harness", label: "This app", description: "Matching actions anywhere in the selected app." },
-  { value: "artifact", label: "One specific action", description: "Only the exact fingerprint you provide." }
-];
-function PolicyExceptionForm({ policies, onSaved, onCancel }) {
-  const [step, setStep] = reactExports.useState("app");
-  const [harness, setHarness] = reactExports.useState("");
-  const [family, setFamily] = reactExports.useState(ACTION_FAMILIES[0].id);
-  const [scope, setScope] = reactExports.useState("workspace");
-  const [response, setResponse] = reactExports.useState("warn");
-  const [reason, setReason] = reactExports.useState("");
-  const [artifactId, setArtifactId] = reactExports.useState("");
-  const [workspace, setWorkspace] = reactExports.useState("");
-  const [submitting, setSubmitting] = reactExports.useState(false);
-  const [error, setError] = reactExports.useState(null);
-  const harnessOptions = reactExports.useMemo(() => {
-    const fromPolicies = policies.map((policy) => policy.harness).filter(Boolean);
-    const defaults = ["codex", "cursor", "claude-code", "opencode", "copilot", "kimi"];
-    return [.../* @__PURE__ */ new Set([...fromPolicies, ...defaults])].sort();
-  }, [policies]);
-  const scopeOptions = reactExports.useMemo(() => {
-    if (familySupportsHarnessOrWorkspaceScope(family)) {
-      return SCOPE_OPTIONS;
-    }
-    return SCOPE_OPTIONS.filter((option) => option.value === "artifact");
-  }, [family]);
-  const handleFamilySelect = reactExports.useCallback((familyId) => {
-    setFamily(familyId);
-    if (!familySupportsHarnessOrWorkspaceScope(familyId)) {
-      setScope("artifact");
-    }
-  }, []);
-  const workspaceOptions = reactExports.useMemo(() => {
-    const fromPolicies = policies.map((policy) => policy.workspace).filter((value) => Boolean(value?.trim()));
-    return [...new Set(fromPolicies)].sort();
-  }, [policies]);
-  const handleWorkspaceSelect = reactExports.useCallback((event) => {
-    setWorkspace(event.target.value);
-  }, []);
-  const handleHarnessChange = reactExports.useCallback((event) => {
-    setHarness(event.target.value);
-  }, []);
-  const handleReasonChange = reactExports.useCallback((event) => {
-    setReason(event.target.value);
-  }, []);
-  const handleArtifactChange = reactExports.useCallback((event) => {
-    setArtifactId(event.target.value);
-  }, []);
-  const handleWorkspaceChange = reactExports.useCallback((event) => {
-    setWorkspace(event.target.value);
-  }, []);
-  const resolvedArtifactId = reactExports.useMemo(() => {
-    if (scope === "artifact") {
-      return artifactId.trim() || null;
-    }
-    return `family:${family}`;
-  }, [scope, artifactId, family]);
-  const canContinue = reactExports.useMemo(() => {
-    if (step === "app") {
-      return harness.trim().length > 0;
-    }
-    if (step === "action") {
-      return family.trim().length > 0;
-    }
-    if (step === "response") {
-      if (scope === "artifact" && !artifactId.trim()) {
-        return false;
-      }
-      if (scope === "workspace" && !workspace.trim()) {
-        return false;
-      }
-      return response.trim().length > 0 && reason.trim().length > 0;
-    }
-    return true;
-  }, [step, harness, family, scope, artifactId, workspace, response, reason]);
-  const handleBack = reactExports.useCallback(() => {
-    setError(null);
-    if (step === "action") {
-      setStep("app");
-      return;
-    }
-    if (step === "response") {
-      setStep("action");
-      return;
-    }
-    if (step === "review") {
-      setStep("response");
-    }
-  }, [step]);
-  const handleNext = reactExports.useCallback(() => {
-    setError(null);
-    if (step === "app") {
-      setStep("action");
-      return;
-    }
-    if (step === "action") {
-      setStep("response");
-      return;
-    }
-    if (step === "response") {
-      setStep("review");
-    }
-  }, [step]);
-  const handleSubmit = reactExports.useCallback(
-    async (event) => {
-      event.preventDefault();
-      if (!resolvedArtifactId) {
-        setError("Choose what this exception should apply to.");
-        return;
-      }
-      setSubmitting(true);
-      setError(null);
-      try {
-        await savePolicyDecision({
-          harness,
-          scope,
-          action: response,
-          artifact_id: resolvedArtifactId,
-          workspace: scope === "workspace" ? workspace.trim() : void 0,
-          reason: reason.trim()
-        });
-        onSaved();
-      } catch (submitError) {
-        const message = submitError instanceof Error ? submitError.message : "Could not save this exception.";
-        setError(message);
-      } finally {
-        setSubmitting(false);
-      }
-    },
-    [harness, scope, response, resolvedArtifactId, workspace, reason, onSaved]
-  );
-  const familyLabel = ACTION_FAMILIES.find((item) => item.id === family)?.label ?? family;
-  const responseLabel = RESPONSE_OPTIONS.find((item) => item.id === response)?.label ?? response;
-  const scopeLabelText = SCOPE_OPTIONS.find((item) => item.value === scope)?.label ?? scope;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { onSubmit: handleSubmit, className: "rounded-2xl border border-brand-blue/15 bg-white p-5 shadow-sm space-y-5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Create exception" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: "Tell Guard how to treat a class of actions before they run. You can change or remove exceptions later." })
-    ] }),
-    step === "app" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "exception-harness", className: "text-sm font-medium text-brand-dark", children: "Which app should this apply to?" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "select",
-        {
-          id: "exception-harness",
-          value: harness,
-          onChange: handleHarnessChange,
-          className: "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "Select an app" }),
-            harnessOptions.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: option, children: harnessDisplayName(option) }, option))
-          ]
-        }
-      )
-    ] }) : null,
-    step === "action" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "What kind of action?" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2 sm:grid-cols-2", children: ACTION_FAMILIES.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          type: "button",
-          onClick: () => handleFamilySelect(option.id),
-          "aria-pressed": family === option.id,
-          className: `rounded-xl border px-3 py-3 text-left transition-colors ${family === option.id ? "border-brand-blue bg-brand-blue/[0.06]" : "border-slate-200 hover:border-slate-300"}`,
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: option.label }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-500", children: option.example })
-          ]
-        },
-        option.id
-      )) })
-    ] }) : null,
-    step === "response" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "How far should this reach?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2", children: scopeOptions.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            type: "button",
-            onClick: () => setScope(option.value),
-            "aria-pressed": scope === option.value,
-            className: `rounded-xl border px-3 py-2.5 text-left ${scope === option.value ? "border-brand-blue bg-brand-blue/[0.06]" : "border-slate-200"}`,
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: option.label }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: option.description })
-            ]
-          },
-          option.value
-        )) })
-      ] }),
-      scope === "workspace" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1.5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "exception-workspace", className: "text-sm font-medium text-brand-dark", children: "Which project folder?" }),
-        workspaceOptions.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "select",
-          {
-            id: "exception-workspace",
-            value: workspace,
-            onChange: handleWorkspaceSelect,
-            className: "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "Select a remembered project" }),
-              workspaceOptions.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: option, children: option.startsWith("workspace:") ? "This project (from a prior approval)" : option }, option))
-            ]
-          }
-        ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            id: "exception-workspace",
-            type: "text",
-            value: workspace,
-            onChange: handleWorkspaceChange,
-            placeholder: "/path/to/your/project",
-            className: "w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Guard matches the project folder where the agent runs. Pick one from your remembered rules, or paste a path." })
-      ] }) : null,
-      scope === "artifact" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1.5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "exception-artifact", className: "text-sm font-medium text-brand-dark", children: "Exact artifact id (from Inbox or Evidence)" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            id: "exception-artifact",
-            type: "text",
-            value: artifactId,
-            onChange: handleArtifactChange,
-            placeholder: "codex:project:tool-action:...",
-            className: "w-full rounded-xl border border-slate-200 px-3 py-2.5 font-mono text-xs focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-          }
-        )
-      ] }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "What should Guard do?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2 sm:grid-cols-2", children: RESPONSE_OPTIONS.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            type: "button",
-            onClick: () => setResponse(option.id),
-            "aria-pressed": response === option.id,
-            className: `rounded-xl border px-3 py-2.5 text-left ${response === option.id ? "border-brand-blue bg-brand-blue/[0.06]" : "border-slate-200"}`,
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: option.label }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: option.description })
-            ]
-          },
-          option.id
-        )) })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1.5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "exception-reason", className: "text-sm font-medium text-brand-dark", children: "Why are you adding this?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "textarea",
-          {
-            id: "exception-reason",
-            value: reason,
-            onChange: handleReasonChange,
-            rows: 3,
-            placeholder: "Example: Always warn before package installs in this repo.",
-            className: "w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-          }
-        )
-      ] })
-    ] }) : null,
-    step === "review" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-sm text-brand-dark space-y-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: responseLabel }),
-        " ",
-        familyLabel.toLowerCase(),
-        " in",
-        " ",
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: harnessDisplayName(harness) }),
-        " (",
-        scopeLabelText.toLowerCase(),
-        ")."
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-slate-600", children: reason.trim() })
-    ] }) : null,
-    error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-red-600", children: error }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2 pt-1", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "secondary", type: "button", onClick: step === "app" ? onCancel : handleBack, children: step === "app" ? "Cancel" : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronLeft, { className: "mr-1 h-4 w-4", "aria-hidden": "true" }),
-        "Back"
-      ] }) }),
-      step === "review" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", type: "submit", disabled: submitting, children: submitting ? "Saving…" : "Save exception" }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "primary", type: "button", onClick: handleNext, disabled: !canContinue, children: [
-        "Continue",
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "ml-1 h-4 w-4", "aria-hidden": "true" })
-      ] })
-    ] })
-  ] });
-}
+import { bd as policyActionLabel, h as harnessDisplayName, be as scopeLabel, j as jsxRuntimeExports, r as reactExports, S as SectionLabel, A as ActionButton, b6 as HiMiniCloudArrowUp, b as EmptyState, ac as Tag, p as HiMiniChevronUp, q as HiMiniChevronDown, B as Badge, m as formatRelativeTime, bb as guardAwareHref, ax as HiMiniTrash, ad as HiMiniMagnifyingGlass } from "../guard-dashboard.js";
 const MATCHER_FAMILY_LABELS = {
   "package-request": "package install",
   "tool-action": "shell or tool command",
@@ -587,6 +274,68 @@ function resolveCloudPolicyBundleCopy(snapshot) {
     tone: "green"
   };
 }
+function resolveCloudExceptionsConnected(snapshot) {
+  return snapshot.cloud_state === "paired_active" || snapshot.cloud_state === "paired_waiting";
+}
+function PolicyCloudExceptionsTab({
+  snapshot,
+  onRequestCloudException
+}) {
+  const cloudControlsUrl = resolveCloudPolicyControlsUrl(snapshot);
+  const cloudConnected = resolveCloudExceptionsConnected(snapshot);
+  const connectUrl = snapshot.connect_url?.trim() || null;
+  const handleRequestCloudException = reactExports.useCallback(() => {
+    onRequestCloudException?.();
+  }, [onRequestCloudException]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-5 shadow-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Cloud risk acceptances" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/75", children: "Cloud exceptions are governed risk acceptances with an owner, approver, reason, expiry, and signed bundle. They are managed in Guard Cloud and synced to this device after approval." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-600", children: "Fast remembered approvals from Review stay on the Remembered rules tab. They are separate from Cloud exceptions." })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActionButton,
+        {
+          variant: "primary",
+          onClick: handleRequestCloudException,
+          disabled: !cloudConnected || onRequestCloudException === void 0,
+          children: "Request cloud exception"
+        }
+      ),
+      cloudControlsUrl ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: cloudControlsUrl, variant: "secondary", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloudArrowUp, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
+        "Open Guard Cloud"
+      ] }) : null,
+      !cloudConnected && connectUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: connectUrl, variant: "secondary", children: "Connect Guard Cloud" }) : null
+    ] }),
+    !cloudConnected ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EmptyState,
+      {
+        title: "Guard Cloud is not connected",
+        body: "Cloud exceptions are managed in Guard Cloud. Connect this device to request a risk acceptance or view synced exceptions here.",
+        tone: "teach"
+      }
+    ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EmptyState,
+      {
+        title: "No Cloud exceptions synced yet",
+        body: "Approved Cloud risk acceptances will appear here after Guard Cloud syncs a signed policy bundle to this device.",
+        tone: "teach"
+      }
+    )
+  ] });
+}
+function PolicyRememberedRulesHelper() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: "Remembered approvals vs Cloud exceptions" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "mt-2 list-disc space-y-1 pl-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Review and Inbox keep fast allow/block decisions for the work in front of you." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Remembered rules on this tab explain what Guard will do next time for matching actions." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Cloud exceptions are separate governed risk acceptances managed in Guard Cloud." })
+    ] })
+  ] });
+}
 const PAGE_SIZE = 30;
 function resolveActionTone(action) {
   if (action === "allow") {
@@ -774,7 +523,7 @@ function resolvePolicyViewLabel(view) {
     return "Remembered rules";
   }
   if (view === "exceptions") {
-    return "Exceptions";
+    return "Cloud exceptions";
   }
   return "Strict config";
 }
@@ -783,33 +532,25 @@ function PolicyWorkspace({
   snapshot,
   onClearPolicy,
   onOpenSettings,
-  onOpenInbox,
-  onRefreshPolicies
+  onOpenInbox
 }) {
   const [activeView, setActiveView] = reactExports.useState("rules");
   const [searchQuery, setSearchQuery] = reactExports.useState("");
   const [appFilter, setAppFilter] = reactExports.useState("");
   const [familyFilter, setFamilyFilter] = reactExports.useState("");
-  const [showExceptionForm, setShowExceptionForm] = reactExports.useState(false);
   const handleSearchChange = reactExports.useCallback((event) => {
     setSearchQuery(event.target.value);
   }, []);
   const handleViewChange = reactExports.useCallback((view) => {
     setActiveView(view);
-    setShowExceptionForm(false);
   }, []);
-  const handleOpenExceptionForm = reactExports.useCallback(() => {
-    setShowExceptionForm(true);
-  }, []);
-  const handleCloseExceptionForm = reactExports.useCallback(() => {
-    setShowExceptionForm(false);
-  }, []);
-  const handleExceptionSaved = reactExports.useCallback(() => {
-    setShowExceptionForm(false);
-    onRefreshPolicies?.();
-  }, [onRefreshPolicies]);
-  const modeCopy = reactExports.useMemo(() => resolveSecurityModeCopy(snapshot.security_level), [snapshot.security_level]);
   const cloudControlsUrl = reactExports.useMemo(() => resolveCloudPolicyControlsUrl(snapshot), [snapshot]);
+  const handleRequestCloudException = reactExports.useCallback(() => {
+    if (cloudControlsUrl) {
+      window.open(cloudControlsUrl, "_blank", "noopener,noreferrer");
+    }
+  }, [cloudControlsUrl]);
+  const modeCopy = reactExports.useMemo(() => resolveSecurityModeCopy(snapshot.security_level), [snapshot.security_level]);
   const cloudBundleCopy = reactExports.useMemo(() => resolveCloudPolicyBundleCopy(snapshot), [snapshot]);
   const filteredPolicies = reactExports.useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -855,10 +596,6 @@ function PolicyWorkspace({
     () => rememberedRules.filter((policy) => isCloudManagedPolicy(policy.source)),
     [rememberedRules]
   );
-  const exceptionPolicies = reactExports.useMemo(
-    () => filteredPolicies.filter((policy) => policy.action !== "allow" && policy.action !== "block").sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()),
-    [filteredPolicies]
-  );
   const appOptions = reactExports.useMemo(
     () => [...new Set(policies.map((policy) => policy.harness).filter(Boolean))].sort(),
     [policies]
@@ -892,6 +629,7 @@ function PolicyWorkspace({
       view
     )) }),
     activeView === "rules" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyRememberedRulesHelper, {}),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-1 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "h-4 w-4 shrink-0 text-slate-400", "aria-hidden": "true" }),
@@ -967,53 +705,7 @@ function PolicyWorkspace({
         }
       )
     ] }) : null,
-    activeView === "exceptions" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Exceptions change how Guard responds (warn, require review, block, or allow) without waiting for Inbox." }),
-        !showExceptionForm ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "primary", onClick: handleOpenExceptionForm, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
-          "New exception"
-        ] }) : null
-      ] }),
-      showExceptionForm ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-        PolicyExceptionForm,
-        {
-          policies,
-          onSaved: handleExceptionSaved,
-          onCancel: handleCloseExceptionForm
-        }
-      ) : null,
-      exceptionPolicies.length === 0 && !showExceptionForm ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-        EmptyState,
-        {
-          title: "No exceptions yet",
-          body: "Create one when you want Guard to warn, always review, block, or allow a whole class of actions.",
-          tone: "teach"
-        }
-      ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-        PolicyRuleList,
-        {
-          policies: exceptionPolicies,
-          cloudControlsUrl,
-          onClearPolicy,
-          emptyTitle: "No active exceptions",
-          emptyBody: "Saved warn, review, and custom rules appear here."
-        }
-      ),
-      cloudControlsUrl ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "a",
-        {
-          href: cloudControlsUrl,
-          target: "_blank",
-          rel: "noopener noreferrer",
-          className: "inline-flex items-center gap-1 text-sm font-medium text-brand-blue hover:underline",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloudArrowUp, { className: "h-4 w-4", "aria-hidden": "true" }),
-            "Manage team exceptions in Guard Cloud"
-          ]
-        }
-      ) : null
-    ] }) : null,
+    activeView === "exceptions" ? /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyCloudExceptionsTab, { snapshot, onRequestCloudException: handleRequestCloudException }) : null,
     activeView === "strict" ? /* @__PURE__ */ jsxRuntimeExports.jsx(StrictModeView, { snapshot, onOpenSettings, onOpenInbox }) : null
   ] });
 }
@@ -1039,5 +731,6 @@ export {
   PolicyWorkspace,
   groupPoliciesByHarness,
   resolveCloudPolicyBundleCopy,
+  resolvePolicyViewLabel,
   resolveSecurityModeCopy
 };

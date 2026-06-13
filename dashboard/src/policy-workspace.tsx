@@ -1,10 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
-import { HiMiniMagnifyingGlass, HiMiniCloudArrowUp, HiMiniPlus } from "react-icons/hi2";
-import { SectionLabel, Tag, ActionButton, EmptyState } from "./approval-center-primitives";
+import { HiMiniMagnifyingGlass } from "react-icons/hi2";
+import { SectionLabel, Tag, ActionButton } from "./approval-center-primitives";
 import { harnessDisplayName, policyActionLabel } from "./approval-center-utils";
 import type { GuardPolicyDecision, GuardRuntimeSnapshot } from "./guard-types";
-import { PolicyExceptionForm } from "./policy-exception-form";
+import {
+  PolicyCloudExceptionsTab,
+  PolicyRememberedRulesHelper,
+} from "./policy-cloud-exceptions-tab";
 import {
   isCloudManagedPolicy,
   resolveCloudBundleSurfaceClass,
@@ -16,19 +19,18 @@ import {
 } from "./policy-workspace-helpers";
 import {
   GroupedPolicySection,
-  PolicyRuleList,
   resolveFamilyFilterLabel,
   groupPoliciesByFamily,
 } from "./policy-workspace-views";
 
 export type PolicyPageView = "rules" | "exceptions" | "strict";
 
-function resolvePolicyViewLabel(view: PolicyPageView): string {
+export function resolvePolicyViewLabel(view: PolicyPageView): string {
   if (view === "rules") {
     return "Remembered rules";
   }
   if (view === "exceptions") {
-    return "Exceptions";
+    return "Cloud exceptions";
   }
   return "Strict config";
 }
@@ -54,13 +56,11 @@ export function PolicyWorkspace({
   onClearPolicy,
   onOpenSettings,
   onOpenInbox,
-  onRefreshPolicies,
 }: PolicyWorkspaceProps) {
   const [activeView, setActiveView] = useState<PolicyPageView>("rules");
   const [searchQuery, setSearchQuery] = useState("");
   const [appFilter, setAppFilter] = useState("");
   const [familyFilter, setFamilyFilter] = useState("");
-  const [showExceptionForm, setShowExceptionForm] = useState(false);
 
   const handleSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(event.target.value);
@@ -68,24 +68,17 @@ export function PolicyWorkspace({
 
   const handleViewChange = useCallback((view: PolicyPageView) => {
     setActiveView(view);
-    setShowExceptionForm(false);
   }, []);
 
-  const handleOpenExceptionForm = useCallback(() => {
-    setShowExceptionForm(true);
-  }, []);
+  const cloudControlsUrl = useMemo(() => resolveCloudPolicyControlsUrl(snapshot), [snapshot]);
 
-  const handleCloseExceptionForm = useCallback(() => {
-    setShowExceptionForm(false);
-  }, []);
-
-  const handleExceptionSaved = useCallback(() => {
-    setShowExceptionForm(false);
-    onRefreshPolicies?.();
-  }, [onRefreshPolicies]);
+  const handleRequestCloudException = useCallback(() => {
+    if (cloudControlsUrl) {
+      window.open(cloudControlsUrl, "_blank", "noopener,noreferrer");
+    }
+  }, [cloudControlsUrl]);
 
   const modeCopy = useMemo(() => resolveSecurityModeCopy(snapshot.security_level), [snapshot.security_level]);
-  const cloudControlsUrl = useMemo(() => resolveCloudPolicyControlsUrl(snapshot), [snapshot]);
   const cloudBundleCopy = useMemo(() => resolveCloudPolicyBundleCopy(snapshot), [snapshot]);
 
   const filteredPolicies = useMemo(() => {
@@ -141,14 +134,6 @@ export function PolicyWorkspace({
     [rememberedRules],
   );
 
-  const exceptionPolicies = useMemo(
-    () =>
-      filteredPolicies
-        .filter((policy) => policy.action !== "allow" && policy.action !== "block")
-        .sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()),
-    [filteredPolicies],
-  );
-
   const appOptions = useMemo(
     () => [...new Set(policies.map((policy) => policy.harness).filter(Boolean))].sort(),
     [policies],
@@ -202,6 +187,7 @@ export function PolicyWorkspace({
 
       {activeView === "rules" ? (
         <div className="space-y-4">
+          <PolicyRememberedRulesHelper />
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2">
               <HiMiniMagnifyingGlass className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
@@ -267,55 +253,7 @@ export function PolicyWorkspace({
       ) : null}
 
       {activeView === "exceptions" ? (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-slate-600">
-              Exceptions change how Guard responds (warn, require review, block, or allow) without waiting for Inbox.
-            </p>
-            {!showExceptionForm ? (
-              <ActionButton variant="primary" onClick={handleOpenExceptionForm}>
-                <HiMiniPlus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                New exception
-              </ActionButton>
-            ) : null}
-          </div>
-
-          {showExceptionForm ? (
-            <PolicyExceptionForm
-              policies={policies}
-              onSaved={handleExceptionSaved}
-              onCancel={handleCloseExceptionForm}
-            />
-          ) : null}
-
-          {exceptionPolicies.length === 0 && !showExceptionForm ? (
-            <EmptyState
-              title="No exceptions yet"
-              body="Create one when you want Guard to warn, always review, block, or allow a whole class of actions."
-              tone="teach"
-            />
-          ) : (
-            <PolicyRuleList
-              policies={exceptionPolicies}
-              cloudControlsUrl={cloudControlsUrl}
-              onClearPolicy={onClearPolicy}
-              emptyTitle="No active exceptions"
-              emptyBody="Saved warn, review, and custom rules appear here."
-            />
-          )}
-
-          {cloudControlsUrl ? (
-            <a
-              href={cloudControlsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-sm font-medium text-brand-blue hover:underline"
-            >
-              <HiMiniCloudArrowUp className="h-4 w-4" aria-hidden="true" />
-              Manage team exceptions in Guard Cloud
-            </a>
-          ) : null}
-        </div>
+        <PolicyCloudExceptionsTab snapshot={snapshot} onRequestCloudException={handleRequestCloudException} />
       ) : null}
 
       {activeView === "strict" ? (
