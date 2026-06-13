@@ -32,6 +32,14 @@ assert(
   "workspace keeps single audit findings workbench",
 );
 assert(
+  workspaceSource.includes('from "./supply-chain-workspace-hero-state"'),
+  "workspace imports supply chain hero state helpers",
+);
+assert(
+  workspaceSource.includes("resolveSupplyChainWorkspaceHero"),
+  "workspace resolves hero state for status header",
+);
+assert(
   !controlsSource.includes("NextActionHero"),
   "firewall controls drop duplicate next-step hero",
 );

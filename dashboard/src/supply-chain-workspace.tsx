@@ -32,6 +32,7 @@ import { SupplyChainCloudCapabilitiesPanel } from "./supply-chain-cloud-capabili
 import { PackageWorkbenchPanel } from "./package-workbench-panel";
 import { resolveSupplyChainIssues, type SupplyChainIssueAction } from "./supply-chain-issues";
 import { resolveSupplyChainAuditWorkspaceDir } from "./supply-chain-audit-workspace";
+import { resolveSupplyChainWorkspaceHero } from "./supply-chain-workspace-hero-state";
 import { SupplyChainStatusHeader } from "./supply-chain-status-header";
 import { SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout";
 
