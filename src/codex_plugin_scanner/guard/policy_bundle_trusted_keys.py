@@ -229,7 +229,6 @@ def validate_synced_policy_bundle(
         return None, rejection_reason, anchored_keys
     updated_keys = persistable_policy_bundle_keyring(
         anchored_keys=anchored_keys,
-        trusted_keys=trusted_keys,
         policy_bundle=validated_bundle,
     )
     return validated_bundle, None, updated_keys
@@ -238,7 +237,6 @@ def validate_synced_policy_bundle(
 def persistable_policy_bundle_keyring(
     *,
     anchored_keys: tuple[PolicyBundleVerificationKey, ...],
-    trusted_keys: tuple[PolicyBundleVerificationKey, ...],
     policy_bundle: dict[str, object],
 ) -> tuple[PolicyBundleVerificationKey, ...]:
     verifier = policy_bundle.get("verifier")
@@ -249,9 +247,7 @@ def persistable_policy_bundle_keyring(
     key_id = verifier.get("keyId")
     if not isinstance(key_id, str) or not key_id.strip():
         return anchored_keys
-    signing_key = resolve_policy_bundle_signing_key(key_id.strip(), trusted_keys)
+    signing_key = resolve_policy_bundle_signing_key(key_id.strip(), anchored_keys)
     if signing_key is None:
-        return anchored_keys
-    if not signing_key_is_trusted(signing_key, anchored_keys):
         return anchored_keys
     return merge_policy_bundle_trusted_keys(anchored_keys, (signing_key,))
