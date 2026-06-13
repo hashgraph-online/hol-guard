@@ -234,6 +234,7 @@ class GuardAgentInventoryItem:
     item_id: str
     item_kind: InventoryItemKind
     display_name: str
+    description: str
     source_fingerprint: str
     content_hash: str
     capability_categories: tuple[InventoryCapability, ...]
@@ -586,10 +587,24 @@ def _item_from_artifact(
         item_kind=item_kind,
         content_hash=content_hash,
     )
+    publisher = getattr(artifact, "publisher", None)
+    publisher_text = publisher if isinstance(publisher, str) else None
+    from .inventory_item_description import resolve_inventory_item_description
+
+    description = resolve_inventory_item_description(
+        harness=harness,
+        item_kind=item_kind,
+        display_name=name,
+        metadata=safe_metadata,
+        publisher=publisher_text,
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+    )
     return GuardAgentInventoryItem(
         item_id=artifact_id,
         item_kind=item_kind,
         display_name=name,
+        description=description,
         source_fingerprint=fingerprint_mapping({"harness": harness, "artifact_id": artifact_id}),
         content_hash=content_hash,
         capability_categories=_capabilities_for_artifact(artifact_type, safe_metadata),
@@ -670,11 +685,21 @@ def _mcp_tool_items_from_artifact(
                 "annotations": safe_annotations,
             }
         )
+        from .inventory_item_description import resolve_inventory_item_description
+
+        tool_description = resolve_inventory_item_description(
+            harness=harness,
+            item_kind="mcp_tool",
+            display_name=display_name,
+            metadata=metadata,
+            explicit_description=description or None,
+        )
         items.append(
             GuardAgentInventoryItem(
                 item_id=f"{server_item.item_id}:tool:{name}",
                 item_kind="mcp_tool",
                 display_name=display_name,
+                description=tool_description,
                 source_fingerprint=fingerprint_mapping(
                     {"harness": harness, "server": server_item.item_id, "tool": name}
                 ),

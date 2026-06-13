@@ -17,7 +17,7 @@ from codex_plugin_scanner.guard.aibom_detection import (
     instruction_role_for_path,
 )
 from codex_plugin_scanner.guard.consumer.service import artifact_hash, diff_artifact
-from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
+from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection, serialize_inventory_snapshot
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 
 
@@ -240,6 +240,48 @@ def test_inventory_snapshot_includes_workspace_instructions(tmp_path: Path) -> N
     overlay_items = [item for item in snapshot.items if item.item_kind == "overlay"]
     assert len(overlay_items) == 1
     assert overlay_items[0].metadata.get("instructionRole") == "agents_md"
+    assert overlay_items[0].description
+
+
+def test_inventory_snapshot_items_include_descriptions(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    skill_dir = workspace / "skills" / "review"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: review\ndescription: Review code changes carefully.\n---\n",
+        encoding="utf-8",
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        HarnessDetection(
+            harness="hermes",
+            installed=True,
+            command_available=False,
+            config_paths=(),
+            artifacts=(
+                GuardArtifact(
+                    artifact_id="hermes:skill:review:review",
+                    name="review",
+                    harness="hermes",
+                    artifact_type="skill",
+                    source_scope="workspace",
+                    config_path=str(skill_dir / "SKILL.md"),
+                    metadata={"description": "Review code changes carefully."},
+                ),
+            ),
+        ),
+        generated_at="2026-06-10T00:00:00Z",
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+    )
+
+    skill_items = [item for item in snapshot.items if item.item_kind == "skill"]
+    assert skill_items
+    assert "Review code changes carefully." in skill_items[0].description
+
+    payload = serialize_inventory_snapshot(snapshot)
+    assert payload["items"][0]["description"] == skill_items[0].description
 
 
 def test_hermes_and_openclaw_inventory_snapshots_include_workspace_agents_md(tmp_path: Path) -> None:

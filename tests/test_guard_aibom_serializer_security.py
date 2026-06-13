@@ -29,6 +29,7 @@ def _snapshot_with_metadata(metadata: dict[str, object]) -> GuardAgentInventoryS
                 item_id="hermes:skill:serializer-security",
                 item_kind="skill",
                 display_name="Serializer security",
+                description="Serializer security regression fixture.",
                 source_fingerprint="fp-serializer-security",
                 content_hash="sha256:serializer-security",
                 capability_categories=(),
