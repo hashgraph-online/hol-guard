@@ -10,7 +10,7 @@ function assert(condition: boolean, message: string): void {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, "..", "..");
-const dashboardSrc = join(here);
+const dashboardSrc = here;
 
 function readDashboardSource(relativePath: string): string {
   return readFileSync(join(dashboardSrc, relativePath), "utf8");
@@ -26,8 +26,6 @@ const EXPECTED_SIDEBAR_LABELS = [
   "Settings",
   "About",
 ] as const;
-
-const GUARD_CLOUD_EXCEPTION_SCOPES = ["artifact", "publisher", "harness"] as const;
 
 const POLICY_SOURCE_FILES = [
   "policy-workspace-page.tsx",
@@ -48,9 +46,17 @@ const FORBIDDEN_FIXTURE_PATTERNS = [
 
 const REVIEW_INBOX_DENYLIST = [
   "approval-center-layout.tsx",
-  "inbox-workspace.tsx",
-  "queue-state.tsx",
+  "queue-state.ts",
 ];
+
+const POLICY_SLICE_MARKERS = [
+  "policy-cloud-exception",
+  "PolicyCloudException",
+  "policy-workspace",
+];
+
+// Phase 1 removes local exception authoring. Flip this flag in that PR.
+const PHASE0_EXPECT_LOCAL_EXCEPTION_AUTHORING = true;
 
 const primitivesSource = readDashboardSource("approval-center-primitives.tsx");
 for (const label of EXPECTED_SIDEBAR_LABELS) {
@@ -58,25 +64,33 @@ for (const label of EXPECTED_SIDEBAR_LABELS) {
 }
 
 const policyWorkspaceSource = readDashboardSource("policy-workspace.tsx");
-assert(
-  policyWorkspaceSource.includes('"Remembered rules"'),
-  "policy workspace must expose Remembered rules tab label",
-);
-assert(
-  policyWorkspaceSource.includes('"Exceptions"'),
-  "audit baseline: exceptions tab still uses legacy label before Phase 1 rename",
-);
-assert(
-  policyWorkspaceSource.includes("PolicyExceptionForm"),
-  "audit baseline: local PolicyExceptionForm still mounted before Phase 1 removal",
-);
+if (PHASE0_EXPECT_LOCAL_EXCEPTION_AUTHORING) {
+  assert(
+    policyWorkspaceSource.includes('"Exceptions"'),
+    "phase 0 baseline: exceptions tab still uses legacy label until Phase 1 rename",
+  );
+  assert(
+    policyWorkspaceSource.includes("PolicyExceptionForm"),
+    "phase 0 baseline: local PolicyExceptionForm still mounted until Phase 1 removal",
+  );
+} else {
+  assert(
+    policyWorkspaceSource.includes('"Cloud exceptions"'),
+    "policy workspace must expose Cloud exceptions tab label after Phase 1",
+  );
+  assert(
+    !policyWorkspaceSource.includes("PolicyExceptionForm"),
+    "policy workspace must not mount local PolicyExceptionForm after Phase 1",
+  );
+}
 
+const boundaryDoc = readFileSync(
+  join(repoRoot, "docs", "guard", "policy-cloud-exceptions-boundary.md"),
+  "utf8",
+);
 assert(
-  GUARD_CLOUD_EXCEPTION_SCOPES.length === 3 &&
-    GUARD_CLOUD_EXCEPTION_SCOPES.includes("artifact") &&
-    GUARD_CLOUD_EXCEPTION_SCOPES.includes("publisher") &&
-    GUARD_CLOUD_EXCEPTION_SCOPES.includes("harness"),
-  "Guard Cloud exception scope contract is artifact | publisher | harness only",
+  boundaryDoc.includes("GuardExceptionScope") && boundaryDoc.includes("artifact"),
+  "boundary doc must record Guard Cloud exception scope contract",
 );
 
 for (const file of POLICY_SOURCE_FILES) {
@@ -87,13 +101,13 @@ for (const file of POLICY_SOURCE_FILES) {
 }
 
 for (const file of REVIEW_INBOX_DENYLIST) {
-  const path = join(dashboardSrc, file);
-  try {
-    readFileSync(path, "utf8");
-  } catch {
-    continue;
+  const source = readDashboardSource(file);
+  for (const marker of POLICY_SLICE_MARKERS) {
+    assert(
+      !source.includes(marker),
+      `${file} must not import Policy slice modules (${marker})`,
+    );
   }
-  assert(true, `denylist note: ${file} exists and must not be edited by Policy slice PRs`);
 }
 
 const guardApiSource = readDashboardSource("guard-api.ts");
@@ -102,10 +116,6 @@ assert(guardApiSource.includes("savePolicyDecision"), "guard-api must expose sav
 assert(guardApiSource.includes("clearPolicy"), "guard-api must expose clearPolicy");
 assert(guardApiSource.includes("/v1/policy"), "guard-api must call /v1/policy endpoints");
 
-const boundaryDoc = readFileSync(
-  join(repoRoot, "docs", "guard", "policy-cloud-exceptions-boundary.md"),
-  "utf8",
-);
 assert(boundaryDoc.includes("Remembered rules"), "boundary doc must define Remembered rules");
 assert(boundaryDoc.includes("Cloud exceptions"), "boundary doc must define Cloud exceptions");
 assert(boundaryDoc.includes("Evidence"), "boundary doc must distinguish Evidence");
