@@ -136,11 +136,16 @@ export function AuditRecoveryModal({
   const [approvalSubmitting, setApprovalSubmitting] = useState(false);
 
   useEffect(() => {
-    if (phase !== "approval") {
-      setApprovalPassword("");
-      setApprovalTotpCode("");
-      setApprovalSubmitting(false);
+    if (phase === "syncing" || phase === "connecting" || phase === "auditing") {
+      return;
     }
+    if (phase === "approval") {
+      setApprovalSubmitting(false);
+      return;
+    }
+    setApprovalPassword("");
+    setApprovalTotpCode("");
+    setApprovalSubmitting(false);
   }, [phase]);
 
   const activeStep = resolveActiveStepIndex(gate, phase);
