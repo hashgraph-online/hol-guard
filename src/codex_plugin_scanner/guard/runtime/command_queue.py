@@ -17,6 +17,7 @@ from ..store import GuardStore
 from .command_executors import (
     COMMAND_OPERATION_SCHEMA_VERSIONS,
     SUPPORTED_COMMAND_OPERATIONS,
+    _local_request_snapshot_items,
     command_job_operation,
     execute_guard_command_job,
 )
@@ -192,9 +193,18 @@ def _lease_payload(store: GuardStore) -> dict[str, object]:
             "operations": list(SUPPORTED_COMMAND_OPERATIONS),
             "schemaVersions": dict(COMMAND_OPERATION_SCHEMA_VERSIONS),
         },
+        "localRequestsSnapshot": _local_requests_snapshot(store),
         "maxJobs": 1,
         "waitMs": _env_int(COMMAND_QUEUE_LEASE_WAIT_MS_ENV, _DEFAULT_LEASE_WAIT_MS),
     }
+
+
+def _local_requests_snapshot(store: GuardStore) -> dict[str, object]:
+    try:
+        return {"requests": _local_request_snapshot_items(store)}
+    except Exception as exc:
+        _LOGGER.warning("Guard command local request snapshot failed: %s", _redacted_error(exc))
+        return {"requests": []}
 
 
 def _job_id(job: dict[str, object]) -> str:

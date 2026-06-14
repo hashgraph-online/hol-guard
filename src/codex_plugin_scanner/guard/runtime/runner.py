@@ -1355,10 +1355,10 @@ def sync_receipts(
     active_policy_bundle = active_policy_bundle_payload if isinstance(active_policy_bundle_payload, dict) else None
     cloud_exception_items = _persist_cloud_exceptions(
         store,
+        device_id=device_id,
         sync_exceptions=sync_exceptions_for_persist,
         policy_bundle=active_policy_bundle,
         now=now,
-        device_id=device_id,
     )
     remote_policies_stored = len(remote_decisions)
     remote_policy_sync_blocked = False
@@ -2061,10 +2061,10 @@ def sync_pain_signals(
 def _persist_cloud_exceptions(
     store: GuardStore,
     *,
+    device_id: str | None = None,
     sync_exceptions: list[dict[str, object]] | None = None,
     policy_bundle: dict[str, object] | None = None,
     now: str,
-    device_id: str | None = None,
 ) -> list[dict[str, object]]:
     resolved_device_id = device_id
     if resolved_device_id is None:
