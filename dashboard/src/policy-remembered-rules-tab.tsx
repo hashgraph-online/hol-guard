@@ -2,7 +2,8 @@ import { useCallback, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
 import { HiMiniMagnifyingGlass } from "react-icons/hi2";
 import { harnessDisplayName, policyActionLabel } from "./approval-center-utils";
-import type { GuardPolicyDecision } from "./guard-types";
+import type { GuardPolicyDecision, GuardRuntimeSnapshot } from "./guard-types";
+import { PolicyGuardCloudBundleCard } from "./policy-guard-cloud-bundle-card";
 import {
   isCloudManagedPolicy,
   resolvePolicyDisplay,
@@ -18,6 +19,7 @@ import { PolicyRememberedRulesRightRail } from "./policy-remembered-rules-right-
 
 type PolicyRememberedRulesTabProps = {
   policies: GuardPolicyDecision[];
+  snapshot: GuardRuntimeSnapshot;
   cloudControlsUrl: string | null;
   onClearPolicy?: (policy: GuardPolicyDecision) => void;
   onOpenCloudExceptions: () => void;
@@ -25,6 +27,7 @@ type PolicyRememberedRulesTabProps = {
 
 export function PolicyRememberedRulesTab({
   policies,
+  snapshot,
   cloudControlsUrl,
   onClearPolicy,
   onOpenCloudExceptions,
@@ -104,8 +107,10 @@ export function PolicyRememberedRulesTab({
   const familyCounts = useMemo(() => groupPoliciesByFamily(rememberedRules), [rememberedRules]);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start">
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start">
       <div className="space-y-4">
+        <PolicyGuardCloudBundleCard snapshot={snapshot} />
+
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2">
             <HiMiniMagnifyingGlass className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
@@ -125,7 +130,7 @@ export function PolicyRememberedRulesTab({
               aria-label="Filter by app"
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark"
             >
-              <option value="">All apps</option>
+              <option value="">All assets</option>
               {appOptions.map((app) => (
                 <option key={app} value={app}>
                   {harnessDisplayName(app)}
@@ -156,7 +161,7 @@ export function PolicyRememberedRulesTab({
         <PolicyRememberedCloudRules policies={cloudRules} cloudControlsUrl={cloudControlsUrl} />
       </div>
 
-      <PolicyRememberedRulesRightRail onOpenCloudExceptions={onOpenCloudExceptions} />
+      <PolicyRememberedRulesRightRail snapshot={snapshot} onOpenCloudExceptions={onOpenCloudExceptions} />
     </div>
   );
 }

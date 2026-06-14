@@ -61,11 +61,13 @@ for (const file of POLICY_UI_FILES) {
   }
 }
 
-const workspaceSource = readSource("policy-workspace.tsx");
-assert(workspaceSource.includes('role="tablist"'), "policy tablist exposes tablist role");
-assert(workspaceSource.includes('role="tab"'), "policy tabs expose tab role");
-assert(workspaceSource.includes("tabIndex={activeView === view ? 0 : -1}"), "policy tabs use roving tabindex");
-assert(workspaceSource.includes("nextTab?.focus()") || workspaceSource.includes(".focus()"), "policy tablist moves focus on arrow keys");
+const pageSource = readSource("policy-workspace-page.tsx");
+const chromeSource = readSource("policy-page-chrome.tsx");
+assert(chromeSource.includes('role="tablist"'), "policy tablist exposes tablist role");
+assert(chromeSource.includes('role="tab"'), "policy tabs expose tab role");
+assert(chromeSource.includes("tabIndex={selected ? 0 : -1}"), "policy tabs use roving tabindex");
+assert(chromeSource.includes(".focus()"), "policy tablist moves focus on arrow keys");
+assert(pageSource.includes("PolicyUnderlineTabBar"), "policy page mounts underline tab bar");
 
 const listSource = readSource("policy-cloud-exceptions-list.tsx");
 assert(listSource.includes('aria-label="Cloud exception groups"'), "grouped list exposes list label");

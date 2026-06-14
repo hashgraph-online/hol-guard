@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { HiMiniCloudArrowUp } from "react-icons/hi2";
-import { ActionButton, EmptyState, SectionLabel } from "./approval-center-primitives";
+import { ActionButton, EmptyState } from "./approval-center-primitives";
 import { fetchCloudExceptionRequests, fetchCloudExceptions } from "./guard-api";
 import type { GuardCloudException } from "./guard-types";
 import type { GuardCloudExceptionRequestItem } from "./guard-api";
@@ -118,16 +118,8 @@ export function PolicyCloudExceptionsTab({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-5 shadow-sm">
-        <SectionLabel>Cloud risk acceptances</SectionLabel>
-        <p className="mt-2 text-sm text-brand-dark/75">
-          Cloud exceptions are governed risk acceptances with an owner, approver, reason, expiry, and
-          signed bundle. They are managed in Guard Cloud and synced to this device after approval.
-        </p>
-        <p className="mt-2 text-sm text-slate-600">
-          Fast remembered approvals from Review stay on the Remembered rules tab. They are separate
-          from Cloud exceptions.
-        </p>
+      <div className="rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3 text-sm text-brand-dark/80">
+        Exceptions are approved in Guard Cloud, then enforced locally as signed policy bundle entries.
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -136,7 +128,7 @@ export function PolicyCloudExceptionsTab({
           onClick={handleOpenRequestPanel}
           disabled={!cloudConnected}
         >
-          Request cloud exception
+          + Request cloud exception
         </ActionButton>
         {cloudControlsUrl ? (
           <ActionButton href={cloudControlsUrl} variant="secondary">

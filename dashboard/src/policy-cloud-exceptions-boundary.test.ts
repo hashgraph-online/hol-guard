@@ -37,6 +37,8 @@ const POLICY_SOURCE_FILES = [
   "policy-remembered-cloud-rules.tsx",
   "policy-remembered-rules-tab.tsx",
   "policy-remembered-rules-right-rail.tsx",
+  "policy-page-chrome.tsx",
+  "policy-guard-cloud-bundle-card.tsx",
   "policy-cloud-exceptions-tab.tsx",
   "policy-cloud-exception-request-panel.tsx",
   "policy-cloud-exceptions-utils.ts",

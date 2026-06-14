@@ -19,6 +19,7 @@ export function PolicyRememberedCloudRules({
       emptyTitle="No Guard Cloud rules synced"
       emptyBody="Connect Guard Cloud to sync shared policy bundles."
       defaultOpen={policies.length > 0}
+      cloudVariant
     />
   );
 }
