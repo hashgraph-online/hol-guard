@@ -180,7 +180,7 @@ def test_skill_scanner_reports_timeout_without_marking_scan_failed(monkeypatch, 
     assert "timed out" in summary.message
 
 
-def test_skill_scanner_timeout_path_drains_worker_result_before_terminating(monkeypatch, tmp_path: Path) -> None:
+def test_skill_scanner_subprocess_run_success(monkeypatch, tmp_path: Path) -> None:
     output_path = tmp_path / "scan-output.json"
 
     monkeypatch.setattr(cisco_skill_scanner.tempfile, "mkstemp", lambda prefix, suffix: (123, str(output_path)))

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from ..aibom_cli import AibomCliOptions, _AIBOM_CLOUD_SYNC_OPTIONS
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -129,12 +130,31 @@ def _run_guard_aibom_command(
         _emit("aibom.status", payload, getattr(args, "json", False))
         return 0
     if aibom_command == "sync":
+        sync_options = AibomCliOptions(
+            include_symlinks=aibom_options.include_symlinks,
+            follow_unsafe_symlinks=aibom_options.follow_unsafe_symlinks,
+            cisco_skill_scan=getattr(
+                args,
+                "cisco_skill_scan",
+                _AIBOM_CLOUD_SYNC_OPTIONS.cisco_skill_scan,
+            ),
+            cisco_mcp_scan=getattr(
+                args,
+                "cisco_mcp_scan",
+                _AIBOM_CLOUD_SYNC_OPTIONS.cisco_mcp_scan,
+            ),
+            cisco_timeout_seconds=getattr(
+                args,
+                "cisco_timeout_seconds",
+                _AIBOM_CLOUD_SYNC_OPTIONS.cisco_timeout_seconds,
+            ),
+        )
         try:
             payload = sync_aibom_snapshots(
                 store,
                 context,
                 generated_at=generated_at,
-                options=aibom_options,
+                options=sync_options,
             )
         except GuardSyncNotConfiguredError as error:
             message = _guard_sync_failure_message(error)
