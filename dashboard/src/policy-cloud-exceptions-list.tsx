@@ -82,7 +82,7 @@ function ExceptionCard({
       type="button"
       onClick={handleSelect}
       aria-pressed={selected}
-      className={`w-full rounded-xl border px-3.5 py-3 text-left transition ${
+      className={`min-w-0 w-full rounded-xl border px-3.5 py-3 text-left transition ${
         selected
           ? "border-brand-blue/30 bg-brand-blue/[0.04] ring-1 ring-brand-blue/20"
           : "border-slate-100 bg-white hover:border-brand-blue/20 hover:bg-brand-blue/[0.02]"
@@ -93,8 +93,8 @@ function ExceptionCard({
         <Tag tone="slate">{scopeLabel(item.scope)}</Tag>
         {isCloudExceptionAckFailure(item) ? <Badge tone="warning">Ack issue</Badge> : null}
       </div>
-      <p className="mt-2 min-w-0 break-words text-sm font-semibold text-brand-dark">{headline}</p>
-      <p className="mt-1 min-w-0 break-words text-xs text-slate-500">
+      <p className="mt-2 break-words text-sm font-semibold text-brand-dark">{headline}</p>
+      <p className="mt-1 break-words text-xs text-slate-500">
         Owner {resolvePersonDisplayLabel(item.owner)}
         {expiryTimestamp && expiryValue ? ` · expires ${formatRelativeTime(expiryValue)}` : null}
       </p>
@@ -104,13 +104,13 @@ function ExceptionCard({
 
 function PendingRequestCard({ item }: { item: GuardCloudExceptionRequestItem }) {
   return (
-    <article className="rounded-xl border border-amber-100 bg-amber-50/40 px-3.5 py-3">
+    <article className="min-w-0 rounded-xl border border-amber-100 bg-amber-50/40 px-3.5 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone="warning">Pending</Badge>
         <Tag tone="slate">{scopeLabel(item.scope)}</Tag>
       </div>
-      <p className="mt-2 min-w-0 break-words text-sm font-semibold text-brand-dark">{item.reason}</p>
-      <p className="mt-1 min-w-0 break-words text-xs text-slate-600">
+      <p className="mt-2 break-words text-sm font-semibold text-brand-dark">{item.reason}</p>
+      <p className="mt-1 break-words text-xs text-slate-600">
         Requested by {resolvePersonDisplayLabel(item.owner)} · expires{" "}
         {formatRelativeTime(item.requestedExpiresAt)}
       </p>

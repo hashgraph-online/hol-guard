@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,7 +23,9 @@ const POLICY_RELEASE_FILES = [
 ];
 
 for (const fileName of POLICY_RELEASE_FILES) {
-  const source = readFileSync(join(here, fileName), "utf8");
+  const filePath = join(here, fileName);
+  assert(existsSync(filePath), `missing policy release file: ${fileName}`);
+  const source = readFileSync(filePath, "utf8");
   assert(!/\bbypass\b/i.test(source), `${fileName} must not use bypass copy`);
 }
 
@@ -31,7 +33,7 @@ const listSource = readFileSync(join(here, "policy-cloud-exceptions-list.tsx"), 
 const detailSource = readFileSync(join(here, "policy-cloud-exception-detail-panel.tsx"), "utf8");
 const tabSource = readFileSync(join(here, "policy-cloud-exceptions-tab.tsx"), "utf8");
 
-assert(listSource.includes("break-words"), "exception list cards guard long copy overflow");
+assert(listSource.includes("min-w-0"), "exception list cards constrain width in grid layouts");
 assert(detailSource.includes("break-words"), "exception detail panel guards long copy overflow");
 assert(tabSource.includes("lg:grid-cols-[minmax(0,1fr)_320px]"), "cloud exceptions tab keeps responsive split layout");
 
