@@ -3003,8 +3003,8 @@ class GuardStore:
 
     def list_policy_decisions(self, harness: str | None = None) -> list[dict[str, object]]:
         query = """
-            select decision_id, harness, scope, artifact_id, artifact_hash, workspace, publisher, action, reason, owner, source,
-                   expires_at, updated_at
+            select decision_id, harness, scope, artifact_id, artifact_hash, workspace, publisher,
+                   action, reason, owner, source, expires_at, updated_at
             from policy_decisions
         """
         params: tuple[object, ...] = ()
@@ -3025,7 +3025,6 @@ class GuardStore:
         source_context = _find_policy_source_context(
             connection,
             harness=harness,
-            scope=str(row["scope"]),
             artifact_id=str(artifact_id) if artifact_id is not None else None,
             artifact_hash=str(artifact_hash) if artifact_hash is not None else None,
             workspace=str(workspace) if workspace is not None else None,
@@ -5258,7 +5257,7 @@ def _path_basename_label(path: str) -> str | None:
     normalized = path.strip().replace("\\", "/").rstrip("/")
     if not normalized or normalized.startswith("workspace:"):
         return None
-    if normalized.startswith("/") or normalized.startswith("~") or ":" in normalized:
+    if normalized.startswith("/") or normalized.startswith("~") or (len(normalized) >= 2 and normalized[1] == ":"):
         segments = [segment for segment in normalized.split("/") if segment]
         if segments:
             return segments[-1]
@@ -5367,7 +5366,6 @@ def _find_policy_source_context(
     connection: sqlite3.Connection,
     *,
     harness: str,
-    scope: str,
     artifact_id: str | None,
     artifact_hash: str | None,
     workspace: str | None,
