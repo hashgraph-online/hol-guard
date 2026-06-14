@@ -980,6 +980,10 @@
     height: calc(var(--spacing) * 24);
   }
 
+  .h-28 {
+    height: calc(var(--spacing) * 28);
+  }
+
   .h-32 {
     height: calc(var(--spacing) * 32);
   }
@@ -5194,6 +5198,10 @@
 
   .disabled\:cursor-not-allowed:disabled {
     cursor: not-allowed;
+  }
+
+  .disabled\:bg-slate-50:disabled {
+    background-color: var(--color-slate-50);
   }
 
   .disabled\:opacity-30:disabled {
