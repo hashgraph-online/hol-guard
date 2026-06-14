@@ -108,7 +108,7 @@ def _scan_directory_with_timeout(
     os.close(file_descriptor)
 
     env = os.environ.copy()
-    env["PYTHONPATH"] = os.pathsep.join(sys.path)
+    env["PYTHONPATH"] = os.pathsep.join(str(path) for path in sys.path)
     try:
         try:
             result = subprocess.run(
