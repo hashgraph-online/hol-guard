@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, S as SectionLabel, o as HiMiniXMark, B as Badge, bd as scopeLabel, m as formatRelativeTime, b6 as HiMiniCloudArrowUp, r as reactExports, be as createCloudExceptionRequest, A as ActionButton, h as harnessDisplayName, b as EmptyState, p as HiMiniChevronUp, q as HiMiniChevronDown, ac as Tag, bf as policyActionLabel, bg as fetchCloudExceptions, bh as fetchCloudExceptionRequests, bb as guardAwareHref, ax as HiMiniTrash, ad as HiMiniMagnifyingGlass } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, S as SectionLabel, o as HiMiniXMark, B as Badge, bd as scopeLabel, m as formatRelativeTime, b6 as HiMiniCloudArrowUp, r as reactExports, be as createCloudExceptionRequest, A as ActionButton, h as harnessDisplayName, b as EmptyState, p as HiMiniChevronUp, q as HiMiniChevronDown, ac as Tag, bf as fetchCloudExceptions, bg as fetchCloudExceptionRequests, Y as fetchSettings, _ as updateSettings, bh as policyActionLabel } from "../guard-dashboard.js";
 const CLOUD_EXCEPTION_EXPIRING_SOON_DAYS = 7;
 function parseCloudExceptionTimestamp(value) {
   if (!value || !value.trim()) {
@@ -775,200 +775,6 @@ function PolicyCloudExceptionsSummary({
     }
   );
 }
-const MATCHER_FAMILY_LABELS = {
-  "package-request": "package install",
-  "tool-action": "shell or tool command",
-  "tool-output": "command output review",
-  prompt: "prompt submission",
-  "prompt-env-read": "environment variable read",
-  mcp: "MCP server call",
-  "file-read": "file read"
-};
-const GENERIC_REASONS = [
-  "approved in review",
-  "approved in local approval center",
-  "local auto-resume proof",
-  "local e2e approval proof"
-];
-function isCloudManagedPolicy(source) {
-  return source === "cloud-sync" || source === "team-policy" || source === "policy-bundle";
-}
-function resolvePolicySourceLabel(source) {
-  if (isCloudManagedPolicy(source)) {
-    return "Guard Cloud";
-  }
-  if (source === "manual" || source === "local") {
-    return "This device";
-  }
-  return source.replace(/_/g, " ");
-}
-function policyTargetLabel(policy) {
-  return policy.artifact_id ?? policy.publisher ?? policy.workspace ?? "Global";
-}
-function isGenericReason(reason) {
-  if (!reason?.trim()) {
-    return true;
-  }
-  const normalized = reason.trim().toLowerCase();
-  return GENERIC_REASONS.some((phrase) => normalized.includes(phrase));
-}
-function extractMatcherFamily(artifactId) {
-  if (artifactId.startsWith("family:")) {
-    return artifactId.slice("family:".length);
-  }
-  const parts = artifactId.split(":");
-  for (const family of Object.keys(MATCHER_FAMILY_LABELS)) {
-    if (parts.includes(family)) {
-      return family;
-    }
-  }
-  return null;
-}
-function resolveRuntimeActionLabel(artifactId) {
-  const parts = artifactId.split(":");
-  const runtimeIndex = parts.indexOf("runtime");
-  if (runtimeIndex < 0) {
-    return null;
-  }
-  const tail = parts.slice(runtimeIndex + 1);
-  if (tail[0] === "global" && tail.length >= 3) {
-    const tool = tail[1].replace(/-/g, " ");
-    const action = tail.slice(2).join(" ").replace(/_/g, " ");
-    return `${tool}: ${action}`;
-  }
-  return null;
-}
-function resolvePromptSubtypeLabel(artifactId) {
-  const parts = artifactId.split(":");
-  const promptIndex = parts.indexOf("prompt");
-  if (promptIndex < 0) {
-    return null;
-  }
-  const subtype = parts[promptIndex + 1];
-  if (!subtype) {
-    return "prompt review";
-  }
-  return subtype.replace(/_/g, " ");
-}
-function resolveWorkspaceLabel(workspace) {
-  if (!workspace?.trim()) {
-    return "this project";
-  }
-  const value = workspace.trim();
-  if (value.startsWith("workspace:")) {
-    return "this project";
-  }
-  if (value.startsWith("/")) {
-    const segments = value.split("/").filter(Boolean);
-    return segments[segments.length - 1] ?? "this project";
-  }
-  if (value.length > 32 && /^[a-f0-9]+$/i.test(value)) {
-    return "this project";
-  }
-  return value;
-}
-function resolveActionVerb(action) {
-  if (action === "allow") {
-    return "Allow";
-  }
-  if (action === "block") {
-    return "Block";
-  }
-  return policyActionLabel(action);
-}
-function resolveScopeSubtitle(policy) {
-  const app = harnessDisplayName(policy.harness);
-  if (policy.scope === "artifact") {
-    return `Applies once in ${app}`;
-  }
-  if (policy.scope === "workspace") {
-    return `Applies every time in ${resolveWorkspaceLabel(policy.workspace)} (${app})`;
-  }
-  if (policy.scope === "harness") {
-    return `Applies every time in ${app}`;
-  }
-  if (policy.scope === "publisher") {
-    const publisher = policy.publisher?.trim() || "this publisher";
-    return `Applies to ${publisher} in ${app}`;
-  }
-  if (policy.scope === "global") {
-    return "Applies on every project on this device";
-  }
-  return scopeLabel(policy.scope);
-}
-function resolveWhatPhrase(policy) {
-  const artifactId = policy.artifact_id?.trim() ?? "";
-  const publisher = policy.publisher?.trim();
-  if (policy.scope === "global" && !artifactId && !publisher) {
-    return "all guarded actions on this device";
-  }
-  const runtimeLabel = artifactId ? resolveRuntimeActionLabel(artifactId) : null;
-  if (runtimeLabel) {
-    return runtimeLabel;
-  }
-  const family = artifactId ? extractMatcherFamily(artifactId) : null;
-  const familyPhrase = family ? MATCHER_FAMILY_LABELS[family] ?? family.replace(/-/g, " ") : null;
-  if (familyPhrase) {
-    if (artifactId.startsWith("family:") || policy.scope === "harness") {
-      return `all ${familyPhrase}s`;
-    }
-    if (family === "prompt") {
-      const subtype = resolvePromptSubtypeLabel(artifactId);
-      return subtype ? `${familyPhrase} (${subtype})` : familyPhrase;
-    }
-    return familyPhrase;
-  }
-  if (publisher) {
-    return `actions from ${publisher}`;
-  }
-  return "matching guarded actions";
-}
-function resolvePolicyDisplay(policy) {
-  const reason = policy.reason?.trim() ?? null;
-  const actionVerb = resolveActionVerb(policy.action);
-  if (reason && !isGenericReason(reason)) {
-    return {
-      headline: `${actionVerb}: ${reason}`,
-      subtitle: resolveScopeSubtitle(policy),
-      technicalId: policy.artifact_id
-    };
-  }
-  const what = resolveWhatPhrase(policy);
-  return {
-    headline: `${actionVerb} ${what}`,
-    subtitle: resolveScopeSubtitle(policy),
-    technicalId: policy.artifact_id
-  };
-}
-function resolvePolicyEvidenceSearchTerm(policy) {
-  const hash = policy.artifact_hash?.trim();
-  if (hash) {
-    const normalized = hash.replace(/^sha256:/i, "");
-    return normalized.slice(0, 12);
-  }
-  const target = policyTargetLabel(policy);
-  if (!target || target === "Global") {
-    return null;
-  }
-  if (target.startsWith("family:")) {
-    return target.slice("family:".length);
-  }
-  const parts = target.split(":");
-  const last = parts[parts.length - 1];
-  if (last && last.length >= 12 && /^[a-f0-9]+$/i.test(last)) {
-    return last.slice(0, 12);
-  }
-  return null;
-}
-function resolvePolicyEvidenceHref(policy) {
-  const params = new URLSearchParams();
-  const searchTerm = resolvePolicyEvidenceSearchTerm(policy);
-  if (searchTerm) {
-    params.set("search", searchTerm);
-  }
-  const query = params.toString();
-  return query ? `/evidence?${query}` : "/evidence";
-}
 function resolveCloudPolicyControlsUrl(snapshot) {
   const dashboardUrl = snapshot.dashboard_url?.trim();
   if (dashboardUrl) {
@@ -985,13 +791,6 @@ function resolveCloudBundleSurfaceClass(tone) {
     return "rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-4 shadow-sm";
   }
   return "rounded-2xl border border-slate-200/70 bg-slate-50/70 p-4 shadow-sm";
-}
-function resolvePolicyMatcherFamily(policy) {
-  const target = policy.artifact_id?.trim();
-  if (!target) {
-    return null;
-  }
-  return extractMatcherFamily(target);
 }
 function groupPoliciesByHarness(policies) {
   const map = /* @__PURE__ */ new Map();
@@ -1204,389 +1003,395 @@ function PolicyCloudExceptionsTab({
     ] })
   ] });
 }
-const PAGE_SIZE = 30;
-function resolveActionTone(action) {
-  if (action === "allow") {
-    return "success";
+const STRICT_POLICY_LAYER_OPTIONS = [
+  { value: "none", label: "No match" },
+  { value: "allow", label: "Allow" },
+  { value: "block", label: "Block" }
+];
+const STRICT_CONFIG_ACTION_OPTIONS = [
+  { value: "allow", label: "Allow without asking" },
+  { value: "warn", label: "Warn only" },
+  { value: "review", label: "Ask me first" },
+  { value: "require-reapproval", label: "Ask every time" },
+  { value: "sandbox-required", label: "Run in sandbox" },
+  { value: "block", label: "Block" }
+];
+const STRICT_POLICY_EVALUATION_ORDER = [
+  "Local remembered rule",
+  "Guard Cloud policy",
+  "Cloud exception",
+  "Strict fallback",
+  "Ask or block"
+];
+function fingerprintLocalPolicySettings(settings) {
+  const payload = JSON.stringify({
+    mode: settings.mode,
+    security_level: settings.security_level,
+    default_action: settings.default_action,
+    changed_hash_action: settings.changed_hash_action,
+    new_network_domain_action: settings.new_network_domain_action,
+    subprocess_action: settings.subprocess_action,
+    destructive_shell: settings.risk_actions?.destructive_shell ?? null
+  });
+  let hash = 5381;
+  for (let index = 0; index < payload.length; index += 1) {
+    hash = (hash << 5) + hash ^ payload.charCodeAt(index);
   }
-  if (action === "block") {
-    return "destructive";
-  }
-  if (action === "warn" || action === "require-reapproval") {
-    return "warning";
-  }
-  return "default";
+  return `local-${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
-function PolicyRuleCard({ policy, cloudControlsUrl, onClear }) {
-  const handleClear = reactExports.useCallback(() => onClear?.(policy), [onClear, policy]);
-  const cloudManaged = isCloudManagedPolicy(policy.source);
-  const display = resolvePolicyDisplay(policy);
-  const canClear = onClear !== void 0 && !cloudManaged;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("article", { className: "rounded-2xl border border-slate-100 bg-white px-4 py-3.5 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1 space-y-1.5", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: resolveActionTone(policy.action), children: policyActionLabel(policy.action) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: cloudManaged ? "blue" : "green", children: resolvePolicySourceLabel(policy.source) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: scopeLabel(policy.scope) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: harnessDisplayName(policy.harness) })
+function resolveStrictFileWriteAction(settings) {
+  return settings.risk_actions?.destructive_shell ?? settings.default_action;
+}
+function simulateStrictPolicyOutcome(input) {
+  const path = [];
+  if (input.rememberedRuleAction !== "none") {
+    path.push(`Local remembered rule → ${input.rememberedRuleAction}`);
+    return {
+      outcome: input.rememberedRuleAction,
+      winningStep: "Local remembered rule",
+      path
+    };
+  }
+  path.push("Local remembered rule → none");
+  if (input.cloudPolicyAction !== "none") {
+    path.push(`Guard Cloud policy → ${input.cloudPolicyAction}`);
+    return {
+      outcome: input.cloudPolicyAction,
+      winningStep: "Guard Cloud policy",
+      path
+    };
+  }
+  path.push("Guard Cloud policy → none");
+  if (input.cloudExceptionActive) {
+    path.push("Cloud exception → allow");
+    return {
+      outcome: "allow",
+      winningStep: "Cloud exception",
+      path
+    };
+  }
+  path.push("Cloud exception → none");
+  path.push(`Strict fallback → ${input.fallbackAction}`);
+  if (input.fallbackAction === "allow" || input.fallbackAction === "warn") {
+    return {
+      outcome: input.fallbackAction,
+      winningStep: "Strict fallback",
+      path
+    };
+  }
+  path.push("Ask or block → review/block");
+  return {
+    outcome: input.fallbackAction === "block" ? "block" : "review",
+    winningStep: "Ask or block",
+    path
+  };
+}
+function StrictConfigSelect({ label, value, onChange, disabled = false, help }) {
+  const handleChange = reactExports.useCallback(
+    (event) => {
+      onChange(event.target.value);
+    },
+    [onChange]
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block space-y-1.5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", children: label }),
+    help ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-xs text-slate-500", children: help }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "select",
+      {
+        value,
+        onChange: handleChange,
+        disabled,
+        className: "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark disabled:cursor-not-allowed disabled:bg-slate-50",
+        children: STRICT_CONFIG_ACTION_OPTIONS.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: option.value, children: option.label }, option.value))
+      }
+    )
+  ] });
+}
+function SimLayerSelect({ label, value, onChange }) {
+  const handleChange = reactExports.useCallback(
+    (event) => {
+      const nextValue = event.target.value;
+      if (nextValue === "allow" || nextValue === "block" || nextValue === "none") {
+        onChange(nextValue);
+      }
+    },
+    [onChange]
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block space-y-1.5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", children: label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "select",
+      {
+        value,
+        onChange: handleChange,
+        className: "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark",
+        children: STRICT_POLICY_LAYER_OPTIONS.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: option.value, children: option.label }, option.value))
+      }
+    )
+  ] });
+}
+function PolicyStrictConfigTab({
+  snapshot,
+  onOpenSettings,
+  onOpenInbox
+}) {
+  const [loadState, setLoadState] = reactExports.useState("loading");
+  const [loadError, setLoadError] = reactExports.useState(null);
+  const [settings, setSettings] = reactExports.useState(null);
+  const [configPath, setConfigPath] = reactExports.useState(null);
+  const [saveError, setSaveError] = reactExports.useState(null);
+  const [savingKey, setSavingKey] = reactExports.useState(null);
+  const [simRemembered, setSimRemembered] = reactExports.useState("none");
+  const [simCloudPolicy, setSimCloudPolicy] = reactExports.useState("none");
+  const [simCloudException, setSimCloudException] = reactExports.useState(false);
+  const isStrict = settings?.security_level === "strict";
+  const cloudBundleCopy = resolveCloudPolicyBundleCopy(snapshot);
+  const pendingInboxCount = snapshot.queue_summary?.remaining_pending_count ?? snapshot.pending_count ?? 0;
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    setLoadState("loading");
+    setLoadError(null);
+    void fetchSettings().then((payload) => {
+      if (cancelled) {
+        return;
+      }
+      setSettings(payload.settings);
+      setConfigPath(payload.config_path);
+      setLoadState("ready");
+    }).catch((error) => {
+      if (cancelled) {
+        return;
+      }
+      setLoadState("error");
+      setLoadError(error instanceof Error ? error.message : "Unable to load strict config.");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const localPolicyHash = reactExports.useMemo(
+    () => settings ? fingerprintLocalPolicySettings(settings) : null,
+    [settings]
+  );
+  const simulation = reactExports.useMemo(() => {
+    if (!settings) {
+      return null;
+    }
+    return simulateStrictPolicyOutcome({
+      rememberedRuleAction: simRemembered,
+      cloudPolicyAction: simCloudPolicy,
+      cloudExceptionActive: simCloudException,
+      fallbackAction: settings.default_action
+    });
+  }, [settings, simRemembered, simCloudPolicy, simCloudException]);
+  const persistSetting = reactExports.useCallback(async (key, value) => {
+    if (!settings) {
+      return;
+    }
+    setSavingKey(key);
+    setSaveError(null);
+    const nextSettings = key === "destructive_shell" ? {
+      risk_actions: {
+        ...settings.risk_actions,
+        destructive_shell: value
+      }
+    } : { [key]: value };
+    try {
+      const payload = await updateSettings(nextSettings);
+      setSettings(payload.settings);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Unable to save strict config.");
+    } finally {
+      setSavingKey(null);
+    }
+  }, [settings]);
+  const handleDefaultActionChange = reactExports.useCallback(
+    (value) => {
+      void persistSetting("default_action", value);
+    },
+    [persistSetting]
+  );
+  const handleChangedHashActionChange = reactExports.useCallback(
+    (value) => {
+      void persistSetting("changed_hash_action", value);
+    },
+    [persistSetting]
+  );
+  const handleNetworkActionChange = reactExports.useCallback(
+    (value) => {
+      void persistSetting("new_network_domain_action", value);
+    },
+    [persistSetting]
+  );
+  const handleSubprocessActionChange = reactExports.useCallback(
+    (value) => {
+      void persistSetting("subprocess_action", value);
+    },
+    [persistSetting]
+  );
+  const handleFileWriteActionChange = reactExports.useCallback(
+    (value) => {
+      void persistSetting("destructive_shell", value);
+    },
+    [persistSetting]
+  );
+  const handleSimCloudExceptionChange = reactExports.useCallback((event) => {
+    setSimCloudException(event.target.checked);
+  }, []);
+  const handleSimRememberedChange = reactExports.useCallback((value) => {
+    setSimRemembered(value);
+  }, []);
+  const handleSimCloudPolicyChange = reactExports.useCallback((value) => {
+    setSimCloudPolicy(value);
+  }, []);
+  if (loadState === "loading") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", "aria-busy": "true", children: [0, 1, 2].map((index) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-24 animate-pulse rounded-2xl border border-slate-200 bg-slate-100" }, index)) });
+  }
+  if (loadState === "error" || !settings) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EmptyState,
+      {
+        title: "Could not load strict config",
+        body: loadError ?? "Try again from Settings if the daemon is unavailable."
+      }
+    );
+  }
+  const fileWriteAction = resolveStrictFileWriteAction(settings);
+  const controlsDisabled = savingKey !== null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `rounded-2xl border p-5 ${isStrict ? "border-brand-green/20 bg-brand-green/[0.04]" : "border-slate-200 bg-slate-50/40"}`, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-2 flex flex-wrap items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Strict mode" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: isStrict ? "green" : "slate", children: isStrict ? "Enabled" : "Disabled" })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-base font-semibold leading-snug text-brand-dark", children: display.headline }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: display.subtitle }),
-      display.technicalId ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "text-xs text-slate-500", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer text-brand-blue hover:underline", children: "Technical id" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 break-all font-mono text-[11px] text-slate-600", children: display.technicalId })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/75", children: "Strict config tunes local fallback enforcement only. Authentication, MFA, and general Guard settings stay in Settings." }),
+      !isStrict && onOpenSettings ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "secondary", onClick: onOpenSettings, children: "Enable strict mode in Settings" }) }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Local policy state" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid gap-3 text-sm sm:grid-cols-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-medium uppercase tracking-wide text-slate-500", children: "Local policy hash" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-mono text-xs text-brand-dark", children: localPolicyHash })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-medium uppercase tracking-wide text-slate-500", children: "Config file" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all text-brand-dark", children: configPath ?? "Unavailable" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-medium uppercase tracking-wide text-slate-500", children: "Daemon last reload" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-brand-dark", children: snapshot.runtime_state?.started_at ? formatRelativeTime(snapshot.runtime_state.started_at) : "Unavailable" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-medium uppercase tracking-wide text-slate-500", children: "Daemon heartbeat" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-brand-dark", children: snapshot.runtime_state?.last_heartbeat_at ? formatRelativeTime(snapshot.runtime_state.last_heartbeat_at) : "Unavailable" })
+        ] })
+      ] }),
+      cloudBundleCopy ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 rounded-xl border border-slate-100 bg-slate-50/80 p-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-medium uppercase tracking-wide text-slate-500", children: "Signed Cloud bundle ack" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm font-medium text-brand-dark", children: cloudBundleCopy.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: cloudBundleCopy.detail }),
+        snapshot.cloud_policy_bundle_hash ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 break-all font-mono text-[11px] text-slate-500", children: snapshot.cloud_policy_bundle_hash }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-slate-500", children: "Cloud exceptions apply through signed bundle acknowledgement on this device." })
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm text-slate-600", children: "No signed Cloud policy bundle is synced yet. Cloud exceptions still require bundle acknowledgement before they apply locally." })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Local fallback controls" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-600", children: "These controls apply when no remembered rule, Cloud policy, or Cloud exception matches." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 grid gap-4 md:grid-cols-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          StrictConfigSelect,
+          {
+            label: "Default action",
+            help: "First-time actions with no prior decision.",
+            value: settings.default_action,
+            onChange: handleDefaultActionChange,
+            disabled: controlsDisabled
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          StrictConfigSelect,
+          {
+            label: "Changed tool hash action",
+            value: settings.changed_hash_action,
+            onChange: handleChangedHashActionChange,
+            disabled: controlsDisabled
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          StrictConfigSelect,
+          {
+            label: "New network domain action",
+            value: settings.new_network_domain_action,
+            onChange: handleNetworkActionChange,
+            disabled: controlsDisabled
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          StrictConfigSelect,
+          {
+            label: "Subprocess action",
+            value: settings.subprocess_action,
+            onChange: handleSubprocessActionChange,
+            disabled: controlsDisabled
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          StrictConfigSelect,
+          {
+            label: "Destructive file write action",
+            help: "Backed by the destructive shell risk control.",
+            value: fileWriteAction,
+            onChange: handleFileWriteActionChange,
+            disabled: controlsDisabled
+          }
+        )
+      ] }),
+      saveError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-red-600", children: saveError }) : null,
+      savingKey ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-sm text-slate-500", children: [
+        "Saving ",
+        savingKey.replace(/_/g, " "),
+        "…"
       ] }) : null
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-col items-end gap-2 text-right", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: policy.updated_at ? formatRelativeTime(policy.updated_at) : null }),
-      !cloudManaged ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "a",
-        {
-          href: guardAwareHref(resolvePolicyEvidenceHref(policy)),
-          className: "text-sm font-medium text-brand-blue hover:underline",
-          children: "See approval record"
-        }
-      ) : null,
-      cloudManaged && cloudControlsUrl ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "a",
-        {
-          href: cloudControlsUrl,
-          target: "_blank",
-          rel: "noopener noreferrer",
-          className: "inline-flex items-center gap-1 text-sm font-medium text-brand-blue hover:underline",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloudArrowUp, { className: "h-4 w-4", "aria-hidden": "true" }),
-            "View on cloud"
-          ]
-        }
-      ) : null,
-      canClear ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          type: "button",
-          onClick: handleClear,
-          className: "inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-red-600",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
-            "Remove rule"
-          ]
-        }
-      ) : null
-    ] })
-  ] }) });
-}
-function PolicyRuleList({ policies, cloudControlsUrl, onClearPolicy, emptyTitle, emptyBody }) {
-  const [visibleCount, setVisibleCount] = reactExports.useState(PAGE_SIZE);
-  const visiblePolicies = reactExports.useMemo(() => policies.slice(0, visibleCount), [policies, visibleCount]);
-  const hasMore = policies.length > visibleCount;
-  const handleShowMore = reactExports.useCallback(() => {
-    setVisibleCount((current) => current + PAGE_SIZE);
-  }, []);
-  if (policies.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: emptyTitle, body: emptyBody, tone: "teach" });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-    visiblePolicies.map((policy) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-      PolicyRuleCard,
-      {
-        policy,
-        cloudControlsUrl,
-        onClear: onClearPolicy
-      },
-      `${policy.harness}-${policy.scope}-${policy.artifact_id ?? policy.publisher ?? "global"}-${policy.updated_at ?? ""}-${policy.source}`
-    )),
-    hasMore ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-center pt-1", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "button",
-      {
-        type: "button",
-        onClick: handleShowMore,
-        className: "rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark hover:bg-slate-50",
-        children: [
-          "Show ",
-          Math.min(PAGE_SIZE, policies.length - visibleCount),
-          " more (",
-          policies.length - visibleCount,
-          " remaining)"
-        ]
-      }
-    ) }) : null
-  ] });
-}
-function GroupedPolicySection({
-  title,
-  description,
-  policies,
-  cloudControlsUrl,
-  onClearPolicy,
-  emptyTitle,
-  emptyBody,
-  defaultOpen = true
-}) {
-  const [open, setOpen] = reactExports.useState(defaultOpen);
-  const handleToggle = reactExports.useCallback(() => setOpen((current) => !current), []);
-  if (policies.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: title }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: description })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: emptyTitle, body: emptyBody, tone: "teach" })
-    ] });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "button",
-      {
-        type: "button",
-        onClick: handleToggle,
-        className: "flex w-full items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-left",
-        "aria-expanded": open,
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: title }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: description })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: policies.length }),
-            open ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" })
-          ] })
-        ]
-      }
-    ),
-    open ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      PolicyRuleList,
-      {
-        policies,
-        cloudControlsUrl,
-        onClearPolicy,
-        emptyTitle,
-        emptyBody
-      }
-    ) : null
-  ] });
-}
-function resolveFamilyFilterLabel(family) {
-  switch (family) {
-    case "package-request":
-      return "Package installs";
-    case "tool-action":
-      return "Commands";
-    case "tool-output":
-      return "Output";
-    case "prompt":
-      return "Prompts";
-    default:
-      return family.replace(/-/g, " ");
-  }
-}
-function groupPoliciesByFamily(policies) {
-  const counts = /* @__PURE__ */ new Map();
-  for (const policy of policies) {
-    const family = resolvePolicyMatcherFamily(policy) ?? "other";
-    counts.set(family, (counts.get(family) ?? 0) + 1);
-  }
-  return counts;
-}
-function PolicyRememberedCloudRules({
-  policies,
-  cloudControlsUrl
-}) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    GroupedPolicySection,
-    {
-      title: "From Guard Cloud",
-      description: "Synced team rules are read-only here. Edit them in Guard Cloud Controls.",
-      policies,
-      cloudControlsUrl,
-      emptyTitle: "No Guard Cloud rules synced",
-      emptyBody: "Connect Guard Cloud to sync shared policy bundles.",
-      defaultOpen: policies.length > 0
-    }
-  );
-}
-function PolicyRememberedLocalRules({
-  policies,
-  cloudControlsUrl,
-  onClearPolicy
-}) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    GroupedPolicySection,
-    {
-      title: "Remembered on this device",
-      description: "Choices you saved from Inbox. Each card explains what Guard will do next time.",
-      policies,
-      cloudControlsUrl,
-      onClearPolicy,
-      emptyTitle: "No local remembered rules yet",
-      emptyBody: "Approve or block in Inbox and Guard remembers the decision here in plain language.",
-      defaultOpen: true
-    }
-  );
-}
-const REVIEW_SCOPE_LADDER = [
-  { scope: "artifact", detail: "Guard remembers only the next matching retry." },
-  { scope: "workspace", detail: "Guard remembers the same action in this project folder." },
-  { scope: "publisher", detail: "Guard remembers actions from the same source in this app." },
-  { scope: "harness", detail: "Guard remembers the action across this app." },
-  { scope: "global", detail: "Guard remembers the action on every project on this device." }
-];
-function PolicyRememberedRulesRightRail({
-  onOpenCloudExceptions
-}) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "space-y-4 lg:sticky lg:top-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: "Remembered rules vs Cloud exceptions" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "mt-2 list-disc space-y-1 pl-5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Review and Inbox keep fast allow/block decisions for the work in front of you." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Remembered rules on this tab explain what Guard will do next time for matching actions." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Cloud exceptions are separate governed risk acceptances managed in Guard Cloud." })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: onOpenCloudExceptions,
-          className: "mt-3 text-sm font-medium text-brand-blue hover:underline",
-          children: "Open Cloud exceptions tab"
-        }
-      )
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Pending Inbox impact" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/75", children: pendingInboxCount > 0 ? `${pendingInboxCount} pending review item${pendingInboxCount === 1 ? "" : "s"} may be affected by stricter fallback controls.` : "No pending Inbox items are waiting for review right now." }),
+      onOpenInbox && pendingInboxCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "secondary", onClick: onOpenInbox, children: "Open Inbox" }) }) : null
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: "Review scope ladder" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-500", children: "When you approve in Inbox, you pick how broadly Guard should remember the decision. Wider scopes apply to more future actions." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "mt-3 space-y-2.5", children: REVIEW_SCOPE_LADDER.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex gap-2.5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-[11px] font-semibold text-brand-blue", children: index + 1 }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: scopeLabel(step.scope) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-relaxed text-slate-500", children: step.detail })
-        ] })
-      ] }, step.scope)) })
-    ] })
-  ] });
-}
-function PolicyRememberedRulesTab({
-  policies,
-  cloudControlsUrl,
-  onClearPolicy,
-  onOpenCloudExceptions
-}) {
-  const [searchQuery, setSearchQuery] = reactExports.useState("");
-  const [appFilter, setAppFilter] = reactExports.useState("");
-  const [familyFilter, setFamilyFilter] = reactExports.useState("");
-  const handleSearchChange = reactExports.useCallback((event) => {
-    setSearchQuery(event.target.value);
-  }, []);
-  const filteredPolicies = reactExports.useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    return policies.filter((policy) => {
-      if (appFilter && policy.harness !== appFilter) {
-        return false;
-      }
-      if (familyFilter) {
-        const family = resolvePolicyMatcherFamily(policy) ?? "other";
-        if (family !== familyFilter) {
-          return false;
-        }
-      }
-      if (!query) {
-        return true;
-      }
-      const display = resolvePolicyDisplay(policy);
-      const displayHaystack = [
-        policy.harness,
-        policy.artifact_id,
-        policy.workspace,
-        policy.publisher,
-        policy.scope,
-        policy.action,
-        policy.reason,
-        display.headline,
-        display.subtitle,
-        harnessDisplayName(policy.harness),
-        policyActionLabel(policy.action)
-      ].filter(Boolean).join(" ").toLowerCase();
-      return displayHaystack.includes(query);
-    });
-  }, [policies, searchQuery, appFilter, familyFilter]);
-  const rememberedRules = reactExports.useMemo(
-    () => filteredPolicies.filter((policy) => policy.action === "allow" || policy.action === "block").sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()),
-    [filteredPolicies]
-  );
-  const localRules = reactExports.useMemo(
-    () => rememberedRules.filter((policy) => !isCloudManagedPolicy(policy.source)),
-    [rememberedRules]
-  );
-  const cloudRules = reactExports.useMemo(
-    () => rememberedRules.filter((policy) => isCloudManagedPolicy(policy.source)),
-    [rememberedRules]
-  );
-  const appOptions = reactExports.useMemo(
-    () => [...new Set(policies.map((policy) => policy.harness).filter(Boolean))].sort(),
-    [policies]
-  );
-  const familyCounts = reactExports.useMemo(() => groupPoliciesByFamily(rememberedRules), [rememberedRules]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-1 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "h-4 w-4 shrink-0 text-slate-400", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              type: "search",
-              placeholder: "Search by app, action, or reason…",
-              value: searchQuery,
-              onChange: handleSearchChange,
-              "aria-label": "Search policies",
-              className: "w-full bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none"
-            }
-          )
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Evaluation order" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "mt-3 space-y-2 text-sm text-brand-dark/80", children: STRICT_POLICY_EVALUATION_ORDER.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-semibold text-brand-blue", children: [
+          index + 1,
+          "."
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "select",
-            {
-              value: appFilter,
-              onChange: (event) => setAppFilter(event.target.value),
-              "aria-label": "Filter by app",
-              className: "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark",
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All apps" }),
-                appOptions.map((app) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: app, children: harnessDisplayName(app) }, app))
-              ]
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "select",
-            {
-              value: familyFilter,
-              onChange: (event) => setFamilyFilter(event.target.value),
-              "aria-label": "Filter by action type",
-              className: "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark",
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All action types" }),
-                [...familyCounts.entries()].map(([family, count]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: family, children: [
-                  resolveFamilyFilterLabel(family),
-                  " (",
-                  count,
-                  ")"
-                ] }, family))
-              ]
-            }
-          )
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: step })
+      ] }, step)) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-5 shadow-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Policy simulator" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-600", children: "Preview which layer wins for a hypothetical action without changing live policy." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 grid gap-3 md:grid-cols-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SimLayerSelect, { label: "Remembered rule", value: simRemembered, onChange: handleSimRememberedChange }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SimLayerSelect, { label: "Cloud policy", value: simCloudPolicy, onChange: handleSimCloudPolicyChange }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: simCloudException, onChange: handleSimCloudExceptionChange }),
+          "Active Cloud exception"
         ] })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        PolicyRememberedLocalRules,
-        {
-          policies: localRules,
-          cloudControlsUrl,
-          onClearPolicy
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyRememberedCloudRules, { policies: cloudRules, cloudControlsUrl })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyRememberedRulesRightRail, { onOpenCloudExceptions })
+      simulation ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 rounded-xl border border-slate-100 bg-white p-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-brand-dark", children: [
+          "Outcome: ",
+          policyActionLabel(simulation.outcome),
+          " (",
+          simulation.winningStep,
+          ")"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1 text-xs text-slate-600", children: simulation.path.map((step) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: step }, step)) })
+      ] }) : null
+    ] })
   ] });
 }
 function resolvePolicyViewLabel(view) {
@@ -1651,25 +1456,7 @@ function PolicyWorkspace({
       }
     ) : null,
     activeView === "exceptions" ? /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyCloudExceptionsTab, { snapshot }) : null,
-    activeView === "strict" ? /* @__PURE__ */ jsxRuntimeExports.jsx(StrictModeView, { snapshot, onOpenSettings, onOpenInbox }) : null
-  ] });
-}
-function StrictModeView({
-  snapshot,
-  onOpenSettings,
-  onOpenInbox
-}) {
-  const isStrict = snapshot.security_level === "strict";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `rounded-2xl border p-5 ${isStrict ? "border-brand-green/20 bg-brand-green/[0.04]" : "border-slate-200 bg-slate-50/40"}`, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-2 flex items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Strict mode" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: isStrict ? "green" : "slate", children: isStrict ? "Enabled" : "Disabled" })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-4 text-sm text-brand-dark/75", children: "Strict mode asks before new network connections, subprocess launches, file writes, and harness starts." }),
-      !isStrict && onOpenSettings ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "secondary", onClick: onOpenSettings, children: "Enable strict mode" }) : null
-    ] }),
-    onOpenInbox ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "secondary", onClick: onOpenInbox, children: "Review pending Inbox items" }) : null
+    activeView === "strict" ? /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyStrictConfigTab, { snapshot, onOpenSettings, onOpenInbox }) : null
   ] });
 }
 export {

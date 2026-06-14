@@ -16042,14 +16042,17 @@ async function runPackageAudit(input) {
   }
   return normalizePackageFirewallAction(payloadBody);
 }
-async function runPackageSync() {
+async function runPackageSync(credentials) {
   const response = await fetchGuardApi("/v1/supply-chain/sync", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...guardAuthHeaders()
     },
-    body: JSON.stringify({})
+    body: JSON.stringify({
+      ...credentials?.approval_password !== void 0 ? { approval_password: credentials.approval_password } : {},
+      ...credentials?.approval_totp_code !== void 0 ? { approval_totp_code: credentials.approval_totp_code } : {}
+    })
   });
   const payloadBody = await response.json().catch(() => null);
   if (!response.ok) {
@@ -26567,9 +26570,9 @@ export {
   HiMiniSignal as bc,
   scopeLabel as bd,
   createCloudExceptionRequest as be,
-  policyActionLabel as bf,
-  fetchCloudExceptions as bg,
-  fetchCloudExceptionRequests as bh,
+  fetchCloudExceptions as bf,
+  fetchCloudExceptionRequests as bg,
+  policyActionLabel as bh,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,
