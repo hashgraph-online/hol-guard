@@ -308,7 +308,7 @@ def _local_policy_scope(scope: str | None) -> str:
         return "workspace"
     if scope == "item":
         return "artifact"
-    return scope or "artifact"
+    return "artifact"
 
 
 def _local_request_snapshot_items(store: GuardStore) -> list[dict[str, object]]:

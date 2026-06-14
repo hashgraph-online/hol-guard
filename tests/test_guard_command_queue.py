@@ -651,3 +651,36 @@ def test_executor_syncs_policy_without_local_request_id(tmp_path: Path) -> None:
             "2026-06-13T00:00:00+00:00",
         )
     ]
+
+
+def test_executor_maps_unknown_cloud_policy_scope_to_artifact(tmp_path: Path) -> None:
+    class PolicyStore(FakeStore):
+        def __init__(self, guard_home: Path) -> None:
+            super().__init__(guard_home)
+            self.upserts: list[dict[str, object]] = []
+
+        def upsert_policy(self, decision: object, generated_at: str) -> None:
+            del generated_at
+            self.upserts.append(decision.to_dict())
+
+    store = PolicyStore(tmp_path / "guard-home")
+    command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {
+                "action": "policy_sync",
+                "policyMemory": {
+                    "scope": "global",
+                    "target": {
+                        "artifactId": "pkg:npm/react",
+                        "harness": "package-install",
+                    },
+                },
+            },
+        },
+        context=_context(tmp_path),
+        store=store,  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert store.upserts[0]["scope"] == "artifact"
