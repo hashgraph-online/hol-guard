@@ -21,6 +21,20 @@ from tests.cloud_exception_bundle_fixtures import (
 from tests.test_policy_bundle_parser import computed_policy_bundle_hash
 
 
+class _JsonResponse:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self._payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def read(self) -> bytes:
+        return json.dumps(self._payload).encode("utf-8")
+
+
 def test_hglp136_fixture_is_code_generated_not_static_ui_copy() -> None:
     bundle = build_cloud_exception_policy_bundle()
     assert isinstance(bundle.get("cloudExceptions"), list)
@@ -74,23 +88,10 @@ def test_hglp140_wrong_workspace_bundle_is_rejected(tmp_path: Path, monkeypatch:
     bundle = build_cloud_exception_policy_bundle(workspace_id="workspace-b")
     bundle["bundleHash"] = computed_policy_bundle_hash(bundle)
 
-    class _Response:
-        def __init__(self, payload: dict[str, object]) -> None:
-            self._payload = payload
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self) -> bytes:
-            return json.dumps(self._payload).encode("utf-8")
-
     def _fake_urlopen(request, timeout):
         if request.full_url.endswith("/api/v1/guard/events"):
-            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
-        return _Response(
+            return _JsonResponse({"accepted": 0, "rejected": 0, "statuses": []})
+        return _JsonResponse(
             {
                 "syncedAt": "2026-06-14T12:00:01+00:00",
                 "receiptsStored": 0,
@@ -122,25 +123,12 @@ def test_hglp141_bundle_ack_metadata_is_available_for_sync_upload(
     bundle["bundleHash"] = computed_policy_bundle_hash(bundle)
     requests: list[dict[str, object]] = []
 
-    class _Response:
-        def __init__(self, payload: dict[str, object]) -> None:
-            self._payload = payload
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self) -> bytes:
-            return json.dumps(self._payload).encode("utf-8")
-
     def _fake_urlopen(request, timeout):
         if request.full_url.endswith("/api/v1/guard/events"):
-            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+            return _JsonResponse({"accepted": 0, "rejected": 0, "statuses": []})
         body = json.loads(request.data.decode("utf-8"))
         requests.append(body)
-        return _Response(
+        return _JsonResponse(
             {
                 "syncedAt": f"2026-06-14T12:00:0{len(requests)}+00:00",
                 "receiptsStored": 0,

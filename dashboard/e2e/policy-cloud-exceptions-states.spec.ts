@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import {
   freeStateSnapshot,
   paidStateSnapshot,
@@ -13,7 +13,7 @@ import {
 const DAEMON_PARAM = "?guardDaemon=http://127.0.0.1:4175";
 
 async function mountPolicyCloudRoute(
-  page: Parameters<Parameters<typeof test>[1]>[0]["page"],
+  page: Page,
   snapshot: typeof paidStateSnapshot,
   cloudExceptions: typeof connectedCloudExceptionsPayload,
 ) {
