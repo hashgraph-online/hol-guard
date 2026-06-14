@@ -24,6 +24,10 @@ assert(!workspaceSource.includes("PolicyExceptionForm"), "policy workspace no lo
 assert(!workspaceSource.includes("New exception"), "policy workspace removes local New exception copy");
 assert(tabSource.includes("Request cloud exception"), "cloud exceptions tab exposes request CTA");
 assert(tabSource.includes("PolicyCloudExceptionRequestPanel"), "cloud exceptions tab opens in-dashboard request panel");
+assert(tabSource.includes("fetchCloudExceptions"), "cloud exceptions tab loads synced exceptions");
+assert(tabSource.includes("PolicyCloudExceptionsSummary"), "cloud exceptions tab renders summary cards");
+assert(tabSource.includes("PolicyCloudExceptionDetailPanel"), "cloud exceptions tab renders detail panel");
+assert(tabSource.includes("PolicyCloudExceptionsList"), "cloud exceptions tab renders grouped lists");
 assert(tabSource.includes("Open Guard Cloud"), "cloud exceptions tab exposes Open Guard Cloud CTA");
 assert(tabSource.includes("Guard Cloud is not connected"), "disconnected Cloud copy present");
 assert(!pageSource.includes("add custom exceptions"), "page header removes local exception authoring copy");

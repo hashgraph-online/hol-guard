@@ -1606,18 +1606,27 @@ export type GuardCloudExceptionRequestCreateInput = {
   stepUpChallengeId?: string | null;
 };
 
+export type GuardCloudExceptionRequestItem = {
+  requestId: string;
+  scope: GuardCloudExceptionRequestCreateInput["scope"];
+  status: "pending" | "approved" | "rejected";
+  reason: string;
+  owner: string;
+  requestedAt: string;
+  requestedExpiresAt: string;
+};
+
 export type GuardCloudExceptionRequestListResponse = {
   generatedAt: string;
-  items: Array<{
-    requestId: string;
-    scope: GuardCloudExceptionRequestCreateInput["scope"];
-    status: "pending" | "approved" | "rejected";
-    reason: string;
-    owner: string;
-    requestedAt: string;
-    requestedExpiresAt: string;
-  }>;
+  items: GuardCloudExceptionRequestItem[];
 };
+
+export async function fetchCloudExceptionRequests(): Promise<GuardCloudExceptionRequestListResponse> {
+  if (isGuardDemoMode()) {
+    return { generatedAt: new Date().toISOString(), items: [] };
+  }
+  return readJson<GuardCloudExceptionRequestListResponse>("/v1/policy/cloud-exception-requests");
+}
 
 export async function createCloudExceptionRequest(
   input: GuardCloudExceptionRequestCreateInput,

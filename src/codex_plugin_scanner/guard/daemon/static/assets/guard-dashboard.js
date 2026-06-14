@@ -15208,6 +15208,46 @@ async function fetchPolicy(harness) {
   );
   return payload.items;
 }
+async function fetchCloudExceptions(harness) {
+  if (isGuardDemoMode()) {
+    return [];
+  }
+  const query = "";
+  const payload = await readJson(`/v1/policy/cloud-exceptions${query}`);
+  return payload.items;
+}
+async function fetchCloudExceptionRequests() {
+  if (isGuardDemoMode()) {
+    return { generatedAt: (/* @__PURE__ */ new Date()).toISOString(), items: [] };
+  }
+  return readJson("/v1/policy/cloud-exception-requests");
+}
+async function createCloudExceptionRequest(input) {
+  if (isGuardDemoMode()) {
+    return {
+      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      items: [
+        {
+          requestId: "demo-exception-request",
+          scope: input.scope,
+          status: "pending",
+          reason: input.reason,
+          owner: input.owner,
+          requestedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          requestedExpiresAt: input.requestedExpiresAt
+        }
+      ]
+    };
+  }
+  return readJson("/v1/policy/cloud-exception-requests", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify(input)
+  });
+}
 async function fetchPolicies() {
   if (isGuardDemoMode()) {
     return getDemoPolicy("codex");
@@ -26525,8 +26565,11 @@ export {
   HiMiniDocumentText as ba,
   guardAwareHref as bb,
   HiMiniSignal as bc,
-  policyActionLabel as bd,
-  scopeLabel as be,
+  scopeLabel as bd,
+  createCloudExceptionRequest as be,
+  policyActionLabel as bf,
+  fetchCloudExceptions as bg,
+  fetchCloudExceptionRequests as bh,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,
