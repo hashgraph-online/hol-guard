@@ -30,9 +30,7 @@ def normalized_cloud_exception_requests_url(sync_url: str) -> str:
             (parsed.scheme, parsed.netloc, "/api/guard/exceptions/requests", parsed.query, "")
         )
     if parsed.path.rstrip("/") == "/guard/receipts/sync":
-        return urllib.parse.urlunsplit(
-            (parsed.scheme, parsed.netloc, "/guard/exceptions/requests", parsed.query, "")
-        )
+        return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "/guard/exceptions/requests", parsed.query, ""))
     base = sync_url.rstrip("/")
     if base.endswith("/receipts/sync"):
         return base[: -len("/receipts/sync")] + "/exceptions/requests"

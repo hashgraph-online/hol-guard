@@ -242,9 +242,7 @@ def _stored_cloud_exception_provenance(item: dict[str, object]) -> str:
 
 def stored_receipt_sync_cloud_exceptions(items: list[dict[str, object]]) -> list[CloudException]:
     preserved = [
-        item
-        for item in items
-        if isinstance(item, dict) and _stored_cloud_exception_provenance(item) == "receipt-sync"
+        item for item in items if isinstance(item, dict) and _stored_cloud_exception_provenance(item) == "receipt-sync"
     ]
     return build_cloud_exceptions_from_stored_items(preserved)
 
