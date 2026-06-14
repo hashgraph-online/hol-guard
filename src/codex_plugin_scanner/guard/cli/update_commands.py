@@ -712,9 +712,7 @@ def build_guard_update_status_payload() -> dict[str, object]:
     update_available = auto_updatable and version_check.get("update_available") is True
     latest_version = version_check.get("latest_version")
     recovery_reinstall_command = (
-        _shell_command(_update_command(installer, use_pypi=True))
-        if recovery_reinstall_available
-        else None
+        _shell_command(_update_command(installer, use_pypi=True)) if recovery_reinstall_available else None
     )
     return {
         "current_version": current_version,
