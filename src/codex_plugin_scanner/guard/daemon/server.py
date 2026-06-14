@@ -73,6 +73,7 @@ from ..cli.install_commands import (
 from ..cli.update_commands import build_guard_update_status_payload
 from ..cloud_exception_requests import (
     CloudExceptionRequestError,
+    fetch_cloud_exception_requests,
     submit_cloud_exception_request,
 )
 from ..codex_resume import (
@@ -1169,6 +1170,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             harness = query.get("harness", [None])[-1]
             harness_filter = harness if isinstance(harness, str) else None
             self._write_json({"items": store.list_cloud_exceptions(harness=harness_filter)})
+            return
+        if parsed.path == "/v1/policy/cloud-exception-requests":
+            self._handle_cloud_exception_request_list()
             return
         if parsed.path == "/v1/evidence":
             query = parse_qs(parsed.query)
@@ -3149,6 +3153,20 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except Exception as error:
             message = str(error).strip() or "Unable to publish Guard insights share."
             self._write_json({"error": "insights_share_failed", "message": message}, status=502)
+            return
+        self._write_json(result)
+
+    def _handle_cloud_exception_request_list(self) -> None:
+        store = self.server.store  # type: ignore[attr-defined]
+        try:
+            result = fetch_cloud_exception_requests(store)
+        except CloudExceptionRequestError as error:
+            message = str(error).strip() or "Unable to load Guard Cloud exception requests."
+            self._write_json({"error": "cloud_exception_request_list_failed", "message": message}, status=error.status)
+            return
+        except Exception as error:
+            message = str(error).strip() or "Unable to load Guard Cloud exception requests."
+            self._write_json({"error": "cloud_exception_request_list_failed", "message": message}, status=502)
             return
         self._write_json(result)
 
