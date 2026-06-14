@@ -1239,6 +1239,23 @@ def _package_request_artifact_hash(
     )
 
 
+def package_request_policy_hash(
+    *,
+    artifact: GuardArtifact,
+    store: GuardStore,
+    workspace_dir: Path,
+    evaluation: PackageRequestEvaluation,
+) -> str:
+    """Hash a package request using manifest and lockfile contents."""
+
+    return _package_request_artifact_hash(
+        artifact,
+        workspace_dir=workspace_dir,
+        store=store,
+        evaluation=evaluation,
+    )
+
+
 def _evaluation_uses_saved_package_approval(evaluation: PackageRequestEvaluation) -> bool:
     return any(reason.get("code") == "saved_package_approval" for reason in evaluation.reasons)
 

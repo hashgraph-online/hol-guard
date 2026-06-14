@@ -150,7 +150,7 @@ def _parse_npm_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> Pac
 def _parse_pnpm_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> PackageIntent | None:
     if len(tokens) < 2:
         return None
-    if tokens[1] in {"add", "install"}:
+    if tokens[1] in {"add", "install", "i"}:
         return _build_intent(
             "pnpm",
             "install",

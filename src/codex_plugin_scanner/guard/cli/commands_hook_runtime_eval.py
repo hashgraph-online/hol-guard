@@ -24,7 +24,21 @@ def _evaluate_runtime_artifact_hook(
     store: GuardStore,
 ) -> int | RuntimeArtifactHookState:
     event_name = _hook_event_name(payload) or "PreToolUse"
-    runtime_artifact_hash = artifact_hash(runtime_artifact)
+    package_evaluation = None
+    if runtime_artifact.artifact_type == "package_request" and runtime_workspace is not None:
+        package_evaluation = evaluate_package_request_artifact(
+            artifact=runtime_artifact,
+            store=store,
+            workspace_dir=runtime_workspace,
+        )
+        runtime_artifact_hash = package_request_policy_hash(
+            artifact=runtime_artifact,
+            store=store,
+            workspace_dir=runtime_workspace,
+            evaluation=package_evaluation,
+        )
+    else:
+        runtime_artifact_hash = artifact_hash(runtime_artifact)
     artifact_id = runtime_artifact.artifact_id
     artifact_name = runtime_artifact.name
     policy_harness = _canonical_harness_name(args.harness)
@@ -125,23 +139,23 @@ def _evaluate_runtime_artifact_hook(
             policy_action="allow" if saved else "require-reapproval",
         )
         return 0
+    if package_evaluation is not None and runtime_workspace is not None:
+        package_evaluation = _apply_stored_package_policy_override(
+            package_evaluation,
+            store=store,
+            artifact=runtime_artifact,
+            artifact_hash=runtime_artifact_hash,
+            workspace_dir=runtime_workspace,
+            now=_now(),
+        )
     changed_capabilities = [runtime_artifact.artifact_type]
-    package_evaluation = None
     scanner_evidence = (
         scan_action_for_cisco_evidence(action_envelope, workspace=runtime_workspace)
         if action_envelope is not None
         else ()
     )
     scanner_evidence_payload = [signal.to_dict() for signal in scanner_evidence]
-    if (
-        runtime_artifact.artifact_type == "package_request"
-        and requested_policy_action not in VALID_GUARD_ACTIONS
-    ):
-        package_evaluation = evaluate_package_request_artifact(
-            artifact=runtime_artifact,
-            store=store,
-            workspace_dir=runtime_workspace,
-        )
+    if package_evaluation is not None:
         if guard_action_severity(package_evaluation.policy_action) > guard_action_severity(policy_action):
             policy_action = package_evaluation.policy_action
     if data_flow_signals:
