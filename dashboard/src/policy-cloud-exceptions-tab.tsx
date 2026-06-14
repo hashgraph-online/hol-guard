@@ -1,11 +1,12 @@
+import { useCallback, useState } from "react";
 import { HiMiniCloudArrowUp } from "react-icons/hi2";
 import { ActionButton, EmptyState, SectionLabel } from "./approval-center-primitives";
 import type { GuardRuntimeSnapshot } from "./guard-types";
+import { PolicyCloudExceptionRequestPanel } from "./policy-cloud-exception-request-panel";
 import { resolveCloudPolicyControlsUrl } from "./policy-workspace-helpers";
 
 type PolicyCloudExceptionsTabProps = {
   snapshot: GuardRuntimeSnapshot;
-  onRequestCloudException?: () => void;
 };
 
 function resolveCloudExceptionsConnected(snapshot: GuardRuntimeSnapshot): boolean {
@@ -14,11 +15,33 @@ function resolveCloudExceptionsConnected(snapshot: GuardRuntimeSnapshot): boolea
 
 export function PolicyCloudExceptionsTab({
   snapshot,
-  onRequestCloudException,
 }: PolicyCloudExceptionsTabProps) {
+  const [requestOpen, setRequestOpen] = useState(false);
   const cloudControlsUrl = resolveCloudPolicyControlsUrl(snapshot);
   const cloudConnected = resolveCloudExceptionsConnected(snapshot);
   const connectUrl = snapshot.connect_url?.trim() || null;
+
+  const handleOpenRequestPanel = useCallback(() => {
+    setRequestOpen(true);
+  }, []);
+
+  const handleCloseRequestPanel = useCallback(() => {
+    setRequestOpen(false);
+  }, []);
+
+  const handleRequestSubmitted = useCallback(() => {
+    setRequestOpen(false);
+  }, []);
+
+  if (requestOpen) {
+    return (
+      <PolicyCloudExceptionRequestPanel
+        snapshot={snapshot}
+        onSubmitted={handleRequestSubmitted}
+        onCancel={handleCloseRequestPanel}
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -37,8 +60,8 @@ export function PolicyCloudExceptionsTab({
       <div className="flex flex-wrap items-center gap-2">
         <ActionButton
           variant="primary"
-          onClick={onRequestCloudException}
-          disabled={!cloudConnected || onRequestCloudException === undefined}
+          onClick={handleOpenRequestPanel}
+          disabled={!cloudConnected}
         >
           Request cloud exception
         </ActionButton>
@@ -71,4 +94,3 @@ export function PolicyCloudExceptionsTab({
     </div>
   );
 }
-

@@ -54,14 +54,6 @@ export function PolicyWorkspace({
     setActiveView("exceptions");
   }, []);
 
-  const cloudControlsUrl = useMemo(() => resolveCloudPolicyControlsUrl(snapshot), [snapshot]);
-
-  const handleRequestCloudException = useCallback(() => {
-    if (cloudControlsUrl) {
-      window.open(cloudControlsUrl, "_blank", "noopener,noreferrer");
-    }
-  }, [cloudControlsUrl]);
-
   const modeCopy = useMemo(() => resolveSecurityModeCopy(snapshot.security_level), [snapshot.security_level]);
   const cloudBundleCopy = useMemo(() => resolveCloudPolicyBundleCopy(snapshot), [snapshot]);
 
@@ -113,15 +105,13 @@ export function PolicyWorkspace({
       {activeView === "rules" ? (
         <PolicyRememberedRulesTab
           policies={policies}
-          cloudControlsUrl={cloudControlsUrl}
+          cloudControlsUrl={resolveCloudPolicyControlsUrl(snapshot)}
           onClearPolicy={onClearPolicy}
           onOpenCloudExceptions={handleOpenCloudExceptions}
         />
       ) : null}
 
-      {activeView === "exceptions" ? (
-        <PolicyCloudExceptionsTab snapshot={snapshot} onRequestCloudException={cloudControlsUrl ? handleRequestCloudException : undefined} />
-      ) : null}
+      {activeView === "exceptions" ? <PolicyCloudExceptionsTab snapshot={snapshot} /> : null}
 
       {activeView === "strict" ? (
         <StrictModeView snapshot={snapshot} onOpenSettings={onOpenSettings} onOpenInbox={onOpenInbox} />
