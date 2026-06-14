@@ -83,14 +83,14 @@ from ..config import (
     reset_guard_settings,
     update_guard_settings,
 )
+from ..cloud_exception_requests import (
+    cloud_exception_request_error_status,
+    submit_cloud_exception_request,
+)
 from ..desktop_notifications import (
     desktop_notification_setup_payload,
     ensure_desktop_notification_setup,
     macos_notification_guidance,
-)
-from ..cloud_exception_requests import (
-    cloud_exception_request_error_status,
-    submit_cloud_exception_request,
 )
 from ..insights_share import publish_insights_share
 from ..local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE, build_local_dashboard_session_token
