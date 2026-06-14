@@ -54,6 +54,11 @@ from .runtime.supply_chain_package_eval import (
     evaluate_package_request_artifact,
 )
 from .runtime.supply_chain_support import ecosystem_support_matrix
+from .runtime.workspace_path_guard import (
+    read_bytes_within_workspace,
+    read_text_within_workspace,
+    resolve_path_within_workspace,
+)
 from .shims import package_shim_status, package_shim_supported_managers
 from .stable_digest import stable_digest_hex
 from .store import GuardStore
@@ -363,11 +368,7 @@ def _is_audit_sensitive_basename(name: str) -> bool:
 def _read_workspace_audit_text(workspace_dir: Path, relative_path: str) -> str | None:
     if _is_audit_sensitive_basename(Path(relative_path).name):
         return None
-    disk_path = workspace_dir / relative_path
-    try:
-        return disk_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return None
+    return read_text_within_workspace(workspace_dir, relative_path)
 
 
 def _workspace_has_project_markers(workspace_dir: Path) -> bool:
@@ -1961,20 +1962,16 @@ def _workspace_audit_lockfile_context(
 ) -> dict[str, object] | None:
     if not lockfile_paths:
         return None
-    lockfile_path = workspace_dir / lockfile_paths[0]
-    if not lockfile_path.exists():
+    lockfile_path = resolve_path_within_workspace(workspace_dir, lockfile_paths[0])
+    if lockfile_path is None or not lockfile_path.exists():
         return None
     lockfile_text = _read_workspace_audit_text(workspace_dir, lockfile_paths[0])
     if lockfile_text is None:
         return None
     manifest_hash = None
     if manifest_paths:
-        manifest_path = workspace_dir / manifest_paths[0]
-        try:
-            manifest_bytes = manifest_path.read_bytes()
-        except OSError:
-            manifest_bytes = None
-        if manifest_bytes is not None and not _is_audit_sensitive_basename(manifest_path.name):
+        manifest_bytes = read_bytes_within_workspace(workspace_dir, manifest_paths[0])
+        if manifest_bytes is not None and not _is_audit_sensitive_basename(Path(manifest_paths[0]).name):
             manifest_hash = stable_digest_hex(manifest_bytes)
     return {
         "dependencyCount": len(inventory),
@@ -2012,13 +2009,10 @@ def _workspace_audit_fingerprint(
 def _hash_existing_paths(workspace_dir: Path, relative_paths: Sequence[str]) -> list[str]:
     hashes: list[str] = []
     for relative_path in relative_paths:
-        disk_path = workspace_dir / relative_path
-        if not disk_path.exists():
+        payload = read_bytes_within_workspace(workspace_dir, relative_path)
+        if payload is None:
             continue
-        try:
-            hashes.append(stable_digest_hex(disk_path.read_bytes()))
-        except OSError:
-            continue
+        hashes.append(stable_digest_hex(payload))
     return hashes
 
 

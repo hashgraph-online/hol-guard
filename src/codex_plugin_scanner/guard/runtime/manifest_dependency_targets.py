@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ..models import GuardArtifact
 from .package_manifest_diff import parse_manifest_dependencies
+from .workspace_path_guard import read_text_within_workspace, resolve_path_within_workspace
 
 _MANIFEST_ECOSYSTEMS = {
     "package.json": "npm",
@@ -67,12 +68,11 @@ def unsynced_manifest_dependency_targets(
         for relative_path in lockfile_paths:
             if not isinstance(relative_path, str) or not relative_path:
                 continue
-            lockfile_path = workspace_dir / relative_path
-            if not lockfile_path.exists():
+            lockfile_path = resolve_path_within_workspace(workspace_dir, relative_path)
+            if lockfile_path is None or not lockfile_path.exists():
                 continue
-            try:
-                lockfile_text = lockfile_path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
+            lockfile_text = read_text_within_workspace(workspace_dir, relative_path)
+            if lockfile_text is None:
                 continue
             lockfile_ecosystem = _lockfile_ecosystem(lockfile_path.name) or "npm"
             for package_name in parse_manifest_dependencies(path=relative_path, text=lockfile_text):
@@ -84,12 +84,11 @@ def unsynced_manifest_dependency_targets(
         ecosystem = _manifest_ecosystem_for_path(relative_path)
         if ecosystem is None:
             continue
-        manifest_path = workspace_dir / relative_path
-        if not manifest_path.exists():
+        manifest_path = resolve_path_within_workspace(workspace_dir, relative_path)
+        if manifest_path is None or not manifest_path.exists():
             continue
-        try:
-            manifest_text = manifest_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+        manifest_text = read_text_within_workspace(workspace_dir, relative_path)
+        if manifest_text is None:
             continue
         dependency_map = _artifact_manifest_dependency_map(
             package_manager=package_manager,

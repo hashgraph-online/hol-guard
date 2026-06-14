@@ -12,6 +12,7 @@ from typing import Literal
 
 from ..models import GuardArtifact
 from .mcp_protection import _split_package_token
+from .workspace_path_guard import existing_paths_within_workspace
 
 IntentKind = Literal["install", "execute", "sync"]
 _EXTRAS_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)\[(?P<extras>[A-Za-z0-9_,.-]+)\]$")
@@ -176,19 +177,7 @@ def flag_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
 
 
 def existing_relative_paths(workspace: Path | None, candidates: tuple[str, ...] | list[str]) -> tuple[str, ...]:
-    if workspace is None:
-        return ()
-    resolved: list[str] = []
-    for candidate in candidates:
-        if not candidate:
-            continue
-        path = Path(candidate)
-        disk_path = path if path.is_absolute() else workspace / path
-        if disk_path.exists():
-            normalized = candidate if not path.is_absolute() else path.name
-            if normalized not in resolved:
-                resolved.append(normalized)
-    return tuple(resolved)
+    return existing_paths_within_workspace(workspace, candidates)
 
 
 def first_positional(tokens: tuple[str, ...], *, skip_value_options: set[str]) -> str | None:
