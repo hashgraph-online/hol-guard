@@ -78,30 +78,121 @@ type ConnectStepProps = {
   body: string;
   current: boolean;
   done: boolean;
+  emphasis?: "default" | "prominent";
   index: number;
   title: string;
 };
 
-function ConnectStep({ body, current, done, index, title }: ConnectStepProps) {
+function humanizeConnectError(error: string): { detail: string; title: string } {
+  const trimmed = error.trim();
+  if (/HTTP Error 500|internal server error/i.test(trimmed)) {
+    return {
+      title: "Cloud sign-in is temporarily unavailable",
+      detail: "Guard could not finish the repair flow. Wait a moment, then try connect again.",
+    };
+  }
+  if (/HTTP Error 401|unauthorized/i.test(trimmed)) {
+    return {
+      title: "Guard Cloud authorization expired",
+      detail: "Run connect again to refresh signed access on this machine.",
+    };
+  }
+  if (/failed to fetch|networkerror|load failed/i.test(trimmed)) {
+    return {
+      title: "Guard lost contact with the local daemon",
+      detail: "Confirm the local daemon is still running, then try connect again.",
+    };
+  }
+  return {
+    title: "Guard could not start local connect",
+    detail: trimmed,
+  };
+}
+
+function ConnectStep({
+  body,
+  current,
+  done,
+  emphasis = "default",
+  index,
+  title,
+}: ConnectStepProps) {
+  const prominent = emphasis === "prominent";
   const toneClass = done
-    ? "border-brand-green/20 bg-brand-green/[0.04]"
+    ? "border-brand-green/25 bg-brand-green/[0.05]"
     : current
-    ? "border-brand-blue/20 bg-brand-blue/[0.04]"
-    : "border-slate-200 bg-white/85";
+      ? prominent
+        ? "border-brand-blue/30 bg-gradient-to-br from-brand-blue/[0.08] to-white shadow-sm"
+        : "border-brand-blue/25 bg-brand-blue/[0.05]"
+      : "border-slate-200/90 bg-white/90";
   const badgeClass = done
-    ? "bg-brand-green/10 text-brand-green"
+    ? "bg-brand-green/12 text-brand-green"
     : current
-    ? "bg-brand-blue/10 text-brand-blue"
-    : "bg-slate-100 text-slate-500";
+      ? "bg-brand-blue/12 text-brand-blue"
+      : "bg-slate-100 text-slate-500";
+  const titleClass = prominent
+    ? "text-base font-semibold tracking-[-0.02em] text-brand-dark"
+    : "text-sm font-semibold text-brand-dark";
+  const bodyClass = prominent
+    ? "mt-1.5 text-sm leading-relaxed text-slate-600"
+    : "mt-1 text-sm leading-relaxed text-slate-500";
   return (
-    <div className={`rounded-[18px] border px-3.5 py-3 ${toneClass}`}>
+    <div className={`rounded-2xl border px-4 py-3.5 ${toneClass}`}>
       <div className="flex items-start gap-3">
-        <span className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${badgeClass}`}>
-          {done ? <HiMiniCheckCircle className="h-3.5 w-3.5" aria-hidden="true" /> : index}
+        <span
+          className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${badgeClass}`}
+        >
+          {done ? <HiMiniCheckCircle className="h-4 w-4" aria-hidden="true" /> : index}
         </span>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-brand-dark">{title}</p>
-          <p className="mt-1 text-xs leading-relaxed text-slate-500">{body}</p>
+          <p className={titleClass}>{title}</p>
+          <p className={bodyClass}>{body}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConnectProgressRail({
+  steps,
+}: {
+  steps: Array<{ body: string; current: boolean; done: boolean; title: string }>;
+}) {
+  const activeIndex = steps.findIndex((step) => step.current);
+  const focusIndex = activeIndex >= 0 ? activeIndex : steps.findIndex((step) => !step.done);
+  return (
+    <div className="space-y-2.5" role="list" aria-label="Connect progress">
+      {steps.map((step, index) => (
+        <div key={step.title} role="listitem">
+          <ConnectStep
+            index={index + 1}
+            title={step.title}
+            body={step.body}
+            current={step.current}
+            done={step.done}
+            emphasis={index === focusIndex ? "prominent" : "default"}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ConnectErrorBanner({ connectError }: { connectError: string }) {
+  const copy = humanizeConnectError(connectError);
+  return (
+    <div
+      className="rounded-2xl border border-brand-attention/30 bg-brand-attention/[0.06] px-4 py-3.5"
+      role="alert"
+    >
+      <div className="flex items-start gap-3">
+        <HiMiniExclamationTriangle
+          className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention"
+          aria-hidden="true"
+        />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-brand-dark">{copy.title}</p>
+          <p className="mt-1 text-sm leading-relaxed text-slate-600">{copy.detail}</p>
         </div>
       </div>
     </div>
@@ -255,9 +346,7 @@ export function ConnectFlowCard({
         </div>
         <p className="text-sm leading-relaxed text-slate-600">{helperText}</p>
         {connectError !== null ? (
-          <p className="text-sm text-brand-attention" role="alert">
-            {connectError}
-          </p>
+          <ConnectErrorBanner connectError={connectError} />
         ) : null}
         <div className="flex flex-wrap items-center gap-2">
           <ActionButton variant="primary" onClick={onStartConnect} disabled={primaryBusy}>
@@ -280,60 +369,53 @@ export function ConnectFlowCard({
   }
   if (compact) {
     return (
-      <div className="space-y-3">
-        <div className="space-y-2">
+      <div className="space-y-5">
+        <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue">
               HOL Guard Cloud
             </p>
             <Tag tone={statusTone}>{statusLabel}</Tag>
           </div>
-          <div className="space-y-1">
-            <p className="text-base font-semibold tracking-[-0.02em] text-brand-dark">
-              {titleCopy}
-            </p>
-            <p className="max-w-3xl text-sm leading-relaxed text-slate-500">
-              {detailCopy}
-            </p>
+          <div className="space-y-2">
+            <p className="text-lg font-semibold tracking-[-0.02em] text-brand-dark">{titleCopy}</p>
+            <p className="max-w-2xl text-sm leading-relaxed text-slate-600">{detailCopy}</p>
           </div>
         </div>
 
-        <div className="grid gap-2 text-xs leading-relaxed text-slate-500 md:grid-cols-3">
-          {steps.map((step, index) => (
-            <div key={step.title} className="min-w-0">
-              <p className="font-semibold text-brand-dark">
-                {index + 1}. {step.title}
-              </p>
-              <p className="mt-0.5">{step.body}</p>
-            </div>
-          ))}
-        </div>
+        <ConnectProgressRail steps={steps} />
 
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs leading-relaxed text-slate-500">
-          {localRecoveryHint !== null && <span>{localRecoveryHint}</span>}
-          <span>Guard changes routing only after this machine receives signed cloud access.</span>
-        </div>
+        {connectError !== null ? <ConnectErrorBanner connectError={connectError} /> : null}
 
-        {connectError !== null && (
-          <p className="text-xs leading-relaxed text-brand-attention">{connectError}</p>
-        )}
-
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           <ActionButton variant="primary" onClick={onStartConnect} disabled={primaryBusy}>
             {primaryBusy ? (
-              <HiMiniArrowPath className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              <HiMiniArrowPath className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
             ) : (
-              <HiMiniShieldCheck className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+              <HiMiniShieldCheck className="mr-1.5 h-4 w-4" aria-hidden="true" />
             )}
             {primaryLabel}
           </ActionButton>
-          {showManualLink && (
+          {showManualLink ? (
             <ActionButton href={manualHref} variant="outline">
               Open sign-in page
-              <HiMiniArrowTopRightOnSquare className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
+              <HiMiniArrowTopRightOnSquare className="ml-1.5 h-4 w-4" aria-hidden="true" />
             </ActionButton>
-          )}
+          ) : null}
         </div>
+
+        {localRecoveryHint !== null ? (
+          <details className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+            <summary className="cursor-pointer list-none text-sm font-medium text-brand-dark">
+              What still works locally
+            </summary>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">{localRecoveryHint}</p>
+          </details>
+        ) : null}
+
+        <p className="text-sm leading-relaxed text-slate-500">
+          Guard changes routing only after this machine receives signed cloud access.
+        </p>
       </div>
     );
   }
@@ -367,34 +449,18 @@ export function ConnectFlowCard({
           </div>
         </div>
 
-        <div className="grid gap-2.5 md:grid-cols-3">
-          {steps.map((step, index) => (
-            <ConnectStep
-              key={step.title}
-              index={index + 1}
-              title={step.title}
-              body={step.body}
-              current={step.current}
-              done={step.done}
-            />
-          ))}
-        </div>
+        <ConnectProgressRail steps={steps} />
 
         {localRecoveryHint != null && (
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-              Available now
-            </p>
-            <p className="mt-1 text-xs leading-relaxed text-slate-600">{localRecoveryHint}</p>
-          </div>
+          <details className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+            <summary className="cursor-pointer list-none text-sm font-medium text-brand-dark">
+              What still works locally
+            </summary>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">{localRecoveryHint}</p>
+          </details>
         )}
 
-        {connectError !== null && (
-          <div className="rounded-[18px] border border-brand-attention/25 bg-brand-attention/[0.05] px-3.5 py-3">
-            <p className="text-sm font-medium text-brand-dark">Guard could not start local connect</p>
-            <p className="mt-1 text-xs leading-relaxed text-slate-600">{connectError}</p>
-          </div>
-        )}
+        {connectError !== null ? <ConnectErrorBanner connectError={connectError} /> : null}
 
         <div className="flex flex-wrap items-center gap-2">
           <ActionButton variant="primary" onClick={onStartConnect} disabled={primaryBusy}>
@@ -424,17 +490,17 @@ type CliFallbackProps = {
 export function CliFallback({ commands }: CliFallbackProps) {
   const items = Object.entries(commands);
   return (
-    <details className="rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-      <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-        CLI fallback
+    <details className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3.5">
+      <summary className="cursor-pointer list-none text-sm font-medium text-slate-600">
+        Advanced: run connect from the terminal
       </summary>
-      <div className="mt-3 space-y-1.5">
+      <div className="mt-3 space-y-2">
         {items.map(([label, command]) => (
           <div key={label} className="min-w-0">
-            <span className="mr-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            <span className="mr-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
               {label}
             </span>
-            <code className="break-all font-mono text-xs text-brand-dark">{command}</code>
+            <code className="break-all font-mono text-sm text-brand-dark">{command}</code>
           </div>
         ))}
       </div>
@@ -478,7 +544,7 @@ export function EntitlementNotice({
     data.package_shims.some((shim) => shim.installed) ||
     data.protection?.path_status === "restart_required";
   return (
-    <div className="space-y-4 px-4 py-4">
+    <div className="space-y-5 px-4 py-5 sm:px-5 sm:py-6">
       {connectRequired && data.connect_flow !== null ? (
         <ConnectFlowCard
           compact={compactConnectNotice}
