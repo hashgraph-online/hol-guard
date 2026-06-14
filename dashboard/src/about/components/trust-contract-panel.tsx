@@ -10,11 +10,11 @@ const toneClasses: Record<string, string> = {
   slate: "border-slate-200 bg-slate-50/60",
 };
 
-const badgeTones: Record<string, "blue" | "green" | "purple" | "slate"> = {
-  blue: "blue",
-  green: "green",
-  purple: "purple",
-  slate: "slate",
+const badgeTones: Record<string, "info" | "success" | "attention" | "default"> = {
+  blue: "info",
+  green: "success",
+  purple: "attention",
+  slate: "default",
 };
 
 export function TrustContractPanel({
