@@ -174,7 +174,23 @@ export function buildMemorySummary(
   return `The last saved decision for ${item.artifact_name} was ${receipt.policy_decision}.`;
 }
 
-export function scopeLabel(scope: string): string {
+export function scopeLabel(scope: string, variant: "review" | "policy" = "review"): string {
+  if (variant === "policy") {
+    switch (scope) {
+      case "artifact":
+        return "Once";
+      case "workspace":
+        return "This project";
+      case "harness":
+        return "This app";
+      case "publisher":
+        return "This source";
+      case "global":
+        return "Every project";
+      default:
+        return scope;
+    }
+  }
   switch (scope) {
     case "artifact":
       return "This retry only";

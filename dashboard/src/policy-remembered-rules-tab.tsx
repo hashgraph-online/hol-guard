@@ -61,8 +61,15 @@ export function PolicyRememberedRulesTab({
         policy.scope,
         policy.action,
         policy.reason,
+        policy.remembered_command,
+        policy.remembered_context,
+        policy.workspace_label,
+        policy.source_scope_path,
+        policy.source_receipt_id,
         display.headline,
-        display.subtitle,
+        display.kindLine,
+        display.pathLine,
+        display.projectLabel,
         harnessDisplayName(policy.harness),
         policyActionLabel(policy.action),
       ]
@@ -104,7 +111,7 @@ export function PolicyRememberedRulesTab({
             <HiMiniMagnifyingGlass className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
             <input
               type="search"
-              placeholder="Search by app, action, or reason…"
+              placeholder="Search command, project, path, or app…"
               value={searchQuery}
               onChange={handleSearchChange}
               aria-label="Search policies"

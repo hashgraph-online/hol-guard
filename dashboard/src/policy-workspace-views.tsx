@@ -73,35 +73,43 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear }: PolicyRuleRowProps
 
   return (
     <tr className="border-b border-slate-100 last:border-0 hover:bg-slate-50/80">
-      <td className="px-3 py-3 align-top">
-        <div className="flex items-start gap-2">
-          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+      <td className="w-12 px-2 py-3 align-top">
+        <div className="flex flex-col items-center gap-1.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
             <Icon className="h-4 w-4" aria-hidden="true" />
           </span>
-          <div className="min-w-0 space-y-1">
-            <Badge tone={resolveActionTone(policy.action)}>{policyActionLabel(policy.action)}</Badge>
-            <p className="text-sm font-semibold leading-snug text-brand-dark">{display.headline}</p>
-            {display.subtitle ? <p className="text-xs text-slate-500">{display.subtitle}</p> : null}
-            <p className="text-xs leading-relaxed text-slate-600">{display.rememberSentence}</p>
-          </div>
+          <Badge tone={resolveActionTone(policy.action)}>{policyActionLabel(policy.action)}</Badge>
         </div>
       </td>
-      <td className="hidden px-3 py-3 align-top text-sm text-slate-600 md:table-cell">
+      <td className="min-w-[220px] px-3 py-3 align-top">
+        <p className="break-all font-mono text-sm font-semibold leading-snug text-brand-dark">{display.headline}</p>
+        {display.kindLine ? <p className="mt-1 text-xs text-slate-500">{display.kindLine}</p> : null}
+        {display.pathLine ? (
+          <p className="mt-1 break-all font-mono text-[11px] leading-relaxed text-slate-500">{display.pathLine}</p>
+        ) : null}
+      </td>
+      <td className="hidden min-w-[100px] px-3 py-3 align-top text-sm text-brand-dark md:table-cell">
+        {display.projectLabel ?? "—"}
+      </td>
+      <td className="hidden px-3 py-3 align-top md:table-cell">
         <Tag tone={cloudManaged ? "blue" : "green"}>{resolvePolicySourceLabel(policy.source)}</Tag>
       </td>
-      <td className="hidden px-3 py-3 align-top text-sm text-slate-600 lg:table-cell">{scopeLabel(policy.scope)}</td>
-      <td className="hidden px-3 py-3 align-top text-sm text-slate-600 xl:table-cell">
+      <td className="hidden px-3 py-3 align-top text-sm text-slate-700 lg:table-cell">
+        {scopeLabel(policy.scope, "policy")}
+      </td>
+      <td className="hidden px-3 py-3 align-top text-sm text-slate-700 xl:table-cell">
         {harnessDisplayName(policy.harness)}
       </td>
-      <td className="hidden px-3 py-3 align-top text-xs text-slate-500 sm:table-cell">
+      <td className="hidden whitespace-nowrap px-3 py-3 align-top text-xs text-slate-500 sm:table-cell">
         {policy.updated_at ? formatRelativeTime(policy.updated_at) : "—"}
       </td>
-      <td className="px-3 py-3 align-top text-right">
+      <td className="min-w-[120px] px-3 py-3 align-top text-right">
         <div className="flex flex-col items-end gap-2">
           {!cloudManaged ? (
             <a
               href={guardAwareHref(resolvePolicyEvidenceHref(policy))}
-              className="text-sm font-medium text-brand-blue hover:underline"
+              className="max-w-[160px] truncate font-mono text-xs font-medium text-brand-blue hover:underline"
+              title={resolvePolicyApprovalRecordLabel(policy)}
             >
               {resolvePolicyApprovalRecordLabel(policy)}
             </a>
@@ -164,14 +172,16 @@ export function PolicyRuleTable({
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <table className="min-w-full border-collapse text-left">
+        <table className="min-w-[960px] w-full border-collapse text-left">
           <thead className="border-b border-slate-100 bg-slate-50/80 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-3 py-3">Remembered action</th>
+              <th className="px-2 py-3">Action</th>
+              <th className="px-3 py-3">Command</th>
+              <th className="hidden px-3 py-3 md:table-cell">Project</th>
               <th className="hidden px-3 py-3 md:table-cell">Source</th>
               <th className="hidden px-3 py-3 lg:table-cell">Scope</th>
-              <th className="hidden px-3 py-3 xl:table-cell">Harness</th>
-              <th className="hidden px-3 py-3 sm:table-cell">Last updated</th>
+              <th className="hidden px-3 py-3 xl:table-cell">App</th>
+              <th className="hidden px-3 py-3 sm:table-cell">Updated</th>
               <th className="px-3 py-3 text-right">Record</th>
             </tr>
           </thead>

@@ -13219,7 +13219,23 @@ function buildMemorySummary(item, receipt) {
   }
   return `The last saved decision for ${item.artifact_name} was ${receipt.policy_decision}.`;
 }
-function scopeLabel(scope) {
+function scopeLabel(scope, variant = "review") {
+  if (variant === "policy") {
+    switch (scope) {
+      case "artifact":
+        return "Once";
+      case "workspace":
+        return "This project";
+      case "harness":
+        return "This app";
+      case "publisher":
+        return "This source";
+      case "global":
+        return "Every project";
+      default:
+        return scope;
+    }
+  }
   switch (scope) {
     case "artifact":
       return "This retry only";
