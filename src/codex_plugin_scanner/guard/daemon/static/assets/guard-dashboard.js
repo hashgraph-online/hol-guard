@@ -19200,7 +19200,7 @@ function humanizeConnectError(error) {
   }
   return {
     title: "Guard could not start local connect",
-    detail: trimmed
+    detail: "Guard could not connect right now. Check that the local daemon is running, then try again."
   };
 }
 function ConnectStep({
@@ -19212,8 +19212,24 @@ function ConnectStep({
   title
 }) {
   const prominent = emphasis === "prominent";
-  const toneClass = done ? "border-brand-green/25 bg-brand-green/[0.05]" : current ? prominent ? "border-brand-blue/30 bg-gradient-to-br from-brand-blue/[0.08] to-white shadow-sm" : "border-brand-blue/25 bg-brand-blue/[0.05]" : "border-slate-200/90 bg-white/90";
-  const badgeClass = done ? "bg-brand-green/12 text-brand-green" : current ? "bg-brand-blue/12 text-brand-blue" : "bg-slate-100 text-slate-500";
+  let toneClass;
+  if (done) {
+    toneClass = "border-brand-green/25 bg-brand-green/[0.05]";
+  } else if (current && prominent) {
+    toneClass = "border-brand-blue/30 bg-gradient-to-br from-brand-blue/[0.08] to-white shadow-sm";
+  } else if (current) {
+    toneClass = "border-brand-blue/25 bg-brand-blue/[0.05]";
+  } else {
+    toneClass = "border-slate-200/90 bg-white/90";
+  }
+  let badgeClass;
+  if (done) {
+    badgeClass = "bg-brand-green/12 text-brand-green";
+  } else if (current) {
+    badgeClass = "bg-brand-blue/12 text-brand-blue";
+  } else {
+    badgeClass = "bg-slate-100 text-slate-500";
+  }
   const titleClass = prominent ? "text-base font-semibold tracking-[-0.02em] text-brand-dark" : "text-sm font-semibold text-brand-dark";
   const bodyClass = prominent ? "mt-1.5 text-sm leading-relaxed text-slate-600" : "mt-1 text-sm leading-relaxed text-slate-500";
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `rounded-2xl border px-4 py-3.5 ${toneClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
@@ -19245,7 +19261,7 @@ function ConnectProgressRail({
       done: step.done,
       emphasis: index === focusIndex ? "prominent" : "default"
     }
-  ) }, step.title)) });
+  ) }, `${index}-${step.title}`)) });
 }
 function ConnectErrorBanner({ connectError }) {
   const copy = humanizeConnectError(connectError);
@@ -19425,7 +19441,7 @@ function ConnectFlowCard({
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "ml-1.5 h-4 w-4", "aria-hidden": "true" })
         ] }) : null
       ] }),
-      localRecoveryHint !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3", children: [
+      localRecoveryHint != null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer list-none text-sm font-medium text-brand-dark", children: "What still works locally" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-slate-600", children: localRecoveryHint })
       ] }) : null,

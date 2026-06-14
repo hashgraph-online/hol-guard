@@ -105,7 +105,7 @@ function humanizeConnectError(error: string): { detail: string; title: string } 
   }
   return {
     title: "Guard could not start local connect",
-    detail: trimmed,
+    detail: "Guard could not connect right now. Check that the local daemon is running, then try again.",
   };
 }
 
@@ -118,18 +118,24 @@ function ConnectStep({
   title,
 }: ConnectStepProps) {
   const prominent = emphasis === "prominent";
-  const toneClass = done
-    ? "border-brand-green/25 bg-brand-green/[0.05]"
-    : current
-      ? prominent
-        ? "border-brand-blue/30 bg-gradient-to-br from-brand-blue/[0.08] to-white shadow-sm"
-        : "border-brand-blue/25 bg-brand-blue/[0.05]"
-      : "border-slate-200/90 bg-white/90";
-  const badgeClass = done
-    ? "bg-brand-green/12 text-brand-green"
-    : current
-      ? "bg-brand-blue/12 text-brand-blue"
-      : "bg-slate-100 text-slate-500";
+  let toneClass: string;
+  if (done) {
+    toneClass = "border-brand-green/25 bg-brand-green/[0.05]";
+  } else if (current && prominent) {
+    toneClass = "border-brand-blue/30 bg-gradient-to-br from-brand-blue/[0.08] to-white shadow-sm";
+  } else if (current) {
+    toneClass = "border-brand-blue/25 bg-brand-blue/[0.05]";
+  } else {
+    toneClass = "border-slate-200/90 bg-white/90";
+  }
+  let badgeClass: string;
+  if (done) {
+    badgeClass = "bg-brand-green/12 text-brand-green";
+  } else if (current) {
+    badgeClass = "bg-brand-blue/12 text-brand-blue";
+  } else {
+    badgeClass = "bg-slate-100 text-slate-500";
+  }
   const titleClass = prominent
     ? "text-base font-semibold tracking-[-0.02em] text-brand-dark"
     : "text-sm font-semibold text-brand-dark";
@@ -163,7 +169,7 @@ function ConnectProgressRail({
   return (
     <div className="space-y-2.5" role="list" aria-label="Connect progress">
       {steps.map((step, index) => (
-        <div key={step.title} role="listitem">
+        <div key={`${index}-${step.title}`} role="listitem">
           <ConnectStep
             index={index + 1}
             title={step.title}
@@ -404,7 +410,7 @@ export function ConnectFlowCard({
           ) : null}
         </div>
 
-        {localRecoveryHint !== null ? (
+        {localRecoveryHint != null ? (
           <details className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
             <summary className="cursor-pointer list-none text-sm font-medium text-brand-dark">
               What still works locally
