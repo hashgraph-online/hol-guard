@@ -407,7 +407,7 @@ def _codex_source_inspection_can_skip_secret_output(
         return False
     if _codex_command_references_sensitive_local_source(command_text, cwd=cwd):
         return False
-    if _codex_command_targets_secret_like_source_name(command_text):
+    if _codex_command_targets_secret_like_source_name(command_text, cwd=cwd, home_dir=home_dir):
         return False
     non_medium_matches = [match for match in content_matches if match.sensitivity != "medium"]
     if non_medium_matches:
@@ -443,8 +443,8 @@ def _codex_command_references_benign_source_dotfile(command_text: str) -> bool:
         return False
     return any(Path(part).name.lower() in _CODEX_BENIGN_SOURCE_DOTFILES for part in parts)
 
-def _codex_command_targets_secret_like_source_name(command_text: str) -> bool:
-    dangerous_stems = {
+_CODEX_SECRET_LIKE_SOURCE_NAME_STEMS = frozenset(
+    {
         "auth",
         "credential",
         "credentials",
@@ -456,12 +456,39 @@ def _codex_command_targets_secret_like_source_name(command_text: str) -> bool:
         "secrets",
         "token",
     }
+)
+
+
+def _codex_source_name_stem_has_compound_secret_segment(stem: str, *, split_compound: bool) -> bool:
+    lowered = stem.lower()
+    if not split_compound:
+        return False
+    return any(
+        segment in _CODEX_SECRET_LIKE_SOURCE_NAME_STEMS
+        for segment in re.split(r"[-_]+", lowered)
+        if segment and segment != lowered
+    )
+
+
+def _codex_command_targets_secret_like_source_name(
+    command_text: str,
+    *,
+    cwd: Path | None = None,
+    home_dir: Path | None = None,
+) -> bool:
     chained_segments = _split_codex_safe_read_only_chain(command_text)
     if chained_segments is not None:
-        return any(_codex_command_targets_secret_like_source_name(segment) for segment in chained_segments)
+        return any(
+            _codex_command_targets_secret_like_source_name(segment, cwd=cwd, home_dir=home_dir)
+            for segment in chained_segments
+        )
     pipeline_segments = _split_codex_safe_read_only_pipeline(command_text)
     if pipeline_segments:
-        return _codex_command_targets_secret_like_source_name(pipeline_segments[0])
+        return _codex_command_targets_secret_like_source_name(
+            pipeline_segments[0],
+            cwd=cwd,
+            home_dir=home_dir,
+        )
     try:
         parts = shlex.split(command_text)
     except ValueError:
@@ -472,8 +499,20 @@ def _codex_command_targets_secret_like_source_name(command_text: str) -> bool:
             continue
         name = Path(stripped).name.lower().lstrip(".")
         stem = Path(name).stem or name
-        if stem in dangerous_stems or name.startswith("id_"):
-            return True
+        exact_secret_like = stem.lower() in _CODEX_SECRET_LIKE_SOURCE_NAME_STEMS
+        compound_secret_like = _codex_source_name_stem_has_compound_secret_segment(
+            stem,
+            split_compound=cwd is not None,
+        )
+        if not exact_secret_like and not compound_secret_like and not name.startswith("id_"):
+            continue
+        if compound_secret_like and cwd is not None and _codex_search_target_is_source_like(
+            stripped,
+            cwd=cwd,
+            home_dir=home_dir,
+        ):
+            continue
+        return True
     return False
 
 __all__ = """
@@ -494,6 +533,7 @@ _codex_env_assignment_uses_shell_expansion _codex_local_secret_source_label
 _codex_output_is_only_benign_secret_fixture _codex_output_uses_placeholder_private_key_fixture
 _codex_pipeline_segment_may_read_local_content _codex_post_tool_command_is_read_only_source_inspection
 _codex_post_tool_command_text _codex_shell_split _codex_source_inspection_can_skip_secret_output
+_codex_source_name_stem_has_compound_secret_segment
 _codex_strip_command_wrapper _codex_strip_env_wrapper _codex_tool_output_request_summary
 _codex_tool_output_runtime_summary _codex_unwrapped_command_parts
 """.split()
