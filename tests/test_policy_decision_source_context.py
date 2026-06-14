@@ -185,3 +185,170 @@ def test_list_policy_decisions_uses_trigger_summary_backticks(tmp_path) -> None:
     assert item["remembered_command"] == "git push origin main"
     assert item["source_scope_path"] == "/srv/projects/sample-broker"
     assert item["workspace_label"] == "sample-broker"
+
+
+def test_list_policy_decisions_batch_index_matches_single_lookup(tmp_path) -> None:
+    store = _store(tmp_path)
+    for index in range(3):
+        receipt = GuardReceipt(
+            receipt_id=f"receipt-batch-{index}",
+            timestamp=f"2026-06-14T12:00:{index:02d}+00:00",
+            harness="codex",
+            artifact_id=f"codex:project:package-request:batch{index}",
+            artifact_hash=f"batchhash{index:02d}abcdef1234567890abcdef1234567890abcdef12",
+            policy_decision="allow",
+            capabilities_summary=f"Package install via pnpm-{index}",
+            changed_capabilities=("package-request",),
+            provenance_summary="hook event for package install",
+            artifact_name=f"pnpm install {index}",
+            source_scope=f"/srv/projects/sample-{index}",
+        )
+        store.add_receipt(receipt)
+        store.upsert_policy(
+            PolicyDecision(
+                harness="codex",
+                scope="workspace",
+                action="allow",
+                artifact_id=f"codex:project:package-request:batch{index}",
+                artifact_hash=f"batchhash{index:02d}abcdef1234567890abcdef1234567890abcdef12",
+                workspace=f"workspace:batch{index}",
+                reason="approved in review",
+                source="local",
+            ),
+            f"2026-06-14T12:01:{index:02d}+00:00",
+        )
+
+    items = store.list_policy_decisions()
+    assert len(items) == 3
+    for item in items:
+        assert item["source_receipt_id"] is not None
+        assert item["remembered_command"] is not None
+
+
+def test_list_policy_decisions_scales_without_per_row_queries(tmp_path) -> None:
+    store = _store(tmp_path)
+    for index in range(120):
+        receipt = GuardReceipt(
+            receipt_id=f"receipt-perf-{index}",
+            timestamp=f"2026-06-14T12:00:{index % 60:02d}+00:00",
+            harness="codex",
+            artifact_id=f"codex:project:package-request:perf{index}",
+            artifact_hash=f"perfhash{index:03d}abcdef1234567890abcdef1234567890abcdef12",
+            policy_decision="allow",
+            capabilities_summary="Package install via pnpm",
+            changed_capabilities=("package-request",),
+            provenance_summary="hook event for package install",
+            artifact_name=f"pnpm install {index}",
+            source_scope="/srv/projects/sample-guard",
+        )
+        store.add_receipt(receipt)
+        store.upsert_policy(
+            PolicyDecision(
+                harness="codex",
+                scope="workspace",
+                action="allow",
+                artifact_id=f"codex:project:package-request:perf{index}",
+                artifact_hash=f"perfhash{index:03d}abcdef1234567890abcdef1234567890abcdef12",
+                workspace=f"workspace:perf{index}",
+                reason="approved in review",
+                source="local",
+            ),
+            f"2026-06-14T12:01:{index % 60:02d}+00:00",
+        )
+
+    items = store.list_policy_decisions()
+    assert len(items) == 120
+    assert all(item["remembered_command"] is not None for item in items)
+
+
+def test_list_policy_decisions_supports_global_harness_scope(tmp_path) -> None:
+    store = _store(tmp_path)
+    receipt = GuardReceipt(
+        receipt_id="receipt-global-1",
+        timestamp="2026-06-14T12:00:00+00:00",
+        harness="codex",
+        artifact_id="codex:project:package-request:global1",
+        artifact_hash="globalhash1234567890abcdef1234567890abcdef1234567890ab",
+        policy_decision="allow",
+        capabilities_summary="Package install via pnpm",
+        changed_capabilities=("package-request",),
+        provenance_summary="hook event for package install",
+        artifact_name="pnpm install",
+        source_scope="/srv/projects/sample-guard",
+    )
+    store.add_receipt(receipt)
+    store.upsert_policy(
+        PolicyDecision(
+            harness="*",
+            scope="artifact",
+            action="allow",
+            artifact_id="codex:project:package-request:global1",
+            artifact_hash="globalhash1234567890abcdef1234567890abcdef1234567890ab",
+            workspace="workspace:global",
+            reason="approved in review",
+            source="local",
+        ),
+        "2026-06-14T12:01:00+00:00",
+    )
+
+    item = store.list_policy_decisions()[0]
+    assert item["source_receipt_id"] == "receipt-global-1"
+    assert item["remembered_command"] == "pnpm install"
+
+
+def test_list_policy_decisions_keeps_inventory_context_with_global_policy(tmp_path) -> None:
+    store = _store(tmp_path)
+    with store._connect() as connection:
+        connection.execute(
+            """
+            insert into artifact_inventory (
+              artifact_id, harness, artifact_name, artifact_type, source_scope, config_path,
+              first_seen_at, last_seen_at, last_policy_action, artifact_hash
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "codex:project:package-request:mixed1",
+                "codex",
+                "pnpm",
+                "package_request",
+                "/srv/projects/sample-guard",
+                "config.json",
+                "2026-06-14T12:00:00+00:00",
+                "2026-06-14T12:00:00+00:00",
+                "allow",
+                "hash-mixed1",
+            ),
+        )
+        connection.execute(
+            "update artifact_inventory set launch_command = ? where artifact_id = ? and harness = ?",
+            ("pnpm install --frozen-lockfile", "codex:project:package-request:mixed1", "codex"),
+        )
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="workspace",
+            action="allow",
+            artifact_id="codex:project:package-request:mixed1",
+            artifact_hash="hash-mixed1",
+            workspace="workspace:mixed",
+            reason="approved in review",
+            source="local",
+        ),
+        "2026-06-14T12:01:00+00:00",
+    )
+    store.upsert_policy(
+        PolicyDecision(
+            harness="*",
+            scope="artifact",
+            action="allow",
+            artifact_id="codex:project:package-request:global-mixed",
+            artifact_hash="globalmixedhash1234567890abcdef1234567890abcdef12",
+            workspace="workspace:global",
+            reason="approved in review",
+            source="local",
+        ),
+        "2026-06-14T12:02:00+00:00",
+    )
+
+    items = {str(item["artifact_id"]): item for item in store.list_policy_decisions()}
+    assert items["codex:project:package-request:mixed1"]["remembered_command"] == "pnpm install --frozen-lockfile"
