@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
+import tempfile
 from dataclasses import dataclass
 from enum import Enum
-from multiprocessing import get_context
-from multiprocessing.process import BaseProcess
 from pathlib import Path
-from queue import Empty
 
 from ..models import Finding, Severity, severity_from_value
 
@@ -83,20 +85,15 @@ def _scan_directory_payload(skills_dir: Path, policy_name: str) -> dict[str, obj
     return payload if isinstance(payload, dict) else {}
 
 
-def _scan_directory_worker(skills_dir: str, policy_name: str, result_queue: object) -> None:
-    try:
-        payload = _scan_directory_payload(Path(skills_dir), policy_name)
-        result_queue.put(("ok", payload))
-    except BaseException as exc:
-        result_queue.put(("error", type(exc).__name__, str(exc)))
+_SUBPROCESS_SCAN_SNIPPET = """
+from pathlib import Path
+import json
+import sys
+from codex_plugin_scanner.integrations.cisco_skill_scanner import _scan_directory_payload
 
-
-def _terminate_scan_process(process: BaseProcess) -> None:
-    process.terminate()
-    process.join(1)
-    if process.is_alive():
-        process.kill()
-        process.join()
+payload = _scan_directory_payload(Path(sys.argv[1]), sys.argv[2])
+Path(sys.argv[3]).write_text(json.dumps(payload), encoding='utf-8')
+""".strip()
 
 
 def _scan_directory_with_timeout(
@@ -105,35 +102,47 @@ def _scan_directory_with_timeout(
     if timeout_seconds is None:
         return _scan_directory_payload(skills_dir, policy_name)
 
-    context = get_context("spawn")
-    result_queue = context.Queue(maxsize=1)
-    process = context.Process(
-        target=_scan_directory_worker,
-        args=(str(skills_dir), policy_name, result_queue),
-    )
-    process.start()
+    file_descriptor, output_name = tempfile.mkstemp(prefix="cisco-skill-scan-", suffix=".json")
+    output_path = Path(output_name)
+    # Explicit close avoids leaking the temp file descriptor into the child.
+    os.close(file_descriptor)
 
     try:
-        status, payload, *details = result_queue.get(timeout=timeout_seconds)
-    except Empty as exc:
-        process.join(0)
-        if process.is_alive():
-            _terminate_scan_process(process)
-            raise TimeoutError("Cisco skill scanner timed out") from exc
-        try:
-            status, payload, *details = result_queue.get(timeout=1)
-        except Empty as empty_exc:
-            raise RuntimeError(f"Cisco skill scanner exited with code {process.exitcode}") from empty_exc
-    else:
-        process.join(1)
-        if process.is_alive():
-            _terminate_scan_process(process)
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                _SUBPROCESS_SCAN_SNIPPET,
+                str(skills_dir),
+                policy_name,
+                str(output_path),
+            ],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise TimeoutError("Cisco skill scanner timed out") from exc
 
-    if status == "error":
-        error_type = str(payload)
-        error_message = str(details[0]) if details else "unknown error"
-        raise RuntimeError(f"{error_type}: {error_message}")
-    return payload if isinstance(payload, dict) else {}
+    try:
+        if result.returncode != 0:
+            error_output = result.stderr.strip() or result.stdout.strip()
+            if not error_output:
+                error_output = f"Cisco skill scanner exited with code {result.returncode}"
+            raise RuntimeError(error_output)
+
+        if not output_path.is_file():
+            raise RuntimeError("Cisco skill scanner did not produce a result payload")
+
+        try:
+            payload = json.loads(output_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("Cisco skill scanner produced invalid JSON output") from exc
+
+        return payload if isinstance(payload, dict) else {}
+    finally:
+        output_path.unlink(missing_ok=True)
 
 
 def _to_local_finding(plugin_dir: Path, skill_result: dict[str, object], finding: dict[str, object]) -> Finding:
@@ -241,6 +250,8 @@ def run_cisco_skill_scan(
 
     findings: list[Finding] = []
     results = payload.get("results", [])
+    if not isinstance(results, list):
+        results = []
     for result in results:
         if not isinstance(result, dict):
             continue
@@ -252,6 +263,8 @@ def run_cisco_skill_scan(
                 findings.append(_to_local_finding(skills_dir.parent, result, finding))
 
     summary = payload.get("summary", {})
+    if not isinstance(summary, dict):
+        summary = {}
     counts = _empty_counts()
     findings_by_severity = summary.get("findings_by_severity", {})
     if isinstance(findings_by_severity, dict):
