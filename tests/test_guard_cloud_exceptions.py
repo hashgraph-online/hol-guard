@@ -100,7 +100,19 @@ def test_policy_bundle_cloud_exceptions_are_loaded(tmp_path: Path) -> None:
     assert store.list_cloud_exceptions(harness="codex")
 
 
-def test_empty_sync_payload_preserves_existing_sync_exceptions(tmp_path: Path) -> None:
+def test_missing_sync_payload_preserves_existing_sync_exceptions(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "home")
+    _persist_cloud_exceptions(
+        store,
+        sync_exceptions=[_sample_sync_exception(exception_id="sync:1")],
+        now="2026-06-13T00:00:00Z",
+    )
+    _persist_cloud_exceptions(store, sync_exceptions=None, now="2026-06-13T01:00:00Z")
+    listed = store.list_cloud_exceptions()
+    assert {item["id"] for item in listed} == {"sync:1"}
+
+
+def test_explicit_empty_sync_payload_clears_sync_exceptions(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "home")
     _persist_cloud_exceptions(
         store,
@@ -108,8 +120,7 @@ def test_empty_sync_payload_preserves_existing_sync_exceptions(tmp_path: Path) -
         now="2026-06-13T00:00:00Z",
     )
     _persist_cloud_exceptions(store, sync_exceptions=[], now="2026-06-13T01:00:00Z")
-    listed = store.list_cloud_exceptions()
-    assert {item["id"] for item in listed} == {"sync:1"}
+    assert store.list_cloud_exceptions() == []
 
 
 def test_bundle_only_persist_preserves_existing_sync_exceptions(tmp_path: Path) -> None:

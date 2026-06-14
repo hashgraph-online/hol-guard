@@ -1142,6 +1142,7 @@ def sync_receipts(
     receipts_stored_total = 0
     advisories_payload: list[dict[str, object]] = []
     exceptions_payload: list[dict[str, object]] = []
+    exceptions_sync_payload_provided = False
     policy_payload: dict[str, object] | None = None
     policy_bundle_payload: dict[str, object] | None = None
     policy_bundle_sync_payload: dict[str, object] | None = None
@@ -1221,8 +1222,10 @@ def sync_receipts(
         if isinstance(team_policy_pack, dict) and (team_policy_pack or team_policy_pack_payload is None):
             team_policy_pack_payload = team_policy_pack
         exceptions = payload.get("exceptions")
-        if isinstance(exceptions, list):
-            exceptions_payload.extend(item for item in exceptions if isinstance(item, dict))
+        if "exceptions" in payload:
+            exceptions_sync_payload_provided = True
+            if isinstance(exceptions, list):
+                exceptions_payload.extend(item for item in exceptions if isinstance(item, dict))
         remote_decisions.update(_build_remote_policy_decisions(payload))
     now = _sync_timestamp(payload)
     persisted_cursor_rowid = latest_uploaded_rowid if latest_uploaded_rowid is not None else prior_receipt_cursor
@@ -1233,6 +1236,7 @@ def sync_receipts(
     )
     deduped_advisories = _dedupe_sync_payload_items(advisories_payload)
     deduped_exceptions = _dedupe_sync_payload_items(exceptions_payload)
+    sync_exceptions_for_persist = deduped_exceptions if exceptions_sync_payload_provided else None
     advisories_stored = 0
     if deduped_advisories:
         advisories_stored = store.cache_advisories(deduped_advisories, now)
@@ -1351,7 +1355,7 @@ def sync_receipts(
     active_policy_bundle = active_policy_bundle_payload if isinstance(active_policy_bundle_payload, dict) else None
     cloud_exception_items = _persist_cloud_exceptions(
         store,
-        sync_exceptions=deduped_exceptions,
+        sync_exceptions=sync_exceptions_for_persist,
         policy_bundle=active_policy_bundle,
         now=now,
     )
@@ -2066,7 +2070,7 @@ def _persist_cloud_exceptions(
     bundle_hash = non_empty_string(policy_bundle.get("bundleHash")) if isinstance(policy_bundle, dict) else None
     ack_status = non_empty_string(bundle_ack.get("status")) if bundle_ack else None
     items = []
-    if sync_exceptions:
+    if sync_exceptions is not None:
         items.extend(
             build_cloud_exceptions_from_sync_payload(
                 sync_exceptions,
