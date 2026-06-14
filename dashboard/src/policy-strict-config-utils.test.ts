@@ -53,4 +53,26 @@ const cloudException = simulateStrictPolicyOutcome({
 });
 assert(cloudException.winningStep === "Cloud exception", "cloud exception wins after empty policy layers");
 
+const sandboxFallback = simulateStrictPolicyOutcome({
+  rememberedRuleAction: "none",
+  cloudPolicyAction: "none",
+  cloudExceptionActive: false,
+  fallbackAction: "sandbox-required",
+});
+assert(
+  sandboxFallback.outcome === "sandbox-required",
+  "sandbox-required fallback preserves configured outcome",
+);
+
+const reapprovalFallback = simulateStrictPolicyOutcome({
+  rememberedRuleAction: "none",
+  cloudPolicyAction: "none",
+  cloudExceptionActive: false,
+  fallbackAction: "require-reapproval",
+});
+assert(
+  reapprovalFallback.outcome === "require-reapproval",
+  "require-reapproval fallback preserves configured outcome",
+);
+
 console.log("policy-strict-config-utils.test.ts: all assertions passed");

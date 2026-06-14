@@ -22,20 +22,42 @@ type PolicyStrictConfigTabProps = {
 
 type LoadState = "loading" | "ready" | "error";
 
+type StrictConfigSettingKey =
+  | "default_action"
+  | "changed_hash_action"
+  | "new_network_domain_action"
+  | "subprocess_action"
+  | "destructive_shell";
+
+type StrictConfigSelectOption = {
+  value: string;
+  label: string;
+};
+
 type StrictConfigSelectProps = {
   label: string;
   value: string;
-  onChange: (value: string) => void;
+  settingKey: StrictConfigSettingKey;
+  onSettingChange: (key: StrictConfigSettingKey, value: string) => void;
+  options?: readonly StrictConfigSelectOption[];
   disabled?: boolean;
   help?: string;
 };
 
-function StrictConfigSelect({ label, value, onChange, disabled = false, help }: StrictConfigSelectProps) {
+function StrictConfigSelect({
+  label,
+  value,
+  settingKey,
+  onSettingChange,
+  options = STRICT_CONFIG_ACTION_OPTIONS,
+  disabled = false,
+  help,
+}: StrictConfigSelectProps) {
   const handleChange = useCallback(
     (event: ChangeEvent<HTMLSelectElement>) => {
-      onChange(event.target.value);
+      onSettingChange(settingKey, event.target.value);
     },
-    [onChange],
+    [onSettingChange, settingKey],
   );
 
   return (
@@ -48,7 +70,7 @@ function StrictConfigSelect({ label, value, onChange, disabled = false, help }: 
         disabled={disabled}
         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark disabled:cursor-not-allowed disabled:bg-slate-50"
       >
-        {STRICT_CONFIG_ACTION_OPTIONS.map((option) => (
+        {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>
@@ -154,12 +176,29 @@ export function PolicyStrictConfigTab({
     });
   }, [settings, simRemembered, simCloudPolicy, simCloudException]);
 
-  const persistSetting = useCallback(async (key: keyof GuardSettings | "destructive_shell", value: string) => {
+  const persistSetting = useCallback(async (key: StrictConfigSettingKey, value: string) => {
     if (!settings) {
       return;
     }
+    const previousSettings = settings;
+    const updatedSettings: GuardSettings =
+      key === "destructive_shell"
+        ? {
+            ...settings,
+            risk_actions: {
+              ...settings.risk_actions,
+              destructive_shell: value,
+            },
+          }
+        : {
+            ...settings,
+            [key]: value,
+          };
+
+    setSettings(updatedSettings);
     setSavingKey(key);
     setSaveError(null);
+
     const nextSettings: Partial<GuardSettings> =
       key === "destructive_shell"
         ? {
@@ -169,43 +208,21 @@ export function PolicyStrictConfigTab({
             },
           }
         : { [key]: value };
+
     try {
       const payload = await updateSettings(nextSettings);
       setSettings(payload.settings);
     } catch (error) {
+      setSettings(previousSettings);
       setSaveError(error instanceof Error ? error.message : "Unable to save strict config.");
     } finally {
       setSavingKey(null);
     }
   }, [settings]);
 
-  const handleDefaultActionChange = useCallback(
-    (value: string) => {
-      void persistSetting("default_action", value);
-    },
-    [persistSetting],
-  );
-  const handleChangedHashActionChange = useCallback(
-    (value: string) => {
-      void persistSetting("changed_hash_action", value);
-    },
-    [persistSetting],
-  );
-  const handleNetworkActionChange = useCallback(
-    (value: string) => {
-      void persistSetting("new_network_domain_action", value);
-    },
-    [persistSetting],
-  );
-  const handleSubprocessActionChange = useCallback(
-    (value: string) => {
-      void persistSetting("subprocess_action", value);
-    },
-    [persistSetting],
-  );
-  const handleFileWriteActionChange = useCallback(
-    (value: string) => {
-      void persistSetting("destructive_shell", value);
+  const handleStrictConfigChange = useCallback(
+    (key: StrictConfigSettingKey, value: string) => {
+      void persistSetting(key, value);
     },
     [persistSetting],
   );
@@ -320,32 +337,37 @@ export function PolicyStrictConfigTab({
             label="Default action"
             help="First-time actions with no prior decision."
             value={settings.default_action}
-            onChange={handleDefaultActionChange}
+            settingKey="default_action"
+            onSettingChange={handleStrictConfigChange}
             disabled={controlsDisabled}
           />
           <StrictConfigSelect
             label="Changed tool hash action"
             value={settings.changed_hash_action}
-            onChange={handleChangedHashActionChange}
+            settingKey="changed_hash_action"
+            onSettingChange={handleStrictConfigChange}
             disabled={controlsDisabled}
           />
           <StrictConfigSelect
             label="New network domain action"
             value={settings.new_network_domain_action}
-            onChange={handleNetworkActionChange}
+            settingKey="new_network_domain_action"
+            onSettingChange={handleStrictConfigChange}
             disabled={controlsDisabled}
           />
           <StrictConfigSelect
             label="Subprocess action"
             value={settings.subprocess_action}
-            onChange={handleSubprocessActionChange}
+            settingKey="subprocess_action"
+            onSettingChange={handleStrictConfigChange}
             disabled={controlsDisabled}
           />
           <StrictConfigSelect
             label="Destructive file write action"
             help="Backed by the destructive shell risk control."
             value={fileWriteAction}
-            onChange={handleFileWriteActionChange}
+            settingKey="destructive_shell"
+            onSettingChange={handleStrictConfigChange}
             disabled={controlsDisabled}
           />
         </div>

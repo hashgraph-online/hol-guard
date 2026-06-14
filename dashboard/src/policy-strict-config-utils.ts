@@ -94,9 +94,9 @@ export function simulateStrictPolicyOutcome(input: StrictPolicySimulationInput):
       path,
     };
   }
-  path.push("Ask or block → review/block");
+  path.push(`Ask or block → ${input.fallbackAction}`);
   return {
-    outcome: input.fallbackAction === "block" ? "block" : "review",
+    outcome: input.fallbackAction,
     winningStep: "Ask or block",
     path,
   };
