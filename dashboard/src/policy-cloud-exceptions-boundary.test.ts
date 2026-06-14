@@ -37,6 +37,8 @@ const POLICY_SOURCE_FILES = [
   "policy-remembered-cloud-rules.tsx",
   "policy-remembered-rules-tab.tsx",
   "policy-remembered-rules-right-rail.tsx",
+  "policy-cloud-exceptions-tab.tsx",
+  "policy-cloud-exception-request-panel.tsx",
 ];
 
 const FORBIDDEN_FIXTURE_PATTERNS = [
@@ -120,6 +122,7 @@ assert(guardApiSource.includes("savePolicyDecision"), "guard-api must expose sav
 assert(guardApiSource.includes("clearPolicy"), "guard-api must expose clearPolicy");
 assert(guardApiSource.includes("/v1/policy"), "guard-api must call /v1/policy endpoints");
 assert(guardApiSource.includes("fetchCloudExceptions"), "guard-api must expose fetchCloudExceptions");
+assert(guardApiSource.includes("createCloudExceptionRequest"), "guard-api must expose createCloudExceptionRequest");
 
 assert(boundaryDoc.includes("Remembered rules"), "boundary doc must define Remembered rules");
 assert(boundaryDoc.includes("Cloud exceptions"), "boundary doc must define Cloud exceptions");

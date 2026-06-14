@@ -23,6 +23,7 @@ const sidebarSource = readFileSync(join(here, "approval-center-primitives.tsx"),
 assert(!workspaceSource.includes("PolicyExceptionForm"), "policy workspace no longer mounts PolicyExceptionForm");
 assert(!workspaceSource.includes("New exception"), "policy workspace removes local New exception copy");
 assert(tabSource.includes("Request cloud exception"), "cloud exceptions tab exposes request CTA");
+assert(tabSource.includes("PolicyCloudExceptionRequestPanel"), "cloud exceptions tab opens in-dashboard request panel");
 assert(tabSource.includes("Open Guard Cloud"), "cloud exceptions tab exposes Open Guard Cloud CTA");
 assert(tabSource.includes("Guard Cloud is not connected"), "disconnected Cloud copy present");
 assert(!pageSource.includes("add custom exceptions"), "page header removes local exception authoring copy");
