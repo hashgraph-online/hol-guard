@@ -150,6 +150,14 @@ assert(
   "PF2: staged local recovery view should stay compact instead of nesting extra helper cards",
 );
 assert(
+  freeViewMarkup.includes("What still works locally"),
+  "PF2: local recovery hint should live in progressive disclosure",
+);
+assert(
+  freeViewMarkup.includes("Connect progress"),
+  "PF2: compact connect view should render the progressive step rail",
+);
+assert(
   !freeViewMarkup.includes("SECURITY"),
   "PF2: staged local recovery view should not render the large nested security card",
 );
@@ -218,3 +226,122 @@ assert(
   reconnectLikeMarkup.includes("Repair required"),
   "PF4: broken post-connect local auth should render repair guidance instead of a first-connect badge",
 );
+
+const failedConnectMarkup = renderToStaticMarkup(
+  <ConnectFlowCard
+    compact
+    connectError="HTTP Error 500: Internal Server Error"
+    connectStarting={false}
+    connectFlow={{
+      state: "failed",
+      title: "Guard Cloud sign-in needs attention",
+      detail: "Reconnect HOL Guard Cloud to restore package firewall access.",
+      action_label: "Repair Guard Cloud access",
+      connect_url: "https://hol.org/guard/connect",
+      authorize_url: "https://hol.org/mock-authorize",
+      browser_opened: false,
+      request_id: "guard-connect-2",
+      poll_after_ms: 1500,
+    }}
+    mode="repair"
+    onStartConnect={() => undefined}
+  />,
+);
+
+assert(
+  failedConnectMarkup.includes("Cloud sign-in is temporarily unavailable"),
+  "PF5: connect errors should surface human guidance instead of raw HTTP text",
+);
+assert(
+  !failedConnectMarkup.includes("HTTP Error 500"),
+  "PF5: raw HTTP errors should not appear in the connect card",
+);
+assert(
+  !failedConnectMarkup.includes("What still works locally"),
+  "PF5: omitted localRecoveryHint should not render an empty disclosure",
+);
+assert(
+  failedConnectMarkup.includes("Connect progress"),
+  "PF5: failed connect card should keep the progressive step rail",
+);
+
+const authExpiredMarkup = renderToStaticMarkup(
+  <ConnectFlowCard
+    compact
+    connectError="HTTP Error 401: Unauthorized"
+    connectStarting={false}
+    connectFlow={{
+      state: "failed",
+      title: "Guard Cloud sign-in needs attention",
+      detail: "Reconnect HOL Guard Cloud to restore package firewall access.",
+      action_label: "Repair Guard Cloud access",
+      connect_url: "https://hol.org/guard/connect",
+      authorize_url: null,
+      browser_opened: null,
+      request_id: null,
+      poll_after_ms: null,
+    }}
+    mode="repair"
+    onStartConnect={() => undefined}
+  />,
+);
+assert(
+  authExpiredMarkup.includes("Guard Cloud authorization expired"),
+  "PF6: 401 connect errors should map to reconnect guidance",
+);
+
+const networkMarkup = renderToStaticMarkup(
+  <ConnectFlowCard
+    compact
+    connectError="Failed to fetch"
+    connectStarting={false}
+    connectFlow={{
+      state: "failed",
+      title: "Guard Cloud sign-in needs attention",
+      detail: "Reconnect HOL Guard Cloud to restore package firewall access.",
+      action_label: "Repair Guard Cloud access",
+      connect_url: "https://hol.org/guard/connect",
+      authorize_url: null,
+      browser_opened: null,
+      request_id: null,
+      poll_after_ms: null,
+    }}
+    mode="repair"
+    onStartConnect={() => undefined}
+  />,
+);
+assert(
+  networkMarkup.includes("Guard lost contact with the local daemon"),
+  "PF6: network connect errors should map to daemon guidance",
+);
+
+const unknownMarkup = renderToStaticMarkup(
+  <ConnectFlowCard
+    compact
+    connectError="traceback at /tmp/guard-connect.log line 42"
+    connectStarting={false}
+    connectFlow={{
+      state: "failed",
+      title: "Guard Cloud sign-in needs attention",
+      detail: "Reconnect HOL Guard Cloud to restore package firewall access.",
+      action_label: "Repair Guard Cloud access",
+      connect_url: "https://hol.org/guard/connect",
+      authorize_url: null,
+      browser_opened: null,
+      request_id: null,
+      poll_after_ms: null,
+    }}
+    mode="repair"
+    onStartConnect={() => undefined}
+  />,
+);
+assert(
+  unknownMarkup.includes("Guard could not connect right now"),
+  "PF6: unknown connect errors should fall back to generic guidance",
+);
+assert(
+  !unknownMarkup.includes("/tmp/guard-connect.log"),
+  "PF6: unknown connect errors should not leak raw diagnostics",
+);
+
+console.log("package-firewall-connect.test.tsx: all assertions passed");

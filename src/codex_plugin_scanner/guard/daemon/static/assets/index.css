@@ -1713,10 +1713,6 @@
     border-radius: 3px;
   }
 
-  .rounded-\[18px\] {
-    border-radius: 18px;
-  }
-
   .rounded-full {
     border-radius: 3.40282e38px;
   }
@@ -2179,6 +2175,16 @@
     }
   }
 
+  .border-slate-200\/90 {
+    border-color: #e2e8f0e6;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-slate-200\/90 {
+      border-color: color-mix(in oklab, var(--color-slate-200) 90%, transparent);
+    }
+  }
+
   .border-slate-300 {
     border-color: var(--color-slate-300);
   }
@@ -2441,13 +2447,13 @@
     }
   }
 
-  .bg-brand-attention\/\[0\.05\] {
+  .bg-brand-attention\/\[0\.06\] {
     background-color: var(--brand-attention);
   }
 
   @supports (color: color-mix(in lab, red, red)) {
-    .bg-brand-attention\/\[0\.05\] {
-      background-color: color-mix(in oklab, var(--brand-attention) 5%, transparent);
+    .bg-brand-attention\/\[0\.06\] {
+      background-color: color-mix(in oklab, var(--brand-attention) 6%, transparent);
     }
   }
 
@@ -2458,6 +2464,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .bg-brand-blue\/10 {
       background-color: color-mix(in oklab, var(--brand-blue) 10%, transparent);
+    }
+  }
+
+  .bg-brand-blue\/12 {
+    background-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-brand-blue\/12 {
+      background-color: color-mix(in oklab, var(--brand-blue) 12%, transparent);
     }
   }
 
@@ -2605,6 +2621,16 @@
     }
   }
 
+  .bg-brand-green\/12 {
+    background-color: var(--brand-green);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-brand-green\/12 {
+      background-color: color-mix(in oklab, var(--brand-green) 12%, transparent);
+    }
+  }
+
   .bg-brand-green\/20 {
     background-color: var(--brand-green);
   }
@@ -2632,6 +2658,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .bg-brand-green\/\[0\.04\] {
       background-color: color-mix(in oklab, var(--brand-green) 4%, transparent);
+    }
+  }
+
+  .bg-brand-green\/\[0\.05\] {
+    background-color: var(--brand-green);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-brand-green\/\[0\.05\] {
+      background-color: color-mix(in oklab, var(--brand-green) 5%, transparent);
     }
   }
 
@@ -3044,16 +3080,6 @@
   @supports (color: color-mix(in lab, red, red)) {
     .bg-white\/80 {
       background-color: color-mix(in oklab, var(--color-white) 80%, transparent);
-    }
-  }
-
-  .bg-white\/85 {
-    background-color: #ffffffd9;
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .bg-white\/85 {
-      background-color: color-mix(in oklab, var(--color-white) 85%, transparent);
     }
   }
 
