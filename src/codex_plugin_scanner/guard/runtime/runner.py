@@ -2066,7 +2066,7 @@ def _persist_cloud_exceptions(
     bundle_hash = non_empty_string(policy_bundle.get("bundleHash")) if isinstance(policy_bundle, dict) else None
     ack_status = non_empty_string(bundle_ack.get("status")) if bundle_ack else None
     items = []
-    if sync_exceptions is not None:
+    if sync_exceptions:
         items.extend(
             build_cloud_exceptions_from_sync_payload(
                 sync_exceptions,

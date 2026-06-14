@@ -2,12 +2,7 @@
 
 from __future__ import annotations
 
-import json
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-
-import pytest
 
 from codex_plugin_scanner.guard.cloud_exceptions import (
     build_cloud_exceptions_from_policy_bundle,
@@ -15,7 +10,6 @@ from codex_plugin_scanner.guard.cloud_exceptions import (
     cloud_exception_from_mapping,
     list_active_cloud_exceptions,
 )
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.runtime.runner import _persist_cloud_exceptions
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -104,6 +98,18 @@ def test_policy_bundle_cloud_exceptions_are_loaded(tmp_path: Path) -> None:
     assert items[0].bundle_hash == "sha256:demo"
     _persist_cloud_exceptions(store, policy_bundle=bundle, now="2026-06-13T00:00:00Z")
     assert store.list_cloud_exceptions(harness="codex")
+
+
+def test_empty_sync_payload_preserves_existing_sync_exceptions(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "home")
+    _persist_cloud_exceptions(
+        store,
+        sync_exceptions=[_sample_sync_exception(exception_id="sync:1")],
+        now="2026-06-13T00:00:00Z",
+    )
+    _persist_cloud_exceptions(store, sync_exceptions=[], now="2026-06-13T01:00:00Z")
+    listed = store.list_cloud_exceptions()
+    assert {item["id"] for item in listed} == {"sync:1"}
 
 
 def test_bundle_only_persist_preserves_existing_sync_exceptions(tmp_path: Path) -> None:
