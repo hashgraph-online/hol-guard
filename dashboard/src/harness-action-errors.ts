@@ -77,6 +77,16 @@ export function isSupplyChainSyncConnectError(error: unknown): boolean {
   return code !== null && SUPPLY_CHAIN_CONNECT_ERROR_CODES.has(code);
 }
 
+export function isSupplyChainSyncRetryableError(error: unknown): boolean {
+  if (!isGuardHarnessActionError(error)) {
+    return false;
+  }
+  if (readHarnessActionErrorCode(error) !== "supply_chain_sync_unavailable") {
+    return false;
+  }
+  return error.payload?.retryable === true;
+}
+
 export function readHarnessActionUserMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && GUARD_FETCH_NETWORK_ERROR_MESSAGE.test(error.message)) {
     return "Guard lost connection while syncing supply-chain intel. Confirm the local daemon is still running, then try again.";

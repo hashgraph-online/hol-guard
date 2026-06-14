@@ -261,7 +261,13 @@ class GuardSyncNotConfiguredError(RuntimeError):
 
 
 class GuardSyncNotAvailableError(RuntimeError):
-    """Raised when the sync endpoint returns 403 (free-plan restriction)."""
+    """Raised when Guard Cloud sync is blocked by plan limits or temporary outages."""
+
+    retryable: bool
+
+    def __init__(self, message: str, *, retryable: bool = False) -> None:
+        super().__init__(message)
+        self.retryable = retryable
 
 
 class GuardSyncAuthorizationExpiredError(GuardSyncNotConfiguredError):
@@ -1427,6 +1433,25 @@ def sync_receipts(
     return summary
 
 
+def _guard_cloud_http_error_is_retryable(error: urllib.error.HTTPError) -> bool:
+    try:
+        raw_body = error.read().decode("utf-8", errors="replace")
+    except OSError:
+        return error.code in {503, 524}
+    try:
+        payload = json.loads(raw_body) if raw_body else None
+    except json.JSONDecodeError:
+        payload = None
+    if isinstance(payload, dict):
+        guard_error = payload.get("guardError")
+        if isinstance(guard_error, dict) and guard_error.get("retryable") is True:
+            return True
+        guard_code = guard_error.get("code") if isinstance(guard_error, dict) else None
+        if isinstance(guard_code, str) and guard_code.strip().lower() in {"guard_unavailable", "guard_cloud_unavailable"}:
+            return True
+    return error.code in {503, 524}
+
+
 def _fetch_supply_chain_bundle_payload(request: urllib.request.Request) -> dict[str, object]:
     try:
         return _urlopen_json_with_timeout_retry(
@@ -1440,7 +1465,10 @@ def _fetch_supply_chain_bundle_payload(request: urllib.request.Request) -> dict[
             if is_plan_restricted:
                 raise GuardSyncNotAvailableError(message) from error
             raise RuntimeError(message) from error
-        raise RuntimeError(_sync_http_error_message(error)) from error
+        message = _sync_http_error_message(error)
+        if _guard_cloud_http_error_is_retryable(error):
+            raise GuardSyncNotAvailableError(message, retryable=True) from error
+        raise RuntimeError(message) from error
     except OSError as error:
         raise RuntimeError(_sync_url_error_message(error)) from error
 

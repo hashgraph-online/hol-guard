@@ -19,6 +19,7 @@ import {
 import {
   isApprovalGateRequiredError,
   isSupplyChainSyncConnectError,
+  isSupplyChainSyncRetryableError,
   readHarnessActionUserMessage,
   resolveApprovalGateSyncFailure,
 } from "./harness-action-errors";
@@ -382,6 +383,16 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
             return;
           }
         }
+        if (isSupplyChainSyncRetryableError(err)) {
+          const message = readHarnessActionUserMessage(
+            err,
+            "Guard Cloud is temporarily unavailable. Try syncing again in a few minutes.",
+          );
+          setAuditRecoveryError(message);
+          setAuditRecoveryPhase("ready");
+          setLastFailed({ op: "sync", manager: null, message });
+          return;
+        }
         const failure = resolveApprovalGateSyncFailure(err, {
           hasCredentials: credentials !== undefined,
         });
@@ -598,6 +609,17 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
             setAuditRecoveryError(null);
             return;
           }
+        }
+        if (isSupplyChainSyncRetryableError(err)) {
+          const message = readHarnessActionUserMessage(
+            err,
+            "Guard Cloud is temporarily unavailable. Try syncing again in a few minutes.",
+          );
+          setAuditRecoveryGate(createSupplyChainSyncApprovalGate());
+          setAuditRecoveryPhase("ready");
+          setAuditRecoveryError(message);
+          setLastFailed({ op, manager: null, message });
+          return;
         }
         const message = readHarnessActionUserMessage(err, "Operation failed.");
         setLastFailed({ op, manager: null, message });
