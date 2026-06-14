@@ -2179,7 +2179,9 @@ def _go_replace_result(
         (
             str(path)
             for path in manifest_paths
-            if Path(str(path)).name == "go.mod" and resolve_path_within_workspace(workspace_dir, str(path)) is not None
+            if Path(str(path)).name == "go.mod"
+            and (resolved := resolve_path_within_workspace(workspace_dir, str(path))) is not None
+            and resolved.exists()
         ),
         None,
     )
