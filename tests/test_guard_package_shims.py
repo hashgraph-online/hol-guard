@@ -834,7 +834,7 @@ def test_guard_package_shim_status_reports_foreign_shim_bypass(
     assert status_payload["bypasses"] == [
         {
             "manager": "npm",
-            "reason": "path_inactive",
+            "reason": "foreign_shim_bypass",
         }
     ]
     npm_detail = next(
