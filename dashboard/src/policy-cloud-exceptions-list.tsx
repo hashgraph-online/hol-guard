@@ -93,8 +93,8 @@ function ExceptionCard({
         <Tag tone="slate">{scopeLabel(item.scope)}</Tag>
         {isCloudExceptionAckFailure(item) ? <Badge tone="warning">Ack issue</Badge> : null}
       </div>
-      <p className="mt-2 text-sm font-semibold text-brand-dark">{headline}</p>
-      <p className="mt-1 text-xs text-slate-500">
+      <p className="mt-2 min-w-0 break-words text-sm font-semibold text-brand-dark">{headline}</p>
+      <p className="mt-1 min-w-0 break-words text-xs text-slate-500">
         Owner {resolvePersonDisplayLabel(item.owner)}
         {expiryTimestamp && expiryValue ? ` · expires ${formatRelativeTime(expiryValue)}` : null}
       </p>
@@ -109,8 +109,8 @@ function PendingRequestCard({ item }: { item: GuardCloudExceptionRequestItem }) 
         <Badge tone="warning">Pending</Badge>
         <Tag tone="slate">{scopeLabel(item.scope)}</Tag>
       </div>
-      <p className="mt-2 text-sm font-semibold text-brand-dark">{item.reason}</p>
-      <p className="mt-1 text-xs text-slate-600">
+      <p className="mt-2 min-w-0 break-words text-sm font-semibold text-brand-dark">{item.reason}</p>
+      <p className="mt-1 min-w-0 break-words text-xs text-slate-600">
         Requested by {resolvePersonDisplayLabel(item.owner)} · expires{" "}
         {formatRelativeTime(item.requestedExpiresAt)}
       </p>
