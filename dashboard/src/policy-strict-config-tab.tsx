@@ -189,7 +189,9 @@ export function PolicyStrictConfigTab({
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start">
       <div className="space-y-4">
-      <div className={`rounded-2xl border p-5 ${isStrict ? "border-brand-green/20 bg-brand-green/[0.04]" : "border-slate-200 bg-slate-50/40"}`}>
+        <div
+          className={`rounded-2xl border p-5 ${isStrict ? "border-brand-green/20 bg-brand-green/[0.04]" : "border-slate-200 bg-slate-50/40"}`}
+        >
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <SectionLabel>Strict mode</SectionLabel>
           <Tag tone={isStrict ? "green" : "slate"}>{isStrict ? "Enabled" : "Disabled"}</Tag>

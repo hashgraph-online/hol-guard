@@ -44,7 +44,7 @@ assert(tabSource.includes("PolicyRememberedRulesRightRail"), "tab mounts right r
 assert(railSource.includes("Review scope ladder"), "right rail explains review scope ladder");
 assert(railSource.includes('scope: "artifact"'), "scope ladder includes narrowest scope");
 assert(railSource.includes('scope: "global"'), "scope ladder includes widest scope");
-assert(railSource.includes("policyScopeLabel(step.scope)"), "scope ladder renders policy scope labels");
+assert(railSource.includes('scopeLabel(step.scope, "policy")'), "scope ladder renders policy scope labels");
 assert(railSource.includes("Open Cloud exceptions tab"), "right rail links to Cloud exceptions tab");
 assert(railSource.includes("Remembered rules vs Cloud exceptions"), "right rail explains remembered vs cloud");
 
@@ -53,7 +53,7 @@ assert(!workspaceSource.includes("PolicyRememberedRulesHelper"), "workspace no l
 assert(!workspaceSource.includes("GroupedPolicySection"), "workspace no longer mounts grouped sections directly");
 
 assert(viewsSource.includes("Command"), "rules table uses command column");
-assert(viewsSource.includes("policyScopeLabel"), "rules table uses policy scope labels");
+assert(viewsSource.includes('scopeLabel(policy.scope, "policy")'), "rules table uses policy scope labels");
 assert(viewsSource.includes("display.pathLine"), "rules table shows approval path");
 assert(viewsSource.includes("display.projectLabel"), "rules table shows project column");
 assert(viewsSource.includes("resolvePolicyApprovalRecordLabel"), "rules table links approval record by receipt id");

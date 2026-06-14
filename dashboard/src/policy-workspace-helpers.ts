@@ -27,23 +27,6 @@ export type PolicyDisplay = {
   technicalId: string | null;
 };
 
-export function policyScopeLabel(scope: string): string {
-  switch (scope) {
-    case "artifact":
-      return "Once";
-    case "workspace":
-      return "This project";
-    case "harness":
-      return "This app";
-    case "publisher":
-      return "This source";
-    case "global":
-      return "Every project";
-    default:
-      return scopeLabel(scope);
-  }
-}
-
 export function formatPolicyScopePath(path: string | null | undefined): string | null {
   if (!path?.trim()) {
     return null;
@@ -197,7 +180,7 @@ function resolveScopeSubtitle(policy: GuardPolicyDecision): string {
   if (policy.scope === "global") {
     return "Every project on this device";
   }
-  return policyScopeLabel(policy.scope);
+  return scopeLabel(policy.scope, "policy");
 }
 
 function resolveWhatPhrase(policy: GuardPolicyDecision): string {

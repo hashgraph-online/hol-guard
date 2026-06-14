@@ -1,4 +1,4 @@
-import { policyScopeLabel } from "./policy-workspace-helpers";
+import { scopeLabel } from "./approval-center-utils";
 
 const REVIEW_SCOPE_LADDER = [
   { scope: "artifact", detail: "Guard remembers only the next matching retry." },
@@ -46,7 +46,7 @@ export function PolicyRememberedRulesRightRail({
                 {index + 1}
               </span>
               <div>
-                <p className="text-sm font-medium text-brand-dark">{policyScopeLabel(step.scope)}</p>
+                <p className="text-sm font-medium text-brand-dark">{scopeLabel(step.scope, "policy")}</p>
                 <p className="text-xs leading-relaxed text-slate-500">{step.detail}</p>
               </div>
             </li>

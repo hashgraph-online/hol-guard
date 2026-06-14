@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { HiMiniChevronDown, HiMiniChevronUp } from "react-icons/hi2";
 import { Badge, EmptyState, Tag } from "./approval-center-primitives";
-import { formatRelativeTime } from "./approval-center-utils";
+import { formatRelativeTime, scopeLabel } from "./approval-center-utils";
 import type { GuardCloudException } from "./guard-types";
 import type { GuardCloudExceptionRequestItem } from "./guard-api";
 import {
@@ -13,7 +13,6 @@ import {
   resolveCloudExceptionExpiryValue,
   resolvePersonDisplayLabel,
 } from "./policy-cloud-exceptions-utils";
-import { policyScopeLabel } from "./policy-workspace-helpers";
 
 type PolicyCloudExceptionsListProps = {
   active: GuardCloudException[];
@@ -91,7 +90,7 @@ function ExceptionCard({
     >
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone="success">{item.effect}</Badge>
-        <Tag tone="slate">{policyScopeLabel(item.scope)}</Tag>
+        <Tag tone="slate">{scopeLabel(item.scope, "policy")}</Tag>
         {isCloudExceptionAckFailure(item) ? <Badge tone="warning">Ack issue</Badge> : null}
       </div>
       <p className="mt-2 break-words text-sm font-semibold text-brand-dark">{headline}</p>
@@ -108,7 +107,7 @@ function PendingRequestCard({ item }: { item: GuardCloudExceptionRequestItem }) 
     <article className="min-w-0 rounded-xl border border-amber-100 bg-amber-50/40 px-3.5 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone="warning">Pending</Badge>
-        <Tag tone="slate">{policyScopeLabel(item.scope)}</Tag>
+        <Tag tone="slate">{scopeLabel(item.scope, "policy")}</Tag>
       </div>
       <p className="mt-2 break-words text-sm font-semibold text-brand-dark">{item.reason}</p>
       <p className="mt-1 break-words text-xs text-slate-600">

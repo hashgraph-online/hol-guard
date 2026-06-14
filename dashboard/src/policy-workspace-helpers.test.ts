@@ -5,9 +5,9 @@ import {
   resolvePolicyEvidenceHref,
   resolvePolicyMatcherFamily,
   resolveWorkspaceLabel,
-  policyScopeLabel,
   formatPolicyScopePath,
 } from "./policy-workspace-helpers";
+import { scopeLabel } from "./approval-center-utils";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -91,8 +91,8 @@ const pathDisplay = resolvePolicyDisplay(
 );
 assert(pathDisplay.pathLine?.includes("sample-portal"), "POL-H13: path line surfaces scope path");
 assert(pathDisplay.projectLabel === "sample-portal", "POL-H14: project label surfaces workspace label");
-assert(policyScopeLabel("artifact") === "Once", "POL-H15: policy scope label for once");
-assert(policyScopeLabel("workspace") === "This project", "POL-H16: policy scope label for project");
+assert(scopeLabel("artifact", "policy") === "Once", "POL-H15: policy scope label for once");
+assert(scopeLabel("workspace", "policy") === "This project", "POL-H16: policy scope label for project");
 assert(
   formatPolicyScopePath(
     "/srv/work/monorepo/services/apps/backend/sample-guard/packages/cli/src/commands/policy/workspace/helpers",

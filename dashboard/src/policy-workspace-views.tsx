@@ -11,12 +11,11 @@ import {
   HiMiniShieldCheck,
 } from "react-icons/hi2";
 import { Badge, Tag, EmptyState } from "./approval-center-primitives";
-import { harnessDisplayName, formatRelativeTime, policyActionLabel } from "./approval-center-utils";
+import { harnessDisplayName, formatRelativeTime, policyActionLabel, scopeLabel } from "./approval-center-utils";
 import { guardAwareHref } from "./guard-api";
 import type { GuardPolicyDecision } from "./guard-types";
 import {
   isCloudManagedPolicy,
-  policyScopeLabel,
   resolvePolicyApprovalRecordLabel,
   resolvePolicyDisplay,
   resolvePolicyEvidenceHref,
@@ -96,7 +95,7 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear }: PolicyRuleRowProps
         <Tag tone={cloudManaged ? "blue" : "green"}>{resolvePolicySourceLabel(policy.source)}</Tag>
       </td>
       <td className="hidden px-3 py-3 align-top text-sm text-slate-700 lg:table-cell">
-        {policyScopeLabel(policy.scope)}
+        {scopeLabel(policy.scope, "policy")}
       </td>
       <td className="hidden px-3 py-3 align-top text-sm text-slate-700 xl:table-cell">
         {harnessDisplayName(policy.harness)}

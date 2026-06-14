@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, S as SectionLabel, o as HiMiniXMark, B as Badge, bd as scopeLabel, m as formatRelativeTime, b6 as HiMiniCloudArrowUp, r as reactExports, be as createCloudExceptionRequest, A as ActionButton, h as harnessDisplayName, bf as policyActionLabel, b as EmptyState, p as HiMiniChevronUp, q as HiMiniChevronDown, ac as Tag, bg as fetchCloudExceptions, bh as fetchCloudExceptionRequests, bb as guardAwareHref, ax as HiMiniTrash, bi as HiMiniCube, aA as HiMiniCommandLine, ba as HiMiniDocumentText, bj as HiMiniGlobeAlt, l as HiMiniShieldCheck, ad as HiMiniMagnifyingGlass, Y as fetchSettings, _ as updateSettings } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, S as SectionLabel, o as HiMiniXMark, B as Badge, bd as scopeLabel, m as formatRelativeTime, b6 as HiMiniCloudArrowUp, r as reactExports, be as createCloudExceptionRequest, A as ActionButton, h as harnessDisplayName, b as EmptyState, p as HiMiniChevronUp, q as HiMiniChevronDown, ac as Tag, bf as policyActionLabel, bg as fetchCloudExceptions, bh as fetchCloudExceptionRequests, bb as guardAwareHref, ax as HiMiniTrash, bi as HiMiniCube, aA as HiMiniCommandLine, ba as HiMiniDocumentText, bj as HiMiniGlobeAlt, l as HiMiniShieldCheck, ad as HiMiniMagnifyingGlass, Y as fetchSettings, _ as updateSettings } from "../guard-dashboard.js";
 const CLOUD_EXCEPTION_EXPIRING_SOON_DAYS = 7;
 function parseCloudExceptionTimestamp(value) {
   if (!value || !value.trim()) {
@@ -593,6 +593,209 @@ function PolicyCloudExceptionRequestPanel({
     }
   );
 }
+function GroupSection({ title, description, defaultOpen = true, children }) {
+  const [open, setOpen] = reactExports.useState(defaultOpen);
+  const handleToggle = reactExports.useCallback(() => {
+    setOpen((current) => !current);
+  }, []);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", "aria-label": title, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        onClick: handleToggle,
+        className: "flex w-full items-start justify-between gap-3 px-4 py-3 text-left",
+        "aria-expanded": open,
+        "aria-label": `${title} group`,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-500", children: description })
+          ] }),
+          open ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "mt-0.5 h-4 w-4 shrink-0 text-slate-400", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "mt-0.5 h-4 w-4 shrink-0 text-slate-400", "aria-hidden": "true" })
+        ]
+      }
+    ),
+    open ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-2 border-t border-slate-100 px-3 py-3", children }) : null
+  ] });
+}
+function ExceptionCard({
+  item,
+  selected,
+  onSelect
+}) {
+  const handleSelect = reactExports.useCallback(() => {
+    onSelect(item);
+  }, [item, onSelect]);
+  const expiryTimestamp = resolveCloudExceptionExpiryTimestamp(item);
+  const expiryValue = resolveCloudExceptionExpiryValue(item);
+  const headline = resolveCloudExceptionHeadline(item);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      onClick: handleSelect,
+      "aria-pressed": selected,
+      className: `min-w-0 w-full rounded-xl border px-3.5 py-3 text-left transition ${selected ? "border-brand-blue/30 bg-brand-blue/[0.04] ring-1 ring-brand-blue/20" : "border-slate-100 bg-white hover:border-brand-blue/20 hover:bg-brand-blue/[0.02]"}`,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: item.effect }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: scopeLabel(item.scope, "policy") }),
+          isCloudExceptionAckFailure(item) ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "warning", children: "Ack issue" }) : null
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 break-words text-sm font-semibold text-brand-dark", children: headline }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 break-words text-xs text-slate-500", children: [
+          "Owner ",
+          resolvePersonDisplayLabel(item.owner),
+          expiryTimestamp && expiryValue ? ` · expires ${formatRelativeTime(expiryValue)}` : null
+        ] })
+      ]
+    }
+  );
+}
+function PendingRequestCard({ item }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "min-w-0 rounded-xl border border-amber-100 bg-amber-50/40 px-3.5 py-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "warning", children: "Pending" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: scopeLabel(item.scope, "policy") })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 break-words text-sm font-semibold text-brand-dark", children: item.reason }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 break-words text-xs text-slate-600", children: [
+      "Requested by ",
+      resolvePersonDisplayLabel(item.owner),
+      " · expires",
+      " ",
+      formatRelativeTime(item.requestedExpiresAt)
+    ] })
+  ] });
+}
+function PolicyCloudExceptionsListSkeleton() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", "aria-busy": "true", "aria-label": "Loading Cloud exceptions", children: [0, 1, 2].map((index) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-28 animate-pulse rounded-2xl border border-slate-100 bg-slate-100" }, index)) });
+}
+function PolicyCloudExceptionsList({
+  active,
+  pending,
+  expiringSoon,
+  selectedExceptionId,
+  onSelectException,
+  cloudConnected
+}) {
+  const expiringSoonIds = reactExports.useMemo(() => new Set(expiringSoon.map((item) => item.id)), [expiringSoon]);
+  const activeWithoutExpiringGroup = reactExports.useMemo(
+    () => active.filter((item) => !expiringSoonIds.has(item.id)),
+    [active, expiringSoonIds]
+  );
+  if (!cloudConnected) {
+    return null;
+  }
+  const hasAnyRows = active.length > 0 || pending.length > 0;
+  if (!hasAnyRows) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EmptyState,
+      {
+        title: "No Cloud exceptions synced yet",
+        body: "Approved Cloud risk acceptances will appear here after Guard Cloud syncs a signed policy bundle to this device.",
+        tone: "teach"
+      }
+    );
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", role: "list", "aria-label": "Cloud exception groups", children: [
+    activeWithoutExpiringGroup.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      GroupSection,
+      {
+        title: "Active on this device",
+        description: "Synced Cloud risk acceptances currently enforced locally.",
+        defaultOpen: true,
+        children: activeWithoutExpiringGroup.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ExceptionCard,
+          {
+            item,
+            selected: selectedExceptionId === item.id,
+            onSelect: onSelectException
+          },
+          item.id
+        ))
+      }
+    ) : null,
+    pending.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      GroupSection,
+      {
+        title: "Pending in Guard Cloud",
+        description: "Requests waiting for Cloud approval before they can sync to this device.",
+        defaultOpen: true,
+        children: pending.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(PendingRequestCard, { item }, item.requestId))
+      }
+    ) : null,
+    expiringSoon.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      GroupSection,
+      {
+        title: "Expiring soon",
+        description: "Active acceptances nearing expiry. Renew or revoke them in Guard Cloud.",
+        defaultOpen: true,
+        children: expiringSoon.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ExceptionCard,
+          {
+            item,
+            selected: selectedExceptionId === item.id,
+            onSelect: onSelectException
+          },
+          `expiring-${item.id}`
+        ))
+      }
+    ) : null
+  ] });
+}
+const SUMMARY_TONE_CLASSES = {
+  blue: "text-brand-blue",
+  amber: "text-amber-700",
+  attention: "text-brand-attention",
+  slate: "text-brand-dark"
+};
+function SummaryCard({
+  label,
+  value,
+  tone = "slate"
+}) {
+  const toneClass = SUMMARY_TONE_CLASSES[tone];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200/70 bg-white p-3 text-center shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-2xl font-semibold tabular-nums ${toneClass}`, children: value }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground", children: label })
+  ] });
+}
+function SummarySkeleton() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-2 gap-3 md:grid-cols-4", children: [0, 1, 2, 3].map((index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: "h-[72px] animate-pulse rounded-xl border border-slate-200/70 bg-slate-100",
+      "aria-hidden": "true"
+    },
+    index
+  )) });
+}
+function PolicyCloudExceptionsSummary({
+  activeCount,
+  pendingCount,
+  expiringSoonCount,
+  ackFailureCount,
+  loading = false
+}) {
+  if (loading) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(SummarySkeleton, {});
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "grid grid-cols-2 gap-3 md:grid-cols-4",
+      "aria-label": "Cloud exception summary",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SummaryCard, { label: "Active synced", value: activeCount, tone: "blue" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SummaryCard, { label: "Pending approval", value: pendingCount, tone: "amber" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SummaryCard, { label: "Expiring soon", value: expiringSoonCount, tone: "attention" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SummaryCard, { label: "Local ack failures", value: ackFailureCount, tone: "attention" })
+      ]
+    }
+  );
+}
 const MATCHER_FAMILY_LABELS = {
   "package-request": "Package install",
   "tool-action": "Shell or tool command",
@@ -608,22 +811,6 @@ const GENERIC_REASONS = [
   "local auto-resume proof",
   "local e2e approval proof"
 ];
-function policyScopeLabel(scope) {
-  switch (scope) {
-    case "artifact":
-      return "Once";
-    case "workspace":
-      return "This project";
-    case "harness":
-      return "This app";
-    case "publisher":
-      return "This source";
-    case "global":
-      return "Every project";
-    default:
-      return scopeLabel(scope);
-  }
-}
 function formatPolicyScopePath(path) {
   if (!path?.trim()) {
     return null;
@@ -765,7 +952,7 @@ function resolveScopeSubtitle(policy) {
   if (policy.scope === "global") {
     return "Every project on this device";
   }
-  return policyScopeLabel(policy.scope);
+  return scopeLabel(policy.scope, "policy");
 }
 function resolveWhatPhrase(policy) {
   const artifactId = policy.artifact_id?.trim() ?? "";
@@ -990,209 +1177,6 @@ function resolveCloudPolicyBundleCopy(snapshot) {
     tone: "green"
   };
 }
-function GroupSection({ title, description, defaultOpen = true, children }) {
-  const [open, setOpen] = reactExports.useState(defaultOpen);
-  const handleToggle = reactExports.useCallback(() => {
-    setOpen((current) => !current);
-  }, []);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", "aria-label": title, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "button",
-      {
-        type: "button",
-        onClick: handleToggle,
-        className: "flex w-full items-start justify-between gap-3 px-4 py-3 text-left",
-        "aria-expanded": open,
-        "aria-label": `${title} group`,
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: title }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-500", children: description })
-          ] }),
-          open ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "mt-0.5 h-4 w-4 shrink-0 text-slate-400", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "mt-0.5 h-4 w-4 shrink-0 text-slate-400", "aria-hidden": "true" })
-        ]
-      }
-    ),
-    open ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-2 border-t border-slate-100 px-3 py-3", children }) : null
-  ] });
-}
-function ExceptionCard({
-  item,
-  selected,
-  onSelect
-}) {
-  const handleSelect = reactExports.useCallback(() => {
-    onSelect(item);
-  }, [item, onSelect]);
-  const expiryTimestamp = resolveCloudExceptionExpiryTimestamp(item);
-  const expiryValue = resolveCloudExceptionExpiryValue(item);
-  const headline = resolveCloudExceptionHeadline(item);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "button",
-    {
-      type: "button",
-      onClick: handleSelect,
-      "aria-pressed": selected,
-      className: `min-w-0 w-full rounded-xl border px-3.5 py-3 text-left transition ${selected ? "border-brand-blue/30 bg-brand-blue/[0.04] ring-1 ring-brand-blue/20" : "border-slate-100 bg-white hover:border-brand-blue/20 hover:bg-brand-blue/[0.02]"}`,
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: item.effect }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: policyScopeLabel(item.scope) }),
-          isCloudExceptionAckFailure(item) ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "warning", children: "Ack issue" }) : null
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 break-words text-sm font-semibold text-brand-dark", children: headline }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 break-words text-xs text-slate-500", children: [
-          "Owner ",
-          resolvePersonDisplayLabel(item.owner),
-          expiryTimestamp && expiryValue ? ` · expires ${formatRelativeTime(expiryValue)}` : null
-        ] })
-      ]
-    }
-  );
-}
-function PendingRequestCard({ item }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "min-w-0 rounded-xl border border-amber-100 bg-amber-50/40 px-3.5 py-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "warning", children: "Pending" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: policyScopeLabel(item.scope) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 break-words text-sm font-semibold text-brand-dark", children: item.reason }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 break-words text-xs text-slate-600", children: [
-      "Requested by ",
-      resolvePersonDisplayLabel(item.owner),
-      " · expires",
-      " ",
-      formatRelativeTime(item.requestedExpiresAt)
-    ] })
-  ] });
-}
-function PolicyCloudExceptionsListSkeleton() {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", "aria-busy": "true", "aria-label": "Loading Cloud exceptions", children: [0, 1, 2].map((index) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-28 animate-pulse rounded-2xl border border-slate-100 bg-slate-100" }, index)) });
-}
-function PolicyCloudExceptionsList({
-  active,
-  pending,
-  expiringSoon,
-  selectedExceptionId,
-  onSelectException,
-  cloudConnected
-}) {
-  const expiringSoonIds = reactExports.useMemo(() => new Set(expiringSoon.map((item) => item.id)), [expiringSoon]);
-  const activeWithoutExpiringGroup = reactExports.useMemo(
-    () => active.filter((item) => !expiringSoonIds.has(item.id)),
-    [active, expiringSoonIds]
-  );
-  if (!cloudConnected) {
-    return null;
-  }
-  const hasAnyRows = active.length > 0 || pending.length > 0;
-  if (!hasAnyRows) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(
-      EmptyState,
-      {
-        title: "No Cloud exceptions synced yet",
-        body: "Approved Cloud risk acceptances will appear here after Guard Cloud syncs a signed policy bundle to this device.",
-        tone: "teach"
-      }
-    );
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", role: "list", "aria-label": "Cloud exception groups", children: [
-    activeWithoutExpiringGroup.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      GroupSection,
-      {
-        title: "Active on this device",
-        description: "Synced Cloud risk acceptances currently enforced locally.",
-        defaultOpen: true,
-        children: activeWithoutExpiringGroup.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ExceptionCard,
-          {
-            item,
-            selected: selectedExceptionId === item.id,
-            onSelect: onSelectException
-          },
-          item.id
-        ))
-      }
-    ) : null,
-    pending.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      GroupSection,
-      {
-        title: "Pending in Guard Cloud",
-        description: "Requests waiting for Cloud approval before they can sync to this device.",
-        defaultOpen: true,
-        children: pending.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(PendingRequestCard, { item }, item.requestId))
-      }
-    ) : null,
-    expiringSoon.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      GroupSection,
-      {
-        title: "Expiring soon",
-        description: "Active acceptances nearing expiry. Renew or revoke them in Guard Cloud.",
-        defaultOpen: true,
-        children: expiringSoon.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ExceptionCard,
-          {
-            item,
-            selected: selectedExceptionId === item.id,
-            onSelect: onSelectException
-          },
-          `expiring-${item.id}`
-        ))
-      }
-    ) : null
-  ] });
-}
-const SUMMARY_TONE_CLASSES = {
-  blue: "text-brand-blue",
-  amber: "text-amber-700",
-  attention: "text-brand-attention",
-  slate: "text-brand-dark"
-};
-function SummaryCard({
-  label,
-  value,
-  tone = "slate"
-}) {
-  const toneClass = SUMMARY_TONE_CLASSES[tone];
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200/70 bg-white p-3 text-center shadow-sm", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-2xl font-semibold tabular-nums ${toneClass}`, children: value }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground", children: label })
-  ] });
-}
-function SummarySkeleton() {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-2 gap-3 md:grid-cols-4", children: [0, 1, 2, 3].map((index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "div",
-    {
-      className: "h-[72px] animate-pulse rounded-xl border border-slate-200/70 bg-slate-100",
-      "aria-hidden": "true"
-    },
-    index
-  )) });
-}
-function PolicyCloudExceptionsSummary({
-  activeCount,
-  pendingCount,
-  expiringSoonCount,
-  ackFailureCount,
-  loading = false
-}) {
-  if (loading) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(SummarySkeleton, {});
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: "grid grid-cols-2 gap-3 md:grid-cols-4",
-      "aria-label": "Cloud exception summary",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SummaryCard, { label: "Active synced", value: activeCount, tone: "blue" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SummaryCard, { label: "Pending approval", value: pendingCount, tone: "amber" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SummaryCard, { label: "Expiring soon", value: expiringSoonCount, tone: "attention" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SummaryCard, { label: "Local ack failures", value: ackFailureCount, tone: "attention" })
-      ]
-    }
-  );
-}
 function resolveCloudExceptionsConnected(snapshot) {
   return snapshot.cloud_state === "paired_active" || snapshot.cloud_state === "paired_waiting";
 }
@@ -1394,7 +1378,7 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear }) {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "hidden min-w-[100px] px-3 py-3 align-top text-sm text-brand-dark md:table-cell", children: display.projectLabel ?? "—" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "hidden px-3 py-3 align-top md:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: cloudManaged ? "blue" : "green", children: resolvePolicySourceLabel(policy.source) }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "hidden px-3 py-3 align-top text-sm text-slate-700 lg:table-cell", children: policyScopeLabel(policy.scope) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "hidden px-3 py-3 align-top text-sm text-slate-700 lg:table-cell", children: scopeLabel(policy.scope, "policy") }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "hidden px-3 py-3 align-top text-sm text-slate-700 xl:table-cell", children: harnessDisplayName(policy.harness) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "hidden whitespace-nowrap px-3 py-3 align-top text-xs text-slate-500 sm:table-cell", children: policy.updated_at ? formatRelativeTime(policy.updated_at) : "—" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "min-w-[120px] px-3 py-3 align-top text-right", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-end gap-2", children: [
@@ -1635,7 +1619,7 @@ function PolicyRememberedRulesRightRail({
       /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "mt-3 space-y-2.5", children: REVIEW_SCOPE_LADDER.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex gap-2.5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-[11px] font-semibold text-brand-blue", children: index + 1 }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: policyScopeLabel(step.scope) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: scopeLabel(step.scope, "policy") }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-relaxed text-slate-500", children: step.detail })
         ] })
       ] }, step.scope)) })
@@ -2076,14 +2060,20 @@ function PolicyStrictConfigTab({
   const controlsDisabled = savingKey !== null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `rounded-2xl border p-5 ${isStrict ? "border-brand-green/20 bg-brand-green/[0.04]" : "border-slate-200 bg-slate-50/40"}`, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-2 flex flex-wrap items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Strict mode" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: isStrict ? "green" : "slate", children: isStrict ? "Enabled" : "Disabled" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/75", children: "Strict config tunes local fallback enforcement only. Authentication, MFA, and general Guard settings stay in Settings." }),
-        !isStrict && onOpenSettings ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "secondary", onClick: onOpenSettings, children: "Enable strict mode in Settings" }) }) : null
-      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: `rounded-2xl border p-5 ${isStrict ? "border-brand-green/20 bg-brand-green/[0.04]" : "border-slate-200 bg-slate-50/40"}`,
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-2 flex flex-wrap items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Strict mode" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: isStrict ? "green" : "slate", children: isStrict ? "Enabled" : "Disabled" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/75", children: "Strict config tunes local fallback enforcement only. Authentication, MFA, and general Guard settings stay in Settings." }),
+            !isStrict && onOpenSettings ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "secondary", onClick: onOpenSettings, children: "Enable strict mode in Settings" }) }) : null
+          ]
+        }
+      ),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Local policy state" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid gap-3 text-sm sm:grid-cols-2", children: [
