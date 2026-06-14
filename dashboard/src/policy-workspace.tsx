@@ -63,12 +63,16 @@ export function PolicyWorkspace({
       if (index < 0) {
         return;
       }
+      let nextView: PolicyPageView | undefined;
       if (event.key === "ArrowRight") {
-        event.preventDefault();
-        setActiveView(POLICY_VIEWS[(index + 1) % POLICY_VIEWS.length] ?? "rules");
+        nextView = POLICY_VIEWS[(index + 1) % POLICY_VIEWS.length];
       } else if (event.key === "ArrowLeft") {
+        nextView = POLICY_VIEWS[(index - 1 + POLICY_VIEWS.length) % POLICY_VIEWS.length];
+      }
+      if (nextView) {
         event.preventDefault();
-        setActiveView(POLICY_VIEWS[(index - 1 + POLICY_VIEWS.length) % POLICY_VIEWS.length] ?? "rules");
+        setActiveView(nextView);
+        document.getElementById(`policy-tab-${nextView}`)?.focus();
       }
     },
     [],
@@ -117,6 +121,7 @@ export function PolicyWorkspace({
             id={`policy-tab-${view}`}
             aria-controls={`policy-panel-${view}`}
             aria-selected={activeView === view}
+            tabIndex={activeView === view ? 0 : -1}
             onClick={() => handleViewChange(view)}
             onKeyDown={(event) => handleTabKeyDown(event, view)}
             className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${

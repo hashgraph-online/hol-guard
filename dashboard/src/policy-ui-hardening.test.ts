@@ -64,7 +64,8 @@ for (const file of POLICY_UI_FILES) {
 const workspaceSource = readSource("policy-workspace.tsx");
 assert(workspaceSource.includes('role="tablist"'), "policy tablist exposes tablist role");
 assert(workspaceSource.includes('role="tab"'), "policy tabs expose tab role");
-assert(workspaceSource.includes("onKeyDown"), "policy tablist supports keyboard navigation");
+assert(workspaceSource.includes("tabIndex={activeView === view ? 0 : -1}"), "policy tabs use roving tabindex");
+assert(workspaceSource.includes("nextTab?.focus()") || workspaceSource.includes(".focus()"), "policy tablist moves focus on arrow keys");
 
 const listSource = readSource("policy-cloud-exceptions-list.tsx");
 assert(listSource.includes('aria-label="Cloud exception groups"'), "grouped list exposes list label");
@@ -74,8 +75,8 @@ const detailSource = readSource("policy-cloud-exception-detail-panel.tsx");
 assert(detailSource.includes('aria-label="Cloud exception details"'), "detail panel exposes label");
 
 const requestSource = readSource("policy-cloud-exception-request-panel.tsx");
-assert(requestSource.includes('role="dialog"'), "request panel exposes dialog role");
-assert(requestSource.includes("aria-modal"), "request panel marks modal state");
+assert(requestSource.includes("Request cloud exception"), "request panel contains section title");
+assert(requestSource.includes("aria-labelledby=\"cloud-exception-request-title\""), "request panel exposes labelled heading");
 
 const tabSource = readSource("policy-cloud-exceptions-tab.tsx");
 assert(tabSource.includes("PolicyCloudExceptionsListSkeleton"), "cloud exceptions tab preserves loading layout");

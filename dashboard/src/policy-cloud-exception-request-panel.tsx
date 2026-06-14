@@ -219,8 +219,6 @@ export function PolicyCloudExceptionRequestPanel({
     return (
       <div
         className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-        role="dialog"
-        aria-modal="true"
         aria-labelledby="cloud-exception-request-title"
       >
         <h2 id="cloud-exception-request-title" className="sr-only">
@@ -256,8 +254,6 @@ export function PolicyCloudExceptionRequestPanel({
     <form
       className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
       onSubmit={handleSubmit}
-      role="dialog"
-      aria-modal="true"
       aria-labelledby="cloud-exception-request-title"
     >
       <div>

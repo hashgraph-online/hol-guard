@@ -82,7 +82,6 @@ function ExceptionCard({
       type="button"
       onClick={handleSelect}
       aria-pressed={selected}
-      aria-label={`Cloud exception ${headline}`}
       className={`w-full rounded-xl border px-3.5 py-3 text-left transition ${
         selected
           ? "border-brand-blue/30 bg-brand-blue/[0.04] ring-1 ring-brand-blue/20"
@@ -105,11 +104,7 @@ function ExceptionCard({
 
 function PendingRequestCard({ item }: { item: GuardCloudExceptionRequestItem }) {
   return (
-    <article
-      className="rounded-xl border border-amber-100 bg-amber-50/40 px-3.5 py-3"
-      role="listitem"
-      aria-label={`Pending Cloud exception request ${item.reason}`}
-    >
+    <article className="rounded-xl border border-amber-100 bg-amber-50/40 px-3.5 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone="warning">Pending</Badge>
         <Tag tone="slate">{scopeLabel(item.scope)}</Tag>
