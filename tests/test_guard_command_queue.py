@@ -38,6 +38,18 @@ class FakeStore:
             "workspace_id": "workspace-1",
         }
 
+    def list_approval_requests(
+        self,
+        *,
+        status: str | None = "pending",
+        harness: str | None = None,
+        limit: int | None = 50,
+        cursor: str | None = None,
+        search: str | None = None,
+    ) -> list[dict[str, object]]:
+        del status, harness, limit, cursor, search
+        return []
+
 
 def _context(tmp_path: Path) -> HarnessContext:
     return HarnessContext(
@@ -98,6 +110,7 @@ def test_poll_once_leases_heartbeats_executes_and_posts_result(
                 "operations": list(command_executors.SUPPORTED_COMMAND_OPERATIONS),
                 "schemaVersions": dict(command_executors.COMMAND_OPERATION_SCHEMA_VERSIONS),
             },
+            "localRequestsSnapshot": {"requests": []},
             "maxJobs": 1,
             "waitMs": 25000,
         },
@@ -537,12 +550,51 @@ def test_executor_dispatches_app_connect(tmp_path: Path, monkeypatch) -> None:
     assert isinstance(result["data"], dict)
 
 
-def test_executor_rejects_approval_resolve_until_inbox_phase(tmp_path: Path) -> None:
+def test_executor_resolves_local_approval_request(tmp_path: Path) -> None:
+    class ApprovalStore(FakeStore):
+        def __init__(self, guard_home: Path) -> None:
+            super().__init__(guard_home)
+            self.resolved: list[dict[str, object]] = []
+
+        def resolve_request_with_queue_result(
+            self,
+            request_id: str,
+            *,
+            resolution_action: str,
+            resolution_scope: str,
+            reason: str | None,
+            resolved_at: str,
+        ) -> dict[str, object]:
+            self.resolved.append(
+                {
+                    "request_id": request_id,
+                    "resolution_action": resolution_action,
+                    "resolution_scope": resolution_scope,
+                    "reason": reason,
+                    "resolved_at": resolved_at,
+                }
+            )
+            return {"resolved": True, "resolved_request": {"request_id": request_id}}
+
+    store = ApprovalStore(tmp_path / "guard-home")
     result = command_executors.execute_guard_command_job(
-        {"operation": "guard.approval.resolve", "payload": {"requestId": "request-1", "action": "allow_once"}},
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {"localRequestId": "request-1", "action": "allow_once", "scope": "artifact"},
+        },
         context=_context(tmp_path),
-        store=FakeStore(tmp_path / "guard-home"),  # type: ignore[arg-type]
+        store=store,  # type: ignore[arg-type]
         now=lambda: "2026-06-13T00:00:00+00:00",
     )
 
-    assert result["failureCode"] == "unsupported_operation"
+    assert result["generatedAt"] == "2026-06-13T00:00:00+00:00"
+    assert result["data"]["status"] == "completed"
+    assert store.resolved == [
+        {
+            "request_id": "request-1",
+            "resolution_action": "allow",
+            "resolution_scope": "artifact",
+            "reason": "Guard Cloud approval command",
+            "resolved_at": "2026-06-13T00:00:00+00:00",
+        }
+    ]

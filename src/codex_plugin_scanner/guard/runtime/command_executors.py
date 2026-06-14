@@ -20,6 +20,7 @@ from ..local_supply_chain import (
     managed_install_audit_workspace_dirs,
     resolve_supply_chain_audit_workspace_dir,
 )
+from ..models import PolicyDecision
 from ..package_shim_status import record_package_shim_audit_result
 from ..runtime.runner import sync_supply_chain_bundle
 from ..shims import (
@@ -46,7 +47,11 @@ APP_OPERATIONS: tuple[str, ...] = (
     "guard.app.connect",
     "guard.app.remove",
 )
-SUPPORTED_COMMAND_OPERATIONS: tuple[str, ...] = (*PACKAGE_SHIM_OPERATIONS, *APP_OPERATIONS)
+APPROVAL_OPERATIONS: tuple[str, ...] = (
+    "guard.approval.resolve",
+    "guard.localRequests.snapshot",
+)
+SUPPORTED_COMMAND_OPERATIONS: tuple[str, ...] = (*PACKAGE_SHIM_OPERATIONS, *APP_OPERATIONS, *APPROVAL_OPERATIONS)
 COMMAND_OPERATION_SCHEMA_VERSIONS: dict[str, int] = {operation: 1 for operation in SUPPORTED_COMMAND_OPERATIONS}
 
 
@@ -74,6 +79,13 @@ def execute_guard_command_job(
                 operation,
                 payload=payload,
                 context=context,
+                store=store,
+                generated_at=generated_at,
+            )
+        if operation in APPROVAL_OPERATIONS:
+            return _execute_approval_operation(
+                operation,
+                payload=payload,
                 store=store,
                 generated_at=generated_at,
             )
@@ -203,6 +215,117 @@ def _execute_app_operation(
         "failureCode": "unsupported_operation",
         "failureMessage": f"Unsupported app operation: {operation}",
     }
+
+
+def _execute_approval_operation(
+    operation: str,
+    *,
+    payload: dict[str, object],
+    store: GuardStore,
+    generated_at: str,
+) -> dict[str, object]:
+    if operation == "guard.localRequests.snapshot":
+        return _result({"requests": _local_request_snapshot_items(store)}, generated_at=generated_at)
+    if operation != "guard.approval.resolve":
+        return {
+            "failureCode": "unsupported_operation",
+            "failureMessage": f"Unsupported approval operation: {operation}",
+        }
+    action = _optional_string(payload.get("action"))
+    local_request_id = _optional_string(payload.get("localRequestId")) or _optional_string(payload.get("local_request_id"))
+    if action not in {"allow_once", "block", "policy_sync"} or local_request_id is None:
+        raise ValueError("invalid_approval_payload")
+    if action == "policy_sync":
+        return _execute_policy_sync(payload, store=store, generated_at=generated_at)
+    resolution_action = "allow" if action == "allow_once" else "block"
+    result = store.resolve_request_with_queue_result(
+        local_request_id,
+        resolution_action=resolution_action,
+        resolution_scope=_optional_string(payload.get("scope")) or "artifact",
+        reason=_optional_string(payload.get("reason")) or "Guard Cloud approval command",
+        resolved_at=generated_at,
+    )
+    return _result(
+        {
+            "action": action,
+            "localRequestId": local_request_id,
+            "resolution": result,
+            "status": "completed" if result.get("resolved") is True else "not_resolved",
+        },
+        generated_at=generated_at,
+    )
+
+
+def _execute_policy_sync(
+    payload: dict[str, object],
+    *,
+    store: GuardStore,
+    generated_at: str,
+) -> dict[str, object]:
+    policy_memory = payload.get("policyMemory") or payload.get("policy_memory")
+    if not isinstance(policy_memory, dict):
+        raise ValueError("missing_policy_memory")
+    target = policy_memory.get("target")
+    target_payload = target if isinstance(target, dict) else {}
+    harness = _optional_string(payload.get("harness")) or _optional_string(target_payload.get("harness"))
+    artifact_id = _optional_string(target_payload.get("artifactId")) or _optional_string(target_payload.get("artifact_id"))
+    if harness is None or artifact_id is None:
+        raise ValueError("missing_policy_target")
+    scope = _local_policy_scope(_optional_string(policy_memory.get("scope")))
+    decision = PolicyDecision(
+        harness=harness,
+        scope=scope,
+        action="allow",
+        artifact_id=artifact_id,
+        artifact_hash=None,
+        workspace=_optional_string(target_payload.get("workspaceId")) if scope == "workspace" else None,
+        publisher=None,
+        reason=_optional_string(policy_memory.get("reason")) or "Guard Cloud policy memory sync",
+        source="cloud-sync",
+        expires_at=_optional_string(policy_memory.get("expiry")),
+    )
+    store.upsert_policy(decision, generated_at)
+    return _result(
+        {
+            "action": "policy_sync",
+            "decision": decision.to_dict(),
+            "localRequestId": _optional_string(payload.get("localRequestId")),
+            "status": "completed",
+        },
+        generated_at=generated_at,
+    )
+
+
+def _local_policy_scope(scope: str | None) -> str:
+    if scope in {"workspace", "team", "policy", "machine", "project"}:
+        return "workspace"
+    if scope == "item":
+        return "artifact"
+    return scope or "artifact"
+
+
+def _local_request_snapshot_items(store: GuardStore) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
+    for status in ("pending", "resolved"):
+        for item in store.list_approval_requests(status=status, limit=100):
+            request_id = item.get("request_id")
+            if not isinstance(request_id, str) or not request_id:
+                continue
+            created_at = str(item.get("created_at") or _now())
+            last_seen_at = str(item.get("last_seen_at") or created_at)
+            resolved_at = item.get("resolved_at")
+            items.append(
+                {
+                    "localRequestId": request_id,
+                    "requestKind": str(item.get("harness") or "guard-review"),
+                    "requestPayload": dict(item),
+                    "localStatus": str(item.get("status") or status),
+                    "firstSeenAt": created_at,
+                    "lastSeenAt": last_seen_at,
+                    "resolvedAt": str(resolved_at) if isinstance(resolved_at, str) and resolved_at else None,
+                }
+            )
+    return items[:200]
 
 
 def _package_shim_context(
