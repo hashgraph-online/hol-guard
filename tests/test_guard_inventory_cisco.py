@@ -71,8 +71,12 @@ def test_cisco_inventory_scans_report_missing_targets_without_running_dependenci
 
 def test_cisco_inventory_scans_run_mcp_and_skill_scanners_with_required_mode(tmp_path: Path, monkeypatch) -> None:
     context = _ctx(tmp_path)
-    (context.workspace_dir / ".mcp.json").write_text('{"mcpServers": {}}\n')
-    skill_path = context.home_dir / ".hermes" / "skills" / "ops" / "reviewer" / "SKILL.md"
+    workspace_dir = context.workspace_dir
+    home_dir = context.home_dir
+    assert workspace_dir is not None
+    assert home_dir is not None
+    (workspace_dir / ".mcp.json").write_text('{"mcpServers": {}}\n')
+    skill_path = home_dir / ".hermes" / "skills" / "ops" / "reviewer" / "SKILL.md"
     skill_path.parent.mkdir(parents=True)
     skill_path.write_text("---\nname: reviewer\n---\nReview local files.\n")
     detection = HarnessDetection(
@@ -132,15 +136,17 @@ def test_cisco_inventory_scans_run_mcp_and_skill_scanners_with_required_mode(tmp
     )
 
     assert [call[0] for call in calls] == ["mcp", "skill"]
-    assert calls[0][1] == context.workspace_dir
-    assert calls[1][1] == context.home_dir / ".hermes" / "skills"
+    assert calls[0][1] == workspace_dir
+    assert calls[1][1] == skill_path.parent
     assert all(call[2] == "on" and call[3] == 3.5 for call in calls)
     assert all(run.status == "enabled" for run in runs)
 
 
 def test_cisco_inventory_scans_preserve_timeout_status(tmp_path: Path, monkeypatch) -> None:
     context = _ctx(tmp_path)
-    (context.workspace_dir / ".mcp.json").write_text('{"mcpServers": {}}\n')
+    workspace_dir = context.workspace_dir
+    assert workspace_dir is not None
+    (workspace_dir / ".mcp.json").write_text('{"mcpServers": {}}\n')
     detection = HarnessDetection(
         harness="openclaw",
         installed=True,
@@ -178,7 +184,9 @@ def test_cisco_inventory_scans_preserve_timeout_status(tmp_path: Path, monkeypat
 
 def test_cisco_inventory_scans_use_detected_nonstandard_skill_roots(tmp_path: Path, monkeypatch) -> None:
     context = _ctx(tmp_path)
-    extra_root = context.home_dir / "shared-openclaw-skills"
+    home_dir = context.home_dir
+    assert home_dir is not None
+    extra_root = home_dir / "shared-openclaw-skills"
     skill_path = extra_root / "reviewer" / "SKILL.md"
     skill_path.parent.mkdir(parents=True)
     skill_path.write_text("---\nname: reviewer\n---\nReview local files.\n")
@@ -225,4 +233,69 @@ def test_cisco_inventory_scans_use_detected_nonstandard_skill_roots(tmp_path: Pa
         skill_mode="on",
     )
 
-    assert calls == [extra_root]
+    assert calls == [skill_path.parent]
+
+
+def test_cisco_inventory_scans_runs_each_detected_skill_root(tmp_path: Path, monkeypatch) -> None:
+    context = _ctx(tmp_path)
+    home_dir = context.home_dir
+    assert home_dir is not None
+    skill_a = home_dir / ".agents" / "skills" / "adapt" / "SKILL.md"
+    skill_b = home_dir / ".agents" / "skills" / "audit" / "SKILL.md"
+    skill_a.parent.mkdir(parents=True)
+    skill_b.parent.mkdir(parents=True)
+    skill_a.write_text("---\nname: adapt\n---\nAdapt layouts.\n")
+    skill_b.write_text("---\nname: audit\n---\nAudit interfaces.\n")
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=False,
+        config_paths=(str(skill_a), str(skill_b)),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:skill:adapt",
+                name="adapt",
+                harness="codex",
+                artifact_type="skill",
+                source_scope="global",
+                config_path=str(skill_a),
+            ),
+            GuardArtifact(
+                artifact_id="codex:skill:audit",
+                name="audit",
+                harness="codex",
+                artifact_type="skill",
+                source_scope="global",
+                config_path=str(skill_b),
+            ),
+        ),
+    )
+    calls: list[Path] = []
+
+    def fake_skill_scan(skills_dir: Path, mode: str, timeout_seconds: float | None = None) -> _SkillSummary:
+        del mode, timeout_seconds
+        calls.append(skills_dir)
+        return _SkillSummary(
+            status=CiscoIntegrationStatus.ENABLED,
+            message="Skill scanner completed.",
+            findings=(),
+            skills_scanned=1,
+            skills_skipped=(),
+            analyzers_used=("prompt-injection",),
+            policy_name="balanced",
+            total_findings=0,
+            findings_by_severity={severity.value: 0 for severity in Severity},
+        )
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.inventory_cisco.run_cisco_skill_scan", fake_skill_scan)
+
+    runs = run_cisco_inventory_scans(
+        harness="codex",
+        context=context,
+        detection=detection,
+        skill_mode="auto",
+    )
+
+    assert [run.source for run in runs] == ["cisco-skill-scanner", "cisco-skill-scanner"]
+    assert calls == [skill_a.parent, skill_b.parent]
+    assert [run.metadata["target"] for run in runs] == [str(skill_a.parent), str(skill_b.parent)]
