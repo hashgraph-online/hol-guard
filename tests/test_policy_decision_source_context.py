@@ -294,3 +294,61 @@ def test_list_policy_decisions_supports_global_harness_scope(tmp_path) -> None:
     item = store.list_policy_decisions()[0]
     assert item["source_receipt_id"] == "receipt-global-1"
     assert item["remembered_command"] == "pnpm install"
+
+
+def test_list_policy_decisions_keeps_inventory_context_with_global_policy(tmp_path) -> None:
+    store = _store(tmp_path)
+    with store._connect() as connection:
+        connection.execute(
+            """
+            insert into artifact_inventory (
+              artifact_id, harness, artifact_name, artifact_type, source_scope, config_path,
+              first_seen_at, last_seen_at, last_policy_action, artifact_hash
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "codex:project:package-request:mixed1",
+                "codex",
+                "pnpm",
+                "package_request",
+                "/srv/projects/sample-guard",
+                "config.json",
+                "2026-06-14T12:00:00+00:00",
+                "2026-06-14T12:00:00+00:00",
+                "allow",
+                "hash-mixed1",
+            ),
+        )
+        connection.execute(
+            "update artifact_inventory set launch_command = ? where artifact_id = ? and harness = ?",
+            ("pnpm install --frozen-lockfile", "codex:project:package-request:mixed1", "codex"),
+        )
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="workspace",
+            action="allow",
+            artifact_id="codex:project:package-request:mixed1",
+            artifact_hash="hash-mixed1",
+            workspace="workspace:mixed",
+            reason="approved in review",
+            source="local",
+        ),
+        "2026-06-14T12:01:00+00:00",
+    )
+    store.upsert_policy(
+        PolicyDecision(
+            harness="*",
+            scope="artifact",
+            action="allow",
+            artifact_id="codex:project:package-request:global-mixed",
+            artifact_hash="globalmixedhash1234567890abcdef1234567890abcdef12",
+            workspace="workspace:global",
+            reason="approved in review",
+            source="local",
+        ),
+        "2026-06-14T12:02:00+00:00",
+    )
+
+    items = {str(item["artifact_id"]): item for item in store.list_policy_decisions()}
+    assert items["codex:project:package-request:mixed1"]["remembered_command"] == "pnpm install --frozen-lockfile"

@@ -621,7 +621,7 @@ def build_policy_source_context_index(
                 for variant in _artifact_hash_match_variants(str(artifact_hash)):
                     _append_indexed_row(index.receipts_by_harness_hash, (harness, variant), row)
 
-    if harnesses and artifact_ids and not include_all_harnesses:
+    if harnesses and artifact_ids:
         harness_placeholders = ", ".join("?" for _ in harnesses)
         artifact_placeholders = ", ".join("?" for _ in artifact_ids)
         inventory_rows = connection.execute(
