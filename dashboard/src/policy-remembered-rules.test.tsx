@@ -34,7 +34,7 @@ assert(cloudSource.includes("No Guard Cloud rules synced"), "cloud rules empty s
 assert(cloudSource.includes("Connect Guard Cloud"), "cloud rules empty state body");
 assert(!cloudSource.includes("onClearPolicy"), "cloud rules are read-only without remove");
 
-assert(tabSource.includes('placeholder="Search by app, action, or reason…"'), "tab preserves search");
+assert(tabSource.includes('placeholder="Search command, project, path, or app…"'), "tab preserves search");
 assert(tabSource.includes('aria-label="Filter by app"'), "tab preserves app filter");
 assert(tabSource.includes('aria-label="Filter by action type"'), "tab preserves family filter");
 assert(tabSource.includes("PolicyRememberedLocalRules"), "tab mounts local rules section");
@@ -44,7 +44,7 @@ assert(tabSource.includes("PolicyRememberedRulesRightRail"), "tab mounts right r
 assert(railSource.includes("Review scope ladder"), "right rail explains review scope ladder");
 assert(railSource.includes('scope: "artifact"'), "scope ladder includes narrowest scope");
 assert(railSource.includes('scope: "global"'), "scope ladder includes widest scope");
-assert(railSource.includes("scopeLabel(step.scope)"), "scope ladder renders human scope labels");
+assert(railSource.includes('scopeLabel(step.scope, "policy")'), "scope ladder renders policy scope labels");
 assert(railSource.includes("Open Cloud exceptions tab"), "right rail links to Cloud exceptions tab");
 assert(railSource.includes("Remembered rules vs Cloud exceptions"), "right rail explains remembered vs cloud");
 
@@ -52,9 +52,12 @@ assert(workspaceSource.includes("PolicyRememberedRulesTab"), "workspace uses rem
 assert(!workspaceSource.includes("PolicyRememberedRulesHelper"), "workspace no longer uses inline helper");
 assert(!workspaceSource.includes("GroupedPolicySection"), "workspace no longer mounts grouped sections directly");
 
-assert(viewsSource.includes("Remembered action"), "rules table uses mockup-style columns");
+assert(viewsSource.includes("Command"), "rules table uses command column");
+assert(viewsSource.includes('scopeLabel(policy.scope, "policy")'), "rules table uses policy scope labels");
+assert(viewsSource.includes("display.pathLine"), "rules table shows approval path");
+assert(viewsSource.includes("display.projectLabel"), "rules table shows project column");
 assert(viewsSource.includes("resolvePolicyApprovalRecordLabel"), "rules table links approval record by receipt id");
-assert(viewsSource.includes("display.rememberSentence"), "rules table explains remembered behavior");
+assert(!viewsSource.includes("display.rememberSentence"), "rules table omits verbose remember sentence");
 assert(viewsSource.includes("View on cloud"), "cloud rules link to Guard Cloud");
 assert(viewsSource.includes("Remove rule"), "local rules expose remove action");
 assert(viewsSource.includes("!cloudManaged"), "remove action gated to non-cloud rules");

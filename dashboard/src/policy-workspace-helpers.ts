@@ -20,10 +20,27 @@ const GENERIC_REASONS = [
 
 export type PolicyDisplay = {
   headline: string;
-  subtitle: string;
+  kindLine: string | null;
+  pathLine: string | null;
+  projectLabel: string | null;
   rememberSentence: string;
   technicalId: string | null;
 };
+
+export function formatPolicyScopePath(path: string | null | undefined): string | null {
+  if (!path?.trim()) {
+    return null;
+  }
+  const value = path.trim();
+  if (value.length <= 72) {
+    return value;
+  }
+  const segments = value.split(/[/\\]/).filter(Boolean);
+  if (segments.length <= 2) {
+    return value;
+  }
+  return `…/${segments.slice(-2).join("/")}`;
+}
 
 export function isCloudManagedPolicy(source: string): boolean {
   return source === "cloud-sync" || source === "team-policy" || source === "policy-bundle";
@@ -163,7 +180,7 @@ function resolveScopeSubtitle(policy: GuardPolicyDecision): string {
   if (policy.scope === "global") {
     return "Every project on this device";
   }
-  return scopeLabel(policy.scope);
+  return scopeLabel(policy.scope, "policy");
 }
 
 function resolveWhatPhrase(policy: GuardPolicyDecision): string {
@@ -200,7 +217,7 @@ function resolveWhatPhrase(policy: GuardPolicyDecision): string {
   return "matching guarded actions";
 }
 
-function resolveContextLine(policy: GuardPolicyDecision): string | null {
+function resolveKindLine(policy: GuardPolicyDecision): string | null {
   const remembered = policy.remembered_context?.trim();
   if (remembered) {
     return remembered;
@@ -209,18 +226,38 @@ function resolveContextLine(policy: GuardPolicyDecision): string | null {
   if (family && MATCHER_FAMILY_LABELS[family]) {
     return MATCHER_FAMILY_LABELS[family];
   }
-  return null;
+  return resolveScopeSubtitle(policy);
+}
+
+function resolvePathLine(policy: GuardPolicyDecision): string | null {
+  return formatPolicyScopePath(policy.source_scope_path);
+}
+
+function resolveProjectLabel(policy: GuardPolicyDecision): string | null {
+  const label = policy.workspace_label?.trim();
+  if (label) {
+    return label;
+  }
+  const workspace = policy.workspace?.trim();
+  if (!workspace || workspace.startsWith("workspace:")) {
+    return null;
+  }
+  return resolveWorkspaceLabel(workspace);
 }
 
 export function resolvePolicyDisplay(policy: GuardPolicyDecision): PolicyDisplay {
   const reason = policy.reason?.trim() ?? null;
   const rememberedCommand = policy.remembered_command?.trim();
-  const contextLine = resolveContextLine(policy);
+  const kindLine = resolveKindLine(policy);
+  const pathLine = resolvePathLine(policy);
+  const projectLabel = resolveProjectLabel(policy);
 
   if (rememberedCommand) {
     return {
       headline: rememberedCommand,
-      subtitle: [contextLine, resolveScopeSubtitle(policy)].filter(Boolean).join(" · "),
+      kindLine,
+      pathLine,
+      projectLabel,
       rememberSentence: resolveRememberSentence(policy, rememberedCommand),
       technicalId: policy.artifact_id,
     };
@@ -231,7 +268,9 @@ export function resolvePolicyDisplay(policy: GuardPolicyDecision): PolicyDisplay
   if (reason && !isGenericReason(reason)) {
     return {
       headline: reason,
-      subtitle: [contextLine, resolveScopeSubtitle(policy)].filter(Boolean).join(" · "),
+      kindLine,
+      pathLine,
+      projectLabel,
       rememberSentence: resolveRememberSentence(policy, reason),
       technicalId: policy.artifact_id,
     };
@@ -241,7 +280,9 @@ export function resolvePolicyDisplay(policy: GuardPolicyDecision): PolicyDisplay
   const headline = `${actionVerb} ${what}`;
   return {
     headline,
-    subtitle: [contextLine, resolveScopeSubtitle(policy)].filter(Boolean).join(" · "),
+    kindLine,
+    pathLine,
+    projectLabel,
     rememberSentence: resolveRememberSentence(policy, what),
     technicalId: policy.artifact_id,
   };

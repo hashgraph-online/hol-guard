@@ -485,6 +485,7 @@ export type GuardPolicyDecision = {
   remembered_command?: string | null;
   remembered_context?: string | null;
   workspace_label?: string | null;
+  source_scope_path?: string | null;
 };
 
 export const GUARD_CLOUD_EXCEPTION_ACK_STATUSES = [
