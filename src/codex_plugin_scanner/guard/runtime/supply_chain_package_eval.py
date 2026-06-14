@@ -30,6 +30,7 @@ from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
 from .js_semver import highest_js_version_for_selector, version_matches_js_selector
+from .manifest_dependency_targets import evaluation_targets as _manifest_evaluation_targets
 from .package_intent_common import split_python_extras
 from .package_manifest_diff import (
     _DeadlineExceededError,
@@ -1262,109 +1263,15 @@ def _persist_evidence(
         )
 
 
-_MANIFEST_ECOSYSTEMS = {
-    "package.json": "npm",
-    "pyproject.toml": "pypi",
-    "requirements.txt": "pypi",
-    "pipfile": "pypi",
-    "cargo.toml": "cargo",
-    "go.mod": "go",
-    "composer.json": "packagist",
-    "gemfile": "rubygems",
-}
-
-
-def _manifest_ecosystem_for_path(path: str) -> str | None:
-    manifest_name = Path(path).name.lower()
-    return _MANIFEST_ECOSYSTEMS.get(manifest_name)
-
-
 def _evaluation_targets(
     artifact: GuardArtifact,
     workspace_dir: Path | None,
 ) -> tuple[dict[str, object], ...]:
-    explicit_targets = _targets_from_artifact(artifact)
-    if explicit_targets:
-        return explicit_targets
-    intent_kind = _optional_string(artifact.metadata.get("intent_kind"))
-    if intent_kind not in {None, "install", "sync"}:
-        return ()
-    return _unsynced_manifest_dependency_targets(artifact, workspace_dir)
-
-
-def _unsynced_manifest_dependency_targets(
-    artifact: GuardArtifact,
-    workspace_dir: Path | None,
-) -> tuple[dict[str, object], ...]:
-    if workspace_dir is None:
-        return ()
-    manifest_paths = artifact.metadata.get("manifest_paths")
-    if not isinstance(manifest_paths, list) or not manifest_paths:
-        return ()
-    package_manager = str(artifact.metadata.get("package_manager") or "npm")
-    redacted_command = _optional_string(artifact.metadata.get("redacted_command"))
-    lockfile_paths = artifact.metadata.get("lockfile_paths")
-    lockfile_names: set[str] = set()
-    if isinstance(lockfile_paths, list):
-        for relative_path in lockfile_paths:
-            if not isinstance(relative_path, str) or not relative_path:
-                continue
-            lockfile_path = workspace_dir / relative_path
-            if not lockfile_path.exists():
-                continue
-            try:
-                lockfile_text = lockfile_path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
-                continue
-            lockfile_ecosystem = _lockfile_ecosystem(lockfile_path.name) or "npm"
-            for package_name in parse_manifest_dependencies(path=relative_path, text=lockfile_text):
-                lockfile_names.add(_normalize_package_name(lockfile_ecosystem, package_name))
-    unsynced_targets: list[dict[str, object]] = []
-    for relative_path in manifest_paths:
-        if not isinstance(relative_path, str) or not relative_path:
-            continue
-        ecosystem = _manifest_ecosystem_for_path(relative_path)
-        if ecosystem is None:
-            continue
-        manifest_path = workspace_dir / relative_path
-        if not manifest_path.exists():
-            continue
-        try:
-            manifest_text = manifest_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            continue
-        dependency_map = _artifact_manifest_dependency_map(
-            package_manager=package_manager,
-            relative_path=relative_path,
-            manifest_text=manifest_text,
-        )
-        for package_name, specifier in dependency_map.items():
-            normalized_name = _normalize_package_name(ecosystem, package_name)
-            if normalized_name in lockfile_names:
-                continue
-            namespace, name = _split_namespace_name(package_name)
-            exact_version = _manifest_exact_version(ecosystem, specifier)
-            unsynced_targets.append(
-                {
-                    "ecosystem": ecosystem,
-                    "package_name": package_name,
-                    "normalized_name": normalized_name,
-                    "namespace": namespace,
-                    "name": name,
-                    "raw_spec": package_name if exact_version is None else f"{package_name}@{exact_version}",
-                    "version": exact_version,
-                    "range": specifier if exact_version is None else None,
-                    "source_url": _source_url_from_specifier(specifier),
-                    "alias": None,
-                    "dependency_group": None,
-                    "extras": (),
-                    "editable": False,
-                    "package_manager": package_manager,
-                    "redacted_command": redacted_command,
-                    "manifest_unsynced": True,
-                }
-            )
-    return tuple(unsynced_targets)
+    return _manifest_evaluation_targets(
+        artifact,
+        workspace_dir,
+        explicit_targets=_targets_from_artifact(artifact),
+    )
 
 
 def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], ...]:
