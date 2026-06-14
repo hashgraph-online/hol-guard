@@ -36,6 +36,7 @@ from ..cli.oauth_client import (
 )
 from ..cloud_exceptions import (
     build_cloud_exceptions_from_policy_bundle,
+    build_cloud_exceptions_from_stored_items,
     build_cloud_exceptions_from_sync_payload,
     cloud_exception_to_dict,
     dedupe_cloud_exceptions,
@@ -2063,15 +2064,22 @@ def _persist_cloud_exceptions(
     bundle_ack_payload = store.get_sync_payload("policy_bundle_ack")
     bundle_ack = bundle_ack_payload if isinstance(bundle_ack_payload, dict) else None
     bundle_hash = non_empty_string(policy_bundle.get("bundleHash")) if isinstance(policy_bundle, dict) else None
+    ack_status = non_empty_string(bundle_ack.get("status")) if bundle_ack else None
     items = []
-    if sync_exceptions:
+    if sync_exceptions is not None:
         items.extend(
             build_cloud_exceptions_from_sync_payload(
                 sync_exceptions,
                 bundle_hash=bundle_hash,
-                ack_status=non_empty_string(bundle_ack.get("status")) if bundle_ack else None,
+                ack_status=ack_status,
             )
         )
+    else:
+        existing_payload = store.get_sync_payload("cloud_exceptions")
+        if isinstance(existing_payload, list):
+            items.extend(
+                build_cloud_exceptions_from_stored_items([item for item in existing_payload if isinstance(item, dict)])
+            )
     if isinstance(policy_bundle, dict):
         items.extend(
             build_cloud_exceptions_from_policy_bundle(
