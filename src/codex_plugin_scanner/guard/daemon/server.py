@@ -118,6 +118,7 @@ from ..runtime.runner import (
     _build_policy_bundle_decisions,
     _daemon_version_supported,
     _guard_device_metadata,
+    _persist_cloud_exceptions,
     _policy_bundle_acknowledgement_payload,
     _policy_bundle_is_version_downgrade,
     sync_local_guard_cloud_proof,
@@ -1151,9 +1152,19 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/policy":
             query = parse_qs(parsed.query)
             harness = query.get("harness", [None])[-1]
+            harness_filter = harness if isinstance(harness, str) else None
             self._write_json(
-                {"items": store.list_policy_decisions(harness=harness if isinstance(harness, str) else None)}
+                {
+                    "items": store.list_policy_decisions(harness=harness_filter),
+                    "cloud_exceptions": store.list_cloud_exceptions(harness=harness_filter),
+                }
             )
+            return
+        if parsed.path == "/v1/policy/cloud-exceptions":
+            query = parse_qs(parsed.query)
+            harness = query.get("harness", [None])[-1]
+            harness_filter = harness if isinstance(harness, str) else None
+            self._write_json({"items": store.list_cloud_exceptions(harness=harness_filter)})
             return
         if parsed.path == "/v1/evidence":
             query = parse_qs(parsed.query)
@@ -1874,6 +1885,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
             )
             self.server.store.replace_remote_policies(existing_remote_decisions, applied_at)  # type: ignore[attr-defined]
+            _persist_cloud_exceptions(
+                self.server.store,  # type: ignore[attr-defined]
+                policy_bundle=validated_policy_bundle,
+                now=applied_at,
+            )
             applied_bundle_hash = str(validated_policy_bundle["bundleHash"])
             applied_bundle_version = str(validated_policy_bundle["bundleVersion"])
         if not policy_memory:
@@ -3860,6 +3876,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/cloud/connect",
             "/v1/receipts/latest",
             "/v1/policy",
+            "/v1/policy/cloud-exceptions",
             "/v1/evidence",
             "/v1/evidence/export",
             "/v1/clients/attach",
@@ -4132,6 +4149,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/harnesses",
             "/v1/notifications/setup",
             "/v1/policy",
+            "/v1/policy/cloud-exceptions",
             "/v1/policy/clear",
             "/v1/policy/sync",
             "/v1/receipts",
@@ -4513,6 +4531,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/connect/result",
             "/v1/operations/block",
             "/v1/policy/decisions",
+            "/v1/policy/cloud-exceptions",
             "/v1/policy/clear",
             "/v1/policy/sync",
             "/v1/requests/clear",

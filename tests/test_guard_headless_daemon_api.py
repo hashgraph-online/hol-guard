@@ -2431,3 +2431,38 @@ def test_headless_generic_action_error_omits_unstructured_detail() -> None:
             "retryable": True,
         },
     }
+
+
+def test_policy_cloud_exceptions_endpoint(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime.runner import _persist_cloud_exceptions
+
+    store = GuardStore(tmp_path / "guard-home")
+    _persist_cloud_exceptions(
+        store,
+        sync_exceptions=[
+            {
+                "exceptionId": "artifact:codex:demo",
+                "scope": "artifact",
+                "harness": "codex",
+                "owner": "owner@example.com",
+                "expiresAt": "2099-01-01T00:00:00Z",
+            }
+        ],
+        now="2026-06-13T00:00:00Z",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(daemon.port, "/v1/policy", method="GET", token=token),
+        )
+        assert status == 200
+        assert len(payload["cloud_exceptions"]) == 1
+        dedicated_status, dedicated_payload = _read_json_response(
+            _request(daemon.port, "/v1/policy/cloud-exceptions", method="GET", token=token),
+        )
+        assert dedicated_status == 200
+        assert dedicated_payload["items"][0]["id"] == "artifact:codex:demo"
+    finally:
+        daemon.stop()
