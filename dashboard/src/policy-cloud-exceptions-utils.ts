@@ -26,8 +26,21 @@ export function parseCloudExceptionTimestamp(value: string | null | undefined): 
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+export function resolveCloudExceptionExpiryValue(item: GuardCloudException): string | null {
+  const expiry = item.expiry?.trim();
+  if (expiry) {
+    return expiry;
+  }
+  const legacyExpiry = item.expires_at?.trim();
+  return legacyExpiry || null;
+}
+
+export function resolveCloudExceptionExpiryTimestamp(item: GuardCloudException): Date | null {
+  return parseCloudExceptionTimestamp(resolveCloudExceptionExpiryValue(item));
+}
+
 export function isCloudExceptionActive(item: GuardCloudException, now: Date = new Date()): boolean {
-  const expiry = parseCloudExceptionTimestamp(item.expiry ?? item.expires_at ?? null);
+  const expiry = resolveCloudExceptionExpiryTimestamp(item);
   if (expiry === null) {
     return false;
   }
@@ -42,7 +55,7 @@ export function isCloudExceptionExpiringSoon(
   if (!isCloudExceptionActive(item, now)) {
     return false;
   }
-  const expiry = parseCloudExceptionTimestamp(item.expiry ?? item.expires_at ?? null);
+  const expiry = resolveCloudExceptionExpiryTimestamp(item);
   if (expiry === null) {
     return false;
   }
@@ -142,8 +155,8 @@ export function groupCloudExceptions(
   const active = exceptions
     .filter((item) => isCloudExceptionActive(item, now))
     .sort((left, right) => {
-      const leftExpiry = parseCloudExceptionTimestamp(left.expiry)?.getTime() ?? 0;
-      const rightExpiry = parseCloudExceptionTimestamp(right.expiry)?.getTime() ?? 0;
+      const leftExpiry = resolveCloudExceptionExpiryTimestamp(left)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const rightExpiry = resolveCloudExceptionExpiryTimestamp(right)?.getTime() ?? Number.MAX_SAFE_INTEGER;
       return leftExpiry - rightExpiry;
     });
   const pending = pendingRequests

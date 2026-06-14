@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, S as SectionLabel, o as HiMiniXMark, B as Badge, bd as scopeLabel, m as formatRelativeTime, b6 as HiMiniCloudArrowUp, be as createCloudExceptionRequest, A as ActionButton, h as harnessDisplayName, b as EmptyState, p as HiMiniChevronUp, q as HiMiniChevronDown, ac as Tag, bf as policyActionLabel, bg as fetchCloudExceptions, bh as fetchCloudExceptionRequests, bb as guardAwareHref, ax as HiMiniTrash, ad as HiMiniMagnifyingGlass } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, S as SectionLabel, o as HiMiniXMark, B as Badge, bd as scopeLabel, m as formatRelativeTime, b6 as HiMiniCloudArrowUp, r as reactExports, be as createCloudExceptionRequest, A as ActionButton, h as harnessDisplayName, b as EmptyState, p as HiMiniChevronUp, q as HiMiniChevronDown, ac as Tag, bf as policyActionLabel, bg as fetchCloudExceptions, bh as fetchCloudExceptionRequests, bb as guardAwareHref, ax as HiMiniTrash, ad as HiMiniMagnifyingGlass } from "../guard-dashboard.js";
 const CLOUD_EXCEPTION_EXPIRING_SOON_DAYS = 7;
 function parseCloudExceptionTimestamp(value) {
   if (!value || !value.trim()) {
@@ -8,8 +8,19 @@ function parseCloudExceptionTimestamp(value) {
   const parsed = new Date(normalized);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
+function resolveCloudExceptionExpiryValue(item) {
+  const expiry = item.expiry?.trim();
+  if (expiry) {
+    return expiry;
+  }
+  const legacyExpiry = item.expires_at?.trim();
+  return legacyExpiry || null;
+}
+function resolveCloudExceptionExpiryTimestamp(item) {
+  return parseCloudExceptionTimestamp(resolveCloudExceptionExpiryValue(item));
+}
 function isCloudExceptionActive(item, now = /* @__PURE__ */ new Date()) {
-  const expiry = parseCloudExceptionTimestamp(item.expiry ?? item.expires_at ?? null);
+  const expiry = resolveCloudExceptionExpiryTimestamp(item);
   if (expiry === null) {
     return false;
   }
@@ -19,7 +30,7 @@ function isCloudExceptionExpiringSoon(item, now = /* @__PURE__ */ new Date(), wi
   if (!isCloudExceptionActive(item, now)) {
     return false;
   }
-  const expiry = parseCloudExceptionTimestamp(item.expiry ?? item.expires_at ?? null);
+  const expiry = resolveCloudExceptionExpiryTimestamp(item);
   if (expiry === null) {
     return false;
   }
@@ -102,8 +113,8 @@ function summarizeCloudExceptions(exceptions, pendingRequests, now = /* @__PURE_
 }
 function groupCloudExceptions(exceptions, pendingRequests, now = /* @__PURE__ */ new Date()) {
   const active = exceptions.filter((item) => isCloudExceptionActive(item, now)).sort((left, right) => {
-    const leftExpiry = parseCloudExceptionTimestamp(left.expiry)?.getTime() ?? 0;
-    const rightExpiry = parseCloudExceptionTimestamp(right.expiry)?.getTime() ?? 0;
+    const leftExpiry = resolveCloudExceptionExpiryTimestamp(left)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+    const rightExpiry = resolveCloudExceptionExpiryTimestamp(right)?.getTime() ?? Number.MAX_SAFE_INTEGER;
     return leftExpiry - rightExpiry;
   });
   const pending = pendingRequests.filter((item) => item.status === "pending").sort(
@@ -169,10 +180,8 @@ function PolicyCloudExceptionDetailPanel({
   cloudControlsUrl,
   onClose
 }) {
-  const handleClose = reactExports.useCallback(() => {
-    onClose();
-  }, [onClose]);
-  const expiry = parseCloudExceptionTimestamp(exception.expiry ?? exception.expires_at ?? null);
+  const expiryTimestamp = resolveCloudExceptionExpiryTimestamp(exception);
+  const expiryValue = resolveCloudExceptionExpiryValue(exception);
   const ackCopy = resolveAckCopy(exception);
   const headline = resolveCloudExceptionHeadline(exception);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -190,7 +199,7 @@ function PolicyCloudExceptionDetailPanel({
             "button",
             {
               type: "button",
-              onClick: handleClose,
+              onClick: onClose,
               className: "rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-brand-dark",
               "aria-label": "Close exception detail",
               children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-5 w-5", "aria-hidden": "true" })
@@ -209,7 +218,7 @@ function PolicyCloudExceptionDetailPanel({
             DetailField,
             {
               label: "Expiry",
-              value: expiry ? `${expiry.toLocaleString()} (${formatRelativeTime(exception.expiry)})` : exception.expiry
+              value: expiryTimestamp && expiryValue ? `${expiryTimestamp.toLocaleString()} (${formatRelativeTime(expiryValue)})` : expiryValue
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(DetailField, { label: "Harness", value: exception.harness }),
@@ -600,7 +609,8 @@ function ExceptionCard({
   const handleSelect = reactExports.useCallback(() => {
     onSelect(item);
   }, [item, onSelect]);
-  const expiry = parseCloudExceptionTimestamp(item.expiry ?? item.expires_at ?? null);
+  const expiryTimestamp = resolveCloudExceptionExpiryTimestamp(item);
+  const expiryValue = resolveCloudExceptionExpiryValue(item);
   const headline = resolveCloudExceptionHeadline(item);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "button",
@@ -619,7 +629,7 @@ function ExceptionCard({
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-slate-500", children: [
           "Owner ",
           resolvePersonDisplayLabel(item.owner),
-          expiry ? ` · expires ${formatRelativeTime(item.expiry)}` : null
+          expiryTimestamp && expiryValue ? ` · expires ${formatRelativeTime(expiryValue)}` : null
         ] })
       ]
     }
@@ -714,12 +724,18 @@ function PolicyCloudExceptionsList({
     ) : null
   ] });
 }
+const SUMMARY_TONE_CLASSES = {
+  blue: "text-brand-blue",
+  amber: "text-amber-700",
+  attention: "text-brand-attention",
+  slate: "text-brand-dark"
+};
 function SummaryCard({
   label,
   value,
   tone = "slate"
 }) {
-  const toneClass = tone === "blue" ? "text-brand-blue" : tone === "amber" ? "text-amber-700" : tone === "attention" ? "text-brand-attention" : "text-brand-dark";
+  const toneClass = SUMMARY_TONE_CLASSES[tone];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200/70 bg-white p-3 text-center shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-2xl font-semibold tabular-nums ${toneClass}`, children: value }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground", children: label })
@@ -1146,6 +1162,13 @@ function PolicyCloudExceptionsTab({
         body: "Cloud exceptions are managed in Guard Cloud. Connect this device to request a risk acceptance or view synced exceptions here.",
         tone: "teach"
       }
+    ) : loadState === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EmptyState,
+      {
+        title: "Could not load Cloud exceptions",
+        body: loadError ?? "Try again after Guard Cloud sync completes.",
+        action: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "secondary", onClick: handleRetryLoad, children: "Retry" })
+      }
     ) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         PolicyCloudExceptionsSummary,
@@ -1157,14 +1180,7 @@ function PolicyCloudExceptionsTab({
           loading: loadState === "loading"
         }
       ),
-      loadState === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-        EmptyState,
-        {
-          title: "Could not load Cloud exceptions",
-          body: loadError ?? "Try again after Guard Cloud sync completes.",
-          action: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "secondary", onClick: handleRetryLoad, children: "Retry" })
-        }
-      ) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           PolicyCloudExceptionsList,
           {

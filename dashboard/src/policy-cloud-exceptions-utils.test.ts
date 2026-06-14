@@ -3,6 +3,7 @@ import {
   isCloudExceptionActive,
   isCloudExceptionAckFailure,
   isCloudExceptionExpiringSoon,
+  resolveCloudExceptionExpiryTimestamp,
   resolveCloudExceptionHeadline,
   resolvePersonInitials,
   summarizeCloudExceptions,
@@ -80,5 +81,19 @@ const groups = groupCloudExceptions(
 assert(groups.active.length === 3, "group active count");
 assert(groups.pending.length === 1, "group pending count");
 assert(groups.expiringSoon.length === 1, "group expiring soon count");
+
+const legacyExpiryException: GuardCloudException = {
+  ...activeException,
+  id: "artifact:codex:project:legacy",
+  artifact_id: "codex:project:legacy",
+  expiry: "",
+  expires_at: "2099-06-01T00:00:00+00:00",
+};
+assert(isCloudExceptionActive(legacyExpiryException), "legacy expires_at keeps exception active");
+assert(
+  resolveCloudExceptionExpiryTimestamp(legacyExpiryException)?.getTime() ===
+    new Date("2099-06-01T00:00:00+00:00").getTime(),
+  "legacy expires_at resolves for sorting",
+);
 
 console.log("policy-cloud-exceptions-utils.test.ts: all assertions passed");

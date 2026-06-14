@@ -1,11 +1,11 @@
-import { useCallback } from "react";
 import { HiMiniCloudArrowUp, HiMiniXMark } from "react-icons/hi2";
 import { Badge, SectionLabel } from "./approval-center-primitives";
 import { formatRelativeTime, scopeLabel } from "./approval-center-utils";
 import type { GuardCloudException } from "./guard-types";
 import {
   isCloudExceptionAckFailure,
-  parseCloudExceptionTimestamp,
+  resolveCloudExceptionExpiryTimestamp,
+  resolveCloudExceptionExpiryValue,
   resolveCloudExceptionHeadline,
   resolvePersonDisplayLabel,
   resolvePersonInitials,
@@ -81,11 +81,8 @@ export function PolicyCloudExceptionDetailPanel({
   cloudControlsUrl,
   onClose,
 }: PolicyCloudExceptionDetailPanelProps) {
-  const handleClose = useCallback(() => {
-    onClose();
-  }, [onClose]);
-
-  const expiry = parseCloudExceptionTimestamp(exception.expiry ?? exception.expires_at ?? null);
+  const expiryTimestamp = resolveCloudExceptionExpiryTimestamp(exception);
+  const expiryValue = resolveCloudExceptionExpiryValue(exception);
   const ackCopy = resolveAckCopy(exception);
   const headline = resolveCloudExceptionHeadline(exception);
 
@@ -101,7 +98,7 @@ export function PolicyCloudExceptionDetailPanel({
         </div>
         <button
           type="button"
-          onClick={handleClose}
+          onClick={onClose}
           className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-brand-dark"
           aria-label="Close exception detail"
         >
@@ -121,7 +118,11 @@ export function PolicyCloudExceptionDetailPanel({
 
         <DetailField
           label="Expiry"
-          value={expiry ? `${expiry.toLocaleString()} (${formatRelativeTime(exception.expiry)})` : exception.expiry}
+          value={
+            expiryTimestamp && expiryValue
+              ? `${expiryTimestamp.toLocaleString()} (${formatRelativeTime(expiryValue)})`
+              : expiryValue
+          }
         />
         <DetailField label="Harness" value={exception.harness} />
         <DetailField label="Source receipt" value={exception.source_receipt_id} />

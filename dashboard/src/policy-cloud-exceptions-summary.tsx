@@ -6,6 +6,15 @@ type PolicyCloudExceptionsSummaryProps = {
   loading?: boolean;
 };
 
+type SummaryTone = "blue" | "amber" | "attention" | "slate";
+
+const SUMMARY_TONE_CLASSES: Record<SummaryTone, string> = {
+  blue: "text-brand-blue",
+  amber: "text-amber-700",
+  attention: "text-brand-attention",
+  slate: "text-brand-dark",
+};
+
 function SummaryCard({
   label,
   value,
@@ -13,16 +22,9 @@ function SummaryCard({
 }: {
   label: string;
   value: number;
-  tone?: "blue" | "amber" | "attention" | "slate";
+  tone?: SummaryTone;
 }) {
-  const toneClass =
-    tone === "blue"
-      ? "text-brand-blue"
-      : tone === "amber"
-        ? "text-amber-700"
-        : tone === "attention"
-          ? "text-brand-attention"
-          : "text-brand-dark";
+  const toneClass = SUMMARY_TONE_CLASSES[tone];
   return (
     <div className="rounded-xl border border-slate-200/70 bg-white p-3 text-center shadow-sm">
       <p className={`text-2xl font-semibold tabular-nums ${toneClass}`}>{value}</p>
