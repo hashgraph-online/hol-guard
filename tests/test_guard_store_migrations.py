@@ -32,6 +32,8 @@ class _FakeSystemKeyringModule:
         self.fail_on_set = False
         self.get_password_calls = 0
         self.set_password_calls = 0
+        self.get_password_calls_by_service: dict[str, int] = {}
+        self.set_password_calls_by_service: dict[str, int] = {}
 
     @staticmethod
     def get_keyring():
@@ -44,10 +46,12 @@ class _FakeSystemKeyringModule:
         if self.fail_on_set:
             raise RuntimeError("system keyring unavailable")
         self.set_password_calls += 1
+        self.set_password_calls_by_service[service_name] = self.set_password_calls_by_service.get(service_name, 0) + 1
         self._secrets[(service_name, secret_id)] = value
 
     def get_password(self, service_name: str, secret_id: str) -> str | None:
         self.get_password_calls += 1
+        self.get_password_calls_by_service[service_name] = self.get_password_calls_by_service.get(service_name, 0) + 1
         return self._secrets.get((service_name, secret_id))
 
     def delete_password(self, service_name: str, secret_id: str) -> None:
@@ -61,12 +65,11 @@ def _install_fake_system_keyring(
 ) -> _FakeSystemKeyringModule:
     module = _FakeSystemKeyringModule()
     monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
-    if usable_macos_keychain:
-        monkeypatch.setattr(
-            SystemKeyringSecretStore,
-            "_macos_default_keychain_is_usable",
-            classmethod(lambda cls: True),
-        )
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_macos_default_keychain_is_usable",
+        classmethod(lambda cls: usable_macos_keychain),
+    )
     return module
 
 
@@ -114,12 +117,8 @@ def test_guard_store_repairs_missing_evidence_table_when_schema_v4_is_applied(tm
     guard_home.mkdir()
     database_path = guard_home / "guard.db"
     with sqlite3.connect(database_path) as connection:
-        connection.execute(
-            "create table schema_migrations (version integer primary key, applied_at text not null)"
-        )
-        connection.execute(
-            "insert into schema_migrations (version, applied_at) values (4, '2026-01-01T00:00:00Z')"
-        )
+        connection.execute("create table schema_migrations (version integer primary key, applied_at text not null)")
+        connection.execute("insert into schema_migrations (version, applied_at) values (4, '2026-01-01T00:00:00Z')")
         connection.execute(
             """
             create table harness_installations (
@@ -164,12 +163,8 @@ def test_guard_store_repairs_incomplete_evidence_table_missing_action_identity(t
     guard_home.mkdir()
     database_path = guard_home / "guard.db"
     with sqlite3.connect(database_path) as connection:
-        connection.execute(
-            "create table schema_migrations (version integer primary key, applied_at text not null)"
-        )
-        connection.execute(
-            "insert into schema_migrations (version, applied_at) values (4, '2026-01-01T00:00:00Z')"
-        )
+        connection.execute("create table schema_migrations (version integer primary key, applied_at text not null)")
+        connection.execute("insert into schema_migrations (version, applied_at) values (4, '2026-01-01T00:00:00Z')")
         _incomplete_evidence_table(connection)
 
     store = GuardStore(guard_home)
@@ -190,10 +185,7 @@ def test_guard_store_repairs_incomplete_evidence_table_missing_action_identity(t
     )
 
     with sqlite3.connect(database_path) as connection:
-        columns = {
-            str(row[1])
-            for row in connection.execute("pragma table_info(guard_evidence)").fetchall()
-        }
+        columns = {str(row[1]) for row in connection.execute("pragma table_info(guard_evidence)").fetchall()}
         row = connection.execute(
             "select action_identity from guard_evidence where evidence_id = 'evidence-legacy'"
         ).fetchone()
@@ -1077,7 +1069,7 @@ def test_set_oauth_local_credentials_skips_keyring_rewrite_when_secret_material_
         now="2026-06-01T00:00:00+00:00",
     )
 
-    assert fake_keyring.set_password_calls == 1
+    assert fake_keyring.set_password_calls_by_service.get("hol-guard.oauth", 0) == 1
 
     store.set_oauth_local_credentials(
         issuer="https://hol.org",
@@ -1094,7 +1086,7 @@ def test_set_oauth_local_credentials_skips_keyring_rewrite_when_secret_material_
         now="2026-06-01T00:05:00+00:00",
     )
 
-    assert fake_keyring.set_password_calls == 1
+    assert fake_keyring.set_password_calls_by_service.get("hol-guard.oauth", 0) == 1
     credentials = store.get_oauth_local_credentials()
 
     assert credentials is not None
@@ -1118,7 +1110,7 @@ def test_set_oauth_local_credentials_skips_keyring_rewrite_when_secret_material_
         now="2026-06-01T00:10:00+00:00",
     )
 
-    assert fake_keyring.set_password_calls == 2
+    assert fake_keyring.set_password_calls_by_service.get("hol-guard.oauth", 0) == 2
     rotated_credentials = store.get_oauth_local_credentials()
 
     assert rotated_credentials is not None
@@ -1167,7 +1159,7 @@ def test_get_oauth_local_credentials_prefers_validated_encrypted_fallback_before
         "workspace_id": "workspace-123",
     }
     assert fallback_reads == 1
-    assert fake_keyring.get_password_calls == 0
+    assert fake_keyring.get_password_calls_by_service.get("hol-guard.oauth", 0) == 0
 
 
 def test_get_oauth_local_credentials_fails_closed_when_fallback_hash_is_stale(tmp_path, monkeypatch):

@@ -26,6 +26,13 @@ from .approval_gate import ApprovalGateGrant, require_policy_clear, require_poli
 from .cli.oauth_client import resolve_guard_oauth_client_config, validate_guard_sync_endpoint
 from .edge_events import build_receipt_event
 from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
+from .policy_integrity import (
+    REMOTE_POLICY_SOURCES,
+    PolicyIntegrityVerificationResult,
+    is_remote_policy_source,
+    sign_local_policy_row,
+    verify_local_policy_row,
+)
 from .runtime.actions import GuardActionEnvelope
 from .runtime.scanner_cache import scanner_cache_key
 from .schemas.guard_event_v1 import GuardEventV1
@@ -153,6 +160,7 @@ from .store_threat_intel import (
 from .types import CapabilitySet
 
 _SYNC_TOKEN_REF = "guard-cloud-token"
+_POLICY_INTEGRITY_KEY_REF = "guard-policy-integrity-key"
 _OAUTH_LOCAL_CREDENTIALS_REF = "guard-oauth-local-credentials"
 _SYNC_TOKEN_HASH_KEY = "token_sha256"
 _OAUTH_LOCAL_CREDENTIALS_STATE_KEY = "oauth_local_credentials"
@@ -179,6 +187,15 @@ _DEVICE_ROW_KEY = "local-device"
 _MAX_RESOLVED_SCOPE_IDS = 200
 _SQLITE_ID_BATCH_SIZE = 500
 _WORKSPACE_POLICY_KEY_PREFIX = "workspace:"
+_POLICY_INTEGRITY_STATE_KEY = "policy_integrity"
+_POLICY_INTEGRITY_ENFORCEMENTS = frozenset({"warn", "enforce"})
+_POLICY_INTEGRITY_STATUSES = (
+    "valid",
+    "missing_integrity",
+    "tampered",
+    "unknown_key",
+    "degraded_mode",
+)
 _SCOPED_HARNESS_FAMILIES = frozenset(
     {
         "file-read",
@@ -200,7 +217,8 @@ _SCOPED_RUNTIME_EXACT_FAMILIES = frozenset(
     }
 )
 _RUNTIME_SCOPED_EXACT_MATCH_PREFIX = "runtime-exact:"
-_REMOTE_POLICY_SOURCES = frozenset({"cloud-sync", "team-policy", "policy-bundle"})
+_REMOTE_POLICY_SOURCE_PARAMS = tuple(sorted(REMOTE_POLICY_SOURCES))
+_REMOTE_POLICY_SOURCE_PLACEHOLDERS = "(" + ",".join("?" for _ in _REMOTE_POLICY_SOURCE_PARAMS) + ")"
 _POLICY_SCOPES = frozenset({"artifact", "workspace", "publisher", "harness", "global"})
 _SLOW_STORE_WARNING_ENV = "HOL_GUARD_WARN_SLOW_STORE"
 _SECRET_FINGERPRINT_PREFIX = "pbkdf2-sha256$"
@@ -211,6 +229,7 @@ _CLOUD_SYNC_LOCK_TIMEOUT_SECONDS = 30.0
 _CLOUD_SYNC_LOCK_POLL_SECONDS = 0.05
 _GUARD_STORE_PRIVATE_DIR_MODE = 0o700
 _GUARD_STORE_PRIVATE_FILE_MODE = 0o600
+_POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES = frozenset({"missing_integrity", "unknown_key"})
 
 
 def _oauth_sync_url_from_issuer(issuer: str) -> str:
@@ -753,6 +772,12 @@ def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
     return fallback_store
 
 
+def _build_policy_integrity_secret_store() -> SystemKeyringSecretStore | None:
+    if SystemKeyringSecretStore._is_available():
+        return SystemKeyringSecretStore(service_name="hol-guard.policy-integrity")
+    return None
+
+
 def _secret_store_backend_name(secret_store: SecretStore) -> str:
     if isinstance(secret_store, SystemKeyringSecretStore):
         return "system-keyring"
@@ -803,8 +828,10 @@ class GuardStore:
         _set_private_mode(self.guard_home, _GUARD_STORE_PRIVATE_DIR_MODE)
         self._secret_store = _build_secret_store(self.guard_home)
         self._oauth_secret_store = _build_oauth_secret_store(self.guard_home)
+        self._policy_integrity_secret_store = _build_policy_integrity_secret_store()
         self._cached_oauth_secret_payload: tuple[str, str, str] | None = None
         self._sync_token_ref = self._build_scoped_secret_ref(_SYNC_TOKEN_REF)
+        self._policy_integrity_key_ref = self._build_scoped_secret_ref(_POLICY_INTEGRITY_KEY_REF)
         self._oauth_local_credentials_ref = self._build_scoped_secret_ref(_OAUTH_LOCAL_CREDENTIALS_REF)
         self._guard_event_queue_limit = max(1, guard_event_queue_limit)
         self.path = self.guard_home / "guard.db"
@@ -917,6 +944,203 @@ class GuardStore:
         if token is None:
             return []
         return [token]
+
+    def _policy_integrity_backend_name(self) -> str:
+        if self._policy_integrity_secret_store is None:
+            return "unavailable"
+        return _secret_store_backend_name(self._policy_integrity_secret_store)
+
+    def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
+        secret_store = self._policy_integrity_secret_store
+        if secret_store is None:
+            return None, None
+        encoded_key = self._get_secret_from_store(secret_store, self._policy_integrity_key_ref)
+        if encoded_key is None and create:
+            generated_key = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
+            try:
+                secret_store.set_secret(self._policy_integrity_key_ref, generated_key)
+            except Exception:
+                return None, None
+            encoded_key = self._get_secret_from_store(secret_store, self._policy_integrity_key_ref)
+        if encoded_key is None:
+            return None, None
+        try:
+            raw_key = base64.urlsafe_b64decode(encoded_key.encode("ascii"))
+        except Exception:
+            return None, None
+        if len(raw_key) != 32:
+            return None, None
+        key_id = self._versioned_secret_ref(self._policy_integrity_key_ref, sha256(raw_key).hexdigest())
+        return raw_key, key_id
+
+    def _policy_integrity_path_warnings(self) -> list[str]:
+        warnings: list[str] = []
+        if self.guard_home.is_symlink():
+            warnings.append("guard_home_symlink")
+        if self.path.exists() and self.path.is_symlink():
+            warnings.append("guard_db_symlink")
+        if os.name == "nt":
+            return warnings
+        try:
+            if self.guard_home.stat().st_mode & 0o077:
+                warnings.append("guard_home_permissions")
+        except OSError:
+            warnings.append("guard_home_inaccessible")
+        if not self.path.exists():
+            return warnings
+        try:
+            if self.path.stat().st_mode & 0o077:
+                warnings.append("guard_db_permissions")
+        except OSError:
+            warnings.append("guard_db_inaccessible")
+        return warnings
+
+    @staticmethod
+    def _load_policy_integrity_state(connection: sqlite3.Connection) -> dict[str, object] | None:
+        row = connection.execute(
+            "select payload_json from sync_state where state_key = ?",
+            (_POLICY_INTEGRITY_STATE_KEY,),
+        ).fetchone()
+        if row is None:
+            return None
+        try:
+            payload = json.loads(str(row["payload_json"]))
+        except json.JSONDecodeError:
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    @staticmethod
+    def _store_policy_integrity_state(
+        connection: sqlite3.Connection,
+        payload: dict[str, object],
+        *,
+        now: str,
+    ) -> None:
+        connection.execute(
+            """
+            insert into sync_state (state_key, payload_json, updated_at)
+            values (?, ?, ?)
+            on conflict(state_key) do update set
+              payload_json = excluded.payload_json,
+              updated_at = excluded.updated_at
+            """,
+            (
+                _POLICY_INTEGRITY_STATE_KEY,
+                json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                now,
+            ),
+        )
+
+    @staticmethod
+    def _count_legacy_local_policy_rows(connection: sqlite3.Connection) -> int:
+        row = connection.execute(
+            f"""
+            select count(*) as total
+            from policy_decisions
+            where source not in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}
+              and (
+                integrity_version is null
+                or payload_hash is null
+                or payload_mac is null
+                or integrity_key_id is null
+                or signed_at is null
+              )
+            """,
+            _REMOTE_POLICY_SOURCE_PARAMS,
+        ).fetchone()
+        return int(row["total"]) if row is not None else 0
+
+    def _refresh_policy_integrity_state(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        now: str,
+        create_key: bool,
+        secret_material: tuple[bytes | None, str | None] | None = None,
+    ) -> dict[str, object]:
+        existing = self._load_policy_integrity_state(connection) or {}
+        warnings = self._policy_integrity_path_warnings()
+        raw_key, key_id = (
+            secret_material
+            if secret_material is not None
+            else self._policy_integrity_secret_material(create=create_key)
+        )
+        if self._policy_integrity_secret_store is None:
+            warnings.append("system_keyring_unavailable")
+        elif raw_key is None or key_id is None:
+            warnings.append("policy_integrity_key_unavailable")
+        mode = "protected" if not warnings else "degraded"
+        stored_enforcement = existing.get("enforcement")
+        if isinstance(stored_enforcement, str) and stored_enforcement in _POLICY_INTEGRITY_ENFORCEMENTS:
+            enforcement = stored_enforcement
+        else:
+            has_only_signed_rows = self._count_legacy_local_policy_rows(connection) == 0
+            enforcement = "enforce" if mode == "protected" and has_only_signed_rows else "warn"
+        payload: dict[str, object] = {
+            "backend": self._policy_integrity_backend_name(),
+            "degraded_reasons": list(dict.fromkeys(warnings)),
+            "enforcement": enforcement,
+            "key_id": key_id,
+            "mode": mode,
+        }
+        if payload != existing:
+            self._store_policy_integrity_state(connection, payload, now=now)
+        return payload
+
+    def _policy_integrity_result_for_row(
+        self,
+        row: sqlite3.Row,
+        *,
+        mode: str,
+        key: bytes | None,
+        key_id: str | None,
+    ) -> PolicyIntegrityVerificationResult:
+        source = str(row["source"]) if row["source"] is not None else None
+        if is_remote_policy_source(source):
+            return PolicyIntegrityVerificationResult(status="valid")
+        return verify_local_policy_row(
+            row,
+            key=key,
+            key_id=key_id,
+            degraded_mode=mode != "protected",
+        )
+
+    @staticmethod
+    def _policy_row_payload(
+        row: sqlite3.Row,
+        *,
+        integrity_result: PolicyIntegrityVerificationResult | None = None,
+        state: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        source = str(row["source"])
+        payload: dict[str, object] = {
+            "action": str(row["action"]),
+            "artifact_hash": row["artifact_hash"],
+            "artifact_id": row["artifact_id"],
+            "decision_id": int(row["decision_id"]) if row["decision_id"] is not None else None,
+            "expires_at": row["expires_at"],
+            "harness": str(row["harness"]),
+            "owner": row["owner"],
+            "publisher": row["publisher"],
+            "reason": row["reason"],
+            "scope": str(row["scope"]),
+            "source": source,
+            "updated_at": str(row["updated_at"]),
+            "workspace": row["workspace"],
+        }
+        if integrity_result is not None and not is_remote_policy_source(source):
+            payload["integrity_status"] = integrity_result.status
+            payload["integrity_message"] = integrity_result.message
+        if state is not None and not is_remote_policy_source(source):
+            payload["integrity_mode"] = state.get("mode")
+            payload["integrity_enforcement"] = state.get("enforcement")
+        if row["integrity_version"] is not None:
+            payload["integrity_version"] = int(row["integrity_version"])
+        if row["integrity_key_id"] is not None:
+            payload["integrity_key_id"] = str(row["integrity_key_id"])
+        if row["signed_at"] is not None:
+            payload["signed_at"] = str(row["signed_at"])
+        return payload
 
     def _repair_store_permissions(self) -> None:
         _set_private_mode(self.guard_home, _GUARD_STORE_PRIVATE_DIR_MODE)
@@ -1308,6 +1532,11 @@ class GuardStore:
             self._ensure_policy_column(connection, "owner", "text")
             self._ensure_policy_column(connection, "source", "text not null default 'local'")
             self._ensure_policy_column(connection, "expires_at", "text")
+            self._ensure_policy_column(connection, "integrity_version", "integer")
+            self._ensure_policy_column(connection, "payload_hash", "text")
+            self._ensure_policy_column(connection, "payload_mac", "text")
+            self._ensure_policy_column(connection, "integrity_key_id", "text")
+            self._ensure_policy_column(connection, "signed_at", "text")
             self._ensure_runtime_receipts_column(connection, "capabilities_summary", "text not null default ''")
             self._ensure_runtime_receipts_column(connection, "scanner_evidence_json", "text not null default '[]'")
             self._ensure_runtime_receipts_column(connection, "diff_summary", "text")
@@ -1354,12 +1583,16 @@ class GuardStore:
                 if receipt_rollups_need_backfill(connection):
                     backfill_receipt_rollups(connection)
                 self._record_schema_version(connection, version=6)
+            if not self._schema_version_applied(connection, version=7):
+                self._record_schema_version(connection, version=7)
             self._ensure_attachment_column(connection, "lease_id", "text not null default ''")
             self._ensure_attachment_column(connection, "lease_expires_at", "text")
             self._ensure_local_device(connection)
             if not self._schema_version_applied(connection, version=2):
                 self._record_schema_version(connection, version=2)
             connection.execute("pragma journal_mode=WAL")
+            self._repair_store_permissions()
+            self._refresh_policy_integrity_state(connection, now=_now(), create_key=True)
 
     @staticmethod
     def _ensure_policy_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
@@ -1965,7 +2198,43 @@ class GuardStore:
         )
         _validate_scoped_policy_artifact_target(decision.scope, decision.artifact_id)
         artifact_id, artifact_hash, workspace, publisher = self._normalized_policy_keys(decision)
+        signing_payload = {
+            "harness": decision.harness,
+            "scope": decision.scope,
+            "artifact_id": artifact_id,
+            "artifact_hash": artifact_hash,
+            "workspace": workspace,
+            "publisher": publisher,
+            "action": decision.action,
+            "source": decision.source,
+            "expires_at": decision.expires_at,
+            "updated_at": now,
+        }
+        integrity_values: dict[str, object] = {
+            "integrity_version": None,
+            "payload_hash": None,
+            "payload_mac": None,
+            "integrity_key_id": None,
+            "signed_at": None,
+        }
         with self._connect() as connection:
+            secret_material = (None, None)
+            if not is_remote_policy_source(decision.source):
+                secret_material = self._policy_integrity_secret_material(create=True)
+                key, key_id = secret_material
+                if key is not None and key_id is not None:
+                    integrity_values = sign_local_policy_row(
+                        signing_payload,
+                        key,
+                        key_id=key_id,
+                        signed_at=now,
+                    )
+            self._refresh_policy_integrity_state(
+                connection,
+                now=now,
+                create_key=False,
+                secret_material=secret_material,
+            )
             connection.execute(
                 """
                 delete from policy_decisions
@@ -1980,9 +2249,9 @@ class GuardStore:
                 """
                 insert into policy_decisions (
                   harness, scope, artifact_id, artifact_hash, workspace, publisher, action, reason, owner, source,
-                  expires_at, updated_at
+                  expires_at, updated_at, integrity_version, payload_hash, payload_mac, integrity_key_id, signed_at
                 )
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     decision.harness,
@@ -1997,6 +2266,11 @@ class GuardStore:
                     decision.source,
                     decision.expires_at,
                     now,
+                    integrity_values["integrity_version"],
+                    integrity_values["payload_hash"],
+                    integrity_values["payload_mac"],
+                    integrity_values["integrity_key_id"],
+                    integrity_values["signed_at"],
                 ),
             )
 
@@ -2016,7 +2290,8 @@ class GuardStore:
             )
         with self._connect() as connection:
             connection.execute(
-                "delete from policy_decisions where source in ('cloud-sync', 'team-policy', 'policy-bundle')"
+                f"delete from policy_decisions where source in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}",
+                _REMOTE_POLICY_SOURCE_PARAMS,
             )
             for decision in decisions:
                 _validate_scoped_policy_artifact_target(decision.scope, decision.artifact_id)
@@ -2025,9 +2300,9 @@ class GuardStore:
                     """
                     insert into policy_decisions (
                       harness, scope, artifact_id, artifact_hash, workspace, publisher, action, reason, owner, source,
-                      expires_at, updated_at
+                      expires_at, updated_at, integrity_version, payload_hash, payload_mac, integrity_key_id, signed_at
                     )
-                    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         decision.harness,
@@ -2042,6 +2317,11 @@ class GuardStore:
                         decision.source,
                         decision.expires_at,
                         now,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
                     ),
                 )
 
@@ -2072,14 +2352,20 @@ class GuardStore:
         workspace: str | None = None,
         publisher: str | None = None,
         now: str | None = None,
-    ) -> dict[str, str | None] | None:
+    ) -> dict[str, object] | None:
         current_time = now or _now()
         workspace_key = _workspace_policy_key(workspace)
         action_family_key = _artifact_family_key(artifact_id)
+        events: list[tuple[str, dict[str, object]]] = []
+        selected_payload: dict[str, object] | None = None
         with self._connect() as connection:
+            state = self._refresh_policy_integrity_state(connection, now=current_time, create_key=True)
+            key, key_id = self._policy_integrity_secret_material(create=True)
             rows = connection.execute(
                 """
-                select harness, scope, artifact_id, action, artifact_hash, workspace, publisher, source
+                select decision_id, harness, scope, artifact_id, action, artifact_hash, workspace, publisher, source,
+                       reason, owner, expires_at, updated_at, integrity_version, payload_hash, payload_mac,
+                       integrity_key_id, signed_at
                 from policy_decisions
                 where (harness = ? or harness = '*') and (
                   (
@@ -2136,13 +2422,10 @@ class GuardStore:
                     current_time,
                 ),
             ).fetchall()
-        if not rows:
-            return None
-        row = next(
-            (
-                candidate
-                for candidate in rows
-                if not _scoped_runtime_row_requires_exact_match(
+            if not rows:
+                return None
+            for candidate in rows:
+                if _scoped_runtime_row_requires_exact_match(
                     scope=str(candidate["scope"]),
                     stored_artifact_id=(
                         str(candidate["artifact_id"]) if isinstance(candidate["artifact_id"], str) else None
@@ -2152,22 +2435,63 @@ class GuardStore:
                     ),
                     source=str(candidate["source"]),
                     requested_artifact_id=artifact_id,
+                ):
+                    continue
+                integrity_result = self._policy_integrity_result_for_row(
+                    candidate,
+                    mode=str(state.get("mode") or "degraded"),
+                    key=key,
+                    key_id=key_id,
                 )
-            ),
-            None,
-        )
-        if row is None:
-            return None
-        return {
-            "harness": row["harness"],
-            "scope": row["scope"],
-            "artifact_id": row["artifact_id"],
-            "artifact_hash": row["artifact_hash"],
-            "workspace": row["workspace"],
-            "publisher": row["publisher"],
-            "action": row["action"],
-            "source": row["source"],
-        }
+                if integrity_result.status == "valid":
+                    selected_payload = self._policy_row_payload(
+                        candidate,
+                        integrity_result=integrity_result,
+                        state=state,
+                    )
+                    break
+                if integrity_result.status == "missing_integrity" and state.get("enforcement") == "warn":
+                    events.append(
+                        (
+                            "policy_integrity_warning",
+                            {
+                                "decision_id": int(candidate["decision_id"]),
+                                "harness": str(candidate["harness"]),
+                                "artifact_id": candidate["artifact_id"],
+                                "integrity_status": integrity_result.status,
+                            },
+                        )
+                    )
+                    _store_logger.warning(
+                        "Guard honored legacy unsigned local policy decision %s while integrity enforcement is warn.",
+                        candidate["decision_id"],
+                    )
+                    selected_payload = self._policy_row_payload(
+                        candidate,
+                        integrity_result=integrity_result,
+                        state=state,
+                    )
+                    break
+                events.append(
+                    (
+                        "policy_integrity_violation",
+                        {
+                            "decision_id": int(candidate["decision_id"]),
+                            "harness": str(candidate["harness"]),
+                            "artifact_id": candidate["artifact_id"],
+                            "integrity_status": integrity_result.status,
+                            "message": integrity_result.message,
+                        },
+                    )
+                )
+                _store_logger.warning(
+                    "Guard ignored local policy decision %s because integrity status was %s.",
+                    candidate["decision_id"],
+                    integrity_result.status,
+                )
+        for event_name, payload in events:
+            self.add_event(event_name, payload, current_time)
+        return selected_payload
 
     @staticmethod
     def _normalized_policy_keys(decision: PolicyDecision) -> tuple[str | None, str | None, str | None, str | None]:
@@ -3009,7 +3333,8 @@ class GuardStore:
     def list_policy_decisions(self, harness: str | None = None) -> list[dict[str, object]]:
         query = """
             select decision_id, harness, scope, artifact_id, artifact_hash, workspace, publisher,
-                   action, reason, owner, source, expires_at, updated_at
+                   action, reason, owner, source, expires_at, updated_at, integrity_version,
+                   payload_hash, payload_mac, integrity_key_id, signed_at
             from policy_decisions
         """
         params: tuple[object, ...] = ()
@@ -3018,6 +3343,8 @@ class GuardStore:
             params = (harness,)
         query += " order by updated_at desc"
         with self._connect() as connection:
+            state = self._refresh_policy_integrity_state(connection, now=_now(), create_key=True)
+            key, key_id = self._policy_integrity_secret_material(create=True)
             rows = connection.execute(query, params).fetchall()
             lookup_items = [
                 (
@@ -3028,10 +3355,26 @@ class GuardStore:
                 for row in rows
             ]
             source_context_index = build_policy_source_context_index(connection, items=lookup_items)
-            return [
-                self._policy_decision_dict_from_row(connection, row, source_context_index=source_context_index)
-                for row in rows
-            ]
+            items: list[dict[str, object]] = []
+            for row in rows:
+                payload = self._policy_decision_dict_from_row(
+                    connection,
+                    row,
+                    source_context_index=source_context_index,
+                )
+                if not is_remote_policy_source(str(row["source"])):
+                    integrity_result = self._policy_integrity_result_for_row(
+                        row,
+                        mode=str(state.get("mode") or "degraded"),
+                        key=key,
+                        key_id=key_id,
+                    )
+                    payload["integrity_status"] = integrity_result.status
+                    payload["integrity_message"] = integrity_result.message
+                    payload["integrity_mode"] = state.get("mode")
+                    payload["integrity_enforcement"] = state.get("enforcement")
+                items.append(payload)
+            return items
 
     @staticmethod
     def _policy_decision_dict_from_row(
@@ -3079,9 +3422,233 @@ class GuardStore:
             "expires_at": row["expires_at"],
             "updated_at": str(row["updated_at"]),
         }
+        if row["integrity_version"] is not None:
+            payload["integrity_version"] = int(row["integrity_version"])
+        if row["integrity_key_id"] is not None:
+            payload["integrity_key_id"] = str(row["integrity_key_id"])
+        if row["signed_at"] is not None:
+            payload["signed_at"] = str(row["signed_at"])
         if source_context is not None:
             payload.update(source_context)
         return payload
+
+    @staticmethod
+    def _load_local_policy_rows(
+        connection: sqlite3.Connection,
+        *,
+        harness: str | None = None,
+    ) -> list[sqlite3.Row]:
+        query = f"""
+            select decision_id, harness, scope, artifact_id, artifact_hash, workspace, publisher,
+                   action, reason, owner, source, expires_at, updated_at, integrity_version,
+                   payload_hash, payload_mac, integrity_key_id, signed_at
+            from policy_decisions
+            where source not in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}
+        """
+        params: tuple[object, ...] = _REMOTE_POLICY_SOURCE_PARAMS
+        if harness is not None:
+            query += " and harness = ?"
+            params = (*params, harness)
+        query += " order by updated_at desc"
+        return connection.execute(query, params).fetchall()
+
+    def _policy_integrity_scan(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        now: str,
+        harness: str | None = None,
+    ) -> tuple[dict[str, object], dict[str, int], list[dict[str, object]]]:
+        state = self._refresh_policy_integrity_state(connection, now=now, create_key=True)
+        key, key_id = self._policy_integrity_secret_material(create=True)
+        counts = {status: 0 for status in _POLICY_INTEGRITY_STATUSES}
+        items: list[dict[str, object]] = []
+        for row in self._load_local_policy_rows(connection, harness=harness):
+            integrity_result = self._policy_integrity_result_for_row(
+                row,
+                mode=str(state.get("mode") or "degraded"),
+                key=key,
+                key_id=key_id,
+            )
+            counts[integrity_result.status] += 1
+            item = self._policy_decision_dict_from_row(connection, row)
+            item["integrity_status"] = integrity_result.status
+            item["integrity_message"] = integrity_result.message
+            item["integrity_mode"] = state.get("mode")
+            item["integrity_enforcement"] = state.get("enforcement")
+            items.append(item)
+        return state, counts, items
+
+    def _backup_policy_database(self, connection: sqlite3.Connection, *, now: str) -> str:
+        timestamp = "".join(ch if ch.isalnum() else "-" for ch in now).strip("-") or "backup"
+        backup_path = self.guard_home / f"guard.db.pre-integrity-{timestamp}"
+        backup_connection = sqlite3.connect(backup_path)
+        try:
+            connection.backup(backup_connection)
+        finally:
+            backup_connection.close()
+            if backup_path.exists():
+                _set_private_mode(backup_path, _GUARD_STORE_PRIVATE_FILE_MODE)
+        return str(backup_path)
+
+    def get_policy_integrity_status(self, harness: str | None = None) -> dict[str, object]:
+        now = _now()
+        with self._connect() as connection:
+            state, counts, _items = self._policy_integrity_scan(connection, now=now, harness=harness)
+        return {
+            "generated_at": now,
+            "harness": harness,
+            "backend": state.get("backend"),
+            "mode": state.get("mode"),
+            "enforcement": state.get("enforcement"),
+            "key_id": state.get("key_id"),
+            "degraded_reasons": state.get("degraded_reasons", []),
+            "counts": counts,
+            "local_rows_scanned": sum(counts.values()),
+        }
+
+    def verify_policy_integrity(self, harness: str | None = None) -> dict[str, object]:
+        now = _now()
+        with self._connect() as connection:
+            state, counts, items = self._policy_integrity_scan(connection, now=now, harness=harness)
+        invalid_items = [item for item in items if item.get("integrity_status") != "valid"]
+        return {
+            "generated_at": now,
+            "harness": harness,
+            "backend": state.get("backend"),
+            "mode": state.get("mode"),
+            "enforcement": state.get("enforcement"),
+            "key_id": state.get("key_id"),
+            "degraded_reasons": state.get("degraded_reasons", []),
+            "counts": counts,
+            "local_rows_scanned": sum(counts.values()),
+            "items": invalid_items,
+        }
+
+    def repair_policy_integrity(
+        self,
+        *,
+        clear_invalid: bool,
+        harness: str | None = None,
+        approval_gate_grant: ApprovalGateGrant | None = None,
+        now: str | None = None,
+    ) -> dict[str, object]:
+        current_time = now or _now()
+        if clear_invalid:
+            require_policy_clear(self.guard_home, approval_gate_grant=approval_gate_grant, now=current_time)
+        with self._connect() as connection:
+            _state, _counts, items = self._policy_integrity_scan(connection, now=current_time, harness=harness)
+            invalid_ids = [
+                int(item["decision_id"])
+                for item in items
+                if item.get("integrity_status") != "valid" and isinstance(item.get("decision_id"), int)
+            ]
+            cleared = 0
+            if clear_invalid and invalid_ids:
+                for chunk in _chunks(invalid_ids, _SQLITE_ID_BATCH_SIZE):
+                    placeholders = ",".join("?" for _ in chunk)
+                    cursor = connection.execute(
+                        f"delete from policy_decisions where decision_id in ({placeholders})",
+                        tuple(chunk),
+                    )
+                    cleared += int(cursor.rowcount if cursor.rowcount is not None else 0)
+            state, counts, remaining_items = self._policy_integrity_scan(connection, now=current_time, harness=harness)
+        return {
+            "generated_at": current_time,
+            "harness": harness,
+            "backend": state.get("backend"),
+            "mode": state.get("mode"),
+            "enforcement": state.get("enforcement"),
+            "key_id": state.get("key_id"),
+            "degraded_reasons": state.get("degraded_reasons", []),
+            "counts": counts,
+            "local_rows_scanned": sum(counts.values()),
+            "cleared": cleared,
+            "clear_invalid": clear_invalid,
+            "items": [item for item in remaining_items if item.get("integrity_status") != "valid"],
+        }
+
+    def migrate_local_policy_integrity(
+        self,
+        *,
+        preserve_decision_ids: set[int],
+        clear_unselected: bool,
+        harness: str | None = None,
+        approval_gate_grant: ApprovalGateGrant | None = None,
+        now: str,
+    ) -> dict[str, object]:
+        require_policy_clear(self.guard_home, approval_gate_grant=approval_gate_grant, now=now)
+        with self._connect() as connection:
+            state = self._refresh_policy_integrity_state(connection, now=now, create_key=True)
+            if state.get("mode") != "protected":
+                raise RuntimeError("Guard policy integrity migration requires a protected system keyring backend.")
+            key, key_id = self._policy_integrity_secret_material(create=True)
+            if key is None or key_id is None:
+                raise RuntimeError("Guard could not access the policy integrity key.")
+            backup_path = self._backup_policy_database(connection, now=now)
+            rows = self._load_local_policy_rows(connection, harness=harness)
+            preserved = 0
+            cleared = 0
+            legacy_ids: list[int] = []
+            unknown_key_ids: list[int] = []
+            for row in rows:
+                integrity_result = verify_local_policy_row(row, key=key, key_id=key_id, degraded_mode=False)
+                if integrity_result.status not in _POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES:
+                    continue
+                decision_id = int(row["decision_id"])
+                if integrity_result.status == "missing_integrity":
+                    legacy_ids.append(decision_id)
+                else:
+                    unknown_key_ids.append(decision_id)
+                if decision_id in preserve_decision_ids:
+                    signed = sign_local_policy_row(row, key, key_id=key_id, signed_at=now)
+                    connection.execute(
+                        """
+                        update policy_decisions
+                        set integrity_version = ?,
+                            payload_hash = ?,
+                            payload_mac = ?,
+                            integrity_key_id = ?,
+                            signed_at = ?
+                        where decision_id = ?
+                        """,
+                        (
+                            signed["integrity_version"],
+                            signed["payload_hash"],
+                            signed["payload_mac"],
+                            signed["integrity_key_id"],
+                            signed["signed_at"],
+                            decision_id,
+                        ),
+                    )
+                    preserved += 1
+                elif clear_unselected:
+                    cursor = connection.execute(
+                        "delete from policy_decisions where decision_id = ?",
+                        (decision_id,),
+                    )
+                    cleared += int(cursor.rowcount if cursor.rowcount is not None else 0)
+            next_state = dict(state)
+            next_state["enforcement"] = "enforce"
+            self._store_policy_integrity_state(connection, next_state, now=now)
+            final_state, counts, items = self._policy_integrity_scan(connection, now=now, harness=harness)
+        return {
+            "generated_at": now,
+            "harness": harness,
+            "backup_path": backup_path,
+            "backend": final_state.get("backend"),
+            "mode": final_state.get("mode"),
+            "enforcement": final_state.get("enforcement"),
+            "key_id": final_state.get("key_id"),
+            "degraded_reasons": final_state.get("degraded_reasons", []),
+            "legacy_row_ids": legacy_ids,
+            "unknown_key_row_ids": unknown_key_ids,
+            "preserved": preserved,
+            "cleared": cleared,
+            "counts": counts,
+            "local_rows_scanned": sum(counts.values()),
+            "items": [item for item in items if item.get("integrity_status") != "valid"],
+        }
 
     def clear_policy_decisions(
         self,
@@ -5223,7 +5790,7 @@ def _scoped_runtime_row_requires_exact_match(
 ) -> bool:
     if scope not in {"harness", "global"}:
         return False
-    if source in _REMOTE_POLICY_SOURCES:
+    if source in REMOTE_POLICY_SOURCES:
         return False
     family_key = _artifact_family_key(stored_artifact_id)
     if family_key is None or _family_key_value(family_key) not in _SCOPED_RUNTIME_EXACT_FAMILIES:

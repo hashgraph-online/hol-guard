@@ -216,7 +216,8 @@ def _run_guard_policies_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
-    if getattr(args, "policies_command", None) == "clear":
+    policies_command = getattr(args, "policies_command", None)
+    if policies_command == "clear":
         harness = getattr(args, "harness", None)
         clear_all = bool(getattr(args, "all", False))
         if clear_all and harness is not None:
@@ -281,6 +282,96 @@ def _run_guard_policies_command(
             },
             getattr(args, "json", False),
         )
+        return 0
+    if policies_command == "verify":
+        payload = store.verify_policy_integrity(getattr(args, "harness", None))
+        _emit("policies", payload, getattr(args, "json", False))
+        counts = payload.get("counts")
+        if not isinstance(counts, dict) or payload.get("enforcement") != "enforce":
+            return 0
+        blocking_statuses = ("tampered", "unknown_key", "missing_integrity", "degraded_mode")
+        if any(int(counts.get(status, 0) or 0) > 0 for status in blocking_statuses):
+            return 1
+        return 0
+    if policies_command == "integrity-status":
+        payload = store.get_policy_integrity_status(getattr(args, "harness", None))
+        _emit("policies", payload, getattr(args, "json", False))
+        return 0
+    if policies_command == "repair":
+        clear_invalid = bool(getattr(args, "clear_invalid", False))
+        try:
+            approval_gate_grant = None
+            if clear_invalid:
+                gate_input = prompt_for_approval_gate(store.guard_home, use_cooldown=False)
+                approval_gate_grant = require_high_risk(
+                    store.guard_home,
+                    purpose="policy_clear",
+                    approval_gate_input=gate_input,
+                )
+            payload = store.repair_policy_integrity(
+                clear_invalid=clear_invalid,
+                harness=getattr(args, "harness", None),
+                approval_gate_grant=approval_gate_grant,
+                now=_now(),
+            )
+        except ApprovalGateError as error:
+            _emit("policies", approval_gate_cli_payload(error), getattr(args, "json", False))
+            return 4
+        _emit("policies", payload, getattr(args, "json", False))
+        return 0
+    if policies_command == "migrate-local-integrity":
+        preserve_all_local = bool(getattr(args, "preserve_all_local", False))
+        clear_unselected = bool(getattr(args, "clear_unselected", False))
+        migratable_statuses = {"missing_integrity", "unknown_key"}
+        preserve_ids = {
+            int(value)
+            for value in (getattr(args, "decision_ids", None) or [])
+            if isinstance(value, int)
+        }
+        if not preserve_all_local and not preserve_ids and not clear_unselected:
+            _emit(
+                "policies",
+                {
+                    "error": "Choose --preserve-all-local, one or more --decision-id values, or --clear-unselected.",
+                    "operation": "migrate-local-integrity",
+                },
+                getattr(args, "json", False),
+            )
+            return 2
+        if preserve_all_local:
+            verify_payload = store.verify_policy_integrity(getattr(args, "harness", None))
+            preserve_ids.update(
+                int(item["decision_id"])
+                for item in verify_payload.get("items", [])
+                if isinstance(item, dict)
+                and item.get("integrity_status") in migratable_statuses
+                and isinstance(item.get("decision_id"), int)
+            )
+        try:
+            gate_input = prompt_for_approval_gate(store.guard_home, use_cooldown=False)
+            approval_gate_grant = require_high_risk(
+                store.guard_home,
+                purpose="policy_clear",
+                approval_gate_input=gate_input,
+            )
+            payload = store.migrate_local_policy_integrity(
+                preserve_decision_ids=preserve_ids,
+                clear_unselected=clear_unselected,
+                harness=getattr(args, "harness", None),
+                approval_gate_grant=approval_gate_grant,
+                now=_now(),
+            )
+        except ApprovalGateError as error:
+            _emit("policies", approval_gate_cli_payload(error), getattr(args, "json", False))
+            return 4
+        except RuntimeError as error:
+            _emit(
+                "policies",
+                {"error": str(error), "operation": "migrate-local-integrity"},
+                getattr(args, "json", False),
+            )
+            return 1
+        _emit("policies", payload, getattr(args, "json", False))
         return 0
     policy_items = store.list_policy_decisions(getattr(args, "harness", None))
     items = _filter_policy_items(policy_items, active_only=True)
