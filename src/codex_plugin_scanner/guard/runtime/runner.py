@@ -1358,6 +1358,7 @@ def sync_receipts(
         sync_exceptions=sync_exceptions_for_persist,
         policy_bundle=active_policy_bundle,
         now=now,
+        device_id=device_id,
     )
     remote_policies_stored = len(remote_decisions)
     remote_policy_sync_blocked = False
@@ -2063,8 +2064,11 @@ def _persist_cloud_exceptions(
     sync_exceptions: list[dict[str, object]] | None = None,
     policy_bundle: dict[str, object] | None = None,
     now: str,
+    device_id: str | None = None,
 ) -> list[dict[str, object]]:
-    device_id, _device_name = _guard_device_metadata(store)
+    resolved_device_id = device_id
+    if resolved_device_id is None:
+        resolved_device_id, _device_name = _guard_device_metadata(store)
     bundle_ack_payload = store.get_sync_payload("policy_bundle_ack")
     bundle_ack = bundle_ack_payload if isinstance(bundle_ack_payload, dict) else None
     bundle_hash = non_empty_string(policy_bundle.get("bundleHash")) if isinstance(policy_bundle, dict) else None
@@ -2090,7 +2094,7 @@ def _persist_cloud_exceptions(
         items.extend(
             build_cloud_exceptions_from_policy_bundle(
                 policy_bundle,
-                device_id=device_id,
+                device_id=resolved_device_id,
                 policy_bundle_ack=bundle_ack,
             )
         )
