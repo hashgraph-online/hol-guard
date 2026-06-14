@@ -7,7 +7,7 @@ import type { GuardCloudExceptionRequestItem } from "./guard-api";
 import type { GuardRuntimeSnapshot } from "./guard-types";
 import { PolicyCloudExceptionDetailPanel } from "./policy-cloud-exception-detail-panel";
 import { PolicyCloudExceptionRequestPanel } from "./policy-cloud-exception-request-panel";
-import { PolicyCloudExceptionsList } from "./policy-cloud-exceptions-list";
+import { PolicyCloudExceptionsList, PolicyCloudExceptionsListSkeleton } from "./policy-cloud-exceptions-list";
 import { PolicyCloudExceptionsSummary } from "./policy-cloud-exceptions-summary";
 import {
   groupCloudExceptions,
@@ -160,7 +160,7 @@ export function PolicyCloudExceptionsTab({
       ) : loadState === "error" ? (
         <EmptyState
           title="Could not load Cloud exceptions"
-          body={loadError ?? "Try again after Guard Cloud sync completes."}
+          body={`${loadError ?? "Try again after Guard Cloud sync completes."} Local remembered rules and strict config still apply on this device.`}
           action={
             <ActionButton variant="secondary" onClick={handleRetryLoad}>
               Retry
@@ -178,14 +178,18 @@ export function PolicyCloudExceptionsTab({
           />
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-            <PolicyCloudExceptionsList
-              active={groups.active}
-              pending={groups.pending}
-              expiringSoon={groups.expiringSoon}
-              selectedExceptionId={selectedExceptionId}
-              onSelectException={handleSelectException}
-              cloudConnected={cloudConnected}
-            />
+            {loadState === "loading" ? (
+              <PolicyCloudExceptionsListSkeleton />
+            ) : (
+              <PolicyCloudExceptionsList
+                active={groups.active}
+                pending={groups.pending}
+                expiringSoon={groups.expiringSoon}
+                selectedExceptionId={selectedExceptionId}
+                onSelectException={handleSelectException}
+                cloudConnected={cloudConnected}
+              />
+            )}
             {selectedException ? (
               <PolicyCloudExceptionDetailPanel
                 exception={selectedException}

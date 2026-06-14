@@ -217,7 +217,15 @@ export function PolicyCloudExceptionRequestPanel({
 
   if (receiptOptions.length === 0) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div
+        className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cloud-exception-request-title"
+      >
+        <h2 id="cloud-exception-request-title" className="sr-only">
+          Request cloud exception
+        </h2>
         <SectionLabel>Request cloud exception</SectionLabel>
         <p className="mt-2 text-sm text-brand-dark/75">
           Guard needs at least one receipt on this device to anchor a Cloud exception request.
@@ -245,8 +253,17 @@ export function PolicyCloudExceptionRequestPanel({
   }
 
   return (
-    <form className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" onSubmit={handleSubmit}>
+    <form
+      className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+      onSubmit={handleSubmit}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cloud-exception-request-title"
+    >
       <div>
+        <h2 id="cloud-exception-request-title" className="sr-only">
+          Request cloud exception
+        </h2>
         <SectionLabel>Request cloud exception</SectionLabel>
         <p className="mt-2 text-sm text-brand-dark/75">
           Submit a governed risk acceptance to Guard Cloud. This does not create a local remembered rule.

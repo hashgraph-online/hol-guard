@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type KeyboardEvent } from "react";
 import { SectionLabel, Tag, ActionButton } from "./approval-center-primitives";
 import type { GuardPolicyDecision, GuardRuntimeSnapshot } from "./guard-types";
 import { PolicyCloudExceptionsTab } from "./policy-cloud-exceptions-tab";
+import { PolicyRememberedRulesTab } from "./policy-remembered-rules-tab";
 import { PolicyStrictConfigTab } from "./policy-strict-config-tab";
 import {
   resolveCloudBundleSurfaceClass,
@@ -11,6 +12,8 @@ import {
 } from "./policy-workspace-helpers";
 
 export type PolicyPageView = "rules" | "exceptions" | "strict";
+
+const POLICY_VIEWS: PolicyPageView[] = ["rules", "exceptions", "strict"];
 
 export function resolvePolicyViewLabel(view: PolicyPageView): string {
   if (view === "rules") {
@@ -54,6 +57,23 @@ export function PolicyWorkspace({
     setActiveView("exceptions");
   }, []);
 
+  const handleTabKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>, view: PolicyPageView) => {
+      const index = POLICY_VIEWS.indexOf(view);
+      if (index < 0) {
+        return;
+      }
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setActiveView(POLICY_VIEWS[(index + 1) % POLICY_VIEWS.length] ?? "rules");
+      } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setActiveView(POLICY_VIEWS[(index - 1 + POLICY_VIEWS.length) % POLICY_VIEWS.length] ?? "rules");
+      }
+    },
+    [],
+  );
+
   const modeCopy = useMemo(() => resolveSecurityModeCopy(snapshot.security_level), [snapshot.security_level]);
   const cloudBundleCopy = useMemo(() => resolveCloudPolicyBundleCopy(snapshot), [snapshot]);
 
@@ -84,13 +104,21 @@ export function PolicyWorkspace({
         ) : null}
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-100 pb-3">
-        {(["rules", "exceptions", "strict"] as const).map((view) => (
+      <div
+        className="flex flex-wrap gap-2 border-b border-slate-100 pb-3"
+        role="tablist"
+        aria-label="Policy sections"
+      >
+        {POLICY_VIEWS.map((view) => (
           <button
             key={view}
             type="button"
+            role="tab"
+            id={`policy-tab-${view}`}
+            aria-controls={`policy-panel-${view}`}
+            aria-selected={activeView === view}
             onClick={() => handleViewChange(view)}
-            aria-pressed={activeView === view}
+            onKeyDown={(event) => handleTabKeyDown(event, view)}
             className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${
               activeView === view
                 ? "bg-brand-blue text-white"
@@ -103,18 +131,26 @@ export function PolicyWorkspace({
       </div>
 
       {activeView === "rules" ? (
-        <PolicyRememberedRulesTab
-          policies={policies}
-          cloudControlsUrl={resolveCloudPolicyControlsUrl(snapshot)}
-          onClearPolicy={onClearPolicy}
-          onOpenCloudExceptions={handleOpenCloudExceptions}
-        />
+        <div id="policy-panel-rules" role="tabpanel" aria-labelledby="policy-tab-rules">
+          <PolicyRememberedRulesTab
+            policies={policies}
+            cloudControlsUrl={resolveCloudPolicyControlsUrl(snapshot)}
+            onClearPolicy={onClearPolicy}
+            onOpenCloudExceptions={handleOpenCloudExceptions}
+          />
+        </div>
       ) : null}
 
-      {activeView === "exceptions" ? <PolicyCloudExceptionsTab snapshot={snapshot} /> : null}
+      {activeView === "exceptions" ? (
+        <div id="policy-panel-exceptions" role="tabpanel" aria-labelledby="policy-tab-exceptions">
+          <PolicyCloudExceptionsTab snapshot={snapshot} />
+        </div>
+      ) : null}
 
       {activeView === "strict" ? (
-        <PolicyStrictConfigTab snapshot={snapshot} onOpenSettings={onOpenSettings} onOpenInbox={onOpenInbox} />
+        <div id="policy-panel-strict" role="tabpanel" aria-labelledby="policy-tab-strict">
+          <PolicyStrictConfigTab snapshot={snapshot} onOpenSettings={onOpenSettings} onOpenInbox={onOpenInbox} />
+        </div>
       ) : null}
     </div>
   );

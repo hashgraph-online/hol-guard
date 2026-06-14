@@ -37,12 +37,13 @@ function GroupSection({ title, description, defaultOpen = true, children }: Grou
   }, []);
 
   return (
-    <section className="rounded-2xl border border-slate-100 bg-white shadow-sm">
+    <section className="rounded-2xl border border-slate-100 bg-white shadow-sm" aria-label={title}>
       <button
         type="button"
         onClick={handleToggle}
         className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left"
         aria-expanded={open}
+        aria-label={`${title} group`}
       >
         <div>
           <h3 className="text-sm font-semibold text-brand-dark">{title}</h3>
@@ -81,6 +82,7 @@ function ExceptionCard({
       type="button"
       onClick={handleSelect}
       aria-pressed={selected}
+      aria-label={`Cloud exception ${headline}`}
       className={`w-full rounded-xl border px-3.5 py-3 text-left transition ${
         selected
           ? "border-brand-blue/30 bg-brand-blue/[0.04] ring-1 ring-brand-blue/20"
@@ -103,7 +105,11 @@ function ExceptionCard({
 
 function PendingRequestCard({ item }: { item: GuardCloudExceptionRequestItem }) {
   return (
-    <article className="rounded-xl border border-amber-100 bg-amber-50/40 px-3.5 py-3">
+    <article
+      className="rounded-xl border border-amber-100 bg-amber-50/40 px-3.5 py-3"
+      role="listitem"
+      aria-label={`Pending Cloud exception request ${item.reason}`}
+    >
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone="warning">Pending</Badge>
         <Tag tone="slate">{scopeLabel(item.scope)}</Tag>
@@ -114,6 +120,16 @@ function PendingRequestCard({ item }: { item: GuardCloudExceptionRequestItem }) 
         {formatRelativeTime(item.requestedExpiresAt)}
       </p>
     </article>
+  );
+}
+
+export function PolicyCloudExceptionsListSkeleton() {
+  return (
+    <div className="space-y-3" aria-busy="true" aria-label="Loading Cloud exceptions">
+      {[0, 1, 2].map((index) => (
+        <div key={index} className="h-28 animate-pulse rounded-2xl border border-slate-100 bg-slate-100" />
+      ))}
+    </div>
   );
 }
 
