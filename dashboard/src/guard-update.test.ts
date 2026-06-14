@@ -40,6 +40,36 @@ assert(blocked.auto_updatable === false, "auto_updatable false should normalize"
 assert(blocked.blocked_reason === "Local install only", "blocked_reason should normalize");
 assert(blocked.current_version === "unknown", "missing current_version should default to unknown");
 
+const recovery = normalizeGuardUpdateStatus({
+  current_version: "1.0.0",
+  auto_updatable: false,
+  update_available: false,
+  blocked_reason: "This install was set up from a local folder. Re-run your usual local install command instead.",
+  recovery_reinstall_available: true,
+  recovery_reinstall_command: "pipx install --force hol-guard",
+});
+
+assert(recovery.recovery_reinstall_available === true, "recovery_reinstall_available should pass through when true");
+assert(
+  recovery.recovery_reinstall_command === "pipx install --force hol-guard",
+  "recovery_reinstall_command should pass through",
+);
+
+const noRecovery = normalizeGuardUpdateStatus({
+  auto_updatable: false,
+  update_available: false,
+  blocked_reason: "This install was set up from local source code.",
+});
+
+assert(
+  noRecovery.recovery_reinstall_available === undefined,
+  "editable installs must not expose recovery_reinstall_available",
+);
+assert(
+  noRecovery.recovery_reinstall_command === undefined,
+  "editable installs must not expose recovery_reinstall_command",
+);
+
 const candidatePorts = buildGuardDaemonCandidatePorts(5474);
 assert(candidatePorts.length === 25, "candidate port scan should probe 25 ports");
 assert(candidatePorts[0] === 5474, "candidate ports should start from the preferred port");

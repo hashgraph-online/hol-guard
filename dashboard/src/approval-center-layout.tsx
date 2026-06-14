@@ -289,6 +289,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     updateStatus,
     updatePhase,
     onUpdateGuard,
+    onReinstallGuard,
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
 
   return (
@@ -302,6 +303,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         updateStatus={updateStatus}
         updatePhase={updatePhase}
         onUpdateGuard={onUpdateGuard}
+        onReinstallGuard={onReinstallGuard}
       />
       <ShellSidebar
         queuedCount={queuedCount}
@@ -312,6 +314,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         updateStatus={updateStatus}
         updatePhase={updatePhase}
         onUpdateGuard={onUpdateGuard}
+        onReinstallGuard={onReinstallGuard}
       />
       {mobileQueueOpen && props.view === "inbox" && props.requests.kind === "ready" && (
         <MobileQueueDrawer
