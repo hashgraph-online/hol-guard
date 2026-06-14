@@ -221,6 +221,8 @@ def _skill_dirs_under(root: Path) -> tuple[Path, ...]:
         return ()
     skill_dirs = sorted({path.parent.resolve() for path in root.rglob("SKILL.md") if path.is_file()})
     return tuple(skill_dirs)
+
+
 def _nearest_skill_dir(path: Path) -> Path | None:
     if path.name == "SKILL.md":
         return path.parent
