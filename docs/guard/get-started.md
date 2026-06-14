@@ -232,6 +232,43 @@ Use these actions in config or saved decisions:
 - `sandbox-required`
 - `require-reapproval`
 
+### Local policy integrity
+
+Saved `allow` and `block` rows in `$HOME/.hol-guard/guard.db` are only authoritative
+when Guard can verify an HMAC envelope signed with Guard-controlled key material
+stored outside the SQLite database. The approval password gate proves *who* is
+asking Guard to remember trust. The integrity envelope proves the saved row was
+written through Guard, not forged by editing `guard.db` directly.
+
+Inspect local policy integrity:
+
+```bash
+hol-guard policies integrity-status
+hol-guard policies verify
+```
+
+If you upgraded from an older local database, legacy unsigned rows start in
+`warn` so Guard can show what must be migrated without silently blessing those
+rows forever. Rows can also show `unknown_key` after an OS keyring reset or
+reinstall. Move to `enforce` with an explicit migration after reviewing the
+listed rows:
+
+```bash
+hol-guard policies migrate-local-integrity --preserve-all-local
+```
+
+Or clear untrusted local history and force fresh approvals:
+
+```bash
+hol-guard policies migrate-local-integrity --clear-unselected
+```
+
+Remove invalid or tampered local rows after review:
+
+```bash
+hol-guard policies repair --clear-invalid
+```
+
 ## Require proof before remembered trust
 
 The approval gate protects the places where Guard would otherwise remember trust: scoped allow decisions, broad/global allow, policy clears, settings changes, approval-history clears, native approval persistence, and cloud/headless policy sync. Enforcement lives in the daemon and store layer, so the dashboard and CLI cannot bypass it.
