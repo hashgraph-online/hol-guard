@@ -52,10 +52,11 @@ assert(workspaceSource.includes("PolicyRememberedRulesTab"), "workspace uses rem
 assert(!workspaceSource.includes("PolicyRememberedRulesHelper"), "workspace no longer uses inline helper");
 assert(!workspaceSource.includes("GroupedPolicySection"), "workspace no longer mounts grouped sections directly");
 
-assert(viewsSource.includes("scopeLabel(policy.scope)"), "rule cards show explicit scope tag");
-assert(viewsSource.includes("See approval record"), "local cards link to approval record");
-assert(viewsSource.includes("View on cloud"), "cloud cards link to Guard Cloud");
-assert(viewsSource.includes("Remove rule"), "local cards expose remove action");
+assert(viewsSource.includes("Remembered action"), "rules table uses mockup-style columns");
+assert(viewsSource.includes("resolvePolicyApprovalRecordLabel"), "rules table links approval record by receipt id");
+assert(viewsSource.includes("display.rememberSentence"), "rules table explains remembered behavior");
+assert(viewsSource.includes("View on cloud"), "cloud rules link to Guard Cloud");
+assert(viewsSource.includes("Remove rule"), "local rules expose remove action");
 assert(viewsSource.includes("!cloudManaged"), "remove action gated to non-cloud rules");
 assert(viewsSource.includes("cloudManaged && cloudControlsUrl"), "cloud link gated to cloud-managed rules");
 

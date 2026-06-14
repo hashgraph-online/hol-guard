@@ -15,7 +15,7 @@ export function PolicyRememberedLocalRules({
   return (
     <GroupedPolicySection
       title="Remembered on this device"
-      description="Choices you saved from Inbox. Each card explains what Guard will do next time."
+      description="Choices you saved from Inbox. Each row shows the exact command or action Guard will remember, and where it applies."
       policies={policies}
       cloudControlsUrl={cloudControlsUrl}
       onClearPolicy={onClearPolicy}
