@@ -81,6 +81,17 @@ def test_codex_source_view_compound_token_stem_stays_non_secret_without_cwd() ->
     assert guard_commands_module._codex_command_targets_secret_like_source_name("sed -n '1,20p' token.ts")
 
 
+def test_codex_source_view_exact_secret_stem_stays_secret_with_cwd(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "config" / "secrets.yaml"
+    _write_text(source_file, "token: fixture-only\n")
+
+    assert guard_commands_module._codex_command_targets_secret_like_source_name(
+        "head -40 config/secrets.yaml",
+        cwd=workspace_dir,
+    )
+
+
 def test_codex_source_view_still_blocks_real_private_key_output(tmp_path: Path) -> None:
     workspace_dir = tmp_path / "workspace"
     source_file = workspace_dir / "tests" / "test_connect_fixture.py"

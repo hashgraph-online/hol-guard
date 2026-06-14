@@ -459,16 +459,14 @@ _CODEX_SECRET_LIKE_SOURCE_NAME_STEMS = frozenset(
 )
 
 
-def _codex_source_name_stem_is_secret_like(stem: str, *, split_compound: bool) -> bool:
+def _codex_source_name_stem_has_compound_secret_segment(stem: str, *, split_compound: bool) -> bool:
     lowered = stem.lower()
-    if lowered in _CODEX_SECRET_LIKE_SOURCE_NAME_STEMS:
-        return True
     if not split_compound:
         return False
     return any(
         segment in _CODEX_SECRET_LIKE_SOURCE_NAME_STEMS
         for segment in re.split(r"[-_]+", lowered)
-        if segment
+        if segment and segment != lowered
     )
 
 
@@ -501,11 +499,18 @@ def _codex_command_targets_secret_like_source_name(
             continue
         name = Path(stripped).name.lower().lstrip(".")
         stem = Path(name).stem or name
-        if not _codex_source_name_stem_is_secret_like(stem, split_compound=cwd is not None) and not name.startswith(
-            "id_"
-        ):
+        exact_secret_like = stem.lower() in _CODEX_SECRET_LIKE_SOURCE_NAME_STEMS
+        compound_secret_like = _codex_source_name_stem_has_compound_secret_segment(
+            stem,
+            split_compound=cwd is not None,
+        )
+        if not exact_secret_like and not compound_secret_like and not name.startswith("id_"):
             continue
-        if cwd is not None and _codex_search_target_is_source_like(stripped, cwd=cwd, home_dir=home_dir):
+        if compound_secret_like and cwd is not None and _codex_search_target_is_source_like(
+            stripped,
+            cwd=cwd,
+            home_dir=home_dir,
+        ):
             continue
         return True
     return False
@@ -528,7 +533,7 @@ _codex_env_assignment_uses_shell_expansion _codex_local_secret_source_label
 _codex_output_is_only_benign_secret_fixture _codex_output_uses_placeholder_private_key_fixture
 _codex_pipeline_segment_may_read_local_content _codex_post_tool_command_is_read_only_source_inspection
 _codex_post_tool_command_text _codex_shell_split _codex_source_inspection_can_skip_secret_output
-_codex_source_name_stem_is_secret_like
+_codex_source_name_stem_has_compound_secret_segment
 _codex_strip_command_wrapper _codex_strip_env_wrapper _codex_tool_output_request_summary
 _codex_tool_output_runtime_summary _codex_unwrapped_command_parts
 """.split()
