@@ -192,73 +192,75 @@ export function PolicyStrictConfigTab({
         <div
           className={`rounded-2xl border p-5 ${isStrict ? "border-brand-green/20 bg-brand-green/[0.04]" : "border-slate-200 bg-slate-50/40"}`}
         >
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <SectionLabel>Strict mode</SectionLabel>
-          <Tag tone={isStrict ? "green" : "slate"}>{isStrict ? "Enabled" : "Disabled"}</Tag>
-        </div>
-        <p className="text-sm text-brand-dark/75">
-          Strict config tunes local fallback enforcement only. Authentication, MFA, and general Guard settings stay in
-          Settings.
-        </p>
-        {!isStrict && onOpenSettings ? (
-          <div className="mt-3">
-            <ActionButton variant="secondary" onClick={onOpenSettings}>
-              Enable strict mode in Settings
-            </ActionButton>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <SectionLabel>Strict mode</SectionLabel>
+            <Tag tone={isStrict ? "green" : "slate"}>{isStrict ? "Enabled" : "Disabled"}</Tag>
           </div>
-        ) : null}
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <SectionLabel>Local policy state</SectionLabel>
-        <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Local policy hash</dt>
-            <dd className="mt-1 font-mono text-xs text-brand-dark">{localPolicyHash}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Config file</dt>
-            <dd className="mt-1 break-all text-brand-dark">{configPath ?? "Unavailable"}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Daemon last reload</dt>
-            <dd className="mt-1 text-brand-dark">
-              {snapshot.runtime_state?.started_at
-                ? formatRelativeTime(snapshot.runtime_state.started_at)
-                : "Unavailable"}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Daemon heartbeat</dt>
-            <dd className="mt-1 text-brand-dark">
-              {snapshot.runtime_state?.last_heartbeat_at
-                ? formatRelativeTime(snapshot.runtime_state.last_heartbeat_at)
-                : "Unavailable"}
-            </dd>
-          </div>
-        </dl>
-        {cloudBundleCopy ? (
-          <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/80 p-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Signed Cloud bundle ack</p>
-            <p className="mt-1 text-sm font-medium text-brand-dark">{cloudBundleCopy.label}</p>
-            <p className="mt-1 text-sm text-slate-600">{cloudBundleCopy.detail}</p>
-            {snapshot.cloud_policy_bundle_hash ? (
-              <p className="mt-2 break-all font-mono text-[11px] text-slate-500">{snapshot.cloud_policy_bundle_hash}</p>
-            ) : null}
-            <p className="mt-2 text-xs text-slate-500">
-              Cloud exceptions apply through signed bundle acknowledgement on this device.
-            </p>
-          </div>
-        ) : (
-          <p className="mt-4 text-sm text-slate-600">
-            No signed Cloud policy bundle is synced yet. Cloud exceptions still require bundle acknowledgement before
-            they apply locally.
+          <p className="text-sm text-brand-dark/75">
+            Strict config tunes local fallback enforcement only. Authentication, MFA, and general Guard settings stay in
+            Settings.
           </p>
-        )}
-      </div>
+          {!isStrict && onOpenSettings ? (
+            <div className="mt-3">
+              <ActionButton variant="secondary" onClick={onOpenSettings}>
+                Enable strict mode in Settings
+              </ActionButton>
+            </div>
+          ) : null}
+        </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <SectionLabel>Local fallback controls</SectionLabel>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <SectionLabel>Local policy state</SectionLabel>
+          <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Local policy hash</dt>
+              <dd className="mt-1 font-mono text-xs text-brand-dark">{localPolicyHash}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Config file</dt>
+              <dd className="mt-1 break-all text-brand-dark">{configPath ?? "Unavailable"}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Daemon last reload</dt>
+              <dd className="mt-1 text-brand-dark">
+                {snapshot.runtime_state?.started_at
+                  ? formatRelativeTime(snapshot.runtime_state.started_at)
+                  : "Unavailable"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Daemon heartbeat</dt>
+              <dd className="mt-1 text-brand-dark">
+                {snapshot.runtime_state?.last_heartbeat_at
+                  ? formatRelativeTime(snapshot.runtime_state.last_heartbeat_at)
+                  : "Unavailable"}
+              </dd>
+            </div>
+          </dl>
+          {cloudBundleCopy ? (
+            <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/80 p-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Signed Cloud bundle ack</p>
+              <p className="mt-1 text-sm font-medium text-brand-dark">{cloudBundleCopy.label}</p>
+              <p className="mt-1 text-sm text-slate-600">{cloudBundleCopy.detail}</p>
+              {snapshot.cloud_policy_bundle_hash ? (
+                <p className="mt-2 break-all font-mono text-[11px] text-slate-500">
+                  {snapshot.cloud_policy_bundle_hash}
+                </p>
+              ) : null}
+              <p className="mt-2 text-xs text-slate-500">
+                Cloud exceptions apply through signed bundle acknowledgement on this device.
+              </p>
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-slate-600">
+              No signed Cloud policy bundle is synced yet. Cloud exceptions still require bundle acknowledgement before
+              they apply locally.
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <SectionLabel>Local fallback controls</SectionLabel>
         <p className="mt-2 text-sm text-slate-600">
           These controls apply when no remembered rule, Cloud policy, or Cloud exception matches.
         </p>

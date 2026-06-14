@@ -23,7 +23,6 @@ from uuid import uuid4
 from cryptography.fernet import Fernet, InvalidToken
 
 from .approval_gate import ApprovalGateGrant, require_policy_clear, require_policy_write, require_request_resolution
-from .store_policy_source_context import find_policy_source_context
 from .cli.oauth_client import resolve_guard_oauth_client_config, validate_guard_sync_endpoint
 from .edge_events import build_receipt_event
 from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
@@ -95,6 +94,7 @@ from .store_evidence import (
 from .store_evidence import (
     store_evidence as _store_evidence_impl,
 )
+from .store_policy_source_context import find_policy_source_context
 from .store_receipt_rollups import (
     backfill_receipt_rollups,
     count_receipts_from_rollups,
