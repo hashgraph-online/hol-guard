@@ -17,9 +17,9 @@ from ..store import GuardStore
 from .command_executors import (
     COMMAND_OPERATION_SCHEMA_VERSIONS,
     SUPPORTED_COMMAND_OPERATIONS,
+    _local_request_snapshot_items,
     command_job_operation,
     execute_guard_command_job,
-    _local_request_snapshot_items,
 )
 from .runner import (
     GuardSyncAuthorizationExpiredError,
