@@ -71,6 +71,10 @@ from ..cli.install_commands import (
     uninstall_confirmation_token,
 )
 from ..cli.update_commands import build_guard_update_status_payload
+from ..cloud_exception_requests import (
+    CloudExceptionRequestError,
+    submit_cloud_exception_request,
+)
 from ..codex_resume import (
     defer_request_resume_to_live_hook,
     get_request_resume_status,
@@ -82,10 +86,6 @@ from ..config import (
     load_guard_config,
     reset_guard_settings,
     update_guard_settings,
-)
-from ..cloud_exception_requests import (
-    cloud_exception_request_error_status,
-    submit_cloud_exception_request,
 )
 from ..desktop_notifications import (
     desktop_notification_setup_payload,
@@ -3159,10 +3159,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             message = str(error).strip() or "Invalid Guard exception request payload."
             self._write_json({"error": "invalid_payload", "message": message}, status=400)
             return
+        except CloudExceptionRequestError as error:
+            message = str(error).strip() or "Unable to create Guard Cloud exception request."
+            self._write_json({"error": "cloud_exception_request_failed", "message": message}, status=error.status)
+            return
         except Exception as error:
             message = str(error).strip() or "Unable to create Guard Cloud exception request."
-            status = cloud_exception_request_error_status(message)
-            self._write_json({"error": "cloud_exception_request_failed", "message": message}, status=status)
+            self._write_json({"error": "cloud_exception_request_failed", "message": message}, status=502)
             return
         self._write_json(result)
 
