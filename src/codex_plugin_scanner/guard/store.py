@@ -5492,9 +5492,7 @@ def _find_policy_source_context(
     if receipt_row is not None:
         source_receipt_id = str(receipt_row["receipt_id"])
         scanner_command, scanner_context = _parse_scanner_evidence_fields(
-            str(receipt_row["scanner_evidence_json"])
-            if receipt_row["scanner_evidence_json"] is not None
-            else None
+            str(receipt_row["scanner_evidence_json"]) if receipt_row["scanner_evidence_json"] is not None else None
         )
         if scanner_command and _is_human_policy_label(scanner_command):
             remembered_command = scanner_command
