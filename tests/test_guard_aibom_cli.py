@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 from email.message import Message
 from pathlib import Path
@@ -7,6 +8,9 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import aibom_cli
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.cli import commands_dispatch_records as dispatch
 from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
@@ -466,6 +470,44 @@ def test_sync_aibom_snapshots_uses_cloud_sync_cisco_defaults(
     collect_kwargs = observed["collect_kwargs"]
     assert isinstance(collect_kwargs, dict)
     options = collect_kwargs["options"]
+    assert isinstance(options, aibom_cli.AibomCliOptions)
+    assert options.cisco_skill_scan == "auto"
+    assert options.cisco_mcp_scan == "auto"
+    assert options.cisco_timeout_seconds == 30.0
+
+
+def test_guard_aibom_sync_command_uses_cloud_sync_cisco_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard")
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=tmp_path / "workspace",
+        guard_home=tmp_path / "guard",
+    )
+    observed: dict[str, object] = {}
+
+    def fake_sync_aibom_snapshots(*args: object, **kwargs: object) -> dict[str, object]:
+        observed["kwargs"] = kwargs
+        return {"synced": True}
+
+    monkeypatch.setattr(dispatch, "sync_aibom_snapshots", fake_sync_aibom_snapshots)
+
+    exit_code = dispatch._run_guard_aibom_command(
+        argparse.Namespace(
+            aibom_command="sync",
+            include_symlinks=True,
+            follow_unsafe_symlinks=False,
+            json=True,
+        ),
+        context=context,
+        store=store,
+    )
+
+    assert exit_code == 0
+    kwargs = observed["kwargs"]
+    assert isinstance(kwargs, dict)
+    options = kwargs["options"]
     assert isinstance(options, aibom_cli.AibomCliOptions)
     assert options.cisco_skill_scan == "auto"
     assert options.cisco_mcp_scan == "auto"
