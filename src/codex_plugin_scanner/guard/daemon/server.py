@@ -71,6 +71,10 @@ from ..cli.install_commands import (
     uninstall_confirmation_token,
 )
 from ..cli.update_commands import build_guard_update_status_payload
+from ..cloud_exception_requests import (
+    CloudExceptionRequestError,
+    submit_cloud_exception_request,
+)
 from ..codex_resume import (
     defer_request_resume_to_live_hook,
     get_request_resume_status,
@@ -1341,6 +1345,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/policy/sync":
             self._handle_headless_policy_sync(payload)
             return
+        if parsed.path == "/v1/policy/cloud-exception-requests":
+            self._handle_cloud_exception_request_create(payload)
+            return
         if parsed.path == "/v1/requests/remote-once":
             self._handle_headless_remote_once(payload)
             return
@@ -1889,6 +1896,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self.server.store,  # type: ignore[attr-defined]
                 policy_bundle=validated_policy_bundle,
                 now=applied_at,
+                device_id=device_id,
             )
             applied_bundle_hash = str(validated_policy_bundle["bundleHash"])
             applied_bundle_version = str(validated_policy_bundle["bundleVersion"])
@@ -3144,6 +3152,24 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         self._write_json(result)
 
+    def _handle_cloud_exception_request_create(self, payload: dict[str, object]) -> None:
+        store = self.server.store  # type: ignore[attr-defined]
+        try:
+            result = submit_cloud_exception_request(store, payload)
+        except ValueError as error:
+            message = str(error).strip() or "Invalid Guard exception request payload."
+            self._write_json({"error": "invalid_payload", "message": message}, status=400)
+            return
+        except CloudExceptionRequestError as error:
+            message = str(error).strip() or "Unable to create Guard Cloud exception request."
+            self._write_json({"error": "cloud_exception_request_failed", "message": message}, status=error.status)
+            return
+        except Exception as error:
+            message = str(error).strip() or "Unable to create Guard Cloud exception request."
+            self._write_json({"error": "cloud_exception_request_failed", "message": message}, status=502)
+            return
+        self._write_json(result)
+
     def _handle_settings_update(self, payload: dict[str, object]) -> None:
         settings = payload.get("settings")
         if not isinstance(settings, dict):
@@ -4150,6 +4176,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/notifications/setup",
             "/v1/policy",
             "/v1/policy/cloud-exceptions",
+            "/v1/policy/cloud-exception-requests",
             "/v1/policy/clear",
             "/v1/policy/sync",
             "/v1/receipts",
@@ -4532,6 +4559,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/operations/block",
             "/v1/policy/decisions",
             "/v1/policy/cloud-exceptions",
+            "/v1/policy/cloud-exception-requests",
             "/v1/policy/clear",
             "/v1/policy/sync",
             "/v1/requests/clear",
