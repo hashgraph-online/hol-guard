@@ -1045,6 +1045,27 @@ def build_package_protect_payload(
     return (payload, int(execution.returncode))
 
 
+def apply_stored_package_policy_override(
+    evaluation: PackageRequestEvaluation,
+    *,
+    store: GuardStore,
+    artifact: GuardArtifact,
+    artifact_hash: str,
+    workspace_dir: Path,
+    now: str,
+) -> PackageRequestEvaluation:
+    """Apply a saved package approval when the content hash still matches."""
+
+    return _apply_stored_package_policy_override(
+        evaluation,
+        store=store,
+        artifact=artifact,
+        artifact_hash=artifact_hash,
+        workspace_dir=workspace_dir,
+        now=now,
+    )
+
+
 def _apply_stored_package_policy_override(
     evaluation: PackageRequestEvaluation,
     *,
@@ -1236,6 +1257,23 @@ def _package_request_artifact_hash(
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
+    )
+
+
+def package_request_policy_hash(
+    *,
+    artifact: GuardArtifact,
+    store: GuardStore,
+    workspace_dir: Path,
+    evaluation: PackageRequestEvaluation,
+) -> str:
+    """Hash a package request using manifest and lockfile contents."""
+
+    return _package_request_artifact_hash(
+        artifact,
+        workspace_dir=workspace_dir,
+        store=store,
+        evaluation=evaluation,
     )
 
 
