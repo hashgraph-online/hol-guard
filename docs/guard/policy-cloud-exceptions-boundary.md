@@ -43,9 +43,10 @@ Local Policy must **not** author broad local exceptions directly.
 
 | Endpoint / module | Role today |
 | --- | --- |
-| `GET /v1/policy` | Lists local `GuardPolicyDecision` rows |
+| `GET /v1/policy` | Lists local `GuardPolicyDecision` rows plus `cloud_exceptions` DTO field |
 | `POST /v1/policy/decisions` | Saves local policy decision (used by exception form today) |
 | `POST /v1/policy/clear` | Clears local remembered rules |
+| `GET /v1/policy/cloud-exceptions` | Lists active Cloud exception DTO rows |
 | `POST /v1/policy/sync` | Syncs Cloud policy bundle |
 | `policy_bundle_parser.py` | Schema validation, bundle hash, payload hash, RSA signature verify |
 | `policy_bundle_trusted_keys.py` | Trusted signing keys, key expiry |
@@ -174,4 +175,5 @@ Do not rewrite Review/Inbox components to implement Policy features.
 ## Phase 0 completion
 
 Phase 0 delivers this boundary doc, audit notes, and automated boundary tests.
-Implementation begins in Phase 1 (IA rename, remove local exception authoring).
+Phase 3 adds the local Cloud exception DTO (`cloud_exceptions.py`), separate sync
+storage, and `/v1/policy` + `/v1/policy/cloud-exceptions` API fields.

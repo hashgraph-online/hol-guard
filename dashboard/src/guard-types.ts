@@ -482,6 +482,37 @@ export type GuardPolicyDecision = {
   updated_at: string;
 };
 
+export const GUARD_CLOUD_EXCEPTION_ACK_STATUSES = [
+  "pending",
+  "synced",
+  "failed",
+  "offline",
+] as const;
+
+export type GuardCloudExceptionAckStatus = (typeof GUARD_CLOUD_EXCEPTION_ACK_STATUSES)[number];
+
+export const GUARD_CLOUD_EXCEPTION_EFFECTS = ["allow"] as const;
+
+export type GuardCloudExceptionEffect = (typeof GUARD_CLOUD_EXCEPTION_EFFECTS)[number];
+
+export type GuardCloudExceptionScope = DecisionScope | "global";
+
+export type GuardCloudException = {
+  id: string;
+  effect: GuardCloudExceptionEffect;
+  scope: GuardCloudExceptionScope;
+  harness: string | null;
+  owner: string;
+  approver: string | null;
+  expiry: string;
+  source_receipt_id: string | null;
+  bundle_hash: string | null;
+  ack_status: GuardCloudExceptionAckStatus | null;
+  last_used_at: string | null;
+  rejection_reason: string | null;
+};
+
+
 export type GuardManagedInstall = {
   harness: string;
   active: boolean;

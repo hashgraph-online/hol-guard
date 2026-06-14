@@ -33,6 +33,7 @@ import type {
   GuardManagedInstall,
   GuardNotificationSetupResult,
   GuardPolicyDecision,
+  GuardCloudException,
   PackageManagerProtection,
   CodexResumeStatus,
   GuardCodexResumeResult,
@@ -1574,6 +1575,16 @@ export async function fetchPolicy(harness: string): Promise<GuardPolicyDecision[
   const payload = await readJson<{ items: GuardPolicyDecision[] }>(
     `/v1/policy?harness=${encodeURIComponent(harness)}`
   );
+  return payload.items;
+}
+
+
+export async function fetchCloudExceptions(harness?: string): Promise<GuardCloudException[]> {
+  if (isGuardDemoMode()) {
+    return [];
+  }
+  const query = harness ? `?harness=${encodeURIComponent(harness)}` : "";
+  const payload = await readJson<{ items: GuardCloudException[] }>(`/v1/policy/cloud-exceptions${query}`);
   return payload.items;
 }
 

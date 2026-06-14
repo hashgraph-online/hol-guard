@@ -119,6 +119,7 @@ assert(guardApiSource.includes("fetchPolicies"), "guard-api must expose fetchPol
 assert(guardApiSource.includes("savePolicyDecision"), "guard-api must expose savePolicyDecision baseline");
 assert(guardApiSource.includes("clearPolicy"), "guard-api must expose clearPolicy");
 assert(guardApiSource.includes("/v1/policy"), "guard-api must call /v1/policy endpoints");
+assert(guardApiSource.includes("fetchCloudExceptions"), "guard-api must expose fetchCloudExceptions");
 
 assert(boundaryDoc.includes("Remembered rules"), "boundary doc must define Remembered rules");
 assert(boundaryDoc.includes("Cloud exceptions"), "boundary doc must define Cloud exceptions");

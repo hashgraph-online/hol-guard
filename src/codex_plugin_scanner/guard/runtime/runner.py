@@ -37,6 +37,12 @@ from ..cli.oauth_client import (
 from ..config import GuardConfig
 from ..consumer import detect_harness, evaluate_detection
 from ..edge_events import build_runtime_session_event
+from ..cloud_exceptions import (
+    build_cloud_exceptions_from_policy_bundle,
+    build_cloud_exceptions_from_sync_payload,
+    cloud_exception_to_dict,
+    dedupe_cloud_exceptions,
+)
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..package_firewall_entitlement import build_oauth_package_firewall_entitlement
 from ..policy_bundle_parser import (
@@ -1340,6 +1346,16 @@ def sync_receipts(
         store.set_sync_payload("team_policy_pack", team_policy_pack_payload, now)
     else:
         store.set_sync_payload("team_policy_pack", {}, now)
+    active_policy_bundle_payload = store.get_sync_payload("policy_bundle")
+    active_policy_bundle = (
+        active_policy_bundle_payload if isinstance(active_policy_bundle_payload, dict) else None
+    )
+    cloud_exception_items = _persist_cloud_exceptions(
+        store,
+        sync_exceptions=deduped_exceptions,
+        policy_bundle=active_policy_bundle,
+        now=now,
+    )
     remote_policies_stored = len(remote_decisions)
     remote_policy_sync_blocked = False
     try:
@@ -1369,7 +1385,7 @@ def sync_receipts(
         "synced_at": payload.get("syncedAt"),
         "receipts_stored": receipts_stored_total,
         "advisories_stored": advisories_stored,
-        "exceptions_stored": len(deduped_exceptions),
+        "exceptions_stored": len(cloud_exception_items),
         "remote_policies_stored": remote_policies_stored,
         "pain_signals_uploaded": pain_signals_uploaded,
         "receipts": len(receipts),
@@ -2037,36 +2053,41 @@ def sync_pain_signals(
     return uploaded_count
 
 
+def _persist_cloud_exceptions(
+    store: GuardStore,
+    *,
+    sync_exceptions: list[dict[str, object]] | None = None,
+    policy_bundle: dict[str, object] | None = None,
+    now: str,
+) -> list[dict[str, object]]:
+    device_id, _device_name = _guard_device_metadata(store)
+    bundle_ack_payload = store.get_sync_payload("policy_bundle_ack")
+    bundle_ack = bundle_ack_payload if isinstance(bundle_ack_payload, dict) else None
+    bundle_hash = non_empty_string(policy_bundle.get("bundleHash")) if isinstance(policy_bundle, dict) else None
+    items = []
+    if sync_exceptions:
+        items.extend(
+            build_cloud_exceptions_from_sync_payload(
+                sync_exceptions,
+                bundle_hash=bundle_hash,
+                ack_status=non_empty_string(bundle_ack.get("status")) if bundle_ack else None,
+            )
+        )
+    if isinstance(policy_bundle, dict):
+        items.extend(
+            build_cloud_exceptions_from_policy_bundle(
+                policy_bundle,
+                device_id=device_id,
+                policy_bundle_ack=bundle_ack,
+            )
+        )
+    serialized = [cloud_exception_to_dict(item) for item in dedupe_cloud_exceptions(items)]
+    store.set_cloud_exceptions(serialized, now)
+    return serialized
+
+
 def _build_remote_policy_decisions(payload: dict[str, object]) -> list[PolicyDecision]:
     decisions: list[PolicyDecision] = []
-    exceptions = payload.get("exceptions")
-    if isinstance(exceptions, list):
-        for item in exceptions:
-            if not isinstance(item, dict):
-                continue
-            scope = item.get("scope")
-            if scope not in {"artifact", "publisher", "harness", "global", "workspace"}:
-                continue
-            workspace = _remote_workspace(item)
-            if scope == "workspace" and workspace is None:
-                continue
-            harness = _remote_harness(item.get("harness"), allow_wildcard=scope != "harness")
-            if harness is None:
-                continue
-            decisions.append(
-                PolicyDecision(
-                    harness=harness,
-                    scope=scope,
-                    action="allow",
-                    artifact_id=_optional_string(item.get("artifactId")),
-                    workspace=workspace,
-                    publisher=_optional_string(item.get("publisher")),
-                    reason=_optional_string(item.get("reason")),
-                    owner=_optional_string(item.get("owner")),
-                    source="cloud-sync",
-                    expires_at=_normalized_timestamp_string(item.get("expiresAt")),
-                )
-            )
     team_policy_pack = payload.get("teamPolicyPack")
     if isinstance(team_policy_pack, dict):
         policy_name = _optional_string(team_policy_pack.get("name")) or "team policy"
