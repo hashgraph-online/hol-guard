@@ -232,7 +232,9 @@ def _execute_approval_operation(
             "failureMessage": f"Unsupported approval operation: {operation}",
         }
     action = _optional_string(payload.get("action"))
-    local_request_id = _optional_string(payload.get("localRequestId")) or _optional_string(payload.get("local_request_id"))
+    local_request_id = _optional_string(payload.get("localRequestId")) or _optional_string(
+        payload.get("local_request_id")
+    )
     if action not in {"allow_once", "block", "policy_sync"} or local_request_id is None:
         raise ValueError("invalid_approval_payload")
     if action == "policy_sync":
@@ -268,7 +270,9 @@ def _execute_policy_sync(
     target = policy_memory.get("target")
     target_payload = target if isinstance(target, dict) else {}
     harness = _optional_string(payload.get("harness")) or _optional_string(target_payload.get("harness"))
-    artifact_id = _optional_string(target_payload.get("artifactId")) or _optional_string(target_payload.get("artifact_id"))
+    artifact_id = _optional_string(target_payload.get("artifactId")) or _optional_string(
+        target_payload.get("artifact_id")
+    )
     if harness is None or artifact_id is None:
         raise ValueError("missing_policy_target")
     scope = _local_policy_scope(_optional_string(policy_memory.get("scope")))
