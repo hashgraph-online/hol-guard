@@ -398,7 +398,7 @@ def _codex_browser_wait_metadata(
 def _codex_browser_wait_timeout_seconds(*, event_name: str, configured_timeout: int) -> int:
     wait_timeout_seconds = max(configured_timeout, 0)
     if event_name in {"UserPromptSubmit", "PreToolUse", "PostToolUse"}:
-        wait_timeout_seconds = min(wait_timeout_seconds, _CODEX_PROMPT_APPROVAL_WAIT_MAX_SECONDS)
+        wait_timeout_seconds = min(wait_timeout_seconds, _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS)
     return wait_timeout_seconds
 
 

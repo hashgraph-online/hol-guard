@@ -443,12 +443,30 @@ def _codex_command_references_benign_source_dotfile(command_text: str) -> bool:
         return False
     return any(Path(part).name.lower() in _CODEX_BENIGN_SOURCE_DOTFILES for part in parts)
 
-def _codex_source_name_stem_is_secret_like(stem: str, *, dangerous_stems: frozenset[str]) -> bool:
+_CODEX_SECRET_LIKE_SOURCE_NAME_STEMS = frozenset(
+    {
+        "auth",
+        "credential",
+        "credentials",
+        "passwd",
+        "password",
+        "private-key",
+        "private_key",
+        "secret",
+        "secrets",
+        "token",
+    }
+)
+
+
+def _codex_source_name_stem_is_secret_like(stem: str, *, split_compound: bool) -> bool:
     lowered = stem.lower()
-    if lowered in dangerous_stems:
+    if lowered in _CODEX_SECRET_LIKE_SOURCE_NAME_STEMS:
         return True
+    if not split_compound:
+        return False
     return any(
-        segment in dangerous_stems
+        segment in _CODEX_SECRET_LIKE_SOURCE_NAME_STEMS
         for segment in re.split(r"[-_]+", lowered)
         if segment
     )
@@ -460,20 +478,6 @@ def _codex_command_targets_secret_like_source_name(
     cwd: Path | None = None,
     home_dir: Path | None = None,
 ) -> bool:
-    dangerous_stems = frozenset(
-        {
-            "auth",
-            "credential",
-            "credentials",
-            "passwd",
-            "password",
-            "private-key",
-            "private_key",
-            "secret",
-            "secrets",
-            "token",
-        }
-    )
     chained_segments = _split_codex_safe_read_only_chain(command_text)
     if chained_segments is not None:
         return any(
@@ -497,7 +501,7 @@ def _codex_command_targets_secret_like_source_name(
             continue
         name = Path(stripped).name.lower().lstrip(".")
         stem = Path(name).stem or name
-        if not _codex_source_name_stem_is_secret_like(stem, dangerous_stems=dangerous_stems) and not name.startswith(
+        if not _codex_source_name_stem_is_secret_like(stem, split_compound=cwd is not None) and not name.startswith(
             "id_"
         ):
             continue

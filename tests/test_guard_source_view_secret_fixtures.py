@@ -74,6 +74,13 @@ def test_codex_source_view_allows_oauth_token_service_source_output(tmp_path: Pa
     assert artifact is None
 
 
+def test_codex_source_view_compound_token_stem_stays_non_secret_without_cwd() -> None:
+    command = "sed -n '1,20p' src/oauth-token-service.ts"
+
+    assert not guard_commands_module._codex_command_targets_secret_like_source_name(command)
+    assert guard_commands_module._codex_command_targets_secret_like_source_name("sed -n '1,20p' token.ts")
+
+
 def test_codex_source_view_still_blocks_real_private_key_output(tmp_path: Path) -> None:
     workspace_dir = tmp_path / "workspace"
     source_file = workspace_dir / "tests" / "test_connect_fixture.py"
