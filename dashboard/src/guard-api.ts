@@ -2702,14 +2702,24 @@ export async function runPackageAudit(input?: {
   return normalizePackageFirewallAction(payloadBody);
 }
 
-export async function runPackageSync(): Promise<PackageFirewallActionResponse> {
+export async function runPackageSync(credentials?: {
+  approval_password?: string;
+  approval_totp_code?: string;
+}): Promise<PackageFirewallActionResponse> {
   const response = await fetchGuardApi("/v1/supply-chain/sync", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...guardAuthHeaders(),
     },
-    body: JSON.stringify({}),
+    body: JSON.stringify({
+      ...(credentials?.approval_password !== undefined
+        ? { approval_password: credentials.approval_password }
+        : {}),
+      ...(credentials?.approval_totp_code !== undefined
+        ? { approval_totp_code: credentials.approval_totp_code }
+        : {}),
+    }),
   });
   const payloadBody = (await response.json().catch(() => null)) as unknown;
   if (!response.ok) {
