@@ -13,7 +13,8 @@ import {
   parseDecisionV2,
   readGuardToken,
   runPackageFirewallAction,
-	  startPackageFirewallConnect,
+  runPackageSync,
+  startPackageFirewallConnect,
 	  runAuditRemediation,
 	  resolveRequestWithQueueResult,
 	  retryResume,
@@ -972,6 +973,60 @@ assert(firewallError instanceof GuardHarnessActionError, "L079db: runPackageFire
 assert(
   firewallError instanceof GuardHarnessActionError && firewallError.payload?.error === "approval_gate_required",
   "L079db: runPackageFirewallAction preserves daemon error code for approval modal fallback"
+);
+
+installGuardWindow("?guard-token=token-sync&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const syncCalls = installFetchStub({
+  "/v1/supply-chain/sync": {
+    entitlement: { allowed: true },
+    operation: "sync",
+    receipt: null,
+    result: { synced: true },
+    status: "completed",
+  },
+});
+const syncAction = await runPackageSync({
+  approval_password: "local-password",
+  approval_totp_code: "654321",
+});
+const syncBody = JSON.parse(String(syncCalls[0].init?.body)) as Record<string, unknown>;
+assert(
+  syncCalls[0].url === "http://127.0.0.1:4781/v1/supply-chain/sync",
+  "L079dc: runPackageSync posts to the sync route",
+);
+assert(
+  headerValue(syncCalls[0].init, "X-Guard-Dashboard-Session") === "token-sync",
+  "L079dc: runPackageSync sends dashboard session token",
+);
+assert(syncBody["approval_password"] === "local-password", "L079dc: runPackageSync sends approval password");
+assert(syncBody["approval_totp_code"] === "654321", "L079dc: runPackageSync sends approval TOTP code");
+assert(syncAction.operation === "sync", "L079dc: runPackageSync normalizes response");
+
+installGuardWindow("?guard-token=token-sync&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
+  const url = input instanceof Request ? input.url : String(input);
+  const parsed = new URL(url, "http://127.0.0.1:4174");
+  if (parsed.pathname === "/v1/supply-chain/sync") {
+    return new Response(
+      JSON.stringify({
+        error: "approval_gate_required",
+        message: "Approval password is required.",
+      }),
+      { status: 403, headers: { "Content-Type": "application/json" } },
+    );
+  }
+  return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+};
+let syncError: unknown = null;
+try {
+  await runPackageSync();
+} catch (error) {
+  syncError = error;
+}
+assert(syncError instanceof GuardHarnessActionError, "L079dd: runPackageSync throws GuardHarnessActionError on structured failures");
+assert(
+  syncError instanceof GuardHarnessActionError && syncError.payload?.error === "approval_gate_required",
+  "L079dd: runPackageSync preserves daemon error code for inline approval fallback",
 );
 
 installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
