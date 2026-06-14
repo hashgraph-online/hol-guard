@@ -4,7 +4,53 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from tests.test_policy_bundle_parser import _sample_policy_bundle, computed_policy_bundle_hash
+from codex_plugin_scanner.guard.policy_bundle_parser import computed_policy_bundle_hash
+
+
+def _sample_policy_bundle(*, bundle_hash: str | None = None) -> dict[str, object]:
+    bundle: dict[str, object] = {
+        "contractVersion": "guard-policy-bundle.v1",
+        "bundleVersion": "policy-2026-04-19.1",
+        "bundleHash": bundle_hash or "",
+        "issuedAt": "2026-04-19T00:00:10+00:00",
+        "expiresAt": None,
+        "verifier": {
+            "algorithm": "sha256",
+            "keyId": "guard-policy-bundle-v1",
+            "signature": None,
+        },
+        "rolloutState": "enforcing",
+        "policyDefaults": {
+            "mode": "enforce",
+            "defaultAction": "warn",
+            "unknownPublisherAction": "review",
+            "changedHashAction": "require-reapproval",
+            "newNetworkDomainAction": "warn",
+            "subprocessAction": "block",
+            "telemetryEnabled": False,
+            "syncEnabled": True,
+        },
+        "rules": [
+            {
+                "ruleId": "pkg-block",
+                "action": "block",
+                "reason": "Block risky package installs before execution.",
+                "matcherFamilies": ["package-request"],
+                "scope": {
+                    "agents": [],
+                    "devices": [],
+                    "ecosystems": ["npm"],
+                    "environments": ["development"],
+                    "harnesses": ["codex"],
+                    "locations": [],
+                },
+            }
+        ],
+        "acknowledgements": [],
+    }
+    if bundle_hash is None:
+        bundle["bundleHash"] = computed_policy_bundle_hash(bundle)
+    return bundle
 
 
 def build_cloud_exception_bundle_entry(
