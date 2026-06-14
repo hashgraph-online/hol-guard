@@ -461,7 +461,11 @@ class PolicySourceContextIndex:
     approvals_by_harness_hash: dict[tuple[str, str], list[sqlite3.Row]] = field(default_factory=dict)
 
 
-def _append_indexed_row(index: dict[tuple[str, str], list[sqlite3.Row]], key: tuple[str, str], row: sqlite3.Row) -> None:
+def _append_indexed_row(
+    index: dict[tuple[str, str], list[sqlite3.Row]],
+    key: tuple[str, str],
+    row: sqlite3.Row,
+) -> None:
     bucket = index.get(key)
     if bucket is None:
         index[key] = [row]
