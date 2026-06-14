@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { SectionLabel, Tag, ActionButton } from "./approval-center-primitives";
 import type { GuardPolicyDecision, GuardRuntimeSnapshot } from "./guard-types";
 import { PolicyCloudExceptionsTab } from "./policy-cloud-exceptions-tab";
-import { PolicyRememberedRulesTab } from "./policy-remembered-rules-tab";
+import { PolicyStrictConfigTab } from "./policy-strict-config-tab";
 import {
   resolveCloudBundleSurfaceClass,
   resolveCloudPolicyBundleCopy,
@@ -114,42 +114,7 @@ export function PolicyWorkspace({
       {activeView === "exceptions" ? <PolicyCloudExceptionsTab snapshot={snapshot} /> : null}
 
       {activeView === "strict" ? (
-        <StrictModeView snapshot={snapshot} onOpenSettings={onOpenSettings} onOpenInbox={onOpenInbox} />
-      ) : null}
-    </div>
-  );
-}
-
-function StrictModeView({
-  snapshot,
-  onOpenSettings,
-  onOpenInbox,
-}: {
-  snapshot: GuardRuntimeSnapshot;
-  onOpenSettings?: () => void;
-  onOpenInbox?: () => void;
-}) {
-  const isStrict = snapshot.security_level === "strict";
-  return (
-    <div className="space-y-4">
-      <div className={`rounded-2xl border p-5 ${isStrict ? "border-brand-green/20 bg-brand-green/[0.04]" : "border-slate-200 bg-slate-50/40"}`}>
-        <div className="mb-2 flex items-center gap-2">
-          <SectionLabel>Strict mode</SectionLabel>
-          <Tag tone={isStrict ? "green" : "slate"}>{isStrict ? "Enabled" : "Disabled"}</Tag>
-        </div>
-        <p className="mb-4 text-sm text-brand-dark/75">
-          Strict mode asks before new network connections, subprocess launches, file writes, and harness starts.
-        </p>
-        {!isStrict && onOpenSettings ? (
-          <ActionButton variant="secondary" onClick={onOpenSettings}>
-            Enable strict mode
-          </ActionButton>
-        ) : null}
-      </div>
-      {onOpenInbox ? (
-        <ActionButton variant="secondary" onClick={onOpenInbox}>
-          Review pending Inbox items
-        </ActionButton>
+        <PolicyStrictConfigTab snapshot={snapshot} onOpenSettings={onOpenSettings} onOpenInbox={onOpenInbox} />
       ) : null}
     </div>
   );

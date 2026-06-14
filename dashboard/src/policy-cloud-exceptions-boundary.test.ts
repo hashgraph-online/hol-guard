@@ -43,6 +43,8 @@ const POLICY_SOURCE_FILES = [
   "policy-cloud-exceptions-summary.tsx",
   "policy-cloud-exceptions-list.tsx",
   "policy-cloud-exception-detail-panel.tsx",
+  "policy-strict-config-tab.tsx",
+  "policy-strict-config-utils.ts",
 ];
 
 const FORBIDDEN_FIXTURE_PATTERNS = [
