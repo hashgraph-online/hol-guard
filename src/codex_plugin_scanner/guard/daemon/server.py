@@ -88,6 +88,10 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
+from ..cloud_exception_requests import (
+    cloud_exception_request_error_status,
+    submit_cloud_exception_request,
+)
 from ..insights_share import publish_insights_share
 from ..local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE, build_local_dashboard_session_token
 from ..local_supply_chain import (
@@ -1340,6 +1344,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/policy/sync":
             self._handle_headless_policy_sync(payload)
+            return
+        if parsed.path == "/v1/policy/cloud-exception-requests":
+            self._handle_cloud_exception_request_create(payload)
             return
         if parsed.path == "/v1/requests/remote-once":
             self._handle_headless_remote_once(payload)
@@ -3144,6 +3151,21 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         self._write_json(result)
 
+    def _handle_cloud_exception_request_create(self, payload: dict[str, object]) -> None:
+        store = self.server.store  # type: ignore[attr-defined]
+        try:
+            result = submit_cloud_exception_request(store, payload)
+        except ValueError as error:
+            message = str(error).strip() or "Invalid Guard exception request payload."
+            self._write_json({"error": "invalid_payload", "message": message}, status=400)
+            return
+        except Exception as error:
+            message = str(error).strip() or "Unable to create Guard Cloud exception request."
+            status = cloud_exception_request_error_status(message)
+            self._write_json({"error": "cloud_exception_request_failed", "message": message}, status=status)
+            return
+        self._write_json(result)
+
     def _handle_settings_update(self, payload: dict[str, object]) -> None:
         settings = payload.get("settings")
         if not isinstance(settings, dict):
@@ -4150,6 +4172,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/notifications/setup",
             "/v1/policy",
             "/v1/policy/cloud-exceptions",
+            "/v1/policy/cloud-exception-requests",
             "/v1/policy/clear",
             "/v1/policy/sync",
             "/v1/receipts",
@@ -4532,6 +4555,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/operations/block",
             "/v1/policy/decisions",
             "/v1/policy/cloud-exceptions",
+            "/v1/policy/cloud-exception-requests",
             "/v1/policy/clear",
             "/v1/policy/sync",
             "/v1/requests/clear",

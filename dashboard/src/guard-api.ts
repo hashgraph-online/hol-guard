@@ -1588,6 +1588,66 @@ export async function fetchCloudExceptions(harness?: string): Promise<GuardCloud
   return payload.items;
 }
 
+export type GuardCloudExceptionRequestCreateInput = {
+  scope: "artifact" | "publisher" | "harness" | "workspace";
+  harness?: string | null;
+  artifactId?: string | null;
+  publisher?: string | null;
+  requestedBy: string;
+  reason: string;
+  owner: string;
+  requestedExpiresAt: string;
+  sourceReceiptId?: string | null;
+  sourceReviewItemId?: string | null;
+  projectId?: string | null;
+  workspaceId?: string | null;
+  workingDirectory?: string | null;
+  teamId?: string | null;
+  stepUpChallengeId?: string | null;
+};
+
+export type GuardCloudExceptionRequestListResponse = {
+  generatedAt: string;
+  items: Array<{
+    requestId: string;
+    scope: GuardCloudExceptionRequestCreateInput["scope"];
+    status: "pending" | "approved" | "rejected";
+    reason: string;
+    owner: string;
+    requestedAt: string;
+    requestedExpiresAt: string;
+  }>;
+};
+
+export async function createCloudExceptionRequest(
+  input: GuardCloudExceptionRequestCreateInput,
+): Promise<GuardCloudExceptionRequestListResponse> {
+  if (isGuardDemoMode()) {
+    return {
+      generatedAt: new Date().toISOString(),
+      items: [
+        {
+          requestId: "demo-exception-request",
+          scope: input.scope,
+          status: "pending",
+          reason: input.reason,
+          owner: input.owner,
+          requestedAt: new Date().toISOString(),
+          requestedExpiresAt: input.requestedExpiresAt,
+        },
+      ],
+    };
+  }
+  return readJson<GuardCloudExceptionRequestListResponse>("/v1/policy/cloud-exception-requests", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders(),
+    },
+    body: JSON.stringify(input),
+  });
+}
+
 export async function fetchPolicies(): Promise<GuardPolicyDecision[]> {
   if (isGuardDemoMode()) {
     return getDemoPolicy("codex");
