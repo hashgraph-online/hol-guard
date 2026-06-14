@@ -155,9 +155,11 @@ def _evaluate_runtime_artifact_hook(
         else ()
     )
     scanner_evidence_payload = [signal.to_dict() for signal in scanner_evidence]
-    if package_evaluation is not None:
-        if guard_action_severity(package_evaluation.policy_action) > guard_action_severity(policy_action):
-            policy_action = package_evaluation.policy_action
+    if (
+        package_evaluation is not None
+        and guard_action_severity(package_evaluation.policy_action) > guard_action_severity(policy_action)
+    ):
+        policy_action = package_evaluation.policy_action
     if data_flow_signals:
         data_flow_action = resolve_risk_action(
             config,
