@@ -38,6 +38,18 @@ class FakeStore:
             "workspace_id": "workspace-1",
         }
 
+    def list_approval_requests(
+        self,
+        *,
+        status: str | None = "pending",
+        harness: str | None = None,
+        limit: int | None = 50,
+        cursor: str | None = None,
+        search: str | None = None,
+    ) -> list[dict[str, object]]:
+        del status, harness, limit, cursor, search
+        return []
+
 
 def _context(tmp_path: Path) -> HarnessContext:
     return HarnessContext(
@@ -98,6 +110,7 @@ def test_poll_once_leases_heartbeats_executes_and_posts_result(
                 "operations": list(command_executors.SUPPORTED_COMMAND_OPERATIONS),
                 "schemaVersions": dict(command_executors.COMMAND_OPERATION_SCHEMA_VERSIONS),
             },
+            "localRequestsSnapshot": {"requests": []},
             "maxJobs": 1,
             "waitMs": 25000,
         },
@@ -111,6 +124,64 @@ def test_poll_once_leases_heartbeats_executes_and_posts_result(
     assert "machineInstallationId" not in calls[1][2]
     assert "machineInstallationId" not in calls[2][2]
     assert "machineInstallationId" not in calls[3][2]
+
+
+def test_poll_once_continues_when_local_request_snapshot_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class BrokenSnapshotStore(FakeStore):
+        def list_approval_requests(
+            self,
+            *,
+            status: str | None = "pending",
+            harness: str | None = None,
+            limit: int | None = 50,
+            cursor: str | None = None,
+            search: str | None = None,
+        ) -> list[dict[str, object]]:
+            del status, harness, limit, cursor, search
+            raise OSError("approval store locked")
+
+    store = BrokenSnapshotStore(tmp_path / "guard-home")
+    calls: list[tuple[str, str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        command_queue,
+        "_resolve_guard_sync_auth_context",
+        lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
+    )
+
+    def fake_json_request(
+        auth_context: dict[str, object],
+        *,
+        method: str,
+        path: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        calls.append((method, path, payload))
+        if path == "/lease":
+            return {
+                "item": {
+                    "id": "job-1",
+                    "leaseId": "lease-1",
+                    "operation": "guard.packageShims.status",
+                }
+            }
+        return {"ok": True}
+
+    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+    monkeypatch.setattr(
+        command_executors,
+        "package_shim_status",
+        lambda context: {"active_managers": []},
+    )
+
+    status = command_queue.poll_command_queue_once(store, _context(tmp_path))
+
+    assert status["state"] == "idle"
+    assert calls[0][0:2] == ("POST", "/lease")
+    assert calls[0][2]["localRequestsSnapshot"] == {"requests": []}
+    assert calls[-1][0:2] == ("POST", "/job-1/result")
 
 
 def test_poll_once_persists_result_retry_when_result_upload_fails(
@@ -537,12 +608,137 @@ def test_executor_dispatches_app_connect(tmp_path: Path, monkeypatch) -> None:
     assert isinstance(result["data"], dict)
 
 
-def test_executor_rejects_approval_resolve_until_inbox_phase(tmp_path: Path) -> None:
+def test_executor_resolves_local_approval_request(tmp_path: Path) -> None:
+    class ApprovalStore(FakeStore):
+        def __init__(self, guard_home: Path) -> None:
+            super().__init__(guard_home)
+            self.resolved: list[dict[str, object]] = []
+
+        def resolve_request_with_queue_result(
+            self,
+            request_id: str,
+            *,
+            resolution_action: str,
+            resolution_scope: str,
+            reason: str | None,
+            resolved_at: str,
+        ) -> dict[str, object]:
+            self.resolved.append(
+                {
+                    "request_id": request_id,
+                    "resolution_action": resolution_action,
+                    "resolution_scope": resolution_scope,
+                    "reason": reason,
+                    "resolved_at": resolved_at,
+                }
+            )
+            return {"resolved": True, "resolved_request": {"request_id": request_id}}
+
+    store = ApprovalStore(tmp_path / "guard-home")
     result = command_executors.execute_guard_command_job(
-        {"operation": "guard.approval.resolve", "payload": {"requestId": "request-1", "action": "allow_once"}},
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {"localRequestId": "request-1", "action": "allow_once", "scope": "artifact"},
+        },
         context=_context(tmp_path),
-        store=FakeStore(tmp_path / "guard-home"),  # type: ignore[arg-type]
+        store=store,  # type: ignore[arg-type]
         now=lambda: "2026-06-13T00:00:00+00:00",
     )
 
-    assert result["failureCode"] == "unsupported_operation"
+    assert result["generatedAt"] == "2026-06-13T00:00:00+00:00"
+    assert result["data"]["status"] == "completed"
+    assert store.resolved == [
+        {
+            "request_id": "request-1",
+            "resolution_action": "allow",
+            "resolution_scope": "artifact",
+            "reason": "Guard Cloud approval command",
+            "resolved_at": "2026-06-13T00:00:00+00:00",
+        }
+    ]
+
+
+def test_executor_syncs_policy_without_local_request_id(tmp_path: Path) -> None:
+    class PolicyStore(FakeStore):
+        def __init__(self, guard_home: Path) -> None:
+            super().__init__(guard_home)
+            self.upserts: list[tuple[dict[str, object], str]] = []
+
+        def upsert_policy(self, decision: object, generated_at: str) -> None:
+            self.upserts.append((decision.to_dict(), generated_at))
+
+    store = PolicyStore(tmp_path / "guard-home")
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {
+                "action": "policy_sync",
+                "policyMemory": {
+                    "scope": "workspace",
+                    "reason": "approved in cloud",
+                    "target": {
+                        "artifactId": "pkg:npm/react",
+                        "harness": "package-install",
+                        "workspaceId": "workspace-1",
+                    },
+                },
+            },
+        },
+        context=_context(tmp_path),
+        store=store,  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert result["data"]["status"] == "completed"
+    assert result["data"]["localRequestId"] is None
+    assert store.upserts == [
+        (
+            {
+                "harness": "package-install",
+                "scope": "workspace",
+                "action": "allow",
+                "artifact_id": "pkg:npm/react",
+                "artifact_hash": None,
+                "workspace": "workspace-1",
+                "publisher": None,
+                "reason": "approved in cloud",
+                "owner": None,
+                "source": "cloud-sync",
+                "expires_at": None,
+            },
+            "2026-06-13T00:00:00+00:00",
+        )
+    ]
+
+
+def test_executor_maps_unknown_cloud_policy_scope_to_artifact(tmp_path: Path) -> None:
+    class PolicyStore(FakeStore):
+        def __init__(self, guard_home: Path) -> None:
+            super().__init__(guard_home)
+            self.upserts: list[dict[str, object]] = []
+
+        def upsert_policy(self, decision: object, generated_at: str) -> None:
+            del generated_at
+            self.upserts.append(decision.to_dict())
+
+    store = PolicyStore(tmp_path / "guard-home")
+    command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {
+                "action": "policy_sync",
+                "policyMemory": {
+                    "scope": "global",
+                    "target": {
+                        "artifactId": "pkg:npm/react",
+                        "harness": "package-install",
+                    },
+                },
+            },
+        },
+        context=_context(tmp_path),
+        store=store,  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert store.upserts[0]["scope"] == "artifact"
