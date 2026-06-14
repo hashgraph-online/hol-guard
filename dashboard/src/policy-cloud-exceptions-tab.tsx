@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { HiMiniCloudArrowUp } from "react-icons/hi2";
-import { ActionButton, EmptyState, SectionLabel } from "./approval-center-primitives";
+import { ActionButton, EmptyState } from "./approval-center-primitives";
 import { fetchCloudExceptionRequests, fetchCloudExceptions } from "./guard-api";
 import type { GuardCloudException } from "./guard-types";
 import type { GuardCloudExceptionRequestItem } from "./guard-api";
@@ -35,6 +35,8 @@ export function PolicyCloudExceptionsTab({
   const [pendingRequests, setPendingRequests] = useState<GuardCloudExceptionRequestItem[]>([]);
   const [selectedExceptionId, setSelectedExceptionId] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const [scopeFilter, setScopeFilter] = useState("all");
+  const [actionFilter, setActionFilter] = useState("all");
 
   const cloudControlsUrl = resolveCloudPolicyControlsUrl(snapshot);
   const cloudConnected = resolveCloudExceptionsConnected(snapshot);
@@ -93,6 +95,14 @@ export function PolicyCloudExceptionsTab({
     setSelectedExceptionId(null);
   }, []);
 
+  const handleScopeFilterChange = useCallback((value: string) => {
+    setScopeFilter(value);
+  }, []);
+
+  const handleActionFilterChange = useCallback((value: string) => {
+    setActionFilter(value);
+  }, []);
+
   const summary = useMemo(
     () => summarizeCloudExceptions(exceptions, pendingRequests),
     [exceptions, pendingRequests],
@@ -106,100 +116,96 @@ export function PolicyCloudExceptionsTab({
     [exceptions, selectedExceptionId],
   );
 
-  if (requestOpen) {
-    return (
-      <PolicyCloudExceptionRequestPanel
-        snapshot={snapshot}
-        onSubmitted={handleRequestSubmitted}
-        onCancel={handleCloseRequestPanel}
-      />
-    );
-  }
-
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-5 shadow-sm">
-        <SectionLabel>Cloud risk acceptances</SectionLabel>
-        <p className="mt-2 text-sm text-brand-dark/75">
-          Cloud exceptions are governed risk acceptances with an owner, approver, reason, expiry, and
-          signed bundle. They are managed in Guard Cloud and synced to this device after approval.
-        </p>
-        <p className="mt-2 text-sm text-slate-600">
-          Fast remembered approvals from Review stay on the Remembered rules tab. They are separate
-          from Cloud exceptions.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <ActionButton
-          variant="primary"
-          onClick={handleOpenRequestPanel}
-          disabled={!cloudConnected}
-        >
-          Request cloud exception
-        </ActionButton>
-        {cloudControlsUrl ? (
-          <ActionButton href={cloudControlsUrl} variant="secondary">
-            <HiMiniCloudArrowUp className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Open Guard Cloud
-          </ActionButton>
-        ) : null}
-        {!cloudConnected && connectUrl ? (
-          <ActionButton href={connectUrl} variant="secondary">
-            Connect Guard Cloud
-          </ActionButton>
-        ) : null}
-      </div>
-
-      {!cloudConnected ? (
-        <EmptyState
-          title="Guard Cloud is not connected"
-          body="Cloud exceptions are managed in Guard Cloud. Connect this device to request a risk acceptance or view synced exceptions here."
-          tone="teach"
+    <>
+      {requestOpen ? (
+        <PolicyCloudExceptionRequestPanel
+          snapshot={snapshot}
+          onSubmitted={handleRequestSubmitted}
+          onCancel={handleCloseRequestPanel}
         />
-      ) : loadState === "error" ? (
-        <EmptyState
-          title="Could not load Cloud exceptions"
-          body={`${loadError ?? "Try again after Guard Cloud sync completes."} Local remembered rules and strict config still apply on this device.`}
-          action={
-            <ActionButton variant="secondary" onClick={handleRetryLoad}>
-              Retry
+      ) : null}
+
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3 text-sm text-brand-dark/80">
+          Exceptions are approved in Guard Cloud, then enforced locally as signed policy bundle entries.
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <ActionButton
+            variant="primary"
+            onClick={handleOpenRequestPanel}
+            disabled={!cloudConnected}
+          >
+            + Request cloud exception
+          </ActionButton>
+          {cloudControlsUrl ? (
+            <ActionButton href={cloudControlsUrl} variant="secondary">
+              <HiMiniCloudArrowUp className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              Open Guard Cloud
             </ActionButton>
-          }
-        />
-      ) : (
-        <>
-          <PolicyCloudExceptionsSummary
-            activeCount={summary.activeCount}
-            pendingCount={summary.pendingCount}
-            expiringSoonCount={summary.expiringSoonCount}
-            ackFailureCount={summary.ackFailureCount}
-            loading={loadState === "loading"}
-          />
+          ) : null}
+          {!cloudConnected && connectUrl ? (
+            <ActionButton href={connectUrl} variant="secondary">
+              Connect Guard Cloud
+            </ActionButton>
+          ) : null}
+        </div>
 
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-            {loadState === "loading" ? (
-              <PolicyCloudExceptionsListSkeleton />
-            ) : (
-              <PolicyCloudExceptionsList
-                active={groups.active}
-                pending={groups.pending}
-                expiringSoon={groups.expiringSoon}
-                selectedExceptionId={selectedExceptionId}
-                onSelectException={handleSelectException}
-                cloudConnected={cloudConnected}
-              />
-            )}
-            {selectedException ? (
-              <PolicyCloudExceptionDetailPanel
-                exception={selectedException}
-                cloudControlsUrl={cloudControlsUrl}
-                onClose={handleCloseDetail}
-              />
-            ) : null}
-          </div>
-        </>
-      )}
-    </div>
+        {!cloudConnected ? (
+          <EmptyState
+            title="Guard Cloud is not connected"
+            body="Cloud exceptions are managed in Guard Cloud. Connect this device to request a risk acceptance or view synced exceptions here."
+            tone="teach"
+          />
+        ) : loadState === "error" ? (
+          <EmptyState
+            title="Could not load Cloud exceptions"
+            body={`${loadError ?? "Try again after Guard Cloud sync completes."} Local remembered rules and strict config still apply on this device.`}
+            action={
+              <ActionButton variant="secondary" onClick={handleRetryLoad}>
+                Retry
+              </ActionButton>
+            }
+          />
+        ) : (
+          <>
+            <PolicyCloudExceptionsSummary
+              activeCount={summary.activeCount}
+              pendingCount={summary.pendingCount}
+              expiringSoonCount={summary.expiringSoonCount}
+              ackFailureCount={summary.ackFailureCount}
+              loading={loadState === "loading"}
+            />
+
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+              {loadState === "loading" ? (
+                <PolicyCloudExceptionsListSkeleton />
+              ) : (
+                <PolicyCloudExceptionsList
+                  active={groups.active}
+                  pending={groups.pending}
+                  expiringSoon={groups.expiringSoon}
+                  selectedExceptionId={selectedExceptionId}
+                  onSelectException={handleSelectException}
+                  cloudConnected={cloudConnected}
+                  scopeFilter={scopeFilter}
+                  actionFilter={actionFilter}
+                  onScopeFilterChange={handleScopeFilterChange}
+                  onActionFilterChange={handleActionFilterChange}
+                />
+              )}
+              {selectedException ? (
+                <PolicyCloudExceptionDetailPanel
+                  exception={selectedException}
+                  cloudControlsUrl={cloudControlsUrl}
+                  onClose={handleCloseDetail}
+                />
+              ) : null}
+            </div>
+          </>
+        )}
+      </div>
+    </>
   );
 }

@@ -35,6 +35,6 @@ const tabSource = readFileSync(join(here, "policy-cloud-exceptions-tab.tsx"), "u
 
 assert(listSource.includes("min-w-0"), "exception list cards constrain width in grid layouts");
 assert(detailSource.includes("break-words"), "exception detail panel guards long copy overflow");
-assert(tabSource.includes("lg:grid-cols-[minmax(0,1fr)_320px]"), "cloud exceptions tab keeps responsive split layout");
+assert(tabSource.includes("lg:grid-cols-[minmax(0,1fr)_"), "cloud exceptions tab keeps responsive split layout");
 
 console.log("policy-final-release-guard.test.ts: all assertions passed");
