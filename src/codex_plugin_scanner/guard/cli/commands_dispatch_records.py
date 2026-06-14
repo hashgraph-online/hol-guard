@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from ..aibom_cli import AibomCliOptions, _AIBOM_CLOUD_SYNC_OPTIONS
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -132,9 +133,21 @@ def _run_guard_aibom_command(
         sync_options = AibomCliOptions(
             include_symlinks=aibom_options.include_symlinks,
             follow_unsafe_symlinks=aibom_options.follow_unsafe_symlinks,
-            cisco_skill_scan=getattr(args, "cisco_skill_scan", "auto"),
-            cisco_mcp_scan=getattr(args, "cisco_mcp_scan", "auto"),
-            cisco_timeout_seconds=getattr(args, "cisco_timeout_seconds", 30.0),
+            cisco_skill_scan=getattr(
+                args,
+                "cisco_skill_scan",
+                _AIBOM_CLOUD_SYNC_OPTIONS.cisco_skill_scan,
+            ),
+            cisco_mcp_scan=getattr(
+                args,
+                "cisco_mcp_scan",
+                _AIBOM_CLOUD_SYNC_OPTIONS.cisco_mcp_scan,
+            ),
+            cisco_timeout_seconds=getattr(
+                args,
+                "cisco_timeout_seconds",
+                _AIBOM_CLOUD_SYNC_OPTIONS.cisco_timeout_seconds,
+            ),
         )
         try:
             payload = sync_aibom_snapshots(

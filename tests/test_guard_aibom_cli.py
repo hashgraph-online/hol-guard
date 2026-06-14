@@ -512,6 +512,8 @@ def test_guard_aibom_sync_command_uses_cloud_sync_cisco_defaults(
     assert options.cisco_skill_scan == "auto"
     assert options.cisco_mcp_scan == "auto"
     assert options.cisco_timeout_seconds == 30.0
+    assert options.include_symlinks is True
+    assert options.follow_unsafe_symlinks is False
 
 
 def test_aibom_export_json_includes_redaction_report(tmp_path: Path, capsys) -> None:
