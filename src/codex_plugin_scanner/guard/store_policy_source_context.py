@@ -473,6 +473,105 @@ def _append_indexed_row(
     bucket.append(row)
 
 
+def _policy_harness_scope(items: list[tuple[str, str | None, str | None]]) -> tuple[bool, list[str]]:
+    harnesses = {harness for harness, _, _ in items if harness}
+    include_all_harnesses = "*" in harnesses
+    concrete_harnesses = sorted(harness for harness in harnesses if harness != "*")
+    return include_all_harnesses, concrete_harnesses
+
+
+def _harness_filter_sql(include_all_harnesses: bool, harnesses: list[str]) -> tuple[str, list[object]]:
+    if include_all_harnesses or not harnesses:
+        return "", []
+    placeholders = ", ".join("?" for _ in harnesses)
+    return f"and harness in ({placeholders})", list(harnesses)
+
+
+def _extend_receipt_hash_candidates(
+    index: PolicySourceContextIndex,
+    harness: str,
+    variant: str,
+    candidates: list[sqlite3.Row],
+) -> None:
+    if harness == "*":
+        for (row_harness, row_variant), rows in index.receipts_by_harness_hash.items():
+            if row_variant == variant:
+                candidates.extend(rows)
+        return
+    candidates.extend(index.receipts_by_harness_hash.get((harness, variant), []))
+
+
+def _extend_receipt_artifact_candidates(
+    index: PolicySourceContextIndex,
+    harness: str,
+    artifact_id: str,
+    candidates: list[sqlite3.Row],
+) -> None:
+    if harness == "*":
+        for (row_harness, row_artifact_id), rows in index.receipts_by_harness_artifact.items():
+            if row_artifact_id == artifact_id:
+                candidates.extend(rows)
+        return
+    candidates.extend(index.receipts_by_harness_artifact.get((harness, artifact_id), []))
+
+
+def _extend_approval_hash_candidates(
+    index: PolicySourceContextIndex,
+    harness: str,
+    variant: str,
+    candidates: list[sqlite3.Row],
+) -> None:
+    if harness == "*":
+        for (row_harness, row_variant), rows in index.approvals_by_harness_hash.items():
+            if row_variant == variant:
+                candidates.extend(rows)
+        return
+    candidates.extend(index.approvals_by_harness_hash.get((harness, variant), []))
+
+
+def _extend_approval_artifact_candidates(
+    index: PolicySourceContextIndex,
+    harness: str,
+    artifact_id: str,
+    candidates: list[sqlite3.Row],
+) -> None:
+    if harness == "*":
+        for (row_harness, row_artifact_id), rows in index.approvals_by_harness_artifact.items():
+            if row_artifact_id == artifact_id:
+                candidates.extend(rows)
+        return
+    candidates.extend(index.approvals_by_harness_artifact.get((harness, artifact_id), []))
+
+
+def _filter_approval_candidates(
+    rows: list[sqlite3.Row],
+    *,
+    harness: str,
+    artifact_id: str | None,
+    artifact_hash: str | None,
+) -> list[sqlite3.Row]:
+    if not artifact_id and not artifact_hash:
+        return []
+    hash_variants = set(_artifact_hash_match_variants(artifact_hash)) if artifact_hash else set()
+    filtered: list[sqlite3.Row] = []
+    seen_request_ids: set[str] = set()
+    for row in rows:
+        if harness != "*" and str(row["harness"]) != harness:
+            continue
+        if artifact_id and str(row["artifact_id"]) != artifact_id:
+            continue
+        if artifact_hash:
+            row_hash = str(row["artifact_hash"]) if row["artifact_hash"] is not None else ""
+            if row_hash not in hash_variants:
+                continue
+        request_id = str(row["request_id"])
+        if request_id in seen_request_ids:
+            continue
+        seen_request_ids.add(request_id)
+        filtered.append(row)
+    return filtered
+
+
 def build_policy_source_context_index(
     connection: sqlite3.Connection,
     *,
@@ -482,17 +581,18 @@ def build_policy_source_context_index(
     if not items:
         return index
 
-    harnesses = sorted({harness for harness, _, _ in items if harness})
+    include_all_harnesses, harnesses = _policy_harness_scope(items)
     artifact_ids = sorted({artifact_id for _, artifact_id, _ in items if artifact_id})
     hash_variants: set[str] = set()
     for _, _, artifact_hash in items:
         if artifact_hash:
             hash_variants.update(_artifact_hash_match_variants(artifact_hash))
 
-    if harnesses and (artifact_ids or hash_variants):
-        harness_placeholders = ", ".join("?" for _ in harnesses)
+    harness_filter_sql, harness_filter_params = _harness_filter_sql(include_all_harnesses, harnesses)
+
+    if artifact_ids or hash_variants:
         match_clauses: list[str] = []
-        params: list[object] = [*harnesses]
+        params: list[object] = []
         if artifact_ids:
             artifact_placeholders = ", ".join("?" for _ in artifact_ids)
             match_clauses.append(f"artifact_id in ({artifact_placeholders})")
@@ -505,11 +605,11 @@ def build_policy_source_context_index(
             f"""
             select {_POLICY_RECEIPT_COLUMNS}
             from runtime_receipts
-            where harness in ({harness_placeholders})
-              and ({" or ".join(match_clauses)})
+            where ({" or ".join(match_clauses)})
+            {harness_filter_sql}
             order by timestamp desc
             """,
-            tuple(params),
+            tuple([*params, *harness_filter_params]),
         ).fetchall()
         for row in receipt_rows:
             harness = str(row["harness"])
@@ -521,7 +621,7 @@ def build_policy_source_context_index(
                 for variant in _artifact_hash_match_variants(str(artifact_hash)):
                     _append_indexed_row(index.receipts_by_harness_hash, (harness, variant), row)
 
-    if harnesses and artifact_ids:
+    if harnesses and artifact_ids and not include_all_harnesses:
         harness_placeholders = ", ".join("?" for _ in harnesses)
         artifact_placeholders = ", ".join("?" for _ in artifact_ids)
         inventory_rows = connection.execute(
@@ -536,10 +636,9 @@ def build_policy_source_context_index(
         for row in inventory_rows:
             index.inventory_by_harness_artifact[(str(row["harness"]), str(row["artifact_id"]))] = row
 
-    if harnesses and (artifact_ids or hash_variants):
-        harness_placeholders = ", ".join("?" for _ in harnesses)
+    if artifact_ids or hash_variants:
         match_clauses = []
-        params = [*harnesses]
+        params: list[object] = []
         if artifact_ids:
             artifact_placeholders = ", ".join("?" for _ in artifact_ids)
             match_clauses.append(f"artifact_id in ({artifact_placeholders})")
@@ -553,11 +652,11 @@ def build_policy_source_context_index(
             select {_POLICY_APPROVAL_COLUMNS}
             from approval_requests
             where status = 'resolved'
-              and harness in ({harness_placeholders})
               and ({" or ".join(match_clauses)})
+            {harness_filter_sql}
             order by resolved_at desc
             """,
-            tuple(params),
+            tuple([*params, *harness_filter_params]),
         ).fetchall()
         for row in approval_rows:
             harness = str(row["harness"])
@@ -584,23 +683,29 @@ def lookup_policy_source_context(
     receipt_candidates: list[sqlite3.Row] = []
     if artifact_hash:
         for variant in _artifact_hash_match_variants(artifact_hash):
-            receipt_candidates.extend(index.receipts_by_harness_hash.get((harness, variant), []))
-    if artifact_id:
-        receipt_candidates.extend(index.receipts_by_harness_artifact.get((harness, artifact_id), []))
+            _extend_receipt_hash_candidates(index, harness, variant, receipt_candidates)
+    elif artifact_id:
+        _extend_receipt_artifact_candidates(index, harness, artifact_id, receipt_candidates)
     receipt_row = _select_best_receipt_row(receipt_candidates, artifact_id)
 
     inventory_row = (
         index.inventory_by_harness_artifact.get((harness, artifact_id))
-        if artifact_id is not None and artifact_id.strip()
+        if artifact_id is not None and artifact_id.strip() and harness != "*"
         else None
     )
 
-    approval_candidates: list[sqlite3.Row] = []
+    approval_candidates_raw: list[sqlite3.Row] = []
     if artifact_id:
-        approval_candidates.extend(index.approvals_by_harness_artifact.get((harness, artifact_id), []))
+        _extend_approval_artifact_candidates(index, harness, artifact_id, approval_candidates_raw)
     if artifact_hash:
         for variant in _artifact_hash_match_variants(artifact_hash):
-            approval_candidates.extend(index.approvals_by_harness_hash.get((harness, variant), []))
+            _extend_approval_hash_candidates(index, harness, variant, approval_candidates_raw)
+    approval_candidates = _filter_approval_candidates(
+        approval_candidates_raw,
+        harness=harness,
+        artifact_id=artifact_id,
+        artifact_hash=artifact_hash,
+    )
     approval_row = _select_best_approval_row(approval_candidates, artifact_id)
 
     return _build_policy_source_context_from_rows(

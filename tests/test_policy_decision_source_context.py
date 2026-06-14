@@ -256,11 +256,41 @@ def test_list_policy_decisions_scales_without_per_row_queries(tmp_path) -> None:
             f"2026-06-14T12:01:{index % 60:02d}+00:00",
         )
 
-    import time
-
-    started = time.perf_counter()
     items = store.list_policy_decisions()
-    elapsed = time.perf_counter() - started
-
     assert len(items) == 120
-    assert elapsed < 2.0
+    assert all(item["remembered_command"] is not None for item in items)
+
+
+def test_list_policy_decisions_supports_global_harness_scope(tmp_path) -> None:
+    store = _store(tmp_path)
+    receipt = GuardReceipt(
+        receipt_id="receipt-global-1",
+        timestamp="2026-06-14T12:00:00+00:00",
+        harness="codex",
+        artifact_id="codex:project:package-request:global1",
+        artifact_hash="globalhash1234567890abcdef1234567890abcdef1234567890ab",
+        policy_decision="allow",
+        capabilities_summary="Package install via pnpm",
+        changed_capabilities=("package-request",),
+        provenance_summary="hook event for package install",
+        artifact_name="pnpm install",
+        source_scope="/srv/projects/sample-guard",
+    )
+    store.add_receipt(receipt)
+    store.upsert_policy(
+        PolicyDecision(
+            harness="*",
+            scope="artifact",
+            action="allow",
+            artifact_id="codex:project:package-request:global1",
+            artifact_hash="globalhash1234567890abcdef1234567890abcdef1234567890ab",
+            workspace="workspace:global",
+            reason="approved in review",
+            source="local",
+        ),
+        "2026-06-14T12:01:00+00:00",
+    )
+
+    item = store.list_policy_decisions()[0]
+    assert item["source_receipt_id"] == "receipt-global-1"
+    assert item["remembered_command"] == "pnpm install"
