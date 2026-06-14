@@ -1,4 +1,325 @@
-import { bd as policyActionLabel, h as harnessDisplayName, be as scopeLabel, j as jsxRuntimeExports, S as SectionLabel, A as ActionButton, b6 as HiMiniCloudArrowUp, b as EmptyState, r as reactExports, ac as Tag, p as HiMiniChevronUp, q as HiMiniChevronDown, B as Badge, m as formatRelativeTime, bb as guardAwareHref, ax as HiMiniTrash, ad as HiMiniMagnifyingGlass } from "../guard-dashboard.js";
+import { r as reactExports, bd as createCloudExceptionRequest, j as jsxRuntimeExports, S as SectionLabel, A as ActionButton, h as harnessDisplayName, be as policyActionLabel, bf as scopeLabel, b6 as HiMiniCloudArrowUp, b as EmptyState, ac as Tag, p as HiMiniChevronUp, q as HiMiniChevronDown, B as Badge, m as formatRelativeTime, bb as guardAwareHref, ax as HiMiniTrash, ad as HiMiniMagnifyingGlass } from "../guard-dashboard.js";
+const SCOPE_VALUES = ["artifact", "publisher", "harness", "workspace"];
+const SCOPE_OPTIONS = [
+  {
+    value: "artifact",
+    label: "One specific action",
+    description: "Limit the exception to a single artifact fingerprint."
+  },
+  {
+    value: "publisher",
+    label: "Publisher",
+    description: "Apply to packages or plugins from one publisher."
+  },
+  {
+    value: "harness",
+    label: "App",
+    description: "Apply across one harness such as Codex or Cursor."
+  },
+  {
+    value: "workspace",
+    label: "Project",
+    description: "Apply within the current project folder on this device."
+  }
+];
+function defaultExpiryIso() {
+  const date = /* @__PURE__ */ new Date();
+  date.setDate(date.getDate() + 30);
+  return date.toISOString();
+}
+function toDatetimeLocalValue(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+function fromDatetimeLocalValue(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return (/* @__PURE__ */ new Date()).toISOString();
+  }
+  return date.toISOString();
+}
+function parseScopeValue(value) {
+  if (SCOPE_VALUES.includes(value)) {
+    return value;
+  }
+  return null;
+}
+function resolveDefaultWorkingDirectory(snapshot) {
+  const install = snapshot.managed_installs?.find((entry) => entry.workspace?.trim());
+  return install?.workspace?.trim() ?? "";
+}
+function PolicyCloudExceptionRequestPanel({
+  snapshot,
+  onSubmitted,
+  onCancel
+}) {
+  const receiptOptions = snapshot.latest_receipts ?? [];
+  const harnessOptions = reactExports.useMemo(() => {
+    const fromReceipts = receiptOptions.map((receipt) => receipt.harness).filter(Boolean);
+    const fromInstalls = (snapshot.managed_installs ?? []).map((entry) => entry.harness).filter(Boolean);
+    return [.../* @__PURE__ */ new Set([...fromReceipts, ...fromInstalls, "codex", "cursor"])].sort();
+  }, [receiptOptions, snapshot.managed_installs]);
+  const [scope, setScope] = reactExports.useState("artifact");
+  const [harness, setHarness] = reactExports.useState(harnessOptions[0] ?? "codex");
+  const [artifactId, setArtifactId] = reactExports.useState(receiptOptions[0]?.artifact_id ?? "");
+  const [publisher, setPublisher] = reactExports.useState("");
+  const [workingDirectory, setWorkingDirectory] = reactExports.useState(resolveDefaultWorkingDirectory(snapshot));
+  const [sourceReceiptId, setSourceReceiptId] = reactExports.useState(receiptOptions[0]?.receipt_id ?? "");
+  const [requestedBy, setRequestedBy] = reactExports.useState("");
+  const [owner, setOwner] = reactExports.useState("");
+  const [reason, setReason] = reactExports.useState("");
+  const [requestedExpiresAt, setRequestedExpiresAt] = reactExports.useState(defaultExpiryIso());
+  const [submitting, setSubmitting] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const [successMessage, setSuccessMessage] = reactExports.useState(null);
+  const handleScopeChange = reactExports.useCallback((event) => {
+    const nextScope = parseScopeValue(event.target.value);
+    if (nextScope) {
+      setScope(nextScope);
+    }
+  }, []);
+  const handleReceiptChange = reactExports.useCallback(
+    (event) => {
+      const receiptId = event.target.value;
+      setSourceReceiptId(receiptId);
+      const receipt = receiptOptions.find((entry) => entry.receipt_id === receiptId);
+      if (!receipt) {
+        return;
+      }
+      setHarness(receipt.harness);
+      setArtifactId(receipt.artifact_id);
+    },
+    [receiptOptions]
+  );
+  const handleArtifactIdChange = reactExports.useCallback((event) => {
+    setArtifactId(event.target.value);
+  }, []);
+  const handlePublisherChange = reactExports.useCallback((event) => {
+    setPublisher(event.target.value);
+  }, []);
+  const handleHarnessChange = reactExports.useCallback((event) => {
+    setHarness(event.target.value);
+  }, []);
+  const handleWorkingDirectoryChange = reactExports.useCallback((event) => {
+    setWorkingDirectory(event.target.value);
+  }, []);
+  const handleRequestedByChange = reactExports.useCallback((event) => {
+    setRequestedBy(event.target.value);
+  }, []);
+  const handleOwnerChange = reactExports.useCallback((event) => {
+    setOwner(event.target.value);
+  }, []);
+  const handleReasonChange = reactExports.useCallback((event) => {
+    setReason(event.target.value);
+  }, []);
+  const handleExpiryChange = reactExports.useCallback((event) => {
+    setRequestedExpiresAt(fromDatetimeLocalValue(event.target.value));
+  }, []);
+  const handleSubmit = reactExports.useCallback(
+    async (event) => {
+      event.preventDefault();
+      setSubmitting(true);
+      setError(null);
+      setSuccessMessage(null);
+      const payload = {
+        scope,
+        requestedBy: requestedBy.trim(),
+        owner: owner.trim(),
+        reason: reason.trim(),
+        requestedExpiresAt,
+        sourceReceiptId: sourceReceiptId.trim() || null
+      };
+      if (scope === "artifact") {
+        payload.harness = harness.trim() || null;
+        payload.artifactId = artifactId.trim() || null;
+      } else if (scope === "publisher") {
+        payload.publisher = publisher.trim() || null;
+      } else if (scope === "harness") {
+        payload.harness = harness.trim() || null;
+      } else if (scope === "workspace") {
+        payload.workingDirectory = workingDirectory.trim() || null;
+      }
+      try {
+        const response = await createCloudExceptionRequest(payload);
+        const created = response.items.find((item) => item.status === "pending") ?? response.items[0];
+        setSuccessMessage(
+          created ? `Cloud exception request ${created.requestId} is pending Guard Cloud review.` : "Cloud exception request submitted."
+        );
+      } catch (submitError) {
+        const message = submitError instanceof Error && submitError.message.trim() ? submitError.message : "Unable to submit the Cloud exception request.";
+        setError(message);
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [
+      artifactId,
+      harness,
+      owner,
+      publisher,
+      reason,
+      requestedBy,
+      requestedExpiresAt,
+      scope,
+      sourceReceiptId,
+      workingDirectory
+    ]
+  );
+  const handleDone = reactExports.useCallback(() => {
+    onSubmitted();
+  }, [onSubmitted]);
+  if (receiptOptions.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Request cloud exception" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/75", children: "Guard needs at least one receipt on this device to anchor a Cloud exception request. Run a protected action first, then return here from Evidence or Inbox." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "secondary", onClick: onCancel, children: "Back" }) })
+    ] });
+  }
+  if (successMessage) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5 shadow-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Request submitted" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-emerald-800", children: successMessage }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: handleDone, children: "Done" })
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm", onSubmit: handleSubmit, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Request cloud exception" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/75", children: "Submit a governed risk acceptance to Guard Cloud. This does not create a local remembered rule." })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block space-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", children: "Source receipt" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "select",
+        {
+          className: "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm",
+          value: sourceReceiptId,
+          onChange: handleReceiptChange,
+          required: true,
+          children: receiptOptions.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: receipt.receipt_id, children: [
+            harnessDisplayName(receipt.harness),
+            " · ",
+            receipt.artifact_name ?? receipt.artifact_id
+          ] }, receipt.receipt_id))
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block space-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", children: "Scope" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("select", { className: "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm", value: scope, onChange: handleScopeChange, children: SCOPE_OPTIONS.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: option.value, children: option.label }, option.value)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: SCOPE_OPTIONS.find((option) => option.value === scope)?.description })
+    ] }),
+    scope === "artifact" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block space-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", children: "Artifact fingerprint" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          className: "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm",
+          value: artifactId,
+          onChange: handleArtifactIdChange,
+          required: true
+        }
+      )
+    ] }) : null,
+    scope === "publisher" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block space-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", children: "Publisher" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          className: "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm",
+          value: publisher,
+          onChange: handlePublisherChange,
+          required: true
+        }
+      )
+    ] }) : null,
+    scope === "harness" || scope === "artifact" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block space-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", children: "App" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "select",
+        {
+          className: "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm",
+          value: harness,
+          onChange: handleHarnessChange,
+          required: true,
+          children: harnessOptions.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: option, children: harnessDisplayName(option) }, option))
+        }
+      )
+    ] }) : null,
+    scope === "workspace" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block space-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", children: "Project folder" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          className: "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm",
+          value: workingDirectory,
+          onChange: handleWorkingDirectoryChange,
+          required: true
+        }
+      )
+    ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block space-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", children: "Requested by" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          className: "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm",
+          type: "email",
+          value: requestedBy,
+          onChange: handleRequestedByChange,
+          required: true
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block space-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", children: "Risk owner" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          className: "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm",
+          type: "email",
+          value: owner,
+          onChange: handleOwnerChange,
+          required: true
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block space-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", children: "Reason" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "textarea",
+        {
+          className: "min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm",
+          value: reason,
+          onChange: handleReasonChange,
+          required: true
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block space-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", children: "Expires" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          className: "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm",
+          type: "datetime-local",
+          value: toDatetimeLocalValue(requestedExpiresAt),
+          onChange: handleExpiryChange,
+          required: true
+        }
+      )
+    ] }),
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-red-600", children: error }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", type: "submit", disabled: submitting, children: submitting ? "Submitting…" : "Submit to Guard Cloud" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "secondary", type: "button", onClick: onCancel, disabled: submitting, children: "Cancel" })
+    ] })
+  ] });
+}
 const MATCHER_FAMILY_LABELS = {
   "package-request": "package install",
   "tool-action": "shell or tool command",
@@ -278,12 +599,31 @@ function resolveCloudExceptionsConnected(snapshot) {
   return snapshot.cloud_state === "paired_active" || snapshot.cloud_state === "paired_waiting";
 }
 function PolicyCloudExceptionsTab({
-  snapshot,
-  onRequestCloudException
+  snapshot
 }) {
+  const [requestOpen, setRequestOpen] = reactExports.useState(false);
   const cloudControlsUrl = resolveCloudPolicyControlsUrl(snapshot);
   const cloudConnected = resolveCloudExceptionsConnected(snapshot);
   const connectUrl = snapshot.connect_url?.trim() || null;
+  const handleOpenRequestPanel = reactExports.useCallback(() => {
+    setRequestOpen(true);
+  }, []);
+  const handleCloseRequestPanel = reactExports.useCallback(() => {
+    setRequestOpen(false);
+  }, []);
+  const handleRequestSubmitted = reactExports.useCallback(() => {
+    setRequestOpen(false);
+  }, []);
+  if (requestOpen) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PolicyCloudExceptionRequestPanel,
+      {
+        snapshot,
+        onSubmitted: handleRequestSubmitted,
+        onCancel: handleCloseRequestPanel
+      }
+    );
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-5 shadow-sm", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Cloud risk acceptances" }),
@@ -295,8 +635,8 @@ function PolicyCloudExceptionsTab({
         ActionButton,
         {
           variant: "primary",
-          onClick: onRequestCloudException,
-          disabled: !cloudConnected || onRequestCloudException === void 0,
+          onClick: handleOpenRequestPanel,
+          disabled: !cloudConnected,
           children: "Request cloud exception"
         }
       ),
@@ -731,12 +1071,6 @@ function PolicyWorkspace({
   const handleOpenCloudExceptions = reactExports.useCallback(() => {
     setActiveView("exceptions");
   }, []);
-  const cloudControlsUrl = reactExports.useMemo(() => resolveCloudPolicyControlsUrl(snapshot), [snapshot]);
-  const handleRequestCloudException = reactExports.useCallback(() => {
-    if (cloudControlsUrl) {
-      window.open(cloudControlsUrl, "_blank", "noopener,noreferrer");
-    }
-  }, [cloudControlsUrl]);
   const modeCopy = reactExports.useMemo(() => resolveSecurityModeCopy(snapshot.security_level), [snapshot.security_level]);
   const cloudBundleCopy = reactExports.useMemo(() => resolveCloudPolicyBundleCopy(snapshot), [snapshot]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
@@ -770,12 +1104,12 @@ function PolicyWorkspace({
       PolicyRememberedRulesTab,
       {
         policies,
-        cloudControlsUrl,
+        cloudControlsUrl: resolveCloudPolicyControlsUrl(snapshot),
         onClearPolicy,
         onOpenCloudExceptions: handleOpenCloudExceptions
       }
     ) : null,
-    activeView === "exceptions" ? /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyCloudExceptionsTab, { snapshot, onRequestCloudException: cloudControlsUrl ? handleRequestCloudException : void 0 }) : null,
+    activeView === "exceptions" ? /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyCloudExceptionsTab, { snapshot }) : null,
     activeView === "strict" ? /* @__PURE__ */ jsxRuntimeExports.jsx(StrictModeView, { snapshot, onOpenSettings, onOpenInbox }) : null
   ] });
 }

@@ -1,5 +1,5 @@
-import { r as reactExports, b9 as runAuditRemediation, au as GuardHarnessActionError, j as jsxRuntimeExports, B as Badge, S as SectionLabel, ad as HiMiniMagnifyingGlass, b as EmptyState, d as HiMiniCheckCircle, I as HiMiniXCircle, w as HiMiniExclamationTriangle, h as harnessDisplayName, m as formatRelativeTime, y as HiMiniChevronRight, A as ActionButton, ba as HiMiniDocumentText, bb as guardAwareHref, aI as IconActionButton, aw as HiMiniArrowPath, l as HiMiniShieldCheck } from "../guard-dashboard.js";
-import { u as useResolvedApprovalGate, r as resolveManagerCoverageStatus, A as ApprovalProofModal } from "./supply-chain-protection-stats.js";
+import { r as reactExports, b9 as runAuditRemediation, j as jsxRuntimeExports, B as Badge, S as SectionLabel, ad as HiMiniMagnifyingGlass, b as EmptyState, d as HiMiniCheckCircle, I as HiMiniXCircle, w as HiMiniExclamationTriangle, h as harnessDisplayName, m as formatRelativeTime, y as HiMiniChevronRight, A as ActionButton, ba as HiMiniDocumentText, bb as guardAwareHref, aI as IconActionButton, aw as HiMiniArrowPath, l as HiMiniShieldCheck } from "../guard-dashboard.js";
+import { u as useResolvedApprovalGate, i as isApprovalGateRequiredError, c as resolveManagerCoverageStatus, a as ApprovalProofModal } from "./supply-chain-protection-stats.js";
 function isSupplyChainAuditEvidence(value) {
   return typeof value === "object" && value !== null && value.operation === "audit";
 }
@@ -335,7 +335,7 @@ function AuditWorkspace({ snapshot, receipts, approvalGate }) {
           [result.id]: "Remediation completed. Restart your shell before retrying package installs."
         }));
       } catch (error) {
-        if (credentials === void 0 && error instanceof GuardHarnessActionError && error.payload?.error === "approval_gate_required") {
+        if (credentials === void 0 && isApprovalGateRequiredError(error)) {
           await resolveApprovalGate();
           setPendingRemediation(result);
           setRemediationMessages((prev) => {

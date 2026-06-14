@@ -15208,6 +15208,32 @@ async function fetchPolicy(harness) {
   );
   return payload.items;
 }
+async function createCloudExceptionRequest(input) {
+  if (isGuardDemoMode()) {
+    return {
+      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      items: [
+        {
+          requestId: "demo-exception-request",
+          scope: input.scope,
+          status: "pending",
+          reason: input.reason,
+          owner: input.owner,
+          requestedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          requestedExpiresAt: input.requestedExpiresAt
+        }
+      ]
+    };
+  }
+  return readJson("/v1/policy/cloud-exception-requests", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify(input)
+  });
+}
 async function fetchPolicies() {
   if (isGuardDemoMode()) {
     return getDemoPolicy("codex");
@@ -16002,14 +16028,17 @@ async function runPackageAudit(input) {
   }
   return normalizePackageFirewallAction(payloadBody);
 }
-async function runPackageSync() {
+async function runPackageSync(credentials) {
   const response = await fetchGuardApi("/v1/supply-chain/sync", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...guardAuthHeaders()
     },
-    body: JSON.stringify({})
+    body: JSON.stringify({
+      ...credentials?.approval_password !== void 0 ? { approval_password: credentials.approval_password } : {},
+      ...credentials?.approval_totp_code !== void 0 ? { approval_totp_code: credentials.approval_totp_code } : {}
+    })
   });
   const payloadBody = await response.json().catch(() => null);
   if (!response.ok) {
@@ -26525,8 +26554,9 @@ export {
   HiMiniDocumentText as ba,
   guardAwareHref as bb,
   HiMiniSignal as bc,
-  policyActionLabel as bd,
-  scopeLabel as be,
+  createCloudExceptionRequest as bd,
+  policyActionLabel as be,
+  scopeLabel as bf,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,

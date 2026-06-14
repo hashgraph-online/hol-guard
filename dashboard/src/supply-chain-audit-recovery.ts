@@ -30,6 +30,21 @@ const SYNC_RECOVERY_STEPS = [
   },
 ] as const;
 
+export function createSupplyChainSyncApprovalGate(options?: {
+  autoRetryAuditAfterPrimary?: boolean;
+}): SupplyChainAuditRecoveryGate {
+  return {
+    obstacle: "sync_required",
+    headline: "Sync supply-chain intel before auditing",
+    detail:
+      "Enter your local approval password so Guard can download the latest signed supply-chain bundle on this device.",
+    steps: [...SYNC_RECOVERY_STEPS],
+    primaryAction: "sync",
+    primaryLabel: "Sync supply-chain intel",
+    autoRetryAuditAfterPrimary: options?.autoRetryAuditAfterPrimary ?? false,
+  };
+}
+
 export function resolveSupplyChainAuditRecoveryGate(
   detail: unknown,
 ): SupplyChainAuditRecoveryGate | null {

@@ -107,6 +107,7 @@
     --color-emerald-500: oklch(69.6% .17 162.48);
     --color-emerald-600: oklch(59.6% .145 163.225);
     --color-emerald-700: oklch(50.8% .118 165.612);
+    --color-emerald-800: oklch(43.2% .095 166.913);
     --color-sky-300: oklch(82.8% .111 230.318);
     --color-blue-50: oklch(97% .014 254.604);
     --color-blue-100: oklch(93.2% .032 255.585);
@@ -1061,6 +1062,10 @@
 
   .min-h-16 {
     min-height: calc(var(--spacing) * 16);
+  }
+
+  .min-h-24 {
+    min-height: calc(var(--spacing) * 24);
   }
 
   .min-h-\[3px\] {
@@ -2034,6 +2039,10 @@
     .border-brand-purple\/30 {
       border-color: color-mix(in oklab, var(--brand-purple) 30%, transparent);
     }
+  }
+
+  .border-emerald-200 {
+    border-color: var(--color-emerald-200);
   }
 
   .border-emerald-200\/40 {
@@ -3987,6 +3996,10 @@
 
   .text-emerald-700 {
     color: var(--color-emerald-700);
+  }
+
+  .text-emerald-800 {
+    color: var(--color-emerald-800);
   }
 
   .text-gray-500 {
