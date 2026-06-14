@@ -63,7 +63,10 @@ def _policy_bundle_cloud_exception_is_valid(item: object) -> bool:
     if _normalized_timestamp_string(item.get("expiresAt") or item.get("expiry")) is None:
         return False
     harness = item.get("harness")
-    if harness is not None and not isinstance(harness, str):
+    if scope == "harness":
+        if not isinstance(harness, str) or not harness.strip():
+            return False
+    elif harness is not None and not isinstance(harness, str):
         return False
     approver = item.get("approver")
     if approver is not None and _non_empty_string(approver) is None:
@@ -113,6 +116,7 @@ def cloud_exception_from_mapping(
     bundle_hash: str | None = None,
     ack_status: str | None = None,
     rejection_reason: str | None = None,
+    provenance: str = "receipt-sync",
 ) -> CloudException | None:
     exception_id = _non_empty_string(item.get("exceptionId") or item.get("id"))
     if exception_id is None:
@@ -129,6 +133,8 @@ def cloud_exception_from_mapping(
         return None
     harness_value = item.get("harness")
     harness = harness_value if isinstance(harness_value, str) and harness_value.strip() else None
+    if scope == "harness" and harness is None:
+        return None
     approver = _non_empty_string(item.get("approver"))
     source_receipt_id = _non_empty_string(item.get("sourceReceiptId") or item.get("source_receipt_id"))
     last_used_at = _normalized_timestamp_string(item.get("lastUsedAt") or item.get("last_used_at"))
@@ -150,6 +156,7 @@ def cloud_exception_from_mapping(
         last_used_at=last_used_at,
         rejection_reason=_non_empty_string(item.get("rejectionReason") or item.get("rejection_reason"))
         or rejection_reason,
+        provenance=provenance if provenance in {"receipt-sync", "policy-bundle"} else "receipt-sync",  # type: ignore[arg-type]
     )
 
 
@@ -176,6 +183,7 @@ def build_cloud_exceptions_from_policy_bundle(
             raw_item,
             bundle_hash=bundle_hash,
             ack_status=ack_status,
+            provenance="policy-bundle",
         )
         if parsed is not None:
             items.append(parsed)
@@ -198,9 +206,14 @@ def cloud_exception_from_stored_dict(item: dict[str, object]) -> CloudException 
         return None
     harness_value = item.get("harness")
     harness = harness_value if isinstance(harness_value, str) and harness_value.strip() else None
+    if scope == "harness" and harness is None:
+        return None
     ack_status = item.get("ack_status")
     if ack_status is not None and ack_status not in _CLOUD_EXCEPTION_ACK_STATUSES:
         ack_status = None
+    resolved_provenance = item.get("provenance")
+    if resolved_provenance not in {"receipt-sync", "policy-bundle"}:
+        resolved_provenance = "receipt-sync"
     return CloudException(
         id=exception_id,
         effect=effect,  # type: ignore[arg-type]
@@ -214,7 +227,26 @@ def cloud_exception_from_stored_dict(item: dict[str, object]) -> CloudException 
         ack_status=ack_status,  # type: ignore[arg-type]
         last_used_at=_normalized_timestamp_string(item.get("last_used_at")),
         rejection_reason=_non_empty_string(item.get("rejection_reason")),
+        provenance=resolved_provenance,  # type: ignore[arg-type]
     )
+
+
+def _stored_cloud_exception_provenance(item: dict[str, object]) -> str:
+    provenance = item.get("provenance")
+    if provenance in {"receipt-sync", "policy-bundle"}:
+        return str(provenance)
+    if _non_empty_string(item.get("bundle_hash")) is not None:
+        return "policy-bundle"
+    return "receipt-sync"
+
+
+def stored_receipt_sync_cloud_exceptions(items: list[dict[str, object]]) -> list[CloudException]:
+    preserved = [
+        item
+        for item in items
+        if isinstance(item, dict) and _stored_cloud_exception_provenance(item) == "receipt-sync"
+    ]
+    return build_cloud_exceptions_from_stored_items(preserved)
 
 
 def build_cloud_exceptions_from_stored_items(items: list[dict[str, object]]) -> list[CloudException]:
@@ -260,7 +292,7 @@ def list_active_cloud_exceptions(
     active = [item for item in items if _cloud_exception_is_active(item, now=now)]
     if harness is None:
         return active
-    return [item for item in active if item.harness in {harness, "*", None}]
+    return [item for item in active if item.harness in {harness, "*"}]
 
 
 def cloud_exception_to_dict(item: CloudException) -> dict[str, object]:

@@ -149,6 +149,41 @@ def test_bundle_only_persist_preserves_existing_sync_exceptions(tmp_path: Path) 
     assert {item["id"] for item in listed} == {"sync:1", "bundle:1"}
 
 
+def test_bundle_update_replaces_stale_bundle_exceptions(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "home")
+    bundle_v1 = {
+        "bundleHash": "sha256:v1",
+        "cloudExceptions": [
+            {
+                "exceptionId": "bundle:1",
+                "effect": "allow",
+                "scope": "harness",
+                "harness": "codex",
+                "owner": "owner@example.com",
+                "expiresAt": "2099-01-01T00:00:00Z",
+            }
+        ],
+        "acknowledgements": [],
+    }
+    _persist_cloud_exceptions(store, policy_bundle=bundle_v1, now="2026-06-13T00:00:00Z")
+    bundle_v2 = {
+        "bundleHash": "sha256:v2",
+        "cloudExceptions": [
+            {
+                "exceptionId": "bundle:2",
+                "effect": "allow",
+                "scope": "harness",
+                "harness": "codex",
+                "owner": "owner@example.com",
+                "expiresAt": "2099-01-01T00:00:00Z",
+            }
+        ],
+        "acknowledgements": [],
+    }
+    _persist_cloud_exceptions(store, policy_bundle=bundle_v2, now="2026-06-13T01:00:00Z")
+    assert {item["id"] for item in store.list_cloud_exceptions()} == {"bundle:2"}
+
+
 def test_sync_payload_builder_deduplicates_by_id() -> None:
     items = build_cloud_exceptions_from_sync_payload(
         [_sample_sync_exception(), _sample_sync_exception(exception_id="artifact:codex:other")]

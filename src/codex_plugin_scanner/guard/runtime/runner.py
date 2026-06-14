@@ -40,6 +40,7 @@ from ..cloud_exceptions import (
     build_cloud_exceptions_from_sync_payload,
     cloud_exception_to_dict,
     dedupe_cloud_exceptions,
+    stored_receipt_sync_cloud_exceptions,
 )
 from ..config import GuardConfig
 from ..consumer import detect_harness, evaluate_detection
@@ -1222,10 +1223,9 @@ def sync_receipts(
         if isinstance(team_policy_pack, dict) and (team_policy_pack or team_policy_pack_payload is None):
             team_policy_pack_payload = team_policy_pack
         exceptions = payload.get("exceptions")
-        if "exceptions" in payload:
+        if isinstance(exceptions, list):
             exceptions_sync_payload_provided = True
-            if isinstance(exceptions, list):
-                exceptions_payload.extend(item for item in exceptions if isinstance(item, dict))
+            exceptions_payload.extend(item for item in exceptions if isinstance(item, dict))
         remote_decisions.update(_build_remote_policy_decisions(payload))
     now = _sync_timestamp(payload)
     persisted_cursor_rowid = latest_uploaded_rowid if latest_uploaded_rowid is not None else prior_receipt_cursor
@@ -2081,9 +2081,11 @@ def _persist_cloud_exceptions(
     else:
         existing_payload = store.get_sync_payload("cloud_exceptions")
         if isinstance(existing_payload, list):
-            items.extend(
-                build_cloud_exceptions_from_stored_items([item for item in existing_payload if isinstance(item, dict)])
-            )
+            stored_items = [item for item in existing_payload if isinstance(item, dict)]
+            if isinstance(policy_bundle, dict):
+                items.extend(stored_receipt_sync_cloud_exceptions(stored_items))
+            else:
+                items.extend(build_cloud_exceptions_from_stored_items(stored_items))
     if isinstance(policy_bundle, dict):
         items.extend(
             build_cloud_exceptions_from_policy_bundle(

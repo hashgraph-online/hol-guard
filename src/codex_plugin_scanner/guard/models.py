@@ -133,6 +133,7 @@ class PolicyDecision:
 CloudExceptionEffect = Literal["allow"]
 CloudExceptionScope = Literal["artifact", "publisher", "harness", "workspace", "global"]
 CloudExceptionAckStatus = Literal["pending", "synced", "failed", "offline"]
+CloudExceptionProvenance = Literal["receipt-sync", "policy-bundle"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +152,7 @@ class CloudException:
     ack_status: CloudExceptionAckStatus | None
     last_used_at: str | None
     rejection_reason: str | None
+    provenance: CloudExceptionProvenance = "receipt-sync"
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
