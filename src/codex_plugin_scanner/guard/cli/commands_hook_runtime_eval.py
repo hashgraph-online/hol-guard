@@ -25,18 +25,21 @@ def _evaluate_runtime_artifact_hook(
 ) -> int | RuntimeArtifactHookState:
     event_name = _hook_event_name(payload) or "PreToolUse"
     package_evaluation = None
-    if runtime_artifact.artifact_type == "package_request" and runtime_workspace is not None:
+    if runtime_artifact.artifact_type == "package_request":
         package_evaluation = evaluate_package_request_artifact(
             artifact=runtime_artifact,
             store=store,
             workspace_dir=runtime_workspace,
         )
-        runtime_artifact_hash = package_request_policy_hash(
-            artifact=runtime_artifact,
-            store=store,
-            workspace_dir=runtime_workspace,
-            evaluation=package_evaluation,
-        )
+        if runtime_workspace is not None:
+            runtime_artifact_hash = package_request_policy_hash(
+                artifact=runtime_artifact,
+                store=store,
+                workspace_dir=runtime_workspace,
+                evaluation=package_evaluation,
+            )
+        else:
+            runtime_artifact_hash = artifact_hash(runtime_artifact)
     else:
         runtime_artifact_hash = artifact_hash(runtime_artifact)
     artifact_id = runtime_artifact.artifact_id
