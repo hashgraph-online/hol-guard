@@ -126,7 +126,61 @@ export const degradedStateSnapshot = {
 };
 
 export const emptyReceiptsPayload = { items: [] };
-export const emptyPoliciesPayload = { items: [] };
+export const emptyPoliciesPayload = { items: [], cloud_exceptions: [] };
+
+export const connectedCloudExceptionsPayload = {
+  items: [
+    {
+      id: "artifact:codex:e2e-active",
+      effect: "allow",
+      scope: "artifact",
+      harness: "codex",
+      owner: "owner@example.com",
+      approver: "approver@example.com",
+      expiry: "2099-01-01T00:00:00+00:00",
+      artifact_id: "codex:project:e2e-active",
+      source_receipt_id: "receipt-e2e",
+      bundle_hash: "sha256:e2e-bundle",
+      ack_status: "synced",
+      last_used_at: null,
+      rejection_reason: null,
+    },
+  ],
+};
+
+export const ackFailureCloudExceptionsPayload = {
+  items: [
+    {
+      id: "artifact:codex:e2e-failed",
+      effect: "allow",
+      scope: "artifact",
+      harness: "codex",
+      owner: "owner@example.com",
+      approver: "approver@example.com",
+      expiry: "2099-01-01T00:00:00+00:00",
+      artifact_id: "codex:project:e2e-failed",
+      source_receipt_id: "receipt-e2e-failed",
+      bundle_hash: "sha256:e2e-bundle-failed",
+      ack_status: "failed",
+      last_used_at: null,
+      rejection_reason: "Bundle signature mismatch",
+    },
+  ],
+};
+
+export const pendingCloudExceptionRequestsPayload = {
+  items: [
+    {
+      requestId: "req-e2e-pending",
+      scope: "artifact",
+      status: "pending",
+      reason: "Temporary allow for e2e",
+      owner: "owner@example.com",
+      requestedAt: "2026-06-14T12:00:00+00:00",
+      requestedExpiresAt: "2099-01-01T00:00:00+00:00",
+    },
+  ],
+};
 export const emptyInventoryPayload = { items: [] };
 
 export const defaultSettingsPayload = {
