@@ -505,11 +505,15 @@ export type GuardCloudException = {
   owner: string;
   approver: string | null;
   expiry: string;
+  expires_at?: string;
+  artifact_id?: string | null;
+  publisher?: string | null;
   source_receipt_id: string | null;
   bundle_hash: string | null;
   ack_status: GuardCloudExceptionAckStatus | null;
   last_used_at: string | null;
   rejection_reason: string | null;
+  provenance?: "receipt-sync" | "policy-bundle";
 };
 
 
