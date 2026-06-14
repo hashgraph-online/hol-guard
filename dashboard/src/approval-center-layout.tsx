@@ -129,7 +129,7 @@ type RuntimeState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "ready"; snapshot: GuardRuntimeSnapshot };
-type AppView = "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health";
+type AppView = "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health" | "about";
 
 export type BulkGateCredentials = {
   approval_password?: string;
