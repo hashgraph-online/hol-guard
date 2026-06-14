@@ -25,6 +25,8 @@ def _run_guard_exceptions_command(
     items = [
         item for item in active_items if isinstance(item.get("expires_at"), str) and str(item["expires_at"]).strip()
     ]
+    cloud_items = store.list_cloud_exceptions(getattr(args, "harness", None))
+    items = cloud_items + items
     _emit("exceptions", {"generated_at": _now(), "items": items}, getattr(args, "json", False))
     return 0
 

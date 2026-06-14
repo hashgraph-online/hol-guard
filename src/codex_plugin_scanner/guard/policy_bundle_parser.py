@@ -11,6 +11,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
+from .cloud_exceptions import policy_bundle_cloud_exceptions_are_valid
 from .policy_bundle_trusted_keys import (
     PolicyBundleVerificationKey,
     policy_bundle_key_fingerprint,
@@ -269,6 +270,8 @@ def validated_policy_bundle_payload(
     rules = policy_bundle.get("rules")
     if not isinstance(rules, list) or not all(_policy_bundle_rule_is_valid(rule) for rule in rules):
         return None, "invalid_rules"
+    if not policy_bundle_cloud_exceptions_are_valid(policy_bundle):
+        return None, "invalid_cloud_exceptions"
     acknowledgements = policy_bundle.get("acknowledgements")
     if not isinstance(acknowledgements, list) or not all(
         _policy_bundle_acknowledgement_is_valid(acknowledgement) for acknowledgement in acknowledgements
@@ -309,6 +312,9 @@ def validated_policy_bundle_payload(
         "rules": rules,
         "acknowledgements": acknowledgements,
     }
+    cloud_exceptions = policy_bundle.get("cloudExceptions")
+    if isinstance(cloud_exceptions, list) and cloud_exceptions:
+        payload["cloudExceptions"] = cloud_exceptions
     if payload_hash is not None:
         payload["payloadHash"] = payload_hash
     if workspace_id is not None:

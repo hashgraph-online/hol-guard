@@ -130,6 +130,34 @@ class PolicyDecision:
         return asdict(self)
 
 
+CloudExceptionEffect = Literal["allow"]
+CloudExceptionScope = Literal["artifact", "publisher", "harness", "workspace", "global"]
+CloudExceptionAckStatus = Literal["pending", "synced", "failed", "offline"]
+CloudExceptionProvenance = Literal["receipt-sync", "policy-bundle"]
+
+
+@dataclass(frozen=True, slots=True)
+class CloudException:
+    """Governed Cloud risk acceptance synced from Guard Cloud."""
+
+    id: str
+    effect: CloudExceptionEffect
+    scope: CloudExceptionScope
+    harness: str | None
+    owner: str
+    approver: str | None
+    expiry: str
+    source_receipt_id: str | None
+    bundle_hash: str | None
+    ack_status: CloudExceptionAckStatus | None
+    last_used_at: str | None
+    rejection_reason: str | None
+    provenance: CloudExceptionProvenance = "receipt-sync"
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
 @dataclass(frozen=True, slots=True)
 class GuardReceipt:
     """Runtime receipt recorded after a Guard evaluation."""
