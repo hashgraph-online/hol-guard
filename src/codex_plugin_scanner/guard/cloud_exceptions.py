@@ -155,12 +155,9 @@ def cloud_exception_from_mapping(
         ack_status=resolved_ack,  # type: ignore[arg-type]
         last_used_at=last_used_at,
         rejection_reason=(
-            _non_empty_string(item.get("rejectionReason") or item.get("rejection_reason"))
-            or rejection_reason
+            _non_empty_string(item.get("rejectionReason") or item.get("rejection_reason")) or rejection_reason
         ),
-        provenance=(
-            provenance if provenance in {"receipt-sync", "policy-bundle"} else "receipt-sync"
-        ),  # type: ignore[arg-type]
+        provenance=(provenance if provenance in {"receipt-sync", "policy-bundle"} else "receipt-sync"),  # type: ignore[arg-type]
     )
 
 
