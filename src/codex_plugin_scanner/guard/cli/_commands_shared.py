@@ -114,7 +114,7 @@ from ..harness_usage import record_harness_usage_events
 from ..incident import build_incident_context
 from ..local_dashboard_session import build_local_dashboard_session_token
 from ..local_supply_chain import (
-    _apply_stored_package_policy_override,
+    apply_stored_package_policy_override,
     build_local_supply_chain_posture,
     build_supply_chain_explain_payload,
     build_supply_chain_status_payload,

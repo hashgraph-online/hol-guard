@@ -140,7 +140,7 @@ def _evaluate_runtime_artifact_hook(
         )
         return 0
     if package_evaluation is not None and runtime_workspace is not None:
-        package_evaluation = _apply_stored_package_policy_override(
+        package_evaluation = apply_stored_package_policy_override(
             package_evaluation,
             store=store,
             artifact=runtime_artifact,

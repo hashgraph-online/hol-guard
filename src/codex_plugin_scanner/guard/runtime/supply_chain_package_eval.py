@@ -977,6 +977,20 @@ def _evaluate_with_bundle(
     packages: list[dict[str, object]] = []
     lockfile_versions = _lockfile_dependency_versions(workspace_dir, artifact, targets)
     for target in targets:
+        if target.get("manifest_unsynced") is True:
+            packages.append(
+                _heuristic_package_result(
+                    target=target,
+                    decision="ask",
+                    code="manifest_lockfile_unsynced",
+                    message=(
+                        f"{target['package_name']} is declared in the project manifest but is not pinned "
+                        "in the existing lockfile yet, so Guard requires review before install."
+                    ),
+                    severity="high",
+                )
+            )
+            continue
         resolved_version = _resolved_target_version(
             target=target,
             lockfile_versions=lockfile_versions,
@@ -1010,19 +1024,6 @@ def _evaluate_with_bundle(
             packages.append(confusion_result)
             continue
         if resolved_version is None:
-            if target.get("manifest_unsynced") is True:
-                packages.append(
-                    _heuristic_package_result(
-                        target=target,
-                        decision="ask",
-                        code="manifest_lockfile_unsynced",
-                        message=(
-                            f"{target['package_name']} is declared in the project manifest but is not pinned "
-                            "in the existing lockfile yet, so Guard requires review before install."
-                        ),
-                        severity="high",
-                    )
-                )
             continue
         offline = evaluate_cached_supply_chain_bundle(
             bundle_response,
@@ -1124,6 +1125,20 @@ def _heuristic_result(
 ) -> _EvaluationDraft | None:
     packages: list[dict[str, object]] = []
     for target in targets:
+        if target.get("manifest_unsynced") is True:
+            packages.append(
+                _heuristic_package_result(
+                    target=target,
+                    decision="ask",
+                    code="manifest_lockfile_unsynced",
+                    message=(
+                        f"{target['package_name']} is declared in the project manifest but is not pinned "
+                        "in the existing lockfile yet, so Guard requires review before install."
+                    ),
+                    severity="high",
+                )
+            )
+            continue
         lockfile_parse_warning = _lockfile_parse_warning_result(
             target=target,
             artifact=artifact,
@@ -1176,17 +1191,6 @@ def _heuristic_result(
                 target,
                 store=store,
                 workspace_dir=workspace_dir,
-            )
-        if package_result is None and target.get("manifest_unsynced") is True:
-            package_result = _heuristic_package_result(
-                target=target,
-                decision="ask",
-                code="manifest_lockfile_unsynced",
-                message=(
-                    f"{target['package_name']} is declared in the project manifest but is not pinned "
-                    "in the existing lockfile yet, so Guard requires review before install."
-                ),
-                severity="high",
             )
         if package_result is None:
             if lockfile_parse_warning is not None:
