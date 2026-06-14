@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from codex_plugin_scanner.guard.cloud_exception_requests import (
+    CloudExceptionRequestError,
     normalized_cloud_exception_requests_url,
     validate_cloud_exception_request_payload,
 )
@@ -61,3 +62,8 @@ def test_validate_cloud_exception_request_payload_requires_workspace_selector() 
                 "sourceReceiptId": "receipt_demo_001",
             }
         )
+
+
+def test_cloud_exception_request_error_carries_http_status() -> None:
+    error = CloudExceptionRequestError("Guard is not logged in.", status=401)
+    assert error.status == 401

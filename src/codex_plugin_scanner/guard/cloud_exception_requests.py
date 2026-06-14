@@ -11,6 +11,14 @@ from .store import GuardStore
 _VALID_SCOPES = frozenset({"artifact", "publisher", "harness", "workspace"})
 
 
+class CloudExceptionRequestError(RuntimeError):
+    status: int
+
+    def __init__(self, message: str, *, status: int = 502) -> None:
+        super().__init__(message)
+        self.status = status
+
+
 def normalized_cloud_exception_requests_url(sync_url: str) -> str:
     parsed = urllib.parse.urlsplit(sync_url)
     if parsed.path.rstrip("/") == "/registry/api/v1/guard/receipts/sync":
@@ -101,6 +109,8 @@ def submit_cloud_exception_request(
     auth_context: dict[str, object] | None = None,
 ) -> dict[str, object]:
     from codex_plugin_scanner.guard.runtime.runner import (
+        GuardSyncAuthorizationExpiredError,
+        GuardSyncNotConfiguredError,
         _guard_sync_request,
         _resolve_guard_sync_auth_context,
         _sync_http_error_message,
@@ -110,8 +120,13 @@ def submit_cloud_exception_request(
     )
 
     normalized = validate_cloud_exception_request_payload(payload)
-    prepare_guard_cloud_connect_authorization(store)
-    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
+    try:
+        prepare_guard_cloud_connect_authorization(store)
+        resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
+    except GuardSyncNotConfiguredError as error:
+        raise CloudExceptionRequestError(str(error), status=401) from error
+    except GuardSyncAuthorizationExpiredError as error:
+        raise CloudExceptionRequestError(str(error), status=401) from error
     request_url = normalized_cloud_exception_requests_url(str(resolved_auth_context["sync_url"]))
     body = json.dumps(normalized).encode("utf-8")
     request = _guard_sync_request(
@@ -124,16 +139,10 @@ def submit_cloud_exception_request(
     try:
         response = _urlopen_json_with_timeout_retry(request=request, timeout_seconds=30, retry_timeout_seconds=45)
     except urllib.error.HTTPError as error:
-        raise RuntimeError(_sync_http_error_message(error)) from error
+        status = error.code if error.code in {400, 401, 403, 409, 422} else 502
+        raise CloudExceptionRequestError(_sync_http_error_message(error), status=status) from error
     except OSError as error:
-        raise RuntimeError(_sync_url_error_message(error)) from error
+        raise CloudExceptionRequestError(_sync_url_error_message(error), status=502) from error
     if not isinstance(response, dict):
-        raise RuntimeError("Guard Cloud exception request returned an invalid response.")
+        raise CloudExceptionRequestError("Guard Cloud exception request returned an invalid response.", status=502)
     return response
-
-
-def cloud_exception_request_error_status(message: str) -> int:
-    lowered = message.lower()
-    if "guard is not logged in" in lowered or "reauthoriz" in lowered:
-        return 401
-    return 502
