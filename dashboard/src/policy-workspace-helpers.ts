@@ -2,13 +2,13 @@ import type { GuardPolicyDecision } from "./guard-types";
 import { harnessDisplayName, policyActionLabel, scopeLabel } from "./approval-center-utils";
 
 const MATCHER_FAMILY_LABELS: Record<string, string> = {
-  "package-request": "package install",
-  "tool-action": "shell or tool command",
-  "tool-output": "command output review",
-  prompt: "prompt submission",
-  "prompt-env-read": "environment variable read",
+  "package-request": "Package install",
+  "tool-action": "Shell or tool command",
+  "tool-output": "Command output review",
+  prompt: "Prompt submission",
+  "prompt-env-read": "Environment variable read",
   mcp: "MCP server call",
-  "file-read": "file read",
+  "file-read": "File read",
 };
 
 const GENERIC_REASONS = [
@@ -21,6 +21,7 @@ const GENERIC_REASONS = [
 export type PolicyDisplay = {
   headline: string;
   subtitle: string;
+  rememberSentence: string;
   technicalId: string | null;
 };
 
@@ -33,7 +34,7 @@ export function resolvePolicySourceLabel(source: string): string {
     return "Guard Cloud";
   }
   if (source === "manual" || source === "local") {
-    return "This device";
+    return "Local";
   }
   return source.replace(/_/g, " ");
 }
@@ -82,7 +83,7 @@ function resolvePromptSubtypeLabel(artifactId: string): string | null {
   const parts = artifactId.split(":");
   const promptIndex = parts.indexOf("prompt");
   if (promptIndex < 0) {
-    return null;
+    return "prompt review";
   }
   const subtype = parts[promptIndex + 1];
   if (!subtype) {
@@ -99,7 +100,7 @@ export function resolveWorkspaceLabel(workspace: string | null | undefined): str
   if (value.startsWith("workspace:")) {
     return "this project";
   }
-  if (value.startsWith("/")) {
+  if (value.startsWith("/") || value.startsWith("~")) {
     const segments = value.split("/").filter(Boolean);
     return segments[segments.length - 1] ?? "this project";
   }
@@ -119,23 +120,48 @@ function resolveActionVerb(action: string): string {
   return policyActionLabel(action);
 }
 
-function resolveScopeSubtitle(policy: GuardPolicyDecision): string {
+function resolveRememberSentence(policy: GuardPolicyDecision, commandLabel: string): string {
   const app = harnessDisplayName(policy.harness);
+  const folder = policy.workspace_label?.trim() || resolveWorkspaceLabel(policy.workspace);
+  const verb = policy.action === "block" ? "block" : "allow";
+
   if (policy.scope === "artifact") {
-    return `Applies once in ${app}`;
+    return `Guard will ${verb} "${commandLabel}" the next time ${app} retries this exact action.`;
   }
   if (policy.scope === "workspace") {
-    return `Applies every time in ${resolveWorkspaceLabel(policy.workspace)} (${app})`;
+    return `Guard will ${verb} "${commandLabel}" every time ${app} runs it in ${folder}.`;
   }
   if (policy.scope === "harness") {
-    return `Applies every time in ${app}`;
+    return `Guard will ${verb} "${commandLabel}" every time ${app} runs a matching action.`;
   }
   if (policy.scope === "publisher") {
     const publisher = policy.publisher?.trim() || "this publisher";
-    return `Applies to ${publisher} in ${app}`;
+    return `Guard will ${verb} actions from ${publisher} in ${app}.`;
   }
   if (policy.scope === "global") {
-    return "Applies on every project on this device";
+    return `Guard will ${verb} matching actions on every project on this device.`;
+  }
+  return `Guard will ${verb} matching actions when ${scopeLabel(policy.scope).toLowerCase()} rules apply.`;
+}
+
+function resolveScopeSubtitle(policy: GuardPolicyDecision): string {
+  const app = harnessDisplayName(policy.harness);
+  if (policy.scope === "artifact") {
+    return `Once in ${app}`;
+  }
+  if (policy.scope === "workspace") {
+    const folder = policy.workspace_label?.trim() || resolveWorkspaceLabel(policy.workspace);
+    return `This project · ${folder}`;
+  }
+  if (policy.scope === "harness") {
+    return `Every time in ${app}`;
+  }
+  if (policy.scope === "publisher") {
+    const publisher = policy.publisher?.trim() || "this publisher";
+    return `${publisher} in ${app}`;
+  }
+  if (policy.scope === "global") {
+    return "Every project on this device";
   }
   return scopeLabel(policy.scope);
 }
@@ -158,13 +184,13 @@ function resolveWhatPhrase(policy: GuardPolicyDecision): string {
 
   if (familyPhrase) {
     if (artifactId.startsWith("family:") || policy.scope === "harness") {
-      return `all ${familyPhrase}s`;
+      return `all ${familyPhrase.toLowerCase()}s`;
     }
     if (family === "prompt") {
       const subtype = resolvePromptSubtypeLabel(artifactId);
       return subtype ? `${familyPhrase} (${subtype})` : familyPhrase;
     }
-    return familyPhrase;
+    return familyPhrase.toLowerCase();
   }
 
   if (publisher) {
@@ -174,31 +200,61 @@ function resolveWhatPhrase(policy: GuardPolicyDecision): string {
   return "matching guarded actions";
 }
 
+function resolveContextLine(policy: GuardPolicyDecision): string | null {
+  const remembered = policy.remembered_context?.trim();
+  if (remembered) {
+    return remembered;
+  }
+  const family = policy.artifact_id ? extractMatcherFamily(policy.artifact_id) : null;
+  if (family && MATCHER_FAMILY_LABELS[family]) {
+    return MATCHER_FAMILY_LABELS[family];
+  }
+  return null;
+}
+
 export function resolvePolicyDisplay(policy: GuardPolicyDecision): PolicyDisplay {
   const reason = policy.reason?.trim() ?? null;
+  const rememberedCommand = policy.remembered_command?.trim();
+  const contextLine = resolveContextLine(policy);
+
+  if (rememberedCommand) {
+    return {
+      headline: rememberedCommand,
+      subtitle: [contextLine, resolveScopeSubtitle(policy)].filter(Boolean).join(" · "),
+      rememberSentence: resolveRememberSentence(policy, rememberedCommand),
+      technicalId: policy.artifact_id,
+    };
+  }
+
   const actionVerb = resolveActionVerb(policy.action);
 
   if (reason && !isGenericReason(reason)) {
     return {
-      headline: `${actionVerb}: ${reason}`,
-      subtitle: resolveScopeSubtitle(policy),
+      headline: reason,
+      subtitle: [contextLine, resolveScopeSubtitle(policy)].filter(Boolean).join(" · "),
+      rememberSentence: resolveRememberSentence(policy, reason),
       technicalId: policy.artifact_id,
     };
   }
 
   const what = resolveWhatPhrase(policy);
+  const headline = `${actionVerb} ${what}`;
   return {
-    headline: `${actionVerb} ${what}`,
-    subtitle: resolveScopeSubtitle(policy),
+    headline,
+    subtitle: [contextLine, resolveScopeSubtitle(policy)].filter(Boolean).join(" · "),
+    rememberSentence: resolveRememberSentence(policy, what),
     technicalId: policy.artifact_id,
   };
 }
 
 export function resolvePolicyEvidenceSearchTerm(policy: GuardPolicyDecision): string | null {
+  const receiptId = policy.source_receipt_id?.trim();
+  if (receiptId) {
+    return receiptId;
+  }
   const hash = policy.artifact_hash?.trim();
   if (hash) {
-    const normalized = hash.replace(/^sha256:/i, "");
-    return normalized.slice(0, 12);
+    return hash.replace(/^sha256:/i, "").slice(0, 12);
   }
   const target = policyTargetLabel(policy);
   if (!target || target === "Global") {
@@ -217,12 +273,30 @@ export function resolvePolicyEvidenceSearchTerm(policy: GuardPolicyDecision): st
 
 export function resolvePolicyEvidenceHref(policy: GuardPolicyDecision): string {
   const params = new URLSearchParams();
+  const receiptId = policy.source_receipt_id?.trim();
+  if (receiptId) {
+    params.set("selected", receiptId);
+    params.set("search", receiptId);
+    return `/evidence?${params.toString()}`;
+  }
   const searchTerm = resolvePolicyEvidenceSearchTerm(policy);
   if (searchTerm) {
     params.set("search", searchTerm);
   }
   const query = params.toString();
   return query ? `/evidence?${query}` : "/evidence";
+}
+
+export function resolvePolicyApprovalRecordLabel(policy: GuardPolicyDecision): string {
+  const receiptId = policy.source_receipt_id?.trim();
+  if (receiptId) {
+    return `${receiptId}.json`;
+  }
+  const hash = policy.artifact_hash?.replace(/^sha256:/i, "").slice(0, 8);
+  if (hash) {
+    return `receipt_${hash}.json`;
+  }
+  return "View in Evidence";
 }
 
 export function resolveCloudPolicyControlsUrl(snapshot: {
@@ -272,9 +346,9 @@ export function resolveSecurityModeCopy(
 ): { label: string; description: string; tone: "green" | "attention" | "slate" } {
   if (level === "strict") {
     return {
-      label: "Strict mode",
+      label: "Protect",
       description:
-        "Guard asks before most actions including new network connections and file writes. Higher noise, maximum protection.",
+        "Guard asks before risky actions that are not already allowed by policy, remembered rules, or Cloud exceptions.",
       tone: "attention",
     };
   }
@@ -304,9 +378,12 @@ export function resolveCloudPolicyBundleCopy(snapshot: {
   cloud_policy_bundle_version?: string | null;
   cloud_policy_rollout_state?: string | null;
   cloud_policy_sync_error?: string | null;
+  cloud_policy_bundle_hash?: string | null;
+  cloud_policy_last_ack_at?: string | null;
 }): {
   label: string;
   detail: string;
+  hash: string | null;
   tone: "green" | "attention" | "slate";
 } | null {
   const bundleVersion = snapshot.cloud_policy_bundle_version?.trim();
@@ -315,16 +392,19 @@ export function resolveCloudPolicyBundleCopy(snapshot: {
   }
   const rollout = snapshot.cloud_policy_rollout_state?.trim() || "unknown";
   const syncError = snapshot.cloud_policy_sync_error?.trim();
+  const hash = snapshot.cloud_policy_bundle_hash?.trim() || null;
   if (syncError) {
     return {
-      label: `Cloud bundle ${bundleVersion}`,
-      detail: `Guard Cloud Controls owns rollout and authoring. Latest sync issue: ${syncError}.`,
+      label: "Needs attention",
+      detail: `Bundle ${bundleVersion} is connected, but the latest sync reported: ${syncError}`,
+      hash,
       tone: "attention",
     };
   }
   return {
-    label: `Cloud bundle ${bundleVersion}`,
-    detail: `Guard Cloud Controls owns authoring and rollout. This local workspace reflects rollout state ${rollout}.`,
+    label: "Synced",
+    detail: `Bundle ${bundleVersion} is active on this device (${rollout}).`,
+    hash,
     tone: "green",
   };
 }

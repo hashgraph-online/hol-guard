@@ -470,6 +470,7 @@ export type GuardArtifactDiff = {
 };
 
 export type GuardPolicyDecision = {
+  decision_id?: number;
   harness: string;
   scope: DecisionScope;
   artifact_id: string | null;
@@ -480,6 +481,10 @@ export type GuardPolicyDecision = {
   reason: string | null;
   source: string;
   updated_at: string;
+  source_receipt_id?: string | null;
+  remembered_command?: string | null;
+  remembered_context?: string | null;
+  workspace_label?: string | null;
 };
 
 export const GUARD_CLOUD_EXCEPTION_ACK_STATUSES = [

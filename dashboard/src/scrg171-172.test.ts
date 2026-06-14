@@ -266,8 +266,8 @@ assert(
 
 const cloudBundleCopy = resolveCloudPolicyBundleCopy(pairedPolicySnapshot);
 assert(cloudBundleCopy !== null, "SCRG171-K: paired cloud bundle should expose policy workspace copy");
-assert(cloudBundleCopy!.label.includes("policy-2026-06-05.1"), "SCRG171-L: cloud bundle label includes version");
-assert(cloudBundleCopy!.detail.includes("Guard Cloud Controls"), "SCRG171-M: cloud bundle detail preserves cloud ownership");
+assert(cloudBundleCopy!.label === "Synced", "SCRG171-L: cloud bundle label shows sync status");
+assert(cloudBundleCopy!.detail.includes("policy-2026-06-05.1"), "SCRG171-M: cloud bundle detail includes version");
 
 assert(
   typeof loadAuditPage === "function",

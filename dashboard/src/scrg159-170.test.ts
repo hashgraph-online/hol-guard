@@ -338,7 +338,7 @@ assert(grouped.get("cursor")?.length === 1, "SCRG164-B: 1 cursor policy");
 
 const strictCopy = resolveSecurityModeCopy("strict");
 assert(strictCopy.tone === "attention", "SCRG164-C: strict mode is attention tone");
-assert(strictCopy.label.toLowerCase().includes("strict"), "SCRG164-D: strict label includes strict");
+assert(strictCopy.label.toLowerCase().includes("protect"), "SCRG164-D: strict mode shows Protect label");
 
 const balancedCopy = resolveSecurityModeCopy("balanced");
 assert(balancedCopy.tone === "green", "SCRG164-E: balanced is green tone");

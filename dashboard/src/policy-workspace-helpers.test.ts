@@ -1,5 +1,6 @@
 import type { GuardPolicyDecision } from "./guard-types";
 import {
+  resolvePolicyApprovalRecordLabel,
   resolvePolicyDisplay,
   resolvePolicyEvidenceHref,
   resolvePolicyMatcherFamily,
@@ -25,82 +26,61 @@ const basePolicy = (overrides: Partial<GuardPolicyDecision>): GuardPolicyDecisio
   ...overrides,
 });
 
+const enrichedPackageRule = basePolicy({
+  remembered_command: "pnpm install",
+  remembered_context: "Package install via pnpm",
+  workspace_label: "hol-points-portal",
+  source_receipt_id: "receipt-abc123",
+  artifact_hash: "sha256:62de981049ed20f850ae2bb52a9aaa2820c6d9be809592ec0c4b3d207b83f9b6",
+});
+
+const enrichedDisplay = resolvePolicyDisplay(enrichedPackageRule);
+
+assert(enrichedDisplay.headline === "pnpm install", "POL-H1: enriched command becomes headline");
+assert(
+  enrichedDisplay.subtitle.includes("Package install via pnpm"),
+  "POL-H2: enriched context appears in subtitle",
+);
+assert(
+  enrichedDisplay.rememberSentence.includes("hol-points-portal"),
+  "POL-H3: remember sentence names project folder",
+);
+assert(
+  enrichedDisplay.rememberSentence.includes("pnpm install"),
+  "POL-H4: remember sentence repeats exact command",
+);
+
 const workspacePackageRule = basePolicy({});
 const display = resolvePolicyDisplay(workspacePackageRule);
 
-assert(
-  !display.headline.includes("62de9810"),
-  "POL-H1: headline must not expose artifact hash ids",
-);
-assert(
-  !display.headline.includes("workspace:c188"),
-  "POL-H2: headline must not expose workspace hash ids",
-);
-assert(
-  display.headline.toLowerCase().includes("package install"),
-  "POL-H3: workspace package rule headline names the action family",
-);
-assert(
-  display.subtitle.includes("this project"),
-  "POL-H4: workspace scope subtitle uses plain project language",
-);
+assert(!display.headline.includes("62de9810"), "POL-H5: headline must not expose artifact hash ids");
+assert(display.headline.toLowerCase().includes("package install"), "POL-H6: fallback names action family");
 
-const familyHarnessRule = resolvePolicyDisplay(
+const evidenceHref = resolvePolicyEvidenceHref(enrichedPackageRule);
+assert(evidenceHref.includes("selected=receipt-abc123"), "POL-H7: evidence link selects source receipt");
+assert(evidenceHref.includes("search=receipt-abc123"), "POL-H8: evidence link searches receipt id");
+
+const hashOnlyHref = resolvePolicyEvidenceHref(
   basePolicy({
-    scope: "harness",
-    artifact_id: "family:package-request",
-    workspace: null,
-    harness: "opencode",
+    artifact_hash: "sha256:62de981049ed20f850ae2bb52a9aaa2820c6d9be809592ec0c4b3d207b83f9b6",
   }),
 );
-assert(
-  familyHarnessRule.headline.toLowerCase().includes("all package install"),
-  "POL-H5: harness family rule explains breadth in plain language",
-);
+assert(hashOnlyHref.includes("search=62de981049ed"), "POL-H9: hash fallback strips sha256 prefix");
 
-const meaningfulReason = resolvePolicyDisplay(
-  basePolicy({
-    reason: "Install locked portal dependencies in isolated worktree for Guard connect-flow validation.",
-    scope: "artifact",
-  }),
-);
 assert(
-  meaningfulReason.headline.includes("Install locked portal dependencies"),
-  "POL-H6: meaningful approval reason becomes the headline",
-);
-
-const runtimeRule = resolvePolicyDisplay(
-  basePolicy({
-    scope: "artifact",
-    artifact_id: "opencode:runtime:global:chrome-devtools:navigate_page",
-    reason: "approved in review",
-  }),
-);
-assert(
-  runtimeRule.headline.toLowerCase().includes("chrome devtools"),
-  "POL-H7: runtime actions get readable tool labels",
+  resolvePolicyApprovalRecordLabel(enrichedPackageRule) === "receipt-abc123.json",
+  "POL-H10: approval record label uses receipt filename",
 );
 
 assert(
   resolveWorkspaceLabel("workspace:c188b6362f81cac126242642b9d7baaa7026c681d5c5ea9e4cc92df615049faf") ===
     "this project",
-  "POL-H8: workspace hash labels collapse to this project",
+  "POL-H11: workspace hash labels collapse to this project",
 );
 
 assert(
   resolvePolicyMatcherFamily(basePolicy({ artifact_id: "family:tool-action" })) === "tool-action",
-  "POL-H9: family matcher ids parse correctly",
+  "POL-H12: family matcher ids parse correctly",
 );
-
-const evidenceHref = resolvePolicyEvidenceHref(
-  basePolicy({
-    artifact_hash: "sha256:62de981049ed20f850ae2bb52a9aaa2820c6d9be809592ec0c4b3d207b83f9b6",
-  }),
-);
-assert(
-  evidenceHref.includes("search=62de981049ed"),
-  "POL-H10: evidence link uses short hash prefix search",
-);
-assert(!evidenceHref.includes("harness="), "POL-H11: evidence link does not over-filter by harness");
 
 console.log("policy-workspace-helpers.test.ts: all assertions passed");

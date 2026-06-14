@@ -70,23 +70,27 @@ export function filterBySearch(
   return receipts.filter((r) => {
     const name = (r.artifact_name ?? r.artifact_id ?? "").toLowerCase();
     const id = r.artifact_id.toLowerCase();
+    const receiptId = r.receipt_id.toLowerCase();
     const harness = r.harness.toLowerCase();
     const caps = (r.capabilities_summary ?? "").toLowerCase();
     const changed = (r.changed_capabilities ?? []).join(" ").toLowerCase();
     const provenance = (r.provenance_summary ?? "").toLowerCase();
     const scope = (r.source_scope ?? "").toLowerCase();
     const decision = (r.policy_decision ?? "").toLowerCase();
-    const hashPrefix = (r.artifact_hash ?? "").toLowerCase().slice(0, 12);
+    const hashRaw = (r.artifact_hash ?? "").toLowerCase();
+    const hashNormalized = hashRaw.replace(/^sha256:/, "");
     return (
       name.includes(q) ||
       id.includes(q) ||
+      receiptId.includes(q) ||
       harness.includes(q) ||
       caps.includes(q) ||
       changed.includes(q) ||
       provenance.includes(q) ||
       scope.includes(q) ||
       decision.includes(q) ||
-      hashPrefix.startsWith(q)
+      hashRaw.startsWith(q) ||
+      hashNormalized.includes(q)
     );
   });
 }

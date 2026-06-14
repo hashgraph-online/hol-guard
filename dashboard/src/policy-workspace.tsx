@@ -83,29 +83,39 @@ export function PolicyWorkspace({
 
   return (
     <div className="space-y-6">
-      {cloudBundleCopy ? (
-        <div className={resolveCloudBundleSurfaceClass(cloudBundleCopy.tone)}>
-          <div className="mb-2 flex flex-wrap items-center gap-2">
+      <div className="grid gap-4 lg:grid-cols-2">
+        {cloudBundleCopy ? (
+          <div className={resolveCloudBundleSurfaceClass(cloudBundleCopy.tone)}>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <SectionLabel>Guard Cloud bundle</SectionLabel>
+              <Tag tone={cloudBundleCopy.tone}>{cloudBundleCopy.label}</Tag>
+            </div>
+            <p className="text-sm text-brand-dark/75">{cloudBundleCopy.detail}</p>
+            {cloudBundleCopy.hash ? (
+              <p className="mt-2 break-all font-mono text-[11px] text-slate-500">{cloudBundleCopy.hash.slice(0, 8)}</p>
+            ) : null}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-slate-200/70 bg-slate-50/70 p-4 shadow-sm">
             <SectionLabel>Guard Cloud bundle</SectionLabel>
-            <Tag tone={cloudBundleCopy.tone}>{cloudBundleCopy.label}</Tag>
+            <p className="mt-2 text-sm text-brand-dark/75">Not connected. Remembered Cloud rules appear when Guard Cloud syncs a bundle.</p>
           </div>
-          <p className="text-sm text-brand-dark/75">{cloudBundleCopy.detail}</p>
-        </div>
-      ) : null}
+        )}
 
-      <div className="rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-5 shadow-sm">
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <SectionLabel>Active mode</SectionLabel>
-          <Tag tone={modeCopy.tone}>{modeCopy.label}</Tag>
-        </div>
-        <p className="text-sm text-brand-dark/75">{modeCopy.description}</p>
-        {onOpenSettings ? (
-          <div className="mt-3">
-            <ActionButton variant="secondary" onClick={onOpenSettings}>
-              Open security settings
-            </ActionButton>
+        <div className="rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-5 shadow-sm">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <SectionLabel>Active mode</SectionLabel>
+            <Tag tone={modeCopy.tone}>{modeCopy.label}</Tag>
           </div>
-        ) : null}
+          <p className="text-sm text-brand-dark/75">{modeCopy.description}</p>
+          {onOpenSettings ? (
+            <div className="mt-3">
+              <ActionButton variant="secondary" onClick={onOpenSettings}>
+                Open security settings
+              </ActionButton>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div
