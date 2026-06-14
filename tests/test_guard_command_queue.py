@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.daemon.command_queue_worker import (
@@ -65,11 +67,25 @@ def test_command_queue_enabled_defaults_on(monkeypatch) -> None:
     assert command_queue.command_queue_enabled() is True
 
 
-def test_command_queue_enabled_allows_explicit_opt_out(monkeypatch) -> None:
-    for value in ("0", "false", "no", "off"):
-        monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, value)
+@pytest.mark.parametrize("value", ["1", "true", "yes", "on"])
+def test_command_queue_enabled_allows_explicit_opt_in(value: str, monkeypatch) -> None:
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, value)
 
-        assert command_queue.command_queue_enabled() is False
+    assert command_queue.command_queue_enabled() is True
+
+
+@pytest.mark.parametrize("value", ["", "0", "false", "no", "off", "disabled"])
+def test_command_queue_enabled_allows_explicit_opt_out(value: str, monkeypatch) -> None:
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, value)
+
+    assert command_queue.command_queue_enabled() is False
+
+
+@pytest.mark.parametrize("value", ["garbage", "maybe"])
+def test_command_queue_enabled_disables_unrecognized_explicit_values(value: str, monkeypatch) -> None:
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, value)
+
+    assert command_queue.command_queue_enabled() is False
 
 
 def test_poll_once_leases_heartbeats_executes_and_posts_result(
