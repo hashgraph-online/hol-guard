@@ -130,6 +130,54 @@ export function resolvePersonInitials(value: string | null | undefined): string 
   return label.slice(0, 2).toUpperCase();
 }
 
+export function resolveCloudExceptionBlastRadius(scope: GuardCloudException["scope"]): {
+  label: string;
+  detail: string;
+  tone: "narrow" | "medium" | "wide";
+} {
+  if (scope === "artifact") {
+    return {
+      label: "Narrow",
+      detail: "Applies to one artifact fingerprint only.",
+      tone: "narrow",
+    };
+  }
+  if (scope === "publisher") {
+    return {
+      label: "Medium",
+      detail: "Applies to packages and plugins from one publisher.",
+      tone: "medium",
+    };
+  }
+  if (scope === "harness") {
+    return {
+      label: "Medium",
+      detail: "Applies across one harness on this device.",
+      tone: "medium",
+    };
+  }
+  if (scope === "workspace") {
+    return {
+      label: "Wide",
+      detail: "Applies within the current project workspace.",
+      tone: "wide",
+    };
+  }
+  return {
+    label: "Wide",
+    detail: "Applies as a global Cloud risk acceptance.",
+    tone: "wide",
+  };
+}
+
+export function resolveCloudExceptionWhyCopy(item: GuardCloudException): string {
+  if (item.rejection_reason?.trim()) {
+    return item.rejection_reason.trim();
+  }
+  const blast = resolveCloudExceptionBlastRadius(item.scope);
+  return `Cloud-approved risk acceptance (${blast.detail.toLowerCase()}) synced from a signed policy bundle.`;
+}
+
 export function summarizeCloudExceptions(
   exceptions: GuardCloudException[],
   pendingRequests: GuardCloudExceptionRequestItem[],

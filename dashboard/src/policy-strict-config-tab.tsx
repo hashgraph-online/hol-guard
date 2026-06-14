@@ -27,6 +27,30 @@ type PolicyStrictConfigTabProps = {
 
 type LoadState = "loading" | "ready" | "error";
 
+const TEST_SCENARIOS = [
+  {
+    id: "first-time",
+    label: "First-time action",
+    remembered: "none" as const,
+    cloudPolicy: "none" as const,
+    cloudException: false,
+  },
+  {
+    id: "remembered-allow",
+    label: "Remembered allow wins",
+    remembered: "allow" as const,
+    cloudPolicy: "block" as const,
+    cloudException: false,
+  },
+  {
+    id: "cloud-exception",
+    label: "Active Cloud exception",
+    remembered: "block" as const,
+    cloudPolicy: "block" as const,
+    cloudException: true,
+  },
+] as const;
+
 type SimLayerSelectProps = {
   label: string;
   value: "allow" | "block" | "none";
@@ -76,6 +100,7 @@ export function PolicyStrictConfigTab({
   const [simRemembered, setSimRemembered] = useState<"allow" | "block" | "none">("none");
   const [simCloudPolicy, setSimCloudPolicy] = useState<"allow" | "block" | "none">("none");
   const [simCloudException, setSimCloudException] = useState(false);
+  const [scenarioId, setScenarioId] = useState<string>(TEST_SCENARIOS[0].id);
 
   const isStrict = settings?.security_level === "strict";
   const cloudBundleCopy = resolveCloudPolicyBundleCopy(snapshot);
@@ -164,6 +189,18 @@ export function PolicyStrictConfigTab({
     setSimCloudPolicy(value);
   }, []);
 
+  const handleScenarioChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const nextId = event.target.value;
+    setScenarioId(nextId);
+    const scenario = TEST_SCENARIOS.find((item) => item.id === nextId);
+    if (!scenario) {
+      return;
+    }
+    setSimRemembered(scenario.remembered);
+    setSimCloudPolicy(scenario.cloudPolicy);
+    setSimCloudException(scenario.cloudException);
+  }, []);
+
   if (loadState === "loading") {
     return (
       <div className="space-y-3" aria-busy="true">
@@ -187,38 +224,31 @@ export function PolicyStrictConfigTab({
   const controlsDisabled = savingKey !== null;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start">
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
       <div className="space-y-4">
         <div
           className={`rounded-2xl border p-5 ${isStrict ? "border-brand-green/20 bg-brand-green/[0.04]" : "border-slate-200 bg-slate-50/40"}`}
         >
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <SectionLabel>Strict mode</SectionLabel>
-            <Tag tone={isStrict ? "green" : "slate"}>{isStrict ? "Enabled" : "Disabled"}</Tag>
-          </div>
-          <p className="text-sm text-brand-dark/75">
-            Strict config tunes local fallback enforcement only. Authentication, MFA, and general Guard settings stay in
-            Settings.
-          </p>
-          {!isStrict && onOpenSettings ? (
-            <div className="mt-3">
-              <ActionButton variant="secondary" onClick={onOpenSettings}>
-                Enable strict mode in Settings
-              </ActionButton>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <SectionLabel>Strict mode</SectionLabel>
+                <Tag tone={isStrict ? "green" : "slate"}>{isStrict ? "Enabled" : "Disabled"}</Tag>
+              </div>
+              <p className="text-sm text-brand-dark/75">
+                Local strict policy applies when no remembered rule, Cloud policy, or Cloud exception matches.
+              </p>
             </div>
-          ) : null}
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <SectionLabel>Local policy state</SectionLabel>
-          <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+            {!isStrict && onOpenSettings ? (
+              <ActionButton variant="secondary" onClick={onOpenSettings}>
+                Enable in Settings
+              </ActionButton>
+            ) : null}
+          </div>
+          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Local policy hash</dt>
               <dd className="mt-1 font-mono text-xs text-brand-dark">{localPolicyHash}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Config file</dt>
-              <dd className="mt-1 break-all text-brand-dark">{configPath ?? "Unavailable"}</dd>
             </div>
             <div>
               <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Daemon last reload</dt>
@@ -228,17 +258,9 @@ export function PolicyStrictConfigTab({
                   : "Unavailable"}
               </dd>
             </div>
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Daemon heartbeat</dt>
-              <dd className="mt-1 text-brand-dark">
-                {snapshot.runtime_state?.last_heartbeat_at
-                  ? formatRelativeTime(snapshot.runtime_state.last_heartbeat_at)
-                  : "Unavailable"}
-              </dd>
-            </div>
           </dl>
           {cloudBundleCopy ? (
-            <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/80 p-3">
+            <div className="mt-4 rounded-xl border border-slate-100 bg-white/70 p-3">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Signed Cloud bundle ack</p>
               <p className="mt-1 text-sm font-medium text-brand-dark">{cloudBundleCopy.label}</p>
               <p className="mt-1 text-sm text-slate-600">{cloudBundleCopy.detail}</p>
@@ -247,101 +269,123 @@ export function PolicyStrictConfigTab({
                   {snapshot.cloud_policy_bundle_hash}
                 </p>
               ) : null}
-              <p className="mt-2 text-xs text-slate-500">
-                Cloud exceptions apply through signed bundle acknowledgement on this device.
-              </p>
             </div>
-          ) : (
-            <p className="mt-4 text-sm text-slate-600">
-              No signed Cloud policy bundle is synced yet. Cloud exceptions still require bundle acknowledgement before
-              they apply locally.
-            </p>
-          )}
+          ) : null}
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <SectionLabel>Local fallback controls</SectionLabel>
-        <p className="mt-2 text-sm text-slate-600">
-          These controls apply when no remembered rule, Cloud policy, or Cloud exception matches.
-        </p>
-        <div className="mt-4 grid gap-5 md:grid-cols-2">
-          <StrictConfigActionSegmented
-            label="Default action"
-            help="First-time actions with no prior decision."
-            value={settings.default_action}
-            settingKey="default_action"
-            onSettingChange={handleStrictConfigChange}
-            disabled={controlsDisabled}
-          />
-          <StrictConfigActionSegmented
-            label="Changed tool hash action"
-            value={settings.changed_hash_action}
-            settingKey="changed_hash_action"
-            onSettingChange={handleStrictConfigChange}
-            disabled={controlsDisabled}
-          />
-          <StrictConfigActionSegmented
-            label="New network domain action"
-            value={settings.new_network_domain_action}
-            settingKey="new_network_domain_action"
-            onSettingChange={handleStrictConfigChange}
-            disabled={controlsDisabled}
-          />
-          <StrictConfigActionSegmented
-            label="Subprocess action"
-            value={settings.subprocess_action}
-            settingKey="subprocess_action"
-            onSettingChange={handleStrictConfigChange}
-            disabled={controlsDisabled}
-          />
-          <StrictConfigActionSegmented
-            label="Destructive file write action"
-            help="Backed by the destructive shell risk control."
-            value={fileWriteAction}
-            settingKey="destructive_shell"
-            onSettingChange={handleStrictConfigChange}
-            disabled={controlsDisabled}
-          />
-        </div>
-        {saveError ? <p className="mt-3 text-sm text-red-600">{saveError}</p> : null}
-        {savingKey ? <p className="mt-3 text-sm text-slate-500">Saving {savingKey.replace(/_/g, " ")}…</p> : null}
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <SectionLabel>Pending Inbox impact</SectionLabel>
-        <p className="mt-2 text-sm text-brand-dark/75">
-          {pendingInboxCount > 0
-            ? `${pendingInboxCount} pending review item${pendingInboxCount === 1 ? "" : "s"} may be affected by stricter fallback controls.`
-            : "No pending Inbox items are waiting for review right now."}
-        </p>
-        {onOpenInbox && pendingInboxCount > 0 ? (
-          <div className="mt-3">
-            <ActionButton variant="secondary" onClick={onOpenInbox}>
-              Open Inbox
-            </ActionButton>
+          <SectionLabel>Local strict policy</SectionLabel>
+          <p className="mt-2 text-sm text-slate-600">
+            Fallback controls when no remembered rule, Cloud policy, or Cloud exception matches.
+          </p>
+          <p className="mt-1 text-xs text-slate-500">Config file: {configPath ?? "Unavailable"}</p>
+          <div className="mt-5 space-y-5">
+            <StrictConfigActionSegmented
+              label="Default action"
+              help="First-time actions with no prior decision."
+              value={settings.default_action}
+              settingKey="default_action"
+              onSettingChange={handleStrictConfigChange}
+              disabled={controlsDisabled}
+            />
+            <StrictConfigActionSegmented
+              label="Changed tool hash action"
+              value={settings.changed_hash_action}
+              settingKey="changed_hash_action"
+              onSettingChange={handleStrictConfigChange}
+              disabled={controlsDisabled}
+            />
+            <StrictConfigActionSegmented
+              label="New network domain action"
+              value={settings.new_network_domain_action}
+              settingKey="new_network_domain_action"
+              onSettingChange={handleStrictConfigChange}
+              disabled={controlsDisabled}
+            />
+            <StrictConfigActionSegmented
+              label="Subprocess action"
+              value={settings.subprocess_action}
+              settingKey="subprocess_action"
+              onSettingChange={handleStrictConfigChange}
+              disabled={controlsDisabled}
+            />
+            <StrictConfigActionSegmented
+              label="Destructive file write action"
+              help="Backed by the destructive shell risk control."
+              value={fileWriteAction}
+              settingKey="destructive_shell"
+              onSettingChange={handleStrictConfigChange}
+              disabled={controlsDisabled}
+            />
           </div>
-        ) : null}
-      </div>
+          {saveError ? <p className="mt-3 text-sm text-red-600">{saveError}</p> : null}
+          {savingKey ? <p className="mt-3 text-sm text-slate-500">Saving {savingKey.replace(/_/g, " ")}…</p> : null}
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <SectionLabel>Evaluation order</SectionLabel>
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-brand-dark/80">
+            {STRICT_POLICY_EVALUATION_ORDER.map((step, index) => (
+              <div key={step} className="flex items-center gap-2">
+                <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-medium">{step}</span>
+                {index < STRICT_POLICY_EVALUATION_ORDER.length - 1 ? (
+                  <span className="text-slate-400" aria-hidden="true">
+                    →
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       <aside className="space-y-4 lg:sticky lg:top-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <SectionLabel>Evaluation order</SectionLabel>
-          <ol className="mt-3 space-y-2 text-sm text-brand-dark/80">
-            {STRICT_POLICY_EVALUATION_ORDER.map((step, index) => (
-              <li key={step} className="flex gap-2">
-                <span className="font-semibold text-brand-blue">{index + 1}.</span>
-                <span>{step}</span>
-              </li>
-            ))}
-          </ol>
+          <SectionLabel>What this changes</SectionLabel>
+          <p className="mt-2 text-sm text-brand-dark/75">
+            Stricter fallback controls increase review and block outcomes for first-time or changed actions on this
+            device.
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <SectionLabel>Affected inbox</SectionLabel>
+          <p className="mt-2 text-3xl font-semibold text-brand-dark">{pendingInboxCount}</p>
+          <p className="mt-1 text-sm text-slate-600">
+            Pending review item{pendingInboxCount === 1 ? "" : "s"} may be affected by stricter fallback controls.
+          </p>
+          {onOpenInbox && pendingInboxCount > 0 ? (
+            <div className="mt-3">
+              <ActionButton variant="secondary" onClick={onOpenInbox}>
+                Open Inbox
+              </ActionButton>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4 text-sm text-slate-600">
+          Cloud exceptions still require signed bundle acknowledgement before they apply locally.
         </div>
 
         <div className="rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 shadow-sm">
-          <SectionLabel>Policy simulator</SectionLabel>
+          <SectionLabel>Test policy</SectionLabel>
           <p className="mt-2 text-sm text-slate-600">
-            Preview which layer wins for a hypothetical action without changing live policy.
+            Policy simulator: preview which layer wins for a hypothetical action without changing live policy.
           </p>
+          <label className="mt-4 block space-y-1.5">
+            <span className="text-sm font-medium text-brand-dark">Scenario</span>
+            <select
+              value={scenarioId}
+              onChange={handleScenarioChange}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark"
+            >
+              {TEST_SCENARIOS.map((scenario) => (
+                <option key={scenario.id} value={scenario.id}>
+                  {scenario.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="mt-4 space-y-3">
             <SimLayerSelect label="Remembered rule" value={simRemembered} onChange={handleSimRememberedChange} />
             <SimLayerSelect label="Cloud policy" value={simCloudPolicy} onChange={handleSimCloudPolicyChange} />

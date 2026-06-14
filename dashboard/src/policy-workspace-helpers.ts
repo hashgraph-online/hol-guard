@@ -288,6 +288,32 @@ export function resolvePolicyDisplay(policy: GuardPolicyDecision): PolicyDisplay
   };
 }
 
+export function resolvePolicyRowTitle(policy: GuardPolicyDecision, display: PolicyDisplay): string {
+  const headline = display.headline.trim();
+  const verb = policyActionLabel(policy.action);
+  const headlineHasVerb = headline.toLowerCase().startsWith(verb.toLowerCase());
+  const project = display.projectLabel?.trim();
+
+  if (headlineHasVerb) {
+    if (project && project !== "this project" && !headline.toLowerCase().includes(project.toLowerCase())) {
+      return `${headline} in ${project}`;
+    }
+    return headline;
+  }
+
+  if (project && project !== "this project" && !headline.toLowerCase().includes(project.toLowerCase())) {
+    return `${verb} ${headline} in ${project}`;
+  }
+  return `${verb} ${headline}`;
+}
+
+export function resolvePolicyRowSourceLabel(policy: GuardPolicyDecision): string {
+  if (isCloudManagedPolicy(policy.source)) {
+    return "Team policy";
+  }
+  return scopeLabel(policy.scope, "policy");
+}
+
 export function resolvePolicyEvidenceSearchTerm(policy: GuardPolicyDecision): string | null {
   const receiptId = policy.source_receipt_id?.trim();
   if (receiptId) {

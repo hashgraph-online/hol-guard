@@ -4,9 +4,11 @@ import { formatRelativeTime, scopeLabel } from "./approval-center-utils";
 import type { GuardCloudException } from "./guard-types";
 import {
   isCloudExceptionAckFailure,
+  resolveCloudExceptionBlastRadius,
   resolveCloudExceptionExpiryTimestamp,
   resolveCloudExceptionExpiryValue,
   resolveCloudExceptionHeadline,
+  resolveCloudExceptionWhyCopy,
   resolvePersonDisplayLabel,
   resolvePersonInitials,
 } from "./policy-cloud-exceptions-utils";
@@ -85,10 +87,12 @@ export function PolicyCloudExceptionDetailPanel({
   const expiryValue = resolveCloudExceptionExpiryValue(exception);
   const ackCopy = resolveAckCopy(exception);
   const headline = resolveCloudExceptionHeadline(exception);
+  const blast = resolveCloudExceptionBlastRadius(exception.scope);
+  const whyCopy = resolveCloudExceptionWhyCopy(exception);
 
   return (
     <aside
-      className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+      className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-4"
       aria-label="Cloud exception details"
     >
       <div className="mb-4 flex min-w-0 items-start justify-between gap-3">
@@ -113,24 +117,37 @@ export function PolicyCloudExceptionDetailPanel({
       </div>
 
       <div className="space-y-4">
+        <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Why this exists</p>
+          <p className="mt-2 text-sm leading-relaxed text-brand-dark">{whyCopy}</p>
+        </div>
+
+        <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Blast radius</p>
+          <p className="mt-1 text-sm font-medium text-brand-dark">{blast.label}</p>
+          <p className="mt-1 text-sm text-slate-600">{blast.detail}</p>
+          <DetailField label="Scope exact" value={headline} />
+        </div>
+
         <PersonRow label="Owner" value={exception.owner} />
         <PersonRow label="Approved by" value={exception.approver} />
 
-        <DetailField
-          label="Expiry"
-          value={
-            expiryTimestamp && expiryValue
+        <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Expiry timeline</p>
+          <p className="mt-2 text-sm text-brand-dark">
+            {expiryTimestamp && expiryValue
               ? `${expiryTimestamp.toLocaleString()} (${formatRelativeTime(expiryValue)})`
-              : expiryValue
-          }
-        />
+              : expiryValue ?? "Expiry unavailable"}
+          </p>
+          <DetailField
+            label="Last used"
+            value={exception.last_used_at ? formatRelativeTime(exception.last_used_at) : null}
+          />
+        </div>
+
         <DetailField label="Harness" value={exception.harness} />
         <DetailField label="Source receipt" value={exception.source_receipt_id} />
         <DetailField label="Signed bundle hash" value={exception.bundle_hash} />
-        <DetailField
-          label="Last used"
-          value={exception.last_used_at ? formatRelativeTime(exception.last_used_at) : null}
-        />
 
         <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Local daemon acknowledgement</p>
@@ -151,7 +168,7 @@ export function PolicyCloudExceptionDetailPanel({
             className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-blue hover:underline"
           >
             <HiMiniCloudArrowUp className="h-4 w-4" aria-hidden="true" />
-            Open in Guard Cloud
+            Review in Guard Cloud
           </a>
         </div>
       ) : null}
