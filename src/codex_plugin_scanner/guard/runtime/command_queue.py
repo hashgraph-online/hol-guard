@@ -51,7 +51,10 @@ def _now() -> str:
 
 def command_queue_enabled(environ: dict[str, str] | None = None) -> bool:
     source = os.environ if environ is None else environ
-    return source.get(COMMAND_QUEUE_ENABLED_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
+    value = source.get(COMMAND_QUEUE_ENABLED_ENV)
+    if value is None:
+        return True
+    return value.strip().lower() not in {"0", "false", "no", "off"}
 
 
 def _env_float(name: str, default: float) -> float:

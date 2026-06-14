@@ -59,6 +59,19 @@ def _context(tmp_path: Path) -> HarnessContext:
     )
 
 
+def test_command_queue_enabled_defaults_on(monkeypatch) -> None:
+    monkeypatch.delenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, raising=False)
+
+    assert command_queue.command_queue_enabled() is True
+
+
+def test_command_queue_enabled_allows_explicit_opt_out(monkeypatch) -> None:
+    for value in ("0", "false", "no", "off"):
+        monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, value)
+
+        assert command_queue.command_queue_enabled() is False
+
+
 def test_poll_once_leases_heartbeats_executes_and_posts_result(
     tmp_path: Path,
     monkeypatch,
@@ -456,7 +469,7 @@ def test_start_worker_replaces_stopped_alive_worker(tmp_path: Path, monkeypatch)
         created_threads.append(thread)
         return thread
 
-    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, "1")
+    monkeypatch.delenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, raising=False)
     monkeypatch.setattr("codex_plugin_scanner.guard.daemon.command_queue_worker.threading.Thread", fake_thread)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.command_queue_worker.threading.Event",
@@ -468,6 +481,13 @@ def test_start_worker_replaces_stopped_alive_worker(tmp_path: Path, monkeypatch)
 
     assert worker is not existing
     assert created_threads[0].started is True
+
+
+def test_start_worker_respects_command_queue_opt_out(tmp_path: Path, monkeypatch) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, "0")
+
+    assert start_command_queue_worker(store, None) is None  # type: ignore[arg-type]
 
 
 def test_command_queue_loop_backs_off_after_errors(tmp_path: Path, monkeypatch) -> None:
