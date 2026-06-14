@@ -221,6 +221,46 @@ def test_gr076b_codex_prompt_secret_read_caps_browser_approval_wait(
     assert "/requests/" in str(payload["reason"])
 
 
+def test_codex_post_tool_secret_output_caps_browser_approval_wait(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(parents=True, exist_ok=True)
+    (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 120\n", encoding="utf-8")
+    observed_timeouts: list[int] = []
+
+    def unresolved_wait(*args: object, **kwargs: object) -> dict[str, object]:
+        del args
+        timeout_seconds = kwargs.get("timeout_seconds")
+        assert isinstance(timeout_seconds, int)
+        observed_timeouts.append(timeout_seconds)
+        return {"resolved": False, "status": "timeout", "items": []}
+
+    monkeypatch.setattr(guard_commands_module, "wait_for_approval_requests", unresolved_wait)
+
+    exit_code, output = _run_hook(
+        tmp_path,
+        harness="codex",
+        json_output=False,
+        payload={
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "cat ~/.npmrc"},
+            "tool_response": {"stdout": "//registry.npmjs.org/:_authToken=npm_secret_fixture_value\n"},
+        },
+    )
+
+    payload = _json_line(output)
+
+    assert exit_code == 0
+    assert payload["decision"] == "block"
+    assert payload["continue"] is False
+    assert observed_timeouts == [8]
+    assert "Open HOL Guard" in str(payload["reason"])
+    assert "/requests/" in str(payload["reason"])
+
+
 def test_gr077_codex_shell_exfil_canary_gets_native_denial(tmp_path: Path) -> None:
     exit_code, output = _run_hook(
         tmp_path,

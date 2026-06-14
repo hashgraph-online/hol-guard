@@ -260,7 +260,7 @@ _HOOK_DAEMON_PERMISSIVE_REASON = (
 _HOOK_DAEMON_PRESERVED_DENY_REASON = (
     "HOL Guard daemon was unreachable; preserving the existing deny decision for this action."
 )
-_CODEX_PROMPT_APPROVAL_WAIT_MAX_SECONDS = 8
+_CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS = 8
 _GUARD_HELP_GROUPS = (
     "HOL Guard AI Antivirus command center:\n"
     "  start        First-run protection setup for one local AI harness\n"
