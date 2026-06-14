@@ -126,6 +126,64 @@ def test_poll_once_leases_heartbeats_executes_and_posts_result(
     assert "machineInstallationId" not in calls[3][2]
 
 
+def test_poll_once_continues_when_local_request_snapshot_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    class BrokenSnapshotStore(FakeStore):
+        def list_approval_requests(
+            self,
+            *,
+            status: str | None = "pending",
+            harness: str | None = None,
+            limit: int | None = 50,
+            cursor: str | None = None,
+            search: str | None = None,
+        ) -> list[dict[str, object]]:
+            del status, harness, limit, cursor, search
+            raise OSError("approval store locked")
+
+    store = BrokenSnapshotStore(tmp_path / "guard-home")
+    calls: list[tuple[str, str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        command_queue,
+        "_resolve_guard_sync_auth_context",
+        lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
+    )
+
+    def fake_json_request(
+        auth_context: dict[str, object],
+        *,
+        method: str,
+        path: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        calls.append((method, path, payload))
+        if path == "/lease":
+            return {
+                "item": {
+                    "id": "job-1",
+                    "leaseId": "lease-1",
+                    "operation": "guard.packageShims.status",
+                }
+            }
+        return {"ok": True}
+
+    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+    monkeypatch.setattr(
+        command_executors,
+        "package_shim_status",
+        lambda context: {"active_managers": []},
+    )
+
+    status = command_queue.poll_command_queue_once(store, _context(tmp_path))
+
+    assert status["state"] == "idle"
+    assert calls[0][0:2] == ("POST", "/lease")
+    assert calls[0][2]["localRequestsSnapshot"] == {"requests": []}
+    assert calls[-1][0:2] == ("POST", "/job-1/result")
+
+
 def test_poll_once_persists_result_retry_when_result_upload_fails(
     tmp_path: Path,
     monkeypatch,
