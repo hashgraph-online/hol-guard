@@ -1433,23 +1433,33 @@ def sync_receipts(
     return summary
 
 
-def _guard_cloud_http_error_is_retryable(error: urllib.error.HTTPError) -> bool:
+def _guard_cloud_http_error_details(error: urllib.error.HTTPError) -> tuple[str, bool]:
     try:
         raw_body = error.read().decode("utf-8", errors="replace")
     except OSError:
-        return error.code in {503, 524}
-    try:
-        payload = json.loads(raw_body) if raw_body else None
-    except json.JSONDecodeError:
-        payload = None
+        raw_body = ""
+    retryable = error.code in {503, 524}
+    payload: object = None
+    if raw_body:
+        try:
+            payload = json.loads(raw_body)
+        except json.JSONDecodeError:
+            payload = None
+    message: str | None = None
     if isinstance(payload, dict):
+        message = _read_guard_cloud_error_message(payload)
         guard_error = payload.get("guardError")
-        if isinstance(guard_error, dict) and guard_error.get("retryable") is True:
-            return True
-        guard_code = guard_error.get("code") if isinstance(guard_error, dict) else None
-        if isinstance(guard_code, str) and guard_code.strip().lower() in {"guard_unavailable", "guard_cloud_unavailable"}:
-            return True
-    return error.code in {503, 524}
+        if isinstance(guard_error, dict):
+            if guard_error.get("retryable") is True:
+                retryable = True
+            guard_code = guard_error.get("code")
+            unavailable_codes = {"guard_unavailable", "guard_cloud_unavailable"}
+            if isinstance(guard_code, str) and guard_code.strip().lower() in unavailable_codes:
+                retryable = True
+    if message is None:
+        normalized_body = raw_body.strip()
+        message = normalized_body or f"HTTP Error {error.code}: {error.reason}"
+    return message, retryable
 
 
 def _fetch_supply_chain_bundle_payload(request: urllib.request.Request) -> dict[str, object]:
@@ -1465,8 +1475,8 @@ def _fetch_supply_chain_bundle_payload(request: urllib.request.Request) -> dict[
             if is_plan_restricted:
                 raise GuardSyncNotAvailableError(message) from error
             raise RuntimeError(message) from error
-        message = _sync_http_error_message(error)
-        if _guard_cloud_http_error_is_retryable(error):
+        message, retryable = _guard_cloud_http_error_details(error)
+        if retryable:
             raise GuardSyncNotAvailableError(message, retryable=True) from error
         raise RuntimeError(message) from error
     except OSError as error:

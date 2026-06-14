@@ -615,7 +615,6 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
             err,
             "Guard Cloud is temporarily unavailable. Try syncing again in a few minutes.",
           );
-          setAuditRecoveryGate(createSupplyChainSyncApprovalGate());
           setAuditRecoveryPhase("ready");
           setAuditRecoveryError(message);
           setLastFailed({ op, manager: null, message });
