@@ -9,6 +9,8 @@ import {
   isCloudExceptionAckFailure,
   parseCloudExceptionTimestamp,
   resolveCloudExceptionHeadline,
+  resolveCloudExceptionExpiryTimestamp,
+  resolveCloudExceptionExpiryValue,
   resolvePersonDisplayLabel,
 } from "./policy-cloud-exceptions-utils";
 
@@ -70,7 +72,8 @@ function ExceptionCard({
     onSelect(item);
   }, [item, onSelect]);
 
-  const expiry = parseCloudExceptionTimestamp(item.expiry ?? item.expires_at ?? null);
+  const expiryTimestamp = resolveCloudExceptionExpiryTimestamp(item);
+  const expiryValue = resolveCloudExceptionExpiryValue(item);
   const headline = resolveCloudExceptionHeadline(item);
 
   return (
@@ -92,7 +95,7 @@ function ExceptionCard({
       <p className="mt-2 text-sm font-semibold text-brand-dark">{headline}</p>
       <p className="mt-1 text-xs text-slate-500">
         Owner {resolvePersonDisplayLabel(item.owner)}
-        {expiry ? ` · expires ${formatRelativeTime(item.expiry)}` : null}
+        {expiryTimestamp && expiryValue ? ` · expires ${formatRelativeTime(expiryValue)}` : null}
       </p>
     </button>
   );

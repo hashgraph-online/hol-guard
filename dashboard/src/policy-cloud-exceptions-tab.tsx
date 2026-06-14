@@ -157,6 +157,16 @@ export function PolicyCloudExceptionsTab({
           body="Cloud exceptions are managed in Guard Cloud. Connect this device to request a risk acceptance or view synced exceptions here."
           tone="teach"
         />
+      ) : loadState === "error" ? (
+        <EmptyState
+          title="Could not load Cloud exceptions"
+          body={loadError ?? "Try again after Guard Cloud sync completes."}
+          action={
+            <ActionButton variant="secondary" onClick={handleRetryLoad}>
+              Retry
+            </ActionButton>
+          }
+        />
       ) : (
         <>
           <PolicyCloudExceptionsSummary
@@ -167,35 +177,23 @@ export function PolicyCloudExceptionsTab({
             loading={loadState === "loading"}
           />
 
-          {loadState === "error" ? (
-            <EmptyState
-              title="Could not load Cloud exceptions"
-              body={loadError ?? "Try again after Guard Cloud sync completes."}
-              action={
-                <ActionButton variant="secondary" onClick={handleRetryLoad}>
-                  Retry
-                </ActionButton>
-              }
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+            <PolicyCloudExceptionsList
+              active={groups.active}
+              pending={groups.pending}
+              expiringSoon={groups.expiringSoon}
+              selectedExceptionId={selectedExceptionId}
+              onSelectException={handleSelectException}
+              cloudConnected={cloudConnected}
             />
-          ) : (
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-              <PolicyCloudExceptionsList
-                active={groups.active}
-                pending={groups.pending}
-                expiringSoon={groups.expiringSoon}
-                selectedExceptionId={selectedExceptionId}
-                onSelectException={handleSelectException}
-                cloudConnected={cloudConnected}
+            {selectedException ? (
+              <PolicyCloudExceptionDetailPanel
+                exception={selectedException}
+                cloudControlsUrl={cloudControlsUrl}
+                onClose={handleCloseDetail}
               />
-              {selectedException ? (
-                <PolicyCloudExceptionDetailPanel
-                  exception={selectedException}
-                  cloudControlsUrl={cloudControlsUrl}
-                  onClose={handleCloseDetail}
-                />
-              ) : null}
-            </div>
-          )}
+            ) : null}
+          </div>
         </>
       )}
     </div>
