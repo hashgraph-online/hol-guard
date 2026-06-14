@@ -5,6 +5,8 @@ import {
   resolvePolicyEvidenceHref,
   resolvePolicyMatcherFamily,
   resolveWorkspaceLabel,
+  policyScopeLabel,
+  formatPolicyScopePath,
 } from "./policy-workspace-helpers";
 
 function assert(condition: boolean, message: string): void {
@@ -37,10 +39,7 @@ const enrichedPackageRule = basePolicy({
 const enrichedDisplay = resolvePolicyDisplay(enrichedPackageRule);
 
 assert(enrichedDisplay.headline === "pnpm install", "POL-H1: enriched command becomes headline");
-assert(
-  enrichedDisplay.subtitle.includes("Package install via pnpm"),
-  "POL-H2: enriched context appears in subtitle",
-);
+assert(enrichedDisplay.kindLine === "Package install via pnpm", "POL-H2: enriched context becomes kind line");
 assert(
   enrichedDisplay.rememberSentence.includes("hol-points-portal"),
   "POL-H3: remember sentence names project folder",
@@ -81,6 +80,24 @@ assert(
 assert(
   resolvePolicyMatcherFamily(basePolicy({ artifact_id: "family:tool-action" })) === "tool-action",
   "POL-H12: family matcher ids parse correctly",
+);
+
+const pathDisplay = resolvePolicyDisplay(
+  basePolicy({
+    remembered_command: "pnpm install",
+    source_scope_path: "/srv/projects/sample-portal",
+    workspace_label: "sample-portal",
+  }),
+);
+assert(pathDisplay.pathLine?.includes("sample-portal"), "POL-H13: path line surfaces scope path");
+assert(pathDisplay.projectLabel === "sample-portal", "POL-H14: project label surfaces workspace label");
+assert(policyScopeLabel("artifact") === "Once", "POL-H15: policy scope label for once");
+assert(policyScopeLabel("workspace") === "This project", "POL-H16: policy scope label for project");
+assert(
+  formatPolicyScopePath(
+    "/srv/work/monorepo/services/apps/backend/sample-guard/packages/cli/src/commands/policy/workspace/helpers",
+  )?.startsWith("…/"),
+  "POL-H17: long paths truncate with ellipsis",
 );
 
 console.log("policy-workspace-helpers.test.ts: all assertions passed");

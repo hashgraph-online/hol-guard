@@ -1,4 +1,4 @@
-from codex_plugin_scanner.guard.models import GuardReceipt, PolicyDecision
+from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardReceipt, PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -90,3 +90,98 @@ def test_list_policy_decisions_falls_back_to_inventory_launch_command(tmp_path) 
     item = store.list_policy_decisions()[0]
     assert item["remembered_command"] == "pnpm install --frozen-lockfile"
     assert item["workspace_label"] == "hol-guard"
+
+
+def test_list_policy_decisions_prefers_scanner_redacted_command(tmp_path) -> None:
+    store = _store(tmp_path)
+    scanner_payload = [
+        {
+            "package": {
+                "redactedCommand": "pip install --force-reinstall hol-guard==2.0.345",
+                "packageManager": "pip",
+            }
+        }
+    ]
+    receipt = GuardReceipt(
+        receipt_id="receipt-scanner-cmd-1",
+        timestamp="2026-06-14T12:00:00+00:00",
+        harness="cursor",
+        artifact_id="cursor:project:package-request:scanner123",
+        artifact_hash="scannerhash1234567890abcdef1234567890abcdef1234567890abcdef12",
+        policy_decision="allow",
+        capabilities_summary="Package install",
+        changed_capabilities=("package-request",),
+        provenance_summary="runtime tool request evaluated from /srv/projects/sample-guard/mcp.json",
+        artifact_name="npx execute tsx",
+        source_scope="/srv/projects/sample-guard",
+        scanner_evidence=tuple(scanner_payload),
+    )
+    store.add_receipt(receipt)
+    store.upsert_policy(
+        PolicyDecision(
+            harness="cursor",
+            scope="artifact",
+            action="allow",
+            artifact_id="cursor:project:package-request:scanner123",
+            artifact_hash="scannerhash1234567890abcdef1234567890abcdef1234567890abcdef12",
+            workspace="/srv/projects/sample-guard",
+            reason="approved in review",
+            source="local",
+        ),
+        "2026-06-14T12:01:00+00:00",
+    )
+
+    item = store.list_policy_decisions()[0]
+    assert item["source_receipt_id"] == "receipt-scanner-cmd-1"
+    assert item["remembered_command"] == "pip install --force-reinstall hol-guard==2.0.345"
+    assert item["remembered_context"] == "Package install via pip"
+    assert item["source_scope_path"] == "/srv/projects/sample-guard"
+    assert item["workspace_label"] == "sample-guard"
+
+
+def test_list_policy_decisions_uses_trigger_summary_backticks(tmp_path) -> None:
+    store = _store(tmp_path)
+    request = GuardApprovalRequest(
+        request_id="approval-trigger-1",
+        harness="cursor",
+        artifact_id="cursor:project:tool-action:tool123",
+        artifact_name="bash",
+        artifact_hash="toolhash1234567890abcdef1234567890abcdef1234567890abcdef1234",
+        policy_action="require-reapproval",
+        recommended_scope="artifact",
+        changed_fields=("tool_action_request",),
+        source_scope="/srv/projects/sample-broker",
+        config_path="/srv/projects/sample-broker/.cursor/mcp.json",
+        workspace="/srv/projects/sample-broker",
+        launch_target="git push origin main",
+        trigger_summary="Allow shell command `git push origin main` from Cursor?",
+        launch_summary="Shell command review",
+        review_command="hol-guard approvals approve approval-trigger-1",
+        approval_url="http://127.0.0.1:5481/approvals/approval-trigger-1",
+    )
+    store.add_approval_request(request, "2026-06-14T11:59:00+00:00")
+    store.resolve_approval_request(
+        "approval-trigger-1",
+        resolution_action="allow",
+        resolution_scope="artifact",
+        reason="approved in review",
+        resolved_at="2026-06-14T12:00:00+00:00",
+    )
+    store.upsert_policy(
+        PolicyDecision(
+            harness="cursor",
+            scope="artifact",
+            action="allow",
+            artifact_id="cursor:project:tool-action:tool123",
+            artifact_hash="toolhash1234567890abcdef1234567890abcdef1234567890abcdef1234",
+            workspace="/srv/projects/sample-broker",
+            reason="approved in review",
+            source="local",
+        ),
+        "2026-06-14T12:01:00+00:00",
+    )
+
+    item = store.list_policy_decisions()[0]
+    assert item["remembered_command"] == "git push origin main"
+    assert item["source_scope_path"] == "/srv/projects/sample-broker"
+    assert item["workspace_label"] == "sample-broker"
