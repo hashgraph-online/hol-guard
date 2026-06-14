@@ -13,13 +13,15 @@ export function PolicyRememberedCloudRules({
   return (
     <GroupedPolicySection
       title="From Guard Cloud"
-      description="Synced team rules are read-only here. Edit them in Guard Cloud Controls."
+      badge="Team policy rules"
+      description="Managed by your team in Guard Cloud. These rules are read-only locally."
       policies={policies}
       cloudControlsUrl={cloudControlsUrl}
       emptyTitle="No Guard Cloud rules synced"
       emptyBody="Connect Guard Cloud to sync shared policy bundles."
       defaultOpen={policies.length > 0}
       cloudVariant
+      viewAllLabel="View all cloud rules ({count}) →"
     />
   );
 }
