@@ -37,12 +37,13 @@ function GroupSection({ title, description, defaultOpen = true, children }: Grou
   }, []);
 
   return (
-    <section className="rounded-2xl border border-slate-100 bg-white shadow-sm">
+    <section className="rounded-2xl border border-slate-100 bg-white shadow-sm" aria-label={title}>
       <button
         type="button"
         onClick={handleToggle}
         className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left"
         aria-expanded={open}
+        aria-label={`${title} group`}
       >
         <div>
           <h3 className="text-sm font-semibold text-brand-dark">{title}</h3>
@@ -114,6 +115,16 @@ function PendingRequestCard({ item }: { item: GuardCloudExceptionRequestItem }) 
         {formatRelativeTime(item.requestedExpiresAt)}
       </p>
     </article>
+  );
+}
+
+export function PolicyCloudExceptionsListSkeleton() {
+  return (
+    <div className="space-y-3" aria-busy="true" aria-label="Loading Cloud exceptions">
+      {[0, 1, 2].map((index) => (
+        <div key={index} className="h-28 animate-pulse rounded-2xl border border-slate-100 bg-slate-100" />
+      ))}
+    </div>
   );
 }
 

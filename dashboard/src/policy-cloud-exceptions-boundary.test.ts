@@ -54,6 +54,12 @@ const FORBIDDEN_FIXTURE_PATTERNS = [
   /policy-2026-\d/,
   /receipt_[a-f0-9]{8,}/i,
   /exception_request_[a-f0-9-]{8,}/i,
+  /\bLorem ipsum\b/i,
+  /\bMock Exception\b/i,
+  /\bSample Exception\b/i,
+  /\bPlaceholder Owner\b/i,
+  /\bDemo User\b/i,
+  /\bfixture-row\b/i,
 ];
 
 const REVIEW_INBOX_DENYLIST = [
