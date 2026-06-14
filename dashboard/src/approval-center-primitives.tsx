@@ -67,9 +67,22 @@ const footerSections = [
   }
 ] as const;
 
+export type AppView =
+  | "home"
+  | "inbox"
+  | "fleet"
+  | "evidence"
+  | "settings"
+  | "app-detail"
+  | "supply-chain"
+  | "audit"
+  | "policy"
+  | "feed-health"
+  | "about";
+
 export function ShellHeader(props: {
   queuedCount: number;
-  view: "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health" | "about";
+  view: AppView;
   onNavigate: (pathname: string) => void;
   onOpenMobileQueue?: () => void;
   guardVersion?: string | null;
@@ -177,7 +190,7 @@ const sidebarLinks = [
 
 export function ShellSidebar(props: {
   queuedCount: number;
-  view: "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health" | "about";
+  view: AppView;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   guardVersion?: string | null;
