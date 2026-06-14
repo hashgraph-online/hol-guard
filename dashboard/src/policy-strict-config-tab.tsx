@@ -388,7 +388,7 @@ export function PolicyStrictConfigTab({
           <p className="mt-1 text-sm text-slate-600">
             Pending review item{pendingInboxCount === 1 ? "" : "s"} may be affected by stricter fallback controls.
           </p>
-          {onOpenInbox ? (
+          {onOpenInbox && pendingInboxCount > 0 ? (
             <div className="mt-3">
               <ActionButton variant="secondary" onClick={onOpenInbox}>
                 Open Inbox
