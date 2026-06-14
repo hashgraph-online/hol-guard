@@ -261,7 +261,13 @@ class GuardSyncNotConfiguredError(RuntimeError):
 
 
 class GuardSyncNotAvailableError(RuntimeError):
-    """Raised when the sync endpoint returns 403 (free-plan restriction)."""
+    """Raised when Guard Cloud sync is blocked by plan limits or temporary outages."""
+
+    retryable: bool
+
+    def __init__(self, message: str, *, retryable: bool = False) -> None:
+        super().__init__(message)
+        self.retryable = retryable
 
 
 class GuardSyncAuthorizationExpiredError(GuardSyncNotConfiguredError):
@@ -1427,6 +1433,35 @@ def sync_receipts(
     return summary
 
 
+def _guard_cloud_http_error_details(error: urllib.error.HTTPError) -> tuple[str, bool]:
+    try:
+        raw_body = error.read().decode("utf-8", errors="replace")
+    except OSError:
+        raw_body = ""
+    retryable = error.code in {503, 524}
+    payload: object = None
+    if raw_body:
+        try:
+            payload = json.loads(raw_body)
+        except json.JSONDecodeError:
+            payload = None
+    message: str | None = None
+    if isinstance(payload, dict):
+        message = _read_guard_cloud_error_message(payload)
+        guard_error = payload.get("guardError")
+        if isinstance(guard_error, dict):
+            if guard_error.get("retryable") is True:
+                retryable = True
+            guard_code = guard_error.get("code")
+            unavailable_codes = {"guard_unavailable", "guard_cloud_unavailable"}
+            if isinstance(guard_code, str) and guard_code.strip().lower() in unavailable_codes:
+                retryable = True
+    if message is None:
+        normalized_body = raw_body.strip()
+        message = normalized_body or f"HTTP Error {error.code}: {error.reason}"
+    return message, retryable
+
+
 def _fetch_supply_chain_bundle_payload(request: urllib.request.Request) -> dict[str, object]:
     try:
         return _urlopen_json_with_timeout_retry(
@@ -1440,7 +1475,10 @@ def _fetch_supply_chain_bundle_payload(request: urllib.request.Request) -> dict[
             if is_plan_restricted:
                 raise GuardSyncNotAvailableError(message) from error
             raise RuntimeError(message) from error
-        raise RuntimeError(_sync_http_error_message(error)) from error
+        message, retryable = _guard_cloud_http_error_details(error)
+        if retryable:
+            raise GuardSyncNotAvailableError(message, retryable=True) from error
+        raise RuntimeError(message) from error
     except OSError as error:
         raise RuntimeError(_sync_url_error_message(error)) from error
 

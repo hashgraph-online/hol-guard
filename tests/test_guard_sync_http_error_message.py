@@ -1,8 +1,15 @@
 import io
 import json
 import urllib.error
+import urllib.request
 
-from codex_plugin_scanner.guard.runtime.runner import _sync_http_error_message
+import pytest
+
+from codex_plugin_scanner.guard.runtime.runner import (
+    GuardSyncNotAvailableError,
+    _fetch_supply_chain_bundle_payload,
+    _sync_http_error_message,
+)
 
 
 def _http_error(body: str, *, code: int = 500, reason: str = "Error") -> urllib.error.HTTPError:
@@ -73,3 +80,39 @@ def test_sync_http_error_message_falls_back_to_raw_body() -> None:
 
 def test_sync_http_error_message_falls_back_to_http_reason() -> None:
     assert _sync_http_error_message(_http_error("", code=502, reason="Bad Gateway")) == "HTTP Error 502: Bad Gateway"
+
+
+def test_fetch_supply_chain_bundle_payload_raises_retryable_unavailable_on_guard_cloud_outage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = json.dumps(
+        {
+            "ok": False,
+            "error": "Guard Cloud is unavailable. Local Guard keeps protecting this machine.",
+            "guardError": {
+                "code": "guard_unavailable",
+                "message": "Guard Cloud is unavailable. Local Guard keeps protecting this machine.",
+                "retryable": True,
+                "status": 503,
+            },
+        }
+    )
+
+    def _raise_service_unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise urllib.error.HTTPError(
+            url="https://hol.org/api/guard/supply-chain/bundle?workspaceId=test",
+            code=503,
+            msg="Service Unavailable",
+            hdrs={},
+            fp=io.BytesIO(body.encode("utf-8")),
+        )
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.runner._urlopen_json_with_timeout_retry",
+        _raise_service_unavailable,
+    )
+    request = urllib.request.Request("https://hol.org/api/guard/supply-chain/bundle?workspaceId=test")
+    with pytest.raises(GuardSyncNotAvailableError) as exc_info:
+        _fetch_supply_chain_bundle_payload(request)
+    assert exc_info.value.retryable is True
+    assert "Guard Cloud is unavailable" in str(exc_info.value)

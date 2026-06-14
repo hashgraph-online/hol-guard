@@ -302,14 +302,14 @@ def _supply_chain_package_action_error_response(
             },
         )
     if isinstance(error, GuardSyncNotAvailableError):
-        return (
-            503,
-            {
-                "error": "supply_chain_sync_unavailable",
-                "message": str(error).strip() or "Supply-chain sync is not available on this device.",
-                "operation": operation,
-            },
-        )
+        payload: dict[str, object] = {
+            "error": "supply_chain_sync_unavailable",
+            "message": str(error).strip() or "Supply-chain sync is not available on this device.",
+            "operation": operation,
+        }
+        if error.retryable:
+            payload["retryable"] = True
+        return (503, payload)
     message = str(error).strip() or "Guard supply-chain bundle sync failed."
     return (
         502,
