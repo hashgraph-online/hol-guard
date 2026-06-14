@@ -9,6 +9,8 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any, cast
 
+import pytest
+
 from codex_plugin_scanner.guard.runtime.cisco_evidence import (
     cisco_finding_to_risk_signal,
     scanner_cache_key,
@@ -196,6 +198,24 @@ def test_skill_scanner_timeout_path_drains_worker_result_before_terminating(monk
     payload = cisco_skill_scanner._scan_directory_with_timeout(tmp_path, "balanced", 0.1)
 
     assert payload == {"summary": {"total_skills_scanned": 0}, "results": []}
+    assert output_path.exists() is False
+
+
+def test_skill_scanner_timeout_path_cleans_temp_file_on_timeout(monkeypatch, tmp_path: Path) -> None:
+    output_path = tmp_path / "scan-timeout.json"
+
+    monkeypatch.setattr(cisco_skill_scanner.tempfile, "mkstemp", lambda prefix, suffix: (123, str(output_path)))
+    monkeypatch.setattr(cisco_skill_scanner.os, "close", lambda fd: None)
+
+    def fake_run(*args: object, **kwargs: object) -> object:
+        output_path.write_text("{}", encoding="utf-8")
+        raise cisco_skill_scanner.subprocess.TimeoutExpired(cmd="skill-scanner", timeout=0.1)
+
+    monkeypatch.setattr(cisco_skill_scanner.subprocess, "run", fake_run)
+
+    with pytest.raises(TimeoutError, match="timed out"):
+        cisco_skill_scanner._scan_directory_with_timeout(tmp_path, "balanced", 0.1)
+
     assert output_path.exists() is False
 
 

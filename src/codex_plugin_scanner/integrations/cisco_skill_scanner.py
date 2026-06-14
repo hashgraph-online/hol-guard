@@ -107,25 +107,28 @@ def _scan_directory_with_timeout(
     # Explicit close avoids leaking the temp file descriptor into the child.
     os.close(file_descriptor)
 
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(sys.path)
     try:
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-c",
-                _SUBPROCESS_SCAN_SNIPPET,
-                str(skills_dir),
-                policy_name,
-                str(output_path),
-            ],
-            capture_output=True,
-            check=False,
-            text=True,
-            timeout=timeout_seconds,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise TimeoutError("Cisco skill scanner timed out") from exc
+        try:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    _SUBPROCESS_SCAN_SNIPPET,
+                    str(skills_dir),
+                    policy_name,
+                    str(output_path),
+                ],
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=timeout_seconds,
+                env=env,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise TimeoutError("Cisco skill scanner timed out") from exc
 
-    try:
         if result.returncode != 0:
             error_output = result.stderr.strip() or result.stdout.strip()
             if not error_output:
