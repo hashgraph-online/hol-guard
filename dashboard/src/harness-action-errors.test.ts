@@ -141,7 +141,7 @@ assert(
   "sync transport failures are not connect errors",
 );
 
-const networkFailure = resolveApprovalGateSyncFailure(new TypeError("Failed to fetch"), {
+const networkFailure = resolveApprovalGateSyncFailure(new Error("Failed to fetch"), {
   hasCredentials: true,
 });
 assert(

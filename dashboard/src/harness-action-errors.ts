@@ -78,15 +78,12 @@ export function isSupplyChainSyncConnectError(error: unknown): boolean {
 }
 
 export function readHarnessActionUserMessage(error: unknown, fallback: string): string {
-  if (error instanceof TypeError && GUARD_FETCH_NETWORK_ERROR_MESSAGE.test(error.message)) {
+  if (error instanceof Error && GUARD_FETCH_NETWORK_ERROR_MESSAGE.test(error.message)) {
     return "Guard lost connection while syncing supply-chain intel. Confirm the local daemon is still running, then try again.";
   }
   const structuredMessage = readHarnessActionErrorMessage(error);
   if (structuredMessage !== null) {
     return structuredMessage;
-  }
-  if (error instanceof Error && error.message.trim()) {
-    return error.message.trim();
   }
   return fallback;
 }

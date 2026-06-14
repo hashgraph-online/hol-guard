@@ -377,10 +377,10 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
           const connectGate = resolveSupplyChainSyncConnectRecoveryGate(err);
           if (connectGate !== null) {
             setAuditRecoveryGate(connectGate);
+            setAuditRecoveryPhase("ready");
+            setAuditRecoveryError(null);
+            return;
           }
-          setAuditRecoveryPhase("ready");
-          setAuditRecoveryError(null);
-          return;
         }
         const failure = resolveApprovalGateSyncFailure(err, {
           hasCredentials: credentials !== undefined,
@@ -596,8 +596,8 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
             setAuditRecoveryGate(connectGate);
             setAuditRecoveryPhase("ready");
             setAuditRecoveryError(null);
+            return;
           }
-          return;
         }
         const message = readHarnessActionUserMessage(err, "Operation failed.");
         setLastFailed({ op, manager: null, message });

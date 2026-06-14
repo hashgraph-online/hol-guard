@@ -66,15 +66,12 @@ function isSupplyChainSyncConnectError(error) {
   return code !== null && SUPPLY_CHAIN_CONNECT_ERROR_CODES.has(code);
 }
 function readHarnessActionUserMessage(error, fallback) {
-  if (error instanceof TypeError && GUARD_FETCH_NETWORK_ERROR_MESSAGE.test(error.message)) {
+  if (error instanceof Error && GUARD_FETCH_NETWORK_ERROR_MESSAGE.test(error.message)) {
     return "Guard lost connection while syncing supply-chain intel. Confirm the local daemon is still running, then try again.";
   }
   const structuredMessage = readHarnessActionErrorMessage(error);
   if (structuredMessage !== null) {
     return structuredMessage;
-  }
-  if (error instanceof Error && error.message.trim()) {
-    return error.message.trim();
   }
   return fallback;
 }

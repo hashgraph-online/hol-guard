@@ -1573,10 +1573,10 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
           const connectGate = resolveSupplyChainSyncConnectRecoveryGate(err);
           if (connectGate !== null) {
             setAuditRecoveryGate(connectGate);
+            setAuditRecoveryPhase("ready");
+            setAuditRecoveryError(null);
+            return;
           }
-          setAuditRecoveryPhase("ready");
-          setAuditRecoveryError(null);
-          return;
         }
         const failure = resolveApprovalGateSyncFailure(err, {
           hasCredentials: credentials !== void 0
@@ -1771,8 +1771,8 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
             setAuditRecoveryGate(connectGate);
             setAuditRecoveryPhase("ready");
             setAuditRecoveryError(null);
+            return;
           }
-          return;
         }
         const message = readHarnessActionUserMessage(err, "Operation failed.");
         setLastFailed({ op, manager: null, message });

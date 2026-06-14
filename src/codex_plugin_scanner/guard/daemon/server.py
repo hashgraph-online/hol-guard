@@ -282,22 +282,22 @@ def _supply_chain_package_action_error_response(
     *,
     operation: str,
     error: Exception,
-) -> tuple[int, dict[str, object]] | None:
-    if isinstance(error, GuardSyncNotConfiguredError):
-        return (
-            403,
-            {
-                "error": "guard_cloud_connect_required",
-                "message": str(error).strip() or "Guard Cloud workspace is not connected.",
-                "operation": operation,
-            },
-        )
+) -> tuple[int, dict[str, object]]:
     if isinstance(error, GuardSyncAuthorizationExpiredError):
         return (
             403,
             {
                 "error": "guard_cloud_reconnect_required",
                 "message": str(error).strip() or "Guard Cloud authorization expired.",
+                "operation": operation,
+            },
+        )
+    if isinstance(error, GuardSyncNotConfiguredError):
+        return (
+            403,
+            {
+                "error": "guard_cloud_connect_required",
+                "message": str(error).strip() or "Guard Cloud workspace is not connected.",
                 "operation": operation,
             },
         )
@@ -310,17 +310,15 @@ def _supply_chain_package_action_error_response(
                 "operation": operation,
             },
         )
-    if isinstance(error, RuntimeError):
-        message = str(error).strip() or "Guard supply-chain bundle sync failed."
-        return (
-            502,
-            {
-                "error": "supply_chain_sync_failed",
-                "message": message,
-                "operation": operation,
-            },
-        )
-    return None
+    message = str(error).strip() or "Guard supply-chain bundle sync failed."
+    return (
+        502,
+        {
+            "error": "supply_chain_sync_failed",
+            "message": message,
+            "operation": operation,
+        },
+    )
 
 
 def _cloud_app_dashboard_session_actions(action_path: str) -> frozenset[str]:
@@ -2303,15 +2301,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json(error_payload, status=400)
             return
         except Exception as error:
-            mapped = _supply_chain_package_action_error_response(
+            status, error_payload = _supply_chain_package_action_error_response(
                 operation=operation,
                 error=error,
             )
-            if mapped is not None:
-                status, error_payload = mapped
-                self._write_json(error_payload, status=status)
-                return
-            raise
+            self._write_json(error_payload, status=status)
+            return
         receipt_overrides = package_firewall_receipt_metadata(
             operation=operation,
             result=result,
