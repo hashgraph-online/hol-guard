@@ -94,7 +94,11 @@ from .store_evidence import (
 from .store_evidence import (
     store_evidence as _store_evidence_impl,
 )
-from .store_policy_source_context import find_policy_source_context
+from .store_policy_source_context import (
+    PolicySourceContextIndex,
+    build_policy_source_context_index,
+    lookup_policy_source_context,
+)
 from .store_receipt_rollups import (
     backfill_receipt_rollups,
     count_receipts_from_rollups,
@@ -3015,22 +3019,51 @@ class GuardStore:
         query += " order by updated_at desc"
         with self._connect() as connection:
             rows = connection.execute(query, params).fetchall()
-            return [self._policy_decision_dict_from_row(connection, row) for row in rows]
+            lookup_items = [
+                (
+                    str(row["harness"]),
+                    str(row["artifact_id"]) if row["artifact_id"] is not None else None,
+                    str(row["artifact_hash"]) if row["artifact_hash"] is not None else None,
+                )
+                for row in rows
+            ]
+            source_context_index = build_policy_source_context_index(connection, items=lookup_items)
+            return [
+                self._policy_decision_dict_from_row(connection, row, source_context_index=source_context_index)
+                for row in rows
+            ]
 
     @staticmethod
-    def _policy_decision_dict_from_row(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, object]:
+    def _policy_decision_dict_from_row(
+        connection: sqlite3.Connection,
+        row: sqlite3.Row,
+        *,
+        source_context_index: PolicySourceContextIndex | None = None,
+    ) -> dict[str, object]:
         harness = str(row["harness"])
         artifact_id = row["artifact_id"]
         artifact_hash = row["artifact_hash"]
         workspace = row["workspace"]
-        source_context = find_policy_source_context(
-            connection,
-            harness=harness,
-            artifact_id=str(artifact_id) if artifact_id is not None else None,
-            artifact_hash=str(artifact_hash) if artifact_hash is not None else None,
-            workspace=str(workspace) if workspace is not None else None,
-            reason=str(row["reason"]) if row["reason"] is not None else None,
-        )
+        if source_context_index is not None:
+            source_context = lookup_policy_source_context(
+                source_context_index,
+                harness=harness,
+                artifact_id=str(artifact_id) if artifact_id is not None else None,
+                artifact_hash=str(artifact_hash) if artifact_hash is not None else None,
+                workspace=str(workspace) if workspace is not None else None,
+                reason=str(row["reason"]) if row["reason"] is not None else None,
+            )
+        else:
+            from .store_policy_source_context import find_policy_source_context
+
+            source_context = find_policy_source_context(
+                connection,
+                harness=harness,
+                artifact_id=str(artifact_id) if artifact_id is not None else None,
+                artifact_hash=str(artifact_hash) if artifact_hash is not None else None,
+                workspace=str(workspace) if workspace is not None else None,
+                reason=str(row["reason"]) if row["reason"] is not None else None,
+            )
         payload: dict[str, object] = {
             "decision_id": int(row["decision_id"]),
             "harness": harness,
