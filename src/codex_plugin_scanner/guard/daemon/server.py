@@ -1896,6 +1896,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self.server.store,  # type: ignore[attr-defined]
                 policy_bundle=validated_policy_bundle,
                 now=applied_at,
+                device_id=device_id,
             )
             applied_bundle_hash = str(validated_policy_bundle["bundleHash"])
             applied_bundle_version = str(validated_policy_bundle["bundleVersion"])

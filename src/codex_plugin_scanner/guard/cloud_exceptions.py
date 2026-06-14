@@ -293,5 +293,25 @@ def list_active_cloud_exceptions(
     return [item for item in active if item.harness in {harness, "*"}]
 
 
+def _cloud_exception_legacy_scope_field(item: CloudException) -> tuple[str, str] | None:
+    prefix = f"{item.scope}:"
+    if not item.id.startswith(prefix):
+        return None
+    value = item.id[len(prefix) :]
+    if not value.strip():
+        return None
+    if item.scope == "artifact":
+        return ("artifact_id", value)
+    if item.scope == "publisher":
+        return ("publisher", value)
+    return None
+
+
 def cloud_exception_to_dict(item: CloudException) -> dict[str, object]:
-    return asdict(item)
+    payload = asdict(item)
+    payload["expires_at"] = item.expiry
+    legacy_scope_field = _cloud_exception_legacy_scope_field(item)
+    if legacy_scope_field is not None:
+        field_name, field_value = legacy_scope_field
+        payload[field_name] = field_value
+    return payload
