@@ -337,38 +337,69 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     setAuditRecoveryPhase((currentPhase) => (currentPhase === "failed" ? "failed" : "ready"));
   }, [runAuditOperation]);
 
-  const runRecoverySync = useCallback(async () => {
-    setAuditRecoveryPhase("syncing");
-    setAuditRecoveryError(null);
-    try {
-      const response = await runPackageSync();
-      setLastCompleted({ op: "sync", manager: null, response });
-      await refreshAfterOp();
-      await onStateChanged?.();
-      if (auditRecoveryGate?.autoRetryAuditAfterPrimary) {
-        await continueAuditAfterRecovery();
-        return;
-      }
-      setAuditRecoveryPhase("ready");
-    } catch (err) {
-      if (isSupplyChainAuditConnectError(err)) {
-        const connectGate = resolveSupplyChainAuditRecoveryGate({
-          audit_status: "incomplete",
-          audit_outcome: "not_connected",
-        });
-        if (connectGate !== null) {
-          setAuditRecoveryGate(connectGate);
+  const runRecoverySync = useCallback(
+    async (credentials?: { approval_password?: string; approval_totp_code?: string }) => {
+      setAuditRecoveryPhase("syncing");
+      setAuditRecoveryError(null);
+      try {
+        const response = await runPackageSync(credentials);
+        setLastCompleted({ op: "sync", manager: null, response });
+        await refreshAfterOp();
+        await onStateChanged?.();
+        if (auditRecoveryGate?.autoRetryAuditAfterPrimary) {
+          await continueAuditAfterRecovery();
+          return;
         }
         setAuditRecoveryPhase("ready");
-        setAuditRecoveryError(null);
-        return;
+      } catch (err) {
+        if (isSupplyChainAuditConnectError(err)) {
+          const connectGate = resolveSupplyChainAuditRecoveryGate({
+            audit_status: "incomplete",
+            audit_outcome: "not_connected",
+          });
+          if (connectGate !== null) {
+            setAuditRecoveryGate(connectGate);
+          }
+          setAuditRecoveryPhase("ready");
+          setAuditRecoveryError(null);
+          return;
+        }
+        if (
+          credentials === undefined &&
+          err instanceof GuardHarnessActionError &&
+          err.payload?.error === "approval_gate_required"
+        ) {
+          await resolveApprovalGate();
+          setAuditRecoveryPhase("approval");
+          setAuditRecoveryError(null);
+          return;
+        }
+        const message = err instanceof Error ? err.message : "Sync failed.";
+        setAuditRecoveryError(message);
+        setAuditRecoveryPhase(credentials === undefined ? "failed" : "approval");
+        setLastFailed({ op: "sync", manager: null, message });
       }
-      const message = err instanceof Error ? err.message : "Sync failed.";
-      setAuditRecoveryError(message);
-      setAuditRecoveryPhase("failed");
-      setLastFailed({ op: "sync", manager: null, message });
-    }
-  }, [auditRecoveryGate, continueAuditAfterRecovery, onStateChanged, refreshAfterOp]);
+    },
+    [
+      auditRecoveryGate,
+      continueAuditAfterRecovery,
+      onStateChanged,
+      refreshAfterOp,
+      resolveApprovalGate,
+    ],
+  );
+
+  const handleRecoveryApprovalBack = useCallback(() => {
+    setAuditRecoveryPhase("ready");
+    setAuditRecoveryError(null);
+  }, []);
+
+  const handleRecoveryApprovalSubmit = useCallback(
+    (credentials: { approval_password?: string; approval_totp_code?: string }) => {
+      void runRecoverySync(credentials);
+    },
+    [runRecoverySync],
+  );
 
   const handleStartConnect = useCallback(async () => {
     setStartingConnect(true);
@@ -774,12 +805,15 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
           connectError={connectError}
           connectStarting={startingConnect}
           connectFlow={panelLoad.phase === "loaded" ? panelLoad.data.connect_flow : null}
+          approvalGate={resolvedApprovalGate}
           onClose={closeAuditRecovery}
           onPrimaryAction={handleRecoveryPrimary}
           onStartConnect={() => {
             setAuditRecoveryPhase("connecting");
             void handleStartConnect();
           }}
+          onApprovalSubmit={handleRecoveryApprovalSubmit}
+          onApprovalBack={handleRecoveryApprovalBack}
         />
       ) : null}
     </div>

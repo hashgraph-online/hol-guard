@@ -1,4 +1,5 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { ChangeEvent } from "react";
 import {
   HiMiniArrowPath,
   HiMiniArrowTopRightOnSquare,
@@ -6,9 +7,10 @@ import {
   HiMiniCloudArrowDown,
   HiMiniShieldCheck,
 } from "react-icons/hi2";
+import { ApprovalProofInline } from "./approval-proof-inline";
 import { ActionButton, Tag } from "./approval-center-primitives";
 import { GuardModalLayer } from "./guard-modal-layer";
-import type { PackageFirewallStatusResponse } from "./guard-types";
+import type { GuardApprovalGatePublicConfig, PackageFirewallStatusResponse } from "./guard-types";
 import { ConnectFlowCard } from "./supply-chain-firewall-views";
 import type { SupplyChainAuditRecoveryGate } from "./supply-chain-audit-recovery";
 
@@ -17,6 +19,7 @@ export type AuditRecoveryModalPhase =
   | "syncing"
   | "connecting"
   | "auditing"
+  | "approval"
   | "failed";
 
 type AuditRecoveryModalProps = {
@@ -26,9 +29,15 @@ type AuditRecoveryModalProps = {
   connectError: string | null;
   connectStarting: boolean;
   connectFlow: PackageFirewallStatusResponse["connect_flow"];
+  approvalGate: GuardApprovalGatePublicConfig | null;
   onClose: () => void;
   onPrimaryAction: () => void;
   onStartConnect: () => void;
+  onApprovalSubmit: (credentials: {
+    approval_password?: string;
+    approval_totp_code?: string;
+  }) => void;
+  onApprovalBack: () => void;
 };
 
 function resolvePhaseLabel(phase: AuditRecoveryModalPhase): string {
@@ -40,6 +49,9 @@ function resolvePhaseLabel(phase: AuditRecoveryModalPhase): string {
   }
   if (phase === "auditing") {
     return "Running audit";
+  }
+  if (phase === "approval") {
+    return "Approval required";
   }
   if (phase === "failed") {
     return "Needs attention";
@@ -96,7 +108,7 @@ function resolveActiveStepIndex(
   if (phase === "auditing") {
     return gate.steps.length;
   }
-  if (phase === "syncing") {
+  if (phase === "syncing" || phase === "approval") {
     return gate.obstacle === "cloud_auth" ? 2 : 1;
   }
   if (phase === "connecting") {
@@ -112,15 +124,29 @@ export function AuditRecoveryModal({
   connectError,
   connectStarting,
   connectFlow,
+  approvalGate,
   onClose,
   onPrimaryAction,
   onStartConnect,
+  onApprovalSubmit,
+  onApprovalBack,
 }: AuditRecoveryModalProps) {
+  const [approvalPassword, setApprovalPassword] = useState("");
+  const [approvalTotpCode, setApprovalTotpCode] = useState("");
+
+  useEffect(() => {
+    if (phase !== "approval") {
+      setApprovalPassword("");
+      setApprovalTotpCode("");
+    }
+  }, [phase]);
+
   const activeStep = resolveActiveStepIndex(gate, phase);
   const primaryBusy = phase === "syncing" || phase === "connecting" || phase === "auditing";
   const PrimaryIcon = resolvePrimaryIcon(gate, phase);
   const showConnectFlow =
     gate.primaryAction === "connect" && connectFlow !== null && phase !== "auditing";
+  const showApprovalStep = phase === "approval";
 
   const handlePrimaryClick = useCallback(() => {
     if (primaryBusy) {
@@ -128,6 +154,21 @@ export function AuditRecoveryModal({
     }
     onPrimaryAction();
   }, [onPrimaryAction, primaryBusy]);
+
+  const handleApprovalPasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setApprovalPassword(event.target.value);
+  }, []);
+
+  const handleApprovalTotpCodeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setApprovalTotpCode(event.target.value);
+  }, []);
+
+  const handleApprovalSubmit = useCallback(() => {
+    onApprovalSubmit({
+      approval_password: approvalPassword,
+      ...(approvalGate?.totp_enabled === true ? { approval_totp_code: approvalTotpCode } : {}),
+    });
+  }, [approvalGate, approvalPassword, approvalTotpCode, onApprovalSubmit]);
 
   return (
     <GuardModalLayer ariaLabel="Finish workspace audit setup" onClose={onClose}>
@@ -168,6 +209,21 @@ export function AuditRecoveryModal({
             detail={gate.detail}
             onStartConnect={onStartConnect}
           />
+        ) : showApprovalStep ? (
+          <div className="px-5 py-5">
+            <ApprovalProofInline
+              approvalGate={approvalGate}
+              approvalPassword={approvalPassword}
+              approvalTotpCode={approvalTotpCode}
+              error={error}
+              submitLabel="Sync supply-chain intel"
+              submitBusy={false}
+              onApprovalPasswordChange={handleApprovalPasswordChange}
+              onApprovalTotpCodeChange={handleApprovalTotpCodeChange}
+              onSubmit={handleApprovalSubmit}
+              onBack={onApprovalBack}
+            />
+          </div>
         ) : (
           <div className="space-y-5 px-5 py-5">
             <ol className="grid gap-3 sm:grid-cols-2">
