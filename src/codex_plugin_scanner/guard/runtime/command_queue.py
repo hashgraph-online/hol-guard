@@ -51,7 +51,16 @@ def _now() -> str:
 
 def command_queue_enabled(environ: dict[str, str] | None = None) -> bool:
     source = os.environ if environ is None else environ
-    return source.get(COMMAND_QUEUE_ENABLED_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
+    value = source.get(COMMAND_QUEUE_ENABLED_ENV)
+    if value is None:
+        return True
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"", "0", "false", "no", "off", "disabled"}:
+        return False
+    _LOGGER.warning("Ignoring unrecognized %s value; command queue disabled.", COMMAND_QUEUE_ENABLED_ENV)
+    return False
 
 
 def _env_float(name: str, default: float) -> float:
