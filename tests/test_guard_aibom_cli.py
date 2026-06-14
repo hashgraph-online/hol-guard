@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+from email.message import Message
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore
@@ -316,7 +320,7 @@ def test_sync_aibom_snapshots_404_backoff_isolated_from_guard_events_summary(
             url="https://hol.test/api/v1/guard/events",
             code=404,
             msg="Not Found",
-            hdrs=None,
+            hdrs=Message(),
             fp=None,
         )
 
@@ -342,6 +346,130 @@ def test_sync_aibom_snapshots_404_backoff_isolated_from_guard_events_summary(
     assert guard_events_summary.get("events") == 12
     assert isinstance(aibom_backoff, dict)
     assert aibom_backoff.get("sync_reason") == "guard_events_endpoint_unavailable"
+
+
+def test_collect_aibom_snapshots_passes_cisco_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import aibom_cli
+    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    skill_path = workspace_dir / ".agents" / "skills" / "demo" / "SKILL.md"
+    _write_text(skill_path, "---\ndescription: demo\n---\n")
+
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(str(skill_path),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:global:skill:.agents/skills:demo",
+                name="demo",
+                harness="codex",
+                artifact_type="skill",
+                source_scope="global",
+                config_path=str(skill_path),
+                metadata={"skill_root": ".agents/skills"},
+            ),
+        ),
+        warnings=(),
+    )
+    context = HarnessContext(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        guard_home=tmp_path / "guard",
+    )
+    observed: dict[str, object] = {}
+    cisco_runs = (
+        CiscoInventoryRun(
+            source="cisco-skill-scanner",
+            status="enabled",
+            message="ok",
+            findings=(),
+            duration_ms=12,
+            metadata={"skillsScanned": 1},
+        ),
+    )
+
+    monkeypatch.setattr(aibom_cli, "detect_all", lambda _context: [detection])
+
+    def fake_run_cisco_inventory_scans(**kwargs: object) -> tuple[object, ...]:
+        observed["cisco_kwargs"] = kwargs
+        return cisco_runs
+
+    def fake_inventory_snapshot_from_detection(*args: object, **kwargs: object) -> object:
+        observed["snapshot_kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr(aibom_cli, "run_cisco_inventory_scans", fake_run_cisco_inventory_scans)
+    monkeypatch.setattr(
+        aibom_cli,
+        "inventory_snapshot_from_detection",
+        fake_inventory_snapshot_from_detection,
+    )
+
+    snapshots = aibom_cli.collect_aibom_snapshots(
+        context,
+        generated_at="2026-06-10T12:00:00+00:00",
+    )
+
+    assert len(snapshots) == 1
+    assert observed["cisco_kwargs"] == {
+        "harness": "codex",
+        "context": context,
+        "detection": detection,
+        "mcp_mode": "off",
+        "skill_mode": "off",
+        "timeout_seconds": None,
+    }
+    snapshot_kwargs = observed["snapshot_kwargs"]
+    assert isinstance(snapshot_kwargs, dict)
+    assert snapshot_kwargs["cisco_runs"] == cisco_runs
+
+
+def test_sync_aibom_snapshots_uses_cloud_sync_cisco_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import aibom_cli
+    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
+
+    store = GuardStore(tmp_path / "guard")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=tmp_path / "workspace",
+        guard_home=tmp_path / "guard",
+    )
+    observed: dict[str, object] = {}
+
+    def fake_collect_aibom_snapshots(*args: object, **kwargs: object) -> tuple[object, ...]:
+        observed["collect_kwargs"] = kwargs
+        return ()
+
+    monkeypatch.setattr(aibom_cli, "collect_aibom_snapshots", fake_collect_aibom_snapshots)
+
+    summary = sync_aibom_snapshots(
+        store,
+        context,
+        generated_at="2026-06-10T12:00:00+00:00",
+        auth_context={
+            "sync_url": "https://hol.test/api/v1/guard/events",
+            "token": "test-token",
+        },
+    )
+
+    assert summary["accepted"] == 0
+    collect_kwargs = observed["collect_kwargs"]
+    assert isinstance(collect_kwargs, dict)
+    options = collect_kwargs["options"]
+    assert isinstance(options, aibom_cli.AibomCliOptions)
+    assert options.cisco_skill_scan == "auto"
+    assert options.cisco_mcp_scan == "auto"
+    assert options.cisco_timeout_seconds == 30.0
 
 
 def test_aibom_export_json_includes_redaction_report(tmp_path: Path, capsys) -> None:

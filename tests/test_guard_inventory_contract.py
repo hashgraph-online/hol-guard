@@ -336,6 +336,7 @@ def test_inventory_snapshot_attaches_cisco_skill_trust_layer(tmp_path: Path) -> 
     )
     skill_item = next(item for item in snapshot.items if item.item_kind == "skill")
     trust_layers = skill_item.metadata.get("trustLayers")
+    local_security = skill_item.metadata.get("localSecurity")
     encoded = json.dumps(serialize_inventory_snapshot(snapshot), sort_keys=True)
 
     assert isinstance(trust_layers, list)
@@ -343,6 +344,17 @@ def test_inventory_snapshot_attaches_cisco_skill_trust_layer(tmp_path: Path) -> 
         layer for layer in trust_layers if isinstance(layer, dict) and layer.get("layerType") == "cisco_skill_scanner"
     )
     assert cisco_layer.get("trustScore") == 88
+    assert isinstance(local_security, dict)
+    assert local_security.get("entityType") == "skill"
+    assert local_security.get("provider") == "cisco-skill-scanner"
+    safety = local_security.get("safety")
+    assert isinstance(safety, dict)
+    assert safety.get("score") == 88
+    assert safety.get("label") == "review"
+    findings = local_security.get("findings")
+    assert isinstance(findings, list)
+    assert findings[0].get("severity") == "high"
+    assert findings[0].get("file") == "SKILL.md"
     assert str(skill_dir) not in encoded
 
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Literal
 
 from ..checks.skill_security import resolve_skill_security_context
-from ..models import ScanOptions
+from ..models import ScanOptions, Severity
 from ..trust_instruction_scoring import build_instruction_domain
 from ..trust_mcp_scoring import build_mcp_domain, build_mcp_surface_domain
 from ..trust_models import TrustAdapterScore, TrustComponentScore, TrustDomainScore
@@ -116,9 +116,167 @@ def apply_local_trust_metadata(
         )
     )
 
+    local_security = _local_skill_security_for_artifact(
+        artifact,
+        item_kind=item_kind,
+        metadata=metadata,
+        captured_at=captured_at,
+        cisco_runs=cisco_runs,
+        workspace_dir=workspace_dir,
+    )
+    if local_security is not None:
+        enriched["localSecurity"] = local_security
+
     if trust_layers:
         enriched["trustLayers"] = _merge_trust_layers(metadata.get("trustLayers"), trust_layers)
     return enriched
+
+
+def _local_skill_security_for_artifact(
+    artifact: object,
+    *,
+    item_kind: InventoryItemKind,
+    metadata: dict[str, object],
+    captured_at: str,
+    cisco_runs: tuple[object, ...],
+    workspace_dir: Path | None,
+) -> dict[str, object] | None:
+    from .inventory_contract import _normalize_inventory_datetime
+
+    if item_kind != "skill" or metadata.get("artifactType") != "skill":
+        return None
+
+    trust_root = _trust_root_for_artifact(artifact, item_kind=item_kind, workspace_dir=workspace_dir)
+    if trust_root is None:
+        return None
+
+    run = next(
+        (
+            candidate
+            for candidate in cisco_runs
+            if getattr(candidate, "source", None) == "cisco-skill-scanner"
+            and _matches_skill_cisco_run(
+                artifact,
+                item_kind=item_kind,
+                run=candidate,
+                workspace_dir=workspace_dir,
+            )
+        ),
+        None,
+    )
+    if run is None:
+        return None
+
+    status = str(getattr(run, "status", "unknown"))
+    normalized_captured_at = _normalize_inventory_datetime(captured_at)
+    findings = _local_skill_security_findings(run, skill_root=trust_root)
+    severity_counts = _cisco_severity_counts(run)
+    score = _cisco_layer_score(severity_counts) if status == "enabled" else None
+    safety = None
+    if score is not None:
+        safety = {
+            "score": score,
+            "label": _local_skill_security_label(score),
+            "findingsTotal": len(findings),
+            "highFindings": sum(1 for finding in findings if finding["severity"] == "high"),
+            "scriptsTotal": _local_skill_scripts_total(run),
+            "permissionsMissing": [],
+        }
+
+    run_metadata = getattr(run, "metadata", None)
+    metadata_payload: dict[str, object] = {
+        "scannerSource": str(getattr(run, "source", "unknown")),
+        "message": str(getattr(run, "message", "")),
+        "findingsBySeverity": severity_counts,
+        "totalFindings": len(findings),
+    }
+    duration_ms = getattr(run, "duration_ms", None)
+    if isinstance(duration_ms, int):
+        metadata_payload["durationMs"] = duration_ms
+    if isinstance(run_metadata, dict):
+        for key in ("analyzersUsed", "policyName", "mode", "skillsScanned", "skillsSkipped"):
+            value = run_metadata.get(key)
+            if value is not None:
+                metadata_payload[key] = value
+
+    return {
+        "entityType": "skill",
+        "source": "local_indexed",
+        "provider": "cisco-skill-scanner",
+        "status": status,
+        "capturedAt": normalized_captured_at,
+        "safety": safety,
+        "findings": findings,
+        "metadata": metadata_payload,
+    }
+
+
+def _local_skill_security_findings(
+    run: object,
+    *,
+    skill_root: Path,
+) -> list[dict[str, object]]:
+    results: list[dict[str, object]] = []
+    for finding in tuple(getattr(run, "findings", ()) or ()):
+        file_path = getattr(finding, "file_path", None)
+        if isinstance(file_path, str) and file_path.strip():
+            path = Path(file_path)
+            if not _paths_related(skill_root, path):
+                continue
+            try:
+                relative_file = str(path.resolve().relative_to(skill_root.resolve()))
+            except ValueError:
+                relative_file = path.name
+        else:
+            relative_file = "SKILL.md"
+
+        results.append(
+            {
+                "ruleId": str(getattr(finding, "rule_id", "unknown")),
+                "severity": _local_skill_security_severity(getattr(finding, "severity", None)),
+                "file": relative_file,
+                "message": _local_skill_security_message(finding),
+            }
+        )
+    return results
+
+
+def _local_skill_security_severity(value: object) -> str:
+    severity = value.value if isinstance(value, Severity) else str(value).lower()
+    if severity in {"critical", "high"}:
+        return "high"
+    if severity == "medium":
+        return "medium"
+    return "low"
+
+
+def _local_skill_security_message(finding: object) -> str:
+    description = getattr(finding, "description", None)
+    if isinstance(description, str) and description.strip():
+        return description.strip()
+    title = getattr(finding, "title", None)
+    if isinstance(title, str) and title.strip():
+        return title.strip()
+    return "Skill security finding"
+
+
+def _local_skill_security_label(score: int) -> str:
+    if score >= 90:
+        return "safe"
+    if score >= 70:
+        return "review"
+    if score >= 45:
+        return "caution"
+    return "unsafe"
+
+
+def _local_skill_scripts_total(run: object) -> int:
+    metadata = getattr(run, "metadata", None)
+    if isinstance(metadata, dict):
+        value = metadata.get("skillsScanned")
+        if isinstance(value, int):
+            return max(0, value)
+    return 0
 
 
 def _local_trust_domain_for_artifact(

@@ -13,6 +13,7 @@ from typing import Literal
 
 from .adapters.base import HarnessContext
 from .consumer import detect_all
+from .inventory_cisco import run_cisco_inventory_scans
 from .inventory_contract import (
     GuardAgentInventorySnapshot,
     extract_aibom_metadata_extensions,
@@ -29,6 +30,16 @@ AibomExportFormat = Literal["json", "markdown"]
 class AibomCliOptions:
     include_symlinks: bool = True
     follow_unsafe_symlinks: bool = False
+    cisco_skill_scan: str = "off"
+    cisco_mcp_scan: str = "off"
+    cisco_timeout_seconds: float | None = None
+
+
+_AIBOM_CLOUD_SYNC_OPTIONS = AibomCliOptions(
+    cisco_skill_scan="auto",
+    cisco_mcp_scan="auto",
+    cisco_timeout_seconds=30.0,
+)
 
 
 def collect_aibom_snapshots(
@@ -42,12 +53,21 @@ def collect_aibom_snapshots(
     for detection in detect_all(context):
         if not detection.installed and not detection.artifacts:
             continue
+        cisco_runs = run_cisco_inventory_scans(
+            harness=str(getattr(detection, "harness", "unknown")),
+            context=context,
+            detection=detection,
+            mcp_mode=resolved.cisco_mcp_scan,
+            skill_mode=resolved.cisco_skill_scan,
+            timeout_seconds=resolved.cisco_timeout_seconds,
+        )
         snapshots.append(
             inventory_snapshot_from_detection(
                 detection,
                 generated_at=generated_at,
                 home_dir=context.home_dir,
                 workspace_dir=context.workspace_dir,
+                cisco_runs=cisco_runs,
                 include_symlinks=resolved.include_symlinks,
                 follow_unsafe_symlinks=resolved.follow_unsafe_symlinks,
             )
@@ -279,7 +299,12 @@ def sync_aibom_snapshots(
     if workspace_id is None:
         raise GuardSyncNotConfiguredError("Guard Cloud workspace is not configured. Run `hol-guard connect` first.")
 
-    snapshots = collect_aibom_snapshots(context, generated_at=generated_at, options=options)
+    resolved_options = options or _AIBOM_CLOUD_SYNC_OPTIONS
+    snapshots = collect_aibom_snapshots(
+        context,
+        generated_at=generated_at,
+        options=resolved_options,
+    )
     if not snapshots:
         synced_at = generated_at
         summary = {
