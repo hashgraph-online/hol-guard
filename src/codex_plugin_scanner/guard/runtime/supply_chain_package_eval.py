@@ -30,6 +30,7 @@ from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
 from .js_semver import highest_js_version_for_selector, version_matches_js_selector
+from .manifest_dependency_targets import evaluation_targets as _manifest_evaluation_targets
 from .package_intent_common import split_python_extras
 from .package_manifest_diff import (
     _DeadlineExceededError,
@@ -198,7 +199,7 @@ def evaluate_package_request_artifact(
 ) -> PackageRequestEvaluation:
     now_value = now or datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     now_timestamp = _parse_evaluation_timestamp(now_value)
-    targets = _targets_from_artifact(artifact)
+    targets = _evaluation_targets(artifact, workspace_dir)
     package_intent_hash = artifact.artifact_id.rsplit(":", 1)[-1]
     workspace_id = store.get_cloud_workspace_id()
     bundle_payload = store.get_cached_supply_chain_bundle(workspace_id) if workspace_id is not None else None
@@ -977,6 +978,20 @@ def _evaluate_with_bundle(
     packages: list[dict[str, object]] = []
     lockfile_versions = _lockfile_dependency_versions(workspace_dir, artifact, targets)
     for target in targets:
+        if target.get("manifest_unsynced") is True:
+            packages.append(
+                _heuristic_package_result(
+                    target=target,
+                    decision="ask",
+                    code="manifest_lockfile_unsynced",
+                    message=(
+                        f"{target['package_name']} is declared in the project manifest but is not pinned "
+                        "in the existing lockfile yet, so Guard requires review before install."
+                    ),
+                    severity="high",
+                )
+            )
+            continue
         resolved_version = _resolved_target_version(
             target=target,
             lockfile_versions=lockfile_versions,
@@ -1111,6 +1126,20 @@ def _heuristic_result(
 ) -> _EvaluationDraft | None:
     packages: list[dict[str, object]] = []
     for target in targets:
+        if target.get("manifest_unsynced") is True:
+            packages.append(
+                _heuristic_package_result(
+                    target=target,
+                    decision="ask",
+                    code="manifest_lockfile_unsynced",
+                    message=(
+                        f"{target['package_name']} is declared in the project manifest but is not pinned "
+                        "in the existing lockfile yet, so Guard requires review before install."
+                    ),
+                    severity="high",
+                )
+            )
+            continue
         lockfile_parse_warning = _lockfile_parse_warning_result(
             target=target,
             artifact=artifact,
@@ -1232,6 +1261,17 @@ def _persist_evidence(
                 created_at=now,
             )
         )
+
+
+def _evaluation_targets(
+    artifact: GuardArtifact,
+    workspace_dir: Path | None,
+) -> tuple[dict[str, object], ...]:
+    return _manifest_evaluation_targets(
+        artifact,
+        workspace_dir,
+        explicit_targets=_targets_from_artifact(artifact),
+    )
 
 
 def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], ...]:
@@ -1389,7 +1429,7 @@ def _transitive_lockfile_results(
     bundle_index = _bundle_package_index(bundle_response)
     direct_target_names_by_ecosystem: dict[str, set[str]] = {}
     all_direct_target_names: set[str] = set()
-    direct_targets = _targets_from_artifact(artifact)
+    direct_targets = _evaluation_targets(artifact, workspace_dir)
     for target in direct_targets:
         ecosystem = _optional_string(target.get("ecosystem")) or "npm"
         candidate_names = {str(target["normalized_name"]), *_target_candidate_names(target)}
