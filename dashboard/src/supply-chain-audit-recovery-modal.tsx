@@ -133,11 +133,13 @@ export function AuditRecoveryModal({
 }: AuditRecoveryModalProps) {
   const [approvalPassword, setApprovalPassword] = useState("");
   const [approvalTotpCode, setApprovalTotpCode] = useState("");
+  const [approvalSubmitting, setApprovalSubmitting] = useState(false);
 
   useEffect(() => {
     if (phase !== "approval") {
       setApprovalPassword("");
       setApprovalTotpCode("");
+      setApprovalSubmitting(false);
     }
   }, [phase]);
 
@@ -164,6 +166,7 @@ export function AuditRecoveryModal({
   }, []);
 
   const handleApprovalSubmit = useCallback(() => {
+    setApprovalSubmitting(true);
     onApprovalSubmit({
       approval_password: approvalPassword,
       ...(approvalGate?.totp_enabled === true ? { approval_totp_code: approvalTotpCode } : {}),
@@ -217,7 +220,7 @@ export function AuditRecoveryModal({
               approvalTotpCode={approvalTotpCode}
               error={error}
               submitLabel="Sync supply-chain intel"
-              submitBusy={false}
+              submitBusy={approvalSubmitting}
               onApprovalPasswordChange={handleApprovalPasswordChange}
               onApprovalTotpCodeChange={handleApprovalTotpCodeChange}
               onSubmit={handleApprovalSubmit}

@@ -27,20 +27,20 @@ export function ApprovalProofInline(props: ApprovalProofInlineProps) {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        props.onSubmit();
-      }
-    },
-    [props.onSubmit],
-  );
-
   const submitDisabled =
     props.submitBusy ||
     props.approvalPassword.trim() === "" ||
     (props.approvalGate?.totp_enabled === true && props.approvalTotpCode.trim() === "");
+
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Enter" && !submitDisabled) {
+        event.preventDefault();
+        props.onSubmit();
+      }
+    },
+    [props.onSubmit, submitDisabled],
+  );
 
   return (
     <div className="space-y-5" onKeyDown={handleKeyDown}>
