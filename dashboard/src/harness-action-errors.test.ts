@@ -2,6 +2,8 @@ import { GuardHarnessActionError } from "./guard-api";
 import {
   isApprovalGateRequiredError,
   isGuardHarnessActionError,
+  isSupplyChainSyncConnectError,
+  readHarnessActionUserMessage,
   resolveApprovalGateSyncFailure,
 } from "./harness-action-errors";
 
@@ -110,5 +112,42 @@ const withCredentials = resolveApprovalGateSyncFailure(
   { hasCredentials: true },
 );
 assert(withCredentials.kind === "failed", "wrong password stays on approval form with error");
+
+assert(
+  isSupplyChainSyncConnectError(
+    makeHarnessError(403, {
+      error: "guard_cloud_connect_required",
+      message: "Guard Cloud workspace is not connected.",
+    }),
+  ),
+  "connect required sync errors are detected",
+);
+assert(
+  isSupplyChainSyncConnectError(
+    makeHarnessError(403, {
+      error: "guard_cloud_reconnect_required",
+      message: "Guard Cloud authorization expired.",
+    }),
+  ),
+  "reconnect required sync errors are detected",
+);
+assert(
+  !isSupplyChainSyncConnectError(
+    makeHarnessError(502, {
+      error: "supply_chain_sync_failed",
+      message: "Guard supply-chain bundle sync failed.",
+    }),
+  ),
+  "sync transport failures are not connect errors",
+);
+
+const networkFailure = resolveApprovalGateSyncFailure(new TypeError("Failed to fetch"), {
+  hasCredentials: true,
+});
+assert(
+  networkFailure.kind === "failed" &&
+    networkFailure.message.includes("lost connection while syncing"),
+  "failed to fetch maps to daemon connection guidance",
+);
 
 console.log("harness-action-errors.test.ts: all assertions passed");

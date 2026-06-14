@@ -1,6 +1,15 @@
 import { GuardHarnessActionError } from "./guard-api";
+import {
+  isGuardHarnessActionError,
+  isSupplyChainSyncConnectError,
+  readHarnessActionErrorCode,
+} from "./harness-action-errors";
 import type { PackageFirewallStatusResponse } from "./guard-types";
 import { isSupplyChainAuditIncomplete, resolveSupplyChainAuditFailure } from "./supply-chain-audit-result";
+import {
+  resolveSupplyChainAuditRecoveryGate,
+  type SupplyChainAuditRecoveryGate,
+} from "./supply-chain-audit-recovery";
 
 export { isSupplyChainAuditIncomplete, resolveSupplyChainAuditFailure };
 
@@ -20,14 +29,26 @@ export type SupplyChainAuditConnectGate = {
 };
 
 export function isSupplyChainAuditConnectError(error: unknown): error is GuardHarnessActionError {
-  if (!(error instanceof GuardHarnessActionError)) {
-    return false;
+  return isGuardHarnessActionError(error) && isSupplyChainSyncConnectError(error);
+}
+
+export function resolveSupplyChainSyncConnectRecoveryGate(
+  error: unknown,
+): SupplyChainAuditRecoveryGate | null {
+  if (!isSupplyChainSyncConnectError(error)) {
+    return null;
   }
-  const code = error.payload?.error;
-  return (
-    typeof code === "string" &&
-    (SUPPLY_CHAIN_AUDIT_CONNECT_ERROR_CODES as readonly string[]).includes(code)
-  );
+  const code = readHarnessActionErrorCode(error);
+  if (code === "guard_cloud_reconnect_required") {
+    return resolveSupplyChainAuditRecoveryGate({
+      audit_status: "incomplete",
+      audit_outcome: "expired",
+    });
+  }
+  return resolveSupplyChainAuditRecoveryGate({
+    audit_status: "incomplete",
+    audit_outcome: "not_connected",
+  });
 }
 
 export function packageAuditNeedsCloudConnect(data: PackageFirewallStatusResponse): boolean {

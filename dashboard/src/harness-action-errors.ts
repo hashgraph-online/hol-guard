@@ -17,6 +17,13 @@ const APPROVAL_GATE_NON_CREDENTIAL_CODES = new Set([
 const APPROVAL_CREDENTIAL_PROMPT_MESSAGE =
   /approval(?:\s+gate)?\s+password is required|totp code is required/i;
 
+const SUPPLY_CHAIN_CONNECT_ERROR_CODES = new Set([
+  "guard_cloud_connect_required",
+  "guard_cloud_reconnect_required",
+]);
+
+const GUARD_FETCH_NETWORK_ERROR_MESSAGE = /failed to fetch|networkerror|load failed/i;
+
 export function isGuardHarnessActionError(error: unknown): error is GuardHarnessActionError {
   if (error instanceof GuardHarnessActionError) {
     return true;
@@ -65,6 +72,25 @@ function isApprovalCredentialPromptCode(code: string | null): boolean {
   return APPROVAL_CREDENTIAL_PROMPT_MESSAGE.test(code);
 }
 
+export function isSupplyChainSyncConnectError(error: unknown): boolean {
+  const code = readHarnessActionErrorCode(error);
+  return code !== null && SUPPLY_CHAIN_CONNECT_ERROR_CODES.has(code);
+}
+
+export function readHarnessActionUserMessage(error: unknown, fallback: string): string {
+  if (error instanceof TypeError && GUARD_FETCH_NETWORK_ERROR_MESSAGE.test(error.message)) {
+    return "Guard lost connection while syncing supply-chain intel. Confirm the local daemon is still running, then try again.";
+  }
+  const structuredMessage = readHarnessActionErrorMessage(error);
+  if (structuredMessage !== null) {
+    return structuredMessage;
+  }
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  return fallback;
+}
+
 export function isApprovalGateRequiredError(error: unknown): boolean {
   const code = readHarnessActionErrorCode(error);
   if (code !== null && APPROVAL_GATE_NON_CREDENTIAL_CODES.has(code)) {
@@ -94,6 +120,6 @@ export function resolveApprovalGateSyncFailure(
   }
   return {
     kind: "failed",
-    message: readHarnessActionErrorMessage(error) ?? "Sync failed.",
+    message: readHarnessActionUserMessage(error, "Sync failed."),
   };
 }

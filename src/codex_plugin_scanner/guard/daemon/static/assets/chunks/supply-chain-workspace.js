@@ -1,5 +1,5 @@
-import { aG as isSupplyChainAuditIncomplete, au as GuardHarnessActionError, r as reactExports, j as jsxRuntimeExports, d as HiMiniCheckCircle, aw as HiMiniArrowPath, w as HiMiniExclamationTriangle, ac as Tag, m as formatRelativeTime, aH as HiMiniClock, aI as IconActionButton, I as HiMiniXCircle, ax as HiMiniTrash, l as HiMiniShieldCheck, F as HiMiniWrenchScrewdriver, aJ as HiMiniBeaker, aK as ActivationSummary, aL as ActionResultPanel, ad as HiMiniMagnifyingGlass, b as EmptyState, A as ActionButton, aM as HiMiniBugAnt, o as HiMiniXMark, aN as readString$1, aO as isRecord$2, aP as GuardModalLayer, aQ as ConnectFlowCard, aE as HiMiniArrowTopRightOnSquare, aR as HiMiniCloudArrowDown, aS as fetchPackageFirewallStatus, aT as runPackageAudit, aU as resolveSupplyChainAuditFailure, aV as runPackageSync, aW as startPackageFirewallConnect, aX as runPackageFirewallAction, aY as parseInterceptProofSnapshot, aZ as openPackageFirewallShell, S as SectionLabel, a_ as EntitlementNotice, a$ as fetchSupplyChainBundle, B as Badge, b0 as HiMiniDocumentMagnifyingGlass, b1 as HiMiniShieldExclamation, b2 as HiMiniComputerDesktop, t as HiMiniCloud, b3 as HiMiniArrowDown, b4 as HiMiniArrowUp, ah as HiMiniArrowLeft, b5 as HiMiniArrowRight, b6 as HiMiniCloudArrowUp, b7 as HiMiniInformationCircle, b8 as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
-import { A as ApprovalProofInline, u as useResolvedApprovalGate, r as resolveApprovalGateSyncFailure, i as isApprovalGateRequiredError, a as ApprovalProofModal, b as buildSupplyChainStats } from "./supply-chain-protection-stats.js";
+import { aG as isSupplyChainAuditIncomplete, aH as readString$1, aI as isRecord$2, au as GuardHarnessActionError, r as reactExports, j as jsxRuntimeExports, d as HiMiniCheckCircle, aw as HiMiniArrowPath, w as HiMiniExclamationTriangle, ac as Tag, m as formatRelativeTime, aJ as HiMiniClock, aK as IconActionButton, I as HiMiniXCircle, ax as HiMiniTrash, l as HiMiniShieldCheck, F as HiMiniWrenchScrewdriver, aL as HiMiniBeaker, aM as ActivationSummary, aN as ActionResultPanel, ad as HiMiniMagnifyingGlass, b as EmptyState, A as ActionButton, aO as HiMiniBugAnt, o as HiMiniXMark, aP as GuardModalLayer, aQ as ConnectFlowCard, aE as HiMiniArrowTopRightOnSquare, aR as HiMiniCloudArrowDown, aS as fetchPackageFirewallStatus, aT as runPackageAudit, aU as resolveSupplyChainAuditFailure, aV as runPackageSync, aW as startPackageFirewallConnect, aX as runPackageFirewallAction, aY as parseInterceptProofSnapshot, aZ as openPackageFirewallShell, S as SectionLabel, a_ as EntitlementNotice, a$ as fetchSupplyChainBundle, B as Badge, b0 as HiMiniDocumentMagnifyingGlass, b1 as HiMiniShieldExclamation, b2 as HiMiniComputerDesktop, t as HiMiniCloud, b3 as HiMiniArrowDown, b4 as HiMiniArrowUp, ah as HiMiniArrowLeft, b5 as HiMiniArrowRight, b6 as HiMiniCloudArrowUp, b7 as HiMiniInformationCircle, b8 as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
+import { i as isGuardHarnessActionError, a as isSupplyChainSyncConnectError, r as readHarnessActionErrorCode, A as ApprovalProofInline, u as useResolvedApprovalGate, b as resolveApprovalGateSyncFailure, c as isApprovalGateRequiredError, d as readHarnessActionUserMessage, e as ApprovalProofModal, f as buildSupplyChainStats } from "./supply-chain-protection-stats.js";
 import { resolveFeedStaleness } from "./feed-health-workspace.js";
 import { r as resolveHomeProtectionStatus } from "./home-protection-module.js";
 import { S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-hub-workspace.js";
@@ -337,16 +337,125 @@ function filterPackageWorkbenchFindings(findings, filters) {
 function packageWorkbenchEcosystems(findings) {
   return Array.from(new Set(findings.map((finding) => finding.ecosystem))).sort();
 }
-const SUPPLY_CHAIN_AUDIT_CONNECT_ERROR_CODES = [
-  "guard_cloud_connect_required",
-  "guard_cloud_reconnect_required"
-];
-function isSupplyChainAuditConnectError(error) {
-  if (!(error instanceof GuardHarnessActionError)) {
-    return false;
+const SYNC_RECOVERY_STEPS = [
+  {
+    title: "Sync intel",
+    body: "Guard downloads the latest signed supply-chain bundle on this device."
+  },
+  {
+    title: "Run audit",
+    body: "Guard scans workspace manifests and lists flagged packages automatically."
   }
-  const code = error.payload?.error;
-  return typeof code === "string" && SUPPLY_CHAIN_AUDIT_CONNECT_ERROR_CODES.includes(code);
+];
+function createSupplyChainSyncApprovalGate(options) {
+  return {
+    obstacle: "sync_required",
+    headline: "Sync supply-chain intel before auditing",
+    detail: "Enter your local approval password so Guard can download the latest signed supply-chain bundle on this device.",
+    steps: [...SYNC_RECOVERY_STEPS],
+    primaryAction: "sync",
+    primaryLabel: "Sync supply-chain intel",
+    autoRetryAuditAfterPrimary: options?.autoRetryAuditAfterPrimary ?? false
+  };
+}
+function resolveSupplyChainAuditRecoveryGate(detail) {
+  if (!isSupplyChainAuditIncomplete(detail)) {
+    return null;
+  }
+  const outcome = readString$1(detail.audit_outcome);
+  const message = readString$1(detail.message);
+  const supplyChain = isRecord$2(detail.supply_chain) ? detail.supply_chain : null;
+  const supplyStatus = readString$1(supplyChain?.status);
+  if (outcome === "sync_required" || supplyStatus === "sync_required") {
+    return {
+      obstacle: "sync_required",
+      headline: "Sync supply-chain intel before auditing",
+      detail: message ?? "Guard needs the latest signed package intelligence on this device. Sync once, then Guard reruns the workspace audit for you.",
+      steps: [...SYNC_RECOVERY_STEPS],
+      primaryAction: "sync",
+      primaryLabel: "Sync supply-chain intel",
+      autoRetryAuditAfterPrimary: true
+    };
+  }
+  if (outcome === "not_connected" || outcome === "expired" || outcome === "degraded" || supplyStatus === "not_connected" || supplyStatus === "expired" || supplyStatus === "degraded") {
+    return {
+      obstacle: "cloud_auth",
+      headline: "Reconnect Guard Cloud before auditing",
+      detail: message ?? "Guard Cloud sign-in is missing or stale on this machine. Reconnect once, then Guard can sync intel and rerun the audit.",
+      steps: [
+        {
+          title: "Reconnect Cloud",
+          body: "Approve Guard Cloud access in your browser on this device."
+        },
+        {
+          title: "Sync and audit",
+          body: "Guard refreshes supply-chain intel, then reruns the workspace audit."
+        }
+      ],
+      primaryAction: "connect",
+      primaryLabel: "Reconnect Guard Cloud",
+      autoRetryAuditAfterPrimary: true
+    };
+  }
+  if (outcome === "inventory_empty") {
+    return {
+      obstacle: "inventory_empty",
+      headline: "Refresh intel before auditing packages",
+      detail: message ?? "Guard found project files but could not index packages yet. Syncing intel often fixes stale inventory, then Guard reruns the audit.",
+      steps: [...SYNC_RECOVERY_STEPS],
+      primaryAction: "sync",
+      primaryLabel: "Sync and retry audit",
+      autoRetryAuditAfterPrimary: true
+    };
+  }
+  if (outcome === "no_project_files") {
+    return {
+      obstacle: "no_project_files",
+      headline: "Add project manifests before auditing",
+      detail: message ?? "Guard could not find supported manifests or lockfiles in the audit workspace. Open the connected project folder, add package files, then try the audit again.",
+      steps: [
+        {
+          title: "Open workspace",
+          body: "Use the connected app project folder with package.json, lockfiles, or Python manifests."
+        },
+        {
+          title: "Run audit",
+          body: "Guard indexes dependencies and surfaces flagged packages."
+        }
+      ],
+      primaryAction: "retry_audit",
+      primaryLabel: "Run audit again",
+      autoRetryAuditAfterPrimary: false
+    };
+  }
+  return {
+    obstacle: "unknown",
+    headline: "Finish setup before auditing",
+    detail: message ?? "The workspace audit did not complete. Sync supply-chain intel, then try the audit again.",
+    steps: [...SYNC_RECOVERY_STEPS],
+    primaryAction: "sync",
+    primaryLabel: "Sync supply-chain intel",
+    autoRetryAuditAfterPrimary: true
+  };
+}
+function isSupplyChainAuditConnectError(error) {
+  return isGuardHarnessActionError(error) && isSupplyChainSyncConnectError(error);
+}
+function resolveSupplyChainSyncConnectRecoveryGate(error) {
+  if (!isSupplyChainSyncConnectError(error)) {
+    return null;
+  }
+  const code = readHarnessActionErrorCode(error);
+  if (code === "guard_cloud_reconnect_required") {
+    return resolveSupplyChainAuditRecoveryGate({
+      audit_status: "incomplete",
+      audit_outcome: "expired"
+    });
+  }
+  return resolveSupplyChainAuditRecoveryGate({
+    audit_status: "incomplete",
+    audit_outcome: "not_connected"
+  });
 }
 function packageAuditNeedsCloudConnect(data) {
   const auditAction = data.actions.audit;
@@ -1013,107 +1122,6 @@ function SupplyChainManagerDrawer({
     }
   );
 }
-const SYNC_RECOVERY_STEPS = [
-  {
-    title: "Sync intel",
-    body: "Guard downloads the latest signed supply-chain bundle on this device."
-  },
-  {
-    title: "Run audit",
-    body: "Guard scans workspace manifests and lists flagged packages automatically."
-  }
-];
-function createSupplyChainSyncApprovalGate(options) {
-  return {
-    obstacle: "sync_required",
-    headline: "Sync supply-chain intel before auditing",
-    detail: "Enter your local approval password so Guard can download the latest signed supply-chain bundle on this device.",
-    steps: [...SYNC_RECOVERY_STEPS],
-    primaryAction: "sync",
-    primaryLabel: "Sync supply-chain intel",
-    autoRetryAuditAfterPrimary: options?.autoRetryAuditAfterPrimary ?? false
-  };
-}
-function resolveSupplyChainAuditRecoveryGate(detail) {
-  if (!isSupplyChainAuditIncomplete(detail)) {
-    return null;
-  }
-  const outcome = readString$1(detail.audit_outcome);
-  const message = readString$1(detail.message);
-  const supplyChain = isRecord$2(detail.supply_chain) ? detail.supply_chain : null;
-  const supplyStatus = readString$1(supplyChain?.status);
-  if (outcome === "sync_required" || supplyStatus === "sync_required") {
-    return {
-      obstacle: "sync_required",
-      headline: "Sync supply-chain intel before auditing",
-      detail: message ?? "Guard needs the latest signed package intelligence on this device. Sync once, then Guard reruns the workspace audit for you.",
-      steps: [...SYNC_RECOVERY_STEPS],
-      primaryAction: "sync",
-      primaryLabel: "Sync supply-chain intel",
-      autoRetryAuditAfterPrimary: true
-    };
-  }
-  if (outcome === "not_connected" || outcome === "expired" || outcome === "degraded" || supplyStatus === "not_connected" || supplyStatus === "expired" || supplyStatus === "degraded") {
-    return {
-      obstacle: "cloud_auth",
-      headline: "Reconnect Guard Cloud before auditing",
-      detail: message ?? "Guard Cloud sign-in is missing or stale on this machine. Reconnect once, then Guard can sync intel and rerun the audit.",
-      steps: [
-        {
-          title: "Reconnect Cloud",
-          body: "Approve Guard Cloud access in your browser on this device."
-        },
-        {
-          title: "Sync and audit",
-          body: "Guard refreshes supply-chain intel, then reruns the workspace audit."
-        }
-      ],
-      primaryAction: "connect",
-      primaryLabel: "Reconnect Guard Cloud",
-      autoRetryAuditAfterPrimary: true
-    };
-  }
-  if (outcome === "inventory_empty") {
-    return {
-      obstacle: "inventory_empty",
-      headline: "Refresh intel before auditing packages",
-      detail: message ?? "Guard found project files but could not index packages yet. Syncing intel often fixes stale inventory, then Guard reruns the audit.",
-      steps: [...SYNC_RECOVERY_STEPS],
-      primaryAction: "sync",
-      primaryLabel: "Sync and retry audit",
-      autoRetryAuditAfterPrimary: true
-    };
-  }
-  if (outcome === "no_project_files") {
-    return {
-      obstacle: "no_project_files",
-      headline: "Add project manifests before auditing",
-      detail: message ?? "Guard could not find supported manifests or lockfiles in the audit workspace. Open the connected project folder, add package files, then try the audit again.",
-      steps: [
-        {
-          title: "Open workspace",
-          body: "Use the connected app project folder with package.json, lockfiles, or Python manifests."
-        },
-        {
-          title: "Run audit",
-          body: "Guard indexes dependencies and surfaces flagged packages."
-        }
-      ],
-      primaryAction: "retry_audit",
-      primaryLabel: "Run audit again",
-      autoRetryAuditAfterPrimary: false
-    };
-  }
-  return {
-    obstacle: "unknown",
-    headline: "Finish setup before auditing",
-    detail: message ?? "The workspace audit did not complete. Sync supply-chain intel, then try the audit again.",
-    steps: [...SYNC_RECOVERY_STEPS],
-    primaryAction: "sync",
-    primaryLabel: "Sync supply-chain intel",
-    autoRetryAuditAfterPrimary: true
-  };
-}
 function resolvePhaseLabel(phase) {
   if (phase === "syncing") {
     return "Syncing intel";
@@ -1561,11 +1569,8 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
         }
         setAuditRecoveryPhase("ready");
       } catch (err) {
-        if (isSupplyChainAuditConnectError(err)) {
-          const connectGate = resolveSupplyChainAuditRecoveryGate({
-            audit_status: "incomplete",
-            audit_outcome: "not_connected"
-          });
+        if (isSupplyChainSyncConnectError(err)) {
+          const connectGate = resolveSupplyChainSyncConnectRecoveryGate(err);
           if (connectGate !== null) {
             setAuditRecoveryGate(connectGate);
           }
@@ -1760,7 +1765,16 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
           await openSyncApprovalRecovery();
           return;
         }
-        const message = err instanceof Error ? err.message : "Operation failed.";
+        if (isSupplyChainSyncConnectError(err)) {
+          const connectGate = resolveSupplyChainSyncConnectRecoveryGate(err);
+          if (connectGate !== null) {
+            setAuditRecoveryGate(connectGate);
+            setAuditRecoveryPhase("ready");
+            setAuditRecoveryError(null);
+          }
+          return;
+        }
+        const message = readHarnessActionUserMessage(err, "Operation failed.");
         setLastFailed({ op, manager: null, message });
       } finally {
         setPendingOp(null);

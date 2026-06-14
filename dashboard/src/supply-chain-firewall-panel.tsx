@@ -18,6 +18,8 @@ import {
 } from "./guard-api";
 import {
   isApprovalGateRequiredError,
+  isSupplyChainSyncConnectError,
+  readHarnessActionUserMessage,
   resolveApprovalGateSyncFailure,
 } from "./harness-action-errors";
 import { EntitlementNotice, ConnectFlowCard } from "./supply-chain-firewall-views";
@@ -27,6 +29,7 @@ import {
   packageAuditNeedsCloudConnect,
   resolveSupplyChainAuditConnectGate,
   resolveSupplyChainAuditFailure,
+  resolveSupplyChainSyncConnectRecoveryGate,
   supplyChainAuditUserMessage,
   type SupplyChainAuditConnectGate,
 } from "./supply-chain-audit-connect";
@@ -370,11 +373,8 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
         }
         setAuditRecoveryPhase("ready");
       } catch (err) {
-        if (isSupplyChainAuditConnectError(err)) {
-          const connectGate = resolveSupplyChainAuditRecoveryGate({
-            audit_status: "incomplete",
-            audit_outcome: "not_connected",
-          });
+        if (isSupplyChainSyncConnectError(err)) {
+          const connectGate = resolveSupplyChainSyncConnectRecoveryGate(err);
           if (connectGate !== null) {
             setAuditRecoveryGate(connectGate);
           }
@@ -590,7 +590,16 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
           await openSyncApprovalRecovery();
           return;
         }
-        const message = err instanceof Error ? err.message : "Operation failed.";
+        if (isSupplyChainSyncConnectError(err)) {
+          const connectGate = resolveSupplyChainSyncConnectRecoveryGate(err);
+          if (connectGate !== null) {
+            setAuditRecoveryGate(connectGate);
+            setAuditRecoveryPhase("ready");
+            setAuditRecoveryError(null);
+          }
+          return;
+        }
+        const message = readHarnessActionUserMessage(err, "Operation failed.");
         setLastFailed({ op, manager: null, message });
       } finally {
         setPendingOp(null);
