@@ -198,16 +198,12 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   const openSyncApprovalRecovery = useCallback(
     async (options?: { autoRetryAuditAfterPrimary?: boolean }) => {
       await resolveApprovalGate();
-      setAuditRecoveryGate((current) => {
-        const approvalGate = createSupplyChainSyncApprovalGate({
+      setAuditRecoveryGate(
+        createSupplyChainSyncApprovalGate({
           autoRetryAuditAfterPrimary:
-            options?.autoRetryAuditAfterPrimary ?? current?.autoRetryAuditAfterPrimary ?? false,
-        });
-        if (current === null) {
-          return approvalGate;
-        }
-        return { ...current, detail: approvalGate.detail };
-      });
+            options?.autoRetryAuditAfterPrimary ?? auditRecoveryGate?.autoRetryAuditAfterPrimary ?? false,
+        }),
+      );
       setAuditRecoveryPhase("approval");
       setAuditRecoveryError(null);
     },

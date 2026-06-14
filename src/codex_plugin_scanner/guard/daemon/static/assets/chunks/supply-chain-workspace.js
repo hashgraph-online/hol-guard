@@ -1403,15 +1403,11 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
   const openSyncApprovalRecovery = reactExports.useCallback(
     async (options) => {
       await resolveApprovalGate();
-      setAuditRecoveryGate((current) => {
-        const approvalGate2 = createSupplyChainSyncApprovalGate({
-          autoRetryAuditAfterPrimary: options?.autoRetryAuditAfterPrimary ?? current?.autoRetryAuditAfterPrimary ?? false
-        });
-        if (current === null) {
-          return approvalGate2;
-        }
-        return { ...current, detail: approvalGate2.detail };
-      });
+      setAuditRecoveryGate(
+        createSupplyChainSyncApprovalGate({
+          autoRetryAuditAfterPrimary: options?.autoRetryAuditAfterPrimary ?? auditRecoveryGate?.autoRetryAuditAfterPrimary ?? false
+        })
+      );
       setAuditRecoveryPhase("approval");
       setAuditRecoveryError(null);
     },
