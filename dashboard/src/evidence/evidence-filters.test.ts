@@ -89,6 +89,19 @@ assert(byArtifactId.length >= 1 && byArtifactId[0].receipt_id === "r5", "search:
 const byHashPrefix = filterBySearch(ALL, "abcdef78");
 assert(byHashPrefix.length >= 1 && byHashPrefix[0].receipt_id === "r5", "search: artifact_hash prefix");
 
+const bySha256HashPrefix = filterBySearch(
+  [
+    makeReceipt("sha-r1", {
+      artifact_hash: "sha256:2dd8986742cb4f850ae2bb52a9aaa2820c6d9be809592ec0c4b3d207b83f9b6",
+    }),
+  ],
+  "2dd8986742cb",
+);
+assert(bySha256HashPrefix.length === 1 && bySha256HashPrefix[0].receipt_id === "sha-r1", "search: sha256 hash prefix");
+
+const byReceiptId = filterBySearch(ALL, "r3");
+assert(byReceiptId.length === 1 && byReceiptId[0].receipt_id === "r3", "search: receipt id");
+
 const noMatch = filterBySearch(ALL, "zzznomatch999");
 assert(noMatch.length === 0, "search: no match returns empty");
 

@@ -3014,23 +3014,43 @@ class GuardStore:
         query += " order by updated_at desc"
         with self._connect() as connection:
             rows = connection.execute(query, params).fetchall()
-        return [
-            {
-                "harness": str(row["harness"]),
-                "scope": str(row["scope"]),
-                "artifact_id": row["artifact_id"],
-                "artifact_hash": row["artifact_hash"],
-                "workspace": row["workspace"],
-                "publisher": row["publisher"],
-                "action": str(row["action"]),
-                "reason": row["reason"],
-                "owner": row["owner"],
-                "source": str(row["source"]),
-                "expires_at": row["expires_at"],
-                "updated_at": str(row["updated_at"]),
-            }
-            for row in rows
-        ]
+            return [
+                self._policy_decision_dict_from_row(connection, row)
+                for row in rows
+            ]
+
+    @staticmethod
+    def _policy_decision_dict_from_row(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, object]:
+        harness = str(row["harness"])
+        artifact_id = row["artifact_id"]
+        artifact_hash = row["artifact_hash"]
+        workspace = row["workspace"]
+        source_context = _find_policy_source_context(
+            connection,
+            harness=harness,
+            scope=str(row["scope"]),
+            artifact_id=str(artifact_id) if artifact_id is not None else None,
+            artifact_hash=str(artifact_hash) if artifact_hash is not None else None,
+            workspace=str(workspace) if workspace is not None else None,
+            reason=str(row["reason"]) if row["reason"] is not None else None,
+        )
+        payload: dict[str, object] = {
+            "harness": harness,
+            "scope": str(row["scope"]),
+            "artifact_id": artifact_id,
+            "artifact_hash": artifact_hash,
+            "workspace": workspace,
+            "publisher": row["publisher"],
+            "action": str(row["action"]),
+            "reason": row["reason"],
+            "owner": row["owner"],
+            "source": str(row["source"]),
+            "expires_at": row["expires_at"],
+            "updated_at": str(row["updated_at"]),
+        }
+        if source_context is not None:
+            payload.update(source_context)
+        return payload
 
     def clear_policy_decisions(
         self,
@@ -5187,6 +5207,241 @@ def _family_key_value(family_key: str) -> str:
     if family_key.startswith("family:"):
         return family_key.removeprefix("family:")
     return family_key
+
+
+_GENERIC_POLICY_REASONS = (
+    "approved in review",
+    "approved in local approval center",
+    "local auto-resume proof",
+    "local e2e approval proof",
+)
+
+
+def _is_generic_policy_reason(reason: str | None) -> bool:
+    if reason is None or not reason.strip():
+        return True
+    normalized = reason.strip().lower()
+    return any(phrase in normalized for phrase in _GENERIC_POLICY_REASONS)
+
+
+def _is_human_policy_label(value: str | None) -> bool:
+    if value is None or not value.strip():
+        return False
+    normalized = value.strip()
+    lowered = normalized.lower()
+    if lowered.startswith("family:"):
+        return False
+    if len(normalized) >= 32 and all(ch in "0123456789abcdef" for ch in lowered):
+        return False
+    if ":" in normalized:
+        tail = normalized.split(":")[-1]
+        if len(tail) >= 16 and all(ch in "0123456789abcdef" for ch in tail):
+            return False
+    return True
+
+
+def _normalize_hash_for_match(value: str) -> str:
+    return value.strip().lower().removeprefix("sha256:")
+
+
+def _workspace_display_label(source_scope: str | None, workspace: str | None) -> str | None:
+    if source_scope and source_scope.strip() and not source_scope.strip().startswith("workspace:"):
+        path = source_scope.strip()
+        if path.startswith("/") or path.startswith("~"):
+            segments = [segment for segment in path.rstrip("/").split("/") if segment]
+            if segments:
+                return segments[-1]
+    if workspace and workspace.strip() and not workspace.strip().startswith("workspace:"):
+        path = workspace.strip()
+        if path.startswith("/") or path.startswith("~"):
+            segments = [segment for segment in path.rstrip("/").split("/") if segment]
+            if segments:
+                return segments[-1]
+        return path
+    return None
+
+
+def _find_policy_source_receipt_row(
+    connection: sqlite3.Connection,
+    *,
+    harness: str,
+    artifact_id: str | None,
+    artifact_hash: str | None,
+) -> sqlite3.Row | None:
+    conditions: list[str] = []
+    params: list[object] = []
+    if harness != "*":
+        conditions.append("harness = ?")
+        params.append(harness)
+    if artifact_hash:
+        normalized = _normalize_hash_for_match(artifact_hash)
+        conditions.append(
+            "(artifact_hash = ? OR artifact_hash = ? OR lower(replace(artifact_hash, 'sha256:', '')) = ?)"
+        )
+        params.extend([artifact_hash, f"sha256:{normalized}", normalized])
+    elif artifact_id:
+        conditions.append("artifact_id = ?")
+        params.append(artifact_id)
+    if not conditions:
+        return None
+    return connection.execute(
+        f"""
+        select receipt_id, artifact_name, capabilities_summary, provenance_summary, source_scope
+        from runtime_receipts
+        where {' and '.join(conditions)}
+        order by timestamp desc
+        limit 1
+        """,
+        tuple(params),
+    ).fetchone()
+
+
+def _find_policy_inventory_row(
+    connection: sqlite3.Connection,
+    *,
+    harness: str,
+    artifact_id: str | None,
+) -> sqlite3.Row | None:
+    if artifact_id is None or not artifact_id.strip():
+        return None
+    return connection.execute(
+        """
+        select artifact_name, launch_command, source_scope
+        from artifact_inventory
+        where harness = ? and artifact_id = ?
+        limit 1
+        """,
+        (harness, artifact_id),
+    ).fetchone()
+
+
+def _find_policy_approval_row(
+    connection: sqlite3.Connection,
+    *,
+    harness: str,
+    artifact_id: str | None,
+    artifact_hash: str | None,
+) -> sqlite3.Row | None:
+    conditions = ["status = 'resolved'"]
+    params: list[object] = []
+    if harness != "*":
+        conditions.append("harness = ?")
+        params.append(harness)
+    if artifact_id:
+        conditions.append("artifact_id = ?")
+        params.append(artifact_id)
+    if artifact_hash:
+        normalized = _normalize_hash_for_match(artifact_hash)
+        conditions.append(
+            "(artifact_hash = ? OR artifact_hash = ? OR lower(replace(artifact_hash, 'sha256:', '')) = ?)"
+        )
+        params.extend([artifact_hash, f"sha256:{normalized}", normalized])
+    if len(conditions) <= 1:
+        return None
+    return connection.execute(
+        f"""
+        select request_id, artifact_name, launch_summary, launch_target, workspace, resolved_at
+        from approval_requests
+        where {' and '.join(conditions)}
+        order by resolved_at desc
+        limit 1
+        """,
+        tuple(params),
+    ).fetchone()
+
+
+def _find_policy_source_context(
+    connection: sqlite3.Connection,
+    *,
+    harness: str,
+    scope: str,
+    artifact_id: str | None,
+    artifact_hash: str | None,
+    workspace: str | None,
+    reason: str | None,
+) -> dict[str, str] | None:
+    receipt_row = _find_policy_source_receipt_row(
+        connection,
+        harness=harness,
+        artifact_id=artifact_id,
+        artifact_hash=artifact_hash,
+    )
+    inventory_row = _find_policy_inventory_row(connection, harness=harness, artifact_id=artifact_id)
+    approval_row = _find_policy_approval_row(
+        connection,
+        harness=harness,
+        artifact_id=artifact_id,
+        artifact_hash=artifact_hash,
+    )
+
+    remembered_command: str | None = None
+    remembered_context: str | None = None
+    workspace_label: str | None = None
+    source_receipt_id: str | None = None
+
+    if receipt_row is not None:
+        source_receipt_id = str(receipt_row["receipt_id"])
+        receipt_name = receipt_row["artifact_name"]
+        if _is_human_policy_label(str(receipt_name) if receipt_name is not None else None):
+            remembered_command = str(receipt_name).strip()
+        caps = receipt_row["capabilities_summary"]
+        if caps is not None and str(caps).strip():
+            remembered_context = str(caps).strip()
+        workspace_label = _workspace_display_label(
+            str(receipt_row["source_scope"]) if receipt_row["source_scope"] is not None else None,
+            workspace,
+        )
+
+    if inventory_row is not None:
+        launch_command = inventory_row["launch_command"]
+        if remembered_command is None and _is_human_policy_label(
+            str(launch_command) if launch_command is not None else None
+        ):
+            remembered_command = str(launch_command).strip()
+        inventory_name = inventory_row["artifact_name"]
+        if remembered_context is None and _is_human_policy_label(
+            str(inventory_name) if inventory_name is not None else None
+        ):
+            remembered_context = str(inventory_name).strip()
+        if workspace_label is None:
+            workspace_label = _workspace_display_label(
+                str(inventory_row["source_scope"]) if inventory_row["source_scope"] is not None else None,
+                workspace,
+            )
+
+    if approval_row is not None:
+        approval_name = approval_row["artifact_name"]
+        launch_target = approval_row["launch_target"]
+        launch_summary = approval_row["launch_summary"]
+        if remembered_command is None and _is_human_policy_label(
+            str(launch_target) if launch_target is not None else None
+        ):
+            remembered_command = str(launch_target).strip()
+        if remembered_command is None and _is_human_policy_label(str(approval_name)):
+            remembered_command = str(approval_name).strip()
+        if remembered_context is None and _is_human_policy_label(
+            str(launch_summary) if launch_summary is not None else None
+        ):
+            remembered_context = str(launch_summary).strip()
+        if workspace_label is None and approval_row["workspace"] is not None:
+            workspace_label = _workspace_display_label(str(approval_row["workspace"]), workspace)
+
+    if remembered_command is None and not _is_generic_policy_reason(reason):
+        remembered_command = reason.strip() if reason is not None else None
+
+    if source_receipt_id is None and remembered_command is None and remembered_context is None:
+        return None
+
+    payload: dict[str, str] = {}
+    if source_receipt_id is not None:
+        payload["source_receipt_id"] = source_receipt_id
+    if remembered_command is not None:
+        payload["remembered_command"] = remembered_command
+    if remembered_context is not None:
+        payload["remembered_context"] = remembered_context
+    if workspace_label is not None:
+        payload["workspace_label"] = workspace_label
+    return payload or None
 
 
 def _chunks(values: list[str], size: int) -> Iterator[list[str]]:

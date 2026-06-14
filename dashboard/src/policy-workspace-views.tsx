@@ -1,11 +1,22 @@
 import { useCallback, useMemo, useState } from "react";
-import { HiMiniTrash, HiMiniCloudArrowUp, HiMiniChevronDown, HiMiniChevronUp } from "react-icons/hi2";
+import {
+  HiMiniTrash,
+  HiMiniCloudArrowUp,
+  HiMiniChevronDown,
+  HiMiniChevronUp,
+  HiMiniCommandLine,
+  HiMiniCube,
+  HiMiniDocumentText,
+  HiMiniGlobeAlt,
+  HiMiniShieldCheck,
+} from "react-icons/hi2";
 import { Badge, Tag, EmptyState } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime, policyActionLabel, scopeLabel } from "./approval-center-utils";
 import { guardAwareHref } from "./guard-api";
 import type { GuardPolicyDecision } from "./guard-types";
 import {
   isCloudManagedPolicy,
+  resolvePolicyApprovalRecordLabel,
   resolvePolicyDisplay,
   resolvePolicyEvidenceHref,
   resolvePolicyMatcherFamily,
@@ -30,47 +41,69 @@ function resolveActionTone(action: string): "success" | "destructive" | "warning
   return "default";
 }
 
-type PolicyRuleCardProps = {
+function resolveFamilyIcon(family: string | null) {
+  if (family === "package-request") {
+    return HiMiniCube;
+  }
+  if (family === "tool-action" || family === "tool-output") {
+    return HiMiniCommandLine;
+  }
+  if (family === "prompt" || family === "prompt-env-read") {
+    return HiMiniDocumentText;
+  }
+  if (family === "mcp") {
+    return HiMiniGlobeAlt;
+  }
+  return HiMiniShieldCheck;
+}
+
+type PolicyRuleRowProps = {
   policy: GuardPolicyDecision;
   cloudControlsUrl: string | null;
   onClear?: (policy: GuardPolicyDecision) => void;
 };
 
-export function PolicyRuleCard({ policy, cloudControlsUrl, onClear }: PolicyRuleCardProps) {
+function PolicyRuleRow({ policy, cloudControlsUrl, onClear }: PolicyRuleRowProps) {
   const handleClear = useCallback(() => onClear?.(policy), [onClear, policy]);
   const cloudManaged = isCloudManagedPolicy(policy.source);
   const display = resolvePolicyDisplay(policy);
   const canClear = onClear !== undefined && !cloudManaged;
+  const family = resolvePolicyMatcherFamily(policy);
+  const Icon = resolveFamilyIcon(family);
 
   return (
-    <article className="rounded-2xl border border-slate-100 bg-white px-4 py-3.5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={resolveActionTone(policy.action)}>{policyActionLabel(policy.action)}</Badge>
-            <Tag tone={cloudManaged ? "blue" : "green"}>{resolvePolicySourceLabel(policy.source)}</Tag>
-            <Tag tone="slate">{scopeLabel(policy.scope)}</Tag>
-            <span className="text-xs text-slate-400">{harnessDisplayName(policy.harness)}</span>
-          </div>
-          <h3 className="text-base font-semibold leading-snug text-brand-dark">{display.headline}</h3>
-          <p className="text-sm text-slate-600">{display.subtitle}</p>
-          {display.technicalId ? (
-            <details className="text-xs text-slate-500">
-              <summary className="cursor-pointer text-brand-blue hover:underline">Technical id</summary>
-              <p className="mt-1 break-all font-mono text-[11px] text-slate-600">{display.technicalId}</p>
-            </details>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-2 text-right">
-          <span className="text-xs text-slate-400">
-            {policy.updated_at ? formatRelativeTime(policy.updated_at) : null}
+    <tr className="border-b border-slate-100 last:border-0 hover:bg-slate-50/80">
+      <td className="px-3 py-3 align-top">
+        <div className="flex items-start gap-2">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+            <Icon className="h-4 w-4" aria-hidden="true" />
           </span>
+          <div className="min-w-0 space-y-1">
+            <Badge tone={resolveActionTone(policy.action)}>{policyActionLabel(policy.action)}</Badge>
+            <p className="text-sm font-semibold leading-snug text-brand-dark">{display.headline}</p>
+            {display.subtitle ? <p className="text-xs text-slate-500">{display.subtitle}</p> : null}
+            <p className="text-xs leading-relaxed text-slate-600">{display.rememberSentence}</p>
+          </div>
+        </div>
+      </td>
+      <td className="hidden px-3 py-3 align-top text-sm text-slate-600 md:table-cell">
+        <Tag tone={cloudManaged ? "blue" : "green"}>{resolvePolicySourceLabel(policy.source)}</Tag>
+      </td>
+      <td className="hidden px-3 py-3 align-top text-sm text-slate-600 lg:table-cell">{scopeLabel(policy.scope)}</td>
+      <td className="hidden px-3 py-3 align-top text-sm text-slate-600 xl:table-cell">
+        {harnessDisplayName(policy.harness)}
+      </td>
+      <td className="hidden px-3 py-3 align-top text-xs text-slate-500 sm:table-cell">
+        {policy.updated_at ? formatRelativeTime(policy.updated_at) : "—"}
+      </td>
+      <td className="px-3 py-3 align-top text-right">
+        <div className="flex flex-col items-end gap-2">
           {!cloudManaged ? (
             <a
               href={guardAwareHref(resolvePolicyEvidenceHref(policy))}
               className="text-sm font-medium text-brand-blue hover:underline"
             >
-              See approval record
+              {resolvePolicyApprovalRecordLabel(policy)}
             </a>
           ) : null}
           {cloudManaged && cloudControlsUrl ? (
@@ -95,12 +128,12 @@ export function PolicyRuleCard({ policy, cloudControlsUrl, onClear }: PolicyRule
             </button>
           ) : null}
         </div>
-      </div>
-    </article>
+      </td>
+    </tr>
   );
 }
 
-type PolicyRuleListProps = {
+type PolicyRuleTableProps = {
   policies: GuardPolicyDecision[];
   cloudControlsUrl: string | null;
   onClearPolicy?: (policy: GuardPolicyDecision) => void;
@@ -108,7 +141,13 @@ type PolicyRuleListProps = {
   emptyBody: string;
 };
 
-export function PolicyRuleList({ policies, cloudControlsUrl, onClearPolicy, emptyTitle, emptyBody }: PolicyRuleListProps) {
+export function PolicyRuleTable({
+  policies,
+  cloudControlsUrl,
+  onClearPolicy,
+  emptyTitle,
+  emptyBody,
+}: PolicyRuleTableProps) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const visiblePolicies = useMemo(() => policies.slice(0, visibleCount), [policies, visibleCount]);
@@ -124,14 +163,30 @@ export function PolicyRuleList({ policies, cloudControlsUrl, onClearPolicy, empt
 
   return (
     <div className="space-y-3">
-      {visiblePolicies.map((policy) => (
-        <PolicyRuleCard
-          key={`${policy.harness}-${policy.scope}-${policy.artifact_id ?? policy.publisher ?? "global"}-${policy.updated_at ?? ""}-${policy.source}`}
-          policy={policy}
-          cloudControlsUrl={cloudControlsUrl}
-          onClear={onClearPolicy}
-        />
-      ))}
+      <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
+        <table className="min-w-full border-collapse text-left">
+          <thead className="border-b border-slate-100 bg-slate-50/80 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-3 py-3">Remembered action</th>
+              <th className="hidden px-3 py-3 md:table-cell">Source</th>
+              <th className="hidden px-3 py-3 lg:table-cell">Scope</th>
+              <th className="hidden px-3 py-3 xl:table-cell">Harness</th>
+              <th className="hidden px-3 py-3 sm:table-cell">Last updated</th>
+              <th className="px-3 py-3 text-right">Record</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visiblePolicies.map((policy) => (
+              <PolicyRuleRow
+                key={`${policy.harness}-${policy.scope}-${policy.artifact_id ?? policy.publisher ?? "global"}-${policy.updated_at ?? ""}-${policy.source}`}
+                policy={policy}
+                cloudControlsUrl={cloudControlsUrl}
+                onClear={onClearPolicy}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
       {hasMore ? (
         <div className="flex justify-center pt-1">
           <button
@@ -205,7 +260,7 @@ export function GroupedPolicySection({
         </div>
       </button>
       {open ? (
-        <PolicyRuleList
+        <PolicyRuleTable
           policies={policies}
           cloudControlsUrl={cloudControlsUrl}
           onClearPolicy={onClearPolicy}
