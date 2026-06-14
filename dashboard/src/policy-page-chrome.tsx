@@ -83,15 +83,11 @@ type PolicyPageToolbarProps = {
 };
 
 export function PolicyPageToolbar({ snapshot, onReloadPolicy, reloading = false }: PolicyPageToolbarProps) {
-  const handleReload = useCallback(() => {
-    onReloadPolicy?.();
-  }, [onReloadPolicy]);
-
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
       <Badge tone={resolveHealthTone(snapshot)}>{snapshot.headline_label}</Badge>
       {onReloadPolicy ? (
-        <ActionButton variant="secondary" onClick={handleReload} disabled={reloading}>
+        <ActionButton variant="secondary" onClick={onReloadPolicy} disabled={reloading}>
           <HiMiniArrowPath className={`mr-1.5 h-4 w-4 ${reloading ? "animate-spin" : ""}`} aria-hidden="true" />
           Reload policy
         </ActionButton>

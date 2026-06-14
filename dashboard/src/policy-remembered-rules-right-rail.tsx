@@ -47,7 +47,7 @@ export function PolicyRememberedRulesRightRail({
         <p className="mt-1 text-xs leading-relaxed text-slate-500">
           When you approve in Inbox, you pick how broadly Guard should remember the decision.
         </p>
-        <ol className="mt-3 space-y-2.5">
+        <ul className="mt-3 space-y-2.5">
           {REVIEW_SCOPE_LADDER.map((step) => (
             <li key={step.scope} className="flex gap-2.5">
               <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand-blue/70" aria-hidden="true" />
@@ -57,7 +57,7 @@ export function PolicyRememberedRulesRightRail({
               </div>
             </li>
           ))}
-        </ol>
+        </ul>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">

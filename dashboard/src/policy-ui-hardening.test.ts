@@ -21,6 +21,7 @@ const POLICY_UI_FILES = [
   "policy-cloud-exceptions-summary.tsx",
   "policy-cloud-exception-detail-panel.tsx",
   "policy-cloud-exception-request-panel.tsx",
+  "policy-cloud-exception-request-layout.tsx",
   "policy-strict-config-tab.tsx",
 ];
 
@@ -77,8 +78,12 @@ const detailSource = readSource("policy-cloud-exception-detail-panel.tsx");
 assert(detailSource.includes('aria-label="Cloud exception details"'), "detail panel exposes label");
 
 const requestSource = readSource("policy-cloud-exception-request-panel.tsx");
+const requestLayoutSource = readSource("policy-cloud-exception-request-layout.tsx");
 assert(requestSource.includes("Request cloud exception"), "request panel contains section title");
-assert(requestSource.includes("aria-labelledby=\"cloud-exception-request-title\""), "request panel exposes labelled heading");
+assert(
+  requestLayoutSource.includes('aria-labelledby="cloud-exception-request-title"'),
+  "request panel exposes labelled heading",
+);
 
 const tabSource = readSource("policy-cloud-exceptions-tab.tsx");
 assert(tabSource.includes("PolicyCloudExceptionsListSkeleton"), "cloud exceptions tab preserves loading layout");

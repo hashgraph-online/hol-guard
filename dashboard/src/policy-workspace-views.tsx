@@ -80,7 +80,7 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, cloudVariant = false
   const scopeTag = scopeLabel(policy.scope, "policy");
 
   return (
-    <article className={RULE_GRID_CLASS}>
+    <article className={RULE_GRID_CLASS} role="listitem">
       <div className="flex items-start gap-2 md:col-start-1">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
           <Icon className="h-4 w-4" aria-hidden="true" />
@@ -227,7 +227,7 @@ export function PolicyRuleTable({
             onClick={handleShowMore}
             className="text-sm font-medium text-brand-blue hover:underline"
           >
-            View all {cloudVariant ? "cloud" : "local"} rules ({listTotal}) →
+            Show {Math.min(PAGE_SIZE, remaining)} more ({remaining} remaining)
           </button>
         </div>
       ) : null}
