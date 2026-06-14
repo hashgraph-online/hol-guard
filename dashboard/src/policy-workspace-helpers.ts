@@ -475,3 +475,9 @@ export function resolveCloudPolicyBundleCopy(snapshot: {
     tone: "green",
   };
 }
+
+export function resolveCloudExceptionsConnected(snapshot: {
+  cloud_state?: string | null;
+}): boolean {
+  return snapshot.cloud_state === "paired_active" || snapshot.cloud_state === "paired_waiting";
+}

@@ -78,6 +78,19 @@ const TEST_SCENARIOS = [
   },
 ] as const;
 
+function resolveExpectedActionTone(action: string): "success" | "destructive" | "warning" | "default" {
+  if (action === "block") {
+    return "destructive";
+  }
+  if (action === "allow") {
+    return "success";
+  }
+  if (action === "warn" || action === "review" || action === "require-reapproval") {
+    return "warning";
+  }
+  return "default";
+}
+
 export function PolicyStrictConfigTab({
   snapshot,
   onOpenSettings,
@@ -172,10 +185,6 @@ export function PolicyStrictConfigTab({
     [persistSetting],
   );
 
-  const handleSimCloudExceptionChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setSimCloudException(event.target.checked);
-  }, []);
-
   const handleRunSimulation = useCallback(() => {
     setSimulationVisible(true);
   }, []);
@@ -256,7 +265,9 @@ export function PolicyStrictConfigTab({
             <div>
               <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Daemon ack</dt>
               <dd className="mt-1.5 flex items-center gap-1.5 text-sm text-brand-dark">
-                <HiMiniCheckCircle className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                {cloudBundleCopy ? (
+                  <HiMiniCheckCircle className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                ) : null}
                 {daemonAckLabel}
               </dd>
             </div>
@@ -420,7 +431,7 @@ export function PolicyStrictConfigTab({
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Expected action</p>
               <div className="mt-1">
-                <Badge tone={expectedAction === "block" ? "destructive" : expectedAction === "allow" ? "success" : "warning"}>
+                <Badge tone={resolveExpectedActionTone(expectedAction)}>
                   {policyActionLabel(expectedAction)}
                 </Badge>
               </div>

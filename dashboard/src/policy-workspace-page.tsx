@@ -3,7 +3,7 @@ import type { GuardPolicyDecision, GuardRuntimeSnapshot } from "./guard-types";
 import { WorkspacePageHeader } from "./workspace-page-header";
 import { PolicyExceptionsToolbar, PolicyPageToolbar, PolicyUnderlineTabBar } from "./policy-page-chrome";
 import type { PolicyPageView } from "./policy-workspace";
-import { resolveCloudPolicyControlsUrl } from "./policy-workspace-helpers";
+import { resolveCloudPolicyControlsUrl, resolveCloudExceptionsConnected } from "./policy-workspace-helpers";
 
 const PolicyWorkspace = lazy(() =>
   import("./policy-workspace").then((module) => ({ default: module.PolicyWorkspace })),
@@ -25,8 +25,7 @@ export function PolicyWorkspacePage(props: {
   const [reloading, setReloading] = useState(false);
   const [exceptionRequestOpen, setExceptionRequestOpen] = useState(false);
   const cloudControlsUrl = resolveCloudPolicyControlsUrl(props.snapshot);
-  const cloudConnected =
-    props.snapshot.cloud_state === "paired_active" || props.snapshot.cloud_state === "paired_waiting";
+  const cloudConnected = resolveCloudExceptionsConnected(props.snapshot);
 
   const handleOpenSettings = useCallback(() => props.onOpenSettings(), [props]);
   const handleOpenInbox = useCallback(() => props.onOpenInbox(), [props]);

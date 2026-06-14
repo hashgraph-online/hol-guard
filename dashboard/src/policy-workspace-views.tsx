@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   HiMiniTrash,
   HiMiniCloudArrowUp,
@@ -191,6 +191,11 @@ export function PolicyRuleTable({
 }: PolicyRuleTableProps) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    setExpanded(false);
+    setVisibleCount(PAGE_SIZE);
+  }, [policies]);
 
   const visiblePolicies = useMemo(
     () => (expanded ? policies : policies.slice(0, visibleCount)),

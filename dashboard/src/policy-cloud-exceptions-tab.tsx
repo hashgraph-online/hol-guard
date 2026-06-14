@@ -12,7 +12,7 @@ import {
   groupCloudExceptions,
   summarizeCloudExceptions,
 } from "./policy-cloud-exceptions-utils";
-import { resolveCloudPolicyControlsUrl } from "./policy-workspace-helpers";
+import { resolveCloudExceptionsConnected, resolveCloudPolicyControlsUrl } from "./policy-workspace-helpers";
 
 type PolicyCloudExceptionsTabProps = {
   snapshot: GuardRuntimeSnapshot;
@@ -21,10 +21,6 @@ type PolicyCloudExceptionsTabProps = {
 };
 
 type LoadState = "loading" | "ready" | "error";
-
-function resolveCloudExceptionsConnected(snapshot: GuardRuntimeSnapshot): boolean {
-  return snapshot.cloud_state === "paired_active" || snapshot.cloud_state === "paired_waiting";
-}
 
 export function PolicyCloudExceptionsTab({
   snapshot,

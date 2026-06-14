@@ -1,6 +1,5 @@
 import { useCallback, type KeyboardEvent } from "react";
-import { HiMiniArrowPath } from "react-icons/hi2";
-import { HiMiniCloudArrowUp } from "react-icons/hi2";
+import { HiMiniArrowPath, HiMiniCloudArrowUp } from "react-icons/hi2";
 import { ActionButton, Badge } from "./approval-center-primitives";
 import type { GuardRuntimeSnapshot } from "./guard-types";
 import { resolvePolicyViewLabel, type PolicyPageView } from "./policy-workspace";
