@@ -66,7 +66,7 @@ def test_expired_cloud_exceptions_are_not_active() -> None:
     assert active == []
 
 
-def test_persist_cloud_exceptions_stores_separate_from_policy_decisions(tmp_path: Path) -> None:
+def test_persist_cloud_exceptions_stores_dto_in_sync_state(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "home")
     serialized = _persist_cloud_exceptions(
         store,
@@ -78,8 +78,9 @@ def test_persist_cloud_exceptions_stores_separate_from_policy_decisions(tmp_path
     assert len(listed) == 1
     assert listed[0]["id"] == "artifact:codex:demo"
     assert listed[0]["last_used_at"] is None
-    policy_rows = store.list_policy_decisions()
-    assert all(row.get("source") != "cloud-sync" for row in policy_rows)
+    stored = store.get_sync_payload("cloud_exceptions")
+    assert isinstance(stored, list)
+    assert len(stored) == 1
 
 
 def test_policy_bundle_cloud_exceptions_are_loaded(tmp_path: Path) -> None:

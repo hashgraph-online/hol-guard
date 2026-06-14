@@ -130,7 +130,6 @@ class PolicyDecision:
         return asdict(self)
 
 
-
 CloudExceptionEffect = Literal["allow"]
 CloudExceptionScope = Literal["artifact", "publisher", "harness", "workspace", "global"]
 CloudExceptionAckStatus = Literal["pending", "synced", "failed", "offline"]

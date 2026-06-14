@@ -130,16 +130,12 @@ def cloud_exception_from_mapping(
     harness_value = item.get("harness")
     harness = harness_value if isinstance(harness_value, str) and harness_value.strip() else None
     approver = _non_empty_string(item.get("approver"))
-    source_receipt_id = _non_empty_string(
-        item.get("sourceReceiptId") or item.get("source_receipt_id")
-    )
+    source_receipt_id = _non_empty_string(item.get("sourceReceiptId") or item.get("source_receipt_id"))
     last_used_at = _normalized_timestamp_string(item.get("lastUsedAt") or item.get("last_used_at"))
     resolved_ack = ack_status or _non_empty_string(item.get("ackStatus") or item.get("ack_status"))
     if resolved_ack is not None and resolved_ack not in _CLOUD_EXCEPTION_ACK_STATUSES:
         resolved_ack = None
-    resolved_bundle_hash = (
-        _non_empty_string(item.get("bundleHash") or item.get("bundle_hash")) or bundle_hash
-    )
+    resolved_bundle_hash = _non_empty_string(item.get("bundleHash") or item.get("bundle_hash")) or bundle_hash
     return CloudException(
         id=exception_id,
         effect=effect,  # type: ignore[arg-type]
@@ -184,6 +180,50 @@ def build_cloud_exceptions_from_policy_bundle(
         if parsed is not None:
             items.append(parsed)
     return items
+
+
+def cloud_exception_from_stored_dict(item: dict[str, object]) -> CloudException | None:
+    exception_id = _non_empty_string(item.get("id"))
+    if exception_id is None:
+        return None
+    scope = item.get("scope")
+    if scope not in _CLOUD_EXCEPTION_SCOPES:
+        return None
+    effect = item.get("effect") or "allow"
+    if effect not in _CLOUD_EXCEPTION_EFFECTS:
+        return None
+    owner = _non_empty_string(item.get("owner"))
+    expiry = _normalized_timestamp_string(item.get("expiry"))
+    if owner is None or expiry is None:
+        return None
+    harness_value = item.get("harness")
+    harness = harness_value if isinstance(harness_value, str) and harness_value.strip() else None
+    ack_status = item.get("ack_status")
+    if ack_status is not None and ack_status not in _CLOUD_EXCEPTION_ACK_STATUSES:
+        ack_status = None
+    return CloudException(
+        id=exception_id,
+        effect=effect,  # type: ignore[arg-type]
+        scope=scope,  # type: ignore[arg-type]
+        harness=harness,
+        owner=owner,
+        approver=_non_empty_string(item.get("approver")),
+        expiry=expiry,
+        source_receipt_id=_non_empty_string(item.get("source_receipt_id")),
+        bundle_hash=_non_empty_string(item.get("bundle_hash")),
+        ack_status=ack_status,  # type: ignore[arg-type]
+        last_used_at=_normalized_timestamp_string(item.get("last_used_at")),
+        rejection_reason=_non_empty_string(item.get("rejection_reason")),
+    )
+
+
+def build_cloud_exceptions_from_stored_items(items: list[dict[str, object]]) -> list[CloudException]:
+    parsed: list[CloudException] = []
+    for raw_item in items:
+        item = cloud_exception_from_stored_dict(raw_item)
+        if item is not None:
+            parsed.append(item)
+    return parsed
 
 
 def build_cloud_exceptions_from_sync_payload(

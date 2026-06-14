@@ -3316,7 +3316,7 @@ class GuardStore:
 
     def list_cloud_exceptions(self, harness: str | None = None) -> list[dict[str, object]]:
         from .cloud_exceptions import (
-            build_cloud_exceptions_from_sync_payload,
+            build_cloud_exceptions_from_stored_items,
             cloud_exception_to_dict,
             list_active_cloud_exceptions,
         )
@@ -3329,10 +3329,9 @@ class GuardStore:
             nested = payload.get("items")
             if isinstance(nested, list):
                 raw_items = [item for item in nested if isinstance(item, dict)]
-        parsed_items = build_cloud_exceptions_from_sync_payload(raw_items)
+        parsed_items = build_cloud_exceptions_from_stored_items(raw_items)
         active_items = list_active_cloud_exceptions(parsed_items, harness=harness)
         return [cloud_exception_to_dict(item) for item in active_items]
-
 
     def delete_sync_payload(self, state_key: str) -> None:
         with self._connect() as connection:
