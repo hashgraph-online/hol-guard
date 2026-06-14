@@ -598,3 +598,56 @@ def test_executor_resolves_local_approval_request(tmp_path: Path) -> None:
             "resolved_at": "2026-06-13T00:00:00+00:00",
         }
     ]
+
+
+def test_executor_syncs_policy_without_local_request_id(tmp_path: Path) -> None:
+    class PolicyStore(FakeStore):
+        def __init__(self, guard_home: Path) -> None:
+            super().__init__(guard_home)
+            self.upserts: list[tuple[dict[str, object], str]] = []
+
+        def upsert_policy(self, decision: object, generated_at: str) -> None:
+            self.upserts.append((decision.to_dict(), generated_at))
+
+    store = PolicyStore(tmp_path / "guard-home")
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {
+                "action": "policy_sync",
+                "policyMemory": {
+                    "scope": "workspace",
+                    "reason": "approved in cloud",
+                    "target": {
+                        "artifactId": "pkg:npm/react",
+                        "harness": "package-install",
+                        "workspaceId": "workspace-1",
+                    },
+                },
+            },
+        },
+        context=_context(tmp_path),
+        store=store,  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert result["data"]["status"] == "completed"
+    assert result["data"]["localRequestId"] is None
+    assert store.upserts == [
+        (
+            {
+                "harness": "package-install",
+                "scope": "workspace",
+                "action": "allow",
+                "artifact_id": "pkg:npm/react",
+                "artifact_hash": None,
+                "workspace": "workspace-1",
+                "publisher": None,
+                "reason": "approved in cloud",
+                "owner": None,
+                "source": "cloud-sync",
+                "expires_at": None,
+            },
+            "2026-06-13T00:00:00+00:00",
+        )
+    ]

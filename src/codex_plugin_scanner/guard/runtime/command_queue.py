@@ -19,6 +19,7 @@ from .command_executors import (
     SUPPORTED_COMMAND_OPERATIONS,
     command_job_operation,
     execute_guard_command_job,
+    _local_request_snapshot_items,
 )
 from .runner import (
     GuardSyncAuthorizationExpiredError,
@@ -192,34 +193,10 @@ def _lease_payload(store: GuardStore) -> dict[str, object]:
             "operations": list(SUPPORTED_COMMAND_OPERATIONS),
             "schemaVersions": dict(COMMAND_OPERATION_SCHEMA_VERSIONS),
         },
-        "localRequestsSnapshot": _local_requests_snapshot(store),
+        "localRequestsSnapshot": {"requests": _local_request_snapshot_items(store)},
         "maxJobs": 1,
         "waitMs": _env_int(COMMAND_QUEUE_LEASE_WAIT_MS_ENV, _DEFAULT_LEASE_WAIT_MS),
     }
-
-
-def _local_requests_snapshot(store: GuardStore) -> dict[str, object]:
-    requests: list[dict[str, object]] = []
-    for status in ("pending", "resolved"):
-        for item in store.list_approval_requests(status=status, limit=100):
-            request_id = item.get("request_id")
-            if not isinstance(request_id, str) or not request_id:
-                continue
-            created_at = str(item.get("created_at") or _now())
-            last_seen_at = str(item.get("last_seen_at") or created_at)
-            resolved_at = item.get("resolved_at")
-            requests.append(
-                {
-                    "localRequestId": request_id,
-                    "requestKind": str(item.get("harness") or "guard-review"),
-                    "requestPayload": dict(item),
-                    "localStatus": str(item.get("status") or status),
-                    "firstSeenAt": created_at,
-                    "lastSeenAt": last_seen_at,
-                    "resolvedAt": str(resolved_at) if isinstance(resolved_at, str) and resolved_at else None,
-                }
-            )
-    return {"requests": requests[:200]}
 
 
 def _job_id(job: dict[str, object]) -> str:

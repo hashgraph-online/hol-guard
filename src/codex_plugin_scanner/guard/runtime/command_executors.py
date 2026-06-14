@@ -235,10 +235,12 @@ def _execute_approval_operation(
     local_request_id = _optional_string(payload.get("localRequestId")) or _optional_string(
         payload.get("local_request_id")
     )
-    if action not in {"allow_once", "block", "policy_sync"} or local_request_id is None:
+    if action not in {"allow_once", "block", "policy_sync"}:
         raise ValueError("invalid_approval_payload")
     if action == "policy_sync":
         return _execute_policy_sync(payload, store=store, generated_at=generated_at)
+    if local_request_id is None:
+        raise ValueError("invalid_approval_payload")
     resolution_action = "allow" if action == "allow_once" else "block"
     result = store.resolve_request_with_queue_result(
         local_request_id,
@@ -301,6 +303,7 @@ def _execute_policy_sync(
 
 
 def _local_policy_scope(scope: str | None) -> str:
+    """Map Cloud policy scopes onto the narrower local policy model."""
     if scope in {"workspace", "team", "policy", "machine", "project"}:
         return "workspace"
     if scope == "item":
