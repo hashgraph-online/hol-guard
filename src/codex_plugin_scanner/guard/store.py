@@ -3003,7 +3003,7 @@ class GuardStore:
 
     def list_policy_decisions(self, harness: str | None = None) -> list[dict[str, object]]:
         query = """
-            select harness, scope, artifact_id, artifact_hash, workspace, publisher, action, reason, owner, source,
+            select decision_id, harness, scope, artifact_id, artifact_hash, workspace, publisher, action, reason, owner, source,
                    expires_at, updated_at
             from policy_decisions
         """
@@ -3014,10 +3014,7 @@ class GuardStore:
         query += " order by updated_at desc"
         with self._connect() as connection:
             rows = connection.execute(query, params).fetchall()
-            return [
-                self._policy_decision_dict_from_row(connection, row)
-                for row in rows
-            ]
+            return [self._policy_decision_dict_from_row(connection, row) for row in rows]
 
     @staticmethod
     def _policy_decision_dict_from_row(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, object]:
@@ -3035,6 +3032,7 @@ class GuardStore:
             reason=str(row["reason"]) if row["reason"] is not None else None,
         )
         payload: dict[str, object] = {
+            "decision_id": int(row["decision_id"]),
             "harness": harness,
             "scope": str(row["scope"]),
             "artifact_id": artifact_id,
@@ -5244,20 +5242,39 @@ def _normalize_hash_for_match(value: str) -> str:
     return value.strip().lower().removeprefix("sha256:")
 
 
+def _artifact_hash_match_variants(artifact_hash: str) -> tuple[str, ...]:
+    normalized = _normalize_hash_for_match(artifact_hash)
+    variants = {artifact_hash, f"sha256:{normalized}", normalized}
+    return tuple(variant for variant in variants if variant)
+
+
+def _artifact_hash_in_clause(artifact_hash: str) -> tuple[str, tuple[object, ...]]:
+    variants = _artifact_hash_match_variants(artifact_hash)
+    placeholders = ", ".join("?" for _ in variants)
+    return f"artifact_hash in ({placeholders})", variants
+
+
+def _path_basename_label(path: str) -> str | None:
+    normalized = path.strip().replace("\\", "/").rstrip("/")
+    if not normalized or normalized.startswith("workspace:"):
+        return None
+    if normalized.startswith("/") or normalized.startswith("~") or ":" in normalized:
+        segments = [segment for segment in normalized.split("/") if segment]
+        if segments:
+            return segments[-1]
+    return None
+
+
 def _workspace_display_label(source_scope: str | None, workspace: str | None) -> str | None:
-    if source_scope and source_scope.strip() and not source_scope.strip().startswith("workspace:"):
-        path = source_scope.strip()
-        if path.startswith("/") or path.startswith("~"):
-            segments = [segment for segment in path.rstrip("/").split("/") if segment]
-            if segments:
-                return segments[-1]
+    if source_scope and source_scope.strip():
+        label = _path_basename_label(source_scope)
+        if label is not None:
+            return label
     if workspace and workspace.strip() and not workspace.strip().startswith("workspace:"):
-        path = workspace.strip()
-        if path.startswith("/") or path.startswith("~"):
-            segments = [segment for segment in path.rstrip("/").split("/") if segment]
-            if segments:
-                return segments[-1]
-        return path
+        label = _path_basename_label(workspace)
+        if label is not None:
+            return label
+        return workspace.strip()
     return None
 
 
@@ -5274,11 +5291,9 @@ def _find_policy_source_receipt_row(
         conditions.append("harness = ?")
         params.append(harness)
     if artifact_hash:
-        normalized = _normalize_hash_for_match(artifact_hash)
-        conditions.append(
-            "(artifact_hash = ? OR artifact_hash = ? OR lower(replace(artifact_hash, 'sha256:', '')) = ?)"
-        )
-        params.extend([artifact_hash, f"sha256:{normalized}", normalized])
+        hash_clause, hash_params = _artifact_hash_in_clause(artifact_hash)
+        conditions.append(hash_clause)
+        params.extend(hash_params)
     elif artifact_id:
         conditions.append("artifact_id = ?")
         params.append(artifact_id)
@@ -5288,7 +5303,7 @@ def _find_policy_source_receipt_row(
         f"""
         select receipt_id, artifact_name, capabilities_summary, provenance_summary, source_scope
         from runtime_receipts
-        where {' and '.join(conditions)}
+        where {" and ".join(conditions)}
         order by timestamp desc
         limit 1
         """,
@@ -5331,18 +5346,16 @@ def _find_policy_approval_row(
         conditions.append("artifact_id = ?")
         params.append(artifact_id)
     if artifact_hash:
-        normalized = _normalize_hash_for_match(artifact_hash)
-        conditions.append(
-            "(artifact_hash = ? OR artifact_hash = ? OR lower(replace(artifact_hash, 'sha256:', '')) = ?)"
-        )
-        params.extend([artifact_hash, f"sha256:{normalized}", normalized])
+        hash_clause, hash_params = _artifact_hash_in_clause(artifact_hash)
+        conditions.append(hash_clause)
+        params.extend(hash_params)
     if len(conditions) <= 1:
         return None
     return connection.execute(
         f"""
         select request_id, artifact_name, launch_summary, launch_target, workspace, resolved_at
         from approval_requests
-        where {' and '.join(conditions)}
+        where {" and ".join(conditions)}
         order by resolved_at desc
         limit 1
         """,

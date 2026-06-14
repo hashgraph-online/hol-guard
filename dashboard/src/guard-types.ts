@@ -470,6 +470,7 @@ export type GuardArtifactDiff = {
 };
 
 export type GuardPolicyDecision = {
+  decision_id?: number;
   harness: string;
   scope: DecisionScope;
   artifact_id: string | null;

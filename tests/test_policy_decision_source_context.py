@@ -1,5 +1,3 @@
-import pytest
-
 from codex_plugin_scanner.guard.models import GuardReceipt, PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -41,6 +39,7 @@ def test_list_policy_decisions_enriches_source_receipt_and_command(tmp_path) -> 
     items = store.list_policy_decisions()
     assert len(items) == 1
     item = items[0]
+    assert isinstance(item["decision_id"], int)
     assert item["source_receipt_id"] == "receipt-policy-ux-1"
     assert item["remembered_command"] == "pnpm install"
     assert item["remembered_context"] == "Package install via pnpm"

@@ -89,7 +89,6 @@ export function filterBySearch(
       provenance.includes(q) ||
       scope.includes(q) ||
       decision.includes(q) ||
-      hashNormalized.startsWith(q) ||
       hashRaw.startsWith(q) ||
       hashNormalized.includes(q)
     );

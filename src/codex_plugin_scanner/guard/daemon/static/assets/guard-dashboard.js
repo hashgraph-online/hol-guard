@@ -16892,7 +16892,7 @@ function filterBySearch(receipts, search) {
     const decision = (r.policy_decision ?? "").toLowerCase();
     const hashRaw = (r.artifact_hash ?? "").toLowerCase();
     const hashNormalized = hashRaw.replace(/^sha256:/, "");
-    return name.includes(q) || id.includes(q) || receiptId.includes(q) || harness.includes(q) || caps.includes(q) || changed.includes(q) || provenance.includes(q) || scope.includes(q) || decision.includes(q) || hashNormalized.startsWith(q) || hashRaw.startsWith(q) || hashNormalized.includes(q);
+    return name.includes(q) || id.includes(q) || receiptId.includes(q) || harness.includes(q) || caps.includes(q) || changed.includes(q) || provenance.includes(q) || scope.includes(q) || decision.includes(q) || hashRaw.startsWith(q) || hashNormalized.includes(q);
   });
 }
 function filterBySourceScope(receipts, sourceScope) {
