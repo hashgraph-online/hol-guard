@@ -5,12 +5,19 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.local_supply_chain import build_package_protect_payload
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.runtime.package_intent import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+@pytest.fixture(autouse=True)
+def _fake_policy_integrity_keyring(install_fake_system_keyring) -> None:
+    install_fake_system_keyring()
 
 
 def _write_pnpm_workspace(workspace_dir: Path, *, extra_dependency: str | None = None) -> None:

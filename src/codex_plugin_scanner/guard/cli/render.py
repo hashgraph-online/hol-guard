@@ -719,6 +719,61 @@ def _render_inventory(console: Console, payload: dict[str, object]) -> None:
 
 
 def _render_policies(console: Console, payload: dict[str, object]) -> None:
+    if "counts" in payload or payload.get("operation") == "migrate-local-integrity":
+        counts = payload.get("counts") if isinstance(payload.get("counts"), dict) else {}
+        degraded_reasons = [str(item) for item in payload.get("degraded_reasons", []) if isinstance(item, str)]
+        body = Table.grid(padding=(0, 1))
+        body.add_row("Mode", str(payload.get("mode") or "unknown"))
+        body.add_row("Enforcement", str(payload.get("enforcement") or "unknown"))
+        body.add_row("Backend", str(payload.get("backend") or "unknown"))
+        body.add_row("Local rows", str(int(payload.get("local_rows_scanned", 0) or 0)))
+        if payload.get("key_id"):
+            body.add_row("Key", str(payload.get("key_id")))
+        if payload.get("backup_path"):
+            body.add_row("Backup", str(payload.get("backup_path")))
+        if "cleared" in payload:
+            body.add_row("Cleared", str(int(payload.get("cleared", 0) or 0)))
+        for label, key in (
+            ("Valid", "valid"),
+            ("Unsigned", "missing_integrity"),
+            ("Tampered", "tampered"),
+            ("Unknown key", "unknown_key"),
+            ("Degraded", "degraded_mode"),
+        ):
+            body.add_row(label, str(int(counts.get(key, 0) or 0)))
+        if degraded_reasons:
+            body.add_row("Reasons", ", ".join(degraded_reasons))
+        title = "Guard policy integrity"
+        if "backup_path" in payload:
+            title = "Guard policy migration"
+        elif "clear_invalid" in payload:
+            title = "Guard policy repair"
+        elif "items" in payload:
+            title = "Guard policy verify"
+        border_style = "red" if payload.get("error") else "cyan"
+        console.print(Panel(body, title=title, border_style=border_style))
+        if payload.get("error"):
+            console.print(str(payload.get("error")))
+            return
+        invalid_items = _coerce_dict_list(payload.get("items"))
+        if not invalid_items:
+            return
+        table = Table(box=box.SIMPLE_HEAVY, show_header=True)
+        table.add_column("Harness", style="cyan")
+        table.add_column("Action")
+        table.add_column("Artifact", style="bold")
+        table.add_column("Integrity")
+        table.add_column("Updated")
+        for item in invalid_items:
+            table.add_row(
+                str(item.get("harness") or "unknown"),
+                _action_text(str(item.get("action") or "warn")),
+                str(item.get("artifact_id") or "all artifacts"),
+                str(item.get("integrity_status") or "unknown"),
+                str(item.get("updated_at") or "unknown"),
+            )
+        console.print(table)
+        return
     if "cleared" in payload or "error" in payload:
         error = payload.get("error")
         cleared = int(payload.get("cleared", 0) or 0)
@@ -748,6 +803,7 @@ def _render_policies(console: Console, payload: dict[str, object]) -> None:
     table.add_column("Harness", style="cyan")
     table.add_column("Scope")
     table.add_column("Action")
+    table.add_column("Integrity")
     table.add_column("Artifact", style="bold")
     table.add_column("Publisher")
     table.add_column("Owner")
@@ -757,6 +813,7 @@ def _render_policies(console: Console, payload: dict[str, object]) -> None:
             str(item.get("harness") or "unknown"),
             str(item.get("scope") or "harness"),
             _action_text(str(item.get("action") or "warn")),
+            str(item.get("integrity_status") or "remote"),
             str(item.get("artifact_id") or "all artifacts"),
             str(item.get("publisher") or "—"),
             str(item.get("owner") or "—"),

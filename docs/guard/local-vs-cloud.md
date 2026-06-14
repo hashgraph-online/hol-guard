@@ -11,7 +11,9 @@ Available without a Cloud subscription or sign-in:
   sit in front of supported AI harnesses before tools, MCP servers, or skills
   execute.
 - **Local policy decisions** — home config, project overrides, saved allow/deny
-  rules, and built-in recommendations resolve on this machine.
+  rules, and built-in recommendations resolve on this machine. Saved local
+  decisions are verified against Guard-managed integrity key material before
+  they become authoritative again.
 - **Local blocking and warnings** — Guard can stop or warn on supported risky
   shell commands, file reads, MCP tool calls, skill loads, and prompt-sensitive
   actions before side effects occur.
@@ -23,6 +25,10 @@ Available without a Cloud subscription or sign-in:
 - **Local approval and review paths** — inline harness approval, the local
   approval center on `127.0.0.1`, and `hol-guard approvals` resolve decisions
   without Cloud.
+- **Local policy integrity tooling** — `hol-guard policies verify`,
+  `integrity-status`, `migrate-local-integrity`, and `repair --clear-invalid`
+  let an operator detect unsigned, unknown-key, or tampered local policy rows
+  and move to enforce mode deliberately.
 - **Cloud-outage independence** — if Guard Cloud is unavailable, you are signed
   out, or never connected, local interception, policy, blocking, receipts, and
   approvals continue on the machine.

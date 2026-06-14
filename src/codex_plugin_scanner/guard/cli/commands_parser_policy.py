@@ -14,7 +14,11 @@ def _configure_guard_policy_parsers(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
     policies_parser = guard_subparsers.add_parser("policies", help="List or clear stored Guard policy decisions")
-    policies_parser.add_argument("policies_command", nargs="?", choices=("clear",))
+    policies_parser.add_argument(
+        "policies_command",
+        nargs="?",
+        choices=("clear", "verify", "integrity-status", "repair", "migrate-local-integrity"),
+    )
     policies_parser.add_argument("--harness")
     policies_parser.add_argument("--source")
     policies_parser.add_argument("--scope", choices=("artifact", "workspace", "publisher", "harness", "global"))
@@ -22,6 +26,28 @@ def _configure_guard_policy_parsers(
     policies_parser.add_argument("--artifact-hash")
     policies_parser.add_argument("--policy-workspace", dest="policy_workspace")
     policies_parser.add_argument("--publisher")
+    policies_parser.add_argument(
+        "--decision-id",
+        dest="decision_ids",
+        action="append",
+        type=int,
+        help="Policy decision ID to preserve during migrate-local-integrity; repeat to keep multiple rows",
+    )
+    policies_parser.add_argument(
+        "--preserve-all-local",
+        action="store_true",
+        help="Preserve every local policy row eligible for re-signing during migrate-local-integrity",
+    )
+    policies_parser.add_argument(
+        "--clear-unselected",
+        action="store_true",
+        help="Delete eligible local policy rows not preserved during migrate-local-integrity",
+    )
+    policies_parser.add_argument(
+        "--clear-invalid",
+        action="store_true",
+        help="Delete invalid local policy rows during policies repair",
+    )
     policies_parser.add_argument(
         "--all",
         action="store_true",
