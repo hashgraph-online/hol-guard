@@ -3,6 +3,7 @@ import {
   isApprovalGateRequiredError,
   isGuardHarnessActionError,
   isSupplyChainSyncConnectError,
+  isSupplyChainSyncRetryableError,
   readHarnessActionUserMessage,
   resolveApprovalGateSyncFailure,
 } from "./harness-action-errors";
@@ -139,6 +140,26 @@ assert(
     }),
   ),
   "sync transport failures are not connect errors",
+);
+
+assert(
+  isSupplyChainSyncRetryableError(
+    makeHarnessError(503, {
+      error: "supply_chain_sync_unavailable",
+      message: "Guard Cloud is unavailable. Local Guard keeps protecting this machine.",
+      retryable: true,
+    }),
+  ),
+  "retryable cloud outage sync errors are detected",
+);
+assert(
+  !isSupplyChainSyncRetryableError(
+    makeHarnessError(503, {
+      error: "supply_chain_sync_unavailable",
+      message: "Supply-chain sync is not available on this device.",
+    }),
+  ),
+  "non-retryable sync unavailable errors are not retryable",
 );
 
 const networkFailure = resolveApprovalGateSyncFailure(new Error("Failed to fetch"), {

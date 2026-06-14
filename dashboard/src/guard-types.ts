@@ -593,6 +593,7 @@ export type GuardHarnessActionErrorPayload = {
   harness?: string;
   confirmation_phrase?: string;
   confirm_command?: string;
+  retryable?: boolean;
 };
 
 export type GuardInventoryItem = {

@@ -27,7 +27,10 @@ from codex_plugin_scanner.guard.daemon.server import _headless_action_error_payl
 from codex_plugin_scanner.guard.local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
-from codex_plugin_scanner.guard.runtime.runner import GuardSyncAuthorizationExpiredError
+from codex_plugin_scanner.guard.runtime.runner import (
+    GuardSyncAuthorizationExpiredError,
+    GuardSyncNotAvailableError,
+)
 from codex_plugin_scanner.guard.shims import install_package_shims
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_supply_chain_evaluator import WORKSPACE_ID, _bundle_response, _package
@@ -651,6 +654,56 @@ def test_supply_chain_sync_returns_json_when_bundle_sync_fails_after_approval(
     assert payload["error"] == "supply_chain_sync_failed"
     assert payload["operation"] == "sync"
     assert "simulated network failure" in str(payload["message"])
+
+
+def test_supply_chain_sync_returns_retryable_unavailable_when_cloud_outage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {"tier": "premium", "workspace_id": "workspace-1"},
+        "2026-06-09T12:00:00.000Z",
+    )
+    update_approval_gate_settings(
+        store.guard_home,
+        {
+            "enabled": True,
+            "new_password": "phase07-password",
+            "confirm_password": "phase07-password",
+        },
+    )
+
+    def _fail_sync(_store: GuardStore) -> dict[str, object]:
+        raise GuardSyncNotAvailableError(
+            "Guard Cloud is unavailable. Local Guard keeps protecting this machine.",
+            retryable=True,
+        )
+
+    monkeypatch.setattr(daemon_server, "sync_supply_chain_bundle", _fail_sync)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/sync",
+                token=token,
+                payload={
+                    "workspace_id": "workspace-1",
+                    "approval_password": "phase07-password",
+                },
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 503
+    assert payload["error"] == "supply_chain_sync_unavailable"
+    assert payload["retryable"] is True
+    assert payload["operation"] == "sync"
 
 
 def test_supply_chain_sync_returns_reconnect_error_when_auth_expired(
