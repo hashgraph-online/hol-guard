@@ -1430,8 +1430,20 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._handle_guard_cloud_connect_start()
             return
         if parsed.path == "/v1/update":
+            force_pypi_reinstall = bool(payload.get("force_pypi_reinstall"))
             status_payload = build_guard_update_status_payload()
-            if status_payload.get("auto_updatable") is not True:
+            recovery_reinstall_available = bool(status_payload.get("recovery_reinstall_available"))
+            if force_pypi_reinstall and not recovery_reinstall_available:
+                self._write_json(
+                    {
+                        "error": "update_not_supported",
+                        "message": status_payload.get("blocked_reason")
+                        or "Reinstall is not available for this install.",
+                    },
+                    status=400,
+                )
+                return
+            if status_payload.get("auto_updatable") is not True and not force_pypi_reinstall:
                 self._write_json(
                     {
                         "error": "update_not_supported",
@@ -1441,7 +1453,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     status=400,
                 )
                 return
-            if status_payload.get("update_available") is not True:
+            if status_payload.get("update_available") is not True and not force_pypi_reinstall:
                 self._write_json(
                     {
                         "error": "update_not_available",
@@ -1458,6 +1470,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     guard_home,
                     daemon_pid=daemon_pid,
                     daemon_port=daemon_port,
+                    force_pypi_reinstall=force_pypi_reinstall,
                 )
             )
             return

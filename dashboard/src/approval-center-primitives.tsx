@@ -75,6 +75,7 @@ export function ShellHeader(props: {
   guardVersion?: string | null;
   updateStatus?: GuardUpdateStatus | null;
   onUpdateGuard?: () => void;
+  onReinstallGuard?: () => void;
   updatePhase?: GuardUpdatePhase;
 }) {
   function handleMobileNavigationChange(event: ChangeEvent<HTMLSelectElement>) {
@@ -183,6 +184,7 @@ export function ShellSidebar(props: {
   guardVersion?: string | null;
   updateStatus?: GuardUpdateStatus | null;
   onUpdateGuard?: () => void;
+  onReinstallGuard?: () => void;
   updatePhase?: GuardUpdatePhase;
 }) {
   const collapsed = props.collapsed ?? false;
@@ -277,6 +279,7 @@ export function ShellSidebar(props: {
                   updateStatus={props.updateStatus}
                   updatePhase={props.updatePhase}
                   onUpdateGuard={props.onUpdateGuard}
+                  onReinstallGuard={props.onReinstallGuard}
                 />
               </div>
             </div>

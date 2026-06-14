@@ -2061,6 +2061,12 @@ export function normalizeGuardUpdateStatus(raw: unknown): GuardUpdateStatus {
     auto_updatable: booleanValue(value.auto_updatable),
     update_available: booleanValue(value.update_available),
     blocked_reason: stringValue(value.blocked_reason),
+    recovery_reinstall_available:
+      value.recovery_reinstall_available === true ? true : undefined,
+    recovery_reinstall_command:
+      typeof value.recovery_reinstall_command === "string"
+        ? value.recovery_reinstall_command
+        : undefined,
     update_in_progress:
       typeof value.update_in_progress === "boolean" ? value.update_in_progress : undefined,
   };
@@ -2088,14 +2094,25 @@ export async function fetchGuardUpdateStatus(): Promise<GuardUpdateStatus> {
   return normalizeGuardUpdateStatus(payload);
 }
 
-export async function scheduleGuardUpdate(): Promise<GuardUpdateScheduleResult> {
+export async function scheduleGuardUpdate(
+  options?: { forcePypiReinstall?: boolean },
+): Promise<GuardUpdateScheduleResult> {
   if (isGuardDemoMode()) {
     return {
       scheduled: true,
       message: "Demo mode cannot update Guard.",
     };
   }
-  const response = await fetchWithGuardAuth("/v1/update", { method: "POST" });
+  const body =
+    options?.forcePypiReinstall === true
+      ? JSON.stringify({ force_pypi_reinstall: true })
+      : undefined;
+  const response = await fetchWithGuardAuth("/v1/update", {
+    method: "POST",
+    ...(body
+      ? { headers: { "Content-Type": "application/json" }, body }
+      : {}),
+  });
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
     const message =

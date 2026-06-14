@@ -83,6 +83,7 @@ def build_dashboard_update_runner_command(
     *,
     daemon_pid: int,
     daemon_port: int,
+    force_pypi_reinstall: bool = False,
 ) -> list[str]:
     resolved_home = guard_home.expanduser().resolve()
     runner_script = dashboard_update_runner_script()
@@ -100,6 +101,8 @@ def build_dashboard_update_runner_command(
             str(daemon_port),
         ]
     )
+    if force_pypi_reinstall:
+        command.append("--force-pypi-reinstall")
     return command
 
 
@@ -121,6 +124,8 @@ def schedule_guard_dashboard_update(
     guard_home: Path,
     daemon_pid: int,
     daemon_port: int,
+    *,
+    force_pypi_reinstall: bool = False,
 ) -> dict[str, object]:
     guard_home = guard_home.expanduser().resolve()
     if dashboard_update_in_progress(guard_home):
@@ -136,6 +141,7 @@ def schedule_guard_dashboard_update(
         guard_home,
         daemon_pid=daemon_pid,
         daemon_port=daemon_port,
+        force_pypi_reinstall=force_pypi_reinstall,
     )
     kwargs = build_dashboard_update_runner_popen_kwargs(guard_home)
     if os.name == "nt":

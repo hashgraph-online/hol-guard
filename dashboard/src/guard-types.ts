@@ -833,6 +833,8 @@ export type GuardUpdateStatus = {
   auto_updatable: boolean;
   update_available: boolean;
   blocked_reason: string | null;
+  recovery_reinstall_available?: boolean;
+  recovery_reinstall_command?: string;
   update_in_progress?: boolean;
 };
 

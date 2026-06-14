@@ -19,6 +19,7 @@ export type GuardUpdatePanelProps = {
   updateStatus?: GuardUpdateStatus | null;
   updatePhase?: GuardUpdatePhase;
   onUpdateGuard?: () => void;
+  onReinstallGuard?: () => void;
   compact?: boolean;
 };
 
@@ -45,6 +46,10 @@ function updateHelpCopy(status: GuardUpdateStatus | null | undefined, phase: Gua
   if (status?.update_available) {
     return "This restarts Guard for a moment. Open approvals will stay saved.";
   }
+  // Recovery case gets calmer copy that frames the fix instead of the dead end.
+  if (status && !status.auto_updatable && status.recovery_reinstall_available) {
+    return "This install came from a local folder, so automatic updates are off. Reinstall from PyPI to switch it back to a normal package; Guard restarts briefly and saved approvals stay.";
+  }
   if (status && !status.auto_updatable && status.blocked_reason) {
     return status.blocked_reason;
   }
@@ -60,6 +65,12 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
     props.updateStatus.auto_updatable &&
     phase !== "updating" &&
     phase !== "reconnecting";
+  const showReinstallButton =
+    props.updateStatus?.recovery_reinstall_available === true &&
+    props.updateStatus.auto_updatable !== true &&
+    phase !== "updating" &&
+    phase !== "reconnecting";
+  const busy = phase === "updating" || phase === "reconnecting";
 
   return (
     <div className={props.compact ? "space-y-1" : "space-y-2"}>
@@ -84,7 +95,17 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
           Update Guard
         </button>
       ) : null}
-      {(phase === "updating" || phase === "reconnecting") && (
+      {showReinstallButton && props.onReinstallGuard ? (
+        <button
+          type="button"
+          onClick={props.onReinstallGuard}
+          className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-brand-blue/30 bg-white px-3 py-2 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40"
+        >
+          <HiMiniArrowPath className="h-4 w-4 shrink-0" aria-hidden="true" />
+          Reinstall from PyPI
+        </button>
+      ) : null}
+      {busy && (
         <p className="inline-flex min-h-11 items-center gap-2 text-[11px] font-medium text-brand-blue" role="status">
           <HiMiniArrowPath className="h-4 w-4 animate-spin" aria-hidden="true" />
           {phase === "updating" ? "Updating Guard…" : "Reconnecting…"}
@@ -175,41 +196,75 @@ export function useGuardUpdate(options?: { onReconnected?: () => void }) {
     [options],
   );
 
+  const scheduleAndWait = useCallback(
+    async (params: {
+      forcePypiReinstall?: boolean;
+      expectedPreviousVersion: string;
+      expectedLatestVersion: string | null;
+    }): Promise<void> => {
+      setUpdatePhase("updating");
+      try {
+        const scheduleResult = await scheduleGuardUpdate(
+          params.forcePypiReinstall === true ? { forcePypiReinstall: true } : undefined,
+        );
+        if (scheduleResult.scheduled === false && scheduleResult.error === "update_in_progress") {
+          setUpdatePhase("reconnecting");
+          const redirected = await waitForReconnect(
+            params.expectedPreviousVersion,
+            params.expectedLatestVersion,
+          );
+          if (!redirected) {
+            window.location.reload();
+          }
+          return;
+        }
+        if (scheduleResult.scheduled !== true) {
+          throw new Error(scheduleResult.message ?? scheduleResult.error ?? "Guard update was not scheduled.");
+        }
+        setUpdatePhase("reconnecting");
+        const redirected = await waitForReconnect(
+          params.expectedPreviousVersion,
+          params.expectedLatestVersion,
+        );
+        if (!redirected) {
+          window.location.reload();
+        }
+      } catch {
+        setUpdatePhase("error");
+      }
+    },
+    [waitForReconnect],
+  );
+
   const onUpdateGuard = useCallback(async () => {
     if (!updateStatus?.update_available || !updateStatus.auto_updatable) {
       return;
     }
-    const expectedPreviousVersion = updateStatus.current_version;
-    const expectedLatestVersion = updateStatus.latest_version;
-    setUpdatePhase("updating");
-    try {
-      const scheduleResult = await scheduleGuardUpdate();
-      if (scheduleResult.scheduled === false && scheduleResult.error === "update_in_progress") {
-        setUpdatePhase("reconnecting");
-        const redirected = await waitForReconnect(expectedPreviousVersion, expectedLatestVersion);
-        if (!redirected) {
-          window.location.reload();
-        }
-        return;
-      }
-      if (scheduleResult.scheduled !== true) {
-        throw new Error(scheduleResult.message ?? scheduleResult.error ?? "Guard update was not scheduled.");
-      }
-      setUpdatePhase("reconnecting");
-      const redirected = await waitForReconnect(expectedPreviousVersion, expectedLatestVersion);
-      if (!redirected) {
-        window.location.reload();
-      }
-    } catch {
-      setUpdatePhase("error");
+    await scheduleAndWait({
+      expectedPreviousVersion: updateStatus.current_version,
+      expectedLatestVersion: updateStatus.latest_version,
+    });
+  }, [scheduleAndWait, updateStatus]);
+
+  const onReinstallGuard = useCallback(async () => {
+    if (!updateStatus?.recovery_reinstall_available) {
+      return;
     }
-  }, [updateStatus, waitForReconnect]);
+    // A PyPI reinstall may land the same version; skip the version-change gate
+    // during reconnect by not pinning an expected previous/target version.
+    await scheduleAndWait({
+      forcePypiReinstall: true,
+      expectedPreviousVersion: "",
+      expectedLatestVersion: null,
+    });
+  }, [scheduleAndWait, updateStatus]);
 
   return {
     guardVersion: updateStatus?.current_version ?? null,
     updateStatus,
     updatePhase,
     onUpdateGuard,
+    onReinstallGuard,
     refreshUpdateStatus,
   };
 }

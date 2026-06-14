@@ -60,6 +60,26 @@ def _post_json(daemon: GuardDaemonServer, path: str) -> tuple[int, dict[str, obj
         return error.code, payload
 
 
+def _post_json_body(
+    daemon: GuardDaemonServer, path: str, body: dict[str, object]
+) -> tuple[int, dict[str, object]]:
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{daemon.port}{path}",
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            assert isinstance(payload, dict)
+            return response.status, payload
+    except urllib.error.HTTPError as error:
+        payload = json.loads(error.read().decode("utf-8"))
+        assert isinstance(payload, dict)
+        return error.code, payload
+
+
 def test_build_guard_update_status_payload_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_commands._current_version",
@@ -127,7 +147,12 @@ def test_daemon_update_schedule_route(tmp_path: Path, monkeypatch: pytest.Monkey
     store = _store(tmp_path)
     scheduled: dict[str, object] = {}
 
-    def fake_schedule(guard_home: Path, daemon_pid: int, daemon_port: int) -> dict[str, object]:
+    def fake_schedule(
+        guard_home: Path,
+        daemon_pid: int,
+        daemon_port: int,
+        **kwargs: object,
+    ) -> dict[str, object]:
         scheduled["guard_home"] = guard_home
         scheduled["daemon_pid"] = daemon_pid
         scheduled["daemon_port"] = daemon_port
@@ -395,3 +420,195 @@ def test_dashboard_update_runner_retires_all_daemons_before_upgrade(
         "ensure",
         "clear_lock",
     ]
+
+
+def test_status_payload_exposes_recovery_for_local_folder_install(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._current_version",
+        lambda: "1.0.0",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._installer_kind",
+        lambda: "pipx",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._direct_url_payload",
+        lambda: {"url": "file:///home/me/hol-guard", "dir_info": {}},
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._local_source_install_payload",
+        lambda direct_url: {
+            "kind": "local_path",
+            "url": "file:///home/me/hol-guard",
+            "path": "/home/me/hol-guard",
+            "path_exists": True,
+        },
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._version_check_payload",
+        lambda current_version: {
+            "source": "pypi",
+            "status": "current",
+            "current_version": current_version,
+            "latest_version": current_version,
+            "update_available": False,
+        },
+    )
+
+    payload = build_guard_update_status_payload()
+
+    assert payload["auto_updatable"] is False
+    assert payload["recovery_reinstall_available"] is True
+    assert payload["recovery_reinstall_command"] == "pipx install --force hol-guard"
+
+
+def test_status_payload_hides_recovery_for_editable_install(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._current_version",
+        lambda: "1.0.0",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._installer_kind",
+        lambda: "pipx",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._direct_url_payload",
+        lambda: {"url": "file:///home/me/hol-guard", "dir_info": {"editable": True}},
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._local_source_install_payload",
+        lambda direct_url: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._version_check_payload",
+        lambda current_version: {
+            "source": "pypi",
+            "status": "current",
+            "current_version": current_version,
+            "latest_version": current_version,
+            "update_available": False,
+        },
+    )
+
+    payload = build_guard_update_status_payload()
+
+    assert payload["auto_updatable"] is False
+    assert payload["recovery_reinstall_available"] is False
+    assert payload["recovery_reinstall_command"] is None
+
+
+def test_daemon_update_schedules_recovery_reinstall_for_local_folder(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    scheduled: dict[str, object] = {}
+
+    def fake_schedule(guard_home, daemon_pid, daemon_port, **kwargs):
+        scheduled["guard_home"] = guard_home
+        scheduled["daemon_pid"] = daemon_pid
+        scheduled["daemon_port"] = daemon_port
+        scheduled["force_pypi_reinstall"] = kwargs.get("force_pypi_reinstall")
+        return {"scheduled": True, "message": "reinstall scheduled"}
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
+        lambda: {
+            "current_version": "1.0.0",
+            "latest_version": "1.0.0",
+            "installer": "pipx",
+            "version_check": {
+                "source": "pypi",
+                "status": "current",
+                "current_version": "1.0.0",
+                "latest_version": "1.0.0",
+                "update_available": False,
+            },
+            "auto_updatable": False,
+            "update_available": False,
+            "blocked_reason": "This install was set up from a local folder.",
+            "recovery_reinstall_available": True,
+            "recovery_reinstall_command": "pipx install --force hol-guard",
+        },
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.server.schedule_guard_dashboard_update",
+        fake_schedule,
+    )
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _post_json_body(daemon, "/v1/update", {"force_pypi_reinstall": True})
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["scheduled"] is True
+    assert scheduled["force_pypi_reinstall"] is True
+
+
+def test_daemon_update_recovery_reinstall_rejected_for_editable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
+        lambda: {
+            "current_version": "1.0.0",
+            "latest_version": "1.0.0",
+            "installer": "pipx",
+            "version_check": {
+                "source": "pypi",
+                "status": "current",
+                "current_version": "1.0.0",
+                "latest_version": "1.0.0",
+                "update_available": False,
+            },
+            "auto_updatable": False,
+            "update_available": False,
+            "blocked_reason": "This install was set up from local source code.",
+            "recovery_reinstall_available": False,
+            "recovery_reinstall_command": None,
+        },
+    )
+    schedule_mock = MagicMock()
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.server.schedule_guard_dashboard_update",
+        schedule_mock,
+    )
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _post_json_body(daemon, "/v1/update", {"force_pypi_reinstall": True})
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "update_not_supported"
+    schedule_mock.assert_not_called()
+
+
+def test_runner_command_appends_force_pypi_reinstall_flag(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    command = build_dashboard_update_runner_command(
+        guard_home.resolve(),
+        daemon_pid=99,
+        daemon_port=1234,
+        force_pypi_reinstall=True,
+    )
+    assert "--force-pypi-reinstall" in command
+
+    command_without = build_dashboard_update_runner_command(
+        guard_home.resolve(),
+        daemon_pid=99,
+        daemon_port=1234,
+    )
+    assert "--force-pypi-reinstall" not in command_without
