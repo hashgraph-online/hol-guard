@@ -177,3 +177,29 @@ Do not rewrite Review/Inbox components to implement Policy features.
 Phase 0 delivers this boundary doc, audit notes, and automated boundary tests.
 Phase 3 adds the local Cloud exception DTO (`cloud_exceptions.py`), separate sync
 storage, and `/v1/policy` + `/v1/policy/cloud-exceptions` API fields.
+
+## Final architecture (2026-06-14)
+
+Implementation is complete across local dashboard, daemon, and Guard Cloud bundle
+delivery:
+
+| Layer | Delivered behavior |
+| --- | --- |
+| **Policy tabs** | Remembered rules, Cloud exceptions, Strict config |
+| **Cloud exceptions UI** | Summary cards, grouped lists, detail panel, in-dashboard request flow, disconnected/error/loading states |
+| **Strict config** | Local fallback controls, simulator, evaluation order, bundle ack copy |
+| **Local daemon** | Validates signed bundles, persists active Cloud exceptions, rejects tampered/wrong-workspace payloads |
+| **Guard Cloud bundle** | Active exceptions compiled into `cloudExceptions` on receipt sync; expired/revoked rows omitted |
+| **Integrity** | Bundle hash/signing excludes `cloudExceptions` so local parser verification stays aligned |
+
+Release audit command:
+
+```bash
+./scripts/run-policy-cloud-exceptions-release-audit.sh
+```
+
+Focused portal contract proof:
+
+```bash
+pnpm test -- __tests__/guard-policy-cloud-exceptions-sync.test.ts
+```
