@@ -147,6 +147,7 @@ _IGNORED_TREE_DIR_NAMES = {".git", ".hg", ".svn", "__pycache__", ".mypy_cache", 
 _MAX_FINGERPRINT_FILE_BYTES = 1024 * 1024
 _AIBOM_METADATA_KEYS = (
     "instructionRole",
+    "localSecurity",
     "registryIdentity",
     "sourceLinks",
     "sourceOfTruth",
