@@ -30,7 +30,10 @@ def main(argv: list[str] | None = None) -> int:
         clear_guard_daemon_state(guard_home)
         repair_approval_center_locator(guard_home)
 
-        update_payload, exit_code = run_guard_update(dry_run=False)
+        update_payload, exit_code = run_guard_update(
+            dry_run=False,
+            force_pypi_reinstall=args.force_pypi_reinstall,
+        )
         if exit_code != 0:
             message = update_payload.get("message") or update_payload.get("error") or "Guard update failed."
             print(str(message), file=sys.stderr)
@@ -51,6 +54,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--guard-home", required=True)
     parser.add_argument("--daemon-pid", type=int, required=True)
     parser.add_argument("--daemon-port", type=int, required=True)
+    parser.add_argument(
+        "--force-pypi-reinstall",
+        action="store_true",
+        help="Reinstall hol-guard from PyPI to repair a local folder install.",
+    )
     return parser.parse_args(argv)
 
 

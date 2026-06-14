@@ -49,6 +49,7 @@ def run_guard_update(
     store: GuardStore | None = None,
     workspace: str | None = None,
     now: str | None = None,
+    force_pypi_reinstall: bool = False,
 ) -> tuple[dict[str, object], int]:
     current_version = _current_version()
     installer = _installer_kind()
@@ -75,7 +76,11 @@ def run_guard_update(
                 "Automatic update is disabled for editable installs. Re-run your local install workflow instead."
             )
             return payload, 0
-        if local_source_install is not None and bool(local_source_install.get("path_exists")):
+        if (
+            local_source_install is not None
+            and bool(local_source_install.get("path_exists"))
+            and not force_pypi_reinstall
+        ):
             payload["status"] = "skipped"
             payload["changed"] = False
             payload["error"] = (
@@ -85,13 +90,15 @@ def run_guard_update(
         if local_source_install is not None and not bool(local_source_install.get("path_exists")):
             payload["recovery_source_install"] = True
     version_check = _version_check_payload(current_version)
-    use_pypi = _should_upgrade_from_pypi(
+    use_pypi = force_pypi_reinstall or _should_upgrade_from_pypi(
         current_version=current_version,
         version_check=version_check,
         vcs_install=vcs_install,
         local_source_install=local_source_install,
     )
     command = _update_command(installer, use_pypi=use_pypi)
+    if force_pypi_reinstall:
+        payload["recovery_reinstall"] = True
     payload.update(
         {
             "command": command,
@@ -686,6 +693,7 @@ def build_guard_update_status_payload() -> dict[str, object]:
     version_check = _version_check_payload(current_version)
     auto_updatable = True
     blocked_reason: str | None = None
+    recovery_reinstall_available = False
 
     if isinstance(direct_url, dict):
         if bool(_read_direct_url_dir_info(direct_url).get("editable")):
@@ -698,9 +706,16 @@ def build_guard_update_status_payload() -> dict[str, object]:
             blocked_reason = (
                 "This install was set up from a local folder. Re-run your usual local install command instead."
             )
+            # Recovery can convert this install back to a normal PyPI package.
+            recovery_reinstall_available = True
 
     update_available = auto_updatable and version_check.get("update_available") is True
     latest_version = version_check.get("latest_version")
+    recovery_reinstall_command = (
+        _shell_command(_update_command(installer, use_pypi=True))
+        if recovery_reinstall_available
+        else None
+    )
     return {
         "current_version": current_version,
         "latest_version": latest_version if isinstance(latest_version, str) else None,
@@ -709,6 +724,8 @@ def build_guard_update_status_payload() -> dict[str, object]:
         "auto_updatable": auto_updatable,
         "update_available": update_available,
         "blocked_reason": blocked_reason,
+        "recovery_reinstall_available": recovery_reinstall_available,
+        "recovery_reinstall_command": recovery_reinstall_command,
     }
 
 
