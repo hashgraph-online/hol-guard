@@ -18,7 +18,8 @@ import {
 import { SectionLabel, Badge, Tag, ActionButton, IconActionButton, EmptyState } from "./approval-center-primitives";
 import { ApprovalProofModal } from "./approval-proof-modal";
 import { formatRelativeTime, harnessDisplayName } from "./approval-center-utils";
-import { GuardHarnessActionError, runAuditRemediation, guardAwareHref } from "./guard-api";
+import { runAuditRemediation, guardAwareHref } from "./guard-api";
+import { isApprovalGateRequiredError } from "./harness-action-errors";
 import type { AuditRemediationAction } from "./guard-api";
 import type { GuardApprovalGatePublicConfig, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
@@ -470,11 +471,7 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate }: AuditWorksp
           [result.id]: "Remediation completed. Restart your shell before retrying package installs.",
         }));
       } catch (error) {
-        if (
-          credentials === undefined &&
-          error instanceof GuardHarnessActionError &&
-          error.payload?.error === "approval_gate_required"
-        ) {
+        if (credentials === undefined && isApprovalGateRequiredError(error)) {
           await resolveApprovalGate();
           setPendingRemediation(result);
           setRemediationMessages((prev) => {

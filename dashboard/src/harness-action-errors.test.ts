@@ -1,0 +1,114 @@
+import { GuardHarnessActionError } from "./guard-api";
+import {
+  isApprovalGateRequiredError,
+  isGuardHarnessActionError,
+  resolveApprovalGateSyncFailure,
+} from "./harness-action-errors";
+
+function assert(condition: boolean, message: string): void {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+function makeHarnessError(
+  status: number,
+  payload: { error: string; message?: string } | null,
+): GuardHarnessActionError {
+  return new GuardHarnessActionError(status, payload);
+}
+
+function makeDuckTypedHarnessError(
+  status: number,
+  payload: { error: string; message?: string } | null,
+): GuardHarnessActionError {
+  const error = makeHarnessError(status, payload);
+  return Object.assign(Object.create(GuardHarnessActionError.prototype), error);
+}
+
+assert(
+  isGuardHarnessActionError(makeHarnessError(403, { error: "approval_gate_required" })),
+  "instanceof GuardHarnessActionError is recognized",
+);
+assert(
+  isGuardHarnessActionError(
+    makeDuckTypedHarnessError(403, {
+      error: "approval_gate_required",
+      message: "Approval password is required.",
+    }),
+  ),
+  "duck-typed GuardHarnessActionError is recognized",
+);
+assert(
+  isApprovalGateRequiredError(
+    makeHarnessError(403, {
+      error: "approval_gate_required",
+      message: "Approval password is required.",
+    }),
+  ),
+  "approval_gate_required code is detected",
+);
+assert(
+  isApprovalGateRequiredError(
+    makeHarnessError(403, {
+      error: "Approval password is required.",
+    }),
+  ),
+  "human-readable error field is detected",
+);
+assert(
+  isApprovalGateRequiredError(
+    makeDuckTypedHarnessError(403, {
+      error: "approval_gate_required",
+      message: "Approval password is required.",
+    }),
+  ),
+  "duck-typed approval_gate_required is detected",
+);
+assert(
+  isApprovalGateRequiredError(
+    makeHarnessError(403, {
+      error: "approval_gate_password_required",
+      message: "Approval gate password is required.",
+    }),
+  ),
+  "approval_gate_password_required code is detected",
+);
+assert(
+  isApprovalGateRequiredError(
+    makeHarnessError(403, {
+      error: "approval_gate_totp_required",
+      message: "TOTP code is required.",
+    }),
+  ),
+  "approval_gate_totp_required code is detected",
+);
+assert(
+  isApprovalGateRequiredError(new Error("Approval password is required.")),
+  "plain Error message fallback is detected",
+);
+assert(
+  !isApprovalGateRequiredError(makeHarnessError(403, { error: "approval_gate_locked" })),
+  "locked gate is not treated as missing password",
+);
+
+const withoutCredentials = resolveApprovalGateSyncFailure(
+  makeHarnessError(403, {
+    error: "Approval password is required.",
+  }),
+);
+assert(
+  withoutCredentials.kind === "approval_required",
+  "missing credentials route to approval step",
+);
+
+const withCredentials = resolveApprovalGateSyncFailure(
+  makeHarnessError(403, {
+    error: "approval_gate_required",
+    message: "Approval password is required.",
+  }),
+  { hasCredentials: true },
+);
+assert(withCredentials.kind === "failed", "wrong password stays on approval form with error");
+
+console.log("harness-action-errors.test.ts: all assertions passed");

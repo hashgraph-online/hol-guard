@@ -10,13 +10,16 @@ import type {
 } from "./guard-types";
 import {
   fetchPackageFirewallStatus,
-  GuardHarnessActionError,
   openPackageFirewallShell,
   runPackageFirewallAction,
   runPackageAudit,
   runPackageSync,
   startPackageFirewallConnect,
 } from "./guard-api";
+import {
+  isApprovalGateRequiredError,
+  resolveApprovalGateSyncFailure,
+} from "./harness-action-errors";
 import { EntitlementNotice, ConnectFlowCard } from "./supply-chain-firewall-views";
 import type { CompletedOp } from "./supply-chain-firewall-views";
 import {
@@ -38,7 +41,7 @@ import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 import { parseInterceptProofSnapshot, type InterceptProofSnapshot } from "./supply-chain-firewall-action-result";
 import { InterceptProofModal } from "./supply-chain-intercept-proof-modal";
 import { SupplyChainManagerDrawer } from "./supply-chain-manager-drawer";
-import { resolveSupplyChainAuditRecoveryGate, type SupplyChainAuditRecoveryGate } from "./supply-chain-audit-recovery";
+import { resolveSupplyChainAuditRecoveryGate, createSupplyChainSyncApprovalGate, type SupplyChainAuditRecoveryGate } from "./supply-chain-audit-recovery";
 import {
   AuditRecoveryModal,
   type AuditRecoveryModalPhase,
@@ -191,6 +194,25 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   const [auditRecoveryPhase, setAuditRecoveryPhase] = useState<AuditRecoveryModalPhase>("ready");
   const [auditRecoveryError, setAuditRecoveryError] = useState<string | null>(null);
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(approvalGate);
+
+  const openSyncApprovalRecovery = useCallback(
+    async (options?: { autoRetryAuditAfterPrimary?: boolean }) => {
+      await resolveApprovalGate();
+      setAuditRecoveryGate((current) => {
+        const approvalGate = createSupplyChainSyncApprovalGate({
+          autoRetryAuditAfterPrimary:
+            options?.autoRetryAuditAfterPrimary ?? current?.autoRetryAuditAfterPrimary ?? false,
+        });
+        if (current === null) {
+          return approvalGate;
+        }
+        return { ...current, detail: approvalGate.detail };
+      });
+      setAuditRecoveryPhase("approval");
+      setAuditRecoveryError(null);
+    },
+    [resolveApprovalGate],
+  );
 
   const closeAuditRecovery = useCallback(() => {
     setAuditRecoveryGate(null);
@@ -364,28 +386,26 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
           setAuditRecoveryError(null);
           return;
         }
-        if (
-          credentials === undefined &&
-          err instanceof GuardHarnessActionError &&
-          err.payload?.error === "approval_gate_required"
-        ) {
-          await resolveApprovalGate();
-          setAuditRecoveryPhase("approval");
-          setAuditRecoveryError(null);
+        const failure = resolveApprovalGateSyncFailure(err, {
+          hasCredentials: credentials !== undefined,
+        });
+        if (failure.kind === "approval_required") {
+          await openSyncApprovalRecovery({
+            autoRetryAuditAfterPrimary: auditRecoveryGate?.autoRetryAuditAfterPrimary ?? true,
+          });
           return;
         }
-        const message = err instanceof Error ? err.message : "Sync failed.";
-        setAuditRecoveryError(message);
+        setAuditRecoveryError(failure.message);
         setAuditRecoveryPhase(credentials === undefined ? "failed" : "approval");
-        setLastFailed({ op: "sync", manager: null, message });
+        setLastFailed({ op: "sync", manager: null, message: failure.message });
       }
     },
     [
       auditRecoveryGate,
       continueAuditAfterRecovery,
       onStateChanged,
+      openSyncApprovalRecovery,
       refreshAfterOp,
-      resolveApprovalGate,
     ],
   );
 
@@ -535,8 +555,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
         if (
           credentials === undefined &&
           manager !== null &&
-          err instanceof GuardHarnessActionError &&
-          err.payload?.error === "approval_gate_required"
+          isApprovalGateRequiredError(err)
         ) {
           await resolveApprovalGate();
           setPendingApprovalOp({ op, manager });
@@ -571,13 +590,17 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
         await refreshAfterOp();
         await onStateChanged?.();
       } catch (err) {
+        if (isApprovalGateRequiredError(err)) {
+          await openSyncApprovalRecovery();
+          return;
+        }
         const message = err instanceof Error ? err.message : "Operation failed.";
         setLastFailed({ op, manager: null, message });
       } finally {
         setPendingOp(null);
       }
     },
-    [onStateChanged, openAuditConnectGate, panelLoad, refreshAfterOp, runAuditOperation],
+    [onStateChanged, openAuditConnectGate, openSyncApprovalRecovery, panelLoad, refreshAfterOp, runAuditOperation],
   );
 
   const handleInstall = useCallback(
