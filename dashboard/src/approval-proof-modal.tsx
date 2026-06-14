@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import type { ChangeEvent } from "react";
 import { ActionButton, SectionLabel } from "./approval-center-primitives";
+import { ApprovalProofFieldInputs } from "./approval-proof-inline";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
 
 type ApprovalProofModalProps = {
@@ -41,33 +42,15 @@ export function ApprovalProofModal(props: ApprovalProofModalProps) {
         <SectionLabel>Approval required</SectionLabel>
         <h2 className="mt-2 text-base font-semibold text-brand-dark">{title}</h2>
         <p className="mt-1 text-sm text-slate-500">{detail}</p>
-        <label className="mt-4 block">
-          <span className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
-            Approval password
-          </span>
-          <input
-            type="password"
-            value={password}
-            onChange={handlePasswordChange}
-            autoComplete="current-password"
-            className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        <div className="mt-4">
+          <ApprovalProofFieldInputs
+            approvalGate={approvalGate}
+            approvalPassword={password}
+            approvalTotpCode={totpCode}
+            onApprovalPasswordChange={handlePasswordChange}
+            onApprovalTotpCodeChange={handleTotpChange}
           />
-        </label>
-        {approvalGate?.totp_enabled === true && (
-          <label className="mt-3 block">
-            <span className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
-              Authenticator code
-            </span>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={totpCode}
-              onChange={handleTotpChange}
-              className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-            />
-          </label>
-        )}
+        </div>
         <div className="mt-5 flex justify-end gap-2">
           <ActionButton variant="outline" onClick={onCancel}>
             Cancel

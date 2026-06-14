@@ -1,8 +1,49 @@
 import { useCallback, useEffect, useRef } from "react";
-import type { ChangeEvent, KeyboardEvent } from "react";
+import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
 import { HiMiniKey } from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
+
+type ApprovalProofFieldInputsProps = {
+  approvalGate: GuardApprovalGatePublicConfig | null;
+  approvalPassword: string;
+  approvalTotpCode: string;
+  passwordRef?: RefObject<HTMLInputElement | null>;
+  onApprovalPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onApprovalTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
+};
+
+export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
+  return (
+    <div className="space-y-3">
+      <label className="block">
+        <span className="text-sm font-semibold text-brand-dark">Approval password</span>
+        <input
+          ref={props.passwordRef}
+          type="password"
+          autoComplete="current-password"
+          value={props.approvalPassword}
+          onChange={props.onApprovalPasswordChange}
+          className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        />
+      </label>
+      {props.approvalGate?.totp_enabled === true ? (
+        <label className="block">
+          <span className="text-sm font-semibold text-brand-dark">Authenticator code</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="one-time-code"
+            value={props.approvalTotpCode}
+            onChange={props.onApprovalTotpCodeChange}
+            className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          />
+        </label>
+      ) : null}
+    </div>
+  );
+}
 
 type ApprovalProofInlineProps = {
   approvalGate: GuardApprovalGatePublicConfig | null;
@@ -58,33 +99,14 @@ export function ApprovalProofInline(props: ApprovalProofInlineProps) {
         </div>
       </div>
 
-      <div className="space-y-3">
-        <label className="block">
-          <span className="text-sm font-semibold text-brand-dark">Approval password</span>
-          <input
-            ref={passwordRef}
-            type="password"
-            autoComplete="current-password"
-            value={props.approvalPassword}
-            onChange={props.onApprovalPasswordChange}
-            className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-          />
-        </label>
-        {props.approvalGate?.totp_enabled === true ? (
-          <label className="block">
-            <span className="text-sm font-semibold text-brand-dark">Authenticator code</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              autoComplete="one-time-code"
-              value={props.approvalTotpCode}
-              onChange={props.onApprovalTotpCodeChange}
-              className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-            />
-          </label>
-        ) : null}
-      </div>
+      <ApprovalProofFieldInputs
+        approvalGate={props.approvalGate}
+        approvalPassword={props.approvalPassword}
+        approvalTotpCode={props.approvalTotpCode}
+        passwordRef={passwordRef}
+        onApprovalPasswordChange={props.onApprovalPasswordChange}
+        onApprovalTotpCodeChange={props.onApprovalTotpCodeChange}
+      />
 
       {props.error !== null ? (
         <p className="text-sm text-brand-attention" role="alert">
