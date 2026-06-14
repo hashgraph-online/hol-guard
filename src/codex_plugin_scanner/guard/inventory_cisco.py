@@ -87,100 +87,6 @@ def _run_mcp_inventory_scan(
     )
 
 
-def _run_skill_inventory_scan(
-    *,
-    harness: str,
-    context: HarnessContext,
-    detection: object,
-    mode: str,
-    timeout_seconds: float | None,
-) -> CiscoInventoryRun:
-    roots = _skill_scan_roots(harness=harness, context=context, detection=detection)
-    if not roots:
-        return CiscoInventoryRun(
-            source="cisco-skill-scanner",
-            status="skipped",
-            message="No skill directory found; Cisco skill inventory scan skipped.",
-            findings=(),
-            duration_ms=0,
-            metadata={"target": "missing", "skillsScanned": 0, "mode": mode},
-        )
-    if len(roots) == 1:
-        return _run_single_skill_inventory_scan(root=roots[0], mode=mode, timeout_seconds=timeout_seconds)
-
-    findings: list[Finding] = []
-    severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-    analyzers_used: list[str] = []
-    skills_scanned = 0
-    skills_skipped: list[str] = []
-    duration_ms = 0
-    failure_message: str | None = None
-
-    for root in roots:
-        run = _run_single_skill_inventory_scan(root=root, mode=mode, timeout_seconds=timeout_seconds)
-        duration_ms += run.duration_ms
-        metadata = run.metadata if isinstance(run.metadata, dict) else {}
-        for finding in run.findings:
-            findings.append(finding)
-        raw_counts = metadata.get("findingsBySeverity")
-        if isinstance(raw_counts, dict):
-            for key in severity_counts:
-                value = raw_counts.get(key)
-                if isinstance(value, int):
-                    severity_counts[key] += value
-        raw_analyzers = metadata.get("analyzersUsed")
-        if isinstance(raw_analyzers, list):
-            for analyzer in raw_analyzers:
-                if isinstance(analyzer, str) and analyzer and analyzer not in analyzers_used:
-                    analyzers_used.append(analyzer)
-        raw_scanned = metadata.get("skillsScanned")
-        if isinstance(raw_scanned, int):
-            skills_scanned += raw_scanned
-        raw_skipped = metadata.get("skillsSkipped")
-        if isinstance(raw_skipped, list):
-            for entry in raw_skipped:
-                if isinstance(entry, str) and entry:
-                    skills_skipped.append(entry)
-        if run.status in {"failed", "timed_out", "unavailable"}:
-            failure_message = run.message
-            return CiscoInventoryRun(
-                source="cisco-skill-scanner",
-                status=run.status,
-                message=failure_message,
-                findings=tuple(findings),
-                duration_ms=duration_ms,
-                metadata={
-                    "target": str(roots[0].parent),
-                    "skillsScanned": skills_scanned,
-                    "skillsSkipped": tuple(skills_skipped),
-                    "totalFindings": len(findings),
-                    "findingsBySeverity": severity_counts,
-                    "analyzersUsed": tuple(analyzers_used),
-                    "policyName": metadata.get("policyName", "balanced"),
-                    "mode": mode,
-                },
-            )
-
-    return CiscoInventoryRun(
-        source="cisco-skill-scanner",
-        status="enabled",
-        message="Cisco skill scan completed.",
-        findings=tuple(findings),
-        duration_ms=duration_ms,
-        metadata={
-            "target": str(roots[0].parent),
-            "skillsScanned": skills_scanned,
-            "skillsSkipped": tuple(skills_skipped),
-            "totalFindings": len(findings),
-            "findingsBySeverity": severity_counts,
-            "analyzersUsed": tuple(analyzers_used),
-            "policyName": "balanced",
-            "mode": mode,
-            "skillTargets": [str(root) for root in roots],
-        },
-    )
-
-
 def _run_skill_inventory_scans(
     *,
     harness: str,
@@ -283,8 +189,12 @@ def _artifact_skill_root(artifact: object, *, context: HarnessContext) -> Path |
                 if base_dir is None:
                     continue
                 candidate = (base_dir / skill_root).resolve()
-                if candidate.is_dir() and (candidate / "SKILL.md").is_file():
-                    return candidate
+                if candidate.is_dir():
+                    nested_skill_dirs = _skill_dirs_under(candidate)
+                    if len(nested_skill_dirs) == 1:
+                        return nested_skill_dirs[0]
+                    if (candidate / "SKILL.md").is_file():
+                        return candidate
     config_path = getattr(artifact, "config_path", None)
     if not isinstance(config_path, str):
         return None
@@ -311,13 +221,6 @@ def _skill_dirs_under(root: Path) -> tuple[Path, ...]:
         return ()
     skill_dirs = sorted({path.parent.resolve() for path in root.rglob("SKILL.md") if path.is_file()})
     return tuple(skill_dirs)
-
-
-def _nearest_skills_root(path: Path) -> Path | None:
-    for parent in path.parents:
-        if parent.name == "skills":
-            return parent
-    return None
 
 
 def _nearest_skill_dir(path: Path) -> Path | None:
