@@ -5,12 +5,10 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.parse
-from typing import Any
 
 from .store import GuardStore
 
 _VALID_SCOPES = frozenset({"artifact", "publisher", "harness", "workspace"})
-_STEP_UP_SCOPES = frozenset({"harness", "workspace"})
 
 
 def normalized_cloud_exception_requests_url(sync_url: str) -> str:
@@ -136,8 +134,6 @@ def submit_cloud_exception_request(
 
 def cloud_exception_request_error_status(message: str) -> int:
     lowered = message.lower()
-    if "not logged in" in lowered or "reauthoriz" in lowered:
+    if "guard is not logged in" in lowered or "reauthoriz" in lowered:
         return 401
-    if "invalid" in lowered or "requires" in lowered or "must include" in lowered:
-        return 400
     return 502

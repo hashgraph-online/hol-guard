@@ -6,6 +6,8 @@ import { createCloudExceptionRequest } from "./guard-api";
 import type { GuardCloudExceptionRequestCreateInput } from "./guard-api";
 import type { GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 
+const SCOPE_VALUES = ["artifact", "publisher", "harness", "workspace"] as const;
+
 const SCOPE_OPTIONS: Array<{
   value: GuardCloudExceptionRequestCreateInput["scope"];
   label: string;
@@ -45,6 +47,30 @@ function defaultExpiryIso(): string {
   return date.toISOString();
 }
 
+function toDatetimeLocalValue(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function fromDatetimeLocalValue(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return new Date().toISOString();
+  }
+  return date.toISOString();
+}
+
+function parseScopeValue(value: string): GuardCloudExceptionRequestCreateInput["scope"] | null {
+  if ((SCOPE_VALUES as readonly string[]).includes(value)) {
+    return value as GuardCloudExceptionRequestCreateInput["scope"];
+  }
+  return null;
+}
+
 function resolveDefaultWorkingDirectory(snapshot: GuardRuntimeSnapshot): string {
   const install = snapshot.managed_installs?.find((entry) => entry.workspace?.trim());
   return install?.workspace?.trim() ?? "";
@@ -77,7 +103,10 @@ export function PolicyCloudExceptionRequestPanel({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleScopeChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
-    setScope(event.target.value as GuardCloudExceptionRequestCreateInput["scope"]);
+    const nextScope = parseScopeValue(event.target.value);
+    if (nextScope) {
+      setScope(nextScope);
+    }
   }, []);
 
   const handleReceiptChange = useCallback(
@@ -93,6 +122,38 @@ export function PolicyCloudExceptionRequestPanel({
     },
     [receiptOptions],
   );
+
+  const handleArtifactIdChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setArtifactId(event.target.value);
+  }, []);
+
+  const handlePublisherChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setPublisher(event.target.value);
+  }, []);
+
+  const handleHarnessChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    setHarness(event.target.value);
+  }, []);
+
+  const handleWorkingDirectoryChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setWorkingDirectory(event.target.value);
+  }, []);
+
+  const handleRequestedByChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setRequestedBy(event.target.value);
+  }, []);
+
+  const handleOwnerChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setOwner(event.target.value);
+  }, []);
+
+  const handleReasonChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
+    setReason(event.target.value);
+  }, []);
+
+  const handleExpiryChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setRequestedExpiresAt(fromDatetimeLocalValue(event.target.value));
+  }, []);
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -126,7 +187,6 @@ export function PolicyCloudExceptionRequestPanel({
             ? `Cloud exception request ${created.requestId} is pending Guard Cloud review.`
             : "Cloud exception request submitted.",
         );
-        onSubmitted();
       } catch (submitError) {
         const message =
           submitError instanceof Error && submitError.message.trim()
@@ -140,7 +200,6 @@ export function PolicyCloudExceptionRequestPanel({
     [
       artifactId,
       harness,
-      onSubmitted,
       owner,
       publisher,
       reason,
@@ -151,6 +210,10 @@ export function PolicyCloudExceptionRequestPanel({
       workingDirectory,
     ],
   );
+
+  const handleDone = useCallback(() => {
+    onSubmitted();
+  }, [onSubmitted]);
 
   if (receiptOptions.length === 0) {
     return (
@@ -165,6 +228,18 @@ export function PolicyCloudExceptionRequestPanel({
             Back
           </ActionButton>
         </div>
+      </div>
+    );
+  }
+
+  if (successMessage) {
+    return (
+      <div className="space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5 shadow-sm">
+        <SectionLabel>Request submitted</SectionLabel>
+        <p className="text-sm text-emerald-800">{successMessage}</p>
+        <ActionButton variant="primary" onClick={handleDone}>
+          Done
+        </ActionButton>
       </div>
     );
   }
@@ -214,7 +289,7 @@ export function PolicyCloudExceptionRequestPanel({
           <input
             className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
             value={artifactId}
-            onChange={(event) => setArtifactId(event.target.value)}
+            onChange={handleArtifactIdChange}
             required
           />
         </label>
@@ -226,7 +301,7 @@ export function PolicyCloudExceptionRequestPanel({
           <input
             className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
             value={publisher}
-            onChange={(event) => setPublisher(event.target.value)}
+            onChange={handlePublisherChange}
             required
           />
         </label>
@@ -238,7 +313,7 @@ export function PolicyCloudExceptionRequestPanel({
           <select
             className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
             value={harness}
-            onChange={(event) => setHarness(event.target.value)}
+            onChange={handleHarnessChange}
             required
           >
             {harnessOptions.map((option) => (
@@ -256,7 +331,7 @@ export function PolicyCloudExceptionRequestPanel({
           <input
             className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
             value={workingDirectory}
-            onChange={(event) => setWorkingDirectory(event.target.value)}
+            onChange={handleWorkingDirectoryChange}
             required
           />
         </label>
@@ -268,7 +343,7 @@ export function PolicyCloudExceptionRequestPanel({
           className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
           type="email"
           value={requestedBy}
-          onChange={(event) => setRequestedBy(event.target.value)}
+          onChange={handleRequestedByChange}
           required
         />
       </label>
@@ -279,7 +354,7 @@ export function PolicyCloudExceptionRequestPanel({
           className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
           type="email"
           value={owner}
-          onChange={(event) => setOwner(event.target.value)}
+          onChange={handleOwnerChange}
           required
         />
       </label>
@@ -289,7 +364,7 @@ export function PolicyCloudExceptionRequestPanel({
         <textarea
           className="min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
           value={reason}
-          onChange={(event) => setReason(event.target.value)}
+          onChange={handleReasonChange}
           required
         />
       </label>
@@ -299,14 +374,13 @@ export function PolicyCloudExceptionRequestPanel({
         <input
           className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
           type="datetime-local"
-          value={requestedExpiresAt.slice(0, 16)}
-          onChange={(event) => setRequestedExpiresAt(new Date(event.target.value).toISOString())}
+          value={toDatetimeLocalValue(requestedExpiresAt)}
+          onChange={handleExpiryChange}
           required
         />
       </label>
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      {successMessage ? <p className="text-sm text-emerald-700">{successMessage}</p> : null}
 
       <div className="flex flex-wrap gap-2">
         <ActionButton variant="primary" type="submit" disabled={submitting}>
