@@ -494,7 +494,7 @@ def _extend_receipt_hash_candidates(
     candidates: list[sqlite3.Row],
 ) -> None:
     if harness == "*":
-        for (row_harness, row_variant), rows in index.receipts_by_harness_hash.items():
+        for (_, row_variant), rows in index.receipts_by_harness_hash.items():
             if row_variant == variant:
                 candidates.extend(rows)
         return
@@ -508,7 +508,7 @@ def _extend_receipt_artifact_candidates(
     candidates: list[sqlite3.Row],
 ) -> None:
     if harness == "*":
-        for (row_harness, row_artifact_id), rows in index.receipts_by_harness_artifact.items():
+        for (_, row_artifact_id), rows in index.receipts_by_harness_artifact.items():
             if row_artifact_id == artifact_id:
                 candidates.extend(rows)
         return
@@ -522,7 +522,7 @@ def _extend_approval_hash_candidates(
     candidates: list[sqlite3.Row],
 ) -> None:
     if harness == "*":
-        for (row_harness, row_variant), rows in index.approvals_by_harness_hash.items():
+        for (_, row_variant), rows in index.approvals_by_harness_hash.items():
             if row_variant == variant:
                 candidates.extend(rows)
         return
@@ -536,7 +536,7 @@ def _extend_approval_artifact_candidates(
     candidates: list[sqlite3.Row],
 ) -> None:
     if harness == "*":
-        for (row_harness, row_artifact_id), rows in index.approvals_by_harness_artifact.items():
+        for (_, row_artifact_id), rows in index.approvals_by_harness_artifact.items():
             if row_artifact_id == artifact_id:
                 candidates.extend(rows)
         return
