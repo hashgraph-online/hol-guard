@@ -69,9 +69,7 @@ def _policy_bundle_cloud_exception_is_valid(item: object) -> bool:
     if approver is not None and _non_empty_string(approver) is None:
         return False
     source_receipt_id = item.get("sourceReceiptId")
-    if source_receipt_id is not None and _non_empty_string(source_receipt_id) is None:
-        return False
-    return True
+    return source_receipt_id is None or _non_empty_string(source_receipt_id) is not None
 
 
 def policy_bundle_cloud_exceptions_are_valid(policy_bundle: dict[str, object]) -> bool:

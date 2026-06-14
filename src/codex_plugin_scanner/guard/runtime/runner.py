@@ -34,15 +34,15 @@ from ..cli.oauth_client import (
     resolve_guard_oauth_client_config,
     validate_guard_sync_endpoint,
 )
-from ..config import GuardConfig
-from ..consumer import detect_harness, evaluate_detection
-from ..edge_events import build_runtime_session_event
 from ..cloud_exceptions import (
     build_cloud_exceptions_from_policy_bundle,
     build_cloud_exceptions_from_sync_payload,
     cloud_exception_to_dict,
     dedupe_cloud_exceptions,
 )
+from ..config import GuardConfig
+from ..consumer import detect_harness, evaluate_detection
+from ..edge_events import build_runtime_session_event
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..package_firewall_entitlement import build_oauth_package_firewall_entitlement
 from ..policy_bundle_parser import (
