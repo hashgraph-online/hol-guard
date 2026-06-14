@@ -20,6 +20,7 @@ import {
   retryResume,
 } from "./guard-api";
 import { ApprovalCenterLayout, type BulkGateCredentials } from "./approval-center-layout";
+import type { AppView } from "./approval-center-primitives";
 import { buildClearPayload } from "./clear-policy-payload";
 import { normalizeHarnessSlug } from "./approval-center-utils";
 import { ErrorBoundary } from "./error-boundary";
@@ -126,8 +127,6 @@ function parseRequestId(pathname: string): string | null {
 }
 
 export const PROTECT_ROUTE = "/protect";
-
-type AppView = "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health" | "about";
 
 export function viewTitle(view: AppView): string {
   if (view === "home") return "Home";
