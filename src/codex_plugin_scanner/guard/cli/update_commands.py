@@ -22,7 +22,12 @@ from packaging.version import InvalidVersion, Version
 
 from ..adapters.base import HarnessContext
 from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
-from ..adapters.opencode_pretool import global_plugin_path, install_pretool_plugin, pretool_plugin_source
+from ..adapters.opencode_pretool import (
+    global_plugin_path,
+    install_pretool_plugin,
+    managed_plugin_path,
+    pretool_plugin_source,
+)
 from ..redaction import redact_sensitive_text
 from ..store import GuardStore
 from .dashboard_sync import sync_dashboard_assets as _sync_dashboard_assets
@@ -615,14 +620,16 @@ def _refresh_opencode_pretool_plugin(
         return None
     if managed_install is None or not bool(managed_install.get("active")):
         return None
-    repair_context = _opencode_repair_context(context, managed_install)
-    plugin_path = global_plugin_path(repair_context)
+    repair_context, _ = _repair_context_from_managed_install(context, managed_install)
+    global_path = global_plugin_path(repair_context)
+    managed_path = managed_plugin_path(repair_context)
     expected_source = pretool_plugin_source(repair_context)
     try:
-        current_source = plugin_path.read_text(encoding="utf-8") if plugin_path.is_file() else ""
+        global_source = global_path.read_text(encoding="utf-8") if global_path.is_file() else ""
+        managed_source = managed_path.read_text(encoding="utf-8") if managed_path.is_file() else ""
     except OSError as error:
         return f"Could not inspect OpenCode pretool plugin during update: {error}"
-    if current_source == expected_source:
+    if global_source == expected_source and managed_source == expected_source:
         return None
     try:
         install_pretool_plugin(repair_context)
@@ -631,16 +638,22 @@ def _refresh_opencode_pretool_plugin(
     return "Refreshed the OpenCode pretool plugin during update. Restart OpenCode to load it."
 
 
-def _opencode_repair_context(context: HarnessContext, managed_install: dict[str, object]) -> HarnessContext:
+def _repair_context_from_managed_install(
+    context: HarnessContext,
+    managed_install: dict[str, object],
+) -> tuple[HarnessContext, str | None]:
     managed_workspace = managed_install.get("workspace")
     if isinstance(managed_workspace, str) and managed_workspace.strip():
         workspace_path = Path(managed_workspace).expanduser().resolve()
-        return HarnessContext(
-            home_dir=context.home_dir,
-            workspace_dir=workspace_path,
-            guard_home=context.guard_home,
+        return (
+            HarnessContext(
+                home_dir=context.home_dir,
+                workspace_dir=workspace_path,
+                guard_home=context.guard_home,
+            ),
+            str(workspace_path),
         )
-    return HarnessContext(context.home_dir, None, context.guard_home)
+    return HarnessContext(context.home_dir, None, context.guard_home), None
 
 
 def _repair_codex_install(
@@ -682,18 +695,7 @@ def _codex_repair_target(context: HarnessContext, store: GuardStore) -> tuple[Ha
     except (json.JSONDecodeError, sqlite3.Error):
         return _codex_backup_repair_target(context)
     if managed_install is not None and bool(managed_install.get("active")):
-        managed_workspace = managed_install.get("workspace")
-        if isinstance(managed_workspace, str) and managed_workspace.strip():
-            workspace_path = Path(managed_workspace).expanduser().resolve()
-            return (
-                HarnessContext(
-                    home_dir=context.home_dir,
-                    workspace_dir=workspace_path,
-                    guard_home=context.guard_home,
-                ),
-                str(workspace_path),
-            )
-        return HarnessContext(context.home_dir, None, context.guard_home), None
+        return _repair_context_from_managed_install(context, managed_install)
     return _codex_backup_repair_target(context)
 
 

@@ -404,6 +404,9 @@ def test_refresh_opencode_pretool_plugin_rewrites_stale_plugin(tmp_path: Path) -
     refreshed = stale_path.read_text(encoding="utf-8")
     assert "Bun" not in refreshed
     assert 'import { spawn as nodeSpawn } from "node:child_process"' in refreshed
+    refreshed_managed = managed_plugin_path(ctx).read_text(encoding="utf-8")
+    assert "Bun" not in refreshed_managed
+    assert 'import { spawn as nodeSpawn } from "node:child_process"' in refreshed_managed
 
 
 def test_opencode_verification_reports_missing_plugin(tmp_path: Path) -> None:
