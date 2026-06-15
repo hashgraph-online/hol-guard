@@ -720,5 +720,5 @@ def test_audit_receipt_metadata_enriches_cloud_advisory_aliases_from_bundle(
     assert findings
     aliases = findings[0].get("advisoryAliases")
     assert isinstance(aliases, list)
-    assert "GHSA-vh95-rmgr-6w4m" in aliases
+    assert "GHSA-VH95-RMGR-6W4M" in aliases
     assert "CVE-2020-7598" in aliases

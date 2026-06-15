@@ -101,7 +101,7 @@ const camelCaseAliases = normalizeSupplyChainAuditSnapshot({
 const lodashFinding = camelCaseAliases?.findings.find((finding) => finding.packageName === "lodash");
 assert(lodashFinding !== undefined, "SCSR173-B: camelCase advisory ids normalize");
 assert(
-  lodashFinding!.advisoryAliases.includes("GHSA-xx99-yy88-zz77"),
+  lodashFinding!.advisoryAliases.includes("GHSA-XX99-YY88-ZZ77"),
   "SCSR173-B: relatedAdvisoryIds preserved",
 );
 assert(
@@ -128,7 +128,7 @@ const cloudAdvisoryIds = normalizeSupplyChainAuditSnapshot({
 const cloudFinding = cloudAdvisoryIds?.findings.find((finding) => finding.packageName === "minimist");
 assert(cloudFinding !== undefined, "SCSR173-C: cloud advisoryIds normalize");
 assert(
-  cloudFinding!.advisoryAliases.includes("GHSA-vh95-rmgr-6w4w"),
+  cloudFinding!.advisoryAliases.includes("GHSA-VH95-RMGR-6W4W"),
   "SCSR173-C: cloud advisoryIds surface as aliases",
 );
 

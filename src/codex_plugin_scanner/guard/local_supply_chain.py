@@ -523,6 +523,19 @@ def _package_advisory_ids(package: dict[str, object]) -> list[str]:
     return advisory_ids
 
 
+def _cached_supply_chain_bundle_payload(store: GuardStore) -> dict[str, object] | None:
+    workspace_id = store.get_cloud_workspace_id()
+    if workspace_id is None:
+        return None
+    cached_bundle = store.get_cached_supply_chain_bundle(workspace_id)
+    if not isinstance(cached_bundle, dict):
+        return None
+    bundle_payload = cached_bundle.get("bundle")
+    if isinstance(bundle_payload, dict):
+        return bundle_payload
+    return None
+
+
 def _resolve_advisory_aliases_from_bundle(
     bundle: dict[str, object] | None,
     advisory_ids: list[str],
@@ -546,12 +559,13 @@ def _resolve_advisory_aliases_from_bundle(
                         advisory_id,
                         *[alias for alias in raw_aliases if isinstance(alias, str) and alias.strip()],
                     )
-                lookup[advisory_id] = alias_tuple
+                upper_tuple = tuple(alias.upper() for alias in alias_tuple)
+                lookup[advisory_id.upper()] = upper_tuple
                 for alias in alias_tuple:
-                    lookup.setdefault(alias, alias_tuple)
+                    lookup.setdefault(alias.upper(), upper_tuple)
 
     def add_alias(value: str) -> None:
-        trimmed = value.strip()
+        trimmed = value.strip().upper()
         if not trimmed or trimmed in seen:
             return
         seen.add(trimmed)
@@ -559,7 +573,7 @@ def _resolve_advisory_aliases_from_bundle(
 
     for advisory_id in advisory_ids:
         add_alias(advisory_id)
-        resolved = lookup.get(advisory_id)
+        resolved = lookup.get(advisory_id.upper())
         if resolved is None:
             continue
         for alias in resolved:
@@ -593,14 +607,7 @@ def _enrich_evaluation_packages_with_advisory_aliases(
     packages = evaluation.get("packages")
     if not isinstance(packages, list):
         return evaluation
-    workspace_id = store.get_cloud_workspace_id()
-    bundle: dict[str, object] | None = None
-    if workspace_id is not None:
-        cached_bundle = store.get_cached_supply_chain_bundle(workspace_id)
-        if isinstance(cached_bundle, dict):
-            bundle_payload = cached_bundle.get("bundle")
-            if isinstance(bundle_payload, dict):
-                bundle = bundle_payload
+    bundle = _cached_supply_chain_bundle_payload(store)
     enriched_packages: list[dict[str, object]] = []
     for package in packages:
         if not isinstance(package, dict):
@@ -625,10 +632,7 @@ def _audit_package_findings_for_receipt(
         decision_rank = decision_rank_map.get(decision, 0)
         ranked.append((decision_rank, severity_rank, item))
     ranked.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
-    return [
-        _enrich_package_with_advisory_aliases(item, bundle=bundle)
-        for _, _, item in ranked[:limit]
-    ]
+    return [_enrich_package_with_advisory_aliases(item, bundle=bundle) for _, _, item in ranked[:limit]]
 
 
 def workspace_audit_path_hashes(
@@ -720,15 +724,7 @@ def audit_receipt_metadata(
     packages = evaluation.get("packages")
     package_items = [item for item in packages if isinstance(item, dict)] if isinstance(packages, list) else []
     blocked_packages = [item for item in package_items if str(item.get("decision") or "") == "block"]
-    bundle: dict[str, object] | None = None
-    if store is not None:
-        workspace_id = store.get_cloud_workspace_id()
-        if workspace_id is not None:
-            cached_bundle = store.get_cached_supply_chain_bundle(workspace_id)
-            if isinstance(cached_bundle, dict):
-                bundle_payload = cached_bundle.get("bundle")
-                if isinstance(bundle_payload, dict):
-                    bundle = bundle_payload
+    bundle = _cached_supply_chain_bundle_payload(store) if store is not None else None
     package_findings = _audit_package_findings_for_receipt(package_items, bundle=bundle)
     policy_decision = "allow"
     if decision == "block":

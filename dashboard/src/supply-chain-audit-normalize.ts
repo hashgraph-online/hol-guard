@@ -146,13 +146,14 @@ function addAdvisoryAlias(aliases: Set<string>, rawId: string): void {
   if (trimmed.length === 0) {
     return;
   }
+  const upper = trimmed.toUpperCase();
   if (
-    trimmed.startsWith("GHSA-") ||
-    trimmed.startsWith("CVE-") ||
-    trimmed.startsWith("PYSEC-") ||
-    trimmed.startsWith("GO-")
+    upper.startsWith("GHSA-") ||
+    upper.startsWith("CVE-") ||
+    upper.startsWith("PYSEC-") ||
+    upper.startsWith("GO-")
   ) {
-    aliases.add(trimmed);
+    aliases.add(upper);
   }
 }
 
@@ -173,7 +174,11 @@ function buildAdvisoryAliases(
     readAdvisoryIdList(packageRecord.advisory_aliases),
   );
   if (precomputed.length > 0) {
-    return Array.from(new Set(precomputed));
+    const normalized = new Set<string>();
+    for (const id of precomputed) {
+      addAdvisoryAlias(normalized, id);
+    }
+    return Array.from(normalized);
   }
 
   const aliases = new Set<string>();

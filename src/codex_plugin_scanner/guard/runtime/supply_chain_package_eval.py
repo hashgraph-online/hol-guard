@@ -1135,13 +1135,14 @@ def _bundle_advisory_aliases(
     advisory_lookup: dict[str, tuple[str, ...]] = {}
     for advisory in bundle_response.bundle.advisories:
         alias_tuple = (advisory.advisory_id, *advisory.aliases)
-        advisory_lookup[advisory.advisory_id] = alias_tuple
+        upper_tuple = tuple(alias.upper() for alias in alias_tuple)
+        advisory_lookup[advisory.advisory_id.upper()] = upper_tuple
         for alias in alias_tuple:
-            advisory_lookup.setdefault(alias, alias_tuple)
+            advisory_lookup.setdefault(alias.upper(), upper_tuple)
     aliases: list[str] = []
     seen: set[str] = set()
     for advisory_id in advisory_ids:
-        for alias in advisory_lookup.get(advisory_id, (advisory_id,)):
+        for alias in advisory_lookup.get(advisory_id.upper(), (advisory_id.upper(),)):
             if alias in seen:
                 continue
             seen.add(alias)
