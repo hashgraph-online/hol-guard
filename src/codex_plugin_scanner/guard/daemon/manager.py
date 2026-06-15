@@ -68,20 +68,31 @@ def _daemon_launcher_env() -> dict[str, str]:
     return env
 
 
-def ensure_guard_daemon(guard_home: Path, *, start_timeout: float | None = None) -> str:
+def ensure_guard_daemon(
+    guard_home: Path,
+    *,
+    start_timeout: float | None = None,
+    preferred_port: int | None = None,
+) -> str:
     timeout = GUARD_DAEMON_START_TIMEOUT_SECONDS if start_timeout is None else start_timeout
     _reap_stale_ephemeral_guard_daemons(exclude_guard_home=guard_home)
     state_path = _state_path(guard_home)
     existing_url = load_guard_daemon_url(guard_home)
     if existing_url is not None:
-        _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(existing_url))
-        return existing_url
+        existing_port = _guard_daemon_url_port(existing_url)
+        if preferred_port is None or existing_port == preferred_port:
+            _retire_duplicate_guard_daemons(guard_home, keep_port=existing_port)
+            return existing_url
     with _guard_daemon_start_lock(guard_home):
         existing_url = load_guard_daemon_url(guard_home)
         if existing_url is not None:
-            _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(existing_url))
-            return existing_url
-        adopted_url = _adopt_existing_guard_daemon(guard_home)
+            existing_port = _guard_daemon_url_port(existing_url)
+            if preferred_port is None or existing_port == preferred_port:
+                _retire_duplicate_guard_daemons(guard_home, keep_port=existing_port)
+                return existing_url
+            retire_all_guard_daemons_for_home(guard_home)
+            clear_guard_daemon_state(guard_home)
+        adopted_url = _adopt_existing_guard_daemon(guard_home, preferred_port=preferred_port)
         if adopted_url is not None:
             _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(adopted_url))
             return adopted_url
@@ -94,7 +105,7 @@ def ensure_guard_daemon(guard_home: Path, *, start_timeout: float | None = None)
                 _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(inflight_url))
                 return inflight_url
         clear_guard_daemon_state(guard_home)
-        for candidate_port in _candidate_ports(guard_home):
+        for candidate_port in _candidate_ports(guard_home, preferred_port=preferred_port):
             command = [
                 sys.executable,
                 "-m",
@@ -129,11 +140,16 @@ def ensure_guard_daemon(guard_home: Path, *, start_timeout: float | None = None)
     raise RuntimeError(f"Guard approval center did not start. Expected state file at {state_path}.")
 
 
-def ensure_guard_daemon_after_update(guard_home: Path) -> str:
+def ensure_guard_daemon_after_update(
+    guard_home: Path,
+    *,
+    preferred_port: int | None = None,
+) -> str:
     """Restart the local daemon after a package update with a longer startup window."""
     return ensure_guard_daemon(
         guard_home,
         start_timeout=GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS,
+        preferred_port=preferred_port,
     )
 
 
@@ -238,10 +254,21 @@ def _guard_daemon_url_port(url: str) -> int | None:
         return None
 
 
-def _adopt_existing_guard_daemon(guard_home: Path) -> str | None:
+def _adopt_existing_guard_daemon(
+    guard_home: Path,
+    *,
+    preferred_port: int | None = None,
+) -> str | None:
     if os.name == "nt":
         return None
+    if isinstance(preferred_port, int) and preferred_port > 0:
+        adopted = _initialize_existing_guard_daemon(guard_home, preferred_port)
+        if adopted is not None:
+            write_guard_daemon_state(guard_home, preferred_port, adopted["auth_token"], pid=adopted["pid"])
+            return adopted["url"]
     candidate_ports = _adoptable_guard_daemon_ports(guard_home)
+    if isinstance(preferred_port, int) and preferred_port > 0:
+        candidate_ports = _prepend_preferred_port(candidate_ports, preferred_port)
     for port in candidate_ports:
         adopted = _initialize_existing_guard_daemon(guard_home, port)
         if adopted is None:
@@ -998,19 +1025,32 @@ def _stable_port_for_guard_home(guard_home: Path) -> int:
     return DEFAULT_GUARD_DAEMON_PORT + offset
 
 
-def _candidate_ports(guard_home: Path) -> list[int]:
+def _prepend_preferred_port(ports: list[int], preferred_port: int | None) -> list[int]:
+    if not isinstance(preferred_port, int) or preferred_port <= 0:
+        return ports
+    ordered: list[int] = [preferred_port]
+    seen = {preferred_port}
+    for port in ports:
+        if port in seen:
+            continue
+        seen.add(port)
+        ordered.append(port)
+    return ordered
+
+
+def _candidate_ports(guard_home: Path, *, preferred_port: int | None = None) -> list[int]:
     configured_port = _configured_port(guard_home)
     if configured_port is None:
-        return []
+        return _prepend_preferred_port([], preferred_port)
     raw_port = os.environ.get("GUARD_DAEMON_PORT")
     if raw_port is not None and raw_port.strip():
-        return [configured_port]
+        return _prepend_preferred_port([configured_port], preferred_port)
     offset = configured_port - DEFAULT_GUARD_DAEMON_PORT
     ports: list[int] = []
     for step in range(min(25, GUARD_DAEMON_PORT_RANGE)):
         candidate_offset = (offset + step) % GUARD_DAEMON_PORT_RANGE
         ports.append(DEFAULT_GUARD_DAEMON_PORT + candidate_offset)
-    return ports
+    return _prepend_preferred_port(ports, preferred_port)
 
 
 def _healthz_payload_is_current(raw_payload: str) -> bool:

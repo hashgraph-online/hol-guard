@@ -37,13 +37,13 @@ def main(argv: list[str] | None = None) -> int:
         if exit_code != 0:
             message = update_payload.get("message") or update_payload.get("error") or "Guard update failed."
             print(str(message), file=sys.stderr)
-            ensure_guard_daemon_after_update(guard_home)
+            ensure_guard_daemon_after_update(guard_home, preferred_port=args.daemon_port)
             return 1
 
         retire_all_guard_daemons_for_home(guard_home)
         _retire_guard_daemon_pid(args.daemon_pid, expected_guard_home=guard_home)
         clear_guard_daemon_state(guard_home)
-        ensure_guard_daemon_after_update(guard_home)
+        ensure_guard_daemon_after_update(guard_home, preferred_port=args.daemon_port)
         return 0
     finally:
         clear_dashboard_update_lock(guard_home)
