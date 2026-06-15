@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass, field
+from hashlib import sha256
 from pathlib import Path
 
 _GENERIC_POLICY_REASONS = (
@@ -30,6 +31,28 @@ _SCANNER_GENERATED_LABEL_MARKERS = (
     "looking output",
     "scanner flagged",
 )
+
+_SCOPED_HARNESS_FAMILIES = frozenset(
+    {
+        "file-read",
+        "mcp",
+        "mcp-tool",
+        "package-request",
+        "prompt",
+        "prompt-env-read",
+        "prompt-file",
+        "tool-action",
+    }
+)
+_SCOPED_RUNTIME_EXACT_FAMILIES = frozenset(
+    {
+        "file-read",
+        "package-request",
+        "prompt",
+        "tool-action",
+    }
+)
+_RUNTIME_SCOPED_EXACT_MATCH_PREFIX = "runtime-exact:"
 
 
 def _is_scanner_generated_label(value: str) -> bool:
@@ -94,6 +117,35 @@ def _artifact_hash_in_clause(artifact_hash: str) -> tuple[str, tuple[object, ...
     variants = _artifact_hash_match_variants(artifact_hash)
     placeholders = ", ".join("?" for _ in variants)
     return f"artifact_hash in ({placeholders})", variants
+
+
+def _artifact_family_key(artifact_id: str | None) -> str | None:
+    if artifact_id is None or not artifact_id.strip():
+        return None
+    if artifact_id.startswith("family:"):
+        family = artifact_id.removeprefix("family:").strip().lower()
+        return artifact_id if family in _SCOPED_HARNESS_FAMILIES else None
+    parts = artifact_id.split(":")
+    if len(parts) < 3:
+        return None
+    family = parts[2].strip().lower()
+    if family not in _SCOPED_HARNESS_FAMILIES:
+        return None
+    return f"family:{family}"
+
+
+def _runtime_scoped_exact_match_key(artifact_id: str | None) -> str | None:
+    if artifact_id is None or not artifact_id.strip() or artifact_id.startswith("family:"):
+        return None
+    family_key = _artifact_family_key(artifact_id)
+    if family_key is None or family_key.removeprefix("family:") not in _SCOPED_RUNTIME_EXACT_FAMILIES:
+        return None
+    digest = sha256(artifact_id.encode("utf-8")).hexdigest()
+    return f"{_RUNTIME_SCOPED_EXACT_MATCH_PREFIX}{digest}"
+
+
+def _is_runtime_scoped_exact_match_key(value: str | None) -> bool:
+    return isinstance(value, str) and value.startswith(_RUNTIME_SCOPED_EXACT_MATCH_PREFIX)
 
 
 def _path_basename_label(path: str) -> str | None:
@@ -237,7 +289,7 @@ def _find_policy_source_receipt_row(
     if artifact_id:
         order_clause = "case when artifact_id = ? then 0 else 1 end, timestamp desc"
         order_params.append(artifact_id)
-    return connection.execute(
+    row = connection.execute(
         f"""
         select receipt_id, artifact_name, capabilities_summary, provenance_summary, source_scope,
                scanner_evidence_json, artifact_id
@@ -248,6 +300,23 @@ def _find_policy_source_receipt_row(
         """,
         tuple([*params, *order_params]),
     ).fetchone()
+    if row is not None or not artifact_hash:
+        return row
+    if artifact_id:
+        fallback_row = _find_policy_source_receipt_row(
+            connection,
+            harness=harness,
+            artifact_id=artifact_id,
+            artifact_hash=None,
+        )
+        if fallback_row is not None:
+            return fallback_row
+    return _find_runtime_exact_receipt_row(
+        connection,
+        harness=harness,
+        artifact_id=artifact_id,
+        artifact_hash=artifact_hash,
+    )
 
 
 def _find_policy_inventory_row(
@@ -290,7 +359,7 @@ def _find_policy_approval_row(
         params.extend(hash_params)
     if len(conditions) <= 1:
         return None
-    return connection.execute(
+    row = connection.execute(
         f"""
         select request_id, artifact_name, launch_summary, launch_target, workspace, resolved_at,
                trigger_summary, resolution_scope
@@ -301,6 +370,23 @@ def _find_policy_approval_row(
         """,
         tuple(params),
     ).fetchone()
+    if row is not None or not artifact_hash:
+        return row
+    if artifact_id:
+        fallback_row = _find_policy_approval_row(
+            connection,
+            harness=harness,
+            artifact_id=artifact_id,
+            artifact_hash=None,
+        )
+        if fallback_row is not None:
+            return fallback_row
+    return _find_runtime_exact_approval_row(
+        connection,
+        harness=harness,
+        artifact_id=artifact_id,
+        artifact_hash=artifact_hash,
+    )
 
 
 def _build_policy_source_context_from_rows(
@@ -447,6 +533,80 @@ _POLICY_APPROVAL_COLUMNS = """
 """
 
 
+def _runtime_exact_match_family(artifact_id: str | None) -> str | None:
+    family_key = _artifact_family_key(artifact_id)
+    if family_key is None:
+        return None
+    family = family_key.removeprefix("family:")
+    if family not in _SCOPED_RUNTIME_EXACT_FAMILIES:
+        return None
+    return family
+
+
+def _find_runtime_exact_receipt_row(
+    connection: sqlite3.Connection,
+    *,
+    harness: str,
+    artifact_id: str | None,
+    artifact_hash: str,
+) -> sqlite3.Row | None:
+    if not _is_runtime_scoped_exact_match_key(artifact_hash):
+        return None
+    conditions: list[str] = []
+    params: list[object] = []
+    if harness != "*":
+        conditions.append("harness = ?")
+        params.append(harness)
+    family = _runtime_exact_match_family(artifact_id)
+    if family is not None:
+        conditions.append("artifact_id like ?")
+        params.append(f"%:{family}:%")
+    query = f"select {_POLICY_RECEIPT_COLUMNS} from runtime_receipts"
+    if conditions:
+        query += f" where {' and '.join(conditions)}"
+    query += " order by timestamp desc"
+    rows = connection.execute(query, tuple(params)).fetchall()
+    for row in rows:
+        row_artifact_id = str(row["artifact_id"]) if row["artifact_id"] is not None else None
+        if _runtime_scoped_exact_match_key(row_artifact_id) == artifact_hash:
+            return row
+    return None
+
+
+def _find_runtime_exact_approval_row(
+    connection: sqlite3.Connection,
+    *,
+    harness: str,
+    artifact_id: str | None,
+    artifact_hash: str,
+) -> sqlite3.Row | None:
+    if not _is_runtime_scoped_exact_match_key(artifact_hash):
+        return None
+    conditions = ["status = 'resolved'"]
+    params: list[object] = []
+    if harness != "*":
+        conditions.append("harness = ?")
+        params.append(harness)
+    family = _runtime_exact_match_family(artifact_id)
+    if family is not None:
+        conditions.append("artifact_id like ?")
+        params.append(f"%:{family}:%")
+    rows = connection.execute(
+        f"""
+        select {_POLICY_APPROVAL_COLUMNS}
+        from approval_requests
+        where {" and ".join(conditions)}
+        order by resolved_at desc
+        """,
+        tuple(params),
+    ).fetchall()
+    for row in rows:
+        row_artifact_id = str(row["artifact_id"]) if row["artifact_id"] is not None else None
+        if _runtime_scoped_exact_match_key(row_artifact_id) == artifact_hash:
+            return row
+    return None
+
+
 def _row_sort_timestamp(value: object) -> str:
     return str(value) if value is not None else ""
 
@@ -566,6 +726,16 @@ def _extend_approval_artifact_candidates(
     candidates.extend(index.approvals_by_harness_artifact.get((harness, artifact_id), []))
 
 
+def _policy_artifact_matches_candidate(policy_artifact_id: str | None, candidate_artifact_id: str | None) -> bool:
+    if not policy_artifact_id:
+        return True
+    if candidate_artifact_id == policy_artifact_id:
+        return True
+    policy_family = _artifact_family_key(policy_artifact_id)
+    candidate_family = _artifact_family_key(candidate_artifact_id)
+    return policy_family is not None and policy_family == candidate_family
+
+
 def _filter_approval_candidates(
     rows: list[sqlite3.Row],
     *,
@@ -581,11 +751,12 @@ def _filter_approval_candidates(
     for row in rows:
         if harness != "*" and str(row["harness"]) != harness:
             continue
-        if artifact_id and str(row["artifact_id"]) != artifact_id:
+        row_artifact_id = str(row["artifact_id"]) if row["artifact_id"] is not None else None
+        if not _policy_artifact_matches_candidate(artifact_id, row_artifact_id):
             continue
         if artifact_hash:
             row_hash = str(row["artifact_hash"]) if row["artifact_hash"] is not None else ""
-            if row_hash not in hash_variants:
+            if row_hash not in hash_variants and _runtime_scoped_exact_match_key(row_artifact_id) != artifact_hash:
                 continue
         request_id = str(row["request_id"])
         if request_id in seen_request_ids:
@@ -606,6 +777,15 @@ def build_policy_source_context_index(
 
     include_all_harnesses, harnesses = _policy_harness_scope(items)
     artifact_ids = sorted({artifact_id for _, artifact_id, _ in items if artifact_id})
+    runtime_exact_families = sorted(
+        {
+            family
+            for _, artifact_id, artifact_hash in items
+            if artifact_hash and _is_runtime_scoped_exact_match_key(artifact_hash)
+            for family in [_runtime_exact_match_family(artifact_id)]
+            if family is not None
+        }
+    )
     hash_variants: set[str] = set()
     for _, _, artifact_hash in items:
         if artifact_hash:
@@ -620,6 +800,9 @@ def build_policy_source_context_index(
             artifact_placeholders = ", ".join("?" for _ in artifact_ids)
             match_clauses.append(f"artifact_id in ({artifact_placeholders})")
             params.extend(artifact_ids)
+        if runtime_exact_families:
+            match_clauses.extend("artifact_id like ?" for _ in runtime_exact_families)
+            params.extend(f"%:{family}:%" for family in runtime_exact_families)
         if hash_variants:
             hash_placeholders = ", ".join("?" for _ in hash_variants)
             match_clauses.append(f"artifact_hash in ({hash_placeholders})")
@@ -638,7 +821,11 @@ def build_policy_source_context_index(
             harness = str(row["harness"])
             artifact_id = row["artifact_id"]
             if artifact_id is not None and str(artifact_id).strip():
-                _append_indexed_row(index.receipts_by_harness_artifact, (harness, str(artifact_id)), row)
+                row_artifact_id = str(artifact_id)
+                _append_indexed_row(index.receipts_by_harness_artifact, (harness, row_artifact_id), row)
+                exact_key = _runtime_scoped_exact_match_key(row_artifact_id)
+                if exact_key is not None:
+                    _append_indexed_row(index.receipts_by_harness_hash, (harness, exact_key), row)
             artifact_hash = row["artifact_hash"]
             if artifact_hash is not None and str(artifact_hash).strip():
                 for variant in _artifact_hash_match_variants(str(artifact_hash)):
@@ -666,6 +853,9 @@ def build_policy_source_context_index(
             artifact_placeholders = ", ".join("?" for _ in artifact_ids)
             match_clauses.append(f"artifact_id in ({artifact_placeholders})")
             params.extend(artifact_ids)
+        if runtime_exact_families:
+            match_clauses.extend("artifact_id like ?" for _ in runtime_exact_families)
+            params.extend(f"%:{family}:%" for family in runtime_exact_families)
         if hash_variants:
             hash_placeholders = ", ".join("?" for _ in hash_variants)
             match_clauses.append(f"artifact_hash in ({hash_placeholders})")
@@ -685,7 +875,11 @@ def build_policy_source_context_index(
             harness = str(row["harness"])
             artifact_id = row["artifact_id"]
             if artifact_id is not None and str(artifact_id).strip():
-                _append_indexed_row(index.approvals_by_harness_artifact, (harness, str(artifact_id)), row)
+                row_artifact_id = str(artifact_id)
+                _append_indexed_row(index.approvals_by_harness_artifact, (harness, row_artifact_id), row)
+                exact_key = _runtime_scoped_exact_match_key(row_artifact_id)
+                if exact_key is not None:
+                    _append_indexed_row(index.approvals_by_harness_hash, (harness, exact_key), row)
             artifact_hash = row["artifact_hash"]
             if artifact_hash is not None and str(artifact_hash).strip():
                 for variant in _artifact_hash_match_variants(str(artifact_hash)):
@@ -707,7 +901,7 @@ def lookup_policy_source_context(
     if artifact_hash:
         for variant in _artifact_hash_match_variants(artifact_hash):
             _extend_receipt_hash_candidates(index, harness, variant, receipt_candidates)
-    elif artifact_id:
+    if artifact_id:
         _extend_receipt_artifact_candidates(index, harness, artifact_id, receipt_candidates)
     receipt_row = _select_best_receipt_row(receipt_candidates, artifact_id)
 
