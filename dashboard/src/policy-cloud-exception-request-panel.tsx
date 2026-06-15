@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { ActionButton, SectionLabel } from "./approval-center-primitives";
 import { harnessDisplayName } from "./approval-center-utils";
@@ -13,32 +13,42 @@ import {
   SafetyPreview,
   ScopeCardGrid,
   SourceReceiptSummary,
+  type RequestScopeValue,
 } from "./policy-cloud-exception-request-layout";
 
+const DRAFT_STORAGE_KEY = "hol-guard:cloud-exception-request-draft";
+
 const SCOPE_OPTIONS: Array<{
-  value: GuardCloudExceptionRequestCreateInput["scope"];
+  value: RequestScopeValue;
   label: string;
   description: string;
+  disabled?: boolean;
 }> = [
   {
     value: "artifact",
     label: "Exact action",
-    description: "Limit the exception to one specific action fingerprint.",
+    description: "Only this exact command + context.",
   },
   {
     value: "publisher",
     label: "This cwd",
-    description: "Reuse within the current working directory scope.",
+    description: "Any matching action in your current folder.",
   },
   {
     value: "workspace",
     label: "This project",
-    description: "Apply within the current project folder on this device.",
+    description: "Any matching action in this project repository.",
   },
   {
     value: "harness",
     label: "This harness",
-    description: "Apply across one harness such as Codex or Cursor.",
+    description: "Any matching action for this harness.",
+  },
+  {
+    value: "team-policy",
+    label: "Team policy",
+    description: "Make this an allow rule for your whole team.",
+    disabled: true,
   },
 ];
 
@@ -88,7 +98,7 @@ export function PolicyCloudExceptionRequestPanel({
     return [...new Set([...fromReceipts, ...fromInstalls, "codex", "cursor"])].sort();
   }, [receiptOptions, snapshot.managed_installs]);
 
-  const [scope, setScope] = useState<GuardCloudExceptionRequestCreateInput["scope"]>("artifact");
+  const [scope, setScope] = useState<RequestScopeValue>("workspace");
   const [harness, setHarness] = useState(harnessOptions[0] ?? "codex");
   const [artifactId, setArtifactId] = useState(receiptOptions[0]?.artifact_id ?? "");
   const [publisher, setPublisher] = useState("");
@@ -186,6 +196,11 @@ export function PolicyCloudExceptionRequestPanel({
       setSubmitting(true);
       setError(null);
       setSuccessMessage(null);
+      if (scope === "team-policy") {
+        setError("Team policy exceptions must be created directly in Guard Cloud.");
+        setSubmitting(false);
+        return;
+      }
       const payload: GuardCloudExceptionRequestCreateInput = {
         scope,
         requestedBy: requestedBy.trim(),
@@ -242,6 +257,7 @@ export function PolicyCloudExceptionRequestPanel({
 
   const canAdvanceFromSource = Boolean(sourceReceiptId.trim());
   const canAdvanceFromScope =
+    scope !== "team-policy" &&
     (scope !== "artifact" || artifactId.trim()) &&
     (scope !== "publisher" || publisher.trim()) &&
     (scope !== "workspace" || workingDirectory.trim()) &&
@@ -251,6 +267,102 @@ export function PolicyCloudExceptionRequestPanel({
     requestedExpiresAt.trim().length > 0;
   const canAdvanceFromGuardrails = requestedBy.trim().length > 0;
   const canSubmit = canAdvanceFromSource && canAdvanceFromScope && canAdvanceFromGuardrails;
+
+  const handleSaveDraft = useCallback(() => {
+    const draft = {
+      scope,
+      harness,
+      artifactId,
+      publisher,
+      workingDirectory,
+      sourceReceiptId,
+      requestedBy,
+      owner,
+      reason,
+      requestedExpiresAt,
+      linkedTicket,
+      maxUses,
+    };
+    try {
+      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    } catch {
+      // ignore storage failures
+    }
+  }, [
+    artifactId,
+    harness,
+    linkedTicket,
+    maxUses,
+    owner,
+    publisher,
+    reason,
+    requestedBy,
+    requestedExpiresAt,
+    scope,
+    sourceReceiptId,
+    workingDirectory,
+  ]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!saved) {
+        return;
+      }
+      const draft = JSON.parse(saved) as Partial<{
+        scope: RequestScopeValue;
+        harness: string;
+        artifactId: string;
+        publisher: string;
+        workingDirectory: string;
+        sourceReceiptId: string;
+        requestedBy: string;
+        owner: string;
+        reason: string;
+        requestedExpiresAt: string;
+        linkedTicket: string;
+        maxUses: string;
+      }>;
+      if (draft.scope) {
+        setScope(draft.scope);
+      }
+      if (draft.harness) {
+        setHarness(draft.harness);
+      }
+      if (draft.artifactId) {
+        setArtifactId(draft.artifactId);
+      }
+      if (draft.publisher) {
+        setPublisher(draft.publisher);
+      }
+      if (draft.workingDirectory) {
+        setWorkingDirectory(draft.workingDirectory);
+      }
+      if (draft.sourceReceiptId) {
+        setSourceReceiptId(draft.sourceReceiptId);
+      }
+      if (draft.requestedBy) {
+        setRequestedBy(draft.requestedBy);
+      }
+      if (draft.owner) {
+        setOwner(draft.owner);
+      }
+      if (draft.reason) {
+        setReason(draft.reason);
+      }
+      if (draft.requestedExpiresAt) {
+        setRequestedExpiresAt(draft.requestedExpiresAt);
+      }
+      if (draft.linkedTicket) {
+        setLinkedTicket(draft.linkedTicket);
+      }
+      if (draft.maxUses) {
+        setMaxUses(draft.maxUses);
+      }
+    } catch {
+      // ignore restore failures
+    }
+  }, []);
 
   const handleBack = useCallback(() => {
     setStepIndex((current) => Math.max(0, current - 1));
@@ -308,7 +420,12 @@ export function PolicyCloudExceptionRequestPanel({
           <ActionButton variant="secondary" type="button" onClick={onCancel} disabled={submitting}>
             Cancel
           </ActionButton>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {activeStep === "Scope" || activeStep === "Guardrails" || activeStep === "Submit" ? (
+              <ActionButton variant="secondary" type="button" onClick={handleSaveDraft} disabled={submitting}>
+                Save draft locally
+              </ActionButton>
+            ) : null}
             {stepIndex > 0 ? (
               <ActionButton variant="secondary" type="button" onClick={handleBack} disabled={submitting}>
                 Back
@@ -489,7 +606,7 @@ export function PolicyCloudExceptionRequestPanel({
                 </label>
               </div>
 
-              {scope === "harness" || scope === "workspace" ? (
+              {scope === "harness" || scope === "workspace" || scope === "team-policy" ? (
                 <div className="rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-2 text-xs text-brand-dark/80">
                   Broad scopes require step-up authentication and Cloud approval.
                 </div>

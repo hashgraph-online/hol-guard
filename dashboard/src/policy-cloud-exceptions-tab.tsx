@@ -113,6 +113,15 @@ export function PolicyCloudExceptionsTab({
     [exceptions, selectedExceptionId],
   );
 
+  const firstActiveId = groups.active[0]?.id ?? null;
+
+  useEffect(() => {
+    if (loadState !== "ready" || !firstActiveId) {
+      return;
+    }
+    setSelectedExceptionId((current) => current ?? firstActiveId);
+  }, [firstActiveId, loadState]);
+
   return (
     <>
       {requestOpen ? (
@@ -154,7 +163,7 @@ export function PolicyCloudExceptionsTab({
               loading={loadState === "loading"}
             />
 
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
               {loadState === "loading" ? (
                 <PolicyCloudExceptionsListSkeleton />
               ) : (

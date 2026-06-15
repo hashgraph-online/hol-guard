@@ -20,6 +20,7 @@ import {
   resolveCloudExceptionExpiryTimestamp,
   resolveCloudExceptionExpiryValue,
   resolveCloudExceptionHeadline,
+  resolveCloudExceptionSubtitle,
   resolvePersonDisplayLabel,
   resolvePersonInitials,
 } from "./policy-cloud-exceptions-utils";
@@ -114,6 +115,7 @@ function ExceptionTableRow({
       </div>
       <div className="min-w-0 md:col-start-2">
         <p className="truncate text-sm font-semibold text-brand-dark">{headline}</p>
+        <p className="mt-0.5 truncate text-xs text-slate-500">{resolveCloudExceptionSubtitle(item)}</p>
         <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500 md:hidden">
           <span>{scopeLabel(item.scope, "policy")}</span>
           {item.harness ? <span>{harnessDisplayName(item.harness)}</span> : null}
