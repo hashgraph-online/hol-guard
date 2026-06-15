@@ -14103,6 +14103,32 @@ def test_guard_hook_codex_does_not_block_safe_pytest_exit_code_echo(tmp_path, ca
     assert "approval_requests" not in output
 
 
+@pytest.mark.parametrize(
+    ("command_suffix",),
+    [
+        ('echo "$HOME"',),
+        ('echo "${VAR}"',),
+        ('printf "$PATH"',),
+    ],
+)
+def test_guard_runtime_keeps_static_shell_expansions_blocked_after_safe_pytest(tmp_path, command_suffix):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {
+            "command": (
+                "cd sub && .venv/bin/python -m pytest "
+                "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+                "test_release_checklist_references_smoke_evidence -q 2>&1; "
+                f"{command_suffix}"
+            )
+        },
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
 def test_guard_runtime_keeps_mutating_pytest_flags_sensitive(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",
