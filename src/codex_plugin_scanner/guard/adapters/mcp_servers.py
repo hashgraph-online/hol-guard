@@ -258,10 +258,19 @@ def _bool_metadata(value: object, *, default: bool) -> bool:
     return default
 
 
+def _hol_guard_command_name(command: str) -> str | None:
+    cmd_name = PurePath(command.replace("\\", "/")).name.lower()
+    for suffix in (".exe", ".cmd", ".bat"):
+        if cmd_name.endswith(suffix):
+            cmd_name = cmd_name[: -len(suffix)]
+            break
+    return cmd_name if cmd_name == "hol-guard" else None
+
+
 def is_guard_proxy_command(command: str | None, args: tuple[str, ...]) -> bool:
     if not isinstance(command, str):
         return False
-    if command == "hol-guard":
+    if _hol_guard_command_name(command) is not None:
         return "guard" in args and any(value in _GUARD_PROXY_COMMANDS for value in args)
     if "codex_plugin_scanner.cli" not in args or "guard" not in args:
         return False

@@ -665,7 +665,7 @@ class TestOpenCodeResiliency:
                 "chrome-devtools": {"type": "local", "command": ["npx", "-y", "chrome-devtools-mcp@latest"]},
                 "hol-guard::chrome-devtools": {
                     "type": "local",
-                    "command": ["hol-guard", "guard", "opencode-mcp-proxy"],
+                    "command": ["/usr/local/bin/hol-guard", "guard", "opencode-mcp-proxy"],
                 },
             },
         )
