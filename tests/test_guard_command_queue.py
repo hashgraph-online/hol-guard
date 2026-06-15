@@ -7,6 +7,7 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.daemon import client as daemon_client_module
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon.command_queue_worker import (
@@ -14,6 +15,7 @@ from codex_plugin_scanner.guard.daemon.command_queue_worker import (
     start_command_queue_worker,
 )
 from codex_plugin_scanner.guard.runtime import command_executors, command_queue
+from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -61,6 +63,28 @@ def _context(tmp_path: Path) -> HarnessContext:
         workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
+
+
+def _oauth_store(tmp_path: Path) -> GuardStore:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        supply_chain_entitlement_expires_at="2026-07-01T00:00:00+00:00",
+        supply_chain_firewall=True,
+        supply_chain_plan_id="team",
+        now="2026-06-13T00:00:00+00:00",
+    )
+    return store
 
 
 def _block_local_daemon_client(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -544,6 +568,61 @@ def test_poll_once_retries_pending_result_before_leasing(tmp_path: Path, monkeyp
     assert status["pending_result"] is None
 
 
+def test_poll_once_continues_across_oauth_refresh_token_rotation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    store = _oauth_store(tmp_path)
+    observed_refresh_tokens: list[str] = []
+    observed_access_tokens: list[str] = []
+
+    def fake_refresh(
+        *,
+        token_endpoint: str,
+        client_id: str,
+        refresh_token: str,
+        dpop_key_material,
+    ) -> dict[str, object]:
+        del token_endpoint, client_id, dpop_key_material
+        observed_refresh_tokens.append(refresh_token)
+        current_index = len(observed_refresh_tokens)
+        return {
+            "access_token": f"access-token-{current_index}",
+            "refresh_token": f"refresh-token-{current_index + 1}",
+            "package_firewall_entitlement": {
+                "supply_chain_entitlement_expires_at": "2026-07-05T00:00:00+00:00",
+                "supply_chain_firewall": True,
+                "supply_chain_plan_id": "team",
+            },
+        }
+
+    def fake_json_request(
+        auth_context: dict[str, object],
+        *,
+        method: str,
+        path: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        del method, payload
+        observed_access_tokens.append(str(auth_context["access_token"]))
+        assert path == "/lease"
+        return {"item": None}
+
+    monkeypatch.setattr(guard_runner_module, "_refresh_guard_oauth_access_token", fake_refresh)
+    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+
+    first_status = command_queue.poll_command_queue_once(store, _context(tmp_path))
+    second_status = command_queue.poll_command_queue_once(store, _context(tmp_path))
+
+    assert first_status["last_poll_was_empty"] is True
+    assert second_status["last_poll_was_empty"] is True
+    assert observed_refresh_tokens == ["refresh-token-1", "refresh-token-2"]
+    assert observed_access_tokens == ["access-token-1", "access-token-2"]
+    credentials = store.get_oauth_local_credentials()
+    assert credentials is not None
+    assert credentials["refresh_token"] == "refresh-token-3"
+
+
 def test_poll_once_clears_active_job_for_malformed_pending_result(tmp_path: Path, monkeypatch) -> None:
     store = FakeStore(tmp_path / "guard-home")
     store.set_sync_payload(
@@ -689,6 +768,48 @@ def test_command_queue_loop_backs_off_after_errors(tmp_path: Path, monkeypatch) 
     )
 
     assert waits == [1, 2, 4]
+
+
+def test_command_queue_loop_stops_on_revoked_oauth_auth_and_records_reconnect_state(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    store = _oauth_store(tmp_path)
+
+    class FailIfWaitCalled:
+        def __init__(self) -> None:
+            self.wait_called = False
+
+        def is_set(self) -> bool:
+            return False
+
+        def wait(self, seconds: float) -> bool:
+            del seconds
+            self.wait_called = True
+            return True
+
+    def fake_refresh(
+        *,
+        token_endpoint: str,
+        client_id: str,
+        refresh_token: str,
+        dpop_key_material,
+    ) -> dict[str, object]:
+        del token_endpoint, client_id, refresh_token, dpop_key_material
+        raise guard_runner_module.GuardSyncAuthorizationExpiredError(
+            "Guard authorization expired. Run `hol-guard connect` to sign in again."
+        )
+
+    stop_event = FailIfWaitCalled()
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, "1")
+    monkeypatch.setattr(guard_runner_module, "_refresh_guard_oauth_access_token", fake_refresh)
+
+    command_queue.command_queue_loop(store, _context(tmp_path), stop_event=stop_event)
+
+    status = command_queue.command_queue_status(store)
+    assert status["state"] == "auth_expired"
+    assert "hol-guard connect" in str(status["last_error"])
+    assert stop_event.wait_called is False
 
 
 def test_commands_status_outputs_command_queue_state(tmp_path: Path, capsys, monkeypatch) -> None:
