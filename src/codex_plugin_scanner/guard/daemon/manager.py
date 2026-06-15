@@ -90,6 +90,8 @@ def ensure_guard_daemon(
             if preferred_port is None or existing_port == preferred_port:
                 _retire_duplicate_guard_daemons(guard_home, keep_port=existing_port)
                 return existing_url
+            retire_all_guard_daemons_for_home(guard_home)
+            clear_guard_daemon_state(guard_home)
         adopted_url = _adopt_existing_guard_daemon(guard_home, preferred_port=preferred_port)
         if adopted_url is not None:
             _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(adopted_url))
@@ -261,11 +263,12 @@ def _adopt_existing_guard_daemon(
         return None
     if isinstance(preferred_port, int) and preferred_port > 0:
         adopted = _initialize_existing_guard_daemon(guard_home, preferred_port)
-        if adopted is None:
-            return None
-        write_guard_daemon_state(guard_home, preferred_port, adopted["auth_token"], pid=adopted["pid"])
-        return adopted["url"]
+        if adopted is not None:
+            write_guard_daemon_state(guard_home, preferred_port, adopted["auth_token"], pid=adopted["pid"])
+            return adopted["url"]
     candidate_ports = _adoptable_guard_daemon_ports(guard_home)
+    if isinstance(preferred_port, int) and preferred_port > 0:
+        candidate_ports = _prepend_preferred_port(candidate_ports, preferred_port)
     for port in candidate_ports:
         adopted = _initialize_existing_guard_daemon(guard_home, port)
         if adopted is None:

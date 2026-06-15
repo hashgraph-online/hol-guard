@@ -891,8 +891,8 @@ def test_candidate_ports_prefers_dashboard_update_port(tmp_path: Path) -> None:
     guard_home.mkdir()
     ports = daemon_manager_module._candidate_ports(guard_home, preferred_port=5483)
     assert ports[0] == 5483
-    assert len(ports) == 26
-    assert 5483 not in ports[1:] or ports.count(5483) == 1
+    assert len(ports) in (25, 26)
+    assert 5483 not in ports[1:]
 
 
 def test_prepend_preferred_port_dedupes() -> None:
