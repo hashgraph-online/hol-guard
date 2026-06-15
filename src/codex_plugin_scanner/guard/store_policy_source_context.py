@@ -38,9 +38,7 @@ def _is_scanner_generated_label(value: str) -> bool:
         return True
     if any(marker in lowered for marker in _SCANNER_GENERATED_LABEL_MARKERS):
         return True
-    if lowered.endswith(" review") and "`" not in value:
-        return True
-    return False
+    return lowered.endswith(" review") and "`" not in value
 
 
 def _is_human_policy_label(value: str | None) -> bool:
