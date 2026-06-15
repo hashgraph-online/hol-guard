@@ -17,6 +17,7 @@ import {
 } from "react-icons/hi2";
 import {
   ShellHeader,
+  ShellFooter,
   ShellSidebar,
   Surface,
   Badge,
@@ -376,6 +377,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
             )}
           </div>
         </main>
+        <ShellFooter />
       </div>
     </div>
   );
