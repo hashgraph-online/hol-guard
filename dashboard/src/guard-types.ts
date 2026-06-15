@@ -803,6 +803,7 @@ export type SupplyChainAuditSnapshot = {
   source: string | null;
   decision: SupplyChainAuditDecision;
   inventory: SupplyChainAuditInventory;
+  packages: SupplyChainAuditFinding[];
   findings: SupplyChainAuditFinding[];
   manifestPaths: string[];
   lockfilePaths: string[];

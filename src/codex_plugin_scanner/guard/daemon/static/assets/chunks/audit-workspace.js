@@ -1,6 +1,67 @@
-import { r as reactExports, j as jsxRuntimeExports, S as SectionLabel, b as EmptyState, aK as GuardModalLayer, ac as Tag, m as formatRelativeTime, aL as ConnectFlowCard, A as ActionButton, aJ as HiMiniBugAnt, ad as HiMiniMagnifyingGlass, br as HiMiniChevronLeft, y as HiMiniChevronRight, aF as IconActionButton, o as HiMiniXMark, w as HiMiniExclamationTriangle, bs as HiMiniArrowDown, bt as HiMiniArrowUp, aw as HiMiniArrowPath, d as HiMiniCheckCircle, bu as runAuditRemediation, B as Badge, I as HiMiniXCircle, h as harnessDisplayName, b2 as HiMiniDocumentText, b1 as guardAwareHref, l as HiMiniShieldCheck } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, r as reactExports, S as SectionLabel, A as ActionButton, aw as HiMiniArrowPath, aJ as HiMiniBugAnt, b as EmptyState, ac as Tag, aK as GuardModalLayer, m as formatRelativeTime, aL as ConnectFlowCard, w as HiMiniExclamationTriangle, ad as HiMiniMagnifyingGlass, br as HiMiniChevronLeft, y as HiMiniChevronRight, aF as IconActionButton, o as HiMiniXMark, bs as HiMiniArrowDown, bt as HiMiniArrowUp, bu as runAuditRemediation, B as Badge, d as HiMiniCheckCircle, I as HiMiniXCircle, h as harnessDisplayName, b2 as HiMiniDocumentText, b1 as guardAwareHref, l as HiMiniShieldCheck } from "../guard-dashboard.js";
 import { p as packageWorkbenchEcosystems, f as filterPackageWorkbenchFindings, s as sortPackageWorkbenchFindings, u as useResolvedApprovalGate, i as isApprovalGateRequiredError, A as ApprovalProofModal } from "./supply-chain-hub-workspace.js";
 import { r as resolveManagerCoverageStatus } from "./supply-chain-protection-stats.js";
+const STEPS = [
+  { id: "preparing", label: "Prepare workspace" },
+  { id: "scanning", label: "Scan manifests and lockfiles" },
+  { id: "evaluating", label: "Evaluate packages against Guard intel" },
+  { id: "finalizing", label: "Prepare results" }
+];
+function stepState(stepId, phase, running) {
+  const order = STEPS.map((step) => step.id);
+  const stepIndex = order.indexOf(stepId);
+  const phaseIndex = order.indexOf(phase);
+  if (!running && phase === "idle") {
+    return "pending";
+  }
+  if (phase === "finalizing" && stepId !== "finalizing") {
+    return "done";
+  }
+  if (stepIndex < phaseIndex) {
+    return "done";
+  }
+  if (stepIndex === phaseIndex) {
+    return "active";
+  }
+  return "pending";
+}
+function stepTextClass(state) {
+  if (state === "active") {
+    return "font-medium text-brand-dark";
+  }
+  if (state === "done") {
+    return "text-slate-600";
+  }
+  return "text-slate-400";
+}
+function stepBubbleClass(state) {
+  if (state === "active") {
+    return "bg-brand-blue text-white";
+  }
+  if (state === "done") {
+    return "bg-brand-green/15 text-brand-green-text";
+  }
+  return "border border-slate-200 bg-white text-slate-400";
+}
+function AuditProgressStepList({ phase, running }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "space-y-2", "aria-live": "polite", "aria-busy": running, "data-testid": "audit-run-progress", children: STEPS.map((step, index) => {
+    const state = stepState(step.id, phase, running);
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: `flex items-center gap-2 text-sm ${stepTextClass(state)}`, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "span",
+        {
+          className: `inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${stepBubbleClass(state)}`,
+          "aria-hidden": "true",
+          children: state === "done" ? "✓" : index + 1
+        }
+      ),
+      step.label
+    ] }, step.id);
+  }) });
+}
+function auditProgressActive(phase, running) {
+  return running || phase !== "idle";
+}
 const WORKBENCH_PAGE_SIZE = 25;
 const decisionTone = (decision) => {
   if (decision === "block") {
@@ -44,18 +105,47 @@ function humanizeReasonMessage(code, message) {
   }
   return message;
 }
-function WorkbenchHeader({ auditSnapshot, flaggedCount }) {
+function cloudIntelLabel(cloudState, source) {
+  if (cloudState === "local_only") {
+    return "Local intel only";
+  }
+  if (source !== null && source.length > 0) {
+    return `${source} intel`;
+  }
+  return "Guard Cloud";
+}
+function cloudIntelTone(cloudState) {
+  if (cloudState === "local_only") {
+    return "attention";
+  }
+  if (cloudState === "paired_active") {
+    return "green";
+  }
+  return "info";
+}
+function WorkbenchHeader({
+  auditSnapshot,
+  flaggedCount,
+  packageCount,
+  cloudState
+}) {
   const manifestSummary = auditSnapshot.manifestPaths.length > 0 ? `${auditSnapshot.manifestPaths.length} manifest${auditSnapshot.manifestPaths.length === 1 ? "" : "s"}` : null;
   const lockfileSummary = auditSnapshot.lockfilePaths.length > 0 ? `${auditSnapshot.lockfilePaths.length} lockfile${auditSnapshot.lockfilePaths.length === 1 ? "" : "s"}` : null;
   const scanSummary = [manifestSummary, lockfileSummary].filter((entry) => entry !== null).join(" · ");
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2 text-xs text-slate-500", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: decisionTone(auditSnapshot.decision), children: auditSnapshot.decision }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: cloudIntelTone(cloudState), children: cloudIntelLabel(cloudState, auditSnapshot.source) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
         auditSnapshot.inventory.totalPackages,
         " package",
         auditSnapshot.inventory.totalPackages === 1 ? "" : "s",
         " indexed"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "·" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+        packageCount,
+        " in table"
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "·" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
@@ -66,13 +156,6 @@ function WorkbenchHeader({ auditSnapshot, flaggedCount }) {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
         "Last audit ",
         formatRelativeTime(auditSnapshot.generatedAt)
-      ] }),
-      auditSnapshot.source !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "·" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "capitalize", children: [
-          auditSnapshot.source,
-          " intel"
-        ] })
       ] })
     ] }),
     scanSummary.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] text-slate-400", children: [
@@ -328,7 +411,7 @@ function WorkbenchAuditErrorBanner({ message }) {
     }
   );
 }
-function WorkbenchEmptyState({ auditConnectGate, auditError, onRunAudit, auditRunning }) {
+function WorkbenchEmptyState({ auditConnectGate, auditError }) {
   if (auditConnectGate !== null && auditConnectGate !== void 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       ConnectFlowCard,
@@ -351,23 +434,32 @@ function WorkbenchEmptyState({ auditConnectGate, auditError, onRunAudit, auditRu
       EmptyState,
       {
         title: "No workspace audit yet",
-        body: "Run a package audit to index dependencies and surface flagged packages here.",
-        tone: "teach",
-        action: onRunAudit !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: onRunAudit, disabled: auditRunning, "aria-busy": auditRunning, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
-          "Run audit"
-        ] }) : void 0
+        body: "Run a workspace audit to index dependencies across npm, pnpm, PyPI, and other ecosystems found in this project.",
+        tone: "teach"
       }
     )
   ] });
+}
+function ViewModeChip({ label, active, onSelect }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label, active, onSelect });
+}
+function ecosystemSummary(packages) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const pkg of packages) {
+    counts.set(pkg.ecosystem, (counts.get(pkg.ecosystem) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([ecosystem, count]) => ({ ecosystem, count })).sort((left, right) => right.count - left.count || left.ecosystem.localeCompare(right.ecosystem));
 }
 function PackageWorkbenchPanel({
   auditConnectGate = null,
   auditError = null,
   auditSnapshot,
   onRunAudit,
-  auditRunning = false
+  auditRunning = false,
+  auditPhase = "idle",
+  cloudState = null
 }) {
+  const [viewMode, setViewMode] = reactExports.useState("all");
   const [filters, setFilters] = reactExports.useState({
     ecosystem: "all",
     decision: "all",
@@ -379,10 +471,15 @@ function PackageWorkbenchPanel({
   const [selectedId, setSelectedId] = reactExports.useState("");
   const [page, setPage] = reactExports.useState(0);
   const findings = auditSnapshot?.findings ?? [];
-  const ecosystems = reactExports.useMemo(() => packageWorkbenchEcosystems(findings), [findings]);
+  const packages = auditSnapshot?.packages ?? [];
+  const tableSource = viewMode === "review" ? findings : packages;
+  const progressActive = auditProgressActive(auditPhase, auditRunning);
+  const showResults = auditSnapshot !== null && !progressActive && (auditConnectGate === null || auditConnectGate === void 0);
+  const ecosystems = reactExports.useMemo(() => packageWorkbenchEcosystems(tableSource), [tableSource]);
+  const ecosystemBreakdown = reactExports.useMemo(() => ecosystemSummary(packages), [packages]);
   const filteredFindings = reactExports.useMemo(
-    () => filterPackageWorkbenchFindings(findings, filters),
-    [findings, filters]
+    () => filterPackageWorkbenchFindings(tableSource, filters),
+    [tableSource, filters]
   );
   const sortedFindings = reactExports.useMemo(() => {
     const sorted = sortPackageWorkbenchFindings(filteredFindings, sortKey);
@@ -443,84 +540,137 @@ function PackageWorkbenchPanel({
     setPage(nextPage);
     setSelectedId("");
   }, []);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", children: [
+  const handleViewAll = reactExports.useCallback(() => {
+    setViewMode("all");
+    setPage(0);
+    setSelectedId("");
+  }, []);
+  const handleViewReview = reactExports.useCallback(() => {
+    setViewMode("review");
+    setPage(0);
+    setSelectedId("");
+  }, []);
+  const handleRunAudit = reactExports.useCallback(() => {
+    onRunAudit?.();
+  }, [onRunAudit]);
+  const headerTitle = progressActive ? "Auditing workspace" : "Workspace audit";
+  const headerBody = progressActive ? "Guard is scanning manifests, lockfiles, and package intel for this workspace." : "Browse indexed packages, filter by ecosystem, and open any row for advisory detail.";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", "data-testid": "workspace-audit-panel", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 px-4 py-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Audit findings" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm text-slate-500", children: "Packages that need review from the latest workspace audit. Filter, sort, and open a finding for detail." }),
-      auditSnapshot !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchHeader, { auditSnapshot, flaggedCount: findings.length }) })
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: headerTitle }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm text-slate-500", children: headerBody })
+        ] }),
+        onRunAudit !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          ActionButton,
+          {
+            variant: "outline",
+            onClick: handleRunAudit,
+            disabled: auditRunning,
+            "aria-busy": auditRunning,
+            children: [
+              auditRunning ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "mr-1.5 h-4 w-4 animate-spin", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
+              auditSnapshot === null ? "Run audit" : "Run audit again"
+            ]
+          }
+        ) : null
+      ] }),
+      auditSnapshot !== null && showResults ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        WorkbenchHeader,
+        {
+          auditSnapshot,
+          flaggedCount: findings.length,
+          packageCount: packages.length,
+          cloudState
+        }
+      ) }) : null
     ] }),
-    auditSnapshot === null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      WorkbenchEmptyState,
-      {
-        auditConnectGate,
-        auditError,
-        onRunAudit,
-        auditRunning
-      }
-    ) }),
-    auditSnapshot !== null && findings.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      EmptyState,
-      {
-        title: "No flagged packages",
-        body: "The latest workspace audit completed without packages that need review.",
-        tone: "teach"
-      }
-    ) }),
-    auditSnapshot !== null && findings.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-4 py-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        WorkbenchControls,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-4 space-y-4", children: auditConnectGate !== null && auditConnectGate !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchEmptyState, { auditConnectGate, auditError }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      auditError ? /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchAuditErrorBanner, { message: auditError }) : null,
+      progressActive ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] px-4 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(AuditProgressStepList, { phase: auditPhase, running: auditRunning }) }) : null,
+      auditSnapshot === null && !progressActive ? /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchEmptyState, { auditConnectGate: null, auditError }) : null,
+      showResults && auditSnapshot !== null && packages.length === 0 && auditSnapshot.inventory.totalPackages > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        EmptyState,
         {
-          filters,
-          ecosystems,
-          sortKey,
-          sortDirection,
-          onSearchChange: handleSearchChange,
-          onEcosystemChange: handleEcosystemChange,
-          onDecisionChange: handleDecisionChange,
-          onSeverityChange: handleSeverityChange,
-          onSortChange: handleSortChange
+          title: "Package list not loaded",
+          body: "This audit indexed packages, but the detailed list was not stored yet. Run audit again to load the full inventory table.",
+          tone: "teach"
         }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        WorkbenchPagination,
-        {
-          page: safePage,
-          pageCount,
-          total: sortedFindings.length,
-          onPageChange: handlePageChange
-        }
-      ),
-      sortedFindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "py-6 text-center text-sm text-slate-500", children: "No packages match the current filters." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "div",
-        {
-          className: "overflow-hidden rounded-xl border border-slate-100",
-          role: "table",
-          "aria-label": "Package audit findings",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              "div",
-              {
-                className: "sticky top-0 z-[1] hidden border-b border-slate-100 bg-slate-50 px-4 py-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3",
-                role: "row",
-                children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", role: "columnheader", children: "Package" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", role: "columnheader", children: "Decision · Severity" })
-                ]
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-[min(60vh,32rem)] overflow-y-auto overscroll-y-contain", role: "rowgroup", children: pagedFindings.map((finding) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-              FindingRow,
-              {
-                finding,
-                selected: selectedId === finding.id,
-                onSelect: handleSelectFinding
-              },
-              finding.id
-            )) })
-          ]
-        }
-      )
-    ] }),
+      ) : null,
+      showResults && packages.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-2", children: ecosystemBreakdown.map((entry) => /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "default", children: [
+          entry.ecosystem,
+          " · ",
+          entry.count
+        ] }, entry.ecosystem)) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ViewModeChip, { label: `All packages (${packages.length})`, active: viewMode === "all", onSelect: handleViewAll }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ViewModeChip,
+            {
+              label: `Needs review (${findings.length})`,
+              active: viewMode === "review",
+              onSelect: handleViewReview
+            }
+          )
+        ] }),
+        cloudState === "local_only" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-relaxed text-slate-500", children: "This device is using local intel only. Connect Guard Cloud and sync supply-chain intel for live CVE and malware coverage." }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          WorkbenchControls,
+          {
+            filters,
+            ecosystems,
+            sortKey,
+            sortDirection,
+            onSearchChange: handleSearchChange,
+            onEcosystemChange: handleEcosystemChange,
+            onDecisionChange: handleDecisionChange,
+            onSeverityChange: handleSeverityChange,
+            onSortChange: handleSortChange
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          WorkbenchPagination,
+          {
+            page: safePage,
+            pageCount,
+            total: sortedFindings.length,
+            onPageChange: handlePageChange
+          }
+        ),
+        sortedFindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "py-6 text-center text-sm text-slate-500", children: viewMode === "review" ? "No packages need review in this audit." : "No packages match the current filters." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: "overflow-hidden rounded-xl border border-slate-100",
+            role: "table",
+            "aria-label": viewMode === "review" ? "Packages needing review" : "Indexed packages",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "div",
+                {
+                  className: "sticky top-0 z-[1] hidden border-b border-slate-100 bg-slate-50 px-4 py-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3",
+                  role: "row",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", role: "columnheader", children: "Package" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", role: "columnheader", children: "Decision · Severity" })
+                  ]
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-[min(60vh,32rem)] overflow-y-auto overscroll-y-contain", role: "rowgroup", children: pagedFindings.map((finding) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+                FindingRow,
+                {
+                  finding,
+                  selected: selectedId === finding.id,
+                  onSelect: handleSelectFinding
+                },
+                finding.id
+              )) })
+            ]
+          }
+        )
+      ] }) : null
+    ] }) }),
     selectedFinding !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       GuardModalLayer,
       {
@@ -531,89 +681,6 @@ function PackageWorkbenchPanel({
       }
     ) : null
   ] });
-}
-const STEPS = [
-  { id: "preparing", label: "Prepare workspace" },
-  { id: "scanning", label: "Scan manifests and lockfiles" },
-  { id: "evaluating", label: "Evaluate packages" },
-  { id: "finalizing", label: "Build findings" }
-];
-function stepState(stepId, phase, running) {
-  const order = STEPS.map((step) => step.id);
-  const stepIndex = order.indexOf(stepId);
-  const phaseIndex = order.indexOf(phase);
-  if (!running && phase === "idle") {
-    return "pending";
-  }
-  if (phase === "finalizing" && stepId !== "finalizing") {
-    return "done";
-  }
-  if (stepIndex < phaseIndex) {
-    return "done";
-  }
-  if (stepIndex === phaseIndex) {
-    return "active";
-  }
-  return "pending";
-}
-function stepTextClass(state) {
-  if (state === "active") {
-    return "font-medium text-brand-dark";
-  }
-  if (state === "done") {
-    return "text-slate-600";
-  }
-  return "text-slate-400";
-}
-function stepBubbleClass(state) {
-  if (state === "active") {
-    return "bg-brand-blue text-white";
-  }
-  if (state === "done") {
-    return "bg-brand-green/15 text-brand-green-text";
-  }
-  return "border border-slate-200 bg-white text-slate-400";
-}
-function AuditRunProgress({ phase, running }) {
-  if (!running && phase === "idle") {
-    return null;
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "section",
-    {
-      className: "rounded-2xl border border-brand-blue/15 bg-brand-blue/[0.03] px-4 py-4",
-      "aria-live": "polite",
-      "aria-busy": running,
-      "data-testid": "audit-run-progress",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-          running ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 shrink-0 animate-spin text-brand-blue", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: running ? "Workspace audit in progress" : "Workspace audit complete" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "mt-4 space-y-2", children: STEPS.map((step, index) => {
-          const state = stepState(step.id, phase, running);
-          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "li",
-            {
-              className: `flex items-center gap-2 text-sm ${stepTextClass(state)}`,
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "span",
-                  {
-                    className: `inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${stepBubbleClass(state)}`,
-                    "aria-hidden": "true",
-                    children: state === "done" ? "✓" : index + 1
-                  }
-                ),
-                step.label
-              ]
-            },
-            step.id
-          );
-        }) })
-      ]
-    }
-  );
 }
 function isSupplyChainAuditEvidence(value) {
   return typeof value === "object" && value !== null && value.operation === "audit";
@@ -1011,7 +1078,6 @@ function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession }) {
     [baseResults, resolvedIds]
   );
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(AuditRunProgress, { phase: auditSession.auditPhase, running: auditSession.auditRunning }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       PackageWorkbenchPanel,
       {
@@ -1019,6 +1085,8 @@ function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession }) {
         auditError: auditSession.auditError,
         auditSnapshot: auditSession.auditSnapshot,
         auditRunning: auditSession.auditRunning,
+        auditPhase: auditSession.auditPhase,
+        cloudState: snapshot.cloud_state,
         onRunAudit: auditSession.handleRunAudit
       }
     ),

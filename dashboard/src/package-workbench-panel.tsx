@@ -3,6 +3,7 @@ import type { ChangeEvent, ReactNode } from "react";
 import {
   HiMiniArrowDown,
   HiMiniArrowUp,
+  HiMiniArrowPath,
   HiMiniBugAnt,
   HiMiniChevronLeft,
   HiMiniChevronRight,
@@ -13,6 +14,8 @@ import {
 import { SectionLabel, Tag, ActionButton, EmptyState, IconActionButton } from "./approval-center-primitives";
 import { formatRelativeTime } from "./approval-center-utils";
 import { GuardModalLayer } from "./guard-modal-layer";
+import { AuditProgressStepList, auditProgressActive } from "./audit-run-progress";
+import type { AuditRunPhase } from "./use-supply-chain-audit-session";
 import type {
   PackageWorkbenchFilters,
   PackageWorkbenchSortKey,
@@ -31,12 +34,16 @@ import type { AuditConnectGateViewState } from "./supply-chain-firewall-panel";
 
 const WORKBENCH_PAGE_SIZE = 25;
 
+type PackageViewMode = "all" | "review";
+
 type PackageWorkbenchPanelProps = {
   auditConnectGate?: AuditConnectGateViewState | null;
   auditError?: string | null;
   auditSnapshot: SupplyChainAuditSnapshot | null;
   onRunAudit?: () => void;
   auditRunning?: boolean;
+  auditPhase?: AuditRunPhase;
+  cloudState?: string | null;
 };
 
 const decisionTone = (
@@ -91,9 +98,36 @@ function humanizeReasonMessage(code: string, message: string): string {
 type WorkbenchHeaderProps = {
   auditSnapshot: SupplyChainAuditSnapshot;
   flaggedCount: number;
+  packageCount: number;
+  cloudState?: string | null;
 };
 
-function WorkbenchHeader({ auditSnapshot, flaggedCount }: WorkbenchHeaderProps) {
+function cloudIntelLabel(cloudState: string | null | undefined, source: string | null): string {
+  if (cloudState === "local_only") {
+    return "Local intel only";
+  }
+  if (source !== null && source.length > 0) {
+    return `${source} intel`;
+  }
+  return "Guard Cloud";
+}
+
+function cloudIntelTone(cloudState: string | null | undefined): "attention" | "green" | "info" {
+  if (cloudState === "local_only") {
+    return "attention";
+  }
+  if (cloudState === "paired_active") {
+    return "green";
+  }
+  return "info";
+}
+
+function WorkbenchHeader({
+  auditSnapshot,
+  flaggedCount,
+  packageCount,
+  cloudState,
+}: WorkbenchHeaderProps) {
   const manifestSummary =
     auditSnapshot.manifestPaths.length > 0
       ? `${auditSnapshot.manifestPaths.length} manifest${auditSnapshot.manifestPaths.length === 1 ? "" : "s"}`
@@ -108,9 +142,14 @@ function WorkbenchHeader({ auditSnapshot, flaggedCount }: WorkbenchHeaderProps) 
     <div className="space-y-1">
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
         <Tag tone={decisionTone(auditSnapshot.decision)}>{auditSnapshot.decision}</Tag>
+        <Tag tone={cloudIntelTone(cloudState)}>{cloudIntelLabel(cloudState, auditSnapshot.source)}</Tag>
         <span>
           {auditSnapshot.inventory.totalPackages} package
           {auditSnapshot.inventory.totalPackages === 1 ? "" : "s"} indexed
+        </span>
+        <span aria-hidden="true">·</span>
+        <span>
+          {packageCount} in table
         </span>
         <span aria-hidden="true">·</span>
         <span>
@@ -118,12 +157,6 @@ function WorkbenchHeader({ auditSnapshot, flaggedCount }: WorkbenchHeaderProps) 
         </span>
         <span aria-hidden="true">·</span>
         <span>Last audit {formatRelativeTime(auditSnapshot.generatedAt)}</span>
-        {auditSnapshot.source !== null && (
-          <>
-            <span aria-hidden="true">·</span>
-            <span className="capitalize">{auditSnapshot.source} intel</span>
-          </>
-        )}
       </div>
       {scanSummary.length > 0 ? (
         <p className="text-[11px] text-slate-400">Scanned {scanSummary} across this workspace.</p>
@@ -439,8 +472,6 @@ function EcosystemChip({ ecosystem, active, onSelect }: EcosystemChipProps) {
 type WorkbenchEmptyStateProps = {
   auditConnectGate?: AuditConnectGateViewState | null;
   auditError?: string | null;
-  onRunAudit?: () => void;
-  auditRunning?: boolean;
 };
 
 function WorkbenchAuditErrorBanner({ message }: { message: string }) {
@@ -460,7 +491,7 @@ function WorkbenchAuditErrorBanner({ message }: { message: string }) {
   );
 }
 
-function WorkbenchEmptyState({ auditConnectGate, auditError, onRunAudit, auditRunning }: WorkbenchEmptyStateProps) {
+function WorkbenchEmptyState({ auditConnectGate, auditError }: WorkbenchEmptyStateProps) {
   if (auditConnectGate !== null && auditConnectGate !== undefined) {
     return (
       <ConnectFlowCard
@@ -482,19 +513,31 @@ function WorkbenchEmptyState({ auditConnectGate, auditError, onRunAudit, auditRu
       {auditError ? <WorkbenchAuditErrorBanner message={auditError} /> : null}
       <EmptyState
         title="No workspace audit yet"
-        body="Run a package audit to index dependencies and surface flagged packages here."
+        body="Run a workspace audit to index dependencies across npm, pnpm, PyPI, and other ecosystems found in this project."
         tone="teach"
-        action={
-          onRunAudit !== undefined ? (
-            <ActionButton variant="outline" onClick={onRunAudit} disabled={auditRunning} aria-busy={auditRunning}>
-              <HiMiniBugAnt className="mr-1.5 h-4 w-4" aria-hidden="true" />
-              Run audit
-            </ActionButton>
-          ) : undefined
-        }
       />
     </>
   );
+}
+
+type ViewModeChipProps = {
+  label: string;
+  active: boolean;
+  onSelect: () => void;
+};
+
+function ViewModeChip({ label, active, onSelect }: ViewModeChipProps) {
+  return <FilterChip label={label} active={active} onSelect={onSelect} />;
+}
+
+function ecosystemSummary(packages: SupplyChainAuditFinding[]): Array<{ ecosystem: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const pkg of packages) {
+    counts.set(pkg.ecosystem, (counts.get(pkg.ecosystem) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([ecosystem, count]) => ({ ecosystem, count }))
+    .sort((left, right) => right.count - left.count || left.ecosystem.localeCompare(right.ecosystem));
 }
 
 export function PackageWorkbenchPanel({
@@ -503,7 +546,10 @@ export function PackageWorkbenchPanel({
   auditSnapshot,
   onRunAudit,
   auditRunning = false,
+  auditPhase = "idle",
+  cloudState = null,
 }: PackageWorkbenchPanelProps) {
+  const [viewMode, setViewMode] = useState<PackageViewMode>("all");
   const [filters, setFilters] = useState<PackageWorkbenchFilters>({
     ecosystem: "all",
     decision: "all",
@@ -519,10 +565,15 @@ export function PackageWorkbenchPanel({
   const [page, setPage] = useState(0);
 
   const findings = auditSnapshot?.findings ?? [];
-  const ecosystems = useMemo(() => packageWorkbenchEcosystems(findings), [findings]);
+  const packages = auditSnapshot?.packages ?? [];
+  const tableSource = viewMode === "review" ? findings : packages;
+  const progressActive = auditProgressActive(auditPhase, auditRunning);
+  const showResults = auditSnapshot !== null && !progressActive && (auditConnectGate === null || auditConnectGate === undefined);
+  const ecosystems = useMemo(() => packageWorkbenchEcosystems(tableSource), [tableSource]);
+  const ecosystemBreakdown = useMemo(() => ecosystemSummary(packages), [packages]);
   const filteredFindings = useMemo(
-    () => filterPackageWorkbenchFindings(findings, filters),
-    [findings, filters],
+    () => filterPackageWorkbenchFindings(tableSource, filters),
+    [tableSource, filters],
   );
   const sortedFindings = useMemo(() => {
     const sorted = sortPackageWorkbenchFindings(filteredFindings, sortKey);
@@ -592,91 +643,167 @@ export function PackageWorkbenchPanel({
     setSelectedId("");
   }, []);
 
+  const handleViewAll = useCallback(() => {
+    setViewMode("all");
+    setPage(0);
+    setSelectedId("");
+  }, []);
+
+  const handleViewReview = useCallback(() => {
+    setViewMode("review");
+    setPage(0);
+    setSelectedId("");
+  }, []);
+
+  const handleRunAudit = useCallback(() => {
+    onRunAudit?.();
+  }, [onRunAudit]);
+
+  const headerTitle = progressActive ? "Auditing workspace" : "Workspace audit";
+  const headerBody = progressActive
+    ? "Guard is scanning manifests, lockfiles, and package intel for this workspace."
+    : "Browse indexed packages, filter by ecosystem, and open any row for advisory detail.";
+
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
+    <div className="rounded-2xl border border-slate-100 bg-white shadow-sm" data-testid="workspace-audit-panel">
       <div className="border-b border-slate-100 px-4 py-3">
-        <SectionLabel>Audit findings</SectionLabel>
-        <p className="mt-0.5 text-sm text-slate-500">
-          Packages that need review from the latest workspace audit. Filter, sort, and open a finding for detail.
-        </p>
-        {auditSnapshot !== null && (
-          <div className="mt-2">
-            <WorkbenchHeader auditSnapshot={auditSnapshot} flaggedCount={findings.length} />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <SectionLabel>{headerTitle}</SectionLabel>
+            <p className="mt-0.5 text-sm text-slate-500">{headerBody}</p>
           </div>
-        )}
+          {onRunAudit !== undefined ? (
+            <ActionButton
+              variant="outline"
+              onClick={handleRunAudit}
+              disabled={auditRunning}
+              aria-busy={auditRunning}
+            >
+              {auditRunning ? (
+                <HiMiniArrowPath className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <HiMiniBugAnt className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              )}
+              {auditSnapshot === null ? "Run audit" : "Run audit again"}
+            </ActionButton>
+          ) : null}
+        </div>
+        {auditSnapshot !== null && showResults ? (
+          <div className="mt-2">
+            <WorkbenchHeader
+              auditSnapshot={auditSnapshot}
+              flaggedCount={findings.length}
+              packageCount={packages.length}
+              cloudState={cloudState}
+            />
+          </div>
+        ) : null}
       </div>
 
-      {auditSnapshot === null && (
-        <div className="px-4 py-6">
-          <WorkbenchEmptyState
-            auditConnectGate={auditConnectGate}
-            auditError={auditError}
-            onRunAudit={onRunAudit}
-            auditRunning={auditRunning}
-          />
-        </div>
-      )}
-      {auditSnapshot !== null && findings.length === 0 && (
-        <div className="px-4 py-6">
+      <div className="px-4 py-4 space-y-4">
+        {auditConnectGate !== null && auditConnectGate !== undefined ? (
+          <WorkbenchEmptyState auditConnectGate={auditConnectGate} auditError={auditError} />
+        ) : (
+          <>
+            {auditError ? <WorkbenchAuditErrorBanner message={auditError} /> : null}
+
+            {progressActive ? (
+              <div className="rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] px-4 py-4">
+                <AuditProgressStepList phase={auditPhase} running={auditRunning} />
+              </div>
+            ) : null}
+
+            {auditSnapshot === null && !progressActive ? (
+              <WorkbenchEmptyState auditConnectGate={null} auditError={auditError} />
+            ) : null}
+
+        {showResults && auditSnapshot !== null && packages.length === 0 && auditSnapshot.inventory.totalPackages > 0 ? (
           <EmptyState
-            title="No flagged packages"
-            body="The latest workspace audit completed without packages that need review."
+            title="Package list not loaded"
+            body="This audit indexed packages, but the detailed list was not stored yet. Run audit again to load the full inventory table."
             tone="teach"
           />
-        </div>
-      )}
-      {auditSnapshot !== null && findings.length > 0 && (
-        <div className="space-y-4 px-4 py-4">
-          <WorkbenchControls
-            filters={filters}
-            ecosystems={ecosystems}
-            sortKey={sortKey}
-            sortDirection={sortDirection}
-            onSearchChange={handleSearchChange}
-            onEcosystemChange={handleEcosystemChange}
-            onDecisionChange={handleDecisionChange}
-            onSeverityChange={handleSeverityChange}
-            onSortChange={handleSortChange}
-          />
-          <WorkbenchPagination
-            page={safePage}
-            pageCount={pageCount}
-            total={sortedFindings.length}
-            onPageChange={handlePageChange}
-          />
-          {sortedFindings.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-500">No packages match the current filters.</p>
-          ) : (
-            <div
-              className="overflow-hidden rounded-xl border border-slate-100"
-              role="table"
-              aria-label="Package audit findings"
-            >
-              <div
-                className="sticky top-0 z-[1] hidden border-b border-slate-100 bg-slate-50 px-4 py-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3"
-                role="row"
-              >
-                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400" role="columnheader">
-                  Package
-                </span>
-                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400" role="columnheader">
-                  Decision · Severity
-                </span>
-              </div>
-              <div className="max-h-[min(60vh,32rem)] overflow-y-auto overscroll-y-contain" role="rowgroup">
-                {pagedFindings.map((finding) => (
-                  <FindingRow
-                    key={finding.id}
-                    finding={finding}
-                    selected={selectedId === finding.id}
-                    onSelect={handleSelectFinding}
-                  />
-                ))}
-              </div>
+        ) : null}
+
+        {showResults && packages.length > 0 ? (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {ecosystemBreakdown.map((entry) => (
+                <Tag key={entry.ecosystem} tone="default">
+                  {entry.ecosystem} · {entry.count}
+                </Tag>
+              ))}
             </div>
-          )}
-        </div>
-      )}
+            <div className="flex flex-wrap gap-2">
+              <ViewModeChip label={`All packages (${packages.length})`} active={viewMode === "all"} onSelect={handleViewAll} />
+              <ViewModeChip
+                label={`Needs review (${findings.length})`}
+                active={viewMode === "review"}
+                onSelect={handleViewReview}
+              />
+            </div>
+            {cloudState === "local_only" ? (
+              <p className="text-xs leading-relaxed text-slate-500">
+                This device is using local intel only. Connect Guard Cloud and sync supply-chain intel for live CVE and malware coverage.
+              </p>
+            ) : null}
+            <WorkbenchControls
+              filters={filters}
+              ecosystems={ecosystems}
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              onSearchChange={handleSearchChange}
+              onEcosystemChange={handleEcosystemChange}
+              onDecisionChange={handleDecisionChange}
+              onSeverityChange={handleSeverityChange}
+              onSortChange={handleSortChange}
+            />
+            <WorkbenchPagination
+              page={safePage}
+              pageCount={pageCount}
+              total={sortedFindings.length}
+              onPageChange={handlePageChange}
+            />
+            {sortedFindings.length === 0 ? (
+              <p className="py-6 text-center text-sm text-slate-500">
+                {viewMode === "review"
+                  ? "No packages need review in this audit."
+                  : "No packages match the current filters."}
+              </p>
+            ) : (
+              <div
+                className="overflow-hidden rounded-xl border border-slate-100"
+                role="table"
+                aria-label={viewMode === "review" ? "Packages needing review" : "Indexed packages"}
+              >
+                <div
+                  className="sticky top-0 z-[1] hidden border-b border-slate-100 bg-slate-50 px-4 py-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3"
+                  role="row"
+                >
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400" role="columnheader">
+                    Package
+                  </span>
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400" role="columnheader">
+                    Decision · Severity
+                  </span>
+                </div>
+                <div className="max-h-[min(60vh,32rem)] overflow-y-auto overscroll-y-contain" role="rowgroup">
+                  {pagedFindings.map((finding) => (
+                    <FindingRow
+                      key={finding.id}
+                      finding={finding}
+                      selected={selectedId === finding.id}
+                      onSelect={handleSelectFinding}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : null}
+          </>
+        )}
+      </div>
       {selectedFinding !== null ? (
         <GuardModalLayer
           ariaLabel={`Finding detail for ${selectedFinding.packageName}`}
