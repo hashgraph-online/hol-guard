@@ -17,8 +17,8 @@ from .hook_python import resolve_guard_hook_python
 from .mcp_servers import (
     GUARD_MCP_COMPANION_PREFIX,
     ManagedMcpServer,
-    is_guard_mcp_companion_name,
     is_guard_proxy_command,
+    is_verified_guard_mcp_companion,
     managed_stdio_servers,
     proxy_cli_args,
     proxy_process_env,
@@ -445,7 +445,8 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             for name, value in mcp.items():
                 if not isinstance(name, str) or not isinstance(value, dict):
                     continue
-                if is_guard_mcp_companion_name(name):
+                command, args = _command_parts(value)
+                if is_verified_guard_mcp_companion(name, command, args):
                     continue
                 workspace_server_names.add(name)
         return workspace_server_names
@@ -739,7 +740,8 @@ def _persisted_mcp_with_guard_companions(
         name
         for name in persisted
         if isinstance(name, str)
-        and name.startswith(_GUARD_MCP_COMPANION_PREFIX)
+        and isinstance(persisted.get(name), dict)
+        and is_verified_guard_mcp_companion(name, *_command_parts(persisted[name]))
         and name.removeprefix(_GUARD_MCP_COMPANION_PREFIX) not in managed_names
     ]
     for name in stale_companions:
