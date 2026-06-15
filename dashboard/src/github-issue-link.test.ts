@@ -29,5 +29,3 @@ const customUrl = new URL(buildGitHubIssueUrl({ title: "Crash on approvals", lab
 
 assert(customUrl.searchParams.get("title") === "Crash on approvals", "custom issue URL accepts a title");
 assert(customUrl.searchParams.get("labels") === "bug", "custom issue URL accepts labels");
-
-console.log("github-issue-link.test.ts: all assertions passed");

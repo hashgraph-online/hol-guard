@@ -339,6 +339,21 @@ export function ShellFooter() {
       style={{ contain: "layout style paint", minHeight: 200 }}
     >
       <nav aria-label="Footer Navigation" className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
+        <div className="mb-8 flex flex-col gap-3 rounded-2xl border border-white/15 bg-white/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-white">Found something Guard should fix?</p>
+            <p className="mt-1 text-sm text-indigo-100">Open a prefilled GitHub issue so the maintainers get the right details.</p>
+          </div>
+          <a
+            href={GITHUB_ISSUE_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-brand-blue no-underline transition-colors hover:bg-indigo-50"
+          >
+            <HiMiniBugAnt className="h-4 w-4" aria-hidden="true" />
+            {GITHUB_ISSUE_BUTTON_LABEL}
+          </a>
+        </div>
         <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-8 lg:grid-cols-4">
           {footerSections.map((section) => (
             <FooterLinkList key={section.title} title={section.title} links={section.links} />

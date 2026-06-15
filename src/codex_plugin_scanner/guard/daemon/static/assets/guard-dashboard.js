@@ -16358,6 +16358,41 @@ function buildGitHubIssueUrl(options) {
   return url.toString();
 }
 const GITHUB_ISSUE_LINK = buildGitHubIssueUrl();
+const footerSections = [
+  {
+    title: "Guard",
+    links: [
+      { href: "https://hol.org/guard", label: "Cloud Dashboard" },
+      { href: "https://hol.org/guard/pricing", label: "Pricing" },
+      { href: "https://hol.org/guard/docs", label: "Docs" }
+    ]
+  },
+  {
+    title: "Docs",
+    links: [
+      { href: "https://hol.org/registry/docs", label: "API Reference" },
+      { href: "https://hol.org/docs/libraries/standards-sdk", label: "Standards SDK" },
+      { href: "https://hol.org/docs/standards/hcs-1", label: "Standards" }
+    ]
+  },
+  {
+    title: "Community",
+    links: [
+      { href: "https://x.com/HashgraphOnline", label: "X" },
+      { href: "https://t.me/hashinals", label: "Telegram" }
+    ]
+  },
+  {
+    title: "More",
+    links: [
+      { href: "https://hol.org/blog", label: "Blog" },
+      { href: "https://github.com/hashgraph-online", label: "GitHub" },
+      { href: GITHUB_ISSUE_LINK, label: GITHUB_ISSUE_BUTTON_LABEL },
+      { href: "https://hol.org/points/legal/privacy", label: "Privacy Policy" },
+      { href: "https://hol.org/points/legal/terms", label: "Terms of Service" }
+    ]
+  }
+];
 function ShellHeader(props) {
   function handleMobileNavigationChange(event) {
     props.onNavigate(event.target.value);
@@ -16553,6 +16588,42 @@ function ShellSidebar(props) {
     ] })
   ] });
 }
+function ShellFooter() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "footer",
+    {
+      className: "mt-10 bg-gradient-to-r from-[#3f4174] to-brand-blue text-indigo-200",
+      style: { contain: "layout style paint", minHeight: 200 },
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { "aria-label": "Footer Navigation", className: "mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-8 flex flex-col gap-3 rounded-2xl border border-white/15 bg-white/10 p-4 sm:flex-row sm:items-center sm:justify-between", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-white", children: "Found something Guard should fix?" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-indigo-100", children: "Open a prefilled GitHub issue so the maintainers get the right details." })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "a",
+            {
+              href: GITHUB_ISSUE_LINK,
+              target: "_blank",
+              rel: "noopener noreferrer",
+              className: "inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-brand-blue no-underline transition-colors hover:bg-indigo-50",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "h-4 w-4", "aria-hidden": "true" }),
+                GITHUB_ISSUE_BUTTON_LABEL
+              ]
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-8 lg:grid-cols-4", children: footerSections.map((section) => /* @__PURE__ */ jsxRuntimeExports.jsx(FooterLinkList, { title: section.title, links: section.links }, section.title)) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-8 border-t border-indigo-200/20 pt-8", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-center text-[13px] font-medium text-blue-200", children: [
+          "Copyright © ",
+          (/* @__PURE__ */ new Date()).getFullYear(),
+          " HOL DAO LLC. All rights reserved."
+        ] }) })
+      ] })
+    }
+  );
+}
 function Surface(props) {
   const toneClass = surfaceToneClass(props.tone);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -16726,6 +16797,24 @@ function actionButtonClass(variant) {
   if (variant === "success") return `${base} ${sizeDefault} bg-[#059669] text-white shadow-lg shadow-emerald-500/15 hover:bg-[#047857] hover:shadow-emerald-500/20`;
   if (variant === "quiet") return `${base} ${sizeDefault} bg-transparent text-brand-dark hover:bg-surface-1`;
   return `${base} ${sizeDefault} bg-brand-blue text-white shadow-lg shadow-brand-blue/20 hover:bg-brand-blue/90 hover:shadow-brand-blue/30`;
+}
+function FooterLinkList(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group border-b border-indigo-200/20 py-2 sm:border-none sm:py-0", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "flex cursor-pointer select-none list-none items-center justify-between py-2 text-[15px] font-bold text-white transition-colors hover:text-indigo-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 rounded-sm [&::-webkit-details-marker]:hidden", children: [
+      props.title,
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-indigo-300 transition-transform duration-300 group-open:rotate-180", children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "20", height: "20", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "m6 9 6 6 6-6" }) }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-4 pb-4 sm:pb-0", children: props.links.map((link) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "a",
+      {
+        href: link.href,
+        target: "_blank",
+        rel: "noreferrer",
+        className: "block p-1 -m-1 text-[15px] font-medium text-indigo-100 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 rounded-sm",
+        children: link.label
+      }
+    ) }, `${props.title}-${link.href}`)) })
+  ] });
 }
 function WelcomeState(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-surface-in flex flex-col items-center justify-center py-16 text-center sm:py-24", children: [
@@ -24559,34 +24648,37 @@ function ApprovalCenterLayout(props) {
         onBulkBlock: props.onBulkBlock
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ReceiptsWorkspace,
-      {
-        receipts: props.receipts,
-        runtime: props.runtime,
-        onClearEvidence: props.onClearEvidence,
-        onNavigate: props.onNavigate
-      }
-    ) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "about" ? props.aboutContent ?? null : props.view === "policy" ? props.policyContent ?? null : props.view === "supply-chain" || props.view === "audit" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "inbox" ? renderInboxContent(props) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-      QueueWorkspace,
-      {
-        requests: props.requests,
-        detail: props.detail,
-        runtime: props.runtime,
-        activeRequestId: props.activeRequestId,
-        resolutionMessage: props.resolutionMessage,
-        codexResume: props.codexResume,
-        approvalGate: props.approvalGate ?? null,
-        onOpenRequest: props.onOpenRequest,
-        onGoHome: props.onGoHome,
-        onResolve: props.onResolve,
-        onBulkApprove: props.onBulkApprove,
-        onBulkBlock: props.onBulkBlock,
-        onRetry: props.onRetry,
-        onRepair: props.onRepair,
-        onRetryResume: props.onRetryResume
-      }
-    ) }) }) })
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ReceiptsWorkspace,
+        {
+          receipts: props.receipts,
+          runtime: props.runtime,
+          onClearEvidence: props.onClearEvidence,
+          onNavigate: props.onNavigate
+        }
+      ) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "about" ? props.aboutContent ?? null : props.view === "policy" ? props.policyContent ?? null : props.view === "supply-chain" || props.view === "audit" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "inbox" ? renderInboxContent(props) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+        QueueWorkspace,
+        {
+          requests: props.requests,
+          detail: props.detail,
+          runtime: props.runtime,
+          activeRequestId: props.activeRequestId,
+          resolutionMessage: props.resolutionMessage,
+          codexResume: props.codexResume,
+          approvalGate: props.approvalGate ?? null,
+          onOpenRequest: props.onOpenRequest,
+          onGoHome: props.onGoHome,
+          onResolve: props.onResolve,
+          onBulkApprove: props.onBulkApprove,
+          onBulkBlock: props.onBulkBlock,
+          onRetry: props.onRetry,
+          onRepair: props.onRepair,
+          onRetryResume: props.onRetryResume
+        }
+      ) }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ShellFooter, {})
+    ] })
   ] });
 }
 function MobileQueueDrawer(props) {
