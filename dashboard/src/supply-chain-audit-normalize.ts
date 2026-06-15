@@ -146,11 +146,14 @@ function addAdvisoryAlias(aliases: Set<string>, rawId: string): void {
   if (trimmed.length === 0) {
     return;
   }
-  if (trimmed.startsWith("GHSA-") || trimmed.startsWith("CVE-")) {
+  if (
+    trimmed.startsWith("GHSA-") ||
+    trimmed.startsWith("CVE-") ||
+    trimmed.startsWith("PYSEC-") ||
+    trimmed.startsWith("GO-")
+  ) {
     aliases.add(trimmed);
-    return;
   }
-  aliases.add(`GHSA-${trimmed.slice(0, 8).toLowerCase()}`);
 }
 
 function readAdvisoryIdList(value: unknown): string[] {
@@ -162,20 +165,41 @@ function readAdvisoryIdList(value: unknown): string[] {
     .map((entry) => entry.trim());
 }
 
-function buildAdvisoryAliasStubs(
+function buildAdvisoryAliases(
   packageRecord: Record<string, unknown>,
   reasons: SupplyChainAuditFindingReason[],
 ): string[] {
+  const precomputed = readAdvisoryIdList(packageRecord.advisoryAliases).concat(
+    readAdvisoryIdList(packageRecord.advisory_aliases),
+  );
+  if (precomputed.length > 0) {
+    return Array.from(new Set(precomputed));
+  }
+
   const aliases = new Set<string>();
   const packageAdvisoryId = readString(packageRecord.advisoryId) ?? readString(packageRecord.advisory_id);
   if (packageAdvisoryId !== null) {
     addAdvisoryAlias(aliases, packageAdvisoryId);
   }
   for (const entry of [
+    ...readAdvisoryIdList(packageRecord.advisoryIds),
+    ...readAdvisoryIdList(packageRecord.advisory_ids),
     ...readAdvisoryIdList(packageRecord.related_advisory_ids),
     ...readAdvisoryIdList(packageRecord.relatedAdvisoryIds),
   ]) {
     addAdvisoryAlias(aliases, entry);
+  }
+  const rawReasons = packageRecord.reasons;
+  if (Array.isArray(rawReasons)) {
+    for (const entry of rawReasons) {
+      if (!isRecord(entry)) {
+        continue;
+      }
+      const advisoryId = readString(entry.advisoryId) ?? readString(entry.advisory_id);
+      if (advisoryId !== null) {
+        addAdvisoryAlias(aliases, advisoryId);
+      }
+    }
   }
   for (const reason of reasons) {
     const match = reason.message.match(/\b(CVE-\d{4}-\d+)\b/i);
@@ -185,13 +209,6 @@ function buildAdvisoryAliasStubs(
     const ghsaMatch = reason.message.match(/\b(GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4})\b/i);
     if (ghsaMatch !== null) {
       aliases.add(ghsaMatch[1].toUpperCase());
-    }
-  }
-  if (aliases.size === 0) {
-    const severity = resolveFindingSeverity(packageRecord, reasons);
-    if (SEVERITY_RANK[severity] >= SEVERITY_RANK.medium) {
-      aliases.add("GHSA-alias-pending");
-      aliases.add("CVE-alias-pending");
     }
   }
   return Array.from(aliases);
@@ -219,7 +236,7 @@ function normalizePackageFinding(
     decision,
     severity,
     reasons,
-    advisoryAliases: buildAdvisoryAliasStubs(packageRecord, reasons),
+    advisoryAliases: buildAdvisoryAliases(packageRecord, reasons),
     status: readString(packageRecord.status),
   };
 }

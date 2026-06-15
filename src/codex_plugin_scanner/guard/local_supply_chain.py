@@ -493,10 +493,127 @@ def _audit_lockfile_warnings(
     return tuple(warnings)
 
 
+def _package_advisory_ids(package: dict[str, object]) -> list[str]:
+    advisory_ids: list[str] = []
+    seen: set[str] = set()
+
+    def add_id(value: object) -> None:
+        if not isinstance(value, str):
+            return
+        trimmed = value.strip()
+        if not trimmed or trimmed in seen:
+            return
+        seen.add(trimmed)
+        advisory_ids.append(trimmed)
+
+    for key in ("advisoryIds", "advisory_ids", "relatedAdvisoryIds", "related_advisory_ids"):
+        raw = package.get(key)
+        if isinstance(raw, list):
+            for entry in raw:
+                add_id(entry)
+    add_id(package.get("advisoryId"))
+    add_id(package.get("advisory_id"))
+    reasons = package.get("reasons")
+    if isinstance(reasons, list):
+        for reason in reasons:
+            if not isinstance(reason, dict):
+                continue
+            add_id(reason.get("advisoryId"))
+            add_id(reason.get("advisory_id"))
+    return advisory_ids
+
+
+def _resolve_advisory_aliases_from_bundle(
+    bundle: dict[str, object] | None,
+    advisory_ids: list[str],
+) -> list[str]:
+    aliases: list[str] = []
+    seen: set[str] = set()
+    lookup: dict[str, tuple[str, ...]] = {}
+    if isinstance(bundle, dict):
+        advisories = bundle.get("advisories")
+        if isinstance(advisories, list):
+            for advisory in advisories:
+                if not isinstance(advisory, dict):
+                    continue
+                advisory_id = advisory.get("advisoryId")
+                if not isinstance(advisory_id, str) or not advisory_id.strip():
+                    continue
+                raw_aliases = advisory.get("aliases")
+                alias_tuple: tuple[str, ...] = (advisory_id,)
+                if isinstance(raw_aliases, list):
+                    alias_tuple = (
+                        advisory_id,
+                        *[alias for alias in raw_aliases if isinstance(alias, str) and alias.strip()],
+                    )
+                lookup[advisory_id] = alias_tuple
+                for alias in alias_tuple:
+                    lookup.setdefault(alias, alias_tuple)
+
+    def add_alias(value: str) -> None:
+        trimmed = value.strip()
+        if not trimmed or trimmed in seen:
+            return
+        seen.add(trimmed)
+        aliases.append(trimmed)
+
+    for advisory_id in advisory_ids:
+        add_alias(advisory_id)
+        resolved = lookup.get(advisory_id)
+        if resolved is None:
+            continue
+        for alias in resolved:
+            add_alias(alias)
+    return aliases
+
+
+def _enrich_package_with_advisory_aliases(
+    package: dict[str, object],
+    *,
+    bundle: dict[str, object] | None,
+) -> dict[str, object]:
+    existing_aliases = package.get("advisoryAliases")
+    if isinstance(existing_aliases, list) and existing_aliases:
+        return package
+    advisory_ids = _package_advisory_ids(package)
+    if not advisory_ids:
+        return package
+    aliases = _resolve_advisory_aliases_from_bundle(bundle, advisory_ids)
+    if not aliases:
+        return package
+    enriched = dict(package)
+    enriched["advisoryAliases"] = aliases
+    return enriched
+
+
+def _enrich_evaluation_packages_with_advisory_aliases(
+    evaluation: dict[str, object],
+    store: GuardStore,
+) -> dict[str, object]:
+    packages = evaluation.get("packages")
+    if not isinstance(packages, list):
+        return evaluation
+    workspace_id = store.get_cloud_workspace_id()
+    bundle: dict[str, object] | None = None
+    if workspace_id is not None:
+        cached_bundle = store.get_cached_supply_chain_bundle(workspace_id)
+        if isinstance(cached_bundle, dict):
+            bundle_payload = cached_bundle.get("bundle")
+            if isinstance(bundle_payload, dict):
+                bundle = bundle_payload
+    enriched_packages: list[dict[str, object]] = []
+    for package in packages:
+        if not isinstance(package, dict):
+            continue
+        enriched_packages.append(_enrich_package_with_advisory_aliases(package, bundle=bundle))
+    return {**evaluation, "packages": enriched_packages}
+
+
 def _audit_package_findings_for_receipt(
     package_items: list[dict[str, object]],
     *,
     limit: int = 100,
+    bundle: dict[str, object] | None = None,
 ) -> list[dict[str, object]]:
     decision_rank_map = {"block": 4, "ask": 3, "warn": 2, "monitor": 1, "allow": 0}
     ranked: list[tuple[int, int, dict[str, object]]] = []
@@ -508,7 +625,10 @@ def _audit_package_findings_for_receipt(
         decision_rank = decision_rank_map.get(decision, 0)
         ranked.append((decision_rank, severity_rank, item))
     ranked.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
-    return [item for _, _, item in ranked[:limit]]
+    return [
+        _enrich_package_with_advisory_aliases(item, bundle=bundle)
+        for _, _, item in ranked[:limit]
+    ]
 
 
 def workspace_audit_path_hashes(
@@ -591,6 +711,7 @@ def audit_receipt_metadata(
     result: dict[str, object],
     *,
     workspace_dir: Path | None = None,
+    store: GuardStore | None = None,
 ) -> dict[str, object]:
     evaluation = result.get("evaluation")
     if not isinstance(evaluation, dict):
@@ -599,7 +720,16 @@ def audit_receipt_metadata(
     packages = evaluation.get("packages")
     package_items = [item for item in packages if isinstance(item, dict)] if isinstance(packages, list) else []
     blocked_packages = [item for item in package_items if str(item.get("decision") or "") == "block"]
-    package_findings = _audit_package_findings_for_receipt(package_items)
+    bundle: dict[str, object] | None = None
+    if store is not None:
+        workspace_id = store.get_cloud_workspace_id()
+        if workspace_id is not None:
+            cached_bundle = store.get_cached_supply_chain_bundle(workspace_id)
+            if isinstance(cached_bundle, dict):
+                bundle_payload = cached_bundle.get("bundle")
+                if isinstance(bundle_payload, dict):
+                    bundle = bundle_payload
+    package_findings = _audit_package_findings_for_receipt(package_items, bundle=bundle)
     policy_decision = "allow"
     if decision == "block":
         policy_decision = "block"
@@ -753,6 +883,7 @@ def build_workspace_audit_payload(
             command_name=command_name,
             now=now,
         )
+    evaluation = _enrich_evaluation_packages_with_advisory_aliases(evaluation, store)
     payload = {
         "generated_at": now,
         "mode": command_name,

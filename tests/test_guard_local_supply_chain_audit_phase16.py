@@ -669,3 +669,56 @@ def test_guard_supply_chain_scan_falls_back_when_oauth_refresh_fails(
         "code": "cloud_auth_error",
         "message": "Guard cloud authorization could not be refreshed, so Guard fell back locally.",
     }
+
+
+def test_audit_receipt_metadata_enriches_cloud_advisory_aliases_from_bundle(
+    tmp_path: Path,
+) -> None:
+    from tests.test_guard_local_supply_chain_phase15 import _bundle_response, _package
+
+    home_dir = tmp_path / "guard-home"
+    store = GuardStore(home_dir)
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "demo-token",
+        "2026-05-25T10:00:00+00:00",
+        workspace_id=WORKSPACE_ID,
+    )
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(
+            packages=[
+                _package(
+                    name="minimist",
+                    version="1.2.5",
+                    default_action="block",
+                )
+            ]
+        ),
+        "2026-05-25T10:00:00+00:00",
+    )
+
+    payload = {
+        "evaluation": {
+            "decision": "block",
+            "packages": [
+                {
+                    "name": "minimist",
+                    "ecosystem": "npm",
+                    "decision": "block",
+                    "reasons": [{"code": "known_malware", "message": "known malware", "severity": "critical"}],
+                    "advisoryIds": ["GHSA-vh95-rmgr-6w4m"],
+                }
+            ],
+        },
+        "inventory": {"total_packages": 1},
+        "manifest_paths": ["package.json"],
+        "lockfile_paths": ["package-lock.json"],
+    }
+    metadata = local_supply_chain_module.audit_receipt_metadata(payload, store=store)
+    findings = metadata["scanner_evidence"]["package_findings"]
+    assert findings
+    aliases = findings[0].get("advisoryAliases")
+    assert isinstance(aliases, list)
+    assert "GHSA-vh95-rmgr-6w4m" in aliases
+    assert "CVE-2020-7598" in aliases
