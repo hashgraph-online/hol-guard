@@ -44,6 +44,8 @@ class OfflineSupplyChainDecision:
     matched_advisory_ids: tuple[str, ...]
     reason: str
     stale: bool
+    recommended_fix_version: str | None = None
+    emergency_deny: bool = False
 
 
 def canonical_supply_chain_bundle_payload(bundle: SupplyChainBundle | dict[str, object]) -> bytes:
@@ -203,18 +205,22 @@ def verify_supply_chain_bundle_response(
         raise SupplyChainBundleSignatureError("Supply-chain bundle signature verification failed") from exc
 
 
-def _package_matches(package: SupplyChainBundlePackage, package_name: str, package_version: str | None) -> bool:
-    normalized_name = _normalize_package_name(package.ecosystem, package_name)
-    namespace_name = (
-        _normalize_package_name(package.ecosystem, f"{package.namespace}/{package.name}")
-        if package.namespace is not None
-        else None
-    )
-    package_leaf_name = _normalize_package_name(package.ecosystem, package.name)
+def _package_identity_matches(
+    ecosystem: str,
+    namespace: str | None,
+    name: str,
+    package_name: str,
+) -> bool:
+    normalized_name = _normalize_package_name(ecosystem, package_name)
+    namespace_name = _normalize_package_name(ecosystem, f"{namespace}/{name}") if namespace is not None else None
+    leaf_name = _normalize_package_name(ecosystem, name)
     if normalized_name.startswith("@"):
-        if namespace_name != normalized_name:
-            return False
-    elif package.namespace is not None or package_leaf_name != normalized_name:
+        return namespace_name == normalized_name
+    return namespace is None and leaf_name == normalized_name
+
+
+def _package_matches(package: SupplyChainBundlePackage, package_name: str, package_version: str | None) -> bool:
+    if not _package_identity_matches(package.ecosystem, package.namespace, package.name, package_name):
         return False
     return package_version is None or package.version == package_version
 
@@ -227,16 +233,7 @@ def _normalize_package_name(ecosystem: str, package_name: str) -> str:
 
 
 def _emergency_deny_identity_matches(entry: SupplyChainBundleEmergencyDeny, package_name: str) -> bool:
-    normalized_name = _normalize_package_name(entry.ecosystem, package_name)
-    namespace_name = (
-        _normalize_package_name(entry.ecosystem, f"{entry.namespace}/{entry.name}")
-        if entry.namespace is not None
-        else None
-    )
-    entry_leaf_name = _normalize_package_name(entry.ecosystem, entry.name)
-    if normalized_name.startswith("@"):
-        return namespace_name == normalized_name
-    return entry.namespace is None and entry_leaf_name == normalized_name
+    return _package_identity_matches(entry.ecosystem, entry.namespace, entry.name, package_name)
 
 
 def _matching_emergency_deny_entries(
@@ -294,12 +291,15 @@ def evaluate_cached_supply_chain_bundle(
         ecosystem=ecosystem,
     )
     if deny_entries:
+        deny_entry = deny_entries[0]
         return OfflineSupplyChainDecision(
             action="block",
             bundle_version=response.bundle.bundle_version,
             matched_advisory_ids=(),
-            reason=deny_entries[0].reason,
+            reason=deny_entry.reason,
             stale=stale,
+            recommended_fix_version=deny_entry.recommended_fix_version,
+            emergency_deny=True,
         )
     matches = [
         item

@@ -425,6 +425,8 @@ def test_supply_chain_bundle_offline_evaluation_enforces_emergency_deny_without_
     assert decision.action == "block"
     assert decision.reason == "known_malware"
     assert decision.stale is False
+    assert decision.recommended_fix_version == "1.2.9"
+    assert decision.emergency_deny is True
 
 
 def test_supply_chain_bundle_offline_evaluation_enforces_emergency_deny_when_bundle_is_stale() -> None:

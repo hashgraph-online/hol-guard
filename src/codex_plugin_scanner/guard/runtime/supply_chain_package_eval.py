@@ -1038,6 +1038,23 @@ def _evaluate_with_bundle(
             ecosystem=_optional_string(target.get("ecosystem")) or "npm",
             now=now_timestamp,
         )
+        if offline.emergency_deny and offline.action == "block":
+            packages.append(
+                _heuristic_package_result(
+                    target=target,
+                    decision="block",
+                    code=offline.reason,
+                    message=_emergency_deny_bundle_message(
+                        target=target,
+                        resolved_version=resolved_version,
+                        reason=offline.reason,
+                    ),
+                    severity="critical",
+                    resolved_version=resolved_version,
+                    recommended_fix_version=offline.recommended_fix_version,
+                )
+            )
+            continue
         if package_match is None:
             if offline.action == "block":
                 packages.append(
@@ -1051,6 +1068,8 @@ def _evaluate_with_bundle(
                             reason=offline.reason,
                         ),
                         severity="critical",
+                        resolved_version=resolved_version,
+                        recommended_fix_version=offline.recommended_fix_version,
                     )
                 )
                 continue
@@ -1548,46 +1567,56 @@ def _transitive_lockfile_results(
                 package_version=version,
                 ecosystem=lockfile_ecosystem,
             )
-            if package_match is None:
-                offline = evaluate_cached_supply_chain_bundle(
-                    bundle_response,
-                    package_name=package_name,
-                    package_version=version,
-                    ecosystem=lockfile_ecosystem,
-                    now=now_timestamp,
+            offline = evaluate_cached_supply_chain_bundle(
+                bundle_response,
+                package_name=package_name,
+                package_version=version,
+                ecosystem=lockfile_ecosystem,
+                now=now_timestamp,
+            )
+            if offline.emergency_deny and offline.action == "block":
+                results.append(
+                    {
+                        "decision": "block",
+                        "ecosystem": lockfile_ecosystem or "npm",
+                        "name": package_name.rsplit("/", 1)[-1],
+                        "namespace": (
+                            package_name.rsplit("/", 1)[0]
+                            if package_name.startswith("@") and "/" in package_name
+                            else None
+                        ),
+                        "requestedVersion": version,
+                        "resolvedVersion": version,
+                        "recommendedFixVersion": offline.recommended_fix_version,
+                        "riskScore": None,
+                        "direct": False,
+                        "dependencyPath": dependency_path,
+                        "packageManager": str(artifact.metadata.get("package_manager") or "npm"),
+                        "redactedCommand": _optional_string(artifact.metadata.get("redacted_command")),
+                        "reasons": (
+                            {
+                                "code": offline.reason,
+                                "message": _emergency_deny_bundle_message(
+                                    target={
+                                        "name": package_name.rsplit("/", 1)[-1],
+                                        "namespace": (
+                                            package_name.rsplit("/", 1)[0]
+                                            if package_name.startswith("@") and "/" in package_name
+                                            else None
+                                        ),
+                                        "ecosystem": lockfile_ecosystem or "npm",
+                                    },
+                                    resolved_version=version,
+                                    reason=offline.reason,
+                                ),
+                                "severity": "critical",
+                                "source": "bundle",
+                            },
+                        ),
+                    }
                 )
-                if offline.action == "block":
-                    results.append(
-                        {
-                            "decision": "block",
-                            "ecosystem": lockfile_ecosystem or "npm",
-                            "name": package_name.rsplit("/", 1)[-1],
-                            "namespace": (
-                                package_name.rsplit("/", 1)[0]
-                                if package_name.startswith("@") and "/" in package_name
-                                else None
-                            ),
-                            "requestedVersion": version,
-                            "resolvedVersion": version,
-                            "recommendedFixVersion": None,
-                            "riskScore": None,
-                            "direct": False,
-                            "dependencyPath": dependency_path,
-                            "packageManager": str(artifact.metadata.get("package_manager") or "npm"),
-                            "redactedCommand": _optional_string(artifact.metadata.get("redacted_command")),
-                            "reasons": (
-                                {
-                                    "code": offline.reason,
-                                    "message": (
-                                        "Emergency denylist blocked transitive dependency "
-                                        f"{package_name}@{version}."
-                                    ),
-                                    "severity": "critical",
-                                    "source": "bundle",
-                                },
-                            ),
-                        }
-                    )
+                continue
+            if package_match is None:
                 continue
             decision = _transitive_lockfile_decision(package=package_match, stale=bundle_stale)
             if decision not in {"ask", "block", "warn"}:
@@ -2225,6 +2254,8 @@ def _heuristic_package_result(
     code: str,
     message: str,
     severity: str,
+    resolved_version: str | None = None,
+    recommended_fix_version: str | None = None,
 ) -> dict[str, object]:
     return {
         "decision": decision,
@@ -2232,8 +2263,10 @@ def _heuristic_package_result(
         "name": target["name"],
         "namespace": target["namespace"],
         "requestedVersion": _optional_string(target.get("range")) or _optional_string(target.get("version")),
-        "resolvedVersion": _optional_string(target.get("version")),
-        "recommendedFixVersion": None,
+        "resolvedVersion": (
+            resolved_version if resolved_version is not None else _optional_string(target.get("version"))
+        ),
+        "recommendedFixVersion": recommended_fix_version,
         "riskScore": None,
         "direct": True,
         "dependencyPath": None,
