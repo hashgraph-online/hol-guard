@@ -66,7 +66,7 @@ def queue_access_graph_snapshot(
         length=24,
     )
     snapshot_id = f"access-graph-{snapshot_hash}"
-    payload = {
+    payload: dict[str, object] = {
         "snapshotId": snapshot_id,
         "generatedAt": now,
         "entities": entities,

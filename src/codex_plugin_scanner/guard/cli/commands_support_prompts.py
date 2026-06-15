@@ -1,14 +1,14 @@
 """Guard CLI helper definitions."""
 
 # fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
-from ..models import GuardAction
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from ..models import GuardAction
     from ._commands_shared import _NAMED_SECURITY_LEVELS, _SETTINGS_POLICY_RISK_ACTIONS, _guard_risk_action_key
     from .commands_support_hook_payload import _copilot_hook_permission_decision
     from .commands_support_runtime_policy import _ensure_terminal_punctuation, _native_hook_reason
@@ -19,20 +19,21 @@ from ._commands_shared import *
 from .commands_parser_helpers import *
 
 
-def _guard_action_or_default(value: str, default: GuardAction) -> GuardAction:
-    if value == "allow":
+def _guard_action_from_cli(value: object) -> GuardAction:
+    normalized = str(value).strip()
+    if normalized == "allow":
         return "allow"
-    if value == "warn":
+    if normalized == "warn":
         return "warn"
-    if value == "review":
+    if normalized == "review":
         return "review"
-    if value == "block":
+    if normalized == "block":
         return "block"
-    if value == "sandbox-required":
+    if normalized == "sandbox-required":
         return "sandbox-required"
-    if value == "require-reapproval":
+    if normalized == "require-reapproval":
         return "require-reapproval"
-    return default
+    raise ValueError(f"Unsupported Guard action '{normalized}'.")
 
 def _run_approval_password_settings_command(*, args: argparse.Namespace, guard_home: Path) -> dict[str, object]:
     command = str(getattr(args, "settings_approval_password_command", "")).strip().lower()
@@ -172,7 +173,7 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
         return persist_settings({"risk_actions": risk_actions})
     if settings_command == "risk":
         risk_class = _guard_risk_action_key(str(args.risk_class))
-        action = str(args.action)
+        action = _guard_action_from_cli(args.action)
         harness = getattr(args, "harness", None)
         if isinstance(harness, str) and harness.strip():
             harness_key = _canonical_harness_name(harness.strip().lower())
@@ -181,14 +182,14 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
                 for name, values in (config.harness_risk_actions or {}).items()
                 if isinstance(values, dict)
             }
-            harness_actions.setdefault(harness_key, {})[risk_class] = _guard_action_or_default(action, "warn")
+            harness_actions.setdefault(harness_key, {})[risk_class] = action
             return persist_settings(
                 {
                     "harness_risk_actions": harness_actions,
                 },
             )
         risk_actions = dict(config.risk_actions or {})
-        risk_actions[risk_class] = _guard_action_or_default(action, "warn")
+        risk_actions[risk_class] = action
         return persist_settings(
             {
                 "risk_actions": risk_actions,
@@ -267,11 +268,7 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
                 "secrets. The approval flow came from HOL Guard, not from Claude alone. HOL Guard will ask you to "
                 "choose Allow once, Allow during this session, or Keep blocked before Claude retries this action."
             )
-        harness_label = (
-            {"claude-code": "Claude", "codex": "Codex"}.get(harness, "the harness")
-            if isinstance(harness, str)
-            else "the harness"
-        )
+        harness_label = "Claude" if harness == "claude-code" else "Codex" if harness == "codex" else "the harness"
         return (
             f"HOL Guard blocked {harness_label}'s attempt to use {tool_name} for {path_class} to protect your "
             "local secrets. "

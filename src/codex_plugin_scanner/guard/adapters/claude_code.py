@@ -48,6 +48,13 @@ def _guard_command_handler(
     return handler
 
 
+def _manifest_notes(payload: dict[str, object]) -> list[str]:
+    notes = payload.get("notes")
+    if not isinstance(notes, list):
+        return []
+    return [str(note) for note in notes]
+
+
 def _claude_managed_settings_path(context: HarnessContext) -> Path:
     return context.home_dir / ".claude" / "settings.json"
 
@@ -136,10 +143,15 @@ def _merge_hook_group(
     matcher: str | None,
     handler: dict[str, object],
 ) -> list[object]:
-    normalized = [entry for entry in entries if isinstance(entry, dict)]
+    normalized: list[object] = []
+    for entry in entries:
+        if isinstance(entry, dict):
+            normalized.append(entry)
     matcher_key = matcher.strip() if isinstance(matcher, str) and matcher.strip() else None
     handler_identity = _handler_identity(handler)
     for index, entry in enumerate(normalized):
+        if not isinstance(entry, dict):
+            continue
         entry_matcher = entry.get("matcher")
         entry_matcher_key = entry_matcher.strip() if isinstance(entry_matcher, str) and entry_matcher.strip() else None
         if entry_matcher_key != matcher_key:
@@ -634,12 +646,15 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         payload = _json_payload(settings_path)
         session_start_command = self._session_start_command(context)
         hook_command = self._daemon_hook_command(context)
-        hooks = payload.setdefault("hooks", {})
-        if not isinstance(hooks, dict):
+        hooks_payload = payload.get("hooks")
+        if isinstance(hooks_payload, dict):
+            hooks: dict[str, object] = {str(key): value for key, value in hooks_payload.items()}
+        else:
             hooks = {}
-            payload["hooks"] = hooks
+        payload["hooks"] = hooks
+        session_start_payload = hooks.get("SessionStart")
         session_start_entries = _prune_guard_hook_entries(
-            hooks.get("SessionStart") if isinstance(hooks.get("SessionStart"), list) else []
+            session_start_payload if isinstance(session_start_payload, list) else []
         )
         session_start_handler = _guard_command_handler(
             session_start_command,
@@ -659,7 +674,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             **shim_manifest,
             "notes": [
                 "Guard hook entries added to ~/.claude/settings.json",
-                *[str(note) for note in shim_manifest.get("notes", [])],
+                *_manifest_notes(shim_manifest),
             ],
         }
 
@@ -697,6 +712,6 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             **shim_manifest,
             "notes": [
                 "Guard hook entries removed from ~/.claude/settings.json",
-                *[str(note) for note in shim_manifest.get("notes", [])],
+                *_manifest_notes(shim_manifest),
             ],
         }

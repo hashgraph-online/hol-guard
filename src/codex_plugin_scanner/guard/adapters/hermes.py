@@ -12,6 +12,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 from ..inventory_cisco import run_cisco_inventory_scans
 from ..inventory_contract import GuardAgentInventorySnapshot, inventory_snapshot_from_detection
@@ -23,12 +24,11 @@ from .cloud_identity import cloud_agent_identity_environment, cloud_agent_identi
 # Optional: PyYAML is preferred when available for robust YAML parsing.
 # The adapter works without it via a line-based fallback parser.
 try:
-    import yaml as _yaml  # type: ignore[import-untyped]
+    import yaml as _yaml_mod  # type: ignore[import-untyped]
 
-    _HAS_PYYAML = True
+    _yaml: Any = _yaml_mod
 except ImportError:
-    _yaml = None  # type: ignore[assignment]
-    _HAS_PYYAML = False
+    _yaml = None
 
 # Subdirectories within a skill that may contain executable or injectable content.
 _SKILL_SUBDIRS = ("references", "templates", "scripts", "assets")
@@ -58,6 +58,13 @@ _SCANNABLE_NAMES = {".env", "Makefile", "Dockerfile", "Procfile"}
 _MAX_FILE_READ = 64 * 1024
 _HERMES_MANAGED_APPROVAL_TIER = "native-or-center"
 _HERMES_MANAGED_PROMPT_CHANNEL = "native"
+
+
+def _manifest_notes(payload: dict[str, object]) -> list[str]:
+    notes = payload.get("notes")
+    if not isinstance(notes, list):
+        return []
+    return [str(note) for note in notes]
 
 
 class HermesHarnessAdapter(HarnessAdapter):
@@ -110,7 +117,7 @@ class HermesHarnessAdapter(HarnessAdapter):
             "servers": _manifest_servers(source_configs),
             "notes": [
                 "Guard generated a Hermes MCP overlay and pre-tool hook bundle.",
-                *[str(note) for note in shim_manifest.get("notes", [])],
+                *_manifest_notes(shim_manifest),
             ],
         }
         if cloud_identity is not None:
@@ -143,7 +150,7 @@ class HermesHarnessAdapter(HarnessAdapter):
             "removed_paths": removed_paths,
             "notes": [
                 "Guard removed the managed Hermes overlay bundle and kept user Hermes config untouched.",
-                *[str(note) for note in shim_manifest.get("notes", [])],
+                *_manifest_notes(shim_manifest),
             ],
         }
 
@@ -290,10 +297,13 @@ class HermesHarnessAdapter(HarnessAdapter):
         frontmatter = _parse_frontmatter(content)
         code_blocks = _extract_code_blocks(content)
 
-        skill_name = frontmatter.get("name") or skill_dir.name
-        description = frontmatter.get("description", "")
+        skill_name_value = frontmatter.get("name")
+        skill_name = skill_name_value if isinstance(skill_name_value, str) and skill_name_value else skill_dir.name
+        description_value = frontmatter.get("description")
+        description = description_value if isinstance(description_value, str) else ""
         # related_skills may be top-level or nested under metadata.hermes
-        related = frontmatter.get("related_skills", "")
+        related_value = frontmatter.get("related_skills")
+        related = related_value if isinstance(related_value, str) else ""
         if not related:
             meta = frontmatter.get("metadata", {})
             if isinstance(meta, str):
@@ -302,7 +312,9 @@ class HermesHarnessAdapter(HarnessAdapter):
             elif isinstance(meta, dict):
                 hermes_meta = meta.get("hermes", {})
                 if isinstance(hermes_meta, dict):
-                    related = hermes_meta.get("related_skills", "")
+                    hermes_related = hermes_meta.get("related_skills")
+                    if isinstance(hermes_related, str):
+                        related = hermes_related
 
         content_hash = _content_hash(content)
         env_mentions = _extract_env_mentions(content)
@@ -550,9 +562,9 @@ def _parse_frontmatter(content: str) -> dict[str, object]:
     raw = parts[0].strip()
 
     # Try PyYAML first for robust nested-structure support.
-    if _HAS_PYYAML:
+    if _yaml is not None:
         try:
-            parsed = _yaml.safe_load(raw)  # type: ignore[union-attr]
+            parsed = _yaml.safe_load(raw)
             if isinstance(parsed, dict):
                 # Flatten values to strings for consistent downstream handling.
                 return {k: _flatten_yaml_value(v) for k, v in parsed.items()}
@@ -681,6 +693,24 @@ def _unquote(value: str) -> str:
     return value
 
 
+def _server_list_value(target: dict[str, object], key: str) -> list[str]:
+    value = target.get(key)
+    if isinstance(value, list):
+        return value
+    values: list[str] = []
+    target[key] = values
+    return values
+
+
+def _server_mapping_value(target: dict[str, object], key: str) -> dict[str, object]:
+    value = target.get(key)
+    if isinstance(value, dict):
+        return value
+    mapping: dict[str, object] = {}
+    target[key] = mapping
+    return mapping
+
+
 def _parse_mcp_from_yaml(yaml_path: Path) -> dict[str, dict[str, object]]:
     """Extract mcp_servers entries from config.yaml.
 
@@ -689,12 +719,12 @@ def _parse_mcp_from_yaml(yaml_path: Path) -> dict[str, dict[str, object]]:
     blocks by tracking nesting depth.
     """
     # Try PyYAML first for robust parsing.
-    if _HAS_PYYAML:
+    if _yaml is not None:
         try:
             content = _safe_read(yaml_path)
             if not content:
                 return {}
-            parsed = _yaml.safe_load(content)  # type: ignore[union-attr]
+            parsed = _yaml.safe_load(content)
             if not isinstance(parsed, dict):
                 return {}
             mcp = parsed.get("mcp_servers")
@@ -807,7 +837,7 @@ def _parse_mcp_yaml_fallback(yaml_path: Path) -> dict[str, dict[str, object]]:
                 multiline_buffer = ""
                 continue
             arg_val = _unquote(stripped[2:].strip())
-            servers[current_server].setdefault("args", []).append(arg_val)
+            _server_list_value(servers[current_server], "args").append(arg_val)
             continue
 
         # Inside a nested block (env/headers key: value pairs).
@@ -815,12 +845,12 @@ def _parse_mcp_yaml_fallback(yaml_path: Path) -> dict[str, dict[str, object]]:
             if nested_block in ("env", "headers"):
                 if ":" in stripped:
                     k, _, v = stripped.partition(":")
-                    servers[current_server].setdefault(nested_block, {})[k.strip()] = _unquote(v.strip())
+                    _server_mapping_value(servers[current_server], nested_block)[k.strip()] = _unquote(v.strip())
                 continue
             if nested_block == "sampling":
                 if ":" in stripped:
                     k, _, v = stripped.partition(":")
-                    servers[current_server].setdefault("sampling", {})[k.strip()] = _unquote(v.strip())
+                    _server_mapping_value(servers[current_server], "sampling")[k.strip()] = _unquote(v.strip())
                 continue
 
         # Exit nested block if indent drops back.
@@ -834,7 +864,7 @@ def _parse_mcp_yaml_fallback(yaml_path: Path) -> dict[str, dict[str, object]]:
             if indent < multiline_start_indent or (not stripped and indent == 0):
                 # Multiline block ended - save collected content
                 if multiline_buffer and current_server:
-                    servers[current_server].setdefault("args", []).append(multiline_buffer.strip())
+                    _server_list_value(servers[current_server], "args").append(multiline_buffer.strip())
                 multiline_continue = False
                 multiline_buffer = ""
                 # Don't continue - let the dedented line be parsed below
@@ -848,7 +878,7 @@ def _parse_mcp_yaml_fallback(yaml_path: Path) -> dict[str, dict[str, object]]:
 
     # Flush any remaining multiline buffer
     if multiline_continue and multiline_buffer and current_server:
-        servers[current_server].setdefault("args", []).append(multiline_buffer.strip())
+        _server_list_value(servers[current_server], "args").append(multiline_buffer.strip())
 
     return servers
 

@@ -1,5 +1,7 @@
 """Guard CLI helper definitions."""
 
+# pyright: reportImportCycles=false
+
 # fmt: off
 # ruff: noqa: F403, F405, I001
 
@@ -140,6 +142,18 @@ def _copilot_hook_permission_decision(policy_action: str) -> str:
         return "deny"
     return "allow"
 
+
+def _object_list(value: object | None) -> list[object]:
+    if isinstance(value, list):
+        return value
+    return []
+
+
+def _mapping_list(value: object | None) -> list[Mapping[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, Mapping)]
+
 def _headless_approval_resolver(
     *,
     args: argparse.Namespace,
@@ -193,17 +207,16 @@ def _headless_approval_resolver(
             )
             payload["approval_wait"] = wait_result
             if bool(wait_result.get("resolved")):
-                wait_items = wait_result.get("items")
-                resolved_items = [item for item in (wait_items if isinstance(wait_items, list) else []) if isinstance(item, dict)]
+                resolved_items = _mapping_list(wait_result.get("items"))
                 payload["blocked"] = any(str(item.get("resolution_action")) == "block" for item in resolved_items)
                 if not payload["blocked"]:
                     payload["blocked"] = False
                     payload["review_hint"] = "Approval received. Guard is resuming the harness launch."
             else:
-                pending_request_ids = wait_result.get("pending_request_ids")
+                pending_request_ids = _object_list(wait_result.get("pending_request_ids"))
                 payload["review_hint"] = (
                     f"Approval is still pending in the Guard approval center at {approval_center_url}. Resolve request "
-                    f"{', '.join(str(item) for item in (pending_request_ids if isinstance(pending_request_ids, list) else []))}."
+                    f"{', '.join(str(item) for item in pending_request_ids)}."
                 )
             return payload
         session = daemon_client.start_session(
@@ -268,8 +281,7 @@ def _headless_approval_resolver(
         )
         payload["approval_wait"] = wait_result
         if bool(wait_result.get("resolved")):
-            wait_items = wait_result.get("items")
-            resolved_items = [item for item in (wait_items if isinstance(wait_items, list) else []) if isinstance(item, dict)]
+            resolved_items = _mapping_list(wait_result.get("items"))
             payload["blocked"] = any(str(item.get("resolution_action")) == "block" for item in resolved_items)
             if not payload["blocked"]:
                 payload["blocked"] = False
@@ -284,15 +296,15 @@ def _headless_approval_resolver(
                     status="blocked",
                 )
         else:
+            pending_request_ids = _object_list(wait_result.get("pending_request_ids"))
             daemon_client.update_operation_status(
                 operation_id=str(operation["operation_id"]),
                 status="waiting_on_approval",
                 approval_request_ids=[str(item["request_id"]) for item in queued if "request_id" in item],
             )
-            pending_request_ids = wait_result.get("pending_request_ids")
             payload["review_hint"] = (
                 f"Approval is still pending in the Guard approval center at {approval_center_url}. Resolve request "
-                f"{', '.join(str(item) for item in (pending_request_ids if isinstance(pending_request_ids, list) else []))}."
+                f"{', '.join(str(item) for item in pending_request_ids)}."
             )
         return payload
 

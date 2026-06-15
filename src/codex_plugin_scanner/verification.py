@@ -104,7 +104,7 @@ def build_verification_payload(result: VerificationResult) -> dict[str, object]:
     return payload
 
 
-def _read_json(path: Path) -> dict | list | None:
+def _read_json(path: Path) -> dict[str, object] | list[object] | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
@@ -370,9 +370,11 @@ def _check_marketplace(plugin_dir: Path) -> list[VerificationCase]:
     return cases
 
 
-def _check_mcp_http(remotes: list[dict], *, online: bool) -> list[VerificationCase]:
+def _check_mcp_http(remotes: list[object], *, online: bool) -> list[VerificationCase]:
     cases: list[VerificationCase] = []
     for remote in remotes:
+        if not isinstance(remote, dict):
+            continue
         url = str(remote.get("url", ""))
         if not url:
             continue
@@ -452,16 +454,18 @@ def _check_mcp_http(remotes: list[dict], *, online: bool) -> list[VerificationCa
     return cases
 
 
-def _check_mcp_stdio(servers: dict) -> list[VerificationCase]:
+def _check_mcp_stdio(servers: dict[object, object]) -> list[VerificationCase]:
     cases: list[VerificationCase] = []
-    for name, server in servers.items():
+    for raw_name, server in servers.items():
+        if not isinstance(raw_name, str):
+            continue
         cmd = server.get("command") if isinstance(server, dict) else None
         if not cmd:
             continue
         cases.append(
             VerificationCase(
                 "mcp",
-                f"stdio execution:{name}",
+                f"stdio execution:{raw_name}",
                 False,
                 "Skipped stdio command execution for safety; manual review is required before trusting it.",
                 "safety-skip",
@@ -747,6 +751,9 @@ def build_doctor_report(plugin_dir: str | Path, component: str) -> dict[str, obj
         for case in verify.cases
         if component == "all" or case.component == component
     ]
+    filtered_traces = [
+        trace for trace in verify.traces if component in {"all", "mcp"} or trace.component == component
+    ]
     trace_entries = [
         {
             "name": trace.name,
@@ -756,20 +763,19 @@ def build_doctor_report(plugin_dir: str | Path, component: str) -> dict[str, obj
             "stderr": trace.stderr,
             "timed_out": trace.timed_out,
         }
-        for trace in verify.traces
-        if component in {"all", "mcp"} or trace.component == component
+        for trace in filtered_traces
     ]
     stdout_log = "\n\n".join(
-        f"[{trace['name']}]\n$ {' '.join(trace['command'])}\n{trace['stdout']}".rstrip()
-        for trace in trace_entries
-        if trace["stdout"]
+        f"[{trace.name}]\n$ {' '.join(trace.command)}\n{trace.stdout}".rstrip()
+        for trace in filtered_traces
+        if trace.stdout
     )
     stderr_log = "\n\n".join(
-        f"[{trace['name']}]\n$ {' '.join(trace['command'])}\n{trace['stderr']}".rstrip()
-        for trace in trace_entries
-        if trace["stderr"]
+        f"[{trace.name}]\n$ {' '.join(trace.command)}\n{trace.stderr}".rstrip()
+        for trace in filtered_traces
+        if trace.stderr
     )
-    timeout_names = [trace["name"] for trace in trace_entries if trace["timed_out"]]
+    timeout_names = [trace.name for trace in filtered_traces if trace.timed_out]
     return {
         "plugin_dir": str(resolved),
         "component": component,

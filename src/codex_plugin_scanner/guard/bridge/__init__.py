@@ -53,7 +53,7 @@ class NotificationBackend(ABC):
         pass
 
     @abstractmethod
-    def parse_command(self, text: str) -> tuple[str, str | None]:
+    def parse_command(self, text: str) -> tuple[str | None, str | None]:
         """Parse approve/deny commands from text. Returns (command, request_id)."""
         pass
 
@@ -65,7 +65,7 @@ class StderrBackend(NotificationBackend):
         print(f"[Guard Bridge] {message}", file=sys.stderr)
         return True
 
-    def parse_command(self, text: str) -> tuple[str, str | None]:
+    def parse_command(self, text: str) -> tuple[str | None, str | None]:
         return (None, None)
 
 
@@ -85,7 +85,7 @@ class HermesBackend(NotificationBackend):
         except Exception:
             return False
 
-    def parse_command(self, text: str) -> tuple[str, str | None]:
+    def parse_command(self, text: str) -> tuple[str | None, str | None]:
         match = re.match(r"/(approve|deny)\s+([a-f0-9-]+)", text)
         if match:
             return (match.group(1), match.group(2))
@@ -111,7 +111,7 @@ class TelegramBackend(NotificationBackend):
         except Exception:
             return False
 
-    def parse_command(self, text: str) -> tuple[str, str | None]:
+    def parse_command(self, text: str) -> tuple[str | None, str | None]:
         match = re.match(r"/(approve|deny)\s+([a-f0-9-]+)", text)
         if match:
             return (match.group(1), match.group(2))
@@ -138,7 +138,7 @@ class WebhookBackend(NotificationBackend):
         except Exception:
             return False
 
-    def parse_command(self, text: str) -> tuple[str, str | None]:
+    def parse_command(self, text: str) -> tuple[str | None, str | None]:
         match = re.match(r"/(approve|deny)\s+([a-f0-9-]+)", text)
         if match:
             return (match.group(1), match.group(2))
