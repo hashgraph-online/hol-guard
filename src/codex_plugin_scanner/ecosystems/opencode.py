@@ -70,6 +70,14 @@ def _strip_jsonc(text: str) -> str:
     return "".join(output)
 
 
+def _parse_opencode_config_text(text: str) -> dict[str, object] | None:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def _load_json_or_jsonc(path: Path) -> tuple[dict[str, object], bool, str | None]:
     try:
         text = path.read_text(encoding="utf-8")
@@ -81,13 +89,16 @@ def _load_json_or_jsonc(path: Path) -> tuple[dict[str, object], bool, str | None
         return {}, True, "read-error"
     if path.suffix == ".jsonc":
         text = _strip_jsonc(text)
-    try:
-        payload = json.loads(text)
-        if isinstance(payload, dict):
-            return payload, False, None
-    except json.JSONDecodeError:
-        return {}, True, "invalid-json"
-    return {}, True, "not-object"
+    parsed = _parse_opencode_config_text(text)
+    if parsed is not None:
+        return parsed, False, None
+    if path.suffix != ".jsonc":
+        stripped = _strip_jsonc(text)
+        if stripped != text:
+            parsed = _parse_opencode_config_text(stripped)
+            if parsed is not None:
+                return parsed, False, None
+    return {}, True, "invalid-json"
 
 
 class OpenCodeAdapter:
