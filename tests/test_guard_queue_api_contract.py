@@ -786,7 +786,7 @@ def test_request_resolution_without_auth_returns_session_recovery(tmp_path: Path
     assert "Request failed with 401" not in json.dumps(payload)
 
 
-def test_authenticated_hosted_origin_request_resolution_does_not_401(tmp_path: Path) -> None:
+def test_authenticated_hosted_origin_request_resolution_is_forbidden_not_unauthorized(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _populate(store, [_request("req-hosted-auth")])
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -803,17 +803,19 @@ def test_authenticated_hosted_origin_request_resolution_does_not_401(tmp_path: P
             },
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=5) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-            allow_origin = response.headers.get("Access-Control-Allow-Origin")
+        try:
+            urllib.request.urlopen(request, timeout=5)
+        except urllib.error.HTTPError as error:
+            status = error.code
+            payload = json.loads(error.read().decode("utf-8"))
+        else:
+            raise AssertionError("expected HTTPError")
     finally:
         daemon.stop()
 
-    assert payload["resolved"] is True
-    assert payload["copy"]["title"] == "Decision saved. Return to Codex."
-    assert "could not find the original Codex chat" in payload["copy"]["body"]
-    assert allow_origin == "https://hol.org"
-    assert store.get_approval_request("req-hosted-auth")["resolution_action"] == "allow"
+    assert status == 403
+    assert payload["error"] == "forbidden_origin"
+    assert store.get_approval_request("req-hosted-auth")["resolution_action"] is None
 
 
 def test_request_list_status_filter_includes_resolved_items(tmp_path: Path) -> None:
