@@ -35,9 +35,15 @@ def _resolve_policy_expiry(args: argparse.Namespace) -> str | None:
 
 def _guard_doctor_connect_health_payload(store: GuardStore) -> dict[str, object]:
     oauth_storage_health = store.get_oauth_local_credential_health()
+    cloud_profile = store.get_cloud_sync_profile()
+    effective_connect_state = store.get_effective_guard_connect_state(now=_now())
     latest_state = normalize_connect_state_for_missing_oauth(
-        latest_state=store.get_effective_guard_connect_state(now=_now()),
+        latest_state=effective_connect_state,
         oauth_storage_health=oauth_storage_health,
+        oauth_required=connect_state_requires_oauth(
+            latest_state=effective_connect_state,
+            cloud_profile=cloud_profile,
+        ),
     )
     payload: dict[str, object] = {
         "oauth_storage_health": _guard_doctor_oauth_storage_health_payload_from_health(oauth_storage_health),

@@ -1144,9 +1144,11 @@ def build_connect_status_payload(
     latest_state = store.get_effective_guard_connect_state(now=datetime.now(timezone.utc).isoformat())
     cloud_profile = store.get_cloud_sync_profile()
     oauth_storage_health = store.get_oauth_local_credential_health()
+    oauth_required = connect_state_requires_oauth(latest_state=latest_state, cloud_profile=cloud_profile)
     latest_state = normalize_connect_state_for_missing_oauth(
         latest_state=latest_state,
         oauth_storage_health=oauth_storage_health,
+        oauth_required=oauth_required,
     )
     oauth_repair_required = (
         bool(oauth_storage_health.get("configured")) and oauth_storage_health.get("state") == "degraded"
@@ -1167,7 +1169,7 @@ def build_connect_status_payload(
         milestone = "first_sync_failed"
         reason = "Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again."
         recovery_command = CONNECT_COMMAND
-    elif not bool(oauth_storage_health.get("configured")) and status == "connected":
+    elif oauth_required and not bool(oauth_storage_health.get("configured")) and status == "connected":
         status = "retry_required"
         milestone = "first_sync_failed"
         if not isinstance(reason, str) or not reason.strip():
@@ -1193,18 +1195,35 @@ def build_connect_status_payload(
         payload["repair_action"] = "rerun_connect"
         payload["repair_message"] = "Run hol-guard connect to start OAuth Device Code approval."
     elif (oauth_repair_required and cloud_profile is None) or (
-        not bool(oauth_storage_health.get("configured")) and payload["status"] == "retry_required"
+        oauth_required and not bool(oauth_storage_health.get("configured")) and payload["status"] == "retry_required"
     ):
         payload["repair_message"] = "Run hol-guard connect again to repair local Guard Cloud authorization."
     return payload
+
+
+def connect_state_requires_oauth(
+    *,
+    latest_state: dict[str, object] | None,
+    cloud_profile: dict[str, object] | None,
+) -> bool:
+    request_id = latest_state.get("request_id") if latest_state is not None else None
+    if isinstance(request_id, str) and bool(request_id.strip()):
+        return True
+    auth_mode = cloud_profile.get("auth_mode") if isinstance(cloud_profile, dict) else None
+    if auth_mode == "legacy":
+        return False
+    return auth_mode == "oauth"
 
 
 def normalize_connect_state_for_missing_oauth(
     *,
     latest_state: dict[str, object] | None,
     oauth_storage_health: dict[str, object],
+    oauth_required: bool,
 ) -> dict[str, object] | None:
     if latest_state is None:
+        return latest_state
+    if not oauth_required:
         return latest_state
     oauth_state = str(oauth_storage_health.get("state") or "")
     oauth_configured = bool(oauth_storage_health.get("configured"))

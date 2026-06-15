@@ -21,6 +21,7 @@ from .connect_flow import (
     CONNECT_STATUS_COMMAND,
     connect_recovery_command,
     connect_retry_refresh_race_from_reason,
+    connect_state_requires_oauth,
     normalize_connect_state_for_missing_oauth,
     resolve_guard_cloud_repair_detail,
     resolve_guard_cloud_state,
@@ -256,9 +257,14 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
     team_policy_pack = _coerce_payload_dict(store.get_sync_payload("team_policy_pack"))
     sync_summary = _coerce_payload_dict(store.get_sync_payload("sync_summary"))
     last_sync_at = _optional_string(sync_summary.get("synced_at"))
+    effective_connect_state = store.get_effective_guard_connect_state(now=_now())
     latest_connect_state = normalize_connect_state_for_missing_oauth(
-        latest_state=store.get_effective_guard_connect_state(now=_now()),
+        latest_state=effective_connect_state,
         oauth_storage_health=oauth_storage_health,
+        oauth_required=connect_state_requires_oauth(
+            latest_state=effective_connect_state,
+            cloud_profile=cloud_profile,
+        ),
     )
     connect_retry_required = _connect_retry_required(latest_connect_state)
     connect_retry_refresh_race = _connect_retry_refresh_race(latest_connect_state)
