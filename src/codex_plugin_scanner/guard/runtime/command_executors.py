@@ -407,8 +407,7 @@ def _app_remove_confirmation_payload(
         "confirmation_phrase": confirmation_phrase,
         "harness": harness,
         "summary": (
-            "Run the local disconnect command on this machine to confirm "
-            f"removing Guard protection for {harness}."
+            f"Run the local disconnect command on this machine to confirm removing Guard protection for {harness}."
         ),
         "surface": surface,
     }
