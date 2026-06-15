@@ -75,7 +75,7 @@ def _extract_approval_command(approval_row: sqlite3.Row) -> str | None:
         if _is_human_policy_label(str(launch_target)):
             return _sanitize_remembered_command(str(launch_target))
     approval_name = approval_row["artifact_name"]
-    if _is_human_policy_label(str(approval_name)):
+    if approval_name is not None and _is_human_policy_label(str(approval_name)):
         return _sanitize_remembered_command(str(approval_name))
     return None
 

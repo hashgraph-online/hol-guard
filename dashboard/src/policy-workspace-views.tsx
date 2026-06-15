@@ -14,7 +14,7 @@ import {
   HiMiniCheckCircle,
 } from "react-icons/hi2";
 import { Tag, EmptyState } from "./approval-center-primitives";
-import { harnessDisplayName, formatRelativeTime, scopeLabel } from "./approval-center-utils";
+import { harnessDisplayName, formatRelativeTime, scopeLabel, policyActionLabel } from "./approval-center-utils";
 import { guardAwareHref } from "./guard-api";
 import type { GuardPolicyDecision } from "./guard-types";
 import {
@@ -63,7 +63,7 @@ function PolicyActionBadge({ action }: { action: string }) {
   }
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
-      {scopeLabel(action, "policy")}
+      {policyActionLabel(action)}
     </span>
   );
 }

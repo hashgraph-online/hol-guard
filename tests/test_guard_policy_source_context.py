@@ -15,6 +15,7 @@ def _approval_row(
     trigger_summary: str | None = None,
     launch_target: str | None = None,
     workspace: str | None = "/srv/projects/sample-portal",
+    artifact_name: str | None = "tool action",
 ) -> sqlite3.Row:
     connection = sqlite3.connect(":memory:")
     connection.row_factory = sqlite3.Row
@@ -38,7 +39,7 @@ def _approval_row(
         """,
         (
             "req-1",
-            "tool action",
+            artifact_name,
             "Shell command review",
             launch_target,
             workspace,
@@ -103,3 +104,15 @@ def test_approval_backtick_command_wins_over_scanner_receipt_name() -> None:
     assert context["remembered_command"] == "git status"
     assert context["source_receipt_id"] == "receipt-1"
     assert context["workspace_label"] == "sample-portal"
+
+
+def test_null_approval_name_does_not_become_remembered_command() -> None:
+    context = _build_policy_source_context_from_rows(
+        receipt_row=None,
+        inventory_row=None,
+        approval_row=_approval_row(trigger_summary=None, launch_target=None, artifact_name=None),
+        workspace=None,
+        reason="approved in review",
+    )
+    assert context is not None
+    assert context.get("remembered_command") != "None"

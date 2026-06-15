@@ -2357,7 +2357,7 @@ function PolicyActionBadge({ action }) {
       "Block"
     ] });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900", children: scopeLabel(action, "policy") });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900", children: policyActionLabel(action) });
 }
 function resolveFamilyIcon(family) {
   if (family === "package-request") {
