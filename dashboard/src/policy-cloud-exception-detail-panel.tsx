@@ -4,6 +4,7 @@ import { formatRelativeTime, scopeLabel } from "./approval-center-utils";
 import type { GuardCloudException } from "./guard-types";
 import {
   isCloudExceptionAckFailure,
+  isCloudExceptionActive,
   resolveCloudExceptionBlastRadius,
   resolveCloudExceptionExpiryTimestamp,
   resolveCloudExceptionExpiryValue,
@@ -89,6 +90,8 @@ export function PolicyCloudExceptionDetailPanel({
   const headline = resolveCloudExceptionHeadline(exception);
   const blast = resolveCloudExceptionBlastRadius(exception.scope);
   const whyCopy = resolveCloudExceptionWhyCopy(exception);
+  const isActive = isCloudExceptionActive(exception);
+  const isEnforcedLocally = exception.ack_status === "synced";
 
   return (
     <aside
@@ -111,10 +114,10 @@ export function PolicyCloudExceptionDetailPanel({
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
-        <Badge tone="success">Active</Badge>
-        <Tag tone="slate">Enforced locally</Tag>
+        {isActive ? <Badge tone="success">Active</Badge> : <Badge tone="default">Expired</Badge>}
+        {isEnforcedLocally ? <Tag tone="slate">Enforced locally</Tag> : null}
         <Badge tone="success">{exception.effect}</Badge>
-        {isCloudExceptionAckFailure(exception) ? <Badge tone="warning">{ackCopy.label}</Badge> : null}
+        {!isEnforcedLocally ? <Badge tone="warning">{ackCopy.label}</Badge> : null}
       </div>
 
       <div className="space-y-4">

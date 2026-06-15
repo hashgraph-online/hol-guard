@@ -355,7 +355,7 @@ export function PolicyCloudExceptionRequestPanel({
 
             {scope === "publisher" ? (
               <label className="block space-y-1">
-                <span className="text-sm font-medium text-brand-dark">Working directory scope</span>
+                <span className="text-sm font-medium text-brand-dark">Publisher</span>
                 <input
                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
                   value={publisher}
