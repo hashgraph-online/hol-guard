@@ -8925,6 +8925,32 @@ url = http://127.0.0.1:8787/guard-canary
             "reason": "bundle_version_downgrade",
         }
 
+    def test_refresh_cloud_policy_bundle_preserves_bundle_hash_mismatch_reason(self, tmp_path, monkeypatch):
+        home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        store.set_sync_credentials(
+            "https://hol.org/api/guard/receipts/sync",
+            "oauth_access_token_fixture",
+            "2026-04-09T00:00:00Z",
+        )
+
+        def _bundle_rejected(current_store: GuardStore, **_kwargs: object) -> dict[str, object]:
+            current_store.set_sync_payload(
+                "policy_bundle_last_error",
+                {"reason": "bundle_hash_mismatch"},
+                "2026-04-09T00:00:00Z",
+            )
+            return {"synced": True}
+
+        monkeypatch.setattr(guard_commands_module, "sync_receipts", _bundle_rejected)
+        monkeypatch.setattr(guard_commands_module, "sync_supply_chain_bundle", lambda _store: None)
+
+        guard_commands_module._refresh_cloud_policy_bundle(store)
+
+        assert store.get_sync_payload("policy_bundle_last_error") == {
+            "reason": "bundle_hash_mismatch",
+        }
+
     def test_refresh_cloud_policy_bundle_clears_non_bundle_errors_after_success(self, tmp_path, monkeypatch):
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)

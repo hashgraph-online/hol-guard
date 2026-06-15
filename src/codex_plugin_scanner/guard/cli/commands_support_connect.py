@@ -100,6 +100,31 @@ def _synced_policy_payload(store: GuardStore) -> dict[str, object] | None:
     payload = store.get_sync_payload("policy")
     return payload if isinstance(payload, dict) else None
 
+
+_PERSISTED_POLICY_BUNDLE_REJECTION_REASONS = frozenset(
+    {
+        "bundle_hash_mismatch",
+        "bundle_version_downgrade",
+        "invalid_acknowledgements",
+        "invalid_bundle_hash",
+        "invalid_bundle_version",
+        "invalid_cloud_exceptions",
+        "invalid_expires_at",
+        "invalid_issued_at",
+        "invalid_policy_bundle",
+        "invalid_policy_defaults",
+        "invalid_rollout_state",
+        "invalid_rules",
+        "invalid_verifier",
+        "invalid_workspace_id",
+        "missing_required_field",
+        "payload_hash_mismatch",
+        "unsupported_contract_version",
+        "unsupported_daemon_version",
+        "wrong_workspace",
+    }
+)
+
 def _refresh_cloud_policy_bundle(store: GuardStore) -> None:
     if store.get_cloud_sync_profile() is None:
         return
@@ -146,11 +171,7 @@ def _refresh_cloud_policy_bundle(store: GuardStore) -> None:
         if isinstance(policy_bundle_last_error, dict)
         else None
     )
-    if policy_bundle_rejection_reason not in {
-        "bundle_version_downgrade",
-        "invalid_policy_bundle",
-        "unsupported_daemon_version",
-    }:
+    if policy_bundle_rejection_reason not in _PERSISTED_POLICY_BUNDLE_REJECTION_REASONS:
         store.set_sync_payload("policy_bundle_last_error", {}, now)
 
 def _guard_cloud_urls_for_connect(connect_url: str) -> dict[str, str]:

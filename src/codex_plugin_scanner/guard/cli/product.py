@@ -265,6 +265,8 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
         sync_configured=cloud_profile is not None,
         sync_completed=bool(sync_summary),
         remote_payload_active=remote_payload_active,
+        oauth_repair_required=oauth_repair_required,
+        connect_retry_required=connect_retry_required,
     )
     return {
         "cloud_state": cloud_state,
@@ -276,6 +278,7 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
             oauth_repair_required=oauth_repair_required,
             connect_retry_required=connect_retry_required,
             connect_retry_refresh_race=connect_retry_refresh_race,
+            shared_proof_recorded=bool(sync_summary) or remote_payload_active,
         ),
         "sync_url": sync_url,
         "dashboard_url": dashboard_url,
@@ -469,9 +472,20 @@ def _resolve_guard_urls(sync_url: str | None) -> tuple[str, str, str, str]:
     )
 
 
-def _resolve_cloud_state(*, sync_configured: bool, sync_completed: bool, remote_payload_active: bool) -> str:
+def _resolve_cloud_state(
+    *,
+    sync_configured: bool,
+    sync_completed: bool,
+    remote_payload_active: bool,
+    oauth_repair_required: bool = False,
+    connect_retry_required: bool = False,
+) -> str:
     if not sync_configured:
         return "local_only"
+    if oauth_repair_required:
+        return "local_only"
+    if connect_retry_required:
+        return "local_only" if sync_completed or remote_payload_active else "paired_waiting"
     if not sync_completed and not remote_payload_active:
         return "paired_waiting"
     return "paired_active"
@@ -494,6 +508,7 @@ def _cloud_state_detail(
     oauth_repair_required: bool = False,
     connect_retry_required: bool = False,
     connect_retry_refresh_race: bool = False,
+    shared_proof_recorded: bool = False,
 ) -> str:
     if oauth_repair_required:
         return (
@@ -506,6 +521,11 @@ def _cloud_state_detail(
             f"race. Run `{GUARD_COMMAND} connect` or reopen {connect_url} when you want shared proof restored."
         )
     if connect_retry_required:
+        if shared_proof_recorded:
+            return (
+                "Guard Cloud connection on this machine needs repair before shared proof can resume. "
+                f"Run `{GUARD_COMMAND} connect` or reopen {connect_url} to restore sync."
+            )
         return (
             "Guard Cloud connection on this machine needs repair before the first shared proof can land. "
             f"Run `{GUARD_COMMAND} connect` or reopen {connect_url} to repair the first sync."
