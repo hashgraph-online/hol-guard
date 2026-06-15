@@ -17,7 +17,6 @@ from .hook_python import resolve_guard_hook_python
 from .mcp_servers import (
     GUARD_MCP_COMPANION_PREFIX,
     ManagedMcpServer,
-    is_guard_mcp_companion_name,
     is_guard_proxy_command,
     is_verified_guard_mcp_companion,
     managed_stdio_servers,
