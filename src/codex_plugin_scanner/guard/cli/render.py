@@ -738,6 +738,7 @@ def _render_policies(console: Console, payload: dict[str, object]) -> None:
             ("Unsigned", "missing_integrity"),
             ("Tampered", "tampered"),
             ("Unknown key", "unknown_key"),
+            ("Rolled back", "rollback_detected"),
             ("Degraded", "degraded_mode"),
         ):
             body.add_row(label, str(int(counts.get(key, 0) or 0)))
