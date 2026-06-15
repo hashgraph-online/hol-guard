@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, type ChangeEvent } from "react";
-import { HiMiniChevronDown, HiMiniChevronRight, HiMiniChevronUp } from "react-icons/hi2";
+import { HiMiniChevronDown, HiMiniChevronUp, HiMiniMagnifyingGlass } from "react-icons/hi2";
 import { Badge, EmptyState, Tag } from "./approval-center-primitives";
 import { formatRelativeTime, harnessDisplayName, scopeLabel } from "./approval-center-utils";
 import type { GuardCloudException } from "./guard-types";
@@ -26,45 +26,23 @@ type PolicyCloudExceptionsListProps = {
   onActionFilterChange: (value: string) => void;
 };
 
-type GroupSectionProps = {
-  title: string;
-  description: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-};
+const EXCEPTION_ROW_GRID =
+  "grid grid-cols-[minmax(0,1fr)] items-center gap-x-2 gap-y-2 border-b border-slate-100 px-3 py-2.5 last:border-0 hover:bg-slate-50/80 md:grid-cols-[72px_minmax(140px,1.3fr)_88px_72px_36px_36px_88px_80px_72px]";
 
-function GroupSection({ title, description, defaultOpen = true, children }: GroupSectionProps) {
-  const [open, setOpen] = useState(defaultOpen);
-  const handleToggle = useCallback(() => {
-    setOpen((current) => !current);
-  }, []);
+const EXCEPTION_HEADER_GRID =
+  "hidden border-b border-slate-100 bg-slate-50/80 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:grid md:grid-cols-[72px_minmax(140px,1.3fr)_88px_72px_36px_36px_88px_80px_72px] md:gap-x-2";
 
-  return (
-    <section className="rounded-2xl border border-slate-100 bg-white shadow-sm" aria-label={title}>
-      <button
-        type="button"
-        onClick={handleToggle}
-        className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left"
-        aria-expanded={open}
-        aria-label={`${title} group`}
-      >
-        <div>
-          <h3 className="text-sm font-semibold text-brand-dark">{title}</h3>
-          <p className="mt-0.5 text-xs text-slate-500">{description}</p>
-        </div>
-        {open ? (
-          <HiMiniChevronUp className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
-        ) : (
-          <HiMiniChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
-        )}
-      </button>
-      {open ? (
-        <div className="space-y-2 border-t border-slate-100 px-3 py-3" role="list">
-          {children}
-        </div>
-      ) : null}
-    </section>
-  );
+function resolveAckStatusLabel(item: GuardCloudException): { label: string; tone: "success" | "warning" | "default" } {
+  if (item.ack_status === "synced") {
+    return { label: "Ack OK", tone: "success" };
+  }
+  if (isCloudExceptionAckFailure(item)) {
+    return { label: "Ack issue", tone: "warning" };
+  }
+  if (item.ack_status === "pending") {
+    return { label: "Pending", tone: "default" };
+  }
+  return { label: "Unknown", tone: "default" };
 }
 
 function PersonAvatar({ label }: { label: string | null | undefined }) {
@@ -80,7 +58,7 @@ function PersonAvatar({ label }: { label: string | null | undefined }) {
   );
 }
 
-function ExceptionCard({
+function ExceptionTableRow({
   item,
   selected,
   onSelect,
@@ -89,13 +67,10 @@ function ExceptionCard({
   selected: boolean;
   onSelect: (item: GuardCloudException) => void;
 }) {
-  const handleSelect = useCallback(() => {
-    onSelect(item);
-  }, [item, onSelect]);
-
-  const expiryTimestamp = resolveCloudExceptionExpiryTimestamp(item);
+  const handleSelect = useCallback(() => onSelect(item), [item, onSelect]);
   const expiryValue = resolveCloudExceptionExpiryValue(item);
   const headline = resolveCloudExceptionHeadline(item);
+  const ackStatus = resolveAckStatusLabel(item);
 
   return (
     <button
@@ -103,84 +78,155 @@ function ExceptionCard({
       role="listitem"
       onClick={handleSelect}
       aria-pressed={selected}
-      className={`min-w-0 w-full rounded-xl border px-3.5 py-3 text-left transition ${
-        selected
-          ? "border-brand-blue/30 bg-brand-blue/[0.04] ring-1 ring-brand-blue/20"
-          : "border-slate-100 bg-white hover:border-brand-blue/20 hover:bg-brand-blue/[0.02]"
+      className={`min-w-0 w-full text-left transition ${EXCEPTION_ROW_GRID} ${
+        selected ? "bg-brand-blue/[0.04] ring-1 ring-inset ring-brand-blue/20" : ""
       }`}
     >
-      <div className="flex items-start gap-3">
-        <div className="flex -space-x-2 pt-0.5">
-          <PersonAvatar label={item.owner} />
-          <PersonAvatar label={item.approver} />
+      <div className="md:col-start-1">
+        <Badge tone="success">{item.effect}</Badge>
+      </div>
+      <div className="min-w-0 md:col-start-2">
+        <p className="truncate text-sm font-semibold text-brand-dark">{headline}</p>
+        <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500 md:hidden">
+          <span>{scopeLabel(item.scope, "policy")}</span>
+          {item.harness ? <span>{harnessDisplayName(item.harness)}</span> : null}
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="success">{item.effect}</Badge>
-            <Tag tone="slate">{scopeLabel(item.scope, "policy")}</Tag>
-            {item.harness ? <Tag tone="slate">{harnessDisplayName(item.harness)}</Tag> : null}
-            {isCloudExceptionAckFailure(item) ? <Badge tone="warning">Ack issue</Badge> : null}
-          </div>
-          <p className="mt-2 break-words text-sm font-semibold text-brand-dark">{headline}</p>
-          <p className="mt-1 break-words text-xs text-slate-500">
-            Owner {resolvePersonDisplayLabel(item.owner)}
-            {expiryTimestamp && expiryValue ? ` · Expires ${formatRelativeTime(expiryValue)}` : null}
-            {item.last_used_at ? ` · Last used ${formatRelativeTime(item.last_used_at)}` : null}
-          </p>
-        </div>
-        <HiMiniChevronRight
-          className={`mt-1 h-4 w-4 shrink-0 ${selected ? "text-brand-blue" : "text-slate-300"}`}
-          aria-hidden="true"
-        />
+      </div>
+      <div className="hidden md:col-start-3 md:block">
+        <Tag tone="blue">{scopeLabel(item.scope, "policy")}</Tag>
+      </div>
+      <div className="hidden truncate text-sm text-brand-dark md:col-start-4 md:block">
+        {item.harness ? harnessDisplayName(item.harness) : "—"}
+      </div>
+      <div className="hidden md:col-start-5 md:flex md:justify-center">
+        <PersonAvatar label={item.owner} />
+      </div>
+      <div className="hidden md:col-start-6 md:flex md:justify-center">
+        <PersonAvatar label={item.approver} />
+      </div>
+      <div className="hidden whitespace-nowrap text-xs text-slate-500 md:col-start-7 md:block">
+        {expiryValue ? formatRelativeTime(expiryValue) : "—"}
+      </div>
+      <div className="hidden whitespace-nowrap text-xs text-slate-500 md:col-start-8 md:block">
+        {item.last_used_at ? formatRelativeTime(item.last_used_at) : "—"}
+      </div>
+      <div className="hidden md:col-start-9 md:block">
+        <Badge tone={ackStatus.tone}>{ackStatus.label}</Badge>
       </div>
     </button>
   );
 }
 
-function PendingRequestCard({ item }: { item: GuardCloudExceptionRequestItem }) {
+function PendingRequestRow({ item }: { item: GuardCloudExceptionRequestItem }) {
   return (
-    <article className="min-w-0 rounded-xl border border-amber-100 bg-amber-50/40 px-3.5 py-3" role="listitem">
-      <div className="flex flex-wrap items-center gap-2">
+    <article className={`${EXCEPTION_ROW_GRID} bg-amber-50/30`} role="listitem">
+      <div className="md:col-start-1">
         <Badge tone="warning">Pending</Badge>
-        <Tag tone="slate">{scopeLabel(item.scope, "policy")}</Tag>
       </div>
-      <p className="mt-2 break-words text-sm font-semibold text-brand-dark">{item.reason}</p>
-      <p className="mt-1 break-words text-xs text-slate-600">
-        Requested by {resolvePersonDisplayLabel(item.owner)} · expires{" "}
-        {formatRelativeTime(item.requestedExpiresAt)}
-      </p>
+      <div className="min-w-0 md:col-start-2 md:col-span-8">
+        <p className="break-words text-sm font-semibold text-brand-dark">{item.reason}</p>
+        <p className="mt-0.5 text-xs text-slate-600">
+          {scopeLabel(item.scope, "policy")} · {resolvePersonDisplayLabel(item.owner)} · expires{" "}
+          {formatRelativeTime(item.requestedExpiresAt)}
+        </p>
+      </div>
     </article>
   );
 }
 
+function GroupSection({
+  title,
+  count,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  count: number;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const handleToggle = useCallback(() => setOpen((current) => !current), []);
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm" aria-label={title}>
+      <button
+        type="button"
+        onClick={handleToggle}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+        aria-expanded={open}
+      >
+        <h3 className="text-sm font-semibold text-brand-dark">
+          {title} ({count})
+        </h3>
+        {open ? (
+          <HiMiniChevronUp className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+        ) : (
+          <HiMiniChevronDown className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+        )}
+      </button>
+      {open ? (
+        <div className="border-t border-slate-100">
+          <div className={EXCEPTION_HEADER_GRID} aria-hidden="true">
+            <span>Action</span>
+            <span>Description</span>
+            <span>Scope</span>
+            <span>App</span>
+            <span className="text-center">Owner</span>
+            <span className="text-center">Approver</span>
+            <span>Expires</span>
+            <span>Last used</span>
+            <span>Status</span>
+          </div>
+          <div role="list">{children}</div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function ExceptionFilters({
+  searchQuery,
+  onSearchChange,
   scopeFilter,
   actionFilter,
   onScopeFilterChange,
   onActionFilterChange,
 }: {
+  searchQuery: string;
+  onSearchChange: (value: string) => void;
   scopeFilter: string;
   actionFilter: string;
   onScopeFilterChange: (value: string) => void;
   onActionFilterChange: (value: string) => void;
 }) {
+  const handleSearchChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => onSearchChange(event.target.value),
+    [onSearchChange],
+  );
   const handleScopeChange = useCallback(
-    (event: ChangeEvent<HTMLSelectElement>) => {
-      onScopeFilterChange(event.target.value);
-    },
+    (event: ChangeEvent<HTMLSelectElement>) => onScopeFilterChange(event.target.value),
     [onScopeFilterChange],
   );
   const handleActionChange = useCallback(
-    (event: ChangeEvent<HTMLSelectElement>) => {
-      onActionFilterChange(event.target.value);
-    },
+    (event: ChangeEvent<HTMLSelectElement>) => onActionFilterChange(event.target.value),
     [onActionFilterChange],
   );
 
   return (
-    <div className="flex flex-wrap gap-2">
-      <label className="text-sm text-slate-600">
-        <span className="sr-only">Filter by scope</span>
+    <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+      <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2">
+        <HiMiniMagnifyingGlass className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+        <input
+          type="search"
+          placeholder="Search exceptions…"
+          value={searchQuery}
+          onChange={handleSearchChange}
+          aria-label="Search exceptions"
+          className="w-full bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none"
+        />
+      </div>
+      <div className="flex flex-wrap gap-2">
         <select
           value={scopeFilter}
           onChange={handleScopeChange}
@@ -188,15 +234,12 @@ function ExceptionFilters({
           aria-label="All scopes"
         >
           <option value="all">All scopes</option>
-          <option value="artifact">Artifact</option>
-          <option value="publisher">Publisher</option>
-          <option value="harness">Harness</option>
-          <option value="workspace">Workspace</option>
-          <option value="global">Global</option>
+          <option value="artifact">Once</option>
+          <option value="publisher">This cwd</option>
+          <option value="workspace">This project</option>
+          <option value="harness">This harness</option>
+          <option value="global">Team policy</option>
         </select>
-      </label>
-      <label className="text-sm text-slate-600">
-        <span className="sr-only">Filter by action</span>
         <select
           value={actionFilter}
           onChange={handleActionChange}
@@ -206,19 +249,39 @@ function ExceptionFilters({
           <option value="all">All actions</option>
           <option value="allow">Allow</option>
         </select>
-      </label>
+      </div>
     </div>
   );
 }
 
-function matchesFilters(item: GuardCloudException, scopeFilter: string, actionFilter: string): boolean {
+function matchesFilters(
+  item: GuardCloudException,
+  scopeFilter: string,
+  actionFilter: string,
+  searchQuery: string,
+): boolean {
   if (scopeFilter !== "all" && item.scope !== scopeFilter) {
     return false;
   }
   if (actionFilter !== "all" && item.effect !== actionFilter) {
     return false;
   }
-  return true;
+  const query = searchQuery.trim().toLowerCase();
+  if (!query) {
+    return true;
+  }
+  const haystack = [
+    resolveCloudExceptionHeadline(item),
+    item.owner,
+    item.approver,
+    item.harness,
+    item.scope,
+    item.source_receipt_id,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(query);
 }
 
 export function PolicyCloudExceptionsListSkeleton() {
@@ -243,9 +306,12 @@ export function PolicyCloudExceptionsList({
   onScopeFilterChange,
   onActionFilterChange,
 }: PolicyCloudExceptionsListProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+
   const filterActive = useCallback(
-    (items: GuardCloudException[]) => items.filter((item) => matchesFilters(item, scopeFilter, actionFilter)),
-    [scopeFilter, actionFilter],
+    (items: GuardCloudException[]) =>
+      items.filter((item) => matchesFilters(item, scopeFilter, actionFilter, searchQuery)),
+    [scopeFilter, actionFilter, searchQuery],
   );
 
   const expiringSoonIds = useMemo(() => new Set(expiringSoon.map((item) => item.id)), [expiringSoon]);
@@ -278,6 +344,8 @@ export function PolicyCloudExceptionsList({
   return (
     <div className="space-y-3" aria-label="Cloud exception groups">
       <ExceptionFilters
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
         scopeFilter={scopeFilter}
         actionFilter={actionFilter}
         onScopeFilterChange={onScopeFilterChange}
@@ -287,19 +355,15 @@ export function PolicyCloudExceptionsList({
       {!hasFilteredRows ? (
         <EmptyState
           title="No exceptions match these filters"
-          body="Try a broader scope or action filter to see synced Cloud exceptions."
+          body="Try a broader search, scope, or action filter to see synced Cloud exceptions."
           tone="teach"
         />
       ) : (
         <>
           {activeWithoutExpiringGroup.length > 0 ? (
-            <GroupSection
-              title="Active on this device"
-              description="Synced Cloud risk acceptances currently enforced locally."
-              defaultOpen
-            >
+            <GroupSection title="Active on this device" count={activeWithoutExpiringGroup.length} defaultOpen>
               {activeWithoutExpiringGroup.map((item) => (
-                <ExceptionCard
+                <ExceptionTableRow
                   key={item.id}
                   item={item}
                   selected={selectedExceptionId === item.id}
@@ -310,25 +374,17 @@ export function PolicyCloudExceptionsList({
           ) : null}
 
           {pending.length > 0 ? (
-            <GroupSection
-              title="Pending in Guard Cloud"
-              description="Requests waiting for Cloud approval before they can sync to this device."
-              defaultOpen
-            >
+            <GroupSection title="Pending in Guard Cloud" count={pending.length} defaultOpen={false}>
               {pending.map((item) => (
-                <PendingRequestCard key={item.requestId} item={item} />
+                <PendingRequestRow key={item.requestId} item={item} />
               ))}
             </GroupSection>
           ) : null}
 
           {filteredExpiringSoon.length > 0 ? (
-            <GroupSection
-              title="Expiring soon"
-              description="Active acceptances nearing expiry. Renew or revoke them in Guard Cloud."
-              defaultOpen
-            >
+            <GroupSection title="Expiring soon" count={filteredExpiringSoon.length} defaultOpen={false}>
               {filteredExpiringSoon.map((item) => (
-                <ExceptionCard
+                <ExceptionTableRow
                   key={`expiring-${item.id}`}
                   item={item}
                   selected={selectedExceptionId === item.id}

@@ -14,6 +14,8 @@ const panelSource = readFileSync(join(here, "policy-cloud-exception-request-pane
 const guardApiSource = readFileSync(join(here, "guard-api.ts"), "utf8");
 
 assert(tabSource.includes("PolicyCloudExceptionRequestPanel"), "cloud exceptions tab mounts request panel");
+assert(panelSource.includes("handleNext"), "request panel supports wizard next step");
+assert(panelSource.includes("handleBack"), "request panel supports wizard back step");
 assert(panelSource.includes("createCloudExceptionRequest"), "request panel submits through Guard Cloud proxy");
 assert(panelSource.includes("sourceReceiptId"), "request panel anchors to source receipt");
 assert(!panelSource.includes("savePolicyDecision"), "request panel must not save local policy decisions");
