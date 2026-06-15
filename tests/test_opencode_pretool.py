@@ -431,6 +431,30 @@ def test_refresh_opencode_pretool_plugin_handles_runtime_error(
     assert "Could not inspect OpenCode pretool plugin during update" in note
 
 
+def test_refresh_opencode_pretool_plugin_handles_install_runtime_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.cli import update_commands
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    ctx = _ctx(tmp_path)
+    store = GuardStore(ctx.guard_home)
+    store.set_managed_install("opencode", True, None, {}, "2026-06-04T00:00:00+00:00")
+    install_pretool_plugin(ctx)
+    global_plugin_path(ctx).write_text("// stale plugin\n", encoding="utf-8")
+
+    def _raise_runtime_error(_context: HarnessContext) -> dict[str, object]:
+        raise RuntimeError("write failed")
+
+    monkeypatch.setattr(update_commands, "install_pretool_plugin", _raise_runtime_error)
+
+    note = update_commands._refresh_opencode_pretool_plugin(context=ctx, store=store)
+
+    assert note is not None
+    assert "Could not refresh OpenCode pretool plugin during update" in note
+
+
 def test_opencode_verification_reports_missing_plugin(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.store import GuardStore
 
