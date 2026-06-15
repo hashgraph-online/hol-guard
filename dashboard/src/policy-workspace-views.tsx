@@ -100,9 +100,6 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, cloudVariant = false
       <div className="min-w-0 md:col-start-3">
         <p className="text-sm font-semibold leading-snug text-brand-dark">{title}</p>
         {display.kindLine ? <p className="mt-0.5 text-xs text-slate-500">{display.kindLine}</p> : null}
-        {display.pathLine ? (
-          <p className="mt-0.5 break-all font-mono text-[11px] leading-relaxed text-slate-500">{display.pathLine}</p>
-        ) : null}
         <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600 md:hidden">
           <span>{resolvePolicyRowSourceLabel(policy)}</span>
           <span>{scopeTag}</span>
@@ -118,8 +115,8 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, cloudVariant = false
         <Tag tone="blue">{scopeTag}</Tag>
       </div>
 
-      <div className="hidden text-sm text-brand-dark md:col-start-6 md:block">
-        {harnessDisplayName(policy.harness)}
+      <div className="hidden text-sm md:col-start-6 md:block">
+        <span className="font-medium text-brand-blue">{harnessDisplayName(policy.harness)}</span>
       </div>
 
       <div className="hidden whitespace-nowrap text-xs text-slate-500 md:col-start-7 md:block">
@@ -226,7 +223,7 @@ export function PolicyRuleTable({
         <div className={RULE_HEADER_CLASS} aria-hidden="true">
           <span />
           <span>Action</span>
-          <span>Description</span>
+          <span>Rule description</span>
           <span>Source</span>
           <span>Scope</span>
           <span>{cloudVariant ? "Applies to" : "Harness"}</span>

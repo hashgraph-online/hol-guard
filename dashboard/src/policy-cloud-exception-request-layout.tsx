@@ -1,13 +1,27 @@
 import type { ReactNode } from "react";
-import { HiMiniCheck } from "react-icons/hi2";
+import {
+  HiMiniBeaker,
+  HiMiniCheck,
+  HiMiniClipboardDocument,
+  HiMiniCodeBracket,
+  HiMiniDocumentText,
+  HiMiniFolder,
+  HiMiniInformationCircle,
+  HiMiniLockClosed,
+  HiMiniShieldCheck,
+  HiMiniUsers,
+} from "react-icons/hi2";
 import { harnessDisplayName, scopeLabel } from "./approval-center-utils";
+import { guardAwareHref } from "./guard-api";
 import type { GuardCloudExceptionRequestCreateInput } from "./guard-api";
 import type { GuardReceipt } from "./guard-types";
-import { resolveCloudExceptionBlastRadius } from "./policy-cloud-exceptions-utils";
+import { resolveRequestScopeBlastRadius } from "./policy-cloud-exceptions-utils";
 
 export const REQUEST_STEPS = ["Source", "Scope", "Guardrails", "Submit"] as const;
 
 export type RequestStep = (typeof REQUEST_STEPS)[number];
+
+export type RequestScopeValue = GuardCloudExceptionRequestCreateInput["scope"] | "team-policy";
 
 type RequestStepperProps = {
   activeStep: RequestStep;
@@ -53,7 +67,7 @@ export function RequestStepper({ activeStep }: RequestStepperProps) {
 }
 
 const SCOPE_CARD_TONES: Record<
-  ReturnType<typeof resolveCloudExceptionBlastRadius>["tone"],
+  ReturnType<typeof resolveRequestScopeBlastRadius>["tone"],
   string
 > = {
   narrow: "border-emerald-200 bg-emerald-50/70 hover:border-emerald-300",
@@ -61,39 +75,53 @@ const SCOPE_CARD_TONES: Record<
   wide: "border-rose-200 bg-rose-50/50 hover:border-rose-300",
 };
 
+const SCOPE_ICONS: Record<RequestScopeValue, typeof HiMiniCodeBracket> = {
+  artifact: HiMiniCodeBracket,
+  publisher: HiMiniFolder,
+  workspace: HiMiniFolder,
+  harness: HiMiniBeaker,
+  "team-policy": HiMiniUsers,
+};
+
 type ScopeCardOption = {
-  value: GuardCloudExceptionRequestCreateInput["scope"];
+  value: RequestScopeValue;
   label: string;
   description: string;
+  disabled?: boolean;
 };
 
 type ScopeCardGridProps = {
   options: ScopeCardOption[];
-  value: GuardCloudExceptionRequestCreateInput["scope"];
-  onChange: (value: GuardCloudExceptionRequestCreateInput["scope"]) => void;
+  value: RequestScopeValue;
+  onChange: (value: RequestScopeValue) => void;
 };
 
 export function ScopeCardGrid({ options, value, onChange }: ScopeCardGridProps) {
   return (
-    <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Exception scope">
+    <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="radiogroup" aria-label="Exception scope">
       {options.map((option) => {
-        const blast = resolveCloudExceptionBlastRadius(option.value);
+        const blast = resolveRequestScopeBlastRadius(option.value);
         const selected = value === option.value;
+        const Icon = SCOPE_ICONS[option.value];
         return (
           <button
             key={option.value}
             type="button"
             role="radio"
             aria-checked={selected}
+            disabled={option.disabled}
             onClick={() => onChange(option.value)}
-            className={`rounded-xl border p-3 text-left transition ${
+            className={`min-w-[148px] shrink-0 rounded-xl border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
               selected
                 ? `${SCOPE_CARD_TONES[blast.tone]} ring-2 ring-brand-blue/30`
-                : `${SCOPE_CARD_TONES[blast.tone]} opacity-90`
+                : `${SCOPE_CARD_TONES[blast.tone]} opacity-95`
             }`}
           >
-            <p className="text-sm font-semibold text-brand-dark">{option.label}</p>
-            <p className="mt-1 text-xs text-slate-600">{option.description}</p>
+            <div className="flex items-center gap-2">
+              <Icon className="h-4 w-4 text-slate-500" aria-hidden="true" />
+              <p className="text-sm font-semibold text-brand-dark">{option.label}</p>
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-slate-600">{option.description}</p>
             <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-slate-500">
               Blast radius · {blast.label}
             </p>
@@ -105,7 +133,7 @@ export function ScopeCardGrid({ options, value, onChange }: ScopeCardGridProps) 
 }
 
 type SafetyPreviewProps = {
-  scope: GuardCloudExceptionRequestCreateInput["scope"];
+  scope: RequestScopeValue;
   harness: string;
   artifactId: string;
   publisher: string;
@@ -113,6 +141,24 @@ type SafetyPreviewProps = {
   reason: string;
   expiresLabel: string;
 };
+
+const SAFETY_ITEMS = [
+  {
+    icon: HiMiniInformationCircle,
+    title: "Requires Cloud approval",
+    detail: "Your request will be reviewed and approved in Guard Cloud.",
+  },
+  {
+    icon: HiMiniLockClosed,
+    title: "Requires MFA for this scope",
+    detail: "Broad scopes require step-up authentication.",
+  },
+  {
+    icon: HiMiniShieldCheck,
+    title: "Signed bundle enforcement",
+    detail: "Local daemon will enforce only after receiving signed bundle ack.",
+  },
+] as const;
 
 export function SafetyPreview({
   scope,
@@ -123,7 +169,7 @@ export function SafetyPreview({
   reason,
   expiresLabel,
 }: SafetyPreviewProps) {
-  const blast = resolveCloudExceptionBlastRadius(scope);
+  const blast = resolveRequestScopeBlastRadius(scope);
   const scopeTarget =
     scope === "artifact"
       ? artifactId || "Selected artifact"
@@ -133,39 +179,37 @@ export function SafetyPreview({
           ? harness
           : scope === "workspace"
             ? workingDirectory || "Project folder"
-            : "Global";
+            : "Team policy";
 
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Safety preview</p>
-      <dl className="mt-3 space-y-3 text-sm">
-        <div>
-          <dt className="text-xs text-slate-500">Scope</dt>
-          <dd className="font-medium text-brand-dark">{scopeLabel(scope, "policy")}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-slate-500">Target</dt>
-          <dd className="break-all font-medium text-brand-dark">{scopeTarget}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-slate-500">Blast radius</dt>
-          <dd className="text-brand-dark">{blast.label}</dd>
-          <dd className="text-xs text-slate-600">{blast.detail}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-slate-500">Expires</dt>
-          <dd className="text-brand-dark">{expiresLabel}</dd>
-        </div>
-        {reason.trim() ? (
-          <div>
-            <dt className="text-xs text-slate-500">Reason</dt>
-            <dd className="text-brand-dark">{reason.trim()}</dd>
-          </div>
-        ) : null}
-      </dl>
-      <p className="mt-4 text-xs leading-relaxed text-slate-500">
-        Guard Cloud must approve this request before it syncs as a signed bundle entry on this device.
-      </p>
+      <div className="mt-3">
+        <p className="text-xs text-slate-500">Blast radius</p>
+        <p className="mt-1 text-sm font-semibold text-brand-dark">{blast.label}</p>
+        <p className="text-xs text-slate-600">{scopeTarget}</p>
+      </div>
+      <ul className="mt-4 space-y-3">
+        {SAFETY_ITEMS.map((item) => {
+          const Icon = item.icon;
+          return (
+            <li key={item.title} className="flex gap-2.5">
+              <Icon className="mt-0.5 h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-medium text-brand-dark">{item.title}</p>
+                <p className="text-xs leading-relaxed text-slate-600">{item.detail}</p>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {reason.trim() ? (
+        <p className="mt-4 text-xs leading-relaxed text-slate-500">
+          Reason: {reason.trim().slice(0, 120)}
+          {reason.trim().length > 120 ? "…" : ""}
+        </p>
+      ) : null}
+      <p className="mt-3 text-xs text-slate-500">Expires {expiresLabel}</p>
     </div>
   );
 }
@@ -175,33 +219,77 @@ type SourceReceiptSummaryProps = {
 };
 
 export function SourceReceiptSummary({ receipt }: SourceReceiptSummaryProps) {
+  const evidenceHref = `/evidence?search=${encodeURIComponent(receipt.receipt_id)}`;
+  const artifactLabel = receipt.artifact_name ?? receipt.artifact_id;
+
+  const handleCopyArtifact = () => {
+    if (!receipt.artifact_id || !navigator.clipboard?.writeText) {
+      return;
+    }
+    void navigator.clipboard.writeText(receipt.artifact_id);
+  };
+
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Source: approval record</p>
-      <p className="mt-2 text-sm font-semibold text-brand-dark">
-        {receipt.artifact_name ?? receipt.artifact_id}
-      </p>
-      <p className="mt-1 text-xs text-slate-600">
-        {harnessDisplayName(receipt.harness)} · {receipt.receipt_id}
-      </p>
+      <div className="mt-3 flex items-start gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-200/80 text-slate-600">
+          <HiMiniCodeBracket className="h-4 w-4" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-brand-dark">{artifactLabel}</p>
+          <p className="mt-1 text-xs text-slate-600">
+            {harnessDisplayName(receipt.harness)} · Reviewed recently
+          </p>
+        </div>
+      </div>
+      <div className="mt-4 space-y-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Artifact ID</p>
+          <div className="mt-1 flex items-center gap-1.5">
+            <p className="truncate font-mono text-xs text-brand-dark">{receipt.artifact_id}</p>
+            <button
+              type="button"
+              onClick={handleCopyArtifact}
+              className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-brand-dark"
+              aria-label="Copy artifact ID"
+            >
+              <HiMiniClipboardDocument className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Evidence receipt</p>
+          <a
+            href={guardAwareHref(evidenceHref)}
+            className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-brand-blue hover:underline"
+          >
+            <HiMiniDocumentText className="h-3.5 w-3.5" aria-hidden="true" />
+            {receipt.receipt_id}
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
 
 type ResultPreviewProps = {
-  scope: GuardCloudExceptionRequestCreateInput["scope"];
+  scope: RequestScopeValue;
   harness: string;
   expiresLabel: string;
 };
 
 export function ResultPreview({ scope, harness, expiresLabel }: ResultPreviewProps) {
   const showHarness = (scope === "artifact" || scope === "harness") && harness.trim();
+  const actionLabel =
+    scope === "artifact" ? "this exact action" : scope === "workspace" ? "matching actions in this project" : scopeLabel(scope === "team-policy" ? "global" : scope, "policy");
+
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Result preview</p>
       <p className="mt-3 text-sm leading-relaxed text-brand-dark">
-        If approved in Guard Cloud, Guard will apply this exception for {scopeLabel(scope, "policy")}
-        {showHarness ? ` in ${harnessDisplayName(harness)}` : ""} until {expiresLabel}.
+        If approved in Guard Cloud, Guard will allow {actionLabel}
+        {showHarness ? ` for ${harnessDisplayName(harness)}` : ""} until {expiresLabel}.
       </p>
     </div>
   );

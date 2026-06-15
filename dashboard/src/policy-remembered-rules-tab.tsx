@@ -122,6 +122,9 @@ export function PolicyRememberedRulesTab({
               aria-label="Search policies"
               className="w-full bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none"
             />
+            <kbd className="hidden shrink-0 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 sm:inline">
+              ⌘K
+            </kbd>
           </div>
           <div className="flex flex-wrap gap-2">
             <select
