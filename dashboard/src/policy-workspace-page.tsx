@@ -20,6 +20,7 @@ export function PolicyWorkspacePage(props: {
   onOpenSettings: () => void;
   onOpenInbox: () => void;
   onRefreshPolicies: () => void;
+  onNavigate?: (pathname: string) => void;
 }) {
   const [activeView, setActiveView] = useState<PolicyPageView>("rules");
   const [reloading, setReloading] = useState(false);
@@ -77,6 +78,7 @@ export function PolicyWorkspacePage(props: {
           onExceptionRequestOpenChange={setExceptionRequestOpen}
           onReloadPolicy={handleReloadPolicy}
           reloadingPolicy={reloading}
+          onNavigate={props.onNavigate}
         />
       </Suspense>
     </div>

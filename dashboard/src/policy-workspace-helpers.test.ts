@@ -4,8 +4,13 @@ import {
   resolvePolicyDisplay,
   resolvePolicyEvidenceHref,
   resolvePolicyMatcherFamily,
+  resolvePolicyRowFolder,
+  resolvePolicyRowFrequency,
+  resolvePolicyRowSubtitle,
+  resolvePolicyRowTitle,
   resolveWorkspaceLabel,
   formatPolicyScopePath,
+  isScannerGeneratedPolicyLabel,
 } from "./policy-workspace-helpers";
 import { scopeLabel } from "./approval-center-utils";
 
@@ -58,6 +63,8 @@ assert(display.headline.toLowerCase().includes("package install"), "POL-H6: fall
 const evidenceHref = resolvePolicyEvidenceHref(enrichedPackageRule);
 assert(evidenceHref.includes("selected=receipt-abc123"), "POL-H7: evidence link selects source receipt");
 assert(evidenceHref.includes("search=receipt-abc123"), "POL-H8: evidence link searches receipt id");
+assert(evidenceHref.includes("harness=opencode"), "POL-H8b: evidence link scopes harness filter");
+assert(evidenceHref.includes("view=actions"), "POL-H8c: evidence link opens actions view");
 
 const hashOnlyHref = resolvePolicyEvidenceHref(
   basePolicy({
@@ -67,8 +74,25 @@ const hashOnlyHref = resolvePolicyEvidenceHref(
 assert(hashOnlyHref.includes("search=62de981049ed"), "POL-H9: hash fallback strips sha256 prefix");
 
 assert(
-  resolvePolicyApprovalRecordLabel(enrichedPackageRule) === "receipt-abc123.json",
-  "POL-H10: approval record label uses receipt filename",
+  resolvePolicyApprovalRecordLabel(enrichedPackageRule) === "receipt-abc123",
+  "POL-H10: approval record label uses receipt id",
+);
+
+const scannerLabelRule = basePolicy({
+  remembered_command: "Bash credential-looking output",
+  reason: "Bash credential-looking output",
+  artifact_id: "cursor:project:tool-action:abc123",
+});
+assert(isScannerGeneratedPolicyLabel("Bash credential-looking output"), "POL-H18: scanner labels detected");
+assert(
+  resolvePolicyRowTitle(scannerLabelRule, resolvePolicyDisplay(scannerLabelRule)).toLowerCase().includes("shell"),
+  "POL-H19: scanner labels fall back to action family headline",
+);
+assert(resolvePolicyRowFolder(enrichedPackageRule) === "hol-points-portal", "POL-H20: folder resolves workspace label");
+assert(resolvePolicyRowFrequency(enrichedPackageRule) === "This project", "POL-H21: frequency uses policy scope label");
+assert(
+  resolvePolicyRowSubtitle(enrichedPackageRule, enrichedDisplay)?.includes("This project"),
+  "POL-H22: subtitle includes scope frequency",
 );
 
 assert(
