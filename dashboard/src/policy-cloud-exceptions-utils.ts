@@ -190,7 +190,7 @@ export function resolveCloudExceptionEvidenceUrl(item: GuardCloudException): str
   if (!receiptId) {
     return null;
   }
-  return `/evidence?receipt_id=${encodeURIComponent(receiptId)}`;
+  return `/evidence?search=${encodeURIComponent(receiptId)}`;
 }
 
 export function resolveCloudExceptionScopePath(item: GuardCloudException): string | null {

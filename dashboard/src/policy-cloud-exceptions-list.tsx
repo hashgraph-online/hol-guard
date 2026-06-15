@@ -210,11 +210,6 @@ function GroupSection({
             <span>Status</span>
           </div>
           <div role="list">{children}</div>
-          {count > 0 ? (
-            <div className="border-t border-slate-100 px-4 py-2.5 text-sm font-medium text-brand-blue">
-              View all ({count}) →
-            </div>
-          ) : null}
         </div>
       ) : null}
     </section>

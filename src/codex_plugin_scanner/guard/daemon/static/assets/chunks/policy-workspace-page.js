@@ -152,7 +152,7 @@ function resolveCloudExceptionEvidenceUrl(item) {
   if (!receiptId) {
     return null;
   }
-  return `/evidence?receipt_id=${encodeURIComponent(receiptId)}`;
+  return `/evidence?search=${encodeURIComponent(receiptId)}`;
 }
 function resolveCloudExceptionScopePath(item) {
   const target = resolveCloudExceptionScopeTarget(item);
@@ -255,7 +255,7 @@ function ExpiryTimeline({
         formatRelativeTime(expiryValue)
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-full w-2/3 rounded-full bg-brand-blue/70", "aria-hidden": "true" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-full w-full animate-pulse rounded-full bg-brand-blue/40", "aria-hidden": "true" }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-slate-600", children: expiryTimestamp.toLocaleString() })
   ] });
 }
@@ -488,12 +488,13 @@ function SourceReceiptSummary({ receipt }) {
   ] });
 }
 function ResultPreview({ scope, harness, expiresLabel }) {
+  const showHarness = (scope === "artifact" || scope === "harness") && harness.trim();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-slate-500", children: "Result preview" }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-sm leading-relaxed text-brand-dark", children: [
       "If approved in Guard Cloud, Guard will apply this exception for ",
       scopeLabel(scope, "policy"),
-      harness.trim() ? ` in ${harnessDisplayName(harness)}` : "",
+      showHarness ? ` in ${harnessDisplayName(harness)}` : "",
       " until ",
       expiresLabel,
       "."
@@ -907,7 +908,9 @@ function PolicyCloudExceptionRequestPanel({
                     "input",
                     {
                       className: "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm",
-                      inputMode: "numeric",
+                      type: "number",
+                      min: 1,
+                      step: 1,
                       value: maxUses,
                       onChange: handleMaxUsesChange,
                       placeholder: "50"
@@ -1138,12 +1141,7 @@ function GroupSection({
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Last used" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Status" })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "list", children }),
-      count > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 px-4 py-2.5 text-sm font-medium text-brand-blue", children: [
-        "View all (",
-        count,
-        ") →"
-      ] }) : null
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "list", children })
     ] }) : null
   ] });
 }

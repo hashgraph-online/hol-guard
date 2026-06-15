@@ -104,7 +104,7 @@ function ExpiryTimeline({
         <span>Expires {formatRelativeTime(expiryValue)}</span>
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
-        <div className="h-full w-2/3 rounded-full bg-brand-blue/70" aria-hidden="true" />
+        <div className="h-full w-full animate-pulse rounded-full bg-brand-blue/40" aria-hidden="true" />
       </div>
       <p className="mt-2 text-xs text-slate-600">{expiryTimestamp.toLocaleString()}</p>
     </div>

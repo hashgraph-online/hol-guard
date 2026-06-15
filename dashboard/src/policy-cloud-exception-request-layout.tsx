@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { HiMiniCheck } from "react-icons/hi2";
-import { harnessDisplayName } from "./approval-center-utils";
-import { scopeLabel } from "./approval-center-utils";
+import { harnessDisplayName, scopeLabel } from "./approval-center-utils";
 import type { GuardCloudExceptionRequestCreateInput } from "./guard-api";
 import type { GuardReceipt } from "./guard-types";
 import { resolveCloudExceptionBlastRadius } from "./policy-cloud-exceptions-utils";
@@ -196,12 +195,13 @@ type ResultPreviewProps = {
 };
 
 export function ResultPreview({ scope, harness, expiresLabel }: ResultPreviewProps) {
+  const showHarness = (scope === "artifact" || scope === "harness") && harness.trim();
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Result preview</p>
       <p className="mt-3 text-sm leading-relaxed text-brand-dark">
         If approved in Guard Cloud, Guard will apply this exception for {scopeLabel(scope, "policy")}
-        {harness.trim() ? ` in ${harnessDisplayName(harness)}` : ""} until {expiresLabel}.
+        {showHarness ? ` in ${harnessDisplayName(harness)}` : ""} until {expiresLabel}.
       </p>
     </div>
   );

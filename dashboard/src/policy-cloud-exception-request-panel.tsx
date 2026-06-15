@@ -470,7 +470,9 @@ export function PolicyCloudExceptionRequestPanel({
                   <span className="text-sm font-medium text-brand-dark">Max uses (optional)</span>
                   <input
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                    inputMode="numeric"
+                    type="number"
+                    min={1}
+                    step={1}
                     value={maxUses}
                     onChange={handleMaxUsesChange}
                     placeholder="50"
