@@ -707,6 +707,8 @@ def _resolve_package_firewall_connect_flow(
         return None
     current = _copy_package_firewall_connect_state(server)
     if current is None:
+        current = _copy_guard_cloud_connect_state(server)
+    if current is None:
         return _default_package_firewall_connect_flow(store=server.store, reason=reason)
     state = str(current.get("state") or "idle")
     flow = {
