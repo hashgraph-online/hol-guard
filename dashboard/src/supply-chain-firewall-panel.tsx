@@ -23,6 +23,10 @@ import {
   readHarnessActionUserMessage,
   resolveApprovalGateSyncFailure,
 } from "./harness-action-errors";
+import {
+  openPackageFirewallAuthorizeWindow,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE,
+} from "./package-firewall-connect-browser";
 import { EntitlementNotice, ConnectFlowCard } from "./supply-chain-firewall-views";
 import type { CompletedOp } from "./supply-chain-firewall-views";
 import {
@@ -433,7 +437,13 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     setConnectError(null);
     setActivationAssistError(null);
     try {
-      await startPackageFirewallConnect();
+      const connectFlow = await startPackageFirewallConnect();
+      if (
+        connectFlow?.authorize_url &&
+        !openPackageFirewallAuthorizeWindow(connectFlow.authorize_url)
+      ) {
+        setConnectError(PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE);
+      }
       await refreshAfterOp();
       await onStateChanged?.();
     } catch (error) {
