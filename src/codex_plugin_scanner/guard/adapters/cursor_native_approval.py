@@ -406,9 +406,7 @@ def cursor_after_observer_trusted(
         return False
     if not hmac.compare_digest(expected_proof.strip(), proof.strip()):
         return False
-    observer_event = _optional_string(pending.get("observer_event")) or cursor_observer_event_for_payload(
-        payload
-    )
+    observer_event = _optional_string(pending.get("observer_event")) or cursor_observer_event_for_payload(payload)
     try:
         secret = ensure_cursor_hook_attestation_secret(guard_home)
     except OSError:

@@ -48,6 +48,10 @@ def _infer_cursor_hook_event_name(payload: Mapping[str, object]) -> dict[str, ob
     return normalized
 
 
+# Payload normalizers below are mirrored inside _HOOK_SCRIPT_TEMPLATE for the installed
+# Cursor hook script. Keep both copies in sync when changing observer or MCP behavior.
+
+
 def _cursor_shell_hook_payload(normalized: dict[str, object], *, hook_event_name: str) -> dict[str, object]:
     payload = dict(normalized)
     payload["hook_event_name"] = hook_event_name
@@ -151,7 +155,11 @@ def cursor_hook_requires_approval_center_queue(
     policy_action: str,
     guard_payload: Mapping[str, object] | None = None,
 ) -> bool:
-    """Return True when Cursor native prompts should also appear in the approval center."""
+    """Return True when Cursor native prompts should also appear in the approval center.
+
+    Currently equivalent to ``cursor_hook_would_prompt_user``; kept separate so the
+    two concepts can diverge without touching call sites.
+    """
 
     return cursor_hook_would_prompt_user(
         policy_action=policy_action,
