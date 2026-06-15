@@ -623,7 +623,10 @@ def _refresh_opencode_pretool_plugin(
     repair_context, _ = _repair_context_from_managed_install(context, managed_install)
     global_path = global_plugin_path(repair_context)
     managed_path = managed_plugin_path(repair_context)
-    expected_source = pretool_plugin_source(repair_context)
+    try:
+        expected_source = pretool_plugin_source(repair_context)
+    except (OSError, RuntimeError) as error:
+        return f"Could not inspect OpenCode pretool plugin during update: {error}"
     try:
         global_source = global_path.read_text(encoding="utf-8") if global_path.is_file() else ""
         managed_source = managed_path.read_text(encoding="utf-8") if managed_path.is_file() else ""
@@ -633,7 +636,7 @@ def _refresh_opencode_pretool_plugin(
         return None
     try:
         install_pretool_plugin(repair_context)
-    except OSError as error:
+    except (OSError, RuntimeError) as error:
         return f"Could not refresh OpenCode pretool plugin during update: {error}"
     return "Refreshed the OpenCode pretool plugin during update. Restart OpenCode to load it."
 

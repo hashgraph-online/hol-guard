@@ -409,6 +409,28 @@ def test_refresh_opencode_pretool_plugin_rewrites_stale_plugin(tmp_path: Path) -
     assert 'import { spawn as nodeSpawn } from "node:child_process"' in refreshed_managed
 
 
+def test_refresh_opencode_pretool_plugin_handles_runtime_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.cli import update_commands
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    ctx = _ctx(tmp_path)
+    store = GuardStore(ctx.guard_home)
+    store.set_managed_install("opencode", True, None, {}, "2026-06-04T00:00:00+00:00")
+
+    def _raise_runtime_error(_context: HarnessContext) -> str:
+        raise RuntimeError("no guard python")
+
+    monkeypatch.setattr(update_commands, "pretool_plugin_source", _raise_runtime_error)
+
+    note = update_commands._refresh_opencode_pretool_plugin(context=ctx, store=store)
+
+    assert note is not None
+    assert "Could not inspect OpenCode pretool plugin during update" in note
+
+
 def test_opencode_verification_reports_missing_plugin(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.store import GuardStore
 
