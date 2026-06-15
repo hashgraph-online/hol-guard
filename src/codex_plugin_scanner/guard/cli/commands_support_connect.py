@@ -187,7 +187,9 @@ def _finalize_guard_connect_payload(
     )
     oauth_health = store.get_oauth_local_credential_health()
     oauth_state = str(oauth_health.get("state") or "")
-    if store.get_cloud_sync_profile() is None and oauth_state == "degraded":
+    if store.get_cloud_sync_profile() is None and (
+        oauth_state == "degraded" or not oauth_health.get("configured")
+    ):
         repair_message = (
             "Guard Cloud authorization did not persist locally. "
             "Run hol-guard connect again to repair local sign-in."
