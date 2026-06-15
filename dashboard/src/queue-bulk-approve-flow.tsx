@@ -1,4 +1,4 @@
-import { useCallback, type ChangeEvent } from "react";
+import type { ChangeEvent } from "react";
 import { HiMiniCheckCircle, HiMiniExclamationTriangle } from "react-icons/hi2";
 import {
   buildBulkApproveConsequenceCopy,
@@ -14,6 +14,7 @@ export type QueueBulkApproveFlowProps = {
   step: BulkApproveFlowStep;
   eligibleGroups: QueueGroup[];
   selectedGroups: QueueGroup[];
+  completedActionCount: number | null;
   sensitiveFileReadCount: number;
   approvalGate?: GuardApprovalGatePublicConfig | null;
   bulkApprovePassword: string;
@@ -33,6 +34,21 @@ export type QueueBulkApproveFlowProps = {
 };
 
 export function QueueBulkApproveFlow(props: QueueBulkApproveFlowProps) {
+  if (props.step === "completed") {
+    const approvedCount = props.completedActionCount ?? 0;
+    const approvedUnit = approvedCount === 1 ? "action was" : "actions were";
+    return (
+      <div className="mb-4 rounded-xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3">
+        <div className="flex items-start gap-2">
+          <HiMiniCheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
+          <p className="text-sm font-medium text-brand-green-text">
+            {approvedCount} read-only {approvedUnit} approved. This bulk approval cannot be repeated.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (props.eligibleGroups.length < 2) {
     return null;
   }
@@ -59,20 +75,6 @@ export function QueueBulkApproveFlow(props: QueueBulkApproveFlowProps) {
             Review those individually.
           </p>
         )}
-      </div>
-    );
-  }
-
-  if (props.step === "completed") {
-    return (
-      <div className="mb-4 rounded-xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3">
-        <div className="flex items-start gap-2">
-          <HiMiniCheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
-          <p className="text-sm font-medium text-brand-green-text">
-            {selectedActionCount} read-only{" "}
-            {selectedActionCount === 1 ? "action was" : "actions were"} approved. This bulk approval cannot be repeated.
-          </p>
-        </div>
       </div>
     );
   }

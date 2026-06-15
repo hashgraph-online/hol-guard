@@ -628,7 +628,6 @@ export function App() {
       }
       const label = `${succeeded} item${succeeded !== 1 ? "s" : ""} approved.`;
       setResolutionMessage(label);
-      navigate("/inbox");
     } finally {
       bulkApproveInFlight.current = false;
     }

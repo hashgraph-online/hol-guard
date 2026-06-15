@@ -630,6 +630,7 @@ function QueueBrowser(props: {
   const [bulkApproveTotpCode, setBulkApproveTotpCode] = useState("");
   const [bulkApproveUseCooldown, setBulkApproveUseCooldown] = useState(false);
   const [bulkApproveError, setBulkApproveError] = useState<string | null>(null);
+  const [bulkCompletedActionCount, setBulkCompletedActionCount] = useState<number | null>(null);
   const harnesses = Array.from(new Set(props.items.map((item) => item.harness).filter(isDisplayableHarness))).sort();
 
   const filteredItems = useMemo(() => {
@@ -702,7 +703,7 @@ function QueueBrowser(props: {
 
   const showBulkApprove =
     props.onBulkApprove !== undefined &&
-    bulkEligibleGroups.length >= 2;
+    (bulkEligibleGroups.length >= 2 || bulkFlowStep === "completed");
 
   const showBulkGateFields =
     showBulkApprove &&
@@ -721,12 +722,14 @@ function QueueBrowser(props: {
     setBulkApproveTotpCode("");
     setBulkApproveUseCooldown(false);
     setBulkApproveError(null);
+    setBulkCompletedActionCount(null);
   }, []);
 
   const handleBulkFlowStart = useCallback(() => {
     setBulkFlowStep("select");
     setSelectedBulkIds(new Set());
     setBulkApproveError(null);
+    setBulkCompletedActionCount(null);
   }, []);
 
   const handleBulkSelectAll = useCallback(() => {
@@ -781,6 +784,7 @@ function QueueBrowser(props: {
       return;
     }
     const ids = bulkApprovePrimaryIds(selectedBulkGroups);
+    const approvedActionCount = bulkApproveActionCount(selectedBulkGroups);
     const gateCredentials = buildBulkGateCredentials(
       showBulkGateFields,
       bulkApprovePassword,
@@ -790,6 +794,7 @@ function QueueBrowser(props: {
     setBulkFlowStep("submitting");
     setBulkApproveError(null);
     try {
+      setBulkCompletedActionCount(approvedActionCount);
       await props.onBulkApprove?.(ids, gateCredentials);
       setBulkFlowStep("completed");
       setBulkApprovePassword("");
@@ -830,6 +835,7 @@ function QueueBrowser(props: {
           step={bulkFlowStep}
           eligibleGroups={bulkEligibleGroups}
           selectedGroups={selectedBulkGroups}
+          completedActionCount={bulkCompletedActionCount}
           sensitiveFileReadCount={sensitiveFileReadCount}
           approvalGate={props.approvalGate ?? null}
           bulkApprovePassword={bulkApprovePassword}

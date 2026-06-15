@@ -24139,6 +24139,19 @@ function QueueChipFilter(props) {
   ] });
 }
 function QueueBulkApproveFlow(props) {
+  if (props.step === "completed") {
+    const approvedCount = props.completedActionCount ?? 0;
+    const approvedUnit = approvedCount === 1 ? "action was" : "actions were";
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4 rounded-xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-brand-green-text", children: [
+        approvedCount,
+        " read-only ",
+        approvedUnit,
+        " approved. This bulk approval cannot be repeated."
+      ] })
+    ] }) });
+  }
   if (props.eligibleGroups.length < 2) {
     return null;
   }
@@ -24164,18 +24177,6 @@ function QueueBulkApproveFlow(props) {
         " excluded from bulk approval. Review those individually."
       ] })
     ] });
-  }
-  if (props.step === "completed") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4 rounded-xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-brand-green-text", children: [
-        selectedActionCount,
-        " read-only",
-        " ",
-        selectedActionCount === 1 ? "action was" : "actions were",
-        " approved. This bulk approval cannot be repeated."
-      ] })
-    ] }) });
   }
   const previewLines = riskLines.slice(0, 5);
   const hiddenCount = Math.max(0, riskLines.length - previewLines.length);
@@ -24739,6 +24740,7 @@ function QueueBrowser(props) {
   const [bulkApproveTotpCode, setBulkApproveTotpCode] = reactExports.useState("");
   const [bulkApproveUseCooldown, setBulkApproveUseCooldown] = reactExports.useState(false);
   const [bulkApproveError, setBulkApproveError] = reactExports.useState(null);
+  const [bulkCompletedActionCount, setBulkCompletedActionCount] = reactExports.useState(null);
   const harnesses = Array.from(new Set(props.items.map((item) => item.harness).filter(isDisplayableHarness))).sort();
   const filteredItems = reactExports.useMemo(() => {
     const byHarness = harnessFilter === "all" ? props.items : props.items.filter((item) => item.harness === harnessFilter);
@@ -24792,7 +24794,7 @@ function QueueBrowser(props) {
     () => countSensitiveFileReadGroups(groups),
     [groups]
   );
-  const showBulkApprove = props.onBulkApprove !== void 0 && bulkEligibleGroups.length >= 2;
+  const showBulkApprove = props.onBulkApprove !== void 0 && (bulkEligibleGroups.length >= 2 || bulkFlowStep === "completed");
   const showBulkGateFields = showBulkApprove && props.approvalGate?.enabled === true && props.approvalGate.configured === true;
   const selectedBulkGroups = reactExports.useMemo(
     () => bulkEligibleGroups.filter((group) => selectedBulkIds.has(group.primary.request_id)),
@@ -24805,11 +24807,13 @@ function QueueBrowser(props) {
     setBulkApproveTotpCode("");
     setBulkApproveUseCooldown(false);
     setBulkApproveError(null);
+    setBulkCompletedActionCount(null);
   }, []);
   const handleBulkFlowStart = reactExports.useCallback(() => {
     setBulkFlowStep("select");
     setSelectedBulkIds(/* @__PURE__ */ new Set());
     setBulkApproveError(null);
+    setBulkCompletedActionCount(null);
   }, []);
   const handleBulkSelectAll = reactExports.useCallback(() => {
     setSelectedBulkIds(new Set(bulkApprovePrimaryIds(bulkEligibleGroups)));
@@ -24856,6 +24860,7 @@ function QueueBrowser(props) {
       return;
     }
     const ids = bulkApprovePrimaryIds(selectedBulkGroups);
+    const approvedActionCount = bulkApproveActionCount(selectedBulkGroups);
     const gateCredentials = buildBulkGateCredentials(
       showBulkGateFields,
       bulkApprovePassword,
@@ -24865,6 +24870,7 @@ function QueueBrowser(props) {
     setBulkFlowStep("submitting");
     setBulkApproveError(null);
     try {
+      setBulkCompletedActionCount(approvedActionCount);
       await props.onBulkApprove?.(ids, gateCredentials);
       setBulkFlowStep("completed");
       setBulkApprovePassword("");
@@ -24898,6 +24904,7 @@ function QueueBrowser(props) {
         step: bulkFlowStep,
         eligibleGroups: bulkEligibleGroups,
         selectedGroups: selectedBulkGroups,
+        completedActionCount: bulkCompletedActionCount,
         sensitiveFileReadCount,
         approvalGate: props.approvalGate ?? null,
         bulkApprovePassword,
@@ -26752,7 +26759,6 @@ function App() {
       }
       const label = `${succeeded} item${succeeded !== 1 ? "s" : ""} approved.`;
       setResolutionMessage(label);
-      navigate("/inbox");
     } finally {
       bulkApproveInFlight.current = false;
     }
