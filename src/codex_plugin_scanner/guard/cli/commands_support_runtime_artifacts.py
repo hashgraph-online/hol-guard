@@ -7,6 +7,33 @@ from __future__ import annotations
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from .commands_support_codex_commands import (
+    _codex_command_parts_may_read_local_content,
+    _codex_command_reads_environment_pipeline,
+    _codex_local_secret_source_label,
+    _codex_pipeline_segment_may_read_local_content,
+    _codex_post_tool_command_is_read_only_source_inspection,
+    _codex_post_tool_command_text,
+    _codex_shell_split,
+    _codex_source_inspection_can_skip_secret_output,
+)
+from .commands_support_codex_reads import _split_codex_safe_read_only_pipeline
+from .commands_support_codex_tool_output import (
+    _codex_command_captures_combined_shell_output,
+    _codex_command_references_sensitive_local_source,
+    _codex_existing_local_path_match,
+    _codex_focused_pytest_can_skip_secret_output,
+    _codex_path_token_is_url_path,
+    _codex_sensitive_local_source_matches,
+    _codex_sensitive_path_matches_in_text,
+    _codex_token_is_url,
+    _codex_token_prefix_is_url_scheme,
+    _codex_tool_output_request_summary,
+    _codex_tool_output_runtime_reason,
+    _codex_tool_output_runtime_summary,
+    _codex_url_like_local_path_tokens,
+    _dedupe_codex_secret_path_matches,
+)
 
 def _optional_string(value: object | None) -> str | None:
     if isinstance(value, str) and value.strip():
@@ -289,6 +316,15 @@ def _codex_post_tool_output_artifact(
         home_dir=home_dir,
     ):
         return None
+    if _codex_focused_pytest_can_skip_secret_output(
+        command_text=command_text,
+        response_text=response_text,
+        content_matches=content_matches,
+        cwd=cwd,
+        home_dir=home_dir,
+    ):
+        return None
+    merged_output_capture = _codex_command_captures_combined_shell_output(command_text)
     fingerprint = hashlib.sha256(
         json.dumps(
             {
@@ -314,8 +350,12 @@ def _codex_post_tool_output_artifact(
         tool_name=tool_name,
         command_text=command_text,
         local_secret_source=local_secret_source,
+        merged_output_capture=merged_output_capture,
     )
-    runtime_request_summary = _codex_tool_output_runtime_summary(local_secret_source)
+    runtime_request_summary = _codex_tool_output_runtime_summary(
+        local_secret_source,
+        merged_output_capture=merged_output_capture,
+    )
     metadata: dict[str, object] = {
         "tool_name": tool_name,
         "command_text": command_text,
@@ -328,11 +368,13 @@ def _codex_post_tool_output_artifact(
         "request_summary": request_summary,
         "runtime_request_signals": runtime_request_signals,
         "runtime_request_summary": runtime_request_summary,
-        "runtime_request_reason": (
-            "Guard inspects supported Codex tool output before Codex uses it, so accidental secret reads can be "
-            "stopped even when the filename was not obviously sensitive."
+        "runtime_request_reason": _codex_tool_output_runtime_reason(
+            local_secret_source,
+            merged_output_capture=merged_output_capture,
         ),
     }
+    if merged_output_capture:
+        metadata["output_capture_mode"] = "merged-stderr"
     if local_secret_source is not None:
         metadata["secret_source_family"] = local_secret_source
     return GuardArtifact(
@@ -345,113 +387,9 @@ def _codex_post_tool_output_artifact(
         metadata=metadata,
     )
 
-def _codex_command_references_sensitive_local_source(command_text: str, *, cwd: Path | None) -> bool:
-    return bool(_codex_sensitive_local_source_matches(command_text, cwd=cwd))
-
-def _codex_sensitive_local_source_matches(command_text: str, *, cwd: Path | None) -> list[SecretPathMatch]:
-    matches = _codex_sensitive_path_matches_in_text(command_text, cwd=cwd)
-    try:
-        parts = shlex.split(command_text)
-    except ValueError:
-        return matches
-    for part in parts:
-        stripped = part.strip()
-        if not stripped or stripped.startswith("-"):
-            continue
-        if _codex_token_is_url(stripped):
-            local_match = _codex_existing_local_path_match(stripped, cwd=cwd)
-            if local_match is not None:
-                matches.append(local_match)
-            continue
-        path_match = classify_secret_path(stripped, cwd=cwd)
-        if path_match is not None:
-            matches.append(path_match)
-    return _dedupe_codex_secret_path_matches(matches)
-
-def _dedupe_codex_secret_path_matches(matches: list[SecretPathMatch]) -> list[SecretPathMatch]:
-    deduped: list[SecretPathMatch] = []
-    seen: set[tuple[str, str]] = set()
-    for match in matches:
-        key = (match.family, match.requested_path or match.path)
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(match)
-    return deduped
-
-def _codex_token_is_url(token: str) -> bool:
-    parsed = urllib.parse.urlparse(token)
-    return bool(parsed.scheme and parsed.netloc)
-
 def _codex_text_contains_sensitive_path_token(text: str, *, cwd: Path | None) -> bool:
     return bool(_codex_sensitive_path_matches_in_text(text, cwd=cwd))
 
-def _codex_sensitive_path_matches_in_text(text: str, *, cwd: Path | None) -> list[SecretPathMatch]:
-    matches: list[SecretPathMatch] = []
-    for match in _PROMPT_PATH_TOKEN_PATTERN.finditer(text):
-        token = match.group(0)
-        if _codex_path_token_is_url_path(text, match.start()):
-            local_match = _codex_existing_local_path_match(token, cwd=cwd)
-            if local_match is not None:
-                matches.append(local_match)
-            continue
-        path_match = classify_secret_path(token, cwd=cwd)
-        if path_match is not None:
-            matches.append(path_match)
-    for token in _codex_url_like_local_path_tokens(text):
-        local_match = _codex_existing_local_path_match(token, cwd=cwd)
-        if local_match is not None:
-            matches.append(local_match)
-    return matches
-
-def _codex_url_like_local_path_tokens(text: str) -> tuple[str, ...]:
-    separators = frozenset(" \t\r\n'\"`<>|;(){}[]")
-    tokens: list[str] = []
-    start = 0
-    for index, char in enumerate(f"{text} "):
-        if char not in separators:
-            continue
-        token = text[start:index]
-        start = index + 1
-        if 0 < len(token) <= 255 and _codex_token_is_url(token):
-            tokens.append(token)
-    return tuple(tokens)
-
-def _codex_existing_local_path_match(token: str, *, cwd: Path | None) -> SecretPathMatch | None:
-    if cwd is None:
-        return None
-    base_dir = cwd.resolve()
-    parsed = urllib.parse.urlparse(token)
-    if not parsed.scheme or not parsed.netloc:
-        return None
-    relative_parts = [f"{parsed.scheme}:", parsed.netloc]
-    for part in PurePosixPath(parsed.path).parts:
-        if part in {"", "/", ".", ".."}:
-            continue
-        relative_parts.append(part)
-    if len(relative_parts) <= 2 and not parsed.path.strip("/"):
-        return None
-    candidate = base_dir.joinpath(*relative_parts)
-    if not candidate.exists():
-        return None
-    relative_candidate = candidate.relative_to(base_dir)
-    return classify_secret_path(str(relative_candidate), cwd=cwd)
-
-def _codex_path_token_is_url_path(text: str, start: int) -> bool:
-    prefix = text[:start].lower()
-    last_separator = max(prefix.rfind(separator) for separator in " \t\r\n'\"`<>|;(){}[]")
-    token_prefix = prefix[last_separator + 1 :]
-    if "://" in token_prefix:
-        return True
-    scheme = ""
-    if token_prefix.endswith(":/"):
-        scheme = token_prefix[:-2]
-    elif token_prefix.endswith(":"):
-        scheme = token_prefix[:-1]
-    return _codex_token_prefix_is_url_scheme(scheme)
-
-def _codex_token_prefix_is_url_scheme(scheme: str) -> bool:
-    return bool(scheme) and scheme[0].isalpha() and all(char.isalnum() or char in "+.-" for char in scheme)
 
 def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None) -> bool:
     if _codex_command_references_sensitive_local_source(command_text, cwd=cwd):
