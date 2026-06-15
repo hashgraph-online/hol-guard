@@ -133,6 +133,30 @@ def _save_state(store: GuardStore, payload: dict[str, object]) -> None:
     store.set_sync_payload(COMMAND_QUEUE_STATE_KEY, payload, _now())
 
 
+def _parse_iso8601_timestamp(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = value.strip()
+    if normalized.endswith(("Z", "z")):
+        normalized = f"{normalized[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _pending_result_is_stale(job: dict[str, object]) -> bool:
+    now = datetime.now(timezone.utc)
+    for key in ("leaseExpiresAt", "expiresAt"):
+        expires_at = _parse_iso8601_timestamp(job.get(key))
+        if expires_at is not None and expires_at <= now:
+            return True
+    return False
+
+
 def command_queue_status(store: GuardStore) -> dict[str, object]:
     state = _load_state(store)
     profile = store.get_cloud_sync_profile()
@@ -293,6 +317,17 @@ def _retry_pending_result(
     if not isinstance(job, dict) or not isinstance(payload, dict):
         state.pop("pending_result", None)
         state.pop("active_job", None)
+        _save_state(store, state)
+        return False
+    if _pending_result_is_stale(job):
+        _LOGGER.warning(
+            "Guard command dropped stale pending result: job_id=%s",
+            job.get("id", "unknown"),
+        )
+        state.pop("pending_result", None)
+        state.pop("active_job", None)
+        state["state"] = "idle"
+        state["last_error"] = None
         _save_state(store, state)
         return False
     _post_result(auth_context, job, payload)
