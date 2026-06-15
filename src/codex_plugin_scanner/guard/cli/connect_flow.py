@@ -22,6 +22,7 @@ from ...version import __version__
 from ..package_firewall_entitlement import build_oauth_package_firewall_entitlement
 from ..runtime.runner import prepare_guard_cloud_connect_authorization
 from ..store import GuardStore
+from ..store_connect import build_connect_state_response
 from .oauth_client import (
     GuardDpopKeyMaterial,
     GuardOAuthClientConfig,
@@ -1143,6 +1144,11 @@ def build_connect_status_payload(
     latest_state = store.get_effective_guard_connect_state(now=datetime.now(timezone.utc).isoformat())
     cloud_profile = store.get_cloud_sync_profile()
     oauth_storage_health = store.get_oauth_local_credential_health()
+    latest_state = normalize_connect_state_for_missing_oauth(
+        latest_state=latest_state,
+        cloud_profile=cloud_profile,
+        oauth_storage_health=oauth_storage_health,
+    )
     oauth_repair_required = (
         bool(oauth_storage_health.get("configured")) and oauth_storage_health.get("state") == "degraded"
     )
@@ -1192,6 +1198,32 @@ def build_connect_status_payload(
     ):
         payload["repair_message"] = "Run hol-guard connect again to repair local Guard Cloud authorization."
     return payload
+
+
+def normalize_connect_state_for_missing_oauth(
+    *,
+    latest_state: dict[str, object] | None,
+    cloud_profile: dict[str, str] | None,
+    oauth_storage_health: dict[str, object],
+) -> dict[str, object] | None:
+    if latest_state is None or cloud_profile is not None:
+        return latest_state
+    oauth_state = str(oauth_storage_health.get("state") or "")
+    oauth_configured = bool(oauth_storage_health.get("configured"))
+    if oauth_state != "degraded" and oauth_configured:
+        return latest_state
+    status = str(latest_state.get("status") or "")
+    if status != "connected":
+        return latest_state
+    normalized = dict(latest_state)
+    normalized["status"] = "retry_required"
+    normalized["milestone"] = "first_sync_failed"
+    normalized["reason"] = "Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again."
+    poll_after_ms = latest_state.get("poll_after_ms")
+    return build_connect_state_response(
+        normalized,
+        poll_after_ms=poll_after_ms if isinstance(poll_after_ms, int) else None,
+    )
 
 
 def connect_recovery_command(latest_state: dict[str, object] | None) -> str:
