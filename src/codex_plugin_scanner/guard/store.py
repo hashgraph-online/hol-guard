@@ -5073,9 +5073,11 @@ class GuardStore:
         latest_state = self.get_latest_guard_connect_state(now=now)
         cloud_profile = self.get_cloud_sync_profile()
         sync_summary = self.get_sync_payload("sync_summary")
+        oauth_storage_health = self.get_oauth_local_credential_health()
         return self._normalize_guard_connect_state(
             latest_state=latest_state,
             cloud_profile=cloud_profile,
+            oauth_storage_health=oauth_storage_health,
             sync_summary=sync_summary if isinstance(sync_summary, dict) else None,
             now=now,
         )
@@ -5185,10 +5187,29 @@ class GuardStore:
         *,
         latest_state: dict[str, object] | None,
         cloud_profile: dict[str, str] | None,
+        oauth_storage_health: dict[str, object],
         sync_summary: dict[str, object] | None,
         now: str,
     ) -> dict[str, object] | None:
         if cloud_profile is None:
+            if latest_state is None:
+                return None
+            oauth_state = str(oauth_storage_health.get("state") or "")
+            oauth_configured = bool(oauth_storage_health.get("configured"))
+            latest_status = str(latest_state.get("status") or "")
+            latest_milestone = str(latest_state.get("milestone") or "")
+            if (
+                (oauth_state == "degraded" or not oauth_configured)
+                and (latest_status == "connected" or latest_milestone in {"first_sync_pending", "sync_not_available"})
+            ):
+                return self._coerce_guard_connect_state_status(
+                    state=latest_state,
+                    status="retry_required",
+                    milestone="first_sync_failed",
+                    reason="Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again.",
+                    sync_summary=sync_summary,
+                    now=now,
+                )
             return latest_state
         normalized = self._hydrate_guard_connect_state_from_cloud_profile(
             latest_state=latest_state,

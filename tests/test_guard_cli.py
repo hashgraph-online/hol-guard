@@ -6960,6 +6960,45 @@ url = http://127.0.0.1:8787/guard-canary
         assert "sign-in on this machine is incomplete" in output["cloud_state_detail"]
         assert output["oauth_storage_health"]["state"] == "degraded"
 
+    def test_guard_status_marks_stale_connected_state_retry_required_when_oauth_is_missing(
+        self,
+        tmp_path,
+        capsys,
+    ):
+        del capsys
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        store = GuardStore(home_dir)
+        store.record_guard_connect_pairing_completed(
+            sync_url="https://hol.org/api/guard/receipts/sync",
+            allowed_origin="https://hol.org",
+            now="2026-06-11T22:11:11+00:00",
+            request_id="connect-401",
+        )
+        store.record_latest_guard_connect_sync_result(
+            status="connected",
+            milestone="first_sync_pending",
+            now="2026-06-11T22:11:11+00:00",
+            reason="Guard Cloud is unavailable. Local Guard keeps protecting this machine.",
+        )
+
+        output = guard_product_module.build_guard_status_payload(
+            HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+            store,
+            load_guard_config(home_dir),
+        )
+
+        latest_state = output["latest_connect_state"]
+        assert isinstance(latest_state, dict)
+        assert latest_state["status"] == "retry_required"
+        assert latest_state["milestone"] == "first_sync_failed"
+        assert latest_state["reason"] == (
+            "Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again."
+        )
+        assert output["cloud_state"] == "local_only"
+        assert "needs repair before the first shared proof can land" in output["cloud_state_detail"]
+
     def test_guard_disconnect_revokes_cloud_grant_through_oauth_disconnect_helper(
         self,
         tmp_path,
