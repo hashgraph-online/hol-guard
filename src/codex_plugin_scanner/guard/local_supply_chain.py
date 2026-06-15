@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import shlex
@@ -24,8 +25,6 @@ from .adapters.base import HarnessContext
 from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
 from .config import GuardConfig, resolve_risk_action
 from .models import GuardArtifact
-from .package_firewall_entitlement import resolve_package_firewall_entitlement
-from .receipts import build_receipt
 from .redaction import redact_text
 from .runtime.package_intent_common import (
     PackageIntent,
@@ -39,15 +38,6 @@ from .runtime.package_intent_common import (
     version_target,
 )
 from .runtime.package_manifest_diff import parse_manifest_dependencies, parse_manifest_dependency_changes
-from .runtime.runner import (
-    GuardSyncAuthorizationExpiredError,
-    GuardSyncNotAvailableError,
-    GuardSyncNotConfiguredError,
-    _guard_sync_headers,
-    _resolve_guard_sync_auth_context,
-    sync_local_guard_cloud_proof,
-    sync_supply_chain_bundle,
-)
 from .runtime.supply_chain_package_eval import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
@@ -193,6 +183,18 @@ _AUDIT_SENSITIVE_BASENAMES = frozenset(
     }
 )
 _KNOWN_UNSUPPORTED_LOCKFILE_BASENAMES = frozenset({"bun.lockb"})
+
+
+def _runtime_runner_module():
+    return importlib.import_module(".runtime.runner", __package__)
+
+
+def _package_firewall_entitlement_module():
+    return importlib.import_module(".package_firewall_entitlement", __package__)
+
+
+def _package_intent_parser_module():
+    return importlib.import_module(".runtime.package_intent_parser", __package__)
 
 
 def _package_firewall_refresh_state_path(guard_home: Path) -> Path:
@@ -344,7 +346,10 @@ def build_supply_chain_status_payload(
 def resolve_package_firewall_entitlement_with_refresh(store: GuardStore) -> dict[str, object]:
     """Resolve package-firewall access and opportunistically heal stale cloud state."""
 
-    entitlement = resolve_package_firewall_entitlement(store)
+    entitlement_module = _package_firewall_entitlement_module()
+    runner = _runtime_runner_module()
+
+    entitlement = entitlement_module.resolve_package_firewall_entitlement(store)
     if bool(entitlement.get("allowed")):
         return entitlement
     if store.get_cloud_sync_profile() is None:
@@ -366,10 +371,10 @@ def resolve_package_firewall_entitlement_with_refresh(store: GuardStore) -> dict
         ):
             return entitlement
         _write_package_firewall_refresh_state(store.guard_home, now)
-    for refresh in (sync_local_guard_cloud_proof, sync_supply_chain_bundle):
+    for refresh in (runner.sync_local_guard_cloud_proof, runner.sync_supply_chain_bundle):
         try:
             refresh(store)
-        except GuardSyncAuthorizationExpiredError as error:
+        except runner.GuardSyncAuthorizationExpiredError as error:
             if str(entitlement.get("reason") or "") == "guard_cloud_connect_required":
                 store.record_latest_guard_connect_sync_result(
                     status="retry_required",
@@ -378,9 +383,9 @@ def resolve_package_firewall_entitlement_with_refresh(store: GuardStore) -> dict
                     reason=str(error),
                 )
             break
-        except (GuardSyncNotAvailableError, GuardSyncNotConfiguredError, OSError, RuntimeError):
+        except (runner.GuardSyncNotAvailableError, runner.GuardSyncNotConfiguredError, OSError, RuntimeError):
             continue
-    return resolve_package_firewall_entitlement(store)
+    return entitlement_module.resolve_package_firewall_entitlement(store)
 
 
 def _is_audit_sensitive_basename(name: str) -> bool:
@@ -852,6 +857,8 @@ def build_workspace_audit_payload(
     before_workspace_dir: Path | None = None,
     after_workspace_dir: Path | None = None,
 ) -> tuple[dict[str, object], int]:
+    runner = _runtime_runner_module()
+
     target_workspace_dir = after_workspace_dir or workspace_dir
     posture = build_local_supply_chain_posture(store, config, now=now)
     diff_summary: dict[str, object] | None = None
@@ -891,7 +898,7 @@ def build_workspace_audit_payload(
     fallback_reason: dict[str, object] | None = None
     if _should_use_cloud_workspace_audit(store=store, posture=posture):
         try:
-            auth_context = _resolve_guard_sync_auth_context(store)
+            auth_context = runner._resolve_guard_sync_auth_context(store)
             workspace_id = store.get_cloud_workspace_id()
             assert workspace_id is not None
             request_payload = _build_cloud_audit_payload(
@@ -920,7 +927,7 @@ def build_workspace_audit_payload(
                     command_name=command_name,
                     now=now,
                 )
-        except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError, RuntimeError):
+        except (runner.GuardSyncAuthorizationExpiredError, runner.GuardSyncNotConfiguredError, RuntimeError):
             fallback_reason = {
                 "code": "cloud_auth_error",
                 "message": "Guard cloud authorization could not be refreshed, so Guard fell back locally.",
@@ -1063,9 +1070,7 @@ def build_package_protect_payload(
     unsafe_raw_output: bool,
     timeout_seconds: int,
 ) -> tuple[dict[str, object], int] | None:
-    from .runtime.package_intent_parser import parse_package_intent
-
-    intent = parse_package_intent(shlex.join(command), workspace=workspace_dir)
+    intent = _package_intent_parser_module().parse_package_intent(shlex.join(command), workspace=workspace_dir)
     if intent is None:
         return None
     sanitized_intent = replace(intent, redacted_command=shlex.join(redacted_command_tokens(command)))
@@ -1106,6 +1111,8 @@ def build_package_protect_payload(
     }
     if evaluation.bundle_version is not None:
         receipt_policy_metadata["bundle_version"] = evaluation.bundle_version
+    from .receipts import build_receipt
+
     receipt = build_receipt(
         harness=_LOCAL_SUPPLY_CHAIN_HARNESS,
         artifact_id=artifact.artifact_id,
@@ -1313,9 +1320,7 @@ def recompute_package_protect_artifact_hash(
     workspace_dir: Path,
     now: str | None = None,
 ) -> str | None:
-    from .runtime.package_intent_parser import parse_package_intent
-
-    intent = parse_package_intent(shlex.join(command), workspace=workspace_dir)
+    intent = _package_intent_parser_module().parse_package_intent(shlex.join(command), workspace=workspace_dir)
     if intent is None:
         return None
     sanitized_intent = replace(intent, redacted_command=shlex.join(redacted_command_tokens(command)))
@@ -2038,6 +2043,8 @@ def _run_cloud_workspace_audit(
     token: str | None = None,
     workspace_id: str,
 ) -> tuple[dict[str, object] | None, dict[str, object] | None]:
+    runner = _runtime_runner_module()
+
     resolved_auth_context = auth_context
     if resolved_auth_context is None:
         if not isinstance(sync_url, str) or not sync_url or not isinstance(token, str) or not token:
@@ -2049,7 +2056,7 @@ def _run_cloud_workspace_audit(
         }
     else:
         request_url = _normalized_supply_chain_batch_url(str(resolved_auth_context["sync_url"]), workspace_id)
-        request_headers = _guard_sync_headers(resolved_auth_context, request_url=request_url, method="POST")
+        request_headers = runner._guard_sync_headers(resolved_auth_context, request_url=request_url, method="POST")
     aggregated_packages: list[dict[str, object]] = []
     aggregated_reasons: list[dict[str, object]] = []
     cursor: str | None = None

@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from .product import build_guard_start_payload, build_guard_status_payload
 
 def _run_guard_scan_command(
     args: argparse.Namespace,

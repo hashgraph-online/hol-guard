@@ -11,7 +11,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Protocol
 
 from .launcher import merge_guard_launcher_env
 from .package_shim_status import enrich_package_shim_status_payload
@@ -24,8 +24,18 @@ from .shim_probe import (
 )
 from .stable_digest import stable_digest_hex
 
-if TYPE_CHECKING:
-    from .adapters.base import HarnessContext
+class HarnessContextLike(Protocol):
+    @property
+    def home_dir(self) -> Path: ...
+
+    @property
+    def workspace_dir(self) -> Path | None: ...
+
+    @property
+    def guard_home(self) -> Path: ...
+
+
+HarnessContext = HarnessContextLike
 
 _PACKAGE_SHIM_COMMANDS = {
     "bun": "bun",
@@ -79,7 +89,7 @@ _TRUSTED_CLI_LAUNCHER = (
 
 def install_guard_shim(
     harness: str,
-    context: HarnessContext,
+    context: HarnessContextLike,
     *,
     launcher_name: str | None = None,
     display_name: str | None = None,
@@ -112,7 +122,7 @@ def install_guard_shim(
 
 def remove_guard_shim(
     harness: str,
-    context: HarnessContext,
+    context: HarnessContextLike,
     *,
     launcher_name: str | None = None,
     legacy_launcher_names: tuple[str, ...] = (),
@@ -141,7 +151,7 @@ def remove_guard_shim(
     }
 
 
-def _build_python_shim(harness: str, context: HarnessContext, workspace_args: list[str]) -> str:
+def _build_python_shim(harness: str, context: HarnessContextLike, workspace_args: list[str]) -> str:
     command_args = [
         sys.executable,
         *_trusted_python_flags(),
@@ -188,7 +198,7 @@ def _build_windows_script(posix_path: Path) -> str:
     return "\r\n".join(("@echo off", f'"{sys.executable}" "{posix_path}" %*', ""))
 
 
-def _home_override_args(context: HarnessContext) -> list[str]:
+def _home_override_args(context: HarnessContextLike) -> list[str]:
     if not context.home_dir:
         return []
     if context.home_dir.resolve() == Path.home().resolve():

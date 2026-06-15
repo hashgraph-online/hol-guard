@@ -9,16 +9,13 @@ import shlex
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
 from .config import GuardConfig
-from .local_supply_chain import build_package_protect_payload, recompute_package_protect_artifact_hash
 from .models import GuardReceipt
-from .receipts import build_receipt
 from .redaction import redact_text
-from .store import GuardStore
 
 ProtectAction = Literal["allow", "review", "block"]
 SeverityLabel = Literal["low", "medium", "high", "critical"]
@@ -111,7 +108,7 @@ class ProtectVerdict:
 def build_protect_payload(
     *,
     command: list[str],
-    store: GuardStore,
+    store: Any,
     workspace_dir: Path,
     dry_run: bool,
     now: str,
@@ -126,6 +123,8 @@ def build_protect_payload(
     advisories = store.list_cached_advisories(limit=None)
     cached_verdict = evaluate_protect_request(request, advisories)
     cached_gate = cached_verdict.blocking
+    from .local_supply_chain import build_package_protect_payload
+
     package_payload = build_package_protect_payload(
         command=command,
         store=store,
@@ -233,7 +232,7 @@ def build_protect_payload(
 def _package_saved_approval_covers_current_gate(
     payload: dict[str, object],
     *,
-    store: GuardStore,
+    store: Any,
     workspace_dir: Path,
     command: list[str],
     now: str,
@@ -246,6 +245,8 @@ def _package_saved_approval_covers_current_gate(
     stored_hash = receipt.get("artifact_hash")
     if not isinstance(stored_hash, str) or not stored_hash:
         return False
+    from .local_supply_chain import recompute_package_protect_artifact_hash
+
     current_hash = recompute_package_protect_artifact_hash(
         command,
         store=store,
@@ -273,7 +274,7 @@ def _merge_cached_advisory_into_package_payload(
     *,
     cached_verdict: ProtectVerdict,
     requested_dry_run: bool,
-    store: GuardStore,
+    store: Any,
     now: str,
 ) -> tuple[dict[str, object], int]:
     """Apply locally cached advisory blocks/reviews to package protect results."""
@@ -939,6 +940,8 @@ def _review_reason(
 
 
 def _build_install_receipt(request: ProtectRequest, verdict: ProtectVerdict) -> GuardReceipt:
+    from .receipts import build_receipt
+
     primary_target = request.targets[0]
     artifact_hash = _command_fingerprint(list(request.command))
     capabilities_summary = f"{request.executor} {request.install_kind.replace('_', ' ')}"

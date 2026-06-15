@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Protocol
 
-if TYPE_CHECKING:
-    from .adapters.base import HarnessContext
+
+class HarnessContextLike(Protocol):
+    @property
+    def guard_home(self) -> Path: ...
 
 _PACKAGE_SHIM_MANIFEST = "manifest.json"
 
@@ -19,11 +21,11 @@ def _string_list(value: object) -> list[str]:
     return [str(item) for item in value if isinstance(item, str)]
 
 
-def _package_shim_manifest_path(context: HarnessContext) -> Path:
+def _package_shim_manifest_path(context: HarnessContextLike) -> Path:
     return context.guard_home / "package-shims" / _PACKAGE_SHIM_MANIFEST
 
 
-def _load_package_shim_manifest(context: HarnessContext) -> dict[str, object]:
+def _load_package_shim_manifest(context: HarnessContextLike) -> dict[str, object]:
     manifest_path = _package_shim_manifest_path(context)
     if not manifest_path.exists():
         return {}
@@ -34,7 +36,7 @@ def _load_package_shim_manifest(context: HarnessContext) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _write_package_shim_manifest(context: HarnessContext, payload: dict[str, object]) -> None:
+def _write_package_shim_manifest(context: HarnessContextLike, payload: dict[str, object]) -> None:
     _package_shim_manifest_path(context).write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
 
 
@@ -80,7 +82,7 @@ def enrich_package_shim_status_payload(
 
 
 def record_package_shim_audit_result(
-    context: HarnessContext,
+    context: HarnessContextLike,
     *,
     audited_at: str | None = None,
 ) -> None:

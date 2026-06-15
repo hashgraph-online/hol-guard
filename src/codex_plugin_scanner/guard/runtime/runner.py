@@ -26,7 +26,6 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 from ...version import __version__
-from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
 from ..cli.oauth_client import (
@@ -43,7 +42,6 @@ from ..cloud_exceptions import (
     stored_receipt_sync_cloud_exceptions,
 )
 from ..config import GuardConfig
-from ..consumer import detect_harness, evaluate_detection
 from ..edge_events import build_runtime_session_event
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..package_firewall_entitlement import build_oauth_package_firewall_entitlement
@@ -377,6 +375,9 @@ def guard_run(
     blocked_resolver: Callable[[HarnessDetection, dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Evaluate local harness state and optionally launch the harness."""
+
+    from ..consumer import detect_harness, evaluate_detection
+    from ..adapters import get_adapter
 
     detection = _detection_with_prompt_artifacts(detect_harness(harness, context), context, passthrough_args)
     if blocked_resolver is None:
@@ -845,6 +846,8 @@ def _prompt_request_id(request_class: str, matched_text: str, normalized_prompt:
 
 
 def _prompt_policy_path(detection: HarnessDetection, context: HarnessContext) -> Path:
+    from ..adapters import get_adapter
+
     config_candidates = _prompt_config_candidates(detection, context)
     if context.workspace_dir is not None:
         for config_path in config_candidates:

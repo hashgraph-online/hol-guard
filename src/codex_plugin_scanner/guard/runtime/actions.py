@@ -8,7 +8,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PureWindowsPath
-from typing import Literal
+from typing import Literal, TypeGuard
 
 from ..redaction import redact_text
 from .secret_sensitivity import redacted_secret_path_context
@@ -26,7 +26,7 @@ GuardActionType = Literal[
     "harness_start",
 ]
 
-_VALID_ACTION_TYPES = frozenset(
+_VALID_ACTION_TYPES: frozenset[GuardActionType] = frozenset(
     {
         "prompt",
         "shell_command",
@@ -527,6 +527,10 @@ def _normalize_action_payload(
     )
 
 
+def _is_guard_action_type(value: object) -> TypeGuard[GuardActionType]:
+    return isinstance(value, str) and value in _VALID_ACTION_TYPES
+
+
 def _required_int(payload: Mapping[str, object], key: str) -> int:
     value = payload.get(key)
     if not isinstance(value, int):
@@ -542,7 +546,7 @@ def _required_string(payload: Mapping[str, object], key: str) -> str:
 
 
 def _required_action_type(value: object) -> GuardActionType:
-    if not isinstance(value, str) or value not in _VALID_ACTION_TYPES:
+    if not _is_guard_action_type(value):
         raise ValueError("Guard action envelope missing valid action_type.")
     return value
 
@@ -831,6 +835,8 @@ def _redacted_target_path(path: str, *, home_dir: Path | str | None) -> str | No
         return f".../{target_name}"
     if _is_absolute_target_path(stripped):
         redacted_path = redacted_workspace_label(stripped, home_dir=home_dir)
+        if redacted_path is None:
+            return None
         if redacted_path.startswith(".../"):
             secret_context = redacted_secret_path_context(stripped)
             if secret_context is not None:
