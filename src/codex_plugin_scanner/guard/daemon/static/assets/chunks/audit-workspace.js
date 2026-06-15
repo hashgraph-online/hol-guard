@@ -411,7 +411,7 @@ function WorkbenchAuditErrorBanner({ message }) {
     }
   );
 }
-function WorkbenchEmptyState({ auditConnectGate, auditError }) {
+function WorkbenchEmptyState({ auditConnectGate }) {
   if (auditConnectGate !== null && auditConnectGate !== void 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       ConnectFlowCard,
@@ -428,20 +428,14 @@ function WorkbenchEmptyState({ auditConnectGate, auditError }) {
       }
     );
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-    auditError ? /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchAuditErrorBanner, { message: auditError }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      EmptyState,
-      {
-        title: "No workspace audit yet",
-        body: "Run a workspace audit to index dependencies across npm, pnpm, PyPI, and other ecosystems found in this project.",
-        tone: "teach"
-      }
-    )
-  ] });
-}
-function ViewModeChip({ label, active, onSelect }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label, active, onSelect });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    EmptyState,
+    {
+      title: "No workspace audit yet",
+      body: "Run a workspace audit to index dependencies across npm, pnpm, PyPI, and other ecosystems found in this project.",
+      tone: "teach"
+    }
+  );
 }
 function ecosystemSummary(packages) {
   const counts = /* @__PURE__ */ new Map();
@@ -586,15 +580,23 @@ function PackageWorkbenchPanel({
         }
       ) }) : null
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-4 space-y-4", children: auditConnectGate !== null && auditConnectGate !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchEmptyState, { auditConnectGate, auditError }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-4 space-y-4", children: auditConnectGate !== null && auditConnectGate !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchEmptyState, { auditConnectGate }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       auditError ? /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchAuditErrorBanner, { message: auditError }) : null,
       progressActive ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] px-4 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(AuditProgressStepList, { phase: auditPhase, running: auditRunning }) }) : null,
-      auditSnapshot === null && !progressActive ? /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchEmptyState, { auditConnectGate: null, auditError }) : null,
+      auditSnapshot === null && !progressActive ? /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchEmptyState, { auditConnectGate: null }) : null,
       showResults && auditSnapshot !== null && packages.length === 0 && auditSnapshot.inventory.totalPackages > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
         EmptyState,
         {
           title: "Package list not loaded",
           body: "This audit indexed packages, but the detailed list was not stored yet. Run audit again to load the full inventory table.",
+          tone: "teach"
+        }
+      ) : null,
+      showResults && auditSnapshot !== null && packages.length === 0 && auditSnapshot.inventory.totalPackages === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        EmptyState,
+        {
+          title: "No packages indexed",
+          body: "The latest workspace audit completed, but no supported package manifests or lockfiles were found.",
           tone: "teach"
         }
       ) : null,
@@ -605,9 +607,9 @@ function PackageWorkbenchPanel({
           entry.count
         ] }, entry.ecosystem)) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ViewModeChip, { label: `All packages (${packages.length})`, active: viewMode === "all", onSelect: handleViewAll }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: `All packages (${packages.length})`, active: viewMode === "all", onSelect: handleViewAll }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
-            ViewModeChip,
+            FilterChip,
             {
               label: `Needs review (${findings.length})`,
               active: viewMode === "review",
@@ -639,7 +641,7 @@ function PackageWorkbenchPanel({
             onPageChange: handlePageChange
           }
         ),
-        sortedFindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "py-6 text-center text-sm text-slate-500", children: viewMode === "review" ? "No packages need review in this audit." : "No packages match the current filters." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        sortedFindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "py-6 text-center text-sm text-slate-500", children: viewMode === "review" && findings.length === 0 ? "No packages need review in this audit." : "No packages match the current filters." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "div",
           {
             className: "overflow-hidden rounded-xl border border-slate-100",

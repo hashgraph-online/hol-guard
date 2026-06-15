@@ -471,7 +471,6 @@ function EcosystemChip({ ecosystem, active, onSelect }: EcosystemChipProps) {
 
 type WorkbenchEmptyStateProps = {
   auditConnectGate?: AuditConnectGateViewState | null;
-  auditError?: string | null;
 };
 
 function WorkbenchAuditErrorBanner({ message }: { message: string }) {
@@ -491,7 +490,7 @@ function WorkbenchAuditErrorBanner({ message }: { message: string }) {
   );
 }
 
-function WorkbenchEmptyState({ auditConnectGate, auditError }: WorkbenchEmptyStateProps) {
+function WorkbenchEmptyState({ auditConnectGate }: WorkbenchEmptyStateProps) {
   if (auditConnectGate !== null && auditConnectGate !== undefined) {
     return (
       <ConnectFlowCard
@@ -509,25 +508,12 @@ function WorkbenchEmptyState({ auditConnectGate, auditError }: WorkbenchEmptySta
   }
 
   return (
-    <>
-      {auditError ? <WorkbenchAuditErrorBanner message={auditError} /> : null}
-      <EmptyState
-        title="No workspace audit yet"
-        body="Run a workspace audit to index dependencies across npm, pnpm, PyPI, and other ecosystems found in this project."
-        tone="teach"
-      />
-    </>
+    <EmptyState
+      title="No workspace audit yet"
+      body="Run a workspace audit to index dependencies across npm, pnpm, PyPI, and other ecosystems found in this project."
+      tone="teach"
+    />
   );
-}
-
-type ViewModeChipProps = {
-  label: string;
-  active: boolean;
-  onSelect: () => void;
-};
-
-function ViewModeChip({ label, active, onSelect }: ViewModeChipProps) {
-  return <FilterChip label={label} active={active} onSelect={onSelect} />;
 }
 
 function ecosystemSummary(packages: SupplyChainAuditFinding[]): Array<{ ecosystem: string; count: number }> {
@@ -702,7 +688,7 @@ export function PackageWorkbenchPanel({
 
       <div className="px-4 py-4 space-y-4">
         {auditConnectGate !== null && auditConnectGate !== undefined ? (
-          <WorkbenchEmptyState auditConnectGate={auditConnectGate} auditError={auditError} />
+          <WorkbenchEmptyState auditConnectGate={auditConnectGate} />
         ) : (
           <>
             {auditError ? <WorkbenchAuditErrorBanner message={auditError} /> : null}
@@ -714,13 +700,21 @@ export function PackageWorkbenchPanel({
             ) : null}
 
             {auditSnapshot === null && !progressActive ? (
-              <WorkbenchEmptyState auditConnectGate={null} auditError={auditError} />
+              <WorkbenchEmptyState auditConnectGate={null} />
             ) : null}
 
         {showResults && auditSnapshot !== null && packages.length === 0 && auditSnapshot.inventory.totalPackages > 0 ? (
           <EmptyState
             title="Package list not loaded"
             body="This audit indexed packages, but the detailed list was not stored yet. Run audit again to load the full inventory table."
+            tone="teach"
+          />
+        ) : null}
+
+        {showResults && auditSnapshot !== null && packages.length === 0 && auditSnapshot.inventory.totalPackages === 0 ? (
+          <EmptyState
+            title="No packages indexed"
+            body="The latest workspace audit completed, but no supported package manifests or lockfiles were found."
             tone="teach"
           />
         ) : null}
@@ -735,8 +729,8 @@ export function PackageWorkbenchPanel({
               ))}
             </div>
             <div className="flex flex-wrap gap-2">
-              <ViewModeChip label={`All packages (${packages.length})`} active={viewMode === "all"} onSelect={handleViewAll} />
-              <ViewModeChip
+              <FilterChip label={`All packages (${packages.length})`} active={viewMode === "all"} onSelect={handleViewAll} />
+              <FilterChip
                 label={`Needs review (${findings.length})`}
                 active={viewMode === "review"}
                 onSelect={handleViewReview}
@@ -766,7 +760,7 @@ export function PackageWorkbenchPanel({
             />
             {sortedFindings.length === 0 ? (
               <p className="py-6 text-center text-sm text-slate-500">
-                {viewMode === "review"
+                {viewMode === "review" && findings.length === 0
                   ? "No packages need review in this audit."
                   : "No packages match the current filters."}
               </p>

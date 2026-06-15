@@ -254,9 +254,23 @@ function normalizeSupplyChainAuditSnapshot(raw, receiptId = null) {
   const evaluation = isRecord(raw.evaluation) ? raw.evaluation : null;
   const inventoryPackages = normalizePackageFindings(raw.package_inventory);
   const evaluationPackages = packageRecordsFromEvaluation(evaluation);
-  const packages = evaluationPackages.length > 0 ? evaluationPackages : inventoryPackages.length > 0 ? inventoryPackages : normalizePackageFindings(raw.package_findings);
+  let packages;
+  if (evaluationPackages.length > 0) {
+    packages = evaluationPackages;
+  } else if (inventoryPackages.length > 0) {
+    packages = inventoryPackages;
+  } else {
+    packages = normalizePackageFindings(raw.package_findings);
+  }
   const findingsFromEvidence = normalizePackageFindings(raw.package_findings);
-  const findings = packages.length > 0 ? deriveActionableFindings(packages) : findingsFromEvidence.length > 0 ? findingsFromEvidence : [];
+  let findings;
+  if (packages.length > 0) {
+    findings = deriveActionableFindings(packages);
+  } else if (findingsFromEvidence.length > 0) {
+    findings = findingsFromEvidence;
+  } else {
+    findings = [];
+  }
   const generatedAt = readString(raw.generated_at) ?? readString(raw.generatedAt) ?? (/* @__PURE__ */ new Date(0)).toISOString();
   const inventory = normalizeInventory(isRecord(raw.inventory) ? raw.inventory : null);
   const decision = normalizeDecision(evaluation?.decision ?? raw.audit_decision);
