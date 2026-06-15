@@ -1234,3 +1234,35 @@ def connect_recovery_command(latest_state: dict[str, object] | None) -> str:
     if status == "connected" and milestone == "first_sync_succeeded":
         return "hol-guard sync"
     return CONNECT_COMMAND
+
+
+def connect_retry_refresh_race_from_reason(reason: str | None) -> bool:
+    return isinstance(reason, str) and "already consumed" in reason.lower()
+
+
+def resolve_guard_cloud_state(
+    *,
+    sync_configured: bool,
+    sync_completed: bool,
+    remote_payload_active: bool,
+    oauth_repair_required: bool = False,
+    connect_retry_required: bool = False,
+) -> str:
+    if not sync_configured:
+        return "local_only"
+    if oauth_repair_required:
+        return "local_only"
+    if connect_retry_required:
+        return "local_only" if sync_completed or remote_payload_active else "paired_waiting"
+    if sync_completed or remote_payload_active:
+        return "paired_active"
+    return "paired_waiting"
+
+
+def resolve_guard_cloud_repair_detail(
+    *,
+    shared_proof_recorded: bool,
+    first_sync_message: str,
+    resume_message: str,
+) -> str:
+    return resume_message if shared_proof_recorded else first_sync_message

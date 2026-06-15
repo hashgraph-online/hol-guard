@@ -26,6 +26,11 @@ from .local_supply_chain import build_local_supply_chain_posture
 from .models import GuardApprovalRequest, HarnessDetection, PolicyDecision
 from .risk import artifact_risk_signals, artifact_risk_summary
 from .store import GuardStore, _runtime_scoped_exact_match_key
+from .cli.connect_flow import (
+    connect_retry_refresh_race_from_reason,
+    resolve_guard_cloud_repair_detail,
+    resolve_guard_cloud_state,
+)
 
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
@@ -926,7 +931,7 @@ def _build_runtime_cloud_context(
         _optional_string(acknowledgement.get("acknowledgedAt")) if isinstance(acknowledgement, dict) else None
     )
     remote_payload_active = any((sync_summary, remote_policy, team_policy_pack, alert_preferences))
-    cloud_state = _resolve_runtime_cloud_state(
+    cloud_state = resolve_guard_cloud_state(
         sync_configured=cloud_profile is not None,
         sync_completed=bool(sync_summary),
         remote_payload_active=remote_payload_active,
@@ -1081,7 +1086,7 @@ def _runtime_proof_status_name(
     if milestone == "sync_not_available":
         return "sync_unavailable"
     if status == "retry_required" or milestone == "first_sync_failed":
-        if _connect_retry_refresh_race_from_reason(reason):
+        if connect_retry_refresh_race_from_reason(reason):
             return "stalled"
         return "failed"
     if milestone == "first_sync_pending":
@@ -1138,11 +1143,7 @@ def _connect_retry_required(latest_state: dict[str, object] | None) -> bool:
 def _connect_retry_refresh_race(latest_state: dict[str, object] | None) -> bool:
     if latest_state is None or not _connect_retry_required(latest_state):
         return False
-    return _connect_retry_refresh_race_from_reason(_optional_string(latest_state.get("reason")))
-
-
-def _connect_retry_refresh_race_from_reason(reason: str | None) -> bool:
-    return isinstance(reason, str) and "already consumed" in reason.lower()
+    return connect_retry_refresh_race_from_reason(_optional_string(latest_state.get("reason")))
 
 
 def _build_cloud_sync_health(
@@ -1276,25 +1277,6 @@ def _cloud_sync_health_detail(
     return "Waiting for the first shared Cloud proof from this machine."
 
 
-def _resolve_runtime_cloud_state(
-    *,
-    sync_configured: bool,
-    sync_completed: bool,
-    remote_payload_active: bool,
-    oauth_repair_required: bool = False,
-    connect_retry_required: bool = False,
-) -> str:
-    if not sync_configured:
-        return "local_only"
-    if oauth_repair_required:
-        return "local_only"
-    if connect_retry_required:
-        return "local_only" if sync_completed or remote_payload_active else "paired_waiting"
-    if sync_completed or remote_payload_active:
-        return "paired_active"
-    return "paired_waiting"
-
-
 def _runtime_cloud_state_label(cloud_state: str) -> str:
     labels = {
         "local_only": "Local only",
@@ -1324,14 +1306,16 @@ def _runtime_cloud_state_detail(
             "Run hol-guard connect once when you want shared proof restored."
         )
     if connect_retry_required:
-        if shared_proof_recorded:
-            return (
+        return resolve_guard_cloud_repair_detail(
+            shared_proof_recorded=shared_proof_recorded,
+            first_sync_message=(
+                "Guard Cloud connection on this machine needs repair before the first shared proof can land. "
+                "Run hol-guard connect again."
+            ),
+            resume_message=(
                 "Guard Cloud connection on this machine needs repair before shared proof can resume. "
                 "Run hol-guard connect again."
-            )
-        return (
-            "Guard Cloud connection on this machine needs repair before the first shared proof can land. "
-            "Run hol-guard connect again."
+            ),
         )
     if cloud_state == "paired_waiting":
         return (

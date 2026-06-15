@@ -8,7 +8,6 @@ from urllib.parse import urlparse
 
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
-from ..approvals import _connect_retry_refresh_race_from_reason
 from ..config import GuardConfig
 from ..consumer import detect_all
 from ..consumer.service import diff_artifact
@@ -20,8 +19,11 @@ from .connect_flow import (
     CONNECT_COMMAND,
     CONNECT_REPAIR_COMMAND,
     CONNECT_STATUS_COMMAND,
+    connect_retry_refresh_race_from_reason,
     connect_recovery_command,
     normalize_connect_state_for_missing_oauth,
+    resolve_guard_cloud_repair_detail,
+    resolve_guard_cloud_state,
 )
 
 HARNESS_PRIORITY = ("codex", "claude-code", "copilot", "hermes", "cursor", "antigravity", "gemini", "opencode")
@@ -261,7 +263,7 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
     connect_retry_required = _connect_retry_required(latest_connect_state)
     connect_retry_refresh_race = _connect_retry_refresh_race(latest_connect_state)
     remote_payload_active = bool(advisories or alert_preferences or remote_policy or team_policy_pack)
-    cloud_state = _resolve_cloud_state(
+    cloud_state = resolve_guard_cloud_state(
         sync_configured=cloud_profile is not None,
         sync_completed=bool(sync_summary),
         remote_payload_active=remote_payload_active,
@@ -472,25 +474,6 @@ def _resolve_guard_urls(sync_url: str | None) -> tuple[str, str, str, str]:
     )
 
 
-def _resolve_cloud_state(
-    *,
-    sync_configured: bool,
-    sync_completed: bool,
-    remote_payload_active: bool,
-    oauth_repair_required: bool = False,
-    connect_retry_required: bool = False,
-) -> str:
-    if not sync_configured:
-        return "local_only"
-    if oauth_repair_required:
-        return "local_only"
-    if connect_retry_required:
-        return "local_only" if sync_completed or remote_payload_active else "paired_waiting"
-    if not sync_completed and not remote_payload_active:
-        return "paired_waiting"
-    return "paired_active"
-
-
 def _cloud_state_label(cloud_state: str) -> str:
     labels = {
         "local_only": "Local only",
@@ -521,14 +504,16 @@ def _cloud_state_detail(
             f"race. Run `{GUARD_COMMAND} connect` or reopen {connect_url} when you want shared proof restored."
         )
     if connect_retry_required:
-        if shared_proof_recorded:
-            return (
+        return resolve_guard_cloud_repair_detail(
+            shared_proof_recorded=shared_proof_recorded,
+            first_sync_message=(
+                "Guard Cloud connection on this machine needs repair before the first shared proof can land. "
+                f"Run `{GUARD_COMMAND} connect` or reopen {connect_url} to repair the first sync."
+            ),
+            resume_message=(
                 "Guard Cloud connection on this machine needs repair before shared proof can resume. "
                 f"Run `{GUARD_COMMAND} connect` or reopen {connect_url} to restore sync."
-            )
-        return (
-            "Guard Cloud connection on this machine needs repair before the first shared proof can land. "
-            f"Run `{GUARD_COMMAND} connect` or reopen {connect_url} to repair the first sync."
+            ),
         )
     if cloud_state == "paired_waiting":
         return (
@@ -562,7 +547,7 @@ def _connect_retry_required(latest_state: dict[str, object] | None) -> bool:
 def _connect_retry_refresh_race(latest_state: dict[str, object] | None) -> bool:
     if latest_state is None or not _connect_retry_required(latest_state):
         return False
-    return _connect_retry_refresh_race_from_reason(_optional_string(latest_state.get("reason")))
+    return connect_retry_refresh_race_from_reason(_optional_string(latest_state.get("reason")))
 
 
 def _advisory_headline(advisories: list[dict[str, object]]) -> str | None:

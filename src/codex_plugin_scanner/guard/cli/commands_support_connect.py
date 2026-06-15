@@ -125,6 +125,7 @@ _PERSISTED_POLICY_BUNDLE_REJECTION_REASONS = frozenset(
     }
 )
 
+
 def _refresh_cloud_policy_bundle(store: GuardStore) -> None:
     if store.get_cloud_sync_profile() is None:
         return
