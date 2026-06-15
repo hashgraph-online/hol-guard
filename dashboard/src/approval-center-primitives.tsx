@@ -158,6 +158,7 @@ export function ShellHeader(props: {
           target="_blank"
           rel="noopener noreferrer"
           aria-label={GITHUB_ISSUE_BUTTON_LABEL}
+          title={GITHUB_ISSUE_BUTTON_LABEL}
           className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-white no-underline transition-colors duration-150 hover:bg-white/15"
         >
           <HiMiniBugAnt className="h-4 w-4" aria-hidden="true" />
