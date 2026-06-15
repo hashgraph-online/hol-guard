@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
+from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter, OpenCodeInstallConfigError
 from codex_plugin_scanner.guard.adapters.opencode_artifacts import (
     CONFIG_FILENAMES,
     runtime_config_path,
@@ -340,6 +342,7 @@ class TestOpenCodeInstall:
         managed_config = json.loads(target.read_text(encoding="utf-8"))
         chrome = managed_config["mcp"]["chrome-devtools"]
         assert chrome["command"] == ["npx", "-y", "chrome-devtools-mcp@latest"]
+        assert chrome["enabled"] is False
         assert "opencode-mcp-proxy" not in json.dumps(chrome)
         assert managed_config["mcp"]["my-remote"]["url"] == "https://example.com/mcp"
         companion = managed_config["mcp"]["hol-guard::chrome-devtools"]
@@ -601,6 +604,76 @@ class TestOpenCodeResiliency:
         config.write_text("{invalid json!", encoding="utf-8")
         result = OpenCodeHarnessAdapter().detect(ctx)
         assert result.artifacts == ()
+
+    def test_install_refuses_malformed_existing_config(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        original = '{"model": "gpt-4", "mcp": {"lab": {"type": "local", "command": ["node", "lab.js"]}}}'
+        config.write_text(original + ",", encoding="utf-8")
+        with pytest.raises(OpenCodeInstallConfigError):
+            OpenCodeHarnessAdapter().install(ctx)
+        assert config.read_text(encoding="utf-8") == original + ","
+        assert not OpenCodeHarnessAdapter._backup_path(ctx).exists()
+        assert not OpenCodeHarnessAdapter._state_path(ctx, config).exists()
+
+    def test_install_parses_json_with_comments(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text(
+            """
+            {
+              // workspace model
+              "model": "gpt-4",
+              "mcp": {
+                "lab": {
+                  "type": "local",
+                  "command": ["node", "lab.js"]
+                }
+              }
+            }
+            """,
+            encoding="utf-8",
+        )
+        OpenCodeHarnessAdapter().install(ctx)
+        managed_config = json.loads(config.read_text(encoding="utf-8"))
+        assert managed_config["model"] == "gpt-4"
+        assert managed_config["mcp"]["lab"]["command"] == ["node", "lab.js"]
+        assert managed_config["mcp"]["lab"]["enabled"] is False
+        assert "hol-guard::lab" in managed_config["mcp"]
+
+    def test_install_is_idempotent_for_managed_mcp_entries(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
+        _write_mcp_config(
+            config,
+            {"chrome-devtools": {"type": "local", "command": ["npx", "-y", "chrome-devtools-mcp@latest"]}},
+        )
+        OpenCodeHarnessAdapter().install(ctx)
+        first = json.loads(config.read_text(encoding="utf-8"))
+        OpenCodeHarnessAdapter().install(ctx)
+        second = json.loads(config.read_text(encoding="utf-8"))
+        assert set(first["mcp"]) == set(second["mcp"])
+        assert list(first["mcp"]).count("chrome-devtools") == 1
+        assert list(first["mcp"]).count("hol-guard::chrome-devtools") == 1
+
+    def test_detect_ignores_guard_companion_mcp_entries(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
+        _write_mcp_config(
+            config,
+            {
+                "chrome-devtools": {"type": "local", "command": ["npx", "-y", "chrome-devtools-mcp@latest"]},
+                "hol-guard::chrome-devtools": {
+                    "type": "local",
+                    "command": ["/usr/local/bin/hol-guard", "guard", "opencode-mcp-proxy"],
+                },
+            },
+        )
+        result = OpenCodeHarnessAdapter().detect(ctx)
+        artifact_names = {artifact.name for artifact in result.artifacts}
+        assert artifact_names == {"chrome-devtools"}
 
     def test_detect_skips_empty_config_file(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
