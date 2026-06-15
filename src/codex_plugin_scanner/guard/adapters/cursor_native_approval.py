@@ -24,6 +24,17 @@ _CURSOR_BLOCKING_OBSERVER_EVENTS = {
 }
 _MAX_CURSOR_SHELL_NORMALIZE_BYTES = 8192
 _LEAN_CTX_COMMAND_MARKER = "lean-ctx"
+_SHELL_WRAPPER_BINARIES = frozenset(
+    {
+        _LEAN_CTX_COMMAND_MARKER,
+        "ash",
+        "bash",
+        "dash",
+        "fish",
+        "sh",
+        "zsh",
+    }
+)
 
 
 def _split_posix_single_quoted_argument(text: str) -> tuple[str, str] | None:
@@ -117,6 +128,41 @@ def is_lean_ctx_wrapper_command(command: str) -> bool:
         return False
     first_token = stripped.split(maxsplit=1)[0]
     return Path(first_token).name.lower() == _LEAN_CTX_COMMAND_MARKER
+
+
+def is_shell_wrapper_command(command: str) -> bool:
+    """Return True when a top-level command is wrapping an inner shell invocation."""
+
+    stripped = command.strip()
+    if not stripped:
+        return False
+    if is_lean_ctx_wrapper_command(stripped):
+        return True
+    try:
+        parts = shlex.split(stripped, posix=True, comments=False)
+    except ValueError:
+        return False
+    if not parts:
+        return False
+    binary = Path(parts[0]).name.lower()
+    if binary not in _SHELL_WRAPPER_BINARIES:
+        return False
+    return len(parts) > 1 and parts[1] == "-c"
+
+
+def cursor_hook_payload_is_mcp_execution(payload: Mapping[str, object]) -> bool:
+    """Return True when the payload came from Cursor MCP before/after hooks."""
+
+    source_event = payload.get("cursor_source_hook_event")
+    if isinstance(source_event, str) and source_event.strip().lower() == "beforemcpexecution":
+        return True
+    for key in ("hook_event_name", "hookEventName", "hook_name", "hookName", "event", "eventName"):
+        value = payload.get(key)
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"beforemcpexecution", "aftermcpexecution"}:
+                return True
+    return False
 
 
 def cursor_observer_event_for_blocking(blocking_event: str) -> str | None:
@@ -450,12 +496,14 @@ __all__ = [
     "cursor_after_shell_trusted",
     "cursor_generation_id",
     "cursor_hook_attestation_secret_path",
+    "cursor_hook_payload_is_mcp_execution",
     "cursor_observer_event_for_blocking",
     "cursor_observer_event_for_payload",
     "cursor_shell_binding_path",
     "ensure_cursor_approval_binding",
     "ensure_cursor_hook_attestation_secret",
     "is_lean_ctx_wrapper_command",
+    "is_shell_wrapper_command",
     "managed_cursor_hook_invocation",
     "normalize_cursor_shell_command",
     "read_cursor_shell_binding_file",

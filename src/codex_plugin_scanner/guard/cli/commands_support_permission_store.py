@@ -305,27 +305,27 @@ def _persist_cursor_native_permission_after_shell(
         env=hook_env,
     ):
         return False
-    action_envelope = _hook_action_envelope(
-        harness=harness,
-        payload=prepared,
-        home_dir=home_dir,
-        workspace=workspace,
-    )
-    runtime_artifact = _hook_runtime_artifact(
-        harness=harness,
-        payload=prepared,
-        action_envelope=action_envelope,
-        home_dir=home_dir,
-        guard_home=guard_home,
-        workspace=workspace,
-    )
-    runtime_artifact_hash: str | None = None
-    if runtime_artifact is not None:
+    runtime_artifact = _cursor_runtime_artifact_from_pending(pending)
+    runtime_artifact_hash = _optional_string(pending.get("artifact_hash"))
+    if runtime_artifact is not None and runtime_artifact_hash is None:
         runtime_artifact_hash = artifact_hash(runtime_artifact)
-    else:
-        runtime_artifact = _cursor_runtime_artifact_from_pending(pending)
+    if runtime_artifact is None:
+        action_envelope = _hook_action_envelope(
+            harness=harness,
+            payload=prepared,
+            home_dir=home_dir,
+            workspace=workspace,
+        )
+        runtime_artifact = _hook_runtime_artifact(
+            harness=harness,
+            payload=prepared,
+            action_envelope=action_envelope,
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
         if runtime_artifact is not None:
-            runtime_artifact_hash = _optional_string(pending.get("artifact_hash"))
+            runtime_artifact_hash = artifact_hash(runtime_artifact)
     if runtime_artifact is None or runtime_artifact_hash is None:
         return False
     session_saved = _record_cursor_native_shell_allow_state(
