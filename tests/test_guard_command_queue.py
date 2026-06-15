@@ -8,6 +8,7 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.daemon import client as daemon_client_module
+from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon.command_queue_worker import (
     CommandQueueWorker,
     start_command_queue_worker,
@@ -68,9 +69,10 @@ def _block_local_daemon_client(monkeypatch: pytest.MonkeyPatch) -> None:
         raise AssertionError("Guard Cloud command execution must not use the local daemon client.")
 
     monkeypatch.setattr(daemon_client_module, "load_guard_surface_daemon_client", fail)
-    monkeypatch.setattr(daemon_client_module, "ensure_guard_daemon", fail)
-    monkeypatch.setattr(daemon_client_module, "load_guard_daemon_url", fail)
-    monkeypatch.setattr(daemon_client_module, "load_guard_daemon_auth_token", fail)
+    for module in (daemon_client_module, daemon_manager_module):
+        monkeypatch.setattr(module, "ensure_guard_daemon", fail)
+        monkeypatch.setattr(module, "load_guard_daemon_url", fail)
+        monkeypatch.setattr(module, "load_guard_daemon_auth_token", fail)
 
 
 def test_command_queue_enabled_defaults_on(monkeypatch) -> None:
