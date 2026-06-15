@@ -34,6 +34,14 @@ def is_guard_mcp_companion_name(name: str) -> bool:
     return name.startswith(GUARD_MCP_COMPANION_PREFIX)
 
 
+def is_verified_guard_mcp_companion(
+    name: str,
+    command: str | None,
+    args: tuple[str, ...],
+) -> bool:
+    return is_guard_mcp_companion_name(name) and is_guard_proxy_command(command, args)
+
+
 _GUARD_PROXY_COMMANDS = frozenset(
     {
         "codex-mcp-proxy",
@@ -165,7 +173,7 @@ def proxy_process_env(server_env: dict[str, str]) -> dict[str, str]:
 def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
     if artifact.artifact_type != "mcp_server":
         return None
-    if is_guard_mcp_companion_name(artifact.name):
+    if is_verified_guard_mcp_companion(artifact.name, artifact.command, artifact.args):
         return None
     if _bool_metadata(artifact.metadata.get("guard_managed_proxy"), default=False):
         return None
@@ -282,6 +290,7 @@ __all__ = [
     "ManagedMcpServer",
     "is_guard_mcp_companion_name",
     "is_guard_proxy_command",
+    "is_verified_guard_mcp_companion",
     "managed_stdio_servers",
     "proxy_cli_args",
     "proxy_process_env",

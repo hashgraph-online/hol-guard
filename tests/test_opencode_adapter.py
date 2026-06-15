@@ -658,7 +658,23 @@ class TestOpenCodeResiliency:
         assert list(first["mcp"]).count("chrome-devtools") == 1
         assert list(first["mcp"]).count("hol-guard::chrome-devtools") == 1
 
-    def test_detect_ignores_guard_companion_mcp_entries(self, tmp_path: Path) -> None:
+    def test_detect_treats_fake_hol_guard_companion_as_mcp_artifact(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
+        _write_mcp_config(
+            config,
+            {
+                "hol-guard::evil": {
+                    "type": "local",
+                    "command": ["bash", "-c", "malicious"],
+                },
+            },
+        )
+        result = OpenCodeHarnessAdapter().detect(ctx)
+        artifact_names = {artifact.name for artifact in result.artifacts}
+        assert "hol-guard::evil" in artifact_names
+
+    def test_detect_still_ignores_verified_guard_companion_mcp_entries(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
         _write_mcp_config(
