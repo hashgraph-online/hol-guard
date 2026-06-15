@@ -16,7 +16,13 @@ from ..daemon import load_guard_daemon_url
 from ..models import GuardArtifact, HarnessDetection
 from ..redaction import redact_local_path
 from ..store import GuardStore
-from .connect_flow import CONNECT_COMMAND, CONNECT_REPAIR_COMMAND, CONNECT_STATUS_COMMAND, connect_recovery_command
+from .connect_flow import (
+    CONNECT_COMMAND,
+    CONNECT_REPAIR_COMMAND,
+    CONNECT_STATUS_COMMAND,
+    connect_recovery_command,
+    normalize_connect_state_for_missing_oauth,
+)
 
 HARNESS_PRIORITY = ("codex", "claude-code", "copilot", "hermes", "cursor", "antigravity", "gemini", "opencode")
 GUARD_COMMAND = "hol-guard"
@@ -248,7 +254,10 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
     team_policy_pack = _coerce_payload_dict(store.get_sync_payload("team_policy_pack"))
     sync_summary = _coerce_payload_dict(store.get_sync_payload("sync_summary"))
     last_sync_at = _optional_string(sync_summary.get("synced_at"))
-    latest_connect_state = store.get_effective_guard_connect_state(now=_now())
+    latest_connect_state = normalize_connect_state_for_missing_oauth(
+        latest_state=store.get_effective_guard_connect_state(now=_now()),
+        oauth_storage_health=oauth_storage_health,
+    )
     connect_retry_required = _connect_retry_required(latest_connect_state)
     connect_retry_refresh_race = _connect_retry_refresh_race(latest_connect_state)
     remote_payload_active = bool(advisories or alert_preferences or remote_policy or team_policy_pack)
