@@ -13,7 +13,11 @@ from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 
 
 def _disable_daemon_adoption(monkeypatch) -> None:
-    monkeypatch.setattr(daemon_manager_module, "_adopt_existing_guard_daemon", lambda _guard_home: None)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_adopt_existing_guard_daemon",
+        lambda _guard_home, **kwargs: None,
+    )
 
 
 def _disable_duplicate_retire(monkeypatch) -> None:
@@ -200,12 +204,12 @@ def test_ensure_guard_daemon_reuses_inflight_pid_before_respawning(tmp_path, mon
     monkeypatch.setattr(
         daemon_manager_module,
         "load_guard_daemon_url",
-        lambda _guard_home: next(responses, "http://127.0.0.1:5409"),
+        lambda _guard_home, **kwargs: next(responses, "http://127.0.0.1:5409"),
     )
     monkeypatch.setattr(
         daemon_manager_module,
         "_load_state",
-        lambda _guard_home: {
+        lambda _guard_home, **kwargs: {
             "pid": 12345,
             "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
             "source_root": daemon_manager_module._current_guard_daemon_source_root(),
@@ -229,8 +233,8 @@ def test_ensure_guard_daemon_adopts_running_guard_daemon_before_respawning(tmp_p
     guard_home = tmp_path / "guard-home"
 
     monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
-    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _guard_home: None)
-    monkeypatch.setattr(daemon_manager_module, "_adoptable_guard_daemon_ports", lambda _guard_home: [5474])
+    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _guard_home, **kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "_adoptable_guard_daemon_ports", lambda _guard_home, **kwargs: [5474])
     monkeypatch.setattr(
         daemon_manager_module,
         "_initialize_existing_guard_daemon",
@@ -241,7 +245,7 @@ def test_ensure_guard_daemon_adopts_running_guard_daemon_before_respawning(tmp_p
         "Popen",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not spawn a new daemon")),
     )
-    monkeypatch.setattr(daemon_manager_module, "_running_guard_daemon_processes_for_guard_home", lambda _guard_home: [])
+    monkeypatch.setattr(daemon_manager_module, "_running_guard_daemon_processes_for_guard_home", lambda _guard_home, **kwargs: [])
 
     url = daemon_manager_module.ensure_guard_daemon(guard_home)
 
@@ -272,11 +276,11 @@ def test_ensure_guard_daemon_retires_duplicate_ports_for_same_guard_home(tmp_pat
     killed: list[int] = []
 
     monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
-    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:5474")
+    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _guard_home, **kwargs: "http://127.0.0.1:5474")
     monkeypatch.setattr(
         daemon_manager_module,
         "_running_guard_daemon_processes_for_guard_home",
-        lambda _guard_home: [(111, 5474), (222, 5475)],
+        lambda _guard_home, **kwargs: [(111, 5474), (222, 5475)],
     )
     monkeypatch.setattr(
         daemon_manager_module,
@@ -313,8 +317,8 @@ def test_ensure_guard_daemon_serializes_parallel_start_attempts(tmp_path, monkey
         return SimpleNamespace()
 
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
-    monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _guard_home: None)
-    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home: [5410])
+    monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _guard_home, **kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home, **kwargs: [5410])
     monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", fake_popen)
     monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
 
@@ -372,8 +376,8 @@ def test_ensure_guard_daemon_advances_ports_after_early_process_exit(tmp_path, m
         return FakeProcess(alive=len(launched_commands) > 1)
 
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
-    monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _guard_home: None)
-    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home: [5410, 5411])
+    monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _guard_home, **kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home, **kwargs: [5410, 5411])
     monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", fake_popen)
     monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
 
@@ -400,7 +404,7 @@ def test_ensure_guard_daemon_retires_stale_daemon_from_different_source_root(tmp
     monkeypatch.setattr(
         daemon_manager_module,
         "_load_state",
-        lambda _guard_home: {
+        lambda _guard_home, **kwargs: {
             "pid": 98765,
             "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
             "source_root": "/tmp/older-source-root",
@@ -415,7 +419,7 @@ def test_ensure_guard_daemon_retires_stale_daemon_from_different_source_root(tmp
     )
     monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(daemon_manager_module.os, "kill", lambda pid, _signal: killed.append(pid))
-    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home: [5412])
+    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home, **kwargs: [5412])
     monkeypatch.setattr(
         daemon_manager_module.subprocess,
         "Popen",
@@ -446,8 +450,8 @@ def test_ensure_guard_daemon_spawns_with_current_package_import_path(tmp_path, m
     monkeypatch.delenv("PYTHONPATH", raising=False)
     monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
-    monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _guard_home: None)
-    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home: [5412])
+    monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _guard_home, **kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home, **kwargs: [5412])
     monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", fake_popen)
     monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
 
@@ -505,7 +509,7 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_daemon_states(tmp_path, monke
     monkeypatch.setattr(
         daemon_manager_module,
         "_candidate_ports",
-        lambda _guard_home: [5413],
+        lambda _guard_home, **kwargs: [5413],
     )
     monkeypatch.setattr(
         daemon_manager_module,
@@ -578,9 +582,9 @@ def test_ensure_guard_daemon_keeps_ephemeral_state_with_recent_runtime_heartbeat
     monkeypatch.setattr(daemon_manager_module, "_LAST_EPHEMERAL_REAP_AT", 0.0)
     monkeypatch.setattr(daemon_manager_module.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
-    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home: [5415])
+    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home, **kwargs: [5415])
     monkeypatch.setattr(daemon_manager_module, "_state_path_age_seconds", lambda _path: 60.0)
-    monkeypatch.setattr(daemon_manager_module, "_runtime_state_age_seconds", lambda _guard_home: 1.0)
+    monkeypatch.setattr(daemon_manager_module, "_runtime_state_age_seconds", lambda _guard_home, **kwargs: 1.0)
     monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
     monkeypatch.setattr(
@@ -621,9 +625,9 @@ def test_ensure_guard_daemon_does_not_clobber_unowned_ephemeral_state_files(tmp_
     monkeypatch.setattr(daemon_manager_module, "_LAST_EPHEMERAL_REAP_AT", 0.0)
     monkeypatch.setattr(daemon_manager_module.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
-    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home: [5416])
+    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home, **kwargs: [5416])
     monkeypatch.setattr(daemon_manager_module, "_state_path_age_seconds", lambda _path: 60.0)
-    monkeypatch.setattr(daemon_manager_module, "_runtime_state_age_seconds", lambda _guard_home: 60.0)
+    monkeypatch.setattr(daemon_manager_module, "_runtime_state_age_seconds", lambda _guard_home, **kwargs: 60.0)
     monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
     monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(
@@ -663,9 +667,9 @@ def test_ensure_guard_daemon_keeps_stale_state_when_pid_no_longer_matches_guard_
     monkeypatch.setattr(daemon_manager_module, "_LAST_EPHEMERAL_REAP_AT", 0.0)
     monkeypatch.setattr(daemon_manager_module.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
-    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home: [5417])
+    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home, **kwargs: [5417])
     monkeypatch.setattr(daemon_manager_module, "_state_path_age_seconds", lambda _path: 60.0)
-    monkeypatch.setattr(daemon_manager_module, "_runtime_state_age_seconds", lambda _guard_home: 60.0)
+    monkeypatch.setattr(daemon_manager_module, "_runtime_state_age_seconds", lambda _guard_home, **kwargs: 60.0)
     monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
     monkeypatch.setattr(
@@ -703,14 +707,14 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_processes_without_state_file(
     monkeypatch.setattr(daemon_manager_module, "_LAST_EPHEMERAL_REAP_AT", 0.0)
     monkeypatch.setattr(daemon_manager_module.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
-    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home: [5414])
+    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home, **kwargs: [5414])
     monkeypatch.setattr(daemon_manager_module, "_ephemeral_guard_daemon_state_paths", lambda _temp_root: [])
     monkeypatch.setattr(
         daemon_manager_module,
         "_running_ephemeral_guard_daemon_processes",
         lambda: [(33333, stale_guard_home, 60.0)],
     )
-    monkeypatch.setattr(daemon_manager_module, "_runtime_state_age_seconds", lambda _guard_home: None)
+    monkeypatch.setattr(daemon_manager_module, "_runtime_state_age_seconds", lambda _guard_home, **kwargs: None)
     pid_running = {"value": True}
 
     def fake_pid_is_running(_pid):
@@ -880,3 +884,20 @@ def test_guard_daemon_start_lock_recovers_after_exception(tmp_path):
     with daemon_manager_module._guard_daemon_start_lock(guard_home):
         acquired = True
     assert acquired, "Lock was not released after exception; stale lock not recoverable"
+
+
+def test_candidate_ports_prefers_dashboard_update_port(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    ports = daemon_manager_module._candidate_ports(guard_home, preferred_port=5483)
+    assert ports[0] == 5483
+    assert len(ports) == 26
+    assert 5483 not in ports[1:] or ports.count(5483) == 1
+
+
+def test_prepend_preferred_port_dedupes() -> None:
+    ordered = daemon_manager_module._prepend_preferred_port([5483, 5484, 5485], 5483)
+    assert ordered == [5483, 5484, 5485]
+    ordered = daemon_manager_module._prepend_preferred_port([5474, 5475], 5483)
+    assert ordered[0] == 5483
+    assert ordered[1:] == [5474, 5475]

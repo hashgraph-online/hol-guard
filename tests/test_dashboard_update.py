@@ -388,7 +388,7 @@ def test_dashboard_update_runner_retires_all_daemons_before_upgrade(
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.dashboard_update_runner.ensure_guard_daemon_after_update",
-        lambda _home: calls.append("ensure") or "http://127.0.0.1:5474",
+        lambda _home, **kwargs: calls.append(f"ensure:{kwargs.get('preferred_port')}") or "http://127.0.0.1:5474",
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.dashboard_update_runner.clear_dashboard_update_lock",
@@ -417,7 +417,7 @@ def test_dashboard_update_runner_retires_all_daemons_before_upgrade(
         "retire",
         "retire_pid:5150",
         "clear_state",
-        "ensure",
+        "ensure:5474",
         "clear_lock",
     ]
 
