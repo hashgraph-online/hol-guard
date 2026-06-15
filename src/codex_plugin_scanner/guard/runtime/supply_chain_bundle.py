@@ -14,6 +14,7 @@ from .supply_chain_bundle_base import (
 from .supply_chain_bundle_models import (
     SupplyChainBundle,
     SupplyChainBundleAdvisory,
+    SupplyChainBundleEmergencyDeny,
     SupplyChainBundlePackage,
     SupplyChainBundlePolicyRule,
     SupplyChainBundleResponse,
@@ -36,6 +37,7 @@ __all__ = [
     "OfflineSupplyChainDecision",
     "SupplyChainBundle",
     "SupplyChainBundleAdvisory",
+    "SupplyChainBundleEmergencyDeny",
     "SupplyChainBundleError",
     "SupplyChainBundleExpiredError",
     "SupplyChainBundleKeyringError",

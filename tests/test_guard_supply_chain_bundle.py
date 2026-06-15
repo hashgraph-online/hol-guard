@@ -369,6 +369,38 @@ def test_supply_chain_bundle_offline_evaluation_blocks_high_confidence_and_monit
     assert stale_decision.reason == "stale_low_confidence"
 
 
+def test_supply_chain_bundle_verifies_portal_signed_payload_with_emergency_denylist() -> None:
+    private_key, _public_key = _generate_key_pair()
+    bundle = _bundle_dict()
+    bundle["emergencyDenylist"] = [
+        {
+            "ecosystem": "npm",
+            "name": "minimist",
+            "namespace": None,
+            "reason": "known_malware",
+            "recommendedFixVersion": "1.2.9",
+        }
+    ]
+    response = load_supply_chain_bundle_response(
+        json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key))
+    )
+
+    verify_supply_chain_bundle_response(response, now=response.bundle.generated_at_timestamp + 5)
+    assert len(response.bundle.emergency_denylist) == 1
+    assert response.bundle.emergency_denylist[0].reason == "known_malware"
+
+
+def test_supply_chain_bundle_verifies_portal_signed_payload_with_sparse_policy_rules() -> None:
+    private_key, _public_key = _generate_key_pair()
+    bundle = _bundle_dict()
+    bundle["policyRules"] = [{"action": "block", "ruleId": "rule-1"}]
+    response = load_supply_chain_bundle_response(
+        json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key))
+    )
+
+    verify_supply_chain_bundle_response(response, now=response.bundle.generated_at_timestamp + 5)
+
+
 def test_supply_chain_bundle_offline_evaluation_does_not_match_scoped_entries_from_unscoped_names() -> None:
     private_key, _public_key = _generate_key_pair()
     bundle = _bundle_dict()
