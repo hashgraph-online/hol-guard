@@ -365,6 +365,7 @@ export type GuardRuntimeSnapshot = {
   cloud_policy_bundle_version?: string | null;
   cloud_policy_rollout_state?: string | null;
   cloud_policy_sync_error?: string | null;
+  cloud_policy_last_ack_at?: string | null;
   cloud_pairing_state: GuardCloudPairingState;
   cloud_sync_health: GuardCloudSyncHealth;
   dashboard_url: string;
