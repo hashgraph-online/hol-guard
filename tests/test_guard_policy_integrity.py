@@ -60,12 +60,27 @@ def _policy_integrity_state_payload(home_dir: Path) -> dict[str, object]:
     return json.loads(str(row[0]))
 
 
+def _policy_integrity_control_payload(store: GuardStore) -> dict[str, object]:
+    secret_store = store._policy_integrity_secret_store
+    assert secret_store is not None
+    payload_json = secret_store.get_secret(store._policy_integrity_control_ref)
+    assert payload_json is not None
+    return json.loads(payload_json)
+
+
+def _delete_policy_integrity_control_state(store: GuardStore) -> None:
+    secret_store = store._policy_integrity_secret_store
+    assert secret_store is not None
+    secret_store.delete_secret(store._policy_integrity_control_ref)
+
+
 def _strip_policy_integrity(home_dir: Path, *, artifact_id: str) -> None:
     with sqlite3.connect(home_dir / "guard.db") as connection:
         connection.execute(
             """
             update policy_decisions
             set integrity_version = null,
+                integrity_generation = null,
                 payload_hash = null,
                 payload_mac = null,
                 integrity_key_id = null,
@@ -76,7 +91,7 @@ def _strip_policy_integrity(home_dir: Path, *, artifact_id: str) -> None:
         )
 
 
-def _set_policy_integrity_state(
+def _tamper_policy_integrity_state(
     home_dir: Path,
     *,
     backend: str,
@@ -119,6 +134,7 @@ def test_upsert_policy_signs_local_row_and_resolve_honors_it(tmp_path: Path) -> 
     store.upsert_policy(_decision(), "2026-06-14T00:00:00Z")
 
     row = _policy_row(store.guard_home, artifact_id="codex:project:workspace-skill")
+    control = _policy_integrity_control_payload(store)
     resolved = store.resolve_policy_decision(
         "codex",
         "codex:project:workspace-skill",
@@ -126,10 +142,13 @@ def test_upsert_policy_signs_local_row_and_resolve_honors_it(tmp_path: Path) -> 
         now="2026-06-14T00:01:00Z",
     )
 
-    assert row["integrity_version"] == 1
+    assert row["integrity_version"] == 2
+    assert row["integrity_generation"] == 1
     assert isinstance(row["payload_hash"], str) and row["payload_hash"]
     assert isinstance(row["payload_mac"], str) and row["payload_mac"]
     assert isinstance(row["integrity_key_id"], str) and row["integrity_key_id"]
+    assert control["cutover_complete"] is True
+    assert control["generation"] == 1
     assert resolved is not None
     assert resolved["action"] == "allow"
     assert resolved["integrity_status"] == "valid"
@@ -167,6 +186,59 @@ def test_direct_sqlite_insert_is_ignored_in_enforce_mode(tmp_path: Path) -> None
         "codex:project:forged",
         "hash-forged",
         now="2026-06-14T00:01:00Z",
+    )
+    verify = store.verify_policy_integrity()
+
+    assert resolved is None
+    assert verify["enforcement"] == "enforce"
+    assert verify["counts"]["missing_integrity"] == 1
+
+
+def test_sync_state_tamper_cannot_downgrade_enforcement(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:baseline", artifact_hash="hash-baseline"),
+        "2026-06-14T00:00:00Z",
+    )
+
+    status = store.get_policy_integrity_status()
+    _tamper_policy_integrity_state(
+        store.guard_home,
+        backend=str(status["backend"]),
+        mode="protected",
+        enforcement="warn",
+        key_id=status["key_id"] if isinstance(status["key_id"], str) else None,
+    )
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        connection.execute(
+            """
+            insert into policy_decisions (
+              harness, scope, artifact_id, artifact_hash, workspace, publisher, action, reason, owner, source,
+              expires_at, updated_at
+            )
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "codex",
+                "artifact",
+                "codex:project:forged-sync-state",
+                "hash-forged-sync-state",
+                None,
+                None,
+                "allow",
+                "forged",
+                None,
+                "local",
+                None,
+                "2026-06-14T00:01:00Z",
+            ),
+        )
+
+    resolved = store.resolve_policy(
+        "codex",
+        "codex:project:forged-sync-state",
+        "hash-forged-sync-state",
+        now="2026-06-14T00:02:00Z",
     )
     verify = store.verify_policy_integrity()
 
@@ -247,44 +319,38 @@ def test_remote_policy_row_is_honored_without_local_mac(tmp_path: Path) -> None:
     assert resolved == "allow"
 
 
-def test_legacy_unsigned_row_warn_mode_then_enforce_mode(tmp_path: Path) -> None:
+def test_legacy_unsigned_row_warn_mode_then_trusted_local_write_enforces(tmp_path: Path) -> None:
     store = _store(tmp_path)
     store.upsert_policy(
         _decision(artifact_id="codex:project:legacy", artifact_hash="hash-legacy"),
         "2026-06-14T00:00:00Z",
     )
-    status = store.get_policy_integrity_status()
     _strip_policy_integrity(store.guard_home, artifact_id="codex:project:legacy")
-    _set_policy_integrity_state(
-        store.guard_home,
-        backend=str(status["backend"]),
-        mode="protected",
-        enforcement="warn",
-        key_id=status["key_id"] if isinstance(status["key_id"], str) else None,
-    )
+    _delete_policy_integrity_control_state(store)
 
+    warned_status = store.get_policy_integrity_status()
     warned = store.resolve_policy_decision(
         "codex",
         "codex:project:legacy",
         "hash-legacy",
         now="2026-06-14T00:01:00Z",
     )
-    _set_policy_integrity_state(
-        store.guard_home,
-        backend=str(status["backend"]),
-        mode="protected",
-        enforcement="enforce",
-        key_id=status["key_id"] if isinstance(status["key_id"], str) else None,
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:fresh", artifact_hash="hash-fresh"),
+        "2026-06-14T00:02:00Z",
     )
+    enforced_status = store.get_policy_integrity_status()
     enforced = store.resolve_policy(
         "codex",
         "codex:project:legacy",
         "hash-legacy",
-        now="2026-06-14T00:02:00Z",
+        now="2026-06-14T00:03:00Z",
     )
 
+    assert warned_status["enforcement"] == "warn"
     assert warned is not None
     assert warned["integrity_status"] == "missing_integrity"
+    assert enforced_status["enforcement"] == "enforce"
     assert enforced is None
 
 
@@ -298,16 +364,9 @@ def test_migrate_local_policy_integrity_preserves_selected_rows_only(tmp_path: P
         _decision(artifact_id="codex:project:legacy-two", artifact_hash="hash-two"),
         "2026-06-14T00:00:00Z",
     )
-    status = store.get_policy_integrity_status()
     _strip_policy_integrity(store.guard_home, artifact_id="codex:project:legacy-one")
     _strip_policy_integrity(store.guard_home, artifact_id="codex:project:legacy-two")
-    _set_policy_integrity_state(
-        store.guard_home,
-        backend=str(status["backend"]),
-        mode="protected",
-        enforcement="warn",
-        key_id=status["key_id"] if isinstance(status["key_id"], str) else None,
-    )
+    _delete_policy_integrity_control_state(store)
 
     items = store.verify_policy_integrity()["items"]
     preserve_id = next(
@@ -358,19 +417,144 @@ def test_migrate_local_policy_integrity_re_signs_unknown_key_rows(tmp_path: Path
     assert resolved == "allow"
 
 
+def test_pending_generation_recovers_when_post_commit_control_write_is_skipped(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:baseline", artifact_hash="hash-baseline"),
+        "2026-06-14T00:00:00Z",
+    )
+    monkeypatch.setattr(store, "_finalize_policy_integrity_control_state", lambda payload: None)
+
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:pending", artifact_hash="hash-pending"),
+        "2026-06-14T00:01:00Z",
+    )
+
+    pending_control = _policy_integrity_control_payload(store)
+    verify = store.verify_policy_integrity()
+    recovered_control = _policy_integrity_control_payload(store)
+
+    assert pending_control["generation"] == 1
+    assert pending_control["pending_generation"] == 2
+    assert verify["counts"]["valid"] == 2
+    assert recovered_control["generation"] == 2
+    assert recovered_control["pending_generation"] is None
+
+
+def test_signed_rollback_snapshot_is_detected_and_repair_advances_generation(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:rollback", artifact_hash="hash-rollback"),
+        "2026-06-14T00:00:00Z",
+    )
+    snapshot = _policy_row(store.guard_home, artifact_id="codex:project:rollback")
+    assert snapshot["integrity_generation"] == 1
+
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:current", artifact_hash="hash-current"),
+        "2026-06-14T00:01:00Z",
+    )
+
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        connection.execute(
+            """
+            update policy_decisions
+            set integrity_version = ?,
+                integrity_generation = ?,
+                payload_hash = ?,
+                payload_mac = ?,
+                integrity_key_id = ?,
+                signed_at = ?
+            where artifact_id = ?
+            """,
+            (
+                snapshot["integrity_version"],
+                snapshot["integrity_generation"],
+                snapshot["payload_hash"],
+                snapshot["payload_mac"],
+                snapshot["integrity_key_id"],
+                snapshot["signed_at"],
+                "codex:project:rollback",
+            ),
+        )
+
+    verify = store.verify_policy_integrity()
+    rollback_item = next(
+        item for item in verify["items"] if item.get("artifact_id") == "codex:project:rollback"
+    )
+    repair = store.repair_policy_integrity(clear_invalid=True, now="2026-06-14T00:02:00Z")
+    control = _policy_integrity_control_payload(store)
+    resolved = store.resolve_policy("codex", "codex:project:current", "hash-current", now="2026-06-14T00:03:00Z")
+
+    assert verify["counts"]["rollback_detected"] == 1
+    assert rollback_item["integrity_status"] == "rollback_detected"
+    assert rollback_item["integrity_message"] == "policy_integrity_generation_rollback"
+    assert repair["cleared"] == 1
+    assert repair["counts"]["valid"] == 1
+    assert repair["counts"]["rollback_detected"] == 0
+    assert control["generation"] == 3
+    assert resolved == "allow"
+
+
+def test_migrate_local_policy_integrity_reports_rollback_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    monkeypatch.setattr(store, "_backup_policy_database", lambda connection, *, now: "guard.db.pre-integrity-test")
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:rollback-migrate", artifact_hash="hash-rollback-migrate"),
+        "2026-06-14T00:00:00Z",
+    )
+    snapshot = _policy_row(store.guard_home, artifact_id="codex:project:rollback-migrate")
+    rollback_id = int(snapshot["decision_id"])
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:rollback-peer", artifact_hash="hash-rollback-peer"),
+        "2026-06-14T00:01:00Z",
+    )
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        connection.execute(
+            """
+            update policy_decisions
+            set integrity_version = ?,
+                integrity_generation = ?,
+                payload_hash = ?,
+                payload_mac = ?,
+                integrity_key_id = ?,
+                signed_at = ?
+            where decision_id = ?
+            """,
+            (
+                snapshot["integrity_version"],
+                snapshot["integrity_generation"],
+                snapshot["payload_hash"],
+                snapshot["payload_mac"],
+                snapshot["integrity_key_id"],
+                snapshot["signed_at"],
+                rollback_id,
+            ),
+        )
+
+    payload = store.migrate_local_policy_integrity(
+        preserve_decision_ids={rollback_id},
+        clear_unselected=False,
+        now="2026-06-14T00:02:00Z",
+    )
+
+    assert payload["rollback_row_ids"] == [rollback_id]
+    assert payload["blocked_preserve_row_ids"] == [rollback_id]
+    assert payload["counts"]["rollback_detected"] == 1
+
+
 def test_policies_cli_verify_status_migrate_and_repair(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)
     store.upsert_policy(_decision(artifact_id="codex:project:cli", artifact_hash="hash-cli"), "2026-06-14T00:00:00Z")
-    status = store.get_policy_integrity_status()
     _strip_policy_integrity(home_dir, artifact_id="codex:project:cli")
-    _set_policy_integrity_state(
-        home_dir,
-        backend=str(status["backend"]),
-        mode="protected",
-        enforcement="warn",
-        key_id=status["key_id"] if isinstance(status["key_id"], str) else None,
-    )
+    _delete_policy_integrity_control_state(store)
 
     verify_rc = main(["guard", "policies", "verify", "--home", str(home_dir), "--json"])
     verify_payload = json.loads(capsys.readouterr().out)
@@ -399,13 +583,6 @@ def test_policies_cli_verify_status_migrate_and_repair(tmp_path: Path, capsys) -
     assert migrate_payload["enforcement"] == "enforce"
 
     _strip_policy_integrity(home_dir, artifact_id="codex:project:cli")
-    _set_policy_integrity_state(
-        home_dir,
-        backend=str(status["backend"]),
-        mode="protected",
-        enforcement="enforce",
-        key_id=status["key_id"] if isinstance(status["key_id"], str) else None,
-    )
     repair_rc = main(
         [
             "guard",
@@ -421,6 +598,48 @@ def test_policies_cli_verify_status_migrate_and_repair(tmp_path: Path, capsys) -
     assert repair_rc == 0
     assert repair_payload["cleared"] == 1
     assert GuardStore(home_dir).list_policy_decisions() == []
+
+
+def test_policies_cli_verify_returns_nonzero_for_rollback_detected(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:cli-rollback", artifact_hash="hash-cli-rollback"),
+        "2026-06-14T00:00:00Z",
+    )
+    snapshot = _policy_row(home_dir, artifact_id="codex:project:cli-rollback")
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:cli-current", artifact_hash="hash-cli-current"),
+        "2026-06-14T00:01:00Z",
+    )
+    with sqlite3.connect(home_dir / "guard.db") as connection:
+        connection.execute(
+            """
+            update policy_decisions
+            set integrity_version = ?,
+                integrity_generation = ?,
+                payload_hash = ?,
+                payload_mac = ?,
+                integrity_key_id = ?,
+                signed_at = ?
+            where artifact_id = ?
+            """,
+            (
+                snapshot["integrity_version"],
+                snapshot["integrity_generation"],
+                snapshot["payload_hash"],
+                snapshot["payload_mac"],
+                snapshot["integrity_key_id"],
+                snapshot["signed_at"],
+                "codex:project:cli-rollback",
+            ),
+        )
+
+    verify_rc = main(["guard", "policies", "verify", "--home", str(home_dir), "--json"])
+    verify_payload = json.loads(capsys.readouterr().out)
+
+    assert verify_rc == 1
+    assert verify_payload["counts"]["rollback_detected"] == 1
 
 
 def test_policies_cli_migrate_preserve_all_local_re_signs_unknown_key_rows(tmp_path: Path, capsys) -> None:
@@ -500,4 +719,30 @@ def test_degraded_mode_persistent_local_allow_is_not_authoritative(
 
     assert resolved is None
     assert verify["mode"] == "degraded"
+    assert verify["counts"]["degraded_mode"] == 1
+
+
+def test_symlinked_guard_home_forces_degraded_local_policy_authority(tmp_path: Path) -> None:
+    real_home = tmp_path / "real-home"
+    real_home.mkdir()
+    link_home = tmp_path / "link-home"
+    link_home.symlink_to(real_home, target_is_directory=True)
+
+    store = GuardStore(link_home)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:symlinked", artifact_hash="hash-symlinked"),
+        "2026-06-14T00:00:00Z",
+    )
+
+    resolved = store.resolve_policy(
+        "codex",
+        "codex:project:symlinked",
+        "hash-symlinked",
+        now="2026-06-14T00:01:00Z",
+    )
+    verify = store.verify_policy_integrity()
+
+    assert resolved is None
+    assert verify["mode"] == "degraded"
+    assert "guard_home_symlink" in verify["degraded_reasons"]
     assert verify["counts"]["degraded_mode"] == 1
