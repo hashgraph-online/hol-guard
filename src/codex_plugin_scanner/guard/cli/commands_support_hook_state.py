@@ -296,9 +296,10 @@ def _cursor_shell_command_from_payload(payload: Mapping[str, object]) -> str | N
 
     tool_input_command = _hook_command_text(payload)
     top_level = _optional_string(payload.get("command"))
-    if tool_input_command is not None:
-        if top_level is None or is_lean_ctx_wrapper_command(top_level):
-            return normalize_cursor_shell_command(tool_input_command)
+    if tool_input_command is not None and (
+        top_level is None or is_lean_ctx_wrapper_command(top_level)
+    ):
+        return normalize_cursor_shell_command(tool_input_command)
     if top_level is not None:
         return normalize_cursor_shell_command(top_level)
     return None
