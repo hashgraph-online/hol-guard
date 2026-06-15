@@ -30,6 +30,7 @@ import {
 import { guardAwareHref } from "./guard-api";
 import { EMPTY_QUEUE_TITLE } from "./approval-center-utils";
 import { GuardUpdatePanel } from "./guard-update-panel";
+import { GITHUB_ISSUE_BUTTON_LABEL, GITHUB_ISSUE_LINK } from "./github-issue-link";
 import type { GuardUpdatePhase, GuardUpdateStatus } from "./guard-types";
 
 const footerSections = [
@@ -61,6 +62,7 @@ const footerSections = [
     links: [
       { href: "https://hol.org/blog", label: "Blog" },
       { href: "https://github.com/hashgraph-online", label: "GitHub" },
+      { href: GITHUB_ISSUE_LINK, label: GITHUB_ISSUE_BUTTON_LABEL },
       { href: "https://hol.org/points/legal/privacy", label: "Privacy Policy" },
       { href: "https://hol.org/points/legal/terms", label: "Terms of Service" }
     ]
@@ -151,6 +153,16 @@ export function ShellHeader(props: {
             {props.queuedCount > 99 ? "99+" : props.queuedCount}
           </a>
         )}
+        <a
+          href={GITHUB_ISSUE_LINK}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={GITHUB_ISSUE_BUTTON_LABEL}
+          title={GITHUB_ISSUE_BUTTON_LABEL}
+          className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-white no-underline transition-colors duration-150 hover:bg-white/15"
+        >
+          <HiMiniBugAnt className="h-4 w-4" aria-hidden="true" />
+        </a>
         {props.guardVersion ? (
           <span
             className="hidden min-h-11 shrink-0 items-center rounded-full border border-white/20 bg-white/10 px-2.5 font-mono text-[10px] text-white/85 sm:inline-flex"
@@ -264,6 +276,9 @@ export function ShellSidebar(props: {
             <SidebarAction href="https://hol.org/guard" external icon={<HiMiniCloud className="h-4 w-4" aria-hidden="true" />}>
               Open Guard Cloud
             </SidebarAction>
+            <SidebarAction href={GITHUB_ISSUE_LINK} external icon={<HiMiniBugAnt className="h-4 w-4" aria-hidden="true" />}>
+              {GITHUB_ISSUE_BUTTON_LABEL}
+            </SidebarAction>
           </div>
         )}
 
@@ -325,6 +340,21 @@ export function ShellFooter() {
       style={{ contain: "layout style paint", minHeight: 200 }}
     >
       <nav aria-label="Footer Navigation" className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
+        <div className="mb-8 flex flex-col gap-3 rounded-2xl border border-white/15 bg-white/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-white">Found something Guard should fix?</p>
+            <p className="mt-1 text-sm text-indigo-100">Open a prefilled GitHub issue so the maintainers get the right details.</p>
+          </div>
+          <a
+            href={GITHUB_ISSUE_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-brand-blue no-underline transition-colors hover:bg-indigo-50"
+          >
+            <HiMiniBugAnt className="h-4 w-4" aria-hidden="true" />
+            {GITHUB_ISSUE_BUTTON_LABEL}
+          </a>
+        </div>
         <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-8 lg:grid-cols-4">
           {footerSections.map((section) => (
             <FooterLinkList key={section.title} title={section.title} links={section.links} />
@@ -606,7 +636,7 @@ function SidebarAction(props: { href: string; children: ReactNode; icon: ReactNo
     <a
       href={props.external ? props.href : guardAwareHref(props.href)}
       target={props.external ? "_blank" : undefined}
-      rel={props.external ? "noreferrer" : undefined}
+      rel={props.external ? "noopener noreferrer" : undefined}
       title={collapsed ? String(props.children) : undefined}
       className={`flex min-h-10 items-center rounded-lg border border-slate-200 bg-white no-underline transition-colors duration-150 hover:border-brand-blue/30 hover:text-brand-dark ${collapsed ? "justify-center px-2 py-2" : "gap-2.5 px-3 py-2 text-sm font-medium text-slate-700"}`}
     >
