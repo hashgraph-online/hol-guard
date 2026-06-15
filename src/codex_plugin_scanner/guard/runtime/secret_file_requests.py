@@ -166,6 +166,7 @@ _SHELL_TOOL_NAMES = frozenset(
         "ash",
         "bash",
         "cmd",
+        "ctx_shell",
         "dash",
         "powershell",
         "pwsh",

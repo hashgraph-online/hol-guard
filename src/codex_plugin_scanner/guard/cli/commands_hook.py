@@ -61,7 +61,7 @@ def _run_guard_hook_command(
                 runtime_workspace = current_workspace
     if (
         _canonical_harness_name(args.harness) == "cursor"
-        and _hook_event_name(payload) == "afterShellExecution"
+        and _hook_event_name(payload) in {"afterShellExecution", "afterMCPExecution"}
     ):
         if runtime_workspace is None:
             runtime_workspace = _workspace_from_cursor_project_dir()

@@ -8,6 +8,25 @@ from __future__ import annotations
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
+def _cursor_runtime_artifact_from_pending(pending: Mapping[str, object]) -> GuardArtifact | None:
+    artifact_id = _optional_string(pending.get("artifact_id"))
+    artifact_name = _optional_string(pending.get("artifact_name"))
+    artifact_type = _optional_string(pending.get("artifact_type"))
+    config_path = _optional_string(pending.get("config_path"))
+    source_scope = _optional_string(pending.get("source_scope"))
+    if artifact_id is None or artifact_name is None or artifact_type is None or config_path is None:
+        return None
+    command = _optional_string(pending.get("command"))
+    return GuardArtifact(
+        artifact_id=artifact_id,
+        name=artifact_name,
+        harness="cursor",
+        artifact_type=artifact_type,
+        source_scope=source_scope or "project",
+        config_path=config_path,
+        command=command,
+    )
+
 def _record_cursor_pending_shell_permission(
     *,
     store: GuardStore,
@@ -18,7 +37,8 @@ def _record_cursor_pending_shell_permission(
     artifact_hash: str,
 ) -> None:
     from ..adapters.cursor_native_approval import (
-        compute_cursor_after_shell_proof,
+        compute_cursor_after_observer_proof,
+        cursor_observer_event_for_payload,
         ensure_cursor_approval_binding,
         ensure_cursor_hook_attestation_secret,
         remove_cursor_shell_binding_file,
@@ -30,14 +50,16 @@ def _record_cursor_pending_shell_permission(
     if conversation_id is None or command is None:
         return
     approval_binding = ensure_cursor_approval_binding(payload)
+    observer_event = cursor_observer_event_for_payload(payload)
     saved_at = _now()
     try:
         secret = ensure_cursor_hook_attestation_secret(guard_home)
-        after_shell_proof = compute_cursor_after_shell_proof(
+        after_shell_proof = compute_cursor_after_observer_proof(
             secret=secret,
             conversation_id=conversation_id,
             command=command,
             approval_binding=approval_binding,
+            observer_event=observer_event,
         )
     except OSError:
         return
@@ -54,6 +76,7 @@ def _record_cursor_pending_shell_permission(
         "conversation_id": conversation_id,
         "approval_binding": approval_binding,
         "generation_id": approval_binding,
+        "observer_event": observer_event,
         "after_shell_proof": after_shell_proof,
         "native_source": "cursor-native",
     }
@@ -254,7 +277,7 @@ def _persist_cursor_native_permission_after_shell(
     workspace: Path | None,
     hook_env: Mapping[str, str] | None = None,
 ) -> bool:
-    from ..adapters.cursor_native_approval import cursor_after_shell_trusted
+    from ..adapters.cursor_native_approval import cursor_after_observer_trusted
 
     prepared = payload
     conversation_id = _cursor_conversation_id(prepared)
@@ -273,7 +296,7 @@ def _persist_cursor_native_permission_after_shell(
         return False
     if not _cursor_pending_shell_is_fresh(pending, now=now):
         return False
-    if not cursor_after_shell_trusted(
+    if not cursor_after_observer_trusted(
         guard_home=guard_home,
         pending=pending,
         payload=prepared,
@@ -296,9 +319,15 @@ def _persist_cursor_native_permission_after_shell(
         guard_home=guard_home,
         workspace=workspace,
     )
-    if runtime_artifact is None:
+    runtime_artifact_hash: str | None = None
+    if runtime_artifact is not None:
+        runtime_artifact_hash = artifact_hash(runtime_artifact)
+    else:
+        runtime_artifact = _cursor_runtime_artifact_from_pending(pending)
+        if runtime_artifact is not None:
+            runtime_artifact_hash = _optional_string(pending.get("artifact_hash"))
+    if runtime_artifact is None or runtime_artifact_hash is None:
         return False
-    runtime_artifact_hash = artifact_hash(runtime_artifact)
     session_saved = _record_cursor_native_shell_allow_state(
         store=store,
         conversation_id=conversation_id,
@@ -312,7 +341,7 @@ def _persist_cursor_native_permission_after_shell(
     _resolve_cursor_pending_approval_requests(
         store=store,
         pending=pending,
-        reason="Approved in Cursor native shell approval prompt.",
+        reason="Approved in Cursor native approval prompt.",
         now=now,
     )
     receipt = build_receipt(
