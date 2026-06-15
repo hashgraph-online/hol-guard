@@ -923,9 +923,7 @@ def _build_runtime_cloud_context(
     policy_bundle_last_error = _sync_payload_dict(store, "policy_bundle_last_error")
     acknowledgement = policy_bundle.get("acknowledgement")
     cloud_policy_last_ack_at = (
-        _optional_string(acknowledgement.get("acknowledgedAt"))
-        if isinstance(acknowledgement, dict)
-        else None
+        _optional_string(acknowledgement.get("acknowledgedAt")) if isinstance(acknowledgement, dict) else None
     )
     remote_payload_active = any((sync_summary, remote_policy, team_policy_pack, alert_preferences))
     cloud_state = _resolve_runtime_cloud_state(
