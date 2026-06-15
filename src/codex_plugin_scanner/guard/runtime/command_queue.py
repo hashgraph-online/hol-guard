@@ -244,6 +244,15 @@ def _heartbeat(auth_context: dict[str, object], job: dict[str, object]) -> None:
 
 
 def _result_payload(job: dict[str, object], execution: dict[str, object]) -> dict[str, object]:
+    if execution.get("waitingLocalConfirm") is True:
+        sanitized_execution = dict(execution)
+        sanitized_execution.pop("waitingLocalConfirm", None)
+        return {
+            "leaseId": _lease_id(job),
+            "idempotencyKey": f"{_job_id(job)}:{_lease_id(job)}:waiting_local_confirm",
+            "status": "waiting_local_confirm",
+            "result": sanitized_execution,
+        }
     failure_code = execution.get("failureCode")
     if isinstance(failure_code, str) and failure_code:
         payload: dict[str, object] = {
