@@ -386,12 +386,12 @@ def test_poll_once_posts_waiting_local_confirm_result_for_destructive_job(
     assert result_payloads[0]["idempotencyKey"] == "job-6:lease-6:waiting_local_confirm"
     result = result_payloads[0]["result"]
     assert isinstance(result, dict)
+    assert "waitingLocalConfirm" not in result
     data = result["data"]
     assert isinstance(data, dict)
     assert data["confirm_command"] == "hol-guard package-shims uninstall --manager npm"
     assert data["summary"] == (
-        "Run the local package-shim uninstall command on this machine to "
-        "confirm removal for npm."
+        "Run the local package-shim uninstall command on this machine to confirm removal for npm."
     )
 
 
@@ -709,10 +709,26 @@ def test_executor_returns_waiting_local_confirm_for_package_shim_remove(tmp_path
     assert result["data"] == {
         "confirm_command": "hol-guard package-shims uninstall --manager npm",
         "managers": ["npm"],
-        "summary": (
-            "Run the local package-shim uninstall command on this machine to "
-            "confirm removal for npm."
-        ),
+        "summary": ("Run the local package-shim uninstall command on this machine to confirm removal for npm."),
+    }
+
+
+def test_executor_returns_waiting_local_confirm_for_package_shim_remove_all_managers(tmp_path: Path) -> None:
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.packageShims.remove",
+            "payload": {},
+        },
+        context=_context(tmp_path),
+        store=FakeStore(tmp_path / "guard-home"),  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert result["waitingLocalConfirm"] is True
+    assert result["data"] == {
+        "confirm_command": "hol-guard package-shims uninstall",
+        "managers": [],
+        "summary": "Run the local package-shim uninstall command on this machine to confirm removal.",
     }
 
 
@@ -748,11 +764,48 @@ def test_executor_returns_waiting_local_confirm_for_app_remove(tmp_path: Path, m
         "confirm_command": "hol-guard apps disconnect codex --surface cli --confirm disconnect-codex",
         "confirmation_phrase": "disconnect-codex",
         "harness": "codex",
-        "summary": (
-            "Run the local disconnect command on this machine to confirm "
-            "removing Guard protection for codex."
-        ),
+        "summary": ("Run the local disconnect command on this machine to confirm removing Guard protection for codex."),
         "surface": "cli",
+    }
+
+
+def test_executor_returns_waiting_local_confirm_for_app_remove_without_surface(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    def fake_apply_managed_install(
+        command: str,
+        requested_harness: str | None,
+        install_all: bool,
+        context: HarnessContext,
+        store: object,
+        workspace: str | None,
+        now: str,
+        *,
+        surface: str | None = None,
+    ) -> dict[str, object]:
+        del command, requested_harness, install_all, context, store, workspace, now, surface
+        raise AssertionError("app remove should not uninstall without local confirmation")
+
+    monkeypatch.setattr(command_executors, "apply_managed_install", fake_apply_managed_install)
+
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.app.remove",
+            "payload": {"harness": "codex"},
+        },
+        context=_context(tmp_path),
+        store=FakeStore(tmp_path / "guard-home"),  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert result["waitingLocalConfirm"] is True
+    assert result["data"] == {
+        "confirm_command": "hol-guard apps disconnect codex --confirm disconnect-codex",
+        "confirmation_phrase": "disconnect-codex",
+        "harness": "codex",
+        "summary": ("Run the local disconnect command on this machine to confirm removing Guard protection for codex."),
+        "surface": None,
     }
 
 
