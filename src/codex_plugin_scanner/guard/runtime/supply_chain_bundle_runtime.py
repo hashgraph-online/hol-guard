@@ -28,6 +28,7 @@ from .supply_chain_bundle_base import (
 )
 from .supply_chain_bundle_models import (
     SupplyChainBundle,
+    SupplyChainBundleEmergencyDeny,
     SupplyChainBundlePackage,
     SupplyChainBundleResponse,
     SupplyChainVerificationKey,
@@ -225,6 +226,32 @@ def _normalize_package_name(ecosystem: str, package_name: str) -> str:
     return normalized
 
 
+def _emergency_deny_identity_matches(entry: SupplyChainBundleEmergencyDeny, package_name: str) -> bool:
+    normalized_name = _normalize_package_name(entry.ecosystem, package_name)
+    namespace_name = (
+        _normalize_package_name(entry.ecosystem, f"{entry.namespace}/{entry.name}")
+        if entry.namespace is not None
+        else None
+    )
+    entry_leaf_name = _normalize_package_name(entry.ecosystem, entry.name)
+    if normalized_name.startswith("@"):
+        return namespace_name == normalized_name
+    return entry.namespace is None and entry_leaf_name == normalized_name
+
+
+def _matching_emergency_deny_entries(
+    bundle: SupplyChainBundle,
+    *,
+    package_name: str,
+    ecosystem: str | None,
+) -> tuple[SupplyChainBundleEmergencyDeny, ...]:
+    return tuple(
+        item
+        for item in bundle.emergency_denylist
+        if (ecosystem is None or item.ecosystem == ecosystem) and _emergency_deny_identity_matches(item, package_name)
+    )
+
+
 def _is_high_confidence_block(package: SupplyChainBundlePackage) -> bool:
     return package.default_action == "block" and (
         package.known_exploited
@@ -261,6 +288,19 @@ def evaluate_cached_supply_chain_bundle(
         check_supply_chain_bundle_freshness(response.bundle, now=now)
     except SupplyChainBundleExpiredError:
         stale = True
+    deny_entries = _matching_emergency_deny_entries(
+        response.bundle,
+        package_name=package_name,
+        ecosystem=ecosystem,
+    )
+    if deny_entries:
+        return OfflineSupplyChainDecision(
+            action="block",
+            bundle_version=response.bundle.bundle_version,
+            matched_advisory_ids=(),
+            reason=deny_entries[0].reason,
+            stale=stale,
+        )
     matches = [
         item
         for item in response.bundle.packages

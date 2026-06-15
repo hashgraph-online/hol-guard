@@ -1039,6 +1039,21 @@ def _evaluate_with_bundle(
             now=now_timestamp,
         )
         if package_match is None:
+            if offline.action == "block":
+                packages.append(
+                    _heuristic_package_result(
+                        target=target,
+                        decision="block",
+                        code=offline.reason,
+                        message=_emergency_deny_bundle_message(
+                            target=target,
+                            resolved_version=resolved_version,
+                            reason=offline.reason,
+                        ),
+                        severity="critical",
+                    )
+                )
+                continue
             safe_allow = _recommended_fix_allow_package_result(
                 target=target,
                 resolved_version=resolved_version,
@@ -1534,6 +1549,45 @@ def _transitive_lockfile_results(
                 ecosystem=lockfile_ecosystem,
             )
             if package_match is None:
+                offline = evaluate_cached_supply_chain_bundle(
+                    bundle_response,
+                    package_name=package_name,
+                    package_version=version,
+                    ecosystem=lockfile_ecosystem,
+                    now=now_timestamp,
+                )
+                if offline.action == "block":
+                    results.append(
+                        {
+                            "decision": "block",
+                            "ecosystem": lockfile_ecosystem or "npm",
+                            "name": package_name.rsplit("/", 1)[-1],
+                            "namespace": (
+                                package_name.rsplit("/", 1)[0]
+                                if package_name.startswith("@") and "/" in package_name
+                                else None
+                            ),
+                            "requestedVersion": version,
+                            "resolvedVersion": version,
+                            "recommendedFixVersion": None,
+                            "riskScore": None,
+                            "direct": False,
+                            "dependencyPath": dependency_path,
+                            "packageManager": str(artifact.metadata.get("package_manager") or "npm"),
+                            "redactedCommand": _optional_string(artifact.metadata.get("redacted_command")),
+                            "reasons": (
+                                {
+                                    "code": offline.reason,
+                                    "message": (
+                                        "Emergency denylist blocked transitive dependency "
+                                        f"{package_name}@{version}."
+                                    ),
+                                    "severity": "critical",
+                                    "source": "bundle",
+                                },
+                            ),
+                        }
+                    )
                 continue
             decision = _transitive_lockfile_decision(package=package_match, stale=bundle_stale)
             if decision not in {"ask", "block", "warn"}:
@@ -3725,6 +3779,22 @@ def _cloud_fallback_reason(*, code: str, message: str) -> dict[str, object]:
         "severity": "unknown",
         "source": "guard-cloud",
     }
+
+
+def _emergency_deny_bundle_message(
+    *,
+    target: dict[str, object],
+    resolved_version: str,
+    reason: str,
+) -> str:
+    package_label = f"{_package_display_name(target)}@{resolved_version}"
+    if reason == "known_malware":
+        return f"Emergency denylist blocked {package_label} for known malware."
+    if reason == "known_exploited":
+        return f"Emergency denylist blocked {package_label} because it is a known exploited vulnerability."
+    if reason == "critical_active_exploit":
+        return f"Emergency denylist blocked {package_label} for a critical active exploit."
+    return f"Emergency denylist blocked {package_label}."
 
 
 def _bundle_reason_message(
