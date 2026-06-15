@@ -2420,12 +2420,13 @@ def clear_revoked_guard_oauth_sign_in(store: GuardStore) -> bool:
             credentials = store.get_oauth_local_credentials(allow_primary=True)
             if credentials is None:
                 return False
-            _resolve_guard_sync_auth_context_from_oauth_credentials(store, credentials)
-    except GuardSyncAuthorizationExpiredError as error:
-        if _oauth_authorization_error_requires_fresh_sign_in(error):
-            store.clear_oauth_local_credentials()
-            return True
-        return False
+            try:
+                _resolve_guard_sync_auth_context_from_oauth_credentials(store, credentials)
+            except GuardSyncAuthorizationExpiredError as error:
+                if _oauth_authorization_error_requires_fresh_sign_in(error):
+                    store.clear_oauth_local_credentials()
+                    return True
+                return False
     except (RuntimeError, OSError, TimeoutError):
         return False
     return False
@@ -2619,15 +2620,12 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
         oauth_client = resolve_guard_oauth_client_config(issuer)
     except ValueError as error:
         raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
-    try:
-        refreshed = _refresh_guard_oauth_access_token(
-            token_endpoint=oauth_client.token_endpoint,
-            client_id=client_id,
-            refresh_token=refresh_token,
-            dpop_key_material=dpop_key_material,
-        )
-    except GuardSyncAuthorizationExpiredError as error:
-        raise
+    refreshed = _refresh_guard_oauth_access_token(
+        token_endpoint=oauth_client.token_endpoint,
+        client_id=client_id,
+        refresh_token=refresh_token,
+        dpop_key_material=dpop_key_material,
+    )
     rotated_refresh_token = str(refreshed["refresh_token"])
     package_firewall_entitlement = (
         refreshed["package_firewall_entitlement"]
