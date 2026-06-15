@@ -1,5 +1,5 @@
 import type { GuardCloudException } from "./guard-types";
-import type { GuardCloudExceptionRequestItem } from "./guard-api";
+import type { GuardCloudExceptionRequestCreateInput, GuardCloudExceptionRequestItem } from "./guard-api";
 
 export const CLOUD_EXCEPTION_EXPIRING_SOON_DAYS = 7;
 
@@ -183,6 +183,49 @@ export function resolveCloudExceptionEffectLabel(effect: GuardCloudException["ef
     return "Allow temporarily";
   }
   return effect;
+}
+
+export function resolveCloudExceptionSubtitle(item: GuardCloudException): string {
+  if (item.scope === "artifact" && item.artifact_id?.trim()) {
+    return "Exact action fingerprint";
+  }
+  if (item.scope === "publisher") {
+    return "Publisher-scoped exception";
+  }
+  if (item.scope === "workspace") {
+    return "Project-scoped exception";
+  }
+  if (item.scope === "harness" && item.harness) {
+    return `${item.harness} harness actions`;
+  }
+  if (item.scope === "global") {
+    return "Team policy override";
+  }
+  return "Cloud risk acceptance";
+}
+
+export type RequestScopeBlastRadius = {
+  label: string;
+  detail: string;
+  tone: "narrow" | "medium" | "wide";
+};
+
+export function resolveRequestScopeBlastRadius(
+  scope: GuardCloudExceptionRequestCreateInput["scope"] | "team-policy",
+): RequestScopeBlastRadius {
+  if (scope === "artifact") {
+    return { label: "Very low", detail: "Only this exact command + context.", tone: "narrow" };
+  }
+  if (scope === "publisher") {
+    return { label: "Low", detail: "Any matching action in your current folder.", tone: "narrow" };
+  }
+  if (scope === "workspace") {
+    return { label: "Medium", detail: "Any matching action in this project repository.", tone: "medium" };
+  }
+  if (scope === "harness") {
+    return { label: "High", detail: "Any matching action for this harness.", tone: "wide" };
+  }
+  return { label: "Very high", detail: "Make this an allow rule for your whole team.", tone: "wide" };
 }
 
 export function resolveCloudExceptionEvidenceUrl(item: GuardCloudException): string | null {

@@ -1,5 +1,6 @@
 import {
   HiMiniArrowPath,
+  HiMiniCloud,
   HiMiniCloudArrowUp,
   HiMiniFolder,
   HiMiniGlobeAlt,
@@ -89,11 +90,18 @@ export function PolicyRememberedRulesRightRail({
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
-        <p className="font-medium text-brand-dark">Cloud exceptions</p>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600">
-          Governed risk acceptances override team policy when approved in Guard Cloud. They sync as signed bundle
-          entries on this device.
-        </p>
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue">
+            <HiMiniCloud className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <p className="font-medium text-brand-dark">Cloud exceptions</p>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              Governed risk acceptances override team policy when approved in Guard Cloud. They sync as signed bundle
+              entries on this device.
+            </p>
+          </div>
+        </div>
         <button
           type="button"
           onClick={onOpenCloudExceptions}
