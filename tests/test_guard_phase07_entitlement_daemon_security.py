@@ -137,7 +137,7 @@ def test_phase07_revoked_entitlement_blocks_repair_and_remove(
     assert repair_payload["error"] == "guard_cloud_reconnect_required"
 
 
-def test_phase07_dashboard_session_binds_operation_workspace_location_and_origin(tmp_path: Path) -> None:
+def test_phase07_local_dashboard_session_binds_operation_workspace_location_and_origin(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_premium_entitlement(store)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -145,12 +145,13 @@ def test_phase07_dashboard_session_binds_operation_workspace_location_and_origin
     try:
         auth_token = load_guard_daemon_auth_token(store.guard_home)
         assert auth_token is not None
+        local_origin = f"http://127.0.0.1:{daemon.port}"
         token = _dashboard_token_with_claims(
             auth_token,
             {
                 "action_path": "package_shims_test",
                 "allowed_action_paths": ["package_shims_test"],
-                "daemon_origin": "https://hol.org",
+                "daemon_origin": local_origin,
                 "location_id": "location-1",
                 "managers": ["npm"],
                 "nonce": "test-nonce-1",
@@ -162,9 +163,9 @@ def test_phase07_dashboard_session_binds_operation_workspace_location_and_origin
                 daemon.port,
                 "/v1/supply-chain/package-shims/test",
                 dashboard_session_token=token,
-                origin="https://hol.org",
+                origin=local_origin,
                 payload={
-                    "daemon_origin": "https://hol.org",
+                    "daemon_origin": local_origin,
                     "location_id": "location-1",
                     "managers": ["npm"],
                     "workspace_id": "workspace-1",
@@ -190,9 +191,9 @@ def test_phase07_dashboard_session_binds_operation_workspace_location_and_origin
                 daemon.port,
                 "/v1/supply-chain/package-shims/test",
                 dashboard_session_token=token,
-                origin="https://hol.org",
+                origin=local_origin,
                 payload={
-                    "daemon_origin": "https://hol.org",
+                    "daemon_origin": local_origin,
                     "location_id": "location-1",
                     "managers": ["npm"],
                     "workspace_id": "workspace-1",

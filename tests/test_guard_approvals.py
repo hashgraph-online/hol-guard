@@ -2222,7 +2222,7 @@ class TestGuardApprovals:
         assert status == 200
         assert allow_headers == "Authorization, Content-Type, X-Guard-Dashboard-Session, X-Guard-Token"
 
-    def test_guard_daemon_allows_hosted_guard_dashboard_to_resolve_requests(self, tmp_path):
+    def test_guard_daemon_limits_request_resolution_to_local_dashboard_origin(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         store.add_approval_request(
             GuardApprovalRequest(
@@ -2246,9 +2246,18 @@ class TestGuardApprovals:
         daemon.start()
 
         try:
-            options_request = urllib.request.Request(
+            local_origin = f"http://127.0.0.1:{daemon.port}"
+            blocked_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/requests/req-hosted/approve",
                 headers={"Origin": "https://hol.org"},
+                method="OPTIONS",
+            )
+            with pytest.raises(urllib.error.HTTPError) as blocked_error:
+                urllib.request.urlopen(blocked_request, timeout=5)
+
+            options_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/requests/req-hosted/approve",
+                headers={"Origin": local_origin},
                 method="OPTIONS",
             )
             with urllib.request.urlopen(options_request, timeout=5) as response:
@@ -2257,7 +2266,7 @@ class TestGuardApprovals:
             list_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/requests",
                 headers={
-                    "Origin": "https://hol.org",
+                    "Origin": local_origin,
                     "X-Guard-Token": daemon._server.auth_token,
                 },
             )
@@ -2270,7 +2279,7 @@ class TestGuardApprovals:
                 data=json.dumps({"scope": "artifact", "reason": "approved from hosted dashboard"}).encode("utf-8"),
                 headers={
                     **_guard_json_headers(daemon._server.auth_token),
-                    "Origin": "https://hol.org",
+                    "Origin": local_origin,
                 },
                 method="POST",
             )
@@ -2280,10 +2289,11 @@ class TestGuardApprovals:
         finally:
             daemon.stop()
 
-        assert options_origin == "https://hol.org"
-        assert list_origin == "https://hol.org"
+        assert blocked_error.value.code == 403
+        assert options_origin == local_origin
+        assert list_origin == local_origin
         assert list_payload["items"][0]["request_id"] == "req-hosted"
-        assert approve_origin == "https://hol.org"
+        assert approve_origin == local_origin
         assert approve_payload["resolved"] is True
         assert store.list_approval_requests(limit=10) == []
 

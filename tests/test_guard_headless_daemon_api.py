@@ -61,6 +61,17 @@ def _read_json_response_with_headers(
     return _read_json_response_details(request)
 
 
+def _default_origin_for_path(path: str) -> str:
+    if (
+        path.startswith("/v1/apps/")
+        or path.startswith("/v1/supply-chain/")
+        or path == "/v1/policy/sync"
+        or path.startswith("/v1/requests")
+    ):
+        return "http://127.0.0.1:6174"
+    return "https://hol.org"
+
+
 def _request(
     port: int,
     path: str,
@@ -70,7 +81,7 @@ def _request(
     token: str | None = None,
     authorization_token: str | None = None,
     dashboard_session_token: str | None = None,
-    origin: str | None = "https://hol.org",
+    origin: str | None = None,
     referer: str | None = None,
     extra_headers: dict[str, str] | None = None,
 ) -> urllib.request.Request:
@@ -78,13 +89,17 @@ def _request(
     headers = {
         "Content-Type": "application/json",
     }
+    if origin is None:
+        origin = _default_origin_for_path(path)
     if origin is not None:
         headers["Origin"] = origin
     if referer is not None:
         headers["Referer"] = referer
     if token is not None:
-        headers["Authorization"] = f"Bearer {token}"
-        headers["X-Guard-Dashboard-Session"] = token
+        if token.startswith("gld1."):
+            headers["X-Guard-Dashboard-Session"] = token
+        else:
+            headers["Authorization"] = f"Bearer {token}"
     if authorization_token is not None:
         headers["Authorization"] = f"Bearer {authorization_token}"
     if dashboard_session_token is not None:
@@ -1660,7 +1675,7 @@ def test_headless_app_operations_write_receipts_without_cli_copy(
                     },
                 ),
             )
-            assert status == 200
+            assert status == 200, payload
             assert payload["receipt"]["status"] == "completed"
             assert payload["receipt"]["operation"] == operation
             assert payload["state"]["receipt_summary"]["id"] == payload["receipt"]["id"]
@@ -1748,7 +1763,7 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
     finally:
         daemon.stop()
 
-    assert status == 200
+    assert status == 200, payload
     assert payload["receipt"]["operation"] == "scan"
     assert payload["cloud_sync"] == {
         "status": "queued",
