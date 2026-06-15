@@ -5,6 +5,17 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _CLAUDE_GUARD_APPROVAL_HEADER, _CLAUDE_GUARD_APPROVAL_OPTIONS, _now
+    from .commands_support_hook_state import _claude_guard_approval_question_text, _claude_pending_permission_index_key, _load_single_claude_pending_permission, _remove_claude_pending_permission, _sync_payload_list_from_row
+    from .commands_support_permission_store import _persist_claude_native_permission_policy
+    from .commands_support_runtime_artifacts import _hook_event_name, _optional_string
+    from .commands_support_runtime_policy import _claude_notification_tool_display_name, _claude_notification_tool_name, _ensure_terminal_punctuation, _runtime_artifact_policy_action
+    from .commands_support_runtime_resolution import _canonical_harness_name
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
 

@@ -5,6 +5,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
+    from .commands_support_connect import _refresh_cloud_policy_bundle, _synced_policy_payload
+    from .commands_support_hook_payload import _headless_approval_resolver
+    from .commands_support_interaction import _emit
+    from .commands_support_prompts import _guard_approvals_command, _guard_diff_command, _guard_rerun_command
+    from .commands_support_runtime_resolution import _run_hermes_mcp_proxy
+    from .commands_support_workspace import _package_firewall_block_payload, _package_firewall_cli_gate_input
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -19,6 +32,9 @@ def _run_guard_codex_mcp_proxy_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
     proxy = CodexMcpGuardProxy(
         server_name=args.server_name,
         command=[args.server_command, *list(args.server_args)],
@@ -44,6 +60,9 @@ def _run_guard_cursor_mcp_proxy_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
     proxy = CursorMcpGuardProxy(
         server_name=args.server_name,
         command=[args.server_command, *list(args.server_args)],
@@ -69,6 +88,9 @@ def _run_guard_opencode_mcp_proxy_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
     proxy = OpenCodeMcpGuardProxy(
         server_name=args.server_name,
         command=[args.server_command, *list(args.server_args)],
@@ -94,6 +116,9 @@ def _run_guard_copilot_mcp_proxy_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
     proxy = CopilotMcpGuardProxy(
         server_name=args.server_name,
         command=[args.server_command, *list(args.server_args)],
@@ -119,6 +144,9 @@ def _run_guard_hermes_mcp_proxy_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
     return _run_hermes_mcp_proxy(args=args, context=context, store=store, config=config)
 
 def _run_guard_uninstall_command(
@@ -132,6 +160,8 @@ def _run_guard_uninstall_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
     try:
         payload = apply_managed_install(
             "uninstall",
@@ -159,6 +189,8 @@ def _run_guard_package_shims_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
     requested_managers = tuple(
         manager
         for manager in getattr(args, "package_shim_managers", [])
@@ -225,10 +257,13 @@ def _run_guard_run_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
+    context = _require_guard_context(context)
+    config = _require_guard_config(config)
     _refresh_cloud_policy_bundle(store)
     config = overlay_synced_guard_policy(config, _synced_policy_payload(store))
-    interactive_resolver = None
-    blocked_resolver = None
+    interactive_resolver_fn = None
+    blocked_resolver_fn = None
     if (
         not getattr(args, "json", False)
         and not bool(args.dry_run)
@@ -237,7 +272,7 @@ def _run_guard_run_command(
     ):
         from .prompt import build_prompt_artifacts, resolve_interactive_decisions
 
-        def interactive_resolver(detection, payload):
+        def _interactive_resolver_impl(detection, payload):
             return resolve_interactive_decisions(
                 store=store,
                 evaluation=payload,
@@ -249,8 +284,9 @@ def _run_guard_run_command(
                 workspace=str(workspace) if workspace else None,
                 now=_now(),
             )
+        interactive_resolver_fn = _interactive_resolver_impl
     elif not bool(args.dry_run) and config.mode == "prompt":
-        blocked_resolver = _headless_approval_resolver(args=args, context=context, store=store, config=config)
+        blocked_resolver_fn = _headless_approval_resolver(args=args, context=context, store=store, config=config)
 
     payload = guard_run(
         args.harness,
@@ -260,8 +296,8 @@ def _run_guard_run_command(
         dry_run=bool(args.dry_run),
         passthrough_args=list(args.passthrough_args),
         default_action=args.default_action,
-        interactive_resolver=interactive_resolver,
-        blocked_resolver=blocked_resolver,
+        interactive_resolver=interactive_resolver_fn,
+        blocked_resolver=blocked_resolver_fn,
     )
     payload["dry_run"] = bool(args.dry_run)
     payload["rerun_command"] = _guard_rerun_command(args)

@@ -5,6 +5,20 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _now
+    from .commands_support_hook_payload import _coalesce_string
+    from .commands_support_hook_state import _cursor_native_shell_is_approved
+    from .commands_support_interaction import _emit, _record_harness_usage_for_hook
+    from .commands_support_permission_store import _persist_claude_native_permission_for_runtime_artifact, _record_cursor_pending_shell_permission
+    from .commands_support_prompts import _runtime_artifact_native_reason
+    from .commands_support_runtime_artifacts import _hook_event_name, _optional_string
+    from .commands_support_runtime_policy import _runtime_artifact_policy_action, _runtime_data_flow_summary, _runtime_stored_policy_action
+    from .commands_support_runtime_resolution import _canonical_harness_name, _legacy_claude_alias_runtime_artifact, _queue_claude_native_approval_gate_fallback, _runtime_capabilities_summary, _runtime_request_summary, _runtime_requested_path
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
 

@@ -375,4 +375,22 @@ _SETTINGS_POLICY_RISK_ACTIONS: dict[str, dict[str, dict[str, str]]] = {
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+
+def _require_guard_store(store: GuardStore | None) -> GuardStore:
+    if store is None:
+        raise RuntimeError("Guard store is required")
+    return store
+
+
+def _require_guard_context(context: HarnessContext | None) -> HarnessContext:
+    if context is None:
+        raise RuntimeError("Guard context is required")
+    return context
+
+
+def _require_guard_config(config: GuardConfig | None) -> GuardConfig:
+    if config is None:
+        raise RuntimeError("Guard config is required")
+    return config
+
 __all__ = [name for name in globals() if not name.startswith("__")]

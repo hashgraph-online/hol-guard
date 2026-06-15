@@ -5,6 +5,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .commands_support_codex_commands import _CODEX_GIT_DIFF_BOOLEAN_OPTIONS, _CODEX_GIT_DIFF_DISALLOWED_OPTIONS, _CODEX_GIT_DIFF_OPTIONAL_VALUE_OPTIONS, _CODEX_GIT_DIFF_VALUE_OPTIONS, _CODEX_GIT_GLOBAL_VALUE_FLAGS, _CODEX_SAFE_GIT_GLOBAL_BOOLEAN_FLAGS, _CodexSedReadOnlyArgs
+    from .commands_support_codex_paths import _codex_search_target_is_source_like, _git_config_enables_diff_helper, _git_config_logical_lines, _git_config_value_without_inline_comment
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
 

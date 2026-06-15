@@ -5,6 +5,16 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _HOOK_DAEMON_UNREACHABLE_REASON_MARKER, _now
+    from .commands_support_interaction import _preferred_approval_review_url
+    from .commands_support_prompts import _prompt_request_classes, _prompt_requires_hard_block
+    from .commands_support_runtime_artifacts import _optional_string
+    from .commands_support_runtime_resolution import _canonical_harness_name
+
+
 from ..store import _runtime_scoped_exact_match_key
 from ._commands_shared import *
 from .commands_parser_helpers import *

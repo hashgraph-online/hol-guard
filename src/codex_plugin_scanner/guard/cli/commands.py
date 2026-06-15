@@ -68,27 +68,27 @@ def run_guard_command(
     output_stream: TextIO | None = None,
 ) -> int:
     _sync_support_overrides()
-    return _support.run_guard_command(args, input_text=input_text, output_stream=output_stream)
+    return getattr(_support, "run_guard_command")(args, input_text=input_text, output_stream=output_stream)
 
 
 def _build_guard_device_connect_payload(*args: Any, **kwargs: Any):
     _sync_support_overrides()
-    return _support._build_guard_device_connect_payload(*args, **kwargs)
+    return getattr(_support, "_build_guard_device_connect_payload")(*args, **kwargs)
 
 
 def _finalize_guard_connect_payload(*args: Any, **kwargs: Any):
     _sync_support_overrides()
-    return _support._finalize_guard_connect_payload(*args, **kwargs)
+    return getattr(_support, "_finalize_guard_connect_payload")(*args, **kwargs)
 
 
 def _headless_approval_resolver(*args: Any, **kwargs: Any):
     _sync_support_overrides()
-    return _support._headless_approval_resolver(*args, **kwargs)
+    return getattr(_support, "_headless_approval_resolver")(*args, **kwargs)
 
 
 def _refresh_cloud_policy_bundle(*args: Any, **kwargs: Any):
     _sync_support_overrides()
-    return _support._refresh_cloud_policy_bundle(*args, **kwargs)
+    return getattr(_support, "_refresh_cloud_policy_bundle")(*args, **kwargs)
 
 
 def __getattr__(name: str) -> Any:

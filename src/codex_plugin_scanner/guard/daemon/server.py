@@ -208,6 +208,9 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     store: GuardStore
     runtime: GuardSurfaceRuntime
     auth_token: str
+    runtime_host: str
+    runtime_session_id: str
+    runtime_started_at: datetime
     idle_timeout_seconds: float | None
     last_activity_monotonic: float
     start_monotonic: float
@@ -220,6 +223,39 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     package_firewall_action_rate_limiter: PackageFirewallActionRateLimiter
     package_firewall_session_nonces: dict[str, float]
     package_firewall_session_nonces_lock: threading.Lock
+
+    def __init__(
+        self,
+        server_address: tuple[str, int],
+        RequestHandlerClass: type[BaseHTTPRequestHandler],
+        *,
+        store: GuardStore,
+        runtime: GuardSurfaceRuntime,
+        auth_token: str,
+        runtime_host: str,
+        runtime_session_id: str,
+        runtime_started_at: datetime,
+        idle_timeout_seconds: float | None,
+    ) -> None:
+        super().__init__(server_address, RequestHandlerClass)
+        self.store = store
+        self.runtime = runtime
+        self.auth_token = auth_token
+        self.runtime_host = runtime_host
+        self.runtime_session_id = runtime_session_id
+        self.runtime_started_at = runtime_started_at
+        self.idle_timeout_seconds = idle_timeout_seconds
+        self.last_activity_monotonic = time.monotonic()
+        self.start_monotonic = self.last_activity_monotonic
+        self.active_stream_clients = 0
+        self.active_stream_clients_lock = threading.Lock()
+        self.package_firewall_connect_state = None
+        self.package_firewall_connect_state_lock = threading.Lock()
+        self.guard_cloud_connect_state = None
+        self.guard_cloud_connect_state_lock = threading.Lock()
+        self.package_firewall_action_rate_limiter = PackageFirewallActionRateLimiter()
+        self.package_firewall_session_nonces = {}
+        self.package_firewall_session_nonces_lock = threading.Lock()
 
 
 _STATIC_DIR = Path(__file__).with_name("static")
@@ -977,6 +1013,7 @@ def _finalize_daemon_guard_connect_payload(
 
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
     _MAX_BODY_BYTES = 1_000_000
+    server: _GuardDaemonHttpServer
 
     def do_OPTIONS(self) -> None:
         origin = self._normalize_origin(self.headers.get("Origin"))
@@ -4803,28 +4840,25 @@ class GuardDaemonServer:
         idle_timeout_seconds: float | None = None,
     ) -> None:
         _validate_dashboard_bundle()
-        self._server = _GuardDaemonHttpServer((host, port), _GuardDaemonHandler)
-        self._server.store = store
-        self._server.runtime = GuardSurfaceRuntime(store)
-        self._server.auth_token = load_guard_daemon_auth_token(store.guard_home) or uuid.uuid4().hex
-        self._server.runtime_host = host
-        self._server.runtime_session_id = uuid.uuid4().hex
-        self._server.runtime_started_at = _now()
-        self._server.idle_timeout_seconds = _guard_daemon_idle_timeout_seconds(
+        runtime = GuardSurfaceRuntime(store)
+        auth_token = load_guard_daemon_auth_token(store.guard_home) or uuid.uuid4().hex
+        runtime_session_id = uuid.uuid4().hex
+        runtime_started_at = _now()
+        resolved_idle_timeout_seconds = _guard_daemon_idle_timeout_seconds(
             store.guard_home,
             idle_timeout_seconds=idle_timeout_seconds,
         )
-        self._server.last_activity_monotonic = time.monotonic()
-        self._server.start_monotonic = time.monotonic()
-        self._server.active_stream_clients = 0
-        self._server.active_stream_clients_lock = threading.Lock()
-        self._server.package_firewall_connect_state = None
-        self._server.package_firewall_connect_state_lock = threading.Lock()
-        self._server.guard_cloud_connect_state = None
-        self._server.guard_cloud_connect_state_lock = threading.Lock()
-        self._server.package_firewall_action_rate_limiter = PackageFirewallActionRateLimiter()
-        self._server.package_firewall_session_nonces = {}
-        self._server.package_firewall_session_nonces_lock = threading.Lock()
+        self._server = _GuardDaemonHttpServer(
+            (host, port),
+            _GuardDaemonHandler,
+            store=store,
+            runtime=runtime,
+            auth_token=auth_token,
+            runtime_host=host,
+            runtime_session_id=runtime_session_id,
+            runtime_started_at=runtime_started_at,
+            idle_timeout_seconds=resolved_idle_timeout_seconds,
+        )
         self.port = int(self._server.server_address[1])
         self._bundle_refresh_backoff_seconds = bundle_refresh_backoff_seconds
         self._bundle_refresh_interval_seconds = bundle_refresh_interval_seconds

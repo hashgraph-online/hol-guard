@@ -5,6 +5,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .commands_support_codex_git import _git_grep_search_args
+    from .commands_support_codex_paths import _codex_search_target_is_source_like
+    from .commands_support_codex_reads import _codex_command_is_read_only_source_inspection, _codex_command_is_read_only_source_search, _codex_command_is_read_only_source_view, _codex_source_inspection_target_tokens, _split_codex_safe_read_only_chain, _split_codex_safe_read_only_pipeline
+    from .commands_support_runtime_artifacts import _codex_command_references_sensitive_local_source
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
 

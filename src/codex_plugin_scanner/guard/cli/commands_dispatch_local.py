@@ -5,6 +5,18 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
+    from .commands_support_connect import _refresh_cloud_policy_bundle
+    from .commands_support_hook_payload import _open_approval_center
+    from .commands_support_interaction import _emit, _run_apps_command, _run_consumer_scan_with_mode
+    from .commands_support_runtime_policy import _approval_delivery_payload, _localize_pending_approval_copy
+    from .commands_support_workspace import _run_init_command
+    from .protect_approvals import _queue_local_protect_approvals, _suppress_package_shim_allow_output
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -75,6 +87,8 @@ def _run_guard_update_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    if guard_home is None:
+        raise RuntimeError("Guard home is required")
     dry_run = bool(getattr(args, "dry_run", False))
     store: GuardStore | None
     update_store_error: OSError | RuntimeError | sqlite3.Error | None = None
@@ -94,7 +108,8 @@ def _run_guard_update_command(
         now=_now(),
     )
     if update_store_error is not None:
-        notes = [str(item) for item in payload.get("notes", []) if isinstance(item, str)]
+        notes_value = payload.get("notes")
+        notes = [str(item) for item in (notes_value if isinstance(notes_value, list) else []) if isinstance(item, str)]
         notes.append(f"Skipped local Guard repair during update: {update_store_error}")
         payload["notes"] = notes
     _emit("update", payload, getattr(args, "json", False))
@@ -111,6 +126,10 @@ def _run_guard_protect_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
+    if guard_home is None:
+        raise RuntimeError("Guard home is required")
     _refresh_cloud_policy_bundle(store)
     protect_command = list(getattr(args, "protect_command", []) or [])
     if len(protect_command) == 0:
@@ -153,6 +172,9 @@ def _run_guard_start_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
     payload = build_guard_start_payload(context, store, config)
     _emit("start", payload, getattr(args, "json", False))
     return 0
@@ -168,6 +190,9 @@ def _run_guard_status_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
     payload = build_guard_status_payload(context, store, config)
     _emit("status", payload, getattr(args, "json", False))
     return 0
@@ -183,6 +208,9 @@ def _run_guard_init_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
     return _run_init_command(args, context, store, config, workspace)
 
 def _run_guard_dashboard_command(
@@ -196,6 +224,10 @@ def _run_guard_dashboard_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    if guard_home is None:
+        raise RuntimeError("Guard home is required")
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
     try:
         approval_center_url = ensure_guard_daemon(guard_home)
     except RuntimeError as error:
@@ -243,6 +275,9 @@ def _run_guard_bootstrap_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
     try:
         payload = build_guard_bootstrap_payload(
             context=context,
@@ -270,8 +305,9 @@ def _run_guard_detect_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    context = _require_guard_context(context)
     detections = [detect_harness(args.harness, context)] if args.harness else detect_all(context)
-    payload = {
+    payload: dict[str, object] = {
         "generated_at": _now(),
         "harnesses": [detection.to_dict() for detection in detections],
     }
@@ -289,6 +325,8 @@ def _run_guard_apps_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
     return _run_apps_command(args, context, store, str(workspace) if workspace else None)
 
 def _run_guard_install_command(
@@ -302,6 +340,8 @@ def _run_guard_install_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
     try:
         payload = apply_managed_install(
             "install",

@@ -5,6 +5,16 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _now
+    from .commands_support_hook_payload import _hook_action_envelope
+    from .commands_support_hook_state import _append_cursor_pending_shell_key, _claude_pending_permission_index_key, _claude_pending_permission_state_key, _cursor_after_shell_observed, _cursor_conversation_id, _cursor_pending_shell_index_key, _cursor_pending_shell_is_fresh, _cursor_pending_shell_state_key, _cursor_shell_command_fingerprint, _cursor_shell_command_from_payload, _load_claude_pending_permission, _record_cursor_native_shell_allow_state, _remove_claude_pending_permission, _sync_payload_list_from_row
+    from .commands_support_runtime_artifacts import _hook_runtime_artifact, _optional_string, _string_list
+    from .commands_support_runtime_resolution import _runtime_capabilities_summary
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
 

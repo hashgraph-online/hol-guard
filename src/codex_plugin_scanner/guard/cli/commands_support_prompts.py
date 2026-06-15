@@ -5,6 +5,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _NAMED_SECURITY_LEVELS, _SETTINGS_POLICY_RISK_ACTIONS, _guard_risk_action_key
+    from .commands_support_hook_payload import _copilot_hook_permission_decision
+    from .commands_support_runtime_policy import _ensure_terminal_punctuation, _native_hook_reason
+    from .commands_support_runtime_resolution import _canonical_harness_name
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
 

@@ -163,6 +163,20 @@ def _redacted_path(path: str | Path | None, home_dir: Path) -> str | None:
     return redact_local_path(str(path), home_dir=home_dir)
 
 
+def _int_payload_value(payload: dict[str, object], key: str, default: int) -> int:
+    value = payload.get(key)
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
 def _recommended_harness(harnesses: list[dict[str, object]]) -> dict[str, object] | None:
     if not harnesses:
         return None
@@ -171,7 +185,7 @@ def _recommended_harness(harnesses: list[dict[str, object]]) -> dict[str, object
         harnesses,
         key=lambda item: (
             0 if bool(item["installed"]) else 1,
-            0 if int(item.get("artifact_count", 0)) > 0 else 1,
+            0 if _int_payload_value(item, "artifact_count", 0) > 0 else 1,
             0 if bool(item["command_available"]) else 1,
             _approval_experience_rank(item.get("approval_flow")),
             priority.get(str(item["harness"]), len(HARNESS_PRIORITY)),
@@ -356,7 +370,7 @@ def _build_connect_steps(payload: dict[str, object]) -> list[dict[str, str]]:
                 ),
             }
         ]
-        if int(payload.get("receipt_count") or 0) == 0 and recommended is not None:
+        if _int_payload_value(payload, "receipt_count", 0) == 0 and recommended is not None:
             steps.append(_run_step(recommended))
         steps.append(
             {
@@ -369,7 +383,7 @@ def _build_connect_steps(payload: dict[str, object]) -> list[dict[str, str]]:
             }
         )
         return steps
-    if int(payload.get("pending_approvals") or 0) > 0:
+    if _int_payload_value(payload, "pending_approvals", 0) > 0:
         steps = [
             {
                 "title": "Open Guard Inbox",
@@ -414,7 +428,7 @@ def _build_connect_steps(payload: dict[str, object]) -> list[dict[str, str]]:
                 "detail": "Confirm the shared workspace policy Guard pulled down for this machine.",
             }
         )
-    elif int(payload.get("advisory_count") or 0) > 0:
+    elif _int_payload_value(payload, "advisory_count", 0) > 0:
         steps.append(
             {
                 "title": "Review Guard advisories",
@@ -448,7 +462,8 @@ def _recommended_summary(payload: dict[str, object]) -> dict[str, object] | None
     recommended_harness = payload.get("recommended_harness")
     if not isinstance(recommended_harness, str):
         return None
-    for harness in payload.get("harnesses", []):
+    harnesses = payload.get("harnesses")
+    for harness in harnesses if isinstance(harnesses, list) else []:
         if isinstance(harness, dict) and harness.get("harness") == recommended_harness:
             return harness
     return None

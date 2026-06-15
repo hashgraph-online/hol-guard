@@ -42,7 +42,7 @@ def add_guard_root_parser(parser: argparse.ArgumentParser) -> None:
 
 def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     "Attach Guard subcommands to a parser."
-    guard_subparsers = guard_parser.add_subparsers(
+    guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser] = guard_parser.add_subparsers(
         dest="guard_command",
         required=True,
         parser_class=FriendlyArgumentParser,

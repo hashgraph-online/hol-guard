@@ -5,6 +5,17 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _GUARD_CLIENT_VERSION, _HOOK_DAEMON_UNREACHABLE_REASON_MARKER, _now
+    from .commands_support_interaction import _attach_primary_approval_link, _preferred_approval_review_url
+    from .commands_support_prompts import _write_json_line
+    from .commands_support_runtime_artifacts import _hook_event_name
+    from .commands_support_runtime_policy import _approval_delivery_payload, _localize_pending_approval_copy
+    from .commands_support_runtime_resolution import _canonical_harness_name, _managed_install_for
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..adapters.kimi_hooks import normalize_kimi_prompt

@@ -5,6 +5,14 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .commands_support_codex_commands import _CODEX_READ_ONLY_PIPE_FILTERS, _CODEX_READ_ONLY_SEARCH_COMMANDS, _CODEX_READ_ONLY_SEARCH_WRAPPERS, _CODEX_READ_ONLY_VIEW_COMMANDS, _codex_unwrapped_command_parts
+    from .commands_support_codex_git import _codex_count_arg_is_bounded, _codex_git_diff_targets_are_source_like, _git_grep_search_args, _parse_codex_sed_read_only_args
+    from .commands_support_codex_paths import _codex_command_has_unquoted_shell_control, _codex_fd_exec_is_bounded_read_only, _codex_fd_targets, _codex_fd_targets_are_source_like, _codex_resolve_source_like_path, _codex_search_target_is_source_like, _codex_search_targets, _codex_search_targets_are_source_like, _git_grep_uses_external_execution, _path_contains_symlink, _shell_wrapper_script_index
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
 

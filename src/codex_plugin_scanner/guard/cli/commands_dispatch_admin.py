@@ -5,6 +5,16 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
+    from .commands_support_connect import _filter_policy_items, _guard_doctor_connect_health_payload, _resolve_policy_expiry, _validate_policy_scope
+    from .commands_support_interaction import _emit, _policy_write_needs_approval_gate, _policy_write_requires_approval_gate
+    from .commands_support_runtime_policy import _runtime_detector_perf_payload, _runtime_detector_registry_payload
+    from .commands_support_service import _build_explain_payload_with_mode, _guard_sync_failure_message, _validated_supply_chain_sync_payload
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..runtime.command_queue import command_queue_status, repair_command_queue_state
@@ -20,6 +30,7 @@ def _run_guard_exceptions_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
     policy_items = store.list_policy_decisions(getattr(args, "harness", None))
     active_items = _filter_policy_items(policy_items, active_only=True)
     items = [
@@ -41,6 +52,7 @@ def _run_guard_advisories_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
     adv_sub = getattr(args, "advisories_subcommand", None)
     if adv_sub == "sync":
         try:
@@ -101,6 +113,7 @@ def _run_guard_events_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
     _emit(
         "events",
         {"generated_at": _now(), "items": store.list_events(event_name=getattr(args, "name", None))},
@@ -119,6 +132,7 @@ def _run_guard_approvals_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
     approvals_command = getattr(args, "approvals_command", None)
     if approvals_command == "open":
         payload, exit_code = run_approval_open_command(args, store=store)
@@ -134,7 +148,8 @@ def _run_guard_approvals_command(
         return exit_code
     payload = run_approval_command(args, store=store, workspace=workspace)
     _emit("approvals", payload, getattr(args, "json", False))
-    return int(payload.get("exit_code", 0))
+    exit_code = payload.get("exit_code")
+    return exit_code if isinstance(exit_code, int) else 0
 
 def _run_guard_explain_command(
     args: argparse.Namespace,
@@ -147,6 +162,7 @@ def _run_guard_explain_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
     if str(args.target).strip().lower() == "install-connect":
         payload = build_install_connect_docs_payload()
     else:
@@ -165,6 +181,7 @@ def _run_guard_policy_action_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
     _validate_policy_scope(args.scope, args.artifact_id, workspace, getattr(args, "publisher", None))
     expires_at = _resolve_policy_expiry(args)
     try:
@@ -211,6 +228,11 @@ def _run_guard_doctor_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    if guard_home is None:
+        raise RuntimeError("Guard home is required")
+    store = _require_guard_store(store)
+    context = _require_guard_context(context)
+    config = _require_guard_config(config)
     if getattr(args, "notifications", False):
         approval_url = "hol-guard://notification-preview"
         if desktop_notification_setup_supported():
@@ -252,7 +274,7 @@ def _run_guard_doctor_command(
         return 0
     if args.harness:
         adapter = get_adapter(args.harness)
-        payload = adapter.diagnostics(context)
+        payload: dict[str, object] = adapter.diagnostics(context)
         payload["runtime_detector_registry"] = _runtime_detector_registry_payload(config)
         payload["connect_health"] = _guard_doctor_connect_health_payload(store)
         if args.harness == "codex":
@@ -266,6 +288,7 @@ def _run_guard_doctor_command(
     if getattr(args, "perf", False):
         payload["detector_perf"] = _runtime_detector_perf_payload(config)
     package_shims_payload = package_shim_status(context)
+    manager_details = package_shims_payload.get("manager_details")
     package_shim_issues = [
         {
             "kind": "package_shim_integrity",
@@ -273,9 +296,10 @@ def _run_guard_doctor_command(
             "integrity": str(detail.get("integrity")),
             "repair": "Run `hol-guard doctor --repair` to regenerate package-manager shims.",
         }
-        for detail in package_shims_payload.get("manager_details", [])
+        for detail in (manager_details if isinstance(manager_details, list) else [])
         if isinstance(detail, dict) and detail.get("integrity") in {"missing", "stale", "tampered"}
     ]
+    installed_managers_value = package_shims_payload.get("installed_managers")
     if not bool(package_shims_payload.get("path_active")) and package_shims_payload.get("installed_managers"):
         package_shim_issues.append(
             {
@@ -286,7 +310,7 @@ def _run_guard_doctor_command(
     if getattr(args, "repair", False):
         installed_managers = tuple(
             str(manager)
-            for manager in package_shims_payload.get("installed_managers", [])
+            for manager in (installed_managers_value if isinstance(installed_managers_value, list) else [])
             if isinstance(manager, str) and manager.strip()
         )
         if installed_managers:

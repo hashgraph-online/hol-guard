@@ -8,6 +8,7 @@ import json
 import secrets
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -161,6 +162,20 @@ def _encode_jwt_segment(payload: dict[str, object]) -> str:
     return _base64url_encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8"))
 
 
+def _int_payload_value(payload: dict[str, object], key: str, default: int) -> int:
+    value = payload.get(key)
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
 def _sign_dpop_proof(
     *,
     token_endpoint: str,
@@ -169,7 +184,7 @@ def _sign_dpop_proof(
     nonce: str | None = None,
 ) -> str:
     issued_at = int(now.timestamp())
-    header = {
+    header: dict[str, object] = {
         "alg": dpop_key_material.algorithm,
         "jwk": dpop_key_material.public_jwk,
         "typ": "dpop+jwt",
@@ -206,10 +221,12 @@ def _oauth_response_header_value(response: object, header_name: str) -> str | No
         header_items = getattr(headers, "items", None)
         if callable(header_items):
             target_header = header_name.lower()
-            for current_name, current_value in header_items():
-                if isinstance(current_name, str) and current_name.lower() == target_header:
-                    value = current_value
-                    break
+            items = header_items()
+            if isinstance(items, list):
+                for current_name, current_value in items:
+                    if isinstance(current_name, str) and current_name.lower() == target_header:
+                        value = current_value
+                        break
     if not isinstance(value, str):
         return None
     normalized_value = value.strip()
@@ -274,8 +291,14 @@ def start_guard_loopback_callback_listener(
 
     class _CallbackServer(http.server.ThreadingHTTPServer):
         allow_reuse_address = False
+        guard_callback: GuardOAuthLoopbackCallback | None = None
 
     class _CallbackHandler(http.server.BaseHTTPRequestHandler):
+        def _callback_server(self) -> _CallbackServer:
+            if not isinstance(self.server, _CallbackServer):
+                raise RuntimeError("Guard OAuth callback server is unavailable.")
+            return self.server
+
         def do_GET(self) -> None:
             parsed = urllib.parse.urlparse(self.path)
             if parsed.path != _LOOPBACK_REDIRECT_PATH:
@@ -293,7 +316,7 @@ def start_guard_loopback_callback_listener(
                 self.wfile.write(b"Guard OAuth state mismatch.")
                 return
             if error:
-                self.server.guard_callback = GuardOAuthLoopbackCallback(  # type: ignore[attr-defined]
+                self._callback_server().guard_callback = GuardOAuthLoopbackCallback(
                     code=None,
                     state=state,
                     error=error,
@@ -311,14 +334,14 @@ def start_guard_loopback_callback_listener(
                 self.end_headers()
                 self.wfile.write(b"Guard OAuth callback is missing the authorization code.")
                 return
-            self.server.guard_callback = GuardOAuthLoopbackCallback(code=code, state=state)  # type: ignore[attr-defined]
+            self._callback_server().guard_callback = GuardOAuthLoopbackCallback(code=code, state=state)
             callback_ready.set()
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
             self.wfile.write(b"HOL Guard connected. Return to your terminal.")
 
-        def log_message(self, _message: str, *args: object) -> None:
+        def log_message(self, format: str, *args: object) -> None:
             return
 
     for host in _LOOPBACK_HOSTS:
@@ -460,7 +483,7 @@ def _parse_guard_token_exchange_payload(payload: dict[str, object]) -> GuardOAut
     return GuardOAuthTokenExchangeResult(
         access_token=access_token,
         refresh_token=str(payload.get("refresh_token") or "").strip() or None,
-        expires_in=int(payload.get("expires_in") or 0),
+        expires_in=_int_payload_value(payload, "expires_in", 0),
         scope=str(payload.get("scope") or "").strip(),
         token_type=token_type,
         grant_id=_read_nested_string(claims, "grant", "grantId"),
@@ -484,8 +507,8 @@ def build_device_authorization_copy_payload(response: dict[str, object]) -> dict
         "user_code": user_code,
         "verification_uri": verification_uri,
         "verification_uri_complete": verification_uri_complete or None,
-        "expires_in": int(response.get("expires_in") or 0),
-        "interval": int(response.get("interval") or 5),
+        "expires_in": _int_payload_value(response, "expires_in", 0),
+        "interval": _int_payload_value(response, "interval", 5),
         "next_action": {
             "command": "open",
             "target": verification_uri,
@@ -1011,8 +1034,8 @@ def run_guard_device_connect_command(
         client_id=oauth_client.client_id,
         device_code=device_code,
         dpop_key_material=dpop_key_material,
-        interval_seconds=int(response.get("interval") or 5),
-        expires_in_seconds=int(response.get("expires_in") or 0),
+        interval_seconds=_int_payload_value(response, "interval", 5),
+        expires_in_seconds=_int_payload_value(response, "expires_in", 0),
         wait_timeout_seconds=wait_timeout_seconds,
         urlopen=token_urlopen,
         sleep=sleep,

@@ -40,6 +40,7 @@ cisco = [
     "cisco-ai-mcp-scanner~=4.6; python_version >= '3.11'",
 ]
 dev = [
+    "basedpyright>=1.39.8",
     "build>=1.5.0",
     "jsonschema>=4.26.0",
     "pyyaml>=6.0.3",

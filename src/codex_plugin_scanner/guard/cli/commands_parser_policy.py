@@ -5,6 +5,12 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _guard_risk_action_key
+
+
 import argparse
 
 from ._commands_shared import *
