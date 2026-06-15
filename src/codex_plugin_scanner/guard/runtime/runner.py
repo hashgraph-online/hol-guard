@@ -14,7 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from base64 import urlsafe_b64encode
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -72,6 +72,7 @@ from .supply_chain_bundle import (
     load_supply_chain_verification_keys,
     verify_supply_chain_bundle_response,
 )
+from .supply_chain_bundle_models import SupplyChainVerificationKey
 from .supply_chain_support import ecosystem_support_matrix
 
 
@@ -88,21 +89,21 @@ _APPROVAL_METADATA_KEYS = (
 )
 
 
-_DEFAULT_DETECTOR_REGISTRY: tuple[Callable[[], tuple[Any, ...]], DetectorRegistry] | None = None
+_default_detector_registry: tuple[Callable[[], tuple[Any, ...]], DetectorRegistry] | None = None
 _DEFAULT_DETECTOR_REGISTRY_LOCK = threading.Lock()
 
 
 def _get_default_detector_registry() -> DetectorRegistry:
-    global _DEFAULT_DETECTOR_REGISTRY
+    global _default_detector_registry
     factory = register_default_detectors
-    cached = _DEFAULT_DETECTOR_REGISTRY
+    cached = _default_detector_registry
     if cached is not None and cached[0] is factory:
         return cached[1]
     with _DEFAULT_DETECTOR_REGISTRY_LOCK:
-        cached = _DEFAULT_DETECTOR_REGISTRY
+        cached = _default_detector_registry
         if cached is None or cached[0] is not factory:
             cached = (factory, DetectorRegistry(factory()))
-            _DEFAULT_DETECTOR_REGISTRY = cached
+            _default_detector_registry = cached
     return cached[1]
 
 
@@ -1141,7 +1142,7 @@ def sync_receipts(
     """Push local receipts to the configured sync endpoint."""
 
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    sync_url = _normalized_receipts_sync_url(resolved_auth_context["sync_url"])
+    sync_url = _normalized_receipts_sync_url(_auth_context_sync_url(resolved_auth_context))
     prior_receipt_cursor = _receipt_sync_cursor_rowid(store)
     receipts = _receipt_sync_rows_for_upload(store, cursor_rowid=prior_receipt_cursor)
     inventory = store.list_inventory()
@@ -1391,7 +1392,7 @@ def sync_receipts(
     pain_signals_uploaded = sync_pain_signals(store, auth_context=resolved_auth_context)
     value_metrics = _build_value_metrics(store)
     weekly_digest = _build_weekly_firewall_digest(metrics=value_metrics, now=now)
-    summary = {
+    summary: dict[str, object] = {
         "synced_at": payload.get("syncedAt"),
         "receipts_stored": receipts_stored_total,
         "advisories_stored": advisories_stored,
@@ -1405,7 +1406,8 @@ def sync_receipts(
             prior_receipt_cursor is not None
             and len(receipts) > 0
             and not any(
-                isinstance(item.get("receipt_rowid"), int) and int(item.get("receipt_rowid")) > prior_receipt_cursor
+                (receipt_rowid := _int_value(item.get("receipt_rowid"))) is not None
+                and receipt_rowid > prior_receipt_cursor
                 for item in receipts
             )
         ),
@@ -1521,7 +1523,7 @@ def _sync_supply_chain_bundle_incremental(
     cached_bundle_version: str | None,
     auth_context: dict[str, object],
     store: GuardStore,
-    trusted_keys: tuple[object, ...],
+    trusted_keys: tuple[SupplyChainVerificationKey, ...],
     workspace_id: str,
 ) -> dict[str, object] | None:
     index_request = _guard_sync_request(
@@ -1711,12 +1713,14 @@ def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
         synced_at,
     )
     if partition_sync is not None:
-        store.set_sync_payload(
-            "supply_chain_bundle_partition_cache",
-            partition_sync["cache_payload"],  # type: ignore[arg-type]
-            synced_at,
-        )
-    summary = {
+        cache_payload = partition_sync.get("cache_payload")
+        if isinstance(cache_payload, dict):
+            store.set_sync_payload(
+                "supply_chain_bundle_partition_cache",
+                cache_payload,
+                synced_at,
+            )
+    summary: dict[str, object] = {
         "advisory_count": len(response.bundle.advisories),
         "bundle_version": response.bundle.bundle_version,
         "ecosystem_support": list(ecosystem_support_matrix()),
@@ -1731,8 +1735,8 @@ def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
     if partition_sync is not None:
         summary["partition_sync"] = {
             "enabled": True,
-            "refreshed": partition_sync["refreshed_partitions"],  # type: ignore[index]
-            "total": partition_sync["total_partitions"],  # type: ignore[index]
+            "refreshed": _int_value(partition_sync.get("refreshed_partitions")) or 0,
+            "total": _int_value(partition_sync.get("total_partitions")) or 0,
         }
     store.set_sync_payload("supply_chain_bundle_summary", summary, synced_at)
     return summary
@@ -1746,7 +1750,7 @@ def sync_guard_events(
     """Push pending GuardEventV1 envelopes to Guard Cloud."""
 
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    sync_url = _guard_events_sync_url(resolved_auth_context["sync_url"])
+    sync_url = _guard_events_sync_url(_auth_context_sync_url(resolved_auth_context))
     previous_summary = store.get_sync_payload("guard_events_v1_summary")
     total_events = 0
     total_accepted = 0
@@ -1779,7 +1783,7 @@ def sync_guard_events(
         except urllib.error.HTTPError as error:
             if error.code == 404:
                 skipped_count = _mark_all_guard_events_v1_uploaded(store, synced_at)
-                summary = {
+                summary: dict[str, object] = {
                     "synced_at": synced_at,
                     "events": total_events + skipped_count,
                     "accepted": total_accepted,
@@ -1830,7 +1834,7 @@ def sync_guard_events(
         total_accepted += uploaded
         if uploaded == 0 or len(pending_events) < 200:
             break
-    summary = {"synced_at": synced_at, "events": total_events, "accepted": total_accepted}
+    summary: dict[str, object] = {"synced_at": synced_at, "events": total_events, "accepted": total_accepted}
     store.set_sync_payload("guard_events_v1_summary", summary, synced_at)
     return summary
 
@@ -1862,7 +1866,7 @@ def _record_guard_events_sync_failure(
 ) -> None:
     recorded_at = _now()
     next_retry_after = (datetime.now(timezone.utc) + timedelta(seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS)).isoformat()
-    summary = {
+    summary: dict[str, object] = {
         "synced_at": None,
         "status": "failed",
         "events": total_events,
@@ -1900,7 +1904,7 @@ def sync_runtime_session(
     """Publish the active Guard runtime session so the dashboard can show the machine immediately."""
 
     resolved_auth_context = auth_context or _resolve_guard_sync_auth_context(store)
-    sync_url = _normalized_runtime_sessions_sync_url(resolved_auth_context["sync_url"])
+    sync_url = _normalized_runtime_sessions_sync_url(_auth_context_sync_url(resolved_auth_context))
     session_payload = _cloud_runtime_session_payload(store, session)
     body = json.dumps({"session": session_payload}).encode("utf-8")
     request = _guard_sync_request(
@@ -1940,11 +1944,12 @@ def sync_runtime_session(
     if not isinstance(payload, dict):
         raise RuntimeError("Invalid sync response")
     synced_at = _sync_timestamp(payload)
-    summary = {
+    synced_items = payload.get("items")
+    summary: dict[str, object] = {
         "synced_at": synced_at,
         "runtime_session_synced_at": synced_at,
         "runtime_session_id": session_payload["sessionId"],
-        "runtime_sessions_visible": len(payload.get("items", [])) if isinstance(payload.get("items"), list) else 0,
+        "runtime_sessions_visible": len(synced_items) if isinstance(synced_items, list) else 0,
         "local_guard_online_at": synced_at,
         "runtime_harness": session_payload["harness"],
         "runtime_surface": session_payload["surface"],
@@ -2032,7 +2037,7 @@ def sync_pain_signals(
         raise
     except GuardSyncNotConfiguredError:
         return 0
-    normalized_sync_url = _normalized_receipts_sync_url(resolved_auth_context["sync_url"])
+    normalized_sync_url = _normalized_receipts_sync_url(_auth_context_sync_url(resolved_auth_context))
     cursor_payload = store.get_sync_payload("pain_signal_cursor")
     last_event_id = _last_uploaded_event_id(cursor_payload)
     uploaded_count = 0
@@ -2046,7 +2051,7 @@ def sync_pain_signals(
         )
         if not candidates:
             break
-        last_processed_event_id = int(candidates[-1]["event_id"])
+        last_processed_event_id = _int_value(candidates[-1].get("event_id")) or current_event_id
         signal_items: list[dict[str, object]] = []
         for item in candidates:
             event_name = _optional_string(item.get("event_name"))
@@ -2211,8 +2216,8 @@ def _base64url_encode(data: bytes) -> str:
     return urlsafe_b64encode(data).decode("ascii").rstrip("=")
 
 
-def _encode_jwt_segment(payload: dict[str, object]) -> str:
-    return _base64url_encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+def _encode_jwt_segment(payload: Mapping[str, object]) -> str:
+    return _base64url_encode(json.dumps(dict(payload), separators=(",", ":"), sort_keys=True).encode("utf-8"))
 
 
 def _dpop_access_token_confirmation_claim(access_token: str) -> str:
@@ -2272,7 +2277,13 @@ def _guard_http_header_value(response: object, header_name: str) -> str | None:
         header_items = getattr(headers, "items", None)
         if callable(header_items):
             target_header = header_name.lower()
-            for current_name, current_value in header_items():
+            raw_header_items = header_items()
+            if not isinstance(raw_header_items, Sequence):
+                raw_header_items = ()
+            for header_item in raw_header_items:
+                if not isinstance(header_item, tuple) or len(header_item) != 2:
+                    continue
+                current_name, current_value = header_item
                 if isinstance(current_name, str) and current_name.lower() == target_header:
                     value = current_value
                     break
@@ -2343,13 +2354,17 @@ def _guard_sync_request(
         method=method,
         headers=headers,
     )
-    request._guard_dpop_retry_context = {
-        "auth_context": auth_context,
-        "request_url": request_url,
-        "method": method,
-        "extra_headers": None if extra_headers is None else dict(extra_headers),
-        "dpop_nonce": dpop_nonce,
-    }
+    object.__setattr__(
+        request,
+        "_guard_dpop_retry_context",
+        {
+            "auth_context": auth_context,
+            "request_url": request_url,
+            "method": method,
+            "extra_headers": None if extra_headers is None else dict(extra_headers),
+            "dpop_nonce": dpop_nonce,
+        },
+    )
     return request
 
 
@@ -2570,6 +2585,19 @@ def _persist_rotated_oauth_refresh_token(
         or dpop_public_jwk_thumbprint is None
     ):
         raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
+    supply_chain_firewall: bool | None
+    if (
+        isinstance(package_firewall_entitlement, dict)
+        and isinstance(package_firewall_entitlement.get("supply_chain_firewall"), bool)
+    ):
+        supply_chain_firewall = bool(package_firewall_entitlement.get("supply_chain_firewall"))
+    else:
+        credentials_supply_chain_firewall = credentials.get("supply_chain_firewall")
+        supply_chain_firewall = (
+            credentials_supply_chain_firewall
+            if isinstance(credentials_supply_chain_firewall, bool)
+            else None
+        )
     store.set_oauth_local_credentials(
         issuer=issuer,
         client_id=client_id,
@@ -2584,16 +2612,7 @@ def _persist_rotated_oauth_refresh_token(
             if isinstance(package_firewall_entitlement, dict)
             else _optional_string(credentials.get("supply_chain_entitlement_expires_at"))
         ),
-        supply_chain_firewall=(
-            package_firewall_entitlement.get("supply_chain_firewall")
-            if isinstance(package_firewall_entitlement, dict)
-            and isinstance(package_firewall_entitlement.get("supply_chain_firewall"), bool)
-            else (
-                credentials.get("supply_chain_firewall")
-                if isinstance(credentials.get("supply_chain_firewall"), bool)
-                else None
-            )
-        ),
+        supply_chain_firewall=supply_chain_firewall,
         supply_chain_plan_id=(
             _optional_string(package_firewall_entitlement.get("supply_chain_plan_id"))
             if isinstance(package_firewall_entitlement, dict)
@@ -2627,10 +2646,9 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
         dpop_key_material=dpop_key_material,
     )
     rotated_refresh_token = str(refreshed["refresh_token"])
-    package_firewall_entitlement = (
-        refreshed["package_firewall_entitlement"]
-        if isinstance(refreshed.get("package_firewall_entitlement"), dict)
-        else None
+    refreshed_entitlement = refreshed.get("package_firewall_entitlement")
+    package_firewall_entitlement: dict[str, object] | None = (
+        refreshed_entitlement if isinstance(refreshed_entitlement, dict) else None
     )
     if rotated_refresh_token != refresh_token or package_firewall_entitlement is not None or persist_recovered_secret:
         _persist_rotated_oauth_refresh_token(
@@ -2751,7 +2769,7 @@ def _guard_sync_request_with_nonce(
         auth_context,
         request_url=request_url,
         method=method,
-        data=request.data,
+        data=_request_data_bytes(request.data),
         extra_headers=None if extra_headers is None else {str(key): str(value) for key, value in extra_headers.items()},
         dpop_nonce=dpop_nonce,
     )
@@ -2956,6 +2974,38 @@ def _optional_string(value: object) -> str | None:
     return None
 
 
+def _int_value(value: object) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return None
+
+
+def _string_items(value: object) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(item for item in value if isinstance(item, str))
+
+
+def _request_data_bytes(value: object) -> bytes | None:
+    if isinstance(value, bytes):
+        return value
+    return None
+
+
+def _auth_context_sync_url(auth_context: dict[str, object]) -> str:
+    sync_url = _optional_string(auth_context.get("sync_url"))
+    if sync_url is None:
+        raise RuntimeError("Guard sync URL is unavailable.")
+    return sync_url
+
+
+def _metric_count(metrics: dict[str, dict[str, object]], key: str) -> int:
+    metric = metrics.get(key)
+    if not isinstance(metric, dict):
+        return 0
+    return _int_value(metric.get("value")) or 0
+
+
 def _normalized_timestamp_string(value: object) -> str | None:
     raw_value = _optional_string(value)
     if raw_value is None:
@@ -3086,9 +3136,9 @@ def _build_value_metrics(store: GuardStore) -> dict[str, dict[str, object]]:
 
 
 def _build_weekly_firewall_digest(*, metrics: dict[str, dict[str, object]], now: str) -> dict[str, object]:
-    installs_stopped = int(metrics["installs_stopped_before_execution"]["value"])
-    scripts_prevented = int(metrics["scripts_prevented"]["value"])
-    tokens_protected = int(metrics["tokens_protected"]["value"])
+    installs_stopped = _metric_count(metrics, "installs_stopped_before_execution")
+    scripts_prevented = _metric_count(metrics, "scripts_prevented")
+    tokens_protected = _metric_count(metrics, "tokens_protected")
     headline = (
         "Package firewall summary: "
         f"{installs_stopped} installs stopped before execution, "
@@ -3400,7 +3450,7 @@ def _persist_receipt_sync_cursor(
 ) -> None:
     if latest_uploaded_rowid is None:
         return
-    payload = {
+    payload: dict[str, object] = {
         "last_rowid": latest_uploaded_rowid,
         "synced_at": synced_at,
     }
@@ -3476,7 +3526,7 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
     )
     created_at = _optional_string(session.get("created_at") or session.get("createdAt")) or _now()
     updated_at = _optional_string(session.get("updated_at") or session.get("updatedAt")) or created_at
-    capabilities = [str(item) for item in session.get("capabilities", []) if isinstance(item, str)]
+    capabilities = list(_string_items(session.get("capabilities")))
     package_manager_coverage = _cloud_package_manager_coverage(
         store,
         workspace=workspace,
@@ -3672,9 +3722,9 @@ def _guard_device_metadata(store: GuardStore) -> tuple[str, str]:
 def _record_synced_alert_events(
     *,
     store: GuardStore,
-    advisories: list[object],
+    advisories: Sequence[dict[str, object]],
     alert_preferences: dict[str, object] | None,
-    exceptions: list[object],
+    exceptions: Sequence[dict[str, object]],
     now: str,
 ) -> None:
     advisories_enabled = not (
@@ -3682,8 +3732,6 @@ def _record_synced_alert_events(
     )
     if advisories_enabled:
         for item in advisories:
-            if not isinstance(item, dict):
-                continue
             artifact_id = _optional_string(item.get("artifactId"))
             if artifact_id is None:
                 continue
@@ -3696,11 +3744,9 @@ def _record_synced_alert_events(
                     "reason": _optional_string(item.get("reason")),
                 },
                 now,
-            )
+    )
     current_time = _parse_iso_timestamp(now)
     for item in exceptions:
-        if not isinstance(item, dict):
-            continue
         artifact_id = _optional_string(item.get("artifactId"))
         expires_at = _optional_string(item.get("expiresAt"))
         if artifact_id is None or expires_at is None:

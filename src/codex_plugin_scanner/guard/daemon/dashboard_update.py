@@ -8,6 +8,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TextIO
 
 from ..cli.update_commands import build_guard_update_status_payload
 
@@ -106,18 +107,12 @@ def build_dashboard_update_runner_command(
     return command
 
 
-def build_dashboard_update_runner_popen_kwargs(guard_home: Path) -> dict[str, object]:
+def build_dashboard_update_runner_popen_kwargs(guard_home: Path) -> tuple[Path, dict[str, str], TextIO]:
     resolved_home = guard_home.expanduser().resolve()
     resolved_home.mkdir(parents=True, exist_ok=True)
     log_path = resolved_home / "dashboard-update.log"
     log_handle = log_path.open("a", encoding="utf-8")
-    return {
-        "stdin": subprocess.DEVNULL,
-        "stdout": subprocess.DEVNULL,
-        "stderr": log_handle,
-        "cwd": str(resolved_home),
-        "env": _runner_env(),
-    }
+    return resolved_home, _runner_env(), log_handle
 
 
 def schedule_guard_dashboard_update(
@@ -143,15 +138,30 @@ def schedule_guard_dashboard_update(
         daemon_port=daemon_port,
         force_pypi_reinstall=force_pypi_reinstall,
     )
-    kwargs = build_dashboard_update_runner_popen_kwargs(guard_home)
-    if os.name == "nt":
-        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-    else:
-        kwargs["start_new_session"] = True
-    stderr_target = kwargs.get("stderr")
-    process = subprocess.Popen(command, **kwargs)
-    if stderr_target is not None and hasattr(stderr_target, "close"):
-        stderr_target.close()
+    working_directory, env, log_handle = build_dashboard_update_runner_popen_kwargs(guard_home)
+    try:
+        if os.name == "nt":
+            process = subprocess.Popen(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=log_handle,
+                cwd=working_directory,
+                env=env,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
+            )
+        else:
+            process = subprocess.Popen(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=log_handle,
+                cwd=working_directory,
+                env=env,
+                start_new_session=True,
+            )
+    finally:
+        log_handle.close()
     _write_update_lock(
         lock_path,
         {

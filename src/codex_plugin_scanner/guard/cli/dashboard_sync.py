@@ -245,9 +245,12 @@ def _list_committed_static_files(checkout: Path, static_prefix: str) -> list[str
     result = _git_run(checkout, "ls-tree", "-r", "--name-only", "HEAD", "--", static_prefix)
     if result is None or result.returncode != 0:
         return []
+    stdout = result.stdout
+    if not isinstance(stdout, str):
+        return []
     files: list[str] = []
     prefix = f"{static_prefix.rstrip('/')}/"
-    for line in result.stdout.splitlines():
+    for line in stdout.splitlines():
         relative = line.strip()
         if (
             relative == ""

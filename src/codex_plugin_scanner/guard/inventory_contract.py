@@ -662,7 +662,7 @@ def _mcp_tool_items_from_artifact(
         output_schema = _first_present_value(raw_tool, "outputSchema", "output_schema")
         annotations = raw_tool.get("annotations")
         safe_annotations = annotations if isinstance(annotations, dict) else {}
-        metadata = {
+        metadata: dict[str, object] = {
             "serverItemId": server_item.item_id,
             "toolName": name,
             "title": display_name,

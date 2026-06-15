@@ -21,7 +21,7 @@ import webbrowser
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypedDict, TypeGuard, cast
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from ...version import __version__
@@ -101,7 +101,7 @@ from ..local_supply_chain import (
     resolve_package_firewall_entitlement_with_refresh,
     resolve_supply_chain_audit_workspace_dir,
 )
-from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
+from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, DecisionScope, GuardAction, PolicyDecision
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
@@ -204,13 +204,35 @@ def _build_snapshot_payload(context: HarnessContext) -> dict[str, object]:
     }
 
 
+def _is_decision_scope(value: str) -> TypeGuard[DecisionScope]:
+    return value in DECISION_SCOPE_VALUES
+
+
+def _is_guard_action(value: str) -> TypeGuard[GuardAction]:
+    return value in GUARD_ACTION_VALUES
+
+
+def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+class _CursorReceiptContext(TypedDict):
+    action_scope: str
+    artifact_name: str
+    capabilities_summary: str
+    changed_capability: str
+    scanner_evidence: dict[str, object]
+    source_scope: str
+    summary: dict[str, object]
+
+
 class _GuardDaemonHttpServer(ThreadingHTTPServer):
     store: GuardStore
     runtime: GuardSurfaceRuntime
     auth_token: str
     runtime_host: str
     runtime_session_id: str
-    runtime_started_at: datetime
+    runtime_started_at: str
     idle_timeout_seconds: float | None
     last_activity_monotonic: float
     start_monotonic: float
@@ -227,26 +249,25 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     def __init__(
         self,
         server_address: tuple[str, int],
-        RequestHandlerClass: type[BaseHTTPRequestHandler],
+        handler_class: type[BaseHTTPRequestHandler],
         *,
         store: GuardStore,
-        runtime: GuardSurfaceRuntime,
         auth_token: str,
         runtime_host: str,
         runtime_session_id: str,
-        runtime_started_at: datetime,
+        runtime_started_at: str,
         idle_timeout_seconds: float | None,
     ) -> None:
-        super().__init__(server_address, RequestHandlerClass)
+        super().__init__(server_address, handler_class)
         self.store = store
-        self.runtime = runtime
+        self.runtime = GuardSurfaceRuntime(store)
         self.auth_token = auth_token
         self.runtime_host = runtime_host
         self.runtime_session_id = runtime_session_id
         self.runtime_started_at = runtime_started_at
         self.idle_timeout_seconds = idle_timeout_seconds
         self.last_activity_monotonic = time.monotonic()
-        self.start_monotonic = self.last_activity_monotonic
+        self.start_monotonic = time.monotonic()
         self.active_stream_clients = 0
         self.active_stream_clients_lock = threading.Lock()
         self.package_firewall_connect_state = None
@@ -256,6 +277,12 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         self.package_firewall_action_rate_limiter = PackageFirewallActionRateLimiter()
         self.package_firewall_session_nonces = {}
         self.package_firewall_session_nonces_lock = threading.Lock()
+
+    def daemon_host(self) -> str:
+        return str(self.server_address[0])
+
+    def daemon_port(self) -> int:
+        return int(self.server_address[1])
 
 
 _STATIC_DIR = Path(__file__).with_name("static")
@@ -510,6 +537,7 @@ def _run_headless_cloud_sync(
     store: GuardStore,
 ) -> None:
     recorded_at = _now()
+    summary: dict[str, object]
     try:
         sync_payload = sync_local_guard_cloud_proof(store)
         summary = {
@@ -1013,7 +1041,7 @@ def _finalize_daemon_guard_connect_payload(
 
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
     _MAX_BODY_BYTES = 1_000_000
-    server: _GuardDaemonHttpServer
+    server: _GuardDaemonHttpServer  # pyright: ignore[reportIncompatibleVariableOverride]
 
     def do_OPTIONS(self) -> None:
         origin = self._normalize_origin(self.headers.get("Origin"))
@@ -1070,7 +1098,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             config = load_guard_config(store.guard_home)
             snapshot = build_runtime_snapshot(
                 store=store,
-                approval_center_url=f"http://{self.server.server_address[0]}:{self.server.server_address[1]}",
+                approval_center_url=(
+                    f"http://{self._daemon_server().daemon_host()}:{self._daemon_server().daemon_port()}"
+                ),
                 active_request_id=self._query_string(parsed.query, "active_request_id"),
                 include_items=self._query_bool(parsed.query, "include_items", default=True),
             )
@@ -1375,8 +1405,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 and path_parts[:2] == ["v1", "requests"]
                 and path_parts[3] in {"approve", "block", "resume"}
             ):
-                host = self.server.server_address[0]  # type: ignore[attr-defined]
-                port = self.server.server_address[1]  # type: ignore[attr-defined]
+                host = self._daemon_server().daemon_host()
+                port = self._daemon_server().daemon_port()
                 reconnect_url = _build_local_url(host, port, "/#/reconnect")
                 self._write_json(
                     {
@@ -1505,7 +1535,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return
             guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
             daemon_pid = os.getpid()
-            daemon_port = int(self.server.server_address[1])  # type: ignore[attr-defined]
+            daemon_port = self._daemon_server().daemon_port()
             self._write_json(
                 schedule_guard_dashboard_update(
                     guard_home,
@@ -1553,6 +1583,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         if action is None:
+            self._write_json({"resolved": False, "error": "missing_required_fields"}, status=400)
+            return
+        if request_id is None:
             self._write_json({"resolved": False, "error": "missing_required_fields"}, status=400)
             return
         scope = payload.get("scope")
@@ -1642,17 +1675,21 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 copy=copy,
                 codex_resume=codex_resume,
             )
-            copy = updated["copy"]
+            updated_copy = updated.get("copy")
+            if _is_string_object_dict(updated_copy):
+                title = self._optional_string(updated_copy.get("title")) or copy["title"]
+                body = self._optional_string(updated_copy.get("body")) or copy["body"]
+                copy = {"title": title, "body": body}
         updated["copy"] = copy
         updated["retry_hint"] = copy["body"]
         self._write_json(updated)
 
-    def log_message(self, fmt: str, *args: Any) -> None:
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
         return
 
     def _local_queue_url(self) -> str:
-        host = self.server.server_address[0]  # type: ignore[attr-defined]
-        port = self.server.server_address[1]  # type: ignore[attr-defined]
+        host = self._daemon_server().daemon_host()
+        port = self._daemon_server().daemon_port()
         return _build_local_url(host, port, "/#/inbox")
 
     def _load_request_body(self) -> tuple[dict[str, object], str | None]:
@@ -1955,8 +1992,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             existing_remote_decisions = [
                 PolicyDecision(
                     harness=str(item["harness"]),
-                    scope=item["scope"],  # type: ignore[arg-type]
-                    action=item["action"],  # type: ignore[arg-type]
+                    scope=scope,
+                    action=action,
                     artifact_id=self._optional_string(item.get("artifact_id")),
                     artifact_hash=self._optional_string(item.get("artifact_hash")),
                     workspace=self._optional_string(item.get("workspace")),
@@ -1968,6 +2005,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 for item in self.server.store.list_policy_decisions()  # type: ignore[attr-defined]
                 if item.get("source") in {"cloud-sync", "team-policy"}
+                if _is_decision_scope(scope := self._optional_string(item.get("scope")) or "")
+                if _is_guard_action(action := self._optional_string(item.get("action")) or "")
             ]
             existing_remote_decisions.extend(
                 _build_policy_bundle_decisions(
@@ -2135,7 +2174,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if result.get("resolved") is not True:
             self._write_json({"error": "remote_once_apply_failed"}, status=409)
             return
-        resolved_request = result.get("resolved_request") if isinstance(result.get("resolved_request"), dict) else {}
+        resolved_request_value = result.get("resolved_request")
+        resolved_request: dict[str, object] = (
+            resolved_request_value if _is_string_object_dict(resolved_request_value) else {}
+        )
         resolved_at = self._optional_string(resolved_request.get("resolved_at")) or _now()
         self.server.store.add_event(  # type: ignore[attr-defined]
             "approval.remote_once_applied",
@@ -2226,6 +2268,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             managers=(manager,),
             workspace_dir=context.workspace_dir,
         )
+        scanner_evidence = receipt_overrides.get("scanner_evidence")
         receipt = self._record_headless_receipt(
             harness="package-firewall",
             operation=action,
@@ -2236,11 +2279,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             policy_decision=self._optional_string(receipt_overrides.get("policy_decision")),
             capabilities_summary=self._optional_string(receipt_overrides.get("capabilities_summary")),
             artifact_name=self._optional_string(receipt_overrides.get("artifact_name")),
-            scanner_evidence_extra=(
-                receipt_overrides.get("scanner_evidence")
-                if isinstance(receipt_overrides.get("scanner_evidence"), dict)
-                else None
-            ),
+            scanner_evidence_extra=scanner_evidence if _is_string_object_dict(scanner_evidence) else None,
         )
         self._write_json(
             {
@@ -2352,6 +2391,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             workspace_dir=context.workspace_dir,
             store=self.server.store,  # type: ignore[attr-defined]
         )
+        scanner_evidence = receipt_overrides.get("scanner_evidence")
         receipt = self._record_headless_receipt(
             harness="package-firewall",
             operation=operation,
@@ -2362,11 +2402,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             policy_decision=self._optional_string(receipt_overrides.get("policy_decision")),
             capabilities_summary=self._optional_string(receipt_overrides.get("capabilities_summary")),
             artifact_name=self._optional_string(receipt_overrides.get("artifact_name")),
-            scanner_evidence_extra=(
-                receipt_overrides.get("scanner_evidence")
-                if isinstance(receipt_overrides.get("scanner_evidence"), dict)
-                else None
-            ),
+            scanner_evidence_extra=scanner_evidence if _is_string_object_dict(scanner_evidence) else None,
         )
         response_status = "completed"
         if operation == "audit":
@@ -2549,6 +2585,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 _, allowed_origin = resolve_connect_url(connect_url)
                 oauth_client = resolve_guard_oauth_client_config(allowed_origin)
                 callback = session.wait_for_callback(_SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS)
+                if callback.code is None:
+                    raise RuntimeError("Guard OAuth callback missing authorization code.")
                 token_result = exchange_guard_authorization_code(
                     token_endpoint=oauth_client.token_endpoint,
                     client_id=oauth_client.client_id,
@@ -2736,6 +2774,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 _, allowed_origin = resolve_connect_url(connect_url)
                 oauth_client = resolve_guard_oauth_client_config(allowed_origin)
                 callback = session.wait_for_callback(_SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS)
+                if callback.code is None:
+                    raise RuntimeError("Guard OAuth callback missing authorization code.")
                 token_result = exchange_guard_authorization_code(
                     token_endpoint=oauth_client.token_endpoint,
                     client_id=oauth_client.client_id,
@@ -2925,7 +2965,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             approval_source="guard-cloud-headless",
         )
         self.server.store.add_receipt(receipt)  # type: ignore[attr-defined]
-        summary = {
+        summary: dict[str, object] = {
             "id": receipt.receipt_id,
             "operation": operation,
             "status": "completed",
@@ -2951,7 +2991,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         payload: dict[str, object],
         result: dict[str, object],
         cloud_sync: dict[str, object] | None,
-    ) -> dict[str, object] | None:
+    ) -> _CursorReceiptContext | None:
         if harness != "cursor":
             return None
         action_payload = result.get("cursor_action")
@@ -2970,12 +3010,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if isinstance(cloud_sync, dict):
             cloud_sync_status = self._optional_string(cloud_sync.get("status")) or cloud_sync_status
         surface_label = "CLI" if surface == "cli" else "editor"
-        scanner_evidence = {
+        scanner_evidence: dict[str, object] = {
             "action_scope": action_scope,
             "cloud_sync_status": cloud_sync_status,
             "cursor_status": self._optional_string(action_dict.get("status")) or "unknown",
             "editor_or_cli": surface,
             "error_reason": self._optional_string(payload.get("error_reason")),
+        }
+        summary: dict[str, object] = {
+            "action_scope": action_scope,
+            "cloud_sync": dict(cloud_sync) if isinstance(cloud_sync, dict) else {"status": cloud_sync_status},
+            "editor_or_cli": surface,
         }
         return {
             "action_scope": action_scope,
@@ -2984,11 +3029,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "changed_capability": f"{surface}:{action}",
             "scanner_evidence": scanner_evidence,
             "source_scope": f"cursor:{surface}",
-            "summary": {
-                "action_scope": action_scope,
-                "cloud_sync": dict(cloud_sync) if isinstance(cloud_sync, dict) else {"status": cloud_sync_status},
-                "editor_or_cli": surface,
-            },
+            "summary": summary,
         }
 
     def _handle_policy_clear(self, payload: dict[str, object]) -> None:
@@ -3153,8 +3194,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _handle_notification_setup(self, payload: dict[str, object]) -> None:
         del payload
-        host = self.server.server_address[0]  # type: ignore[attr-defined]
-        port = self.server.server_address[1]  # type: ignore[attr-defined]
+        host = self._daemon_server().daemon_host()
+        port = self._daemon_server().daemon_port()
         approval_url = _build_local_url(host, port, "/approvals/notification-preview")
         try:
             result = ensure_desktop_notification_setup(
@@ -3559,25 +3600,24 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         approval_surface_policy = self._optional_string(payload.get("approval_surface_policy"))
         detection = payload.get("detection")
         evaluation = payload.get("evaluation")
-        if not all(
-            (
-                session_id is not None,
-                operation_type is not None,
-                harness is not None,
-                approval_center_url is not None,
-                approval_surface_policy is not None,
-                isinstance(detection, dict),
-                isinstance(evaluation, dict),
-            )
+        if (
+            session_id is None
+            or operation_type is None
+            or harness is None
+            or approval_center_url is None
+            or approval_surface_policy is None
+            or not _is_string_object_dict(detection)
+            or not _is_string_object_dict(evaluation)
         ):
             self._write_json({"error": "missing_required_fields"}, status=400)
             return
+        metadata = payload.get("metadata")
         try:
             response = self.server.runtime.queue_blocked_operation(  # type: ignore[attr-defined]
                 session_id=session_id,
                 operation_type=operation_type,
                 harness=harness,
-                metadata=dict(payload.get("metadata")) if isinstance(payload.get("metadata"), dict) else {},
+                metadata=metadata if _is_string_object_dict(metadata) else {},
                 detection=detection,
                 evaluation=evaluation,
                 approval_center_url=approval_center_url,
@@ -4249,7 +4289,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self._touch_runtime_heartbeat("/v1/events/stream")
                 items = self.server.store.list_events_after(next_cursor, limit=100)  # type: ignore[attr-defined]
                 for item in items:
-                    next_cursor = int(item["event_id"])
+                    event_id = item.get("event_id")
+                    if not isinstance(event_id, int):
+                        continue
+                    next_cursor = event_id
                     body = json.dumps(item)
                     try:
                         self.wfile.write(f"data: {body}\n\n".encode())
@@ -4418,19 +4461,27 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         harness = payload.get("harness")
         scope = payload.get("scope")
         action = payload.get("action")
-        if not all(isinstance(value, str) and value.strip() for value in (harness, scope, action)):
+        if (
+            not isinstance(harness, str)
+            or not harness.strip()
+            or not isinstance(scope, str)
+            or not scope.strip()
+            or not isinstance(action, str)
+            or not action.strip()
+        ):
             self._write_json({"saved": False, "error": "missing_required_fields"}, status=400)
             return
-        normalized_scope = str(scope).strip()
-        normalized_action = str(action).strip()
-        if normalized_scope not in DECISION_SCOPE_VALUES or normalized_action not in GUARD_ACTION_VALUES:
+        normalized_harness = harness.strip()
+        normalized_scope = scope.strip()
+        normalized_action = action.strip()
+        if not _is_decision_scope(normalized_scope) or not _is_guard_action(normalized_action):
             self._write_json({"saved": False, "error": "unsupported_policy_value"}, status=400)
             return
         if normalized_scope == "global" and normalized_action == "allow":
             self._write_json({"saved": False, "error": "broad_allow_requires_narrow_scope"}, status=400)
             return
         record = {
-            "harness": str(harness).strip(),
+            "harness": normalized_harness,
             "scope": normalized_scope,
             "action": normalized_action,
             "artifact_id": self._optional_string(payload.get("artifact_id")),
@@ -4448,9 +4499,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         store = self.server.store  # type: ignore[attr-defined]
         decision = PolicyDecision(
-            harness=record["harness"],
-            scope=record["scope"],  # type: ignore[arg-type]
-            action=record["action"],  # type: ignore[arg-type]
+            harness=normalized_harness,
+            scope=normalized_scope,
+            action=normalized_action,
             artifact_id=record["artifact_id"],
             workspace=record["workspace"],
             publisher=record["publisher"],
@@ -4604,9 +4655,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return tuple(roots)
 
     @staticmethod
-    def _path_is_within_root(candidate: str, root: str) -> bool:
+    def _path_is_within_root(candidate: Path | str, root: Path | str) -> bool:
+        candidate_path = os.fspath(candidate)
+        root_path = os.fspath(root)
         try:
-            return os.path.commonpath([candidate, root]) == root
+            return os.path.commonpath([candidate_path, root_path]) == root_path
         except ValueError:
             return False
 
@@ -4840,26 +4893,20 @@ class GuardDaemonServer:
         idle_timeout_seconds: float | None = None,
     ) -> None:
         _validate_dashboard_bundle()
-        runtime = GuardSurfaceRuntime(store)
-        auth_token = load_guard_daemon_auth_token(store.guard_home) or uuid.uuid4().hex
-        runtime_session_id = uuid.uuid4().hex
-        runtime_started_at = _now()
-        resolved_idle_timeout_seconds = _guard_daemon_idle_timeout_seconds(
-            store.guard_home,
-            idle_timeout_seconds=idle_timeout_seconds,
-        )
         self._server = _GuardDaemonHttpServer(
             (host, port),
             _GuardDaemonHandler,
             store=store,
-            runtime=runtime,
-            auth_token=auth_token,
+            auth_token=load_guard_daemon_auth_token(store.guard_home) or uuid.uuid4().hex,
             runtime_host=host,
-            runtime_session_id=runtime_session_id,
-            runtime_started_at=runtime_started_at,
-            idle_timeout_seconds=resolved_idle_timeout_seconds,
+            runtime_session_id=uuid.uuid4().hex,
+            runtime_started_at=_now(),
+            idle_timeout_seconds=_guard_daemon_idle_timeout_seconds(
+                store.guard_home,
+                idle_timeout_seconds=idle_timeout_seconds,
+            ),
         )
-        self.port = int(self._server.server_address[1])
+        self.port = self._server.daemon_port()
         self._bundle_refresh_backoff_seconds = bundle_refresh_backoff_seconds
         self._bundle_refresh_interval_seconds = bundle_refresh_interval_seconds
         self._bundle_refresh_thread: threading.Thread | None = None

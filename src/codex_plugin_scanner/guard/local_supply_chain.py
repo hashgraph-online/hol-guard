@@ -797,8 +797,8 @@ def audit_receipt_metadata(
         policy_decision = "ask"
     inventory = result.get("inventory")
     inventory_summary = inventory if isinstance(inventory, dict) else {}
-    manifest_paths = [str(path) for path in result.get("manifest_paths") or () if isinstance(path, str)]
-    lockfile_paths = [str(path) for path in result.get("lockfile_paths") or () if isinstance(path, str)]
+    manifest_paths = list(_string_items(result.get("manifest_paths")))
+    lockfile_paths = list(_string_items(result.get("lockfile_paths")))
     path_hashes = workspace_audit_path_hashes(workspace_dir, manifest_paths, lockfile_paths)
     return {
         "policy_decision": policy_decision,
@@ -945,7 +945,7 @@ def build_workspace_audit_payload(
             now=now,
         )
     evaluation = _enrich_evaluation_packages_with_advisory_aliases(evaluation, store)
-    payload = {
+    payload: dict[str, object] = {
         "generated_at": now,
         "mode": command_name,
         "source": source,
@@ -1037,7 +1037,7 @@ def build_supply_chain_explain_payload(
         workspace_dir=workspace_dir,
         now=now,
     )
-    payload = {
+    payload: dict[str, object] = {
         "generated_at": now,
         "request": {
             "package": package_spec,
@@ -1097,7 +1097,7 @@ def build_package_protect_payload(
     )
     verdict_action = _protect_action_for_decision(evaluation.decision)
     risk_signals = tuple(_evaluation_risk_signals(evaluation))
-    receipt_policy_metadata = {
+    receipt_policy_metadata: dict[str, object] = {
         "matched_rule_id": evaluation.matched_rule_id,
         "package_manager": sanitized_intent.package_manager,
         "package_targets": [target.raw_spec for target in sanitized_intent.targets],
@@ -1423,8 +1423,8 @@ def _package_request_artifact_hash(
     policy_gate = _package_policy_gate_context(store, artifact, evaluation)
     metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
     targets = metadata.get("targets")
-    manifest_paths = tuple(str(item) for item in metadata.get("manifest_paths", []) if isinstance(item, str))
-    lockfile_paths = tuple(str(item) for item in metadata.get("lockfile_paths", []) if isinstance(item, str))
+    manifest_paths = _string_items(metadata.get("manifest_paths"))
+    lockfile_paths = _string_items(metadata.get("lockfile_paths"))
     has_targets = isinstance(targets, list) and any(isinstance(item, dict) for item in targets)
     if has_targets or (not manifest_paths and not lockfile_paths):
         return stable_digest_hex(
@@ -1557,11 +1557,11 @@ def _build_package_manager_protection(store: GuardStore) -> dict[str, object]:
     )
     status = package_shim_status(context)
     shim_dir = Path(str(status.get("shim_dir") or store.guard_home / "package-shims" / "bin"))
-    installed_managers = sorted({str(item) for item in status.get("installed_managers", []) if isinstance(item, str)})
-    active_managers = sorted({str(item) for item in status.get("active_managers", []) if isinstance(item, str)})
-    missing_shims = sorted({str(item) for item in status.get("missing_managers", []) if isinstance(item, str)})
+    installed_managers = sorted(set(_string_items(status.get("installed_managers"))))
+    active_managers = sorted(set(_string_items(status.get("active_managers"))))
+    missing_shims = sorted(set(_string_items(status.get("missing_managers"))))
     supported_managers = list(package_shim_supported_managers())
-    protected_managers = sorted({str(item) for item in status.get("protected_managers", []) if isinstance(item, str)})
+    protected_managers = sorted(set(_string_items(status.get("protected_managers"))))
     protected_set = set(protected_managers)
     path_status = str(status.get("path_status") or "missing_from_path")
     staged_managers = set(installed_managers) if path_status == "restart_required" else set()
@@ -1754,7 +1754,7 @@ def _workspace_diff_audit_inventory(
             continue
         for item in parsed_items:
             _merge_inventory_item(inventory_map, item)
-    summary = {
+    summary: dict[str, object] = {
         "changed_package_count": len({item for item in changed_packages}),
         "changed_paths": changed_paths,
     }
@@ -2236,13 +2236,13 @@ def _hash_existing_paths(workspace_dir: Path, relative_paths: Sequence[str]) -> 
 def _normalize_cloud_audit_response(response: dict[str, object]) -> dict[str, object]:
     return {
         "decision": str(response.get("decision") or "monitor"),
-        "packages": [item for item in response.get("packages", []) if isinstance(item, dict)],
-        "reasons": [item for item in response.get("reasons", []) if isinstance(item, dict)],
+        "packages": list(_dict_items(response.get("packages"))),
+        "reasons": list(_dict_items(response.get("reasons"))),
         "enforcement": str(response.get("enforcement") or "premium_cloud"),
         "entitlement_state": str(response.get("entitlementState") or "premium"),
         "cache_status": str(response.get("cacheStatus") or "miss"),
-        "processed_count": int(response.get("processedCount") or 0),
-        "total_packages": int(response.get("totalPackages") or 0),
+        "processed_count": _int_value(response.get("processedCount")) or 0,
+        "total_packages": _int_value(response.get("totalPackages")) or 0,
         "status": str(response.get("status") or "completed"),
         "workspace_id": str(response.get("workspaceId") or ""),
     }
@@ -2377,11 +2377,9 @@ def _protect_action_for_decision(decision: str) -> str:
 
 
 def _evaluation_risk_signals(evaluation: object) -> list[str]:
-    if not hasattr(evaluation, "reasons"):
+    if not isinstance(evaluation, PackageRequestEvaluation):
         return []
     reasons = evaluation.reasons
-    if not isinstance(reasons, tuple):
-        return []
     signals: list[str] = []
     for item in reasons:
         if not isinstance(item, dict):
@@ -2396,19 +2394,14 @@ def _evaluation_risk_signals(evaluation: object) -> list[str]:
 
 
 def _matched_advisories(evaluation: object) -> list[dict[str, object]]:
-    packages = getattr(evaluation, "packages", ())
-    if not isinstance(packages, tuple):
+    if not isinstance(evaluation, PackageRequestEvaluation):
         return []
+    packages = evaluation.packages
     advisories: list[dict[str, object]] = []
     for item in packages:
         if not isinstance(item, dict):
             continue
-        advisory_ids = item.get("related_advisory_ids")
-        if not isinstance(advisory_ids, list):
-            continue
-        for advisory_id in advisory_ids:
-            if not isinstance(advisory_id, str):
-                continue
+        for advisory_id in _string_items(item.get("related_advisory_ids")):
             advisories.append(
                 {
                     "advisory_id": advisory_id,
@@ -2522,6 +2515,18 @@ def _resolve_next_refresh_at(
 
 def _dict_payload(value: object) -> dict[str, object]:
     return value if isinstance(value, dict) else {}
+
+
+def _dict_items(value: object) -> tuple[dict[str, object], ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, dict))
+
+
+def _string_items(value: object) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(item for item in value if isinstance(item, str))
 
 
 def _string_value(value: object) -> str | None:

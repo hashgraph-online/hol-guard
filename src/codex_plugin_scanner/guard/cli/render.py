@@ -7,9 +7,9 @@ import math
 import re
 import sys
 import textwrap
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, TextIO, TypeAlias
 
 from ..redaction import redact_text
 
@@ -53,7 +53,12 @@ except ImportError:
         )
 
 
-try:
+PayloadDict: TypeAlias = dict[str, object]
+PayloadMapping: TypeAlias = Mapping[str, object]
+
+_rich_available = False
+
+if TYPE_CHECKING:
     from rich import box
     from rich.console import Console
     from rich.panel import Panel
@@ -61,15 +66,121 @@ try:
     from rich.table import Table
     from rich.text import Text
 
-    _RICH_AVAILABLE = True
-except ModuleNotFoundError:
-    _RICH_AVAILABLE = False
-    box = None  # type: ignore[assignment]
-    Console = Any  # type: ignore[misc,assignment]
-    Panel = Any  # type: ignore[misc,assignment]
-    Syntax = Any  # type: ignore[misc,assignment]
-    Table = Any  # type: ignore[misc,assignment]
-    Text = Any  # type: ignore[misc,assignment]
+    _rich_available = True
+else:
+    try:
+        from rich import box
+        from rich.console import Console
+        from rich.panel import Panel
+        from rich.syntax import Syntax
+        from rich.table import Table
+        from rich.text import Text
+
+        _rich_available = True
+    except ModuleNotFoundError:
+
+        class _FallbackBox:
+            SIMPLE_HEAD = "simple_head"
+            SIMPLE_HEAVY = "simple_heavy"
+
+        class Console:
+            def __init__(self, *, file: TextIO | None = None, soft_wrap: bool = False) -> None:
+                self.file = sys.stdout if file is None else file
+                self.soft_wrap = soft_wrap
+
+            def print(self, *objects: object) -> None:
+                self.file.write(" ".join(str(item) for item in objects))
+                self.file.write("\n")
+
+        class Panel:
+            def __init__(
+                self, renderable: object, *, title: str | None = None, border_style: str | None = None
+            ) -> None:
+                self.renderable = renderable
+                self.title = title
+                self.border_style = border_style
+
+            @classmethod
+            def fit(
+                cls, renderable: object, *, title: str | None = None, border_style: str | None = None
+            ) -> Panel:
+                return cls(renderable, title=title, border_style=border_style)
+
+            def __str__(self) -> str:
+                return str(self.renderable)
+
+        class Syntax:
+            def __init__(self, code: str, lexer: str, *, theme: str | None = None, word_wrap: bool = False) -> None:
+                self.code = code
+                self.lexer = lexer
+                self.theme = theme
+                self.word_wrap = word_wrap
+
+            def __str__(self) -> str:
+                return self.code
+
+        class Table:
+            def __init__(
+                self,
+                *,
+                title: str | None = None,
+                box: object | None = None,
+                show_header: bool = False,
+                show_lines: bool = False,
+                expand: bool = False,
+                padding: tuple[int, int] | None = None,
+            ) -> None:
+                self.title = title
+                self.box = box
+                self.show_header = show_header
+                self.show_lines = show_lines
+                self.expand = expand
+                self.padding = padding
+                self.columns: list[str] = []
+                self.rows: list[tuple[object, ...]] = []
+
+            @classmethod
+            def grid(cls, *, padding: tuple[int, int] | None = None) -> Table:
+                return cls(padding=padding)
+
+            @property
+            def row_count(self) -> int:
+                return len(self.rows)
+
+            def add_column(
+                self,
+                name: str,
+                *,
+                style: str | None = None,
+                no_wrap: bool = False,
+                justify: str | None = None,
+                overflow: str | None = None,
+            ) -> None:
+                del style, no_wrap, justify, overflow
+                self.columns.append(name)
+
+            def add_row(self, *values: object) -> None:
+                self.rows.append(values)
+
+            def __str__(self) -> str:
+                return "\n".join(" | ".join(str(value) for value in row) for row in self.rows)
+
+        class Text:
+            def __init__(
+                self, text: str = "", *, style: str | None = None, overflow: str | None = None, no_wrap: bool = False
+            ) -> None:
+                self.text = text
+                self.style = style
+                self.overflow = overflow
+                self.no_wrap = no_wrap
+
+            def __str__(self) -> str:
+                return self.text
+
+        box = _FallbackBox()
+
+Renderer: TypeAlias = Callable[[Console, PayloadDict], None]
+PlainTextRenderer: TypeAlias = Callable[[PayloadDict], str]
 
 
 _MODE_ACRONYMS = frozenset({"mcp", "api", "cli"})
@@ -105,7 +216,7 @@ _SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 
 
-def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) -> None:
+def emit_guard_payload(command: str, payload: PayloadDict, as_json: bool) -> None:
     """Render Guard payloads as JSON or human-friendly rich output."""
 
     if as_json:
@@ -114,8 +225,8 @@ def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) 
         sys.stdout.write("\n")
         return
 
-    redacted_payload = _redact_payload(payload)
-    if not _RICH_AVAILABLE:
+    redacted_payload = _coerce_object_dict(_redact_payload(payload))
+    if not _rich_available:
         plain_renderer = _PLAIN_TEXT_RENDERERS.get(command)
         if plain_renderer is None:
             redacted_output = redact_text(_safe_json_output_text(command, payload))
@@ -159,13 +270,13 @@ def _render_redacted_json_payload(redacted_payload: object) -> str:
     return _serialize_redacted_json(redacted_payload, indent=0)
 
 
-def _safe_json_output_text(command: str, payload: dict[str, object]) -> str:
+def _safe_json_output_text(command: str, payload: PayloadDict) -> str:
     json_payload = _json_payload_for_command(command, payload)
     sanitized_payload = _sanitize_payload_for_output(json_payload)
     return _render_redacted_json_payload(sanitized_payload)
 
 
-def _plain_text_protect(payload: dict[str, object]) -> str:
+def _plain_text_protect(payload: PayloadDict) -> str:
     if str(payload.get("mode") or "") == "status":
         lines = ["HOL Guard install protection is active."]
         supply_chain = payload.get("supply_chain")
@@ -179,7 +290,7 @@ def _plain_text_protect(payload: dict[str, object]) -> str:
         return "\n".join(lines)
 
     verdict = payload.get("verdict")
-    verdict_map = verdict if isinstance(verdict, dict) else {}
+    verdict_map = _coerce_object_dict(verdict)
     action = str(verdict_map.get("action") or "review").strip() or "review"
     action_line = {
         "allow": "HOL Guard allowed this install.",
@@ -202,7 +313,7 @@ def _plain_text_protect(payload: dict[str, object]) -> str:
 
     supply_chain_evaluation = payload.get("supply_chain_evaluation")
     user_copy = supply_chain_evaluation.get("user_copy") if isinstance(supply_chain_evaluation, dict) else None
-    user_copy_map = user_copy if isinstance(user_copy, dict) else {}
+    user_copy_map = _coerce_object_dict(user_copy)
     harness_message = str(user_copy_map.get("harness_message") or "").strip()
     if harness_message:
         lines.append(harness_message)
@@ -222,14 +333,14 @@ def _sanitize_payload_for_output(value: object) -> object:
     return _redact_payload(value)
 
 
-def _json_payload_for_command(command: str, payload: dict[str, object]) -> dict[str, object]:
+def _json_payload_for_command(command: str, payload: PayloadDict) -> PayloadDict:
     json_renderer = _JSON_RENDERERS.get(command)
     if json_renderer is None:
         return dict(payload)
     return json_renderer(dict(payload))
 
 
-def _render_settings_json_payload(redacted_payload: dict[str, object]) -> dict[str, object]:
+def _render_settings_json_payload(redacted_payload: PayloadDict) -> PayloadDict:
     settings = redacted_payload.get("settings")
     safe_keys = (
         "mode",
@@ -281,7 +392,7 @@ def _serialize_redacted_json(value: object, *, indent: int) -> str:
         return json.dumps(str(value))
 
 
-_JSON_RENDERERS: dict[str, Callable[[dict[str, object]], dict[str, object]]] = {
+_JSON_RENDERERS: dict[str, Callable[[PayloadDict], PayloadDict]] = {
     "settings": _render_settings_json_payload,
 }
 
@@ -331,10 +442,10 @@ def _render_init(console: Console, payload: dict[str, object]) -> None:
     apps = payload.get("apps")
     cloud = payload.get("cloud")
     notifications = payload.get("desktop_notifications")
-    dashboard_payload = dashboard if isinstance(dashboard, dict) else {}
-    apps_payload = apps if isinstance(apps, dict) else {}
-    cloud_payload = cloud if isinstance(cloud, dict) else {}
-    notification_payload = notifications if isinstance(notifications, dict) else {}
+    dashboard_payload = _coerce_object_dict(dashboard)
+    apps_payload = _coerce_object_dict(apps)
+    cloud_payload = _coerce_object_dict(cloud)
+    notification_payload = _coerce_object_dict(notifications)
     managed_installs = _coerce_dict_list(apps_payload.get("managed_installs"))
     summary = Table.grid(padding=(0, 1))
     summary.add_row("Dashboard", _init_dashboard_summary(dashboard_payload))
@@ -449,7 +560,7 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
     console.print(_build_product_table(harnesses))
     if payload.get("approval_center_url"):
         console.print(f"Approval center: [bold]{payload.get('approval_center_url')}[/bold]")
-    review_items = [item for item in harnesses if int(item.get("review_count", 0)) > 0]
+    review_items = [item for item in harnesses if _coerce_int(item.get("review_count")) > 0]
     if review_items:
         console.print(
             Panel(
@@ -533,8 +644,8 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         table.add_column("Native approval")
         table.add_column("Known blind spots")
         for contract in contracts:
-            aliases = ", ".join(str(a) for a in (contract.get("install_aliases") or []))
-            events = ", ".join(str(e) for e in (contract.get("event_surfaces") or []))
+            aliases = ", ".join(_coerce_string_list(contract.get("install_aliases")))
+            events = ", ".join(_coerce_string_list(contract.get("event_surfaces")))
             native = "\u2713" if bool(contract.get("native_approval")) else "-"
             blind_spots = str(contract.get("known_blind_spots") or "")
             table.add_row(
@@ -720,19 +831,19 @@ def _render_inventory(console: Console, payload: dict[str, object]) -> None:
 
 def _render_policies(console: Console, payload: dict[str, object]) -> None:
     if "counts" in payload or payload.get("operation") == "migrate-local-integrity":
-        counts = payload.get("counts") if isinstance(payload.get("counts"), dict) else {}
-        degraded_reasons = [str(item) for item in payload.get("degraded_reasons", []) if isinstance(item, str)]
+        counts = _coerce_object_dict(payload.get("counts"))
+        degraded_reasons = _coerce_string_list(payload.get("degraded_reasons"))
         body = Table.grid(padding=(0, 1))
         body.add_row("Mode", str(payload.get("mode") or "unknown"))
         body.add_row("Enforcement", str(payload.get("enforcement") or "unknown"))
         body.add_row("Backend", str(payload.get("backend") or "unknown"))
-        body.add_row("Local rows", str(int(payload.get("local_rows_scanned", 0) or 0)))
+        body.add_row("Local rows", str(_coerce_int(payload.get("local_rows_scanned"))))
         if payload.get("key_id"):
             body.add_row("Key", str(payload.get("key_id")))
         if payload.get("backup_path"):
             body.add_row("Backup", str(payload.get("backup_path")))
         if "cleared" in payload:
-            body.add_row("Cleared", str(int(payload.get("cleared", 0) or 0)))
+            body.add_row("Cleared", str(_coerce_int(payload.get("cleared"))))
         for label, key in (
             ("Valid", "valid"),
             ("Unsigned", "missing_integrity"),
@@ -741,7 +852,7 @@ def _render_policies(console: Console, payload: dict[str, object]) -> None:
             ("Rolled back", "rollback_detected"),
             ("Degraded", "degraded_mode"),
         ):
-            body.add_row(label, str(int(counts.get(key, 0) or 0)))
+            body.add_row(label, str(_coerce_int(counts.get(key))))
         if degraded_reasons:
             body.add_row("Reasons", ", ".join(degraded_reasons))
         title = "Guard policy integrity"
@@ -777,7 +888,7 @@ def _render_policies(console: Console, payload: dict[str, object]) -> None:
         return
     if "cleared" in payload or "error" in payload:
         error = payload.get("error")
-        cleared = int(payload.get("cleared", 0) or 0)
+        cleared = _coerce_int(payload.get("cleared"))
         scope = str(payload.get("harness") or "all harnesses")
         source = payload.get("source")
         body = Table.grid(padding=(0, 1))
@@ -905,8 +1016,8 @@ def _render_approvals(console: Console, payload: dict[str, object]) -> None:
         source = payload.get("source")
         if source:
             body.add_row("Source", str(source))
-        body.add_row("Policy decisions", str(int(payload.get("cleared_policies", 0) or 0)))
-        body.add_row("Resolved requests", str(int(payload.get("cleared_resolved_requests", 0) or 0)))
+        body.add_row("Policy decisions", str(_coerce_int(payload.get("cleared_policies"))))
+        body.add_row("Resolved requests", str(_coerce_int(payload.get("cleared_resolved_requests"))))
         console.print(
             Panel(
                 body,
@@ -1038,7 +1149,7 @@ def _render_safe_decode_results(console: Console, safe_decode_risks: list[dict[s
     for entry in safe_decode_risks:
         severity = str(entry.get("severity", "medium")).lower()
         severity_color = _SEVERITY_COLORS.get(severity, "white")
-        layers = entry.get("technical_detail") or ""
+        layers = str(entry.get("technical_detail") or "")
         table.add_row(
             str(entry.get("signal_id", "?")),
             layers[:60] if layers else "-",
@@ -1885,7 +1996,7 @@ def _next_action_label(harness: dict[str, object]) -> str:
     return next_action.replace("-", " ").strip() or "Check status"
 
 
-def _build_steps_panel(steps: list[dict[str, object]]) -> Panel:
+def _build_steps_panel(steps: Sequence[PayloadMapping]) -> Panel:
     lines = []
     for step in steps:
         title = str(step.get("title", "Next step"))
@@ -2396,10 +2507,16 @@ def _command_text(command: object) -> str:
     return str(command or "none")
 
 
-def _coerce_dict_list(value: object) -> list[dict[str, object]]:
+def _coerce_object_dict(value: object) -> PayloadDict:
+    if not isinstance(value, dict):
+        return {}
+    return {key: item for key, item in value.items() if isinstance(key, str)}
+
+
+def _coerce_dict_list(value: object) -> list[PayloadDict]:
     if not isinstance(value, list):
         return []
-    return [item for item in value if isinstance(item, dict)]
+    return [_coerce_object_dict(item) for item in value if isinstance(item, dict)]
 
 
 def _coerce_string_list(value: object) -> list[str]:
@@ -2451,12 +2568,12 @@ def _clean_terminal_output(value: str) -> str:
     return re.sub(r"\x1b\[[0-9;?]*[ -/]*[@-~]", "", value)
 
 
-_PLAIN_TEXT_RENDERERS: dict[str, Callable[[dict[str, object]], str]] = {
+_PLAIN_TEXT_RENDERERS: dict[str, PlainTextRenderer] = {
     "protect": _plain_text_protect,
 }
 
 
-_RENDERERS: dict[str, Any] = {
+_RENDERERS: dict[str, Renderer] = {
     "approvals": _render_approvals,
     "init": _render_init,
     "start": _render_start,

@@ -787,7 +787,8 @@ def _parse_antigravity_mcp_target(raw_payload: str) -> ProtectTarget:
         payload = {}
     if not isinstance(payload, dict):
         payload = {}
-    name = payload.get("name") if isinstance(payload.get("name"), str) else "antigravity-mcp"
+    target_name = payload.get("name")
+    name = target_name if isinstance(target_name, str) else "antigravity-mcp"
     command_or_url = payload.get("url") if isinstance(payload.get("url"), str) else None
     if command_or_url is None and isinstance(payload.get("command"), str):
         command_or_url = payload["command"]
@@ -881,8 +882,12 @@ def _advisory_severity(advisory: dict[str, object]) -> SeverityLabel:
 
 def _advisory_action(advisory: dict[str, object]) -> ProtectAction:
     value = advisory.get("action")
-    if isinstance(value, str) and value in {"allow", "review", "block"}:
-        return value
+    if value == "allow":
+        return "allow"
+    if value == "review":
+        return "review"
+    if value == "block":
+        return "block"
     return "block" if _SEVERITY_ORDER[_advisory_severity(advisory)] >= _SEVERITY_ORDER["high"] else "review"
 
 

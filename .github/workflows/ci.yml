@@ -25,6 +25,8 @@ jobs:
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
       - run: uv run --no-sync python -m ruff check src/
       - run: uv run --no-sync python -m ruff format --check src/
+      - if: matrix.python-version == '3.12'
+        run: uv run --no-sync basedpyright --level error
       - name: Dead-code scan (L329)
         run: uv run --no-sync python -m ruff check src/codex_plugin_scanner/guard/ --select=F401,F811,F841
       - name: TODO/FIXME scan (L330)

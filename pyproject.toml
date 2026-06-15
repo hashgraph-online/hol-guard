@@ -112,3 +112,7 @@ addopts = ["-m", "not slow"]
 markers = [
   "slow: marks tests as slow (deselected by default; run with -m slow to include)",
 ]
+
+[tool.basedpyright]
+include = ["src"]
+pythonVersion = "3.10"

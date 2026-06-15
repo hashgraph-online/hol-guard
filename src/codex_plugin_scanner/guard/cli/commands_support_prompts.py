@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from ..models import GuardAction
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -16,6 +17,22 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
+
+def _guard_action_or_default(value: str, default: GuardAction) -> GuardAction:
+    if value == "allow":
+        return "allow"
+    if value == "warn":
+        return "warn"
+    if value == "review":
+        return "review"
+    if value == "block":
+        return "block"
+    if value == "sandbox-required":
+        return "sandbox-required"
+    if value == "require-reapproval":
+        return "require-reapproval"
+    return default
 
 def _run_approval_password_settings_command(*, args: argparse.Namespace, guard_home: Path) -> dict[str, object]:
     command = str(getattr(args, "settings_approval_password_command", "")).strip().lower()
@@ -164,14 +181,14 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
                 for name, values in (config.harness_risk_actions or {}).items()
                 if isinstance(values, dict)
             }
-            harness_actions.setdefault(harness_key, {})[risk_class] = action
+            harness_actions.setdefault(harness_key, {})[risk_class] = _guard_action_or_default(action, "warn")
             return persist_settings(
                 {
                     "harness_risk_actions": harness_actions,
                 },
             )
         risk_actions = dict(config.risk_actions or {})
-        risk_actions[risk_class] = action
+        risk_actions[risk_class] = _guard_action_or_default(action, "warn")
         return persist_settings(
             {
                 "risk_actions": risk_actions,
@@ -250,7 +267,11 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
                 "secrets. The approval flow came from HOL Guard, not from Claude alone. HOL Guard will ask you to "
                 "choose Allow once, Allow during this session, or Keep blocked before Claude retries this action."
             )
-        harness_label = {"claude-code": "Claude", "codex": "Codex"}.get(harness, "the harness")
+        harness_label = (
+            {"claude-code": "Claude", "codex": "Codex"}.get(harness, "the harness")
+            if isinstance(harness, str)
+            else "the harness"
+        )
         return (
             f"HOL Guard blocked {harness_label}'s attempt to use {tool_name} for {path_class} to protect your "
             "local secrets. "
@@ -426,7 +447,7 @@ def _emit_copilot_hook_response(
     reason: str,
     output_stream: TextIO | None = None,
 ) -> None:
-    payload = {"permissionDecision": _copilot_hook_permission_decision(policy_action)}
+    payload: dict[str, object] = {"permissionDecision": _copilot_hook_permission_decision(policy_action)}
     if payload["permissionDecision"] != "allow":
         payload["permissionDecisionReason"] = reason
     _write_json_line(payload, output_stream=output_stream)
