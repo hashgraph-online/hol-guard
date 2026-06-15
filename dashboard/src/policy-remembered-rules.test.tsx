@@ -30,14 +30,14 @@ const viewsSource = readFileSync(join(here, "policy-workspace-views.tsx"), "utf8
 
 assert(localSource.includes("No local remembered rules yet"), "local rules empty state title");
 assert(localSource.includes("Approve or block in Inbox"), "local rules empty state body");
+assert(localSource.includes("Local rules"), "local rules section badge");
+assert(localSource.includes("View all local rules"), "local rules view-all link");
 assert(localSource.includes("onClearPolicy"), "local rules support remove action");
-
 assert(cloudSource.includes("No Guard Cloud rules synced"), "cloud rules empty state title");
-assert(cloudSource.includes("Connect Guard Cloud"), "cloud rules empty state body");
 assert(cloudSource.includes("cloudVariant"), "cloud rules use cloud table variant");
 assert(!cloudSource.includes("onClearPolicy"), "cloud rules are read-only without remove");
 
-assert(tabSource.includes('placeholder="Search command, project, path, or app…"'), "tab preserves search");
+assert(tabSource.includes('placeholder="Search by app, action, or reason…"'), "tab preserves search");
 assert(tabSource.includes('aria-label="Filter by app"'), "tab preserves app filter");
 assert(tabSource.includes("All assets"), "tab uses mockup asset filter label");
 assert(tabSource.includes('aria-label="Filter by action type"'), "tab preserves family filter");
@@ -48,9 +48,9 @@ assert(tabSource.includes("PolicyRememberedRulesRightRail"), "tab mounts right r
 
 assert(railSource.includes("Active mode"), "right rail shows active mode card");
 assert(railSource.includes("Approvals are still fast"), "right rail explains fast approvals");
-assert(railSource.includes('scope: "artifact"'), "scope ladder includes narrowest scope");
-assert(railSource.includes('scope: "global"'), "scope ladder includes widest scope");
-assert(railSource.includes('scopeLabel(step.scope, "policy")'), "scope ladder renders policy scope labels");
+assert(railSource.includes("Once"), "scope ladder includes Once");
+assert(railSource.includes("Team policy"), "scope ladder includes Team policy");
+assert(railSource.includes("This cwd"), "scope ladder includes This cwd");
 assert(railSource.includes("Open Cloud exceptions tab"), "right rail links to Cloud exceptions tab");
 
 assert(workspaceSource.includes("PolicyRememberedRulesTab"), "workspace uses remembered rules tab");
@@ -59,7 +59,7 @@ assert(pageSource.includes("PolicyUnderlineTabBar"), "page hosts underline polic
 assert(pageSource.includes("PolicyPageToolbar"), "page hosts policy toolbar");
 assert(chromeSource.includes("Reload policy"), "policy toolbar exposes reload policy");
 
-assert(viewsSource.includes("Rule"), "rules list uses rule column");
+assert(viewsSource.includes("Description"), "rules list uses description column");
 assert(viewsSource.includes("Source"), "rules list shows source column");
 assert(viewsSource.includes('scopeLabel(policy.scope, "policy")'), "rules list uses policy scope labels");
 assert(viewsSource.includes("display.pathLine"), "rules list shows approval path");

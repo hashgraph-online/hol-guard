@@ -1,5 +1,5 @@
 import { useCallback, type KeyboardEvent } from "react";
-import { HiMiniArrowPath } from "react-icons/hi2";
+import { HiMiniArrowPath, HiMiniCloudArrowUp } from "react-icons/hi2";
 import { ActionButton, Badge } from "./approval-center-primitives";
 import type { GuardRuntimeSnapshot } from "./guard-types";
 import { resolvePolicyViewLabel, type PolicyPageView } from "./policy-workspace";
@@ -90,6 +90,39 @@ export function PolicyPageToolbar({ snapshot, onReloadPolicy, reloading = false 
         <ActionButton variant="secondary" onClick={onReloadPolicy} disabled={reloading}>
           <HiMiniArrowPath className={`mr-1.5 h-4 w-4 ${reloading ? "animate-spin" : ""}`} aria-hidden="true" />
           Reload policy
+        </ActionButton>
+      ) : null}
+    </div>
+  );
+}
+
+type PolicyExceptionsToolbarProps = {
+  cloudConnected: boolean;
+  cloudControlsUrl: string | null;
+  connectUrl: string | null;
+  onRequestException: () => void;
+};
+
+export function PolicyExceptionsToolbar({
+  cloudConnected,
+  cloudControlsUrl,
+  connectUrl,
+  onRequestException,
+}: PolicyExceptionsToolbarProps) {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <ActionButton variant="primary" onClick={onRequestException} disabled={!cloudConnected}>
+        + Request cloud exception
+      </ActionButton>
+      {cloudControlsUrl ? (
+        <ActionButton href={cloudControlsUrl} variant="secondary">
+          <HiMiniCloudArrowUp className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          Open Guard Cloud
+        </ActionButton>
+      ) : null}
+      {!cloudConnected && connectUrl ? (
+        <ActionButton href={connectUrl} variant="secondary">
+          Connect Guard Cloud
         </ActionButton>
       ) : null}
     </div>

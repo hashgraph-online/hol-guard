@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { HiMiniCloudArrowUp } from "react-icons/hi2";
 import { ActionButton, EmptyState } from "./approval-center-primitives";
 import { fetchCloudExceptionRequests, fetchCloudExceptions } from "./guard-api";
 import type { GuardCloudException } from "./guard-types";
@@ -13,22 +12,24 @@ import {
   groupCloudExceptions,
   summarizeCloudExceptions,
 } from "./policy-cloud-exceptions-utils";
-import { resolveCloudPolicyControlsUrl } from "./policy-workspace-helpers";
+import { resolveCloudExceptionsConnected, resolveCloudPolicyControlsUrl } from "./policy-workspace-helpers";
 
 type PolicyCloudExceptionsTabProps = {
   snapshot: GuardRuntimeSnapshot;
+  requestOpen?: boolean;
+  onRequestOpenChange?: (open: boolean) => void;
 };
 
 type LoadState = "loading" | "ready" | "error";
 
-function resolveCloudExceptionsConnected(snapshot: GuardRuntimeSnapshot): boolean {
-  return snapshot.cloud_state === "paired_active" || snapshot.cloud_state === "paired_waiting";
-}
-
 export function PolicyCloudExceptionsTab({
   snapshot,
+  requestOpen: requestOpenProp,
+  onRequestOpenChange,
 }: PolicyCloudExceptionsTabProps) {
-  const [requestOpen, setRequestOpen] = useState(false);
+  const [requestOpenInternal, setRequestOpenInternal] = useState(false);
+  const requestOpen = requestOpenProp ?? requestOpenInternal;
+  const setRequestOpen = onRequestOpenChange ?? setRequestOpenInternal;
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [exceptions, setExceptions] = useState<GuardCloudException[]>([]);
@@ -70,18 +71,14 @@ export function PolicyCloudExceptionsTab({
     void reloadData();
   }, [reloadData, reloadToken]);
 
-  const handleOpenRequestPanel = useCallback(() => {
-    setRequestOpen(true);
-  }, []);
-
   const handleCloseRequestPanel = useCallback(() => {
     setRequestOpen(false);
-  }, []);
+  }, [setRequestOpen]);
 
   const handleRequestSubmitted = useCallback(() => {
     setRequestOpen(false);
     setReloadToken((current) => current + 1);
-  }, []);
+  }, [setRequestOpen]);
 
   const handleRetryLoad = useCallback(() => {
     setReloadToken((current) => current + 1);
@@ -129,27 +126,6 @@ export function PolicyCloudExceptionsTab({
       <div className="space-y-4">
         <div className="rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3 text-sm text-brand-dark/80">
           Exceptions are approved in Guard Cloud, then enforced locally as signed policy bundle entries.
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <ActionButton
-            variant="primary"
-            onClick={handleOpenRequestPanel}
-            disabled={!cloudConnected}
-          >
-            + Request cloud exception
-          </ActionButton>
-          {cloudControlsUrl ? (
-            <ActionButton href={cloudControlsUrl} variant="secondary">
-              <HiMiniCloudArrowUp className="mr-1.5 h-4 w-4" aria-hidden="true" />
-              Open Guard Cloud
-            </ActionButton>
-          ) : null}
-          {!cloudConnected && connectUrl ? (
-            <ActionButton href={connectUrl} variant="secondary">
-              Connect Guard Cloud
-            </ActionButton>
-          ) : null}
         </div>
 
         {!cloudConnected ? (

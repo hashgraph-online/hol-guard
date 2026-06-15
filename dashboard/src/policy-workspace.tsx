@@ -30,6 +30,10 @@ type PolicyWorkspaceProps = {
   onOpenSettings?: () => void;
   onOpenInbox?: () => void;
   onOpenCloudExceptions?: () => void;
+  exceptionRequestOpen?: boolean;
+  onExceptionRequestOpenChange?: (open: boolean) => void;
+  onReloadPolicy?: () => void;
+  reloadingPolicy?: boolean;
 };
 
 export function PolicyWorkspace({
@@ -40,6 +44,10 @@ export function PolicyWorkspace({
   onOpenSettings,
   onOpenInbox,
   onOpenCloudExceptions,
+  exceptionRequestOpen = false,
+  onExceptionRequestOpenChange,
+  onReloadPolicy,
+  reloadingPolicy = false,
 }: PolicyWorkspaceProps) {
   if (activeView === "rules") {
     return (
@@ -58,14 +66,24 @@ export function PolicyWorkspace({
   if (activeView === "exceptions") {
     return (
       <div id="policy-panel-exceptions" role="tabpanel" aria-labelledby="policy-tab-exceptions">
-        <PolicyCloudExceptionsTab snapshot={snapshot} />
+        <PolicyCloudExceptionsTab
+          snapshot={snapshot}
+          requestOpen={exceptionRequestOpen}
+          onRequestOpenChange={onExceptionRequestOpenChange}
+        />
       </div>
     );
   }
 
   return (
     <div id="policy-panel-strict" role="tabpanel" aria-labelledby="policy-tab-strict">
-      <PolicyStrictConfigTab snapshot={snapshot} onOpenSettings={onOpenSettings} onOpenInbox={onOpenInbox} />
+      <PolicyStrictConfigTab
+        snapshot={snapshot}
+        onOpenSettings={onOpenSettings}
+        onOpenInbox={onOpenInbox}
+        onReloadPolicy={onReloadPolicy}
+        reloadingPolicy={reloadingPolicy}
+      />
     </div>
   );
 }

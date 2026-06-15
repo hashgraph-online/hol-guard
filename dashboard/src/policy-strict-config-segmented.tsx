@@ -38,7 +38,7 @@ export function StrictConfigActionSegmented({
   const showAdvanced = !PRIMARY_STRICT_ACTION_VALUES.has(value);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3 py-4 first:pt-0 last:pb-0">
       <div>
         <p className="text-sm font-medium text-brand-dark">{label}</p>
         {help ? <p className="mt-0.5 text-xs text-slate-500">{help}</p> : null}

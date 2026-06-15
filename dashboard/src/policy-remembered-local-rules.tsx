@@ -15,13 +15,15 @@ export function PolicyRememberedLocalRules({
   return (
     <GroupedPolicySection
       title="Remembered on this device"
-      description="Choices you saved from Inbox. Each row shows the exact command or action Guard will remember, and where it applies."
+      badge="Local rules"
+      description="Decisions you've remembered on this machine."
       policies={policies}
       cloudControlsUrl={cloudControlsUrl}
       onClearPolicy={onClearPolicy}
       emptyTitle="No local remembered rules yet"
       emptyBody="Approve or block in Inbox and Guard remembers the decision here in plain language."
       defaultOpen
+      viewAllLabel="View all local rules ({count}) →"
     />
   );
 }

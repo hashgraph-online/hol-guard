@@ -1,8 +1,9 @@
 import { useCallback, useState, Suspense, lazy } from "react";
 import type { GuardPolicyDecision, GuardRuntimeSnapshot } from "./guard-types";
 import { WorkspacePageHeader } from "./workspace-page-header";
-import { PolicyPageToolbar, PolicyUnderlineTabBar } from "./policy-page-chrome";
+import { PolicyExceptionsToolbar, PolicyPageToolbar, PolicyUnderlineTabBar } from "./policy-page-chrome";
 import type { PolicyPageView } from "./policy-workspace";
+import { resolveCloudPolicyControlsUrl, resolveCloudExceptionsConnected } from "./policy-workspace-helpers";
 
 const PolicyWorkspace = lazy(() =>
   import("./policy-workspace").then((module) => ({ default: module.PolicyWorkspace })),
@@ -22,6 +23,9 @@ export function PolicyWorkspacePage(props: {
 }) {
   const [activeView, setActiveView] = useState<PolicyPageView>("rules");
   const [reloading, setReloading] = useState(false);
+  const [exceptionRequestOpen, setExceptionRequestOpen] = useState(false);
+  const cloudControlsUrl = resolveCloudPolicyControlsUrl(props.snapshot);
+  const cloudConnected = resolveCloudExceptionsConnected(props.snapshot);
 
   const handleOpenSettings = useCallback(() => props.onOpenSettings(), [props]);
   const handleOpenInbox = useCallback(() => props.onOpenInbox(), [props]);
@@ -41,13 +45,22 @@ export function PolicyWorkspacePage(props: {
       <WorkspacePageHeader
         eyebrow="Policy"
         title="Remembered rules and exceptions"
-        description="See what Guard will do next time, in plain language. Remove local remembered rules here or request Cloud exceptions when Guard Cloud is connected."
+        description="See what Guard will do next time, in plain language. Remove local rules or add custom exceptions here."
         actions={
-          <PolicyPageToolbar
-            snapshot={props.snapshot}
-            onReloadPolicy={handleReloadPolicy}
-            reloading={reloading}
-          />
+          activeView === "exceptions" ? (
+            <PolicyExceptionsToolbar
+              cloudConnected={cloudConnected}
+              cloudControlsUrl={cloudControlsUrl}
+              connectUrl={props.snapshot.connect_url?.trim() || null}
+              onRequestException={() => setExceptionRequestOpen(true)}
+            />
+          ) : (
+            <PolicyPageToolbar
+              snapshot={props.snapshot}
+              onReloadPolicy={handleReloadPolicy}
+              reloading={reloading}
+            />
+          )
         }
       />
       <PolicyUnderlineTabBar activeView={activeView} onViewChange={handleViewChange} />
@@ -60,6 +73,10 @@ export function PolicyWorkspacePage(props: {
           onOpenSettings={handleOpenSettings}
           onOpenInbox={handleOpenInbox}
           onOpenCloudExceptions={() => setActiveView("exceptions")}
+          exceptionRequestOpen={exceptionRequestOpen}
+          onExceptionRequestOpenChange={setExceptionRequestOpen}
+          onReloadPolicy={handleReloadPolicy}
+          reloadingPolicy={reloading}
         />
       </Suspense>
     </div>
