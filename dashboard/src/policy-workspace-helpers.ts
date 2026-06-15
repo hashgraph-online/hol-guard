@@ -18,6 +18,23 @@ const GENERIC_REASONS = [
   "local e2e approval proof",
 ];
 
+const SCANNER_GENERATED_LABEL_MARKERS = [
+  "credential-looking",
+  "credential looking",
+  "secret-looking",
+  "suspicious output",
+  "looking output",
+  "scanner flagged",
+];
+
+export function isScannerGeneratedPolicyLabel(value: string | null | undefined): boolean {
+  if (!value?.trim()) {
+    return true;
+  }
+  const lowered = value.trim().toLowerCase();
+  return SCANNER_GENERATED_LABEL_MARKERS.some((marker) => lowered.includes(marker));
+}
+
 export type PolicyDisplay = {
   headline: string;
   kindLine: string | null;
@@ -219,7 +236,7 @@ function resolveWhatPhrase(policy: GuardPolicyDecision): string {
 
 function resolveKindLine(policy: GuardPolicyDecision): string | null {
   const remembered = policy.remembered_context?.trim();
-  if (remembered) {
+  if (remembered && !isScannerGeneratedPolicyLabel(remembered)) {
     return remembered;
   }
   const family = policy.artifact_id ? extractMatcherFamily(policy.artifact_id) : null;
@@ -252,7 +269,7 @@ export function resolvePolicyDisplay(policy: GuardPolicyDecision): PolicyDisplay
   const pathLine = resolvePathLine(policy);
   const projectLabel = resolveProjectLabel(policy);
 
-  if (rememberedCommand) {
+  if (rememberedCommand && !isScannerGeneratedPolicyLabel(rememberedCommand)) {
     return {
       headline: rememberedCommand,
       kindLine,
@@ -265,7 +282,7 @@ export function resolvePolicyDisplay(policy: GuardPolicyDecision): PolicyDisplay
 
   const actionVerb = resolveActionVerb(policy.action);
 
-  if (reason && !isGenericReason(reason)) {
+  if (reason && !isGenericReason(reason) && !isScannerGeneratedPolicyLabel(reason)) {
     return {
       headline: reason,
       kindLine,
@@ -288,20 +305,58 @@ export function resolvePolicyDisplay(policy: GuardPolicyDecision): PolicyDisplay
   };
 }
 
+export function resolvePolicyRowFrequency(policy: GuardPolicyDecision): string {
+  return scopeLabel(policy.scope, "policy");
+}
+
+export function resolvePolicyRowFolder(policy: GuardPolicyDecision): string | null {
+  const pathLine = formatPolicyScopePath(policy.source_scope_path);
+  if (pathLine) {
+    return pathLine;
+  }
+  const label = policy.workspace_label?.trim();
+  if (label) {
+    return label;
+  }
+  const workspace = policy.workspace?.trim();
+  if (!workspace || workspace.startsWith("workspace:")) {
+    return null;
+  }
+  return formatPolicyScopePath(workspace) ?? resolveWorkspaceLabel(workspace);
+}
+
+export function resolvePolicyRowSubtitle(policy: GuardPolicyDecision, display: PolicyDisplay): string | null {
+  const parts: string[] = [];
+  const folder = resolvePolicyRowFolder(policy);
+  if (folder) {
+    parts.push(folder);
+  }
+  parts.push(resolvePolicyRowFrequency(policy));
+  if (display.kindLine && !parts.includes(display.kindLine)) {
+    parts.unshift(display.kindLine);
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 export function resolvePolicyRowTitle(policy: GuardPolicyDecision, display: PolicyDisplay): string {
   const rememberedCommand = policy.remembered_command?.trim();
-  if (rememberedCommand) {
+  if (rememberedCommand && !isScannerGeneratedPolicyLabel(rememberedCommand)) {
     return rememberedCommand;
   }
 
+  const reason = policy.reason?.trim();
+  if (reason && !isGenericReason(reason) && !isScannerGeneratedPolicyLabel(reason)) {
+    return reason;
+  }
+
   const artifactId = policy.artifact_id?.trim();
-  if (artifactId && !artifactId.startsWith("family:")) {
+  if (artifactId && !artifactId.startsWith("family:") && !artifactId.includes(":")) {
     const slashIndex = artifactId.lastIndexOf("/");
     const candidate =
       slashIndex >= 0 && slashIndex < artifactId.length - 1
         ? artifactId.slice(slashIndex + 1)
         : artifactId;
-    if (candidate.length <= 64) {
+    if (candidate.length <= 64 && !isScannerGeneratedPolicyLabel(candidate)) {
       return candidate;
     }
   }
@@ -347,6 +402,10 @@ export function resolvePolicyEvidenceSearchTerm(policy: GuardPolicyDecision): st
 
 export function resolvePolicyEvidenceHref(policy: GuardPolicyDecision): string {
   const params = new URLSearchParams();
+  params.set("view", "actions");
+  if (policy.harness?.trim()) {
+    params.set("harness", policy.harness.trim());
+  }
   const receiptId = policy.source_receipt_id?.trim();
   if (receiptId) {
     params.set("selected", receiptId);
@@ -364,11 +423,14 @@ export function resolvePolicyEvidenceHref(policy: GuardPolicyDecision): string {
 export function resolvePolicyApprovalRecordLabel(policy: GuardPolicyDecision): string {
   const receiptId = policy.source_receipt_id?.trim();
   if (receiptId) {
-    return `${receiptId}.json`;
+    if (receiptId.length <= 24) {
+      return receiptId;
+    }
+    return `${receiptId.slice(0, 10)}…${receiptId.slice(-8)}`;
   }
   const hash = policy.artifact_hash?.replace(/^sha256:/i, "").slice(0, 8);
   if (hash) {
-    return `receipt_${hash}.json`;
+    return `hash ${hash}`;
   }
   return "View in Evidence";
 }

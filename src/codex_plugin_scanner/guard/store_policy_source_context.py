@@ -22,11 +22,34 @@ def _is_generic_policy_reason(reason: str | None) -> bool:
     return any(phrase in normalized for phrase in _GENERIC_POLICY_REASONS)
 
 
+_SCANNER_GENERATED_LABEL_MARKERS = (
+    "credential-looking",
+    "credential looking",
+    "secret-looking",
+    "suspicious output",
+    "looking output",
+    "scanner flagged",
+)
+
+
+def _is_scanner_generated_label(value: str) -> bool:
+    lowered = value.strip().lower()
+    if not lowered:
+        return True
+    if any(marker in lowered for marker in _SCANNER_GENERATED_LABEL_MARKERS):
+        return True
+    if lowered.endswith(" review") and "`" not in value:
+        return True
+    return False
+
+
 def _is_human_policy_label(value: str | None) -> bool:
     if value is None or not value.strip():
         return False
     normalized = value.strip()
     lowered = normalized.lower()
+    if _is_scanner_generated_label(normalized):
+        return False
     if lowered.startswith("family:"):
         return False
     if len(normalized) >= 32 and all(ch in "0123456789abcdef" for ch in lowered):
@@ -36,6 +59,27 @@ def _is_human_policy_label(value: str | None) -> bool:
         if len(tail) >= 16 and all(ch in "0123456789abcdef" for ch in tail):
             return False
     return True
+
+
+def _extract_approval_command(approval_row: sqlite3.Row) -> str | None:
+    trigger_summary = approval_row["trigger_summary"]
+    if trigger_summary is not None:
+        for phrase in _extract_backtick_phrases(str(trigger_summary)):
+            candidate = _sanitize_remembered_command(phrase)
+            if _is_human_policy_label(candidate):
+                return candidate
+    launch_target = approval_row["launch_target"]
+    if launch_target is not None:
+        for phrase in _extract_backtick_phrases(str(launch_target)):
+            candidate = _sanitize_remembered_command(phrase)
+            if _is_human_policy_label(candidate):
+                return candidate
+        if _is_human_policy_label(str(launch_target)):
+            return _sanitize_remembered_command(str(launch_target))
+    approval_name = approval_row["artifact_name"]
+    if _is_human_policy_label(str(approval_name)):
+        return _sanitize_remembered_command(str(approval_name))
+    return None
 
 
 def _normalize_hash_for_match(value: str) -> str:
@@ -275,6 +319,19 @@ def _build_policy_source_context_from_rows(
     source_receipt_id: str | None = None
     source_scope_path: str | None = None
 
+    if approval_row is not None:
+        remembered_command = _extract_approval_command(approval_row)
+        launch_summary = approval_row["launch_summary"]
+        if remembered_context is None and _is_human_policy_label(
+            str(launch_summary) if launch_summary is not None else None
+        ):
+            remembered_context = str(launch_summary).strip()
+        if approval_row["workspace"] is not None:
+            approval_path = _normalize_policy_scope_path(str(approval_row["workspace"]))
+            if approval_path is not None:
+                source_scope_path = approval_path
+            workspace_label = _workspace_display_label(str(approval_row["workspace"]), workspace)
+
     if receipt_row is not None:
         source_receipt_id = str(receipt_row["receipt_id"])
         scanner_command, scanner_context = _parse_scanner_evidence_fields(
@@ -290,8 +347,10 @@ def _build_policy_source_context_from_rows(
         ):
             remembered_command = _sanitize_remembered_command(str(receipt_name))
         caps = receipt_row["capabilities_summary"]
-        if remembered_context is None and caps is not None and str(caps).strip():
-            remembered_context = str(caps).strip()
+        if remembered_context is None and caps is not None:
+            cap_text = str(caps).strip()
+            if cap_text and _is_human_policy_label(cap_text):
+                remembered_context = cap_text
         provenance_path = _parse_provenance_workspace_path(
             str(receipt_row["provenance_summary"]) if receipt_row["provenance_summary"] is not None else None
         )
@@ -320,40 +379,6 @@ def _build_policy_source_context_from_rows(
                 str(inventory_row["source_scope"]) if inventory_row["source_scope"] is not None else None,
                 workspace,
             )
-
-    if approval_row is not None:
-        approval_name = approval_row["artifact_name"]
-        launch_target = approval_row["launch_target"]
-        launch_summary = approval_row["launch_summary"]
-        trigger_summary = approval_row["trigger_summary"]
-        if approval_row["workspace"] is not None:
-            approval_path = _normalize_policy_scope_path(str(approval_row["workspace"]))
-            if approval_path is not None:
-                source_scope_path = approval_path
-        if remembered_command is None and trigger_summary is not None:
-            for phrase in _extract_backtick_phrases(str(trigger_summary)):
-                candidate = _sanitize_remembered_command(phrase)
-                if _is_human_policy_label(candidate):
-                    remembered_command = candidate
-                    break
-        if remembered_command is None and launch_target is not None:
-            for phrase in _extract_backtick_phrases(str(launch_target)):
-                candidate = _sanitize_remembered_command(phrase)
-                if _is_human_policy_label(candidate):
-                    remembered_command = candidate
-                    break
-        if remembered_command is None and _is_human_policy_label(
-            str(launch_target) if launch_target is not None else None
-        ):
-            remembered_command = _sanitize_remembered_command(str(launch_target))
-        if remembered_command is None and _is_human_policy_label(str(approval_name)):
-            remembered_command = _sanitize_remembered_command(str(approval_name))
-        if remembered_context is None and _is_human_policy_label(
-            str(launch_summary) if launch_summary is not None else None
-        ):
-            remembered_context = str(launch_summary).strip()
-        if workspace_label is None and approval_row["workspace"] is not None:
-            workspace_label = _workspace_display_label(str(approval_row["workspace"]), workspace)
 
     if remembered_command is None and not _is_generic_policy_reason(reason):
         remembered_command = reason.strip() if reason is not None else None
