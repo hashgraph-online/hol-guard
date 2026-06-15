@@ -853,20 +853,63 @@ def _normalize_cursor_shell_command(command: str) -> str:
     return stripped
 
 
+def _cursor_hook_payload_is_mcp_execution(payload: Mapping[str, object]) -> bool:
+    source_event = payload.get("cursor_source_hook_event")
+    if isinstance(source_event, str) and source_event.strip().lower() == "beforemcpexecution":
+        return True
+    for key in ("hook_event_name", "hookEventName", "hook_name", "hookName", "event", "eventName"):
+        value = payload.get(key)
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"beforemcpexecution", "aftermcpexecution"}:
+                return True
+    return False
+
+
+def _is_shell_wrapper_command(command: str) -> bool:
+    stripped = command.strip()
+    if not stripped:
+        return False
+    try:
+        parts = shlex.split(stripped, posix=True, comments=False)
+    except ValueError:
+        return False
+    if not parts:
+        return False
+    binary = Path(parts[0]).name.lower()
+    if binary == "lean-ctx":
+        return True
+    if binary not in {"ash", "bash", "dash", "fish", "sh", "zsh"}:
+        return False
+    return len(parts) > 1 and parts[1] == "-c"
+
+
+def _nested_cursor_shell_command(tool_input: Mapping[str, object]) -> str | None:
+    for key in ("command", "cmd", "shell_command", "shellCommand"):
+        value = tool_input.get(key)
+        if isinstance(value, str) and value.strip():
+            return _normalize_cursor_shell_command(value)
+    return None
+
+
 def _cursor_shell_command(payload: Mapping[str, object]) -> str | None:
     tool_input = payload.get("tool_input")
     nested_command: str | None = None
     if isinstance(tool_input, dict):
-        nested = tool_input.get("command")
-        if isinstance(nested, str) and nested.strip():
-            nested_command = _normalize_cursor_shell_command(nested)
+        nested_command = _nested_cursor_shell_command(tool_input)
     command = payload.get("command")
+    top_level: str | None = None
     if isinstance(command, str) and command.strip():
         top_level = _normalize_cursor_shell_command(command)
+    if _cursor_hook_payload_is_mcp_execution(payload):
         if nested_command is not None:
-            first_token = command.strip().split(maxsplit=1)[0]
-            if Path(first_token).name.lower() == "lean-ctx":
-                return nested_command
+            return nested_command
+        return top_level
+    if nested_command is not None and (
+        top_level is None or (isinstance(command, str) and _is_shell_wrapper_command(command))
+    ):
+        return nested_command
+    if top_level is not None:
         return top_level
     return nested_command
 
