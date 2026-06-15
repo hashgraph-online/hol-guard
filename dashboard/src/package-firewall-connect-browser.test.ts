@@ -44,8 +44,8 @@ assert(
   "popup blocked should return false",
 );
 assert(
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE.includes("Open sign-in page"),
-  "popup blocked message should mention manual link",
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE.includes("manual sign-in link"),
+  "popup blocked message should mention manual sign-in link",
 );
 
 console.log("package-firewall-connect-browser.test.ts: all assertions passed");
