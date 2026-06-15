@@ -14,6 +14,11 @@ from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 from .adapters import get_adapter
 from .adapters.base import HarnessContext
 from .approval_gate import ApprovalGateInput, require_approval_decision
+from .cli.connect_flow import (
+    connect_retry_refresh_race_from_reason,
+    resolve_guard_cloud_repair_detail,
+    resolve_guard_cloud_state,
+)
 from .config import load_guard_config
 from .daemon.manager import load_guard_daemon_auth_token
 from .desktop_notifications import (
@@ -26,11 +31,6 @@ from .local_supply_chain import build_local_supply_chain_posture
 from .models import GuardApprovalRequest, HarnessDetection, PolicyDecision
 from .risk import artifact_risk_signals, artifact_risk_summary
 from .store import GuardStore, _runtime_scoped_exact_match_key
-from .cli.connect_flow import (
-    connect_retry_refresh_race_from_reason,
-    resolve_guard_cloud_repair_detail,
-    resolve_guard_cloud_state,
-)
 
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
