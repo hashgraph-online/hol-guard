@@ -5201,7 +5201,11 @@ class GuardStore:
         status = str(normalized.get("status") or "")
         milestone = str(normalized.get("milestone") or "")
         has_sync_summary = bool(sync_summary)
-        if has_sync_summary:
+        if (
+            has_sync_summary
+            and status != "retry_required"
+            and milestone not in {"first_sync_failed", "sync_not_available"}
+        ):
             return self._coerce_guard_connect_state_status(
                 state=normalized,
                 status="connected",
