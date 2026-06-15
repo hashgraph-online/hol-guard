@@ -216,6 +216,8 @@ def test_headless_capabilities_endpoint_reports_safe_action_contract(tmp_path: P
         "scan",
         "policy_sync",
     ]
+    assert payload["headless_api"]["execution_mode"] == "guard_cloud_command_queue"
+    assert "routes" not in payload["headless_api"]
     assert payload["package_firewall_api"]["operations"] == [
         "status",
         "connect",
@@ -226,8 +228,8 @@ def test_headless_capabilities_endpoint_reports_safe_action_contract(tmp_path: P
         "sync",
         "remove",
     ]
-    assert payload["package_firewall_api"]["routes"]["connect"] == "/v1/supply-chain/package-shims/connect"
-    assert payload["package_firewall_api"]["routes"]["status"] == "/v1/supply-chain/package-shims"
+    assert payload["package_firewall_api"]["execution_mode"] == "guard_cloud_command_queue"
+    assert "routes" not in payload["package_firewall_api"]
     assert "codex" in payload["supported_harnesses"]
     assert payload["safe_failure_reasons"]["unsupported"] == "Harness is not supported by this daemon."
     codex_item = next(item for item in payload["items"] if item["harness"] == "codex")
