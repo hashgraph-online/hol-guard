@@ -74,12 +74,12 @@ def test_pretool_plugin_source_embeds_guard_paths(tmp_path: Path) -> None:
     assert str(ctx.guard_home.resolve()) in source
     assert "tool.execute.before" in source
     assert "spawnGuardProcess" in source
-    assert "node:child_process" in source
+    assert 'import { spawn as nodeSpawn } from "node:child_process"' in source
     assert "normalizeCommand" in source
     spawn_block = source.split("async function spawnGuardProcess", 1)[1].split("async function runGuardHook", 1)[0]
-    assert "globalThis" in spawn_block
-    assert "Bun" in spawn_block
-    assert "stdin: new Blob([options.stdin])" in spawn_block
+    assert "nodeSpawn" in spawn_block
+    assert "globalThis" not in spawn_block
+    assert "Bun" not in spawn_block
     assert '.stream()' not in spawn_block
     assert "try {" in source
     assert 'source_scope: directory?.trim() ? "project" : "global"' in source
@@ -190,11 +190,17 @@ def test_pretool_plugin_source_includes_node_spawn_fallback(tmp_path: Path) -> N
         "async function runGuardHook",
         1,
     )[0]
-    assert "typeof bun?.spawn === \"function\"" in spawn_block
-    assert 'await import("node:child_process")' in spawn_block
+    assert "nodeSpawn" in spawn_block
+    assert "await import(" not in spawn_block
+    assert "Bun" not in spawn_block
     assert 'proc.stdout?.setEncoding("utf8")' in spawn_block
     assert 'proc.stdin?.on("error", () => {})' in spawn_block
     assert "proc.stdin?.end(options.stdin)" in spawn_block
+
+
+def test_pretool_plugin_source_has_no_bun_identifier(tmp_path: Path) -> None:
+    source = pretool_plugin_source(_ctx(tmp_path))
+    assert "Bun" not in source
 
 
 def test_install_pretool_plugin_writes_managed_and_global_copies(tmp_path: Path) -> None:
@@ -378,6 +384,26 @@ def test_opencode_verification_ready_with_guard_companion_servers(tmp_path: Path
     assert verification["mcp_proxy_configured"] is True
     assert verification["ready"] is True
     assert not verification["warnings"]
+
+
+def test_refresh_opencode_pretool_plugin_rewrites_stale_plugin(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.cli import update_commands
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    ctx = _ctx(tmp_path)
+    store = GuardStore(ctx.guard_home)
+    store.set_managed_install("opencode", True, None, {}, "2026-06-04T00:00:00+00:00")
+    install_pretool_plugin(ctx)
+    stale_path = global_plugin_path(ctx)
+    stale_path.write_text("// stale plugin\n", encoding="utf-8")
+
+    note = update_commands._refresh_opencode_pretool_plugin(context=ctx, store=store)
+
+    assert note is not None
+    assert "Refreshed the OpenCode pretool plugin" in note
+    refreshed = stale_path.read_text(encoding="utf-8")
+    assert "Bun" not in refreshed
+    assert 'import { spawn as nodeSpawn } from "node:child_process"' in refreshed
 
 
 def test_opencode_verification_reports_missing_plugin(tmp_path: Path) -> None:
