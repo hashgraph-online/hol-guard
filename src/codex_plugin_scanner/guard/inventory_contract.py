@@ -6,6 +6,7 @@ import hashlib
 import ipaddress
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -368,6 +369,7 @@ def inventory_snapshot_from_detection(
     cisco_runs: tuple[object, ...] = (),
     include_symlinks: bool = True,
     follow_unsafe_symlinks: bool = False,
+    trust_attestation_context: Mapping[str, object] | None = None,
 ) -> GuardAgentInventorySnapshot:
     from .aibom_detection import discover_shared_workspace_aibom_artifacts
 
@@ -395,6 +397,7 @@ def inventory_snapshot_from_detection(
             cisco_runs=cisco_runs,
             include_symlinks=include_symlinks,
             follow_unsafe_symlinks=follow_unsafe_symlinks,
+            trust_attestation_context=trust_attestation_context,
         )
         items.append(item)
         items.extend(
@@ -556,6 +559,7 @@ def _item_from_artifact(
     cisco_runs: tuple[object, ...] = (),
     include_symlinks: bool = True,
     follow_unsafe_symlinks: bool = False,
+    trust_attestation_context: Mapping[str, object] | None = None,
 ) -> GuardAgentInventoryItem:
     artifact_id = str(getattr(artifact, "artifact_id", "artifact"))
     artifact_type = str(getattr(artifact, "artifact_type", "unknown"))
@@ -589,7 +593,22 @@ def _item_from_artifact(
         }
     )
     content_hash = _resolve_item_content_hash(safe_metadata, semantic_text)
-    from .runtime.trust_attestation import apply_trust_attestation_metadata
+    from .runtime.trust_attestation import (
+        GuardTrustAttestationSigningConfig,
+        apply_trust_attestation_metadata,
+    )
+
+    workspace_id = None
+    device_id = None
+    signing_config = None
+    if isinstance(trust_attestation_context, Mapping):
+        raw_workspace_id = trust_attestation_context.get("workspaceId")
+        workspace_id = raw_workspace_id if isinstance(raw_workspace_id, str) and raw_workspace_id else None
+        raw_device_id = trust_attestation_context.get("deviceId")
+        device_id = raw_device_id if isinstance(raw_device_id, str) and raw_device_id else None
+        raw_signing_config = trust_attestation_context.get("signingConfig")
+        if isinstance(raw_signing_config, GuardTrustAttestationSigningConfig):
+            signing_config = raw_signing_config
 
     safe_metadata = apply_trust_attestation_metadata(
         safe_metadata,
@@ -597,6 +616,9 @@ def _item_from_artifact(
         item_id=artifact_id,
         item_kind=item_kind,
         content_hash=content_hash,
+        workspace_id=workspace_id,
+        device_id=device_id,
+        signing_config=signing_config,
     )
     publisher = getattr(artifact, "publisher", None)
     publisher_text = publisher if isinstance(publisher, str) else None
