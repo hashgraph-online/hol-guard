@@ -178,6 +178,32 @@ export function resolveCloudExceptionWhyCopy(item: GuardCloudException): string 
   return `Cloud-approved risk acceptance (${blast.detail.toLowerCase()}) synced from a signed policy bundle.`;
 }
 
+export function resolveCloudExceptionEffectLabel(effect: GuardCloudException["effect"]): string {
+  if (effect === "allow") {
+    return "Allow temporarily";
+  }
+  return effect;
+}
+
+export function resolveCloudExceptionEvidenceUrl(item: GuardCloudException): string | null {
+  const receiptId = item.source_receipt_id?.trim();
+  if (!receiptId) {
+    return null;
+  }
+  return `/evidence?receipt_id=${encodeURIComponent(receiptId)}`;
+}
+
+export function resolveCloudExceptionScopePath(item: GuardCloudException): string | null {
+  const target = resolveCloudExceptionScopeTarget(item);
+  if (!target) {
+    return null;
+  }
+  if (item.scope === "workspace" || item.scope === "publisher") {
+    return target;
+  }
+  return null;
+}
+
 export function summarizeCloudExceptions(
   exceptions: GuardCloudException[],
   pendingRequests: GuardCloudExceptionRequestItem[],

@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
+import { HiMiniCheck } from "react-icons/hi2";
+import { harnessDisplayName } from "./approval-center-utils";
 import { scopeLabel } from "./approval-center-utils";
 import type { GuardCloudExceptionRequestCreateInput } from "./guard-api";
+import type { GuardReceipt } from "./guard-types";
 import { resolveCloudExceptionBlastRadius } from "./policy-cloud-exceptions-utils";
 
 export const REQUEST_STEPS = ["Source", "Scope", "Guardrails", "Submit"] as const;
@@ -40,7 +43,7 @@ export function RequestStepper({ activeStep }: RequestStepperProps) {
                     : "bg-slate-200 text-slate-600"
               }`}
             >
-              {index + 1}
+              {complete ? <HiMiniCheck className="h-3 w-3" aria-hidden="true" /> : index + 1}
             </span>
             {step}
           </li>
@@ -163,6 +166,42 @@ export function SafetyPreview({
       </dl>
       <p className="mt-4 text-xs leading-relaxed text-slate-500">
         Guard Cloud must approve this request before it syncs as a signed bundle entry on this device.
+      </p>
+    </div>
+  );
+}
+
+type SourceReceiptSummaryProps = {
+  receipt: GuardReceipt;
+};
+
+export function SourceReceiptSummary({ receipt }: SourceReceiptSummaryProps) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Source: approval record</p>
+      <p className="mt-2 text-sm font-semibold text-brand-dark">
+        {receipt.artifact_name ?? receipt.artifact_id}
+      </p>
+      <p className="mt-1 text-xs text-slate-600">
+        {harnessDisplayName(receipt.harness)} · {receipt.receipt_id}
+      </p>
+    </div>
+  );
+}
+
+type ResultPreviewProps = {
+  scope: GuardCloudExceptionRequestCreateInput["scope"];
+  harness: string;
+  expiresLabel: string;
+};
+
+export function ResultPreview({ scope, harness, expiresLabel }: ResultPreviewProps) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Result preview</p>
+      <p className="mt-3 text-sm leading-relaxed text-brand-dark">
+        If approved in Guard Cloud, Guard will apply this exception for {scopeLabel(scope, "policy")}
+        {harness.trim() ? ` in ${harnessDisplayName(harness)}` : ""} until {expiresLabel}.
       </p>
     </div>
   );

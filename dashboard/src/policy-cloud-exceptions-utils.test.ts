@@ -4,6 +4,8 @@ import {
   isCloudExceptionAckFailure,
   isCloudExceptionExpiringSoon,
   resolveCloudExceptionExpiryTimestamp,
+  resolveCloudExceptionEffectLabel,
+  resolveCloudExceptionEvidenceUrl,
   resolveCloudExceptionHeadline,
   resolvePersonInitials,
   summarizeCloudExceptions,
@@ -63,6 +65,11 @@ assert(!isCloudExceptionActive({ ...activeException, expiry: "2020-01-01T00:00:0
 assert(isCloudExceptionExpiringSoon(expiringSoonException), "expiring soon exception detected");
 assert(isCloudExceptionAckFailure(ackFailureException), "ack failure detected");
 assert(resolveCloudExceptionHeadline(activeException) === "codex:project:demo", "artifact headline resolved");
+assert(resolveCloudExceptionEffectLabel("allow") === "Allow temporarily", "allow effect label");
+assert(
+  resolveCloudExceptionEvidenceUrl(activeException) === "/evidence?receipt_id=receipt-1",
+  "evidence url from source receipt",
+);
 assert(resolvePersonInitials("owner@example.com") === "OW", "email initials resolved");
 
 const summary = summarizeCloudExceptions(

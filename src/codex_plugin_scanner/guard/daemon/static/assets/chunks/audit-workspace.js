@@ -1,5 +1,5 @@
-import { r as reactExports, bi as runAuditRemediation, j as jsxRuntimeExports, B as Badge, S as SectionLabel, ad as HiMiniMagnifyingGlass, b as EmptyState, d as HiMiniCheckCircle, I as HiMiniXCircle, w as HiMiniExclamationTriangle, h as harnessDisplayName, m as formatRelativeTime, y as HiMiniChevronRight, A as ActionButton, aL as HiMiniDocumentText, aJ as guardAwareHref, aU as IconActionButton, aw as HiMiniArrowPath, l as HiMiniShieldCheck } from "../guard-dashboard.js";
-import { u as useResolvedApprovalGate, c as isApprovalGateRequiredError, g as resolveManagerCoverageStatus, e as ApprovalProofModal } from "./supply-chain-protection-stats.js";
+import { r as reactExports, bs as runAuditRemediation, j as jsxRuntimeExports, B as Badge, S as SectionLabel, ad as HiMiniMagnifyingGlass, b as EmptyState, d as HiMiniCheckCircle, I as HiMiniXCircle, w as HiMiniExclamationTriangle, h as harnessDisplayName, m as formatRelativeTime, y as HiMiniChevronRight, A as ActionButton, aE as HiMiniDocumentText, aP as guardAwareHref, b2 as IconActionButton, aw as HiMiniArrowPath, l as HiMiniShieldCheck } from "../guard-dashboard.js";
+import { u as useResolvedApprovalGate, e as isApprovalGateRequiredError, h as resolveManagerCoverageStatus, f as ApprovalProofModal } from "./supply-chain-protection-stats.js";
 function isSupplyChainAuditEvidence(value) {
   return typeof value === "object" && value !== null && value.operation === "audit";
 }

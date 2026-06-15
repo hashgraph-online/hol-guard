@@ -9,8 +9,10 @@ import {
   RequestModalShell,
   RequestStepper,
   REQUEST_STEPS,
+  ResultPreview,
   SafetyPreview,
   ScopeCardGrid,
+  SourceReceiptSummary,
 } from "./policy-cloud-exception-request-layout";
 
 const SCOPE_OPTIONS: Array<{
@@ -96,12 +98,18 @@ export function PolicyCloudExceptionRequestPanel({
   const [owner, setOwner] = useState("");
   const [reason, setReason] = useState("");
   const [requestedExpiresAt, setRequestedExpiresAt] = useState(defaultExpiryIso());
+  const [linkedTicket, setLinkedTicket] = useState("");
+  const [maxUses, setMaxUses] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
 
   const activeStep = REQUEST_STEPS[stepIndex] ?? "Source";
+  const selectedReceipt = useMemo(
+    () => receiptOptions.find((entry) => entry.receipt_id === sourceReceiptId) ?? null,
+    [receiptOptions, sourceReceiptId],
+  );
   const expiryLabel = useMemo(() => {
     const date = new Date(requestedExpiresAt);
     return Number.isNaN(date.getTime()) ? "Not set" : date.toLocaleString();
@@ -153,6 +161,25 @@ export function PolicyCloudExceptionRequestPanel({
     setRequestedExpiresAt(fromDatetimeLocalValue(event.target.value));
   }, []);
 
+  const handleLinkedTicketChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setLinkedTicket(event.target.value);
+  }, []);
+
+  const handleMaxUsesChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setMaxUses(event.target.value);
+  }, []);
+
+  const buildReasonForSubmit = useCallback(() => {
+    const parts = [reason.trim()];
+    if (linkedTicket.trim()) {
+      parts.push(`Ticket: ${linkedTicket.trim()}`);
+    }
+    if (maxUses.trim()) {
+      parts.push(`Max uses: ${maxUses.trim()}`);
+    }
+    return parts.filter(Boolean).join("\n");
+  }, [linkedTicket, maxUses, reason]);
+
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -163,7 +190,7 @@ export function PolicyCloudExceptionRequestPanel({
         scope,
         requestedBy: requestedBy.trim(),
         owner: owner.trim(),
-        reason: reason.trim(),
+        reason: buildReasonForSubmit(),
         requestedExpiresAt,
         sourceReceiptId: sourceReceiptId.trim() || null,
       };
@@ -197,10 +224,10 @@ export function PolicyCloudExceptionRequestPanel({
     },
     [
       artifactId,
+      buildReasonForSubmit,
       harness,
       owner,
       publisher,
-      reason,
       requestedBy,
       requestedExpiresAt,
       scope,
@@ -218,9 +245,11 @@ export function PolicyCloudExceptionRequestPanel({
     (scope !== "artifact" || artifactId.trim()) &&
     (scope !== "publisher" || publisher.trim()) &&
     (scope !== "workspace" || workingDirectory.trim()) &&
-    ((scope === "harness" || scope === "artifact") ? harness.trim() : true);
-  const canAdvanceFromGuardrails =
-    reason.trim().length > 0 && owner.trim().length > 0 && requestedBy.trim().length > 0;
+    ((scope === "harness" || scope === "artifact") ? harness.trim() : true) &&
+    reason.trim().length > 0 &&
+    owner.trim().length > 0 &&
+    requestedExpiresAt.trim().length > 0;
+  const canAdvanceFromGuardrails = requestedBy.trim().length > 0;
   const canSubmit = canAdvanceFromSource && canAdvanceFromScope && canAdvanceFromGuardrails;
 
   const handleBack = useCallback(() => {
@@ -316,10 +345,11 @@ export function PolicyCloudExceptionRequestPanel({
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_280px] lg:items-start">
         {activeStep === "Source" ? (
-          <div className="space-y-4 rounded-xl border border-slate-100 bg-slate-50/50 p-4 lg:col-span-2">
+          <div className="space-y-4 lg:col-span-3">
             <SectionLabel>Source</SectionLabel>
+            {selectedReceipt ? <SourceReceiptSummary receipt={selectedReceipt} /> : null}
             <label className="block space-y-1">
-              <span className="text-sm font-medium text-brand-dark">Source receipt</span>
+              <span className="text-sm font-medium text-brand-dark">Or choose a different record</span>
               <select
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
                 value={sourceReceiptId}
@@ -337,111 +367,160 @@ export function PolicyCloudExceptionRequestPanel({
         ) : null}
 
         {activeStep === "Scope" ? (
-          <div className="space-y-4 rounded-xl border border-slate-100 bg-slate-50/50 p-4 lg:col-span-2">
-            <SectionLabel>Scope</SectionLabel>
-            <ScopeCardGrid options={SCOPE_OPTIONS} value={scope} onChange={setScope} />
+          <>
+            <div className="space-y-4 lg:col-start-1">
+              {selectedReceipt ? <SourceReceiptSummary receipt={selectedReceipt} /> : null}
+            </div>
+            <div className="space-y-4 rounded-xl border border-slate-100 bg-slate-50/50 p-4 lg:col-start-2">
+              <SectionLabel>Scope</SectionLabel>
+              <p className="text-sm text-slate-600">Choose the narrowest scope that solves the problem.</p>
+              <ScopeCardGrid options={SCOPE_OPTIONS} value={scope} onChange={setScope} />
 
-            {scope === "artifact" ? (
-              <label className="block space-y-1">
-                <span className="text-sm font-medium text-brand-dark">Artifact fingerprint</span>
-                <input
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                  value={artifactId}
-                  onChange={handleArtifactIdChange}
-                  required
-                />
-              </label>
-            ) : null}
+              {scope === "artifact" ? (
+                <label className="block space-y-1">
+                  <span className="text-sm font-medium text-brand-dark">Artifact fingerprint</span>
+                  <input
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                    value={artifactId}
+                    onChange={handleArtifactIdChange}
+                    required
+                  />
+                </label>
+              ) : null}
 
-            {scope === "publisher" ? (
-              <label className="block space-y-1">
-                <span className="text-sm font-medium text-brand-dark">Publisher</span>
-                <input
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                  value={publisher}
-                  onChange={handlePublisherChange}
-                  required
-                />
-              </label>
-            ) : null}
+              {scope === "publisher" ? (
+                <label className="block space-y-1">
+                  <span className="text-sm font-medium text-brand-dark">Publisher</span>
+                  <input
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                    value={publisher}
+                    onChange={handlePublisherChange}
+                    required
+                  />
+                </label>
+              ) : null}
 
-            {scope === "harness" || scope === "artifact" ? (
-              <label className="block space-y-1">
-                <span className="text-sm font-medium text-brand-dark">App</span>
-                <select
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                  value={harness}
-                  onChange={handleHarnessChange}
-                  required
-                >
-                  {harnessOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {harnessDisplayName(option)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
+              {scope === "harness" || scope === "artifact" ? (
+                <label className="block space-y-1">
+                  <span className="text-sm font-medium text-brand-dark">App</span>
+                  <select
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                    value={harness}
+                    onChange={handleHarnessChange}
+                    required
+                  >
+                    {harnessOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {harnessDisplayName(option)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
 
-            {scope === "workspace" ? (
-              <label className="block space-y-1">
-                <span className="text-sm font-medium text-brand-dark">Project folder</span>
-                <input
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                  value={workingDirectory}
-                  onChange={handleWorkingDirectoryChange}
-                  required
-                />
-              </label>
-            ) : null}
-          </div>
-        ) : null}
+              {scope === "workspace" ? (
+                <label className="block space-y-1">
+                  <span className="text-sm font-medium text-brand-dark">Project folder</span>
+                  <input
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                    value={workingDirectory}
+                    onChange={handleWorkingDirectoryChange}
+                    required
+                  />
+                </label>
+              ) : null}
 
-        {activeStep === "Guardrails" ? (
-          <div className="space-y-4 rounded-xl border border-slate-100 bg-white p-4 lg:col-span-2">
-            <SectionLabel>Guardrails</SectionLabel>
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="block space-y-1">
-                <span className="text-sm font-medium text-brand-dark">Requested by</span>
-                <input
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                  type="email"
-                  value={requestedBy}
-                  onChange={handleRequestedByChange}
-                  required
-                />
-              </label>
               <label className="block space-y-1">
                 <span className="text-sm font-medium text-brand-dark">Risk owner</span>
                 <input
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
                   type="email"
                   value={owner}
                   onChange={handleOwnerChange}
                   required
                 />
               </label>
+
+              <label className="block space-y-1">
+                <span className="text-sm font-medium text-brand-dark">Reason (required)</span>
+                <textarea
+                  className="min-h-24 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  value={reason}
+                  onChange={handleReasonChange}
+                  maxLength={280}
+                  required
+                />
+                <p className="text-xs text-slate-500">{reason.trim().length}/280</p>
+                {!reason.trim() ? <p className="text-xs text-red-600">Reason is required.</p> : null}
+              </label>
+
+              <label className="block space-y-1 md:max-w-sm">
+                <span className="text-sm font-medium text-brand-dark">Requested expiry (required)</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  type="datetime-local"
+                  value={toDatetimeLocalValue(requestedExpiresAt)}
+                  onChange={handleExpiryChange}
+                  required
+                />
+              </label>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block space-y-1">
+                  <span className="text-sm font-medium text-brand-dark">Max uses (optional)</span>
+                  <input
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                    inputMode="numeric"
+                    value={maxUses}
+                    onChange={handleMaxUsesChange}
+                    placeholder="50"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-sm font-medium text-brand-dark">Linked ticket (optional)</span>
+                  <input
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                    value={linkedTicket}
+                    onChange={handleLinkedTicketChange}
+                    placeholder="ENG-123 or URL"
+                  />
+                </label>
+              </div>
+
+              {scope === "harness" || scope === "workspace" ? (
+                <div className="rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-2 text-xs text-brand-dark/80">
+                  Broad scopes require step-up authentication and Cloud approval.
+                </div>
+              ) : null}
             </div>
-            <label className="block space-y-1">
-              <span className="text-sm font-medium text-brand-dark">Reason (required)</span>
-              <textarea
-                className="min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                value={reason}
-                onChange={handleReasonChange}
-                maxLength={280}
-                required
+            <div className="space-y-4 lg:col-start-3">
+              <SafetyPreview
+                scope={scope}
+                harness={harness}
+                artifactId={artifactId}
+                publisher={publisher}
+                workingDirectory={workingDirectory}
+                reason={reason}
+                expiresLabel={expiryLabel}
               />
-              <p className="text-xs text-slate-500">{reason.trim().length}/280</p>
-            </label>
-            <label className="block space-y-1 md:max-w-sm">
-              <span className="text-sm font-medium text-brand-dark">Requested expiry (required)</span>
+              <ResultPreview scope={scope} harness={harness} expiresLabel={expiryLabel} />
+            </div>
+          </>
+        ) : null}
+
+        {activeStep === "Guardrails" ? (
+          <div className="space-y-4 rounded-xl border border-slate-100 bg-white p-4 lg:col-span-2">
+            <SectionLabel>Guardrails</SectionLabel>
+            <label className="block space-y-1 md:max-w-md">
+              <span className="text-sm font-medium text-brand-dark">Requested by</span>
               <input
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                type="datetime-local"
-                value={toDatetimeLocalValue(requestedExpiresAt)}
-                onChange={handleExpiryChange}
+                type="email"
+                value={requestedBy}
+                onChange={handleRequestedByChange}
                 required
               />
+              {!requestedBy.trim() ? <p className="text-xs text-red-600">Requested by is required.</p> : null}
             </label>
           </div>
         ) : null}
@@ -470,7 +549,7 @@ export function PolicyCloudExceptionRequestPanel({
           </div>
         ) : null}
 
-        {activeStep !== "Source" ? (
+        {activeStep === "Guardrails" || activeStep === "Submit" ? (
           <SafetyPreview
             scope={scope}
             harness={harness}
@@ -480,6 +559,9 @@ export function PolicyCloudExceptionRequestPanel({
             reason={reason}
             expiresLabel={expiryLabel}
           />
+        ) : null}
+        {activeStep === "Submit" ? (
+          <ResultPreview scope={scope} harness={harness} expiresLabel={expiryLabel} />
         ) : null}
       </div>
 
