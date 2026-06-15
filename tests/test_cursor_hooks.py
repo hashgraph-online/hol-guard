@@ -848,6 +848,107 @@ def test_cursor_shell_command_from_payload_prefers_inner_lean_ctx_command() -> N
     assert command == "rm -rf ./hol-guard-cursor-native-mcp-marker"
 
 
+def test_cursor_shell_command_from_payload_prefers_mcp_tool_input_command() -> None:
+    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+
+    command = guard_commands_module._cursor_shell_command_from_payload(
+        {
+            "hook_event_name": "beforeMCPExecution",
+            "tool_name": "run_terminal_cmd",
+            "tool_input": {"command": "rm -rf ./hol-guard-cursor-native-mcp-marker"},
+            "command": "/usr/bin/unrelated-mcp-bridge",
+        }
+    )
+    assert command == "rm -rf ./hol-guard-cursor-native-mcp-marker"
+
+
+def test_cursor_shell_command_from_payload_prefers_bash_wrapper_inner_command() -> None:
+    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+
+    command = guard_commands_module._cursor_shell_command_from_payload(
+        {
+            "hook_event_name": "beforeShellExecution",
+            "command": "bash -c 'rm -rf ./hol-guard-cursor-native-mcp-marker'",
+            "tool_input": {"command": "rm -rf ./hol-guard-cursor-native-mcp-marker"},
+        }
+    )
+    assert command == "rm -rf ./hol-guard-cursor-native-mcp-marker"
+
+
+def test_cursor_native_mcp_session_allow_generic_tool_name(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
+    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    conversation_id = "conv-cursor-generic-mcp"
+    inner_command = "rm -rf ./hol-guard-cursor-native-mcp-marker"
+    generation_id = "gen-cursor-generic-mcp"
+    before_payload = prepare_cursor_hook_payload(
+        {
+            "conversation_id": conversation_id,
+            "generation_id": generation_id,
+            "hook_event_name": "beforeMCPExecution",
+            "tool_name": "run_terminal_cmd",
+            "tool_input": {"command": inner_command},
+        }
+    )
+    guard_commands_module._record_cursor_pending_shell_permission(
+        store=store,
+        guard_home=home_dir,
+        payload=before_payload,
+        reason="Requests a sensitive native tool action.",
+        artifact=_cursor_shell_artifact(workspace_dir=workspace_dir, command=inner_command),
+        artifact_hash="hash-cursor-generic-mcp-shell",
+    )
+    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
+        store=store,
+        payload=prepare_cursor_hook_payload(
+            {
+                "conversation_id": conversation_id,
+                "generation_id": generation_id,
+                "hook_event_name": "afterMCPExecution",
+                "tool_name": "run_terminal_cmd",
+                "tool_input": {"command": inner_command},
+                "result_json": "{\"ok\": true}",
+                "duration": 12,
+            }
+        ),
+        harness="cursor",
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace=workspace_dir,
+        hook_env=_trusted_cursor_after_observer_env(
+            home_dir,
+            conversation_id=conversation_id,
+            command=inner_command,
+            observer_event="afterMCPExecution",
+            approval_binding=generation_id,
+        ),
+    )
+    assert saved is True
+    assert guard_commands_module._cursor_native_shell_is_approved(
+        store,
+        before_payload,
+    )
+
+
+def test_extract_sensitive_tool_action_request_accepts_generic_mcp_tool_command() -> None:
+    from codex_plugin_scanner.guard.runtime.secret_file_requests import (
+        extract_sensitive_tool_action_request,
+    )
+
+    match = extract_sensitive_tool_action_request(
+        "custom_mcp_shell_gateway",
+        {"command": "rm -rf ./hol-guard-cursor-native-mcp-marker"},
+    )
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
 def test_cursor_native_mcp_session_allow_after_trusted_after_mcp(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
     from codex_plugin_scanner.guard.cli import commands as guard_commands_module

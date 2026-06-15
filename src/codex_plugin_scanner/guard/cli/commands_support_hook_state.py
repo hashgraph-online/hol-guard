@@ -290,19 +290,27 @@ def _cursor_conversation_id(payload: dict[str, object]) -> str | None:
 
 def _cursor_shell_command_from_payload(payload: Mapping[str, object]) -> str | None:
     from ..adapters.cursor_native_approval import (
-        is_lean_ctx_wrapper_command,
+        cursor_hook_payload_is_mcp_execution,
+        is_shell_wrapper_command,
         normalize_cursor_shell_command,
     )
 
     tool_input_command = _hook_command_text(payload)
     top_level = _optional_string(payload.get("command"))
+    if cursor_hook_payload_is_mcp_execution(payload):
+        if tool_input_command is not None:
+            return normalize_cursor_shell_command(tool_input_command)
+        if top_level is not None:
+            return normalize_cursor_shell_command(top_level)
+        return None
     if tool_input_command is not None and (
-        top_level is None or is_lean_ctx_wrapper_command(top_level)
+        top_level is None or is_shell_wrapper_command(top_level)
     ):
         return normalize_cursor_shell_command(tool_input_command)
     if top_level is not None:
         return normalize_cursor_shell_command(top_level)
     return None
+
 
 def _cursor_shell_command_fingerprint(command: str) -> str:
     from ..adapters.cursor_native_approval import normalize_cursor_shell_command

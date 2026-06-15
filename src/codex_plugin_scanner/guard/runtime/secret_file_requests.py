@@ -166,7 +166,6 @@ _SHELL_TOOL_NAMES = frozenset(
         "ash",
         "bash",
         "cmd",
-        "ctx_shell",
         "dash",
         "powershell",
         "pwsh",
@@ -665,6 +664,18 @@ def build_file_read_request_artifact(
     )
 
 
+def _shell_normalized_tool_name(
+    *,
+    normalized_tool_name: str | None,
+    arguments: object,
+) -> str | None:
+    if normalized_tool_name in _SHELL_TOOL_NAMES:
+        return normalized_tool_name
+    if _candidate_command_texts(arguments):
+        return "shell"
+    return normalized_tool_name
+
+
 def extract_sensitive_tool_action_request(
     tool_name: object,
     arguments: object,
@@ -675,20 +686,26 @@ def extract_sensitive_tool_action_request(
     """Extract a sensitive native tool action from arguments."""
 
     normalized_tool_name = _normalize_tool_name(tool_name)
-    if normalized_tool_name is None:
+    if normalized_tool_name is None and not _candidate_command_texts(arguments):
         return None
-    requested_tool_name = str(tool_name).strip()
+    requested_tool_name = str(tool_name).strip() if isinstance(tool_name, str) and str(tool_name).strip() else "Shell"
+    effective_tool_name = _shell_normalized_tool_name(
+        normalized_tool_name=normalized_tool_name,
+        arguments=arguments,
+    )
+    if effective_tool_name is None:
+        return None
     for command_text in _candidate_command_texts(arguments):
         docker_sensitive_request = _docker_sensitive_tool_action_request(
             tool_name=requested_tool_name,
-            normalized_tool_name=normalized_tool_name,
+            normalized_tool_name=effective_tool_name,
             command_text=command_text,
         )
         if docker_sensitive_request is not None:
             return docker_sensitive_request
         docker_config_request = _docker_config_tool_action_request(
             tool_name=requested_tool_name,
-            normalized_tool_name=normalized_tool_name,
+            normalized_tool_name=effective_tool_name,
             command_text=command_text,
             cwd=cwd,
             home_dir=home_dir,
@@ -697,7 +714,7 @@ def extract_sensitive_tool_action_request(
             return docker_config_request
         destructive_shell_request = _destructive_shell_tool_action_request(
             tool_name=requested_tool_name,
-            normalized_tool_name=normalized_tool_name,
+            normalized_tool_name=effective_tool_name,
             command_text=command_text,
             cwd=cwd,
             home_dir=home_dir,
