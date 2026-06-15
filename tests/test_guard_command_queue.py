@@ -7,6 +7,7 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.daemon import client as daemon_client_module
 from codex_plugin_scanner.guard.daemon.command_queue_worker import (
     CommandQueueWorker,
     start_command_queue_worker,
@@ -59,6 +60,17 @@ def _context(tmp_path: Path) -> HarnessContext:
         workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
+
+
+def _block_local_daemon_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise AssertionError("Guard Cloud command execution must not use the local daemon client.")
+
+    monkeypatch.setattr(daemon_client_module, "load_guard_surface_daemon_client", fail)
+    monkeypatch.setattr(daemon_client_module, "ensure_guard_daemon", fail)
+    monkeypatch.setattr(daemon_client_module, "load_guard_daemon_url", fail)
+    monkeypatch.setattr(daemon_client_module, "load_guard_daemon_auth_token", fail)
 
 
 def test_command_queue_enabled_defaults_on(monkeypatch) -> None:
@@ -153,6 +165,97 @@ def test_poll_once_leases_heartbeats_executes_and_posts_result(
     assert "machineInstallationId" not in calls[1][2]
     assert "machineInstallationId" not in calls[2][2]
     assert "machineInstallationId" not in calls[3][2]
+
+
+def test_executor_app_remove_never_uses_local_daemon_client(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _block_local_daemon_client(monkeypatch)
+
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.app.remove",
+            "payload": {"harness": "codex", "surface": "cli"},
+        },
+        context=_context(tmp_path),
+        store=FakeStore(tmp_path / "guard-home"),  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert result["waitingLocalConfirm"] is True
+    assert result["data"] == {
+        "confirm_command": "hol-guard apps disconnect codex --surface cli --confirm disconnect-codex",
+        "confirmation_phrase": "disconnect-codex",
+        "harness": "codex",
+        "summary": ("Run the local disconnect command on this machine to confirm removing Guard protection for codex."),
+        "surface": "cli",
+    }
+
+
+def test_poll_once_executes_app_connect_without_local_daemon_client(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    calls: list[tuple[str, str, dict[str, object]]] = []
+    _block_local_daemon_client(monkeypatch)
+    monkeypatch.setattr(
+        command_queue,
+        "_resolve_guard_sync_auth_context",
+        lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
+    )
+
+    def fake_json_request(
+        auth_context: dict[str, object],
+        *,
+        method: str,
+        path: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        calls.append((method, path, payload))
+        if path == "/lease":
+            return {
+                "item": {
+                    "id": "job-app-connect-1",
+                    "leaseId": "lease-app-connect-1",
+                    "operation": "guard.app.connect",
+                    "payload": {"harness": "codex", "surface": "cli"},
+                }
+            }
+        return {"ok": True}
+
+    def fake_apply_managed_install(
+        command: str,
+        requested_harness: str | None,
+        install_all: bool,
+        context: HarnessContext,
+        store: object,
+        workspace: str | None,
+        now: str,
+        *,
+        surface: str | None = None,
+    ) -> dict[str, object]:
+        del install_all, context, store, workspace
+        assert command == "install"
+        assert requested_harness == "codex"
+        assert isinstance(now, str) and now
+        return {"managed_install": {"harness": requested_harness}, "surface": surface}
+
+    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+    monkeypatch.setattr(command_executors, "apply_managed_install", fake_apply_managed_install)
+
+    status = command_queue.poll_command_queue_once(store, _context(tmp_path))
+
+    assert status["state"] == "idle"
+    assert calls[-1][0:2] == ("POST", "/job-app-connect-1/result")
+    assert calls[-1][2]["status"] == "succeeded"
+    result = calls[-1][2]["result"]
+    assert isinstance(result, dict)
+    assert result["data"] == {
+        "managed_install": {"harness": "codex"},
+        "surface": "cli",
+    }
 
 
 def test_poll_once_continues_when_local_request_snapshot_fails(
