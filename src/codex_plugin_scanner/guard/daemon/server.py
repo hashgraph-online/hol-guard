@@ -3991,6 +3991,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/sessions/start",
             "/v1/operations/start",
             "/v1/operations/block",
+            "/v1/policy/sync",
             "/v1/requests/clear",
             "/v1/requests/remote-once",
             "/v1/settings/import",
@@ -4004,6 +4005,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/notifications/setup",
             "/v1/update/status",
         }:
+            return True
+        # Hosted dashboard access is blocked for these routes, but local
+        # loopback/dashboard sessions still use them until the route deletion
+        # slice lands.
+        if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"] and path_parts[2] in _HEADLESS_APP_ACTIONS:
             return True
         if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
             return True
@@ -4259,15 +4265,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/policy/cloud-exceptions",
             "/v1/policy/cloud-exception-requests",
             "/v1/policy/clear",
-            "/v1/policy/sync",
             "/v1/receipts",
             "/v1/receipts/analytics",
             "/v1/insights/share",
             "/v1/cloud/connect",
             "/v1/receipts/latest",
-            "/v1/requests",
-            "/v1/requests/clear",
-            "/v1/requests/remote-once",
             "/v1/runtime",
             "/v1/settings",
             "/v1/settings/export",
@@ -4277,17 +4279,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/update/status",
         }:
             return True
-        if len(path_parts) == 3 and path_parts[:2] in (["v1", "requests"], ["v1", "receipts"]):
-            return True
-        if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
+        if len(path_parts) == 3 and path_parts[:2] == ["v1", "receipts"]:
             return True
         if len(path_parts) == 4 and path_parts[:3] == ["v1", "audit", "remediations"]:
-            return True
-        if (
-            len(path_parts) == 4
-            and path_parts[:2] == ["v1", "requests"]
-            and path_parts[3] in {"approve", "block", "resume"}
-        ):
             return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "approvals"] and path_parts[3] == "decision":
             return True
@@ -4309,8 +4303,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "uninstall",
             }
         ):
-            return True
-        if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"] and path_parts[2] in _HEADLESS_APP_ACTIONS:
             return True
         return len(path_parts) == 4 and path_parts[:2] == ["v1", "artifacts"] and path_parts[3] == "diff"
 
