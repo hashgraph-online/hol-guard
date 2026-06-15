@@ -13,6 +13,7 @@ from ..cli.install_commands import (
     apply_managed_install,
     build_harness_verification,
     list_harness_setup_items,
+    uninstall_confirmation_token,
 )
 from ..config import load_guard_config
 from ..local_supply_chain import (
@@ -28,7 +29,6 @@ from ..shims import (
     package_shim_status,
     package_shim_supported_managers,
     probe_package_shim_intercepts,
-    uninstall_package_shims,
 )
 from ..store import GuardStore
 
@@ -123,7 +123,10 @@ def _execute_package_shim_operation(
         )
     if operation == "guard.packageShims.remove":
         managers = _package_shim_managers(payload)
-        return _result(uninstall_package_shims(command_context, managers=managers), generated_at=generated_at)
+        return _waiting_local_confirm(
+            _package_shim_remove_confirmation_payload(managers),
+            generated_at=generated_at,
+        )
     if operation == "guard.packageShims.test":
         managers = _package_shim_managers(payload)
         return _result(
@@ -198,17 +201,8 @@ def _execute_app_operation(
         result["action"] = "repair"
         return _result(result, generated_at=generated_at)
     if operation == "guard.app.remove":
-        return _result(
-            apply_managed_install(
-                "uninstall",
-                harness,
-                False,
-                context,
-                store,
-                workspace,
-                generated_at,
-                surface=surface,
-            ),
+        return _waiting_local_confirm(
+            _app_remove_confirmation_payload(harness=harness, surface=surface),
             generated_at=generated_at,
         )
     return {
@@ -378,6 +372,48 @@ def _package_shim_managers(payload: dict[str, object]) -> tuple[str, ...] | None
     return normalized
 
 
+def _package_shim_remove_confirmation_payload(
+    managers: tuple[str, ...] | None,
+) -> dict[str, object]:
+    confirm_parts = ["hol-guard", "package-shims", "uninstall"]
+    if managers:
+        for manager in managers:
+            confirm_parts.extend(["--manager", manager])
+    summary = "Run the local package-shim uninstall command on this machine to confirm removal."
+    if managers:
+        summary = (
+            "Run the local package-shim uninstall command on this machine to "
+            f"confirm removal for {', '.join(managers)}."
+        )
+    return {
+        "confirm_command": " ".join(confirm_parts),
+        "managers": list(managers or ()),
+        "summary": summary,
+    }
+
+
+def _app_remove_confirmation_payload(
+    *,
+    harness: str,
+    surface: str | None,
+) -> dict[str, object]:
+    confirmation_phrase = uninstall_confirmation_token(harness)
+    confirm_parts = ["hol-guard", "apps", "disconnect", harness]
+    if surface is not None:
+        confirm_parts.extend(["--surface", surface])
+    confirm_parts.extend(["--confirm", confirmation_phrase])
+    return {
+        "confirm_command": " ".join(confirm_parts),
+        "confirmation_phrase": confirmation_phrase,
+        "harness": harness,
+        "summary": (
+            "Run the local disconnect command on this machine to confirm "
+            f"removing Guard protection for {harness}."
+        ),
+        "surface": surface,
+    }
+
+
 def command_job_operation(job: dict[str, object]) -> str:
     operation = job.get("operation")
     return operation if isinstance(operation, str) else ""
@@ -406,6 +442,16 @@ def _result(data: dict[str, object], *, generated_at: str) -> dict[str, object]:
         "data": data,
         "generatedAt": generated_at,
     }
+
+
+def _waiting_local_confirm(
+    data: dict[str, object],
+    *,
+    generated_at: str,
+) -> dict[str, object]:
+    payload = _result(data, generated_at=generated_at)
+    payload["waitingLocalConfirm"] = True
+    return payload
 
 
 def _now() -> str:
