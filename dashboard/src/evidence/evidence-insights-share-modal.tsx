@@ -10,6 +10,10 @@ import {
   type GuardInsightsShareResult,
 } from "../guard-api";
 import { ConnectFlowCard } from "../supply-chain-firewall-views";
+import {
+  openPackageFirewallAuthorizeWindow,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE,
+} from "../package-firewall-connect-browser";
 import { EvidenceInsightsShareSheet } from "./evidence-insights-share-sheet";
 import { GuardStatMetric } from "./guard-stat-metric";
 import { HomeInsightsMetrics } from "./evidence-insights-headline-bento";
@@ -92,6 +96,12 @@ export function EvidenceInsightsShareModal({
     try {
       const status = await startGuardCloudConnect();
       setConnectFlow(status.connect_flow);
+      if (
+        status.connect_flow?.authorize_url &&
+        !openPackageFirewallAuthorizeWindow(status.connect_flow.authorize_url)
+      ) {
+        setConnectError(PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE);
+      }
       if (!status.connect_required) {
         await refreshConnectState();
       }
