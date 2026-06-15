@@ -490,6 +490,44 @@ def test_runtime_snapshot_exposes_local_device_without_cloud_pairing(tmp_path: P
     }
 
 
+def test_runtime_snapshot_exposes_cloud_policy_bundle_fields(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    now = "2026-06-01T00:00:00+00:00"
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "oauth_access_token_fixture",
+        now,
+        workspace_id="workspace-alpha",
+    )
+    store.set_sync_payload(
+        "policy_bundle",
+        {
+            "bundleVersion": "policy-2026-05-01.3",
+            "bundleHash": "sha256:bundle-proof",
+            "rolloutState": "enforcing",
+            "acknowledgement": {
+                "deviceId": "device-alpha",
+                "acknowledgedAt": "2026-06-01T12:00:00+00:00",
+                "status": "synced",
+            },
+        },
+        now,
+    )
+    store.set_sync_payload(
+        "policy_bundle_last_error",
+        {"reason": "sync_failed"},
+        now,
+    )
+
+    snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
+
+    assert snapshot["cloud_policy_bundle_version"] == "policy-2026-05-01.3"
+    assert snapshot["cloud_policy_bundle_hash"] == "sha256:bundle-proof"
+    assert snapshot["cloud_policy_rollout_state"] == "enforcing"
+    assert snapshot["cloud_policy_sync_error"] == "sync_failed"
+    assert snapshot["cloud_policy_last_ack_at"] == "2026-06-01T12:00:00+00:00"
+
+
 def test_runtime_snapshot_exposes_latest_connect_proof_without_pairing_secrets(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     request_id = "connect-imported-state"

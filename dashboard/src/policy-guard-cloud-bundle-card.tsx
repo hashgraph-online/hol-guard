@@ -5,6 +5,7 @@ import { formatRelativeTime } from "./approval-center-utils";
 import type { GuardRuntimeSnapshot } from "./guard-types";
 import {
   resolveCloudPolicyBundleCopy,
+  resolveCloudExceptionsConnected,
   resolveCloudPolicyControlsUrl,
 } from "./policy-workspace-helpers";
 
@@ -15,8 +16,12 @@ type PolicyGuardCloudBundleCardProps = {
 export function PolicyGuardCloudBundleCard({ snapshot }: PolicyGuardCloudBundleCardProps) {
   const cloudBundleCopy = resolveCloudPolicyBundleCopy(snapshot);
   const cloudControlsUrl = resolveCloudPolicyControlsUrl(snapshot);
+  const cloudConnected = resolveCloudExceptionsConnected(snapshot);
   const lastAckAt =
-    snapshot.runtime_state?.last_heartbeat_at?.trim() ?? snapshot.generated_at?.trim() ?? null;
+    snapshot.cloud_policy_last_ack_at?.trim() ??
+    snapshot.runtime_state?.last_heartbeat_at?.trim() ??
+    snapshot.generated_at?.trim() ??
+    null;
   const policyHash = cloudBundleCopy?.hash?.trim() ?? null;
   const policyHashShort = policyHash?.slice(0, 8) ?? null;
   const bundleVersion = snapshot.cloud_policy_bundle_version?.trim() ?? null;
@@ -32,9 +37,21 @@ export function PolicyGuardCloudBundleCard({ snapshot }: PolicyGuardCloudBundleC
     return (
       <div className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm">
         <SectionLabel>Guard Cloud bundle</SectionLabel>
-        <p className="mt-2 text-sm text-brand-dark/75">
-          Not connected. Remembered Cloud rules appear when Guard Cloud syncs a bundle.
-        </p>
+        {cloudConnected ? (
+          <>
+            <p className="mt-2 text-sm font-medium text-brand-dark">
+              {snapshot.cloud_state_label?.trim() || "Connected to Guard Cloud"}
+            </p>
+            <p className="mt-1 text-sm text-brand-dark/75">
+              {snapshot.cloud_state_detail?.trim() ||
+                "Guard Cloud is connected. Policy bundle details will appear after the next successful sync."}
+            </p>
+          </>
+        ) : (
+          <p className="mt-2 text-sm text-brand-dark/75">
+            Guard Cloud is not connected. Remembered Cloud rules appear when Guard Cloud syncs a bundle.
+          </p>
+        )}
         {cloudControlsUrl ? (
           <div className="mt-3">
             <ActionButton href={cloudControlsUrl} variant="secondary">
