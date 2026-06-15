@@ -2,8 +2,28 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Literal
 
-from .inventory_contract import InventoryItemKind
+InventoryItemKind = Literal[
+    "agent",
+    "daemon_plugin",
+    "harness",
+    "model_provider",
+    "package",
+    "prompt_pack",
+    "skill",
+    "mcp_server",
+    "mcp_tool",
+    "plugin",
+    "channel",
+    "hook",
+    "overlay",
+    "repository",
+    "container_image",
+    "policy",
+    "secret_reference",
+    "network_endpoint",
+]
 
 _MAX_DESCRIPTION_LENGTH = 500
 _WHITESPACE_RE = re.compile(r"\s+")
