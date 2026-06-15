@@ -739,6 +739,7 @@ export function App() {
             onOpenSettings={handleOpenSettings}
             onOpenInbox={handleOpenInbox}
             onRefreshPolicies={handleRefreshPolicies}
+            onNavigate={navigate}
           />
         </Suspense>
       );
@@ -758,6 +759,7 @@ export function App() {
     handleOpenSettings,
     handleOpenInbox,
     handleRefreshPolicies,
+    navigate,
   ]);
 
   return (

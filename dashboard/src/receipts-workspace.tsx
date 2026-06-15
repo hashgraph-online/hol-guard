@@ -52,7 +52,19 @@ function evidenceTitleForView(view: EvidenceView): string {
 
 function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate }: EvidenceWorkbenchProps) {
   const initial = useMemo(() => readEvidenceUrlState(), []);
-  const [filters, setFilters] = useState<EvidenceFilterState>(initial);
+  const [filters, setFilters] = useState<EvidenceFilterState>(() => {
+    const linkedReceipt = initial.selectedId
+      ? receiptItems.find((receipt) => receipt.receipt_id === initial.selectedId)
+      : undefined;
+    if (!linkedReceipt) {
+      return initial;
+    }
+    return {
+      ...initial,
+      view: "actions",
+      harness: linkedReceipt.harness,
+    };
+  });
   const [debouncedSearch, setDebouncedSearch] = useState(initial.search);
   const [page, setPage] = useState(0);
   const [exportOpen, setExportOpen] = useState(false);
@@ -125,9 +137,12 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
 
   const selectedReceipt = useMemo(() => {
     if (!filters.selectedId) return null;
-    const found = filtered.find((r) => r.receipt_id === filters.selectedId);
-    return found ?? null;
-  }, [filtered, filters.selectedId]);
+    return (
+      receiptItems.find((receipt) => receipt.receipt_id === filters.selectedId) ??
+      filtered.find((receipt) => receipt.receipt_id === filters.selectedId) ??
+      null
+    );
+  }, [filtered, filters.selectedId, receiptItems]);
 
   const handleFilterChange = useCallback((patch: Partial<EvidenceFilterState>) => {
     setFilters((prev) => ({ ...prev, ...patch }));

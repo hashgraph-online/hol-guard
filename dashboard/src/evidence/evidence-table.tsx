@@ -3,13 +3,14 @@ import type { ReactNode } from "react";
 interface EvidenceTableProps {
   children: ReactNode;
   label: string;
+  tableClassName?: string;
 }
 
-export function EvidenceTable({ children, label }: EvidenceTableProps) {
+export function EvidenceTable({ children, label, tableClassName = "" }: EvidenceTableProps) {
   return (
     <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm" aria-label={label}>
+        <table className={`w-full text-sm ${tableClassName}`} aria-label={label}>
           {children}
         </table>
       </div>

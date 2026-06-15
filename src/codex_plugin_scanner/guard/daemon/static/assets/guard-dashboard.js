@@ -21530,7 +21530,17 @@ function evidenceTitleForView(view) {
 }
 function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate }) {
   const initial = reactExports.useMemo(() => readEvidenceUrlState(), []);
-  const [filters, setFilters] = reactExports.useState(initial);
+  const [filters, setFilters] = reactExports.useState(() => {
+    const linkedReceipt = initial.selectedId ? receiptItems.find((receipt) => receipt.receipt_id === initial.selectedId) : void 0;
+    if (!linkedReceipt) {
+      return initial;
+    }
+    return {
+      ...initial,
+      view: "actions",
+      harness: linkedReceipt.harness
+    };
+  });
   const [debouncedSearch, setDebouncedSearch] = reactExports.useState(initial.search);
   const [page, setPage] = reactExports.useState(0);
   const [exportOpen, setExportOpen] = reactExports.useState(false);
@@ -21588,9 +21598,8 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
   );
   const selectedReceipt = reactExports.useMemo(() => {
     if (!filters.selectedId) return null;
-    const found = filtered.find((r) => r.receipt_id === filters.selectedId);
-    return found ?? null;
-  }, [filtered, filters.selectedId]);
+    return receiptItems.find((receipt) => receipt.receipt_id === filters.selectedId) ?? filtered.find((receipt) => receipt.receipt_id === filters.selectedId) ?? null;
+  }, [filtered, filters.selectedId, receiptItems]);
   const handleFilterChange = reactExports.useCallback((patch) => {
     setFilters((prev) => ({ ...prev, ...patch }));
   }, []);
@@ -26834,7 +26843,8 @@ function App() {
           onClearPolicy: handleClearPolicy,
           onOpenSettings: handleOpenSettings,
           onOpenInbox: handleOpenInbox,
-          onRefreshPolicies: handleRefreshPolicies
+          onRefreshPolicies: handleRefreshPolicies,
+          onNavigate: navigate
         }
       ) });
     }
@@ -26848,7 +26858,8 @@ function App() {
     handleClearPolicy,
     handleOpenSettings,
     handleOpenInbox,
-    handleRefreshPolicies
+    handleRefreshPolicies,
+    navigate
   ]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -27069,9 +27080,9 @@ export {
   policyActionLabel as bd,
   fetchCloudExceptions as be,
   fetchCloudExceptionRequests as bf,
-  HiMiniCube as bg,
-  HiMiniQueueList as bh,
-  HiMiniNoSymbol as bi,
+  HiMiniNoSymbol as bg,
+  HiMiniCube as bh,
+  HiMiniQueueList as bi,
   HiMiniArrowRight as bj,
   HiMiniPlay as bk,
   Surface as bl,

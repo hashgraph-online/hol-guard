@@ -132,6 +132,7 @@
     --color-rose-300: oklch(81% .117 11.638);
     --color-rose-600: oklch(58.6% .253 17.585);
     --color-rose-700: oklch(51.4% .222 16.935);
+    --color-rose-800: oklch(45.5% .188 13.697);
     --color-rose-900: oklch(41% .159 10.272);
     --color-slate-50: oklch(98.4% .003 247.858);
     --color-slate-100: oklch(96.8% .007 247.896);
@@ -1238,6 +1239,18 @@
     width: calc(var(--spacing) * 64);
   }
 
+  .w-\[88px\] {
+    width: 88px;
+  }
+
+  .w-\[96px\] {
+    width: 96px;
+  }
+
+  .w-\[104px\] {
+    width: 104px;
+  }
+
   .w-fit {
     width: fit-content;
   }
@@ -1280,6 +1293,10 @@
 
   .max-w-\[260px\] {
     max-width: 260px;
+  }
+
+  .max-w-\[360px\] {
+    max-width: 360px;
   }
 
   .max-w-full {
@@ -1336,6 +1353,14 @@
 
   .min-w-\[180px\] {
     min-width: 180px;
+  }
+
+  .min-w-\[240px\] {
+    min-width: 240px;
+  }
+
+  .min-w-\[980px\] {
+    min-width: 980px;
   }
 
   .flex-1 {
@@ -1861,6 +1886,10 @@
     }
   }
 
+  .border-amber-300 {
+    border-color: var(--color-amber-300);
+  }
+
   .border-blue-200\/40 {
     border-color: #bedbff66;
   }
@@ -2147,6 +2176,10 @@
 
   .border-rose-200 {
     border-color: var(--color-rose-200);
+  }
+
+  .border-rose-300 {
+    border-color: var(--color-rose-300);
   }
 
   .border-slate-50 {
@@ -4185,6 +4218,10 @@
     color: var(--color-rose-700);
   }
 
+  .text-rose-800 {
+    color: var(--color-rose-800);
+  }
+
   .text-rose-900 {
     color: var(--color-rose-900);
   }
@@ -5688,10 +5725,6 @@
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
-    .md\:grid-cols-\[40px_72px_minmax\(200px\,1\.4fr\)_88px_96px_88px_104px_minmax\(120px\,1fr\)_72px\] {
-      grid-template-columns: 40px 72px minmax(200px, 1.4fr) 88px 96px 88px 104px minmax(120px, 1fr) 72px;
-    }
-
     .md\:grid-cols-\[72px_minmax\(140px\,1\.3fr\)_88px_72px_36px_36px_88px_80px_72px\] {
       grid-template-columns: 72px minmax(140px, 1.3fr) 88px 72px 36px 36px 88px 80px 72px;
     }
@@ -5726,10 +5759,6 @@
 
     .md\:gap-x-2 {
       column-gap: calc(var(--spacing) * 2);
-    }
-
-    .md\:gap-x-3 {
-      column-gap: calc(var(--spacing) * 3);
     }
   }
 

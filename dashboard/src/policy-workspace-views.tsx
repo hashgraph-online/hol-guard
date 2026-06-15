@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import {
   HiMiniTrash,
   HiMiniCloudArrowUp,
@@ -10,18 +10,31 @@ import {
   HiMiniGlobeAlt,
   HiMiniLockClosed,
   HiMiniShieldCheck,
+  HiMiniNoSymbol,
+  HiMiniCheckCircle,
 } from "react-icons/hi2";
-import { Badge, Tag, EmptyState } from "./approval-center-primitives";
-import { harnessDisplayName, formatRelativeTime, policyActionLabel, scopeLabel } from "./approval-center-utils";
+import { Tag, EmptyState } from "./approval-center-primitives";
+import { harnessDisplayName, formatRelativeTime, scopeLabel, policyActionLabel } from "./approval-center-utils";
 import { guardAwareHref } from "./guard-api";
 import type { GuardPolicyDecision } from "./guard-types";
+import {
+  EvidenceTable,
+  EvidenceTableBody,
+  EvidenceTableCell,
+  EvidenceTableHead,
+  EvidenceTableHeader,
+  EvidenceTableRow,
+} from "./evidence/evidence-table";
 import {
   isCloudManagedPolicy,
   resolvePolicyApprovalRecordLabel,
   resolvePolicyDisplay,
   resolvePolicyEvidenceHref,
   resolvePolicyMatcherFamily,
+  resolvePolicyRowFolder,
+  resolvePolicyRowFrequency,
   resolvePolicyRowSourceLabel,
+  resolvePolicyRowSubtitle,
   resolvePolicyRowTitle,
 } from "./policy-workspace-helpers";
 
@@ -29,24 +42,30 @@ export type PolicySortKey = "app" | "updated";
 export type PolicySortState = { key: PolicySortKey; direction: "asc" | "desc" } | null;
 
 const PAGE_SIZE = 5;
+const TABLE_MIN_WIDTH_CLASS = "min-w-[980px]";
 
-const RULE_GRID_CLASS =
-  "grid grid-cols-[minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-b border-slate-100 px-4 py-3 last:border-0 hover:bg-slate-50/80 md:grid-cols-[40px_72px_minmax(200px,1.4fr)_88px_96px_88px_104px_minmax(120px,1fr)_72px]";
-
-const RULE_HEADER_CLASS =
-  "hidden border-b border-slate-100 bg-slate-50/80 px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:grid md:grid-cols-[40px_72px_minmax(200px,1.4fr)_88px_96px_88px_104px_minmax(120px,1fr)_72px] md:gap-x-3";
-
-function resolveActionTone(action: string): "success" | "destructive" | "warning" | "default" {
+function PolicyActionBadge({ action }: { action: string }) {
   if (action === "allow") {
-    return "success";
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+        <HiMiniCheckCircle className="h-3.5 w-3.5" aria-hidden="true" />
+        Allow
+      </span>
+    );
   }
   if (action === "block") {
-    return "destructive";
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-800">
+        <HiMiniNoSymbol className="h-3.5 w-3.5" aria-hidden="true" />
+        Block
+      </span>
+    );
   }
-  if (action === "warn" || action === "require-reapproval") {
-    return "warning";
-  }
-  return "default";
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
+      {policyActionLabel(action)}
+    </span>
+  );
 }
 
 function resolveFamilyIcon(family: string | null) {
@@ -65,14 +84,47 @@ function resolveFamilyIcon(family: string | null) {
   return HiMiniShieldCheck;
 }
 
+function PolicyEvidenceLink({
+  policy,
+  onNavigate,
+}: {
+  policy: GuardPolicyDecision;
+  onNavigate?: (pathname: string) => void;
+}) {
+  const href = resolvePolicyEvidenceHref(policy);
+  const label = resolvePolicyApprovalRecordLabel(policy);
+  const handleClick = useCallback(
+    (event: MouseEvent<HTMLAnchorElement>) => {
+      if (!onNavigate) {
+        return;
+      }
+      event.preventDefault();
+      onNavigate(href);
+    },
+    [href, onNavigate],
+  );
+
+  return (
+    <a
+      href={guardAwareHref(href)}
+      onClick={handleClick}
+      className="inline-flex max-w-full items-center gap-1 font-mono text-xs font-medium text-brand-blue hover:underline"
+      title={`Open receipt ${policy.source_receipt_id ?? label} in Evidence`}
+    >
+      {label}
+    </a>
+  );
+}
+
 type PolicyRuleRowProps = {
   policy: GuardPolicyDecision;
   cloudControlsUrl: string | null;
   onClear?: (policy: GuardPolicyDecision) => void;
+  onNavigate?: (pathname: string) => void;
   cloudVariant?: boolean;
 };
 
-function PolicyRuleRow({ policy, cloudControlsUrl, onClear, cloudVariant = false }: PolicyRuleRowProps) {
+function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVariant = false }: PolicyRuleRowProps) {
   const handleClear = useCallback(() => onClear?.(policy), [onClear, policy]);
   const cloudManaged = cloudVariant || isCloudManagedPolicy(policy.source);
   const display = resolvePolicyDisplay(policy);
@@ -80,59 +132,61 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, cloudVariant = false
   const family = resolvePolicyMatcherFamily(policy);
   const Icon = resolveFamilyIcon(family);
   const title = resolvePolicyRowTitle(policy, display);
+  const subtitle = resolvePolicyRowSubtitle(policy, display);
+  const folder = resolvePolicyRowFolder(policy);
+  const frequency = resolvePolicyRowFrequency(policy);
   const scopeTag = scopeLabel(policy.scope, "policy");
 
   return (
-    <article className={RULE_GRID_CLASS} role="listitem">
-      <div className="hidden items-center justify-center md:flex">
+    <EvidenceTableRow>
+      <EvidenceTableCell className="w-10">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
           <Icon className="h-4 w-4" aria-hidden="true" />
         </span>
-      </div>
+      </EvidenceTableCell>
 
-      <div className="flex items-center gap-2 md:col-start-2">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 md:hidden">
-          <Icon className="h-4 w-4" aria-hidden="true" />
-        </span>
-        <Badge tone={resolveActionTone(policy.action)}>{policyActionLabel(policy.action)}</Badge>
-      </div>
+      <EvidenceTableCell className="w-[88px] whitespace-nowrap">
+        <PolicyActionBadge action={policy.action} />
+      </EvidenceTableCell>
 
-      <div className="min-w-0 md:col-start-3">
-        <p className="text-sm font-semibold leading-snug text-brand-dark">{title}</p>
-        {display.kindLine ? <p className="mt-0.5 text-xs text-slate-500">{display.kindLine}</p> : null}
-        <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600 md:hidden">
-          <span>{resolvePolicyRowSourceLabel(policy)}</span>
-          <span>{scopeTag}</span>
-          <span>{harnessDisplayName(policy.harness)}</span>
+      <EvidenceTableCell className="min-w-[240px] max-w-[360px]">
+        <p className="font-semibold leading-snug text-brand-dark">{title}</p>
+        {subtitle ? <p className="mt-1 text-xs leading-relaxed text-slate-500">{subtitle}</p> : null}
+        <div className="mt-2 space-y-1 text-xs text-slate-600 lg:hidden">
+          <p>
+            <span className="font-medium text-slate-700">Folder:</span> {folder ?? "Not recorded"}
+          </p>
+          <p>
+            <span className="font-medium text-slate-700">Frequency:</span> {frequency}
+          </p>
+          <p>
+            <span className="font-medium text-slate-700">App:</span> {harnessDisplayName(policy.harness)}
+          </p>
         </div>
-      </div>
+      </EvidenceTableCell>
 
-      <div className="hidden text-sm text-brand-dark md:col-start-4 md:block">
-        {cloudManaged ? <Tag tone="blue">{resolvePolicyRowSourceLabel(policy)}</Tag> : resolvePolicyRowSourceLabel(policy)}
-      </div>
+      <EvidenceTableCell className="hidden w-[96px] lg:table-cell">
+        {cloudManaged ? (
+          <Tag tone="blue">{resolvePolicyRowSourceLabel(policy)}</Tag>
+        ) : (
+          <span className="text-sm text-brand-dark">{resolvePolicyRowSourceLabel(policy)}</span>
+        )}
+      </EvidenceTableCell>
 
-      <div className="hidden md:col-start-5 md:block">
+      <EvidenceTableCell className="hidden w-[104px] lg:table-cell">
         <Tag tone="blue">{scopeTag}</Tag>
-      </div>
+      </EvidenceTableCell>
 
-      <div className="hidden text-sm md:col-start-6 md:block">
+      <EvidenceTableCell className="hidden w-[96px] lg:table-cell">
         <span className="font-medium text-brand-blue">{harnessDisplayName(policy.harness)}</span>
-      </div>
+      </EvidenceTableCell>
 
-      <div className="hidden whitespace-nowrap text-xs text-slate-500 md:col-start-7 md:block">
+      <EvidenceTableCell className="hidden w-[104px] whitespace-nowrap text-xs text-slate-500 lg:table-cell">
         {policy.updated_at ? formatRelativeTime(policy.updated_at) : "—"}
-      </div>
+      </EvidenceTableCell>
 
-      <div className="hidden min-w-0 md:col-start-8 md:block">
-        {!cloudManaged ? (
-          <a
-            href={guardAwareHref(resolvePolicyEvidenceHref(policy))}
-            className="max-w-full truncate font-mono text-xs font-medium text-brand-blue hover:underline"
-            title={resolvePolicyApprovalRecordLabel(policy)}
-          >
-            {resolvePolicyApprovalRecordLabel(policy)}
-          </a>
-        ) : null}
+      <EvidenceTableCell className="hidden min-w-[120px] lg:table-cell">
+        {!cloudManaged ? <PolicyEvidenceLink policy={policy} onNavigate={onNavigate} /> : null}
         {cloudManaged && cloudControlsUrl ? (
           <a
             href={cloudControlsUrl}
@@ -144,9 +198,9 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, cloudVariant = false
             View on cloud
           </a>
         ) : null}
-      </div>
+      </EvidenceTableCell>
 
-      <div className="hidden items-center justify-end md:col-start-9 md:flex">
+      <EvidenceTableCell className="hidden w-[88px] text-right lg:table-cell">
         {cloudManaged ? (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500" title="Read-only Cloud policy">
             <HiMiniLockClosed className="h-3.5 w-3.5" aria-hidden="true" />
@@ -160,11 +214,11 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, cloudVariant = false
             className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-red-600"
           >
             <HiMiniTrash className="h-3.5 w-3.5" aria-hidden="true" />
-            Remove rule
+            Remove
           </button>
         ) : null}
-      </div>
-    </article>
+      </EvidenceTableCell>
+    </EvidenceTableRow>
   );
 }
 
@@ -172,6 +226,7 @@ type PolicyRuleTableProps = {
   policies: GuardPolicyDecision[];
   cloudControlsUrl: string | null;
   onClearPolicy?: (policy: GuardPolicyDecision) => void;
+  onNavigate?: (pathname: string) => void;
   emptyTitle: string;
   emptyBody: string;
   cloudVariant?: boolean;
@@ -183,6 +238,7 @@ export function PolicyRuleTable({
   policies,
   cloudControlsUrl,
   onClearPolicy,
+  onNavigate,
   emptyTitle,
   emptyBody,
   cloudVariant = false,
@@ -219,30 +275,38 @@ export function PolicyRuleTable({
 
   return (
     <div className="space-y-3">
-      <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <div className={RULE_HEADER_CLASS} aria-hidden="true">
-          <span />
-          <span>Action</span>
-          <span>Rule description</span>
-          <span>Source</span>
-          <span>Scope</span>
-          <span>{cloudVariant ? "Applies to" : "Harness"}</span>
-          <span>Last updated</span>
-          <span>{cloudVariant ? "Policy" : "Approval record"}</span>
-          <span className="text-right">{cloudVariant ? "" : "Actions"}</span>
-        </div>
-        <div role="list">
-          {visiblePolicies.map((policy) => (
-            <PolicyRuleRow
-              key={`${policy.harness}-${policy.scope}-${policy.artifact_id ?? policy.publisher ?? "global"}-${policy.updated_at ?? ""}-${policy.source}`}
-              policy={policy}
-              cloudControlsUrl={cloudControlsUrl}
-              onClear={onClearPolicy}
-              cloudVariant={cloudVariant}
-            />
-          ))}
-        </div>
-      </div>
+      <EvidenceTable label={cloudVariant ? "Cloud policy rules" : "Remembered policy rules"} tableClassName={TABLE_MIN_WIDTH_CLASS}>
+          <EvidenceTableHead>
+            <EvidenceTableHeader className="w-10" />
+            <EvidenceTableHeader>Action</EvidenceTableHeader>
+            <EvidenceTableHeader>Rule</EvidenceTableHeader>
+            <EvidenceTableHeader className="hidden lg:table-cell">Source</EvidenceTableHeader>
+            <EvidenceTableHeader className="hidden lg:table-cell">Scope</EvidenceTableHeader>
+            <EvidenceTableHeader className="hidden lg:table-cell">
+              {cloudVariant ? "Applies to" : "App"}
+            </EvidenceTableHeader>
+            <EvidenceTableHeader className="hidden lg:table-cell">Updated</EvidenceTableHeader>
+            <EvidenceTableHeader className="hidden lg:table-cell">
+              {cloudVariant ? "Policy" : "Approval record"}
+            </EvidenceTableHeader>
+            <EvidenceTableHeader className="hidden text-right lg:table-cell">
+              {cloudVariant ? "" : "Actions"}
+            </EvidenceTableHeader>
+          </EvidenceTableHead>
+          <EvidenceTableBody>
+            {visiblePolicies.map((policy) => (
+              <PolicyRuleRow
+                key={`${policy.harness}-${policy.scope}-${policy.artifact_id ?? policy.publisher ?? "global"}-${policy.updated_at ?? ""}-${policy.source}`}
+                policy={policy}
+                cloudControlsUrl={cloudControlsUrl}
+                onClear={onClearPolicy}
+                onNavigate={onNavigate}
+                cloudVariant={cloudVariant}
+              />
+            ))}
+          </EvidenceTableBody>
+      </EvidenceTable>
+
       {hasMore && viewAllLabel ? (
         <div className="flex justify-center pt-1">
           <button
@@ -275,6 +339,7 @@ type GroupedPolicySectionProps = {
   policies: GuardPolicyDecision[];
   cloudControlsUrl: string | null;
   onClearPolicy?: (policy: GuardPolicyDecision) => void;
+  onNavigate?: (pathname: string) => void;
   emptyTitle: string;
   emptyBody: string;
   defaultOpen?: boolean;
@@ -289,6 +354,7 @@ export function GroupedPolicySection({
   policies,
   cloudControlsUrl,
   onClearPolicy,
+  onNavigate,
   emptyTitle,
   emptyBody,
   defaultOpen = true,
@@ -341,6 +407,7 @@ export function GroupedPolicySection({
           policies={policies}
           cloudControlsUrl={cloudControlsUrl}
           onClearPolicy={onClearPolicy}
+          onNavigate={onNavigate}
           emptyTitle={emptyTitle}
           emptyBody={emptyBody}
           cloudVariant={cloudVariant}
