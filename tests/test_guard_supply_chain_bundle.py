@@ -390,6 +390,83 @@ def test_supply_chain_bundle_verifies_portal_signed_payload_with_emergency_denyl
     assert response.bundle.emergency_denylist[0].reason == "known_malware"
 
 
+def test_supply_chain_bundle_offline_evaluation_enforces_emergency_deny_without_package_entry() -> None:
+    private_key, _public_key = _generate_key_pair()
+    bundle = _bundle_dict(
+        default_action="monitor",
+        exploit_level="none",
+        known_exploited=False,
+        malware_state="none",
+        normalized_severity="low",
+        risk_score=120,
+    )
+    bundle["packages"] = []
+    bundle["emergencyDenylist"] = [
+        {
+            "ecosystem": "npm",
+            "name": "minimist",
+            "namespace": None,
+            "reason": "known_malware",
+            "recommendedFixVersion": "1.2.9",
+        }
+    ]
+    response = load_supply_chain_bundle_response(
+        json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key))
+    )
+
+    decision = evaluate_cached_supply_chain_bundle(
+        response,
+        package_name="minimist",
+        package_version="1.2.8",
+        ecosystem="npm",
+        now=response.bundle.generated_at_timestamp + 60,
+    )
+
+    assert decision.action == "block"
+    assert decision.reason == "known_malware"
+    assert decision.stale is False
+    assert decision.recommended_fix_version == "1.2.9"
+    assert decision.emergency_deny is True
+
+
+def test_supply_chain_bundle_offline_evaluation_enforces_emergency_deny_when_bundle_is_stale() -> None:
+    private_key, _public_key = _generate_key_pair()
+    bundle = _bundle_dict(
+        default_action="monitor",
+        exploit_level="none",
+        expires_at=datetime(2026, 5, 18, 1, tzinfo=timezone.utc),
+        known_exploited=False,
+        malware_state="none",
+        normalized_severity="low",
+        risk_score=120,
+    )
+    bundle["packages"] = []
+    bundle["emergencyDenylist"] = [
+        {
+            "ecosystem": "npm",
+            "name": "minimist",
+            "namespace": None,
+            "reason": "critical_active_exploit",
+            "recommendedFixVersion": None,
+        }
+    ]
+    response = load_supply_chain_bundle_response(
+        json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key))
+    )
+
+    decision = evaluate_cached_supply_chain_bundle(
+        response,
+        package_name="minimist",
+        package_version="9.9.9",
+        ecosystem="npm",
+        now=datetime(2026, 5, 19, tzinfo=timezone.utc).timestamp(),
+    )
+
+    assert decision.action == "block"
+    assert decision.reason == "critical_active_exploit"
+    assert decision.stale is True
+
+
 def test_supply_chain_bundle_verifies_portal_signed_payload_with_sparse_policy_rules() -> None:
     private_key, _public_key = _generate_key_pair()
     bundle = _bundle_dict()
