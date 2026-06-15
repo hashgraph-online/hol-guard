@@ -494,7 +494,7 @@ function requireReact_production() {
   react_production.useTransition = function() {
     return ReactSharedInternals.H.useTransition();
   };
-  react_production.version = "19.2.7";
+  react_production.version = "19.2.5";
   return react_production;
 }
 var hasRequiredReact;
@@ -516,7 +516,7 @@ var hasRequiredScheduler_production;
 function requireScheduler_production() {
   if (hasRequiredScheduler_production) return scheduler_production;
   hasRequiredScheduler_production = 1;
-  (function(exports) {
+  (function(exports$1) {
     function push(heap, node) {
       var index = heap.length;
       heap.push(node);
@@ -550,15 +550,15 @@ function requireScheduler_production() {
       var diff = a.sortIndex - b.sortIndex;
       return 0 !== diff ? diff : a.id - b.id;
     }
-    exports.unstable_now = void 0;
+    exports$1.unstable_now = void 0;
     if ("object" === typeof performance && "function" === typeof performance.now) {
       var localPerformance = performance;
-      exports.unstable_now = function() {
+      exports$1.unstable_now = function() {
         return localPerformance.now();
       };
     } else {
       var localDate = Date, initialTime = localDate.now();
-      exports.unstable_now = function() {
+      exports$1.unstable_now = function() {
         return localDate.now() - initialTime;
       };
     }
@@ -585,12 +585,12 @@ function requireScheduler_production() {
     }
     var isMessageLoopRunning = false, taskTimeoutID = -1, frameInterval = 5, startTime = -1;
     function shouldYieldToHost() {
-      return needsPaint ? true : exports.unstable_now() - startTime < frameInterval ? false : true;
+      return needsPaint ? true : exports$1.unstable_now() - startTime < frameInterval ? false : true;
     }
     function performWorkUntilDeadline() {
       needsPaint = false;
       if (isMessageLoopRunning) {
-        var currentTime = exports.unstable_now();
+        var currentTime = exports$1.unstable_now();
         startTime = currentTime;
         var hasMoreWork = true;
         try {
@@ -610,7 +610,7 @@ function requireScheduler_production() {
                     var continuationCallback = callback(
                       currentTask.expirationTime <= currentTime
                     );
-                    currentTime = exports.unstable_now();
+                    currentTime = exports$1.unstable_now();
                     if ("function" === typeof continuationCallback) {
                       currentTask.callback = continuationCallback;
                       advanceTimers(currentTime);
@@ -660,27 +660,27 @@ function requireScheduler_production() {
       };
     function requestHostTimeout(callback, ms) {
       taskTimeoutID = localSetTimeout(function() {
-        callback(exports.unstable_now());
+        callback(exports$1.unstable_now());
       }, ms);
     }
-    exports.unstable_IdlePriority = 5;
-    exports.unstable_ImmediatePriority = 1;
-    exports.unstable_LowPriority = 4;
-    exports.unstable_NormalPriority = 3;
-    exports.unstable_Profiling = null;
-    exports.unstable_UserBlockingPriority = 2;
-    exports.unstable_cancelCallback = function(task) {
+    exports$1.unstable_IdlePriority = 5;
+    exports$1.unstable_ImmediatePriority = 1;
+    exports$1.unstable_LowPriority = 4;
+    exports$1.unstable_NormalPriority = 3;
+    exports$1.unstable_Profiling = null;
+    exports$1.unstable_UserBlockingPriority = 2;
+    exports$1.unstable_cancelCallback = function(task) {
       task.callback = null;
     };
-    exports.unstable_forceFrameRate = function(fps) {
+    exports$1.unstable_forceFrameRate = function(fps) {
       0 > fps || 125 < fps ? console.error(
         "forceFrameRate takes a positive int between 0 and 125, forcing frame rates higher than 125 fps is not supported"
       ) : frameInterval = 0 < fps ? Math.floor(1e3 / fps) : 5;
     };
-    exports.unstable_getCurrentPriorityLevel = function() {
+    exports$1.unstable_getCurrentPriorityLevel = function() {
       return currentPriorityLevel;
     };
-    exports.unstable_next = function(eventHandler) {
+    exports$1.unstable_next = function(eventHandler) {
       switch (currentPriorityLevel) {
         case 1:
         case 2:
@@ -698,10 +698,10 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports.unstable_requestPaint = function() {
+    exports$1.unstable_requestPaint = function() {
       needsPaint = true;
     };
-    exports.unstable_runWithPriority = function(priorityLevel, eventHandler) {
+    exports$1.unstable_runWithPriority = function(priorityLevel, eventHandler) {
       switch (priorityLevel) {
         case 1:
         case 2:
@@ -720,8 +720,8 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports.unstable_scheduleCallback = function(priorityLevel, callback, options) {
-      var currentTime = exports.unstable_now();
+    exports$1.unstable_scheduleCallback = function(priorityLevel, callback, options) {
+      var currentTime = exports$1.unstable_now();
       "object" === typeof options && null !== options ? (options = options.delay, options = "number" === typeof options && 0 < options ? currentTime + options : currentTime) : options = currentTime;
       switch (priorityLevel) {
         case 1:
@@ -751,8 +751,8 @@ function requireScheduler_production() {
       options > currentTime ? (priorityLevel.sortIndex = options, push(timerQueue, priorityLevel), null === peek(taskQueue) && priorityLevel === peek(timerQueue) && (isHostTimeoutScheduled ? (localClearTimeout(taskTimeoutID), taskTimeoutID = -1) : isHostTimeoutScheduled = true, requestHostTimeout(handleTimeout, options - currentTime))) : (priorityLevel.sortIndex = timeout, push(taskQueue, priorityLevel), isHostCallbackScheduled || isPerformingWork || (isHostCallbackScheduled = true, isMessageLoopRunning || (isMessageLoopRunning = true, schedulePerformWorkUntilDeadline())));
       return priorityLevel;
     };
-    exports.unstable_shouldYield = shouldYieldToHost;
-    exports.unstable_wrapCallback = function(callback) {
+    exports$1.unstable_shouldYield = shouldYieldToHost;
+    exports$1.unstable_wrapCallback = function(callback) {
       var parentPriorityLevel = currentPriorityLevel;
       return function() {
         var previousPriorityLevel = currentPriorityLevel;
@@ -922,7 +922,7 @@ function requireReactDom_production() {
   reactDom_production.useFormStatus = function() {
     return ReactSharedInternals.H.useHostTransitionStatus();
   };
-  reactDom_production.version = "19.2.7";
+  reactDom_production.version = "19.2.5";
   return reactDom_production;
 }
 var hasRequiredReactDom;
@@ -12366,12 +12366,12 @@ function requireReactDomClient_production() {
     }
   };
   var isomorphicReactPackageVersion$jscomp$inline_1840 = React2.version;
-  if ("19.2.7" !== isomorphicReactPackageVersion$jscomp$inline_1840)
+  if ("19.2.5" !== isomorphicReactPackageVersion$jscomp$inline_1840)
     throw Error(
       formatProdErrorMessage(
         527,
         isomorphicReactPackageVersion$jscomp$inline_1840,
-        "19.2.7"
+        "19.2.5"
       )
     );
   ReactDOMSharedInternals.findDOMNode = function(componentOrElement) {
@@ -12389,10 +12389,10 @@ function requireReactDomClient_production() {
   };
   var internals$jscomp$inline_2347 = {
     bundleType: 0,
-    version: "19.2.7",
+    version: "19.2.5",
     rendererPackageName: "react-dom",
     currentDispatcherRef: ReactSharedInternals,
-    reconcilerVersion: "19.2.7"
+    reconcilerVersion: "19.2.5"
   };
   if ("undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__) {
     var hook$jscomp$inline_2348 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
@@ -12459,7 +12459,7 @@ function requireReactDomClient_production() {
     listenToAllSupportedEvents(container2);
     return new ReactDOMHydrationRoot(initialChildren);
   };
-  reactDomClient_production.version = "19.2.7";
+  reactDomClient_production.version = "19.2.5";
   return reactDomClient_production;
 }
 var hasRequiredClient;
@@ -16328,6 +16328,71 @@ function useGuardUpdate(options) {
     refreshUpdateStatus
   };
 }
+const GITHUB_ISSUE_BASE_URL = "https://github.com/hashgraph-online/hol-guard/issues/new";
+const DEFAULT_ISSUE_BODY = [
+  "## What happened?",
+  "",
+  "",
+  "## Expected behavior",
+  "",
+  "",
+  "## Steps to reproduce",
+  "1.",
+  "2.",
+  "3.",
+  "",
+  "## Environment",
+  "- HOL Guard version:",
+  "- OS:",
+  "- AI app or harness:",
+  "",
+  "## Anything else?",
+  ""
+].join("\n");
+const GITHUB_ISSUE_BUTTON_LABEL = "Report a bug";
+function buildGitHubIssueUrl(options) {
+  const url = new URL(GITHUB_ISSUE_BASE_URL);
+  url.searchParams.set("title", "[Bug]: ");
+  url.searchParams.set("body", DEFAULT_ISSUE_BODY);
+  url.searchParams.set("labels", ["bug", "needs-triage"].join(","));
+  return url.toString();
+}
+const GITHUB_ISSUE_LINK = buildGitHubIssueUrl();
+const footerSections = [
+  {
+    title: "Guard",
+    links: [
+      { href: "https://hol.org/guard", label: "Cloud Dashboard" },
+      { href: "https://hol.org/guard/pricing", label: "Pricing" },
+      { href: "https://hol.org/guard/docs", label: "Docs" }
+    ]
+  },
+  {
+    title: "Docs",
+    links: [
+      { href: "https://hol.org/registry/docs", label: "API Reference" },
+      { href: "https://hol.org/docs/libraries/standards-sdk", label: "Standards SDK" },
+      { href: "https://hol.org/docs/standards/hcs-1", label: "Standards" }
+    ]
+  },
+  {
+    title: "Community",
+    links: [
+      { href: "https://x.com/HashgraphOnline", label: "X" },
+      { href: "https://t.me/hashinals", label: "Telegram" }
+    ]
+  },
+  {
+    title: "More",
+    links: [
+      { href: "https://hol.org/blog", label: "Blog" },
+      { href: "https://github.com/hashgraph-online", label: "GitHub" },
+      { href: GITHUB_ISSUE_LINK, label: GITHUB_ISSUE_BUTTON_LABEL },
+      { href: "https://hol.org/points/legal/privacy", label: "Privacy Policy" },
+      { href: "https://hol.org/points/legal/terms", label: "Terms of Service" }
+    ]
+  }
+];
 function ShellHeader(props) {
   function handleMobileNavigationChange(event) {
     props.onNavigate(event.target.value);
@@ -16383,6 +16448,18 @@ function ShellHeader(props) {
             className: "inline-flex min-h-11 shrink-0 items-center rounded-full border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-white no-underline transition-colors duration-150 hover:bg-white/15",
             "aria-label": `${props.queuedCount} Guard actions queued`,
             children: props.queuedCount > 99 ? "99+" : props.queuedCount
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "a",
+          {
+            href: GITHUB_ISSUE_LINK,
+            target: "_blank",
+            rel: "noopener noreferrer",
+            "aria-label": GITHUB_ISSUE_BUTTON_LABEL,
+            title: GITHUB_ISSUE_BUTTON_LABEL,
+            className: "inline-flex min-h-11 shrink-0 items-center rounded-full border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-white no-underline transition-colors duration-150 hover:bg-white/15",
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "h-4 w-4", "aria-hidden": "true" })
           }
         ),
         props.guardVersion ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -16472,7 +16549,8 @@ function ShellSidebar(props) {
       !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "px-3 font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400", children: "Quick Actions" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(SidebarAction, { href: "/", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCommandLine, { className: "h-4 w-4", "aria-hidden": "true" }), children: "Local dashboard" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SidebarAction, { href: "https://hol.org/guard", external: true, icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "h-4 w-4", "aria-hidden": "true" }), children: "Open Guard Cloud" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SidebarAction, { href: "https://hol.org/guard", external: true, icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "h-4 w-4", "aria-hidden": "true" }), children: "Open Guard Cloud" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SidebarAction, { href: GITHUB_ISSUE_LINK, external: true, icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "h-4 w-4", "aria-hidden": "true" }), children: GITHUB_ISSUE_BUTTON_LABEL })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-auto pt-6", children: !collapsed ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-2 overflow-hidden rounded-xl border border-brand-blue/25 bg-gradient-to-br from-brand-blue/[0.05] to-brand-dark/[0.03]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 px-3 pb-2.5 pt-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
@@ -16510,6 +16588,42 @@ function ShellSidebar(props) {
       ] }) })
     ] })
   ] });
+}
+function ShellFooter() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "footer",
+    {
+      className: "mt-10 bg-gradient-to-r from-[#3f4174] to-brand-blue text-indigo-200",
+      style: { contain: "layout style paint", minHeight: 200 },
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { "aria-label": "Footer Navigation", className: "mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-8 flex flex-col gap-3 rounded-2xl border border-white/15 bg-white/10 p-4 sm:flex-row sm:items-center sm:justify-between", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-white", children: "Found something Guard should fix?" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-indigo-100", children: "Open a prefilled GitHub issue so the maintainers get the right details." })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "a",
+            {
+              href: GITHUB_ISSUE_LINK,
+              target: "_blank",
+              rel: "noopener noreferrer",
+              className: "inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-brand-blue no-underline transition-colors hover:bg-indigo-50",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "h-4 w-4", "aria-hidden": "true" }),
+                GITHUB_ISSUE_BUTTON_LABEL
+              ]
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-8 lg:grid-cols-4", children: footerSections.map((section) => /* @__PURE__ */ jsxRuntimeExports.jsx(FooterLinkList, { title: section.title, links: section.links }, section.title)) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-8 border-t border-indigo-200/20 pt-8", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-center text-[13px] font-medium text-blue-200", children: [
+          "Copyright © ",
+          (/* @__PURE__ */ new Date()).getFullYear(),
+          " HOL DAO LLC. All rights reserved."
+        ] }) })
+      ] })
+    }
+  );
 }
 function Surface(props) {
   const toneClass = surfaceToneClass(props.tone);
@@ -16639,7 +16753,7 @@ function SidebarAction(props) {
     {
       href: props.external ? props.href : guardAwareHref(props.href),
       target: props.external ? "_blank" : void 0,
-      rel: props.external ? "noreferrer" : void 0,
+      rel: props.external ? "noopener noreferrer" : void 0,
       title: collapsed ? String(props.children) : void 0,
       className: `flex min-h-10 items-center rounded-lg border border-slate-200 bg-white no-underline transition-colors duration-150 hover:border-brand-blue/30 hover:text-brand-dark ${collapsed ? "justify-center px-2 py-2" : "gap-2.5 px-3 py-2 text-sm font-medium text-slate-700"}`,
       children: [
@@ -16684,6 +16798,24 @@ function actionButtonClass(variant) {
   if (variant === "success") return `${base} ${sizeDefault} bg-[#059669] text-white shadow-lg shadow-emerald-500/15 hover:bg-[#047857] hover:shadow-emerald-500/20`;
   if (variant === "quiet") return `${base} ${sizeDefault} bg-transparent text-brand-dark hover:bg-surface-1`;
   return `${base} ${sizeDefault} bg-brand-blue text-white shadow-lg shadow-brand-blue/20 hover:bg-brand-blue/90 hover:shadow-brand-blue/30`;
+}
+function FooterLinkList(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group border-b border-indigo-200/20 py-2 sm:border-none sm:py-0", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "flex cursor-pointer select-none list-none items-center justify-between py-2 text-[15px] font-bold text-white transition-colors hover:text-indigo-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 rounded-sm [&::-webkit-details-marker]:hidden", children: [
+      props.title,
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-indigo-300 transition-transform duration-300 group-open:rotate-180", children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "20", height: "20", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "m6 9 6 6 6-6" }) }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-4 pb-4 sm:pb-0", children: props.links.map((link) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "a",
+      {
+        href: link.href,
+        target: "_blank",
+        rel: "noreferrer",
+        className: "block p-1 -m-1 text-[15px] font-medium text-indigo-100 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 rounded-sm",
+        children: link.label
+      }
+    ) }, `${props.title}-${link.href}`)) })
+  ] });
 }
 function WelcomeState(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-surface-in flex flex-col items-center justify-center py-16 text-center sm:py-24", children: [
@@ -24517,34 +24649,37 @@ function ApprovalCenterLayout(props) {
         onBulkBlock: props.onBulkBlock
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ReceiptsWorkspace,
-      {
-        receipts: props.receipts,
-        runtime: props.runtime,
-        onClearEvidence: props.onClearEvidence,
-        onNavigate: props.onNavigate
-      }
-    ) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "about" ? props.aboutContent ?? null : props.view === "policy" ? props.policyContent ?? null : props.view === "supply-chain" || props.view === "audit" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "inbox" ? renderInboxContent(props) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-      QueueWorkspace,
-      {
-        requests: props.requests,
-        detail: props.detail,
-        runtime: props.runtime,
-        activeRequestId: props.activeRequestId,
-        resolutionMessage: props.resolutionMessage,
-        codexResume: props.codexResume,
-        approvalGate: props.approvalGate ?? null,
-        onOpenRequest: props.onOpenRequest,
-        onGoHome: props.onGoHome,
-        onResolve: props.onResolve,
-        onBulkApprove: props.onBulkApprove,
-        onBulkBlock: props.onBulkBlock,
-        onRetry: props.onRetry,
-        onRepair: props.onRepair,
-        onRetryResume: props.onRetryResume
-      }
-    ) }) }) })
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ReceiptsWorkspace,
+        {
+          receipts: props.receipts,
+          runtime: props.runtime,
+          onClearEvidence: props.onClearEvidence,
+          onNavigate: props.onNavigate
+        }
+      ) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "about" ? props.aboutContent ?? null : props.view === "policy" ? props.policyContent ?? null : props.view === "supply-chain" || props.view === "audit" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "inbox" ? renderInboxContent(props) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+        QueueWorkspace,
+        {
+          requests: props.requests,
+          detail: props.detail,
+          runtime: props.runtime,
+          activeRequestId: props.activeRequestId,
+          resolutionMessage: props.resolutionMessage,
+          codexResume: props.codexResume,
+          approvalGate: props.approvalGate ?? null,
+          onOpenRequest: props.onOpenRequest,
+          onGoHome: props.onGoHome,
+          onResolve: props.onResolve,
+          onBulkApprove: props.onBulkApprove,
+          onBulkBlock: props.onBulkBlock,
+          onRetry: props.onRetry,
+          onRepair: props.onRepair,
+          onRetryResume: props.onRetryResume
+        }
+      ) }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ShellFooter, {})
+    ] })
   ] });
 }
 function MobileQueueDrawer(props) {
@@ -26992,12 +27127,12 @@ export {
   HiMiniExclamationCircle as J,
   HiMiniClipboardDocumentCheck as K,
   HiMiniClipboard as L,
-  getDefaultExportFromCjs as M,
-  HiMiniKey as N,
-  HiMiniLockClosed as O,
+  requireReact as M,
+  getDefaultExportFromCjs as N,
+  HiMiniKey as O,
   ProofStrip as P,
-  HiMiniBellAlert as Q,
-  React as R,
+  HiMiniLockClosed as Q,
+  HiMiniBellAlert as R,
   SectionLabel as S,
   HiMiniAdjustmentsHorizontal as T,
   HiMiniCog6Tooth as U,
