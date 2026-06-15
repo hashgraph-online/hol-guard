@@ -30,6 +30,7 @@ type PolicyWorkspaceProps = {
   onOpenSettings?: () => void;
   onOpenInbox?: () => void;
   onOpenCloudExceptions?: () => void;
+  onNavigate?: (pathname: string) => void;
   exceptionRequestOpen?: boolean;
   onExceptionRequestOpenChange?: (open: boolean) => void;
   onReloadPolicy?: () => void;
@@ -44,6 +45,7 @@ export function PolicyWorkspace({
   onOpenSettings,
   onOpenInbox,
   onOpenCloudExceptions,
+  onNavigate,
   exceptionRequestOpen = false,
   onExceptionRequestOpenChange,
   onReloadPolicy,
@@ -58,6 +60,7 @@ export function PolicyWorkspace({
           cloudControlsUrl={resolveCloudPolicyControlsUrl(snapshot)}
           onClearPolicy={onClearPolicy}
           onOpenCloudExceptions={onOpenCloudExceptions ?? (() => undefined)}
+          onNavigate={onNavigate}
         />
       </div>
     );

@@ -23,6 +23,7 @@ type PolicyRememberedRulesTabProps = {
   cloudControlsUrl: string | null;
   onClearPolicy?: (policy: GuardPolicyDecision) => void;
   onOpenCloudExceptions: () => void;
+  onNavigate?: (pathname: string) => void;
 };
 
 export function PolicyRememberedRulesTab({
@@ -31,6 +32,7 @@ export function PolicyRememberedRulesTab({
   cloudControlsUrl,
   onClearPolicy,
   onOpenCloudExceptions,
+  onNavigate,
 }: PolicyRememberedRulesTabProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [appFilter, setAppFilter] = useState("");
@@ -173,6 +175,7 @@ export function PolicyRememberedRulesTab({
           policies={localRules}
           cloudControlsUrl={cloudControlsUrl}
           onClearPolicy={onClearPolicy}
+          onNavigate={onNavigate}
         />
         <PolicyRememberedCloudRules policies={cloudRules} cloudControlsUrl={cloudControlsUrl} />
       </div>

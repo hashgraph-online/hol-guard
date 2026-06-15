@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, S as SectionLabel, o as HiMiniXMark, B as Badge, ac as Tag, aA as HiMiniCommandLine, w as HiMiniExclamationTriangle, b0 as scopeLabel, h as harnessDisplayName, A as ActionButton, b1 as guardAwareHref, m as formatRelativeTime, b2 as HiMiniDocumentText, d as HiMiniCheckCircle, b3 as HiMiniCloudArrowUp, b4 as HiMiniCheck, b5 as HiMiniCodeBracket, b6 as HiMiniClipboardDocument, b7 as HiMiniUsers, aG as HiMiniBeaker, b8 as HiMiniFolder, b9 as HiMiniInformationCircle, Q as HiMiniLockClosed, l as HiMiniShieldCheck, r as reactExports, ba as createCloudExceptionRequest, b as EmptyState, ad as HiMiniMagnifyingGlass, p as HiMiniChevronUp, q as HiMiniChevronDown, y as HiMiniChevronRight, bb as HiMiniPuzzlePiece, bc as HiMiniGlobeAlt, aE as HiMiniClock, bd as policyActionLabel, be as fetchCloudExceptions, bf as fetchCloudExceptionRequests, ax as HiMiniTrash, bg as HiMiniCube, aw as HiMiniArrowPath, t as HiMiniCloud, Y as fetchSettings, _ as updateSettings, bh as HiMiniQueueList, bi as HiMiniNoSymbol, bj as HiMiniArrowRight, bk as HiMiniPlay, a_ as WorkspacePageHeader, a$ as __vitePreload } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, S as SectionLabel, o as HiMiniXMark, B as Badge, ac as Tag, aA as HiMiniCommandLine, w as HiMiniExclamationTriangle, b0 as scopeLabel, h as harnessDisplayName, A as ActionButton, b1 as guardAwareHref, m as formatRelativeTime, b2 as HiMiniDocumentText, d as HiMiniCheckCircle, b3 as HiMiniCloudArrowUp, b4 as HiMiniCheck, b5 as HiMiniCodeBracket, b6 as HiMiniClipboardDocument, b7 as HiMiniUsers, aG as HiMiniBeaker, b8 as HiMiniFolder, b9 as HiMiniInformationCircle, O as HiMiniLockClosed, l as HiMiniShieldCheck, r as reactExports, ba as createCloudExceptionRequest, b as EmptyState, ad as HiMiniMagnifyingGlass, p as HiMiniChevronUp, q as HiMiniChevronDown, y as HiMiniChevronRight, bb as HiMiniPuzzlePiece, bc as HiMiniGlobeAlt, aE as HiMiniClock, bd as policyActionLabel, be as fetchCloudExceptions, bf as fetchCloudExceptionRequests, ax as HiMiniTrash, bg as HiMiniNoSymbol, bh as HiMiniCube, aw as HiMiniArrowPath, t as HiMiniCloud, Y as fetchSettings, _ as updateSettings, bi as HiMiniQueueList, bj as HiMiniArrowRight, bk as HiMiniPlay, a_ as WorkspacePageHeader, a$ as __vitePreload } from "../guard-dashboard.js";
 const CLOUD_EXCEPTION_EXPIRING_SOON_DAYS = 7;
 function parseCloudExceptionTimestamp(value) {
   if (!value || !value.trim()) {
@@ -1654,6 +1654,21 @@ const GENERIC_REASONS = [
   "local auto-resume proof",
   "local e2e approval proof"
 ];
+const SCANNER_GENERATED_LABEL_MARKERS = [
+  "credential-looking",
+  "credential looking",
+  "secret-looking",
+  "suspicious output",
+  "looking output",
+  "scanner flagged"
+];
+function isScannerGeneratedPolicyLabel(value) {
+  if (!value?.trim()) {
+    return true;
+  }
+  const lowered = value.trim().toLowerCase();
+  return SCANNER_GENERATED_LABEL_MARKERS.some((marker) => lowered.includes(marker));
+}
 function formatPolicyScopePath(path) {
   if (!path?.trim()) {
     return null;
@@ -1817,7 +1832,7 @@ function resolveWhatPhrase(policy) {
 }
 function resolveKindLine(policy) {
   const remembered = policy.remembered_context?.trim();
-  if (remembered) {
+  if (remembered && !isScannerGeneratedPolicyLabel(remembered)) {
     return remembered;
   }
   const family = policy.artifact_id ? extractMatcherFamily(policy.artifact_id) : null;
@@ -1846,7 +1861,7 @@ function resolvePolicyDisplay(policy) {
   const kindLine = resolveKindLine(policy);
   const pathLine = resolvePathLine(policy);
   const projectLabel = resolveProjectLabel(policy);
-  if (rememberedCommand) {
+  if (rememberedCommand && !isScannerGeneratedPolicyLabel(rememberedCommand)) {
     return {
       headline: rememberedCommand,
       kindLine,
@@ -1857,7 +1872,7 @@ function resolvePolicyDisplay(policy) {
     };
   }
   const actionVerb = resolveActionVerb(policy.action);
-  if (reason && !isGenericReason(reason)) {
+  if (reason && !isGenericReason(reason) && !isScannerGeneratedPolicyLabel(reason)) {
     return {
       headline: reason,
       kindLine,
@@ -1878,16 +1893,50 @@ function resolvePolicyDisplay(policy) {
     technicalId: policy.artifact_id
   };
 }
+function resolvePolicyRowFrequency(policy) {
+  return scopeLabel(policy.scope, "policy");
+}
+function resolvePolicyRowFolder(policy) {
+  const pathLine = formatPolicyScopePath(policy.source_scope_path);
+  if (pathLine) {
+    return pathLine;
+  }
+  const label = policy.workspace_label?.trim();
+  if (label) {
+    return label;
+  }
+  const workspace = policy.workspace?.trim();
+  if (!workspace || workspace.startsWith("workspace:")) {
+    return null;
+  }
+  return formatPolicyScopePath(workspace) ?? resolveWorkspaceLabel(workspace);
+}
+function resolvePolicyRowSubtitle(policy, display) {
+  const parts = [];
+  const folder = resolvePolicyRowFolder(policy);
+  if (folder) {
+    parts.push(folder);
+  }
+  parts.push(resolvePolicyRowFrequency(policy));
+  if (display.kindLine && !parts.includes(display.kindLine)) {
+    parts.unshift(display.kindLine);
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
 function resolvePolicyRowTitle(policy, display) {
   const rememberedCommand = policy.remembered_command?.trim();
-  if (rememberedCommand) {
+  if (rememberedCommand && !isScannerGeneratedPolicyLabel(rememberedCommand)) {
     return rememberedCommand;
   }
+  const reason = policy.reason?.trim();
+  if (reason && !isGenericReason(reason) && !isScannerGeneratedPolicyLabel(reason)) {
+    return reason;
+  }
   const artifactId = policy.artifact_id?.trim();
-  if (artifactId && !artifactId.startsWith("family:")) {
+  if (artifactId && !artifactId.startsWith("family:") && !artifactId.includes(":")) {
     const slashIndex = artifactId.lastIndexOf("/");
     const candidate = slashIndex >= 0 && slashIndex < artifactId.length - 1 ? artifactId.slice(slashIndex + 1) : artifactId;
-    if (candidate.length <= 64) {
+    if (candidate.length <= 64 && !isScannerGeneratedPolicyLabel(candidate)) {
       return candidate;
     }
   }
@@ -1929,6 +1978,10 @@ function resolvePolicyEvidenceSearchTerm(policy) {
 }
 function resolvePolicyEvidenceHref(policy) {
   const params = new URLSearchParams();
+  params.set("view", "actions");
+  if (policy.harness?.trim()) {
+    params.set("harness", policy.harness.trim());
+  }
   const receiptId = policy.source_receipt_id?.trim();
   if (receiptId) {
     params.set("selected", receiptId);
@@ -1945,11 +1998,14 @@ function resolvePolicyEvidenceHref(policy) {
 function resolvePolicyApprovalRecordLabel(policy) {
   const receiptId = policy.source_receipt_id?.trim();
   if (receiptId) {
-    return `${receiptId}.json`;
+    if (receiptId.length <= 24) {
+      return receiptId;
+    }
+    return `${receiptId.slice(0, 10)}…${receiptId.slice(-8)}`;
   }
   const hash = policy.artifact_hash?.replace(/^sha256:/i, "").slice(0, 8);
   if (hash) {
-    return `receipt_${hash}.json`;
+    return `hash ${hash}`;
   }
   return "View in Evidence";
 }
@@ -2254,20 +2310,54 @@ function PolicyGuardCloudBundleCard({ snapshot }) {
     ] })
   ] });
 }
+function EvidenceTable({ children, label, tableClassName = "" }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-x-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx("table", { className: `w-full text-sm ${tableClassName}`, "aria-label": label, children }) }) });
+}
+function EvidenceTableHead({ children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("tr", { className: "border-b border-slate-100 bg-slate-50/80", children }) });
+}
+function EvidenceTableHeader({ children, className = "" }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "th",
+    {
+      scope: "col",
+      className: `px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 ${className}`,
+      children
+    }
+  );
+}
+function EvidenceTableBody({ children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children });
+}
+function EvidenceTableRow({ children, onClick, isSelected }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "tr",
+    {
+      onClick,
+      className: `border-b border-slate-100 last:border-0 transition-colors ${isSelected ? "bg-brand-blue/[0.04]" : onClick ? "hover:bg-slate-50 cursor-pointer" : ""}`,
+      children
+    }
+  );
+}
+function EvidenceTableCell({ children, className = "" }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: `px-3 py-2.5 ${className}`, children });
+}
 const PAGE_SIZE = 5;
-const RULE_GRID_CLASS = "grid grid-cols-[minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-b border-slate-100 px-4 py-3 last:border-0 hover:bg-slate-50/80 md:grid-cols-[40px_72px_minmax(200px,1.4fr)_88px_96px_88px_104px_minmax(120px,1fr)_72px]";
-const RULE_HEADER_CLASS = "hidden border-b border-slate-100 bg-slate-50/80 px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 md:grid md:grid-cols-[40px_72px_minmax(200px,1.4fr)_88px_96px_88px_104px_minmax(120px,1fr)_72px] md:gap-x-3";
-function resolveActionTone(action) {
+const TABLE_MIN_WIDTH_CLASS = "min-w-[980px]";
+function PolicyActionBadge({ action }) {
   if (action === "allow") {
-    return "success";
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
+      "Allow"
+    ] });
   }
   if (action === "block") {
-    return "destructive";
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-800", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
+      "Block"
+    ] });
   }
-  if (action === "warn" || action === "require-reapproval") {
-    return "warning";
-  }
-  return "default";
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900", children: policyActionLabel(action) });
 }
 function resolveFamilyIcon(family) {
   if (family === "package-request") {
@@ -2284,7 +2374,34 @@ function resolveFamilyIcon(family) {
   }
   return HiMiniShieldCheck;
 }
-function PolicyRuleRow({ policy, cloudControlsUrl, onClear, cloudVariant = false }) {
+function PolicyEvidenceLink({
+  policy,
+  onNavigate
+}) {
+  const href = resolvePolicyEvidenceHref(policy);
+  const label = resolvePolicyApprovalRecordLabel(policy);
+  const handleClick = reactExports.useCallback(
+    (event) => {
+      if (!onNavigate) {
+        return;
+      }
+      event.preventDefault();
+      onNavigate(href);
+    },
+    [href, onNavigate]
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "a",
+    {
+      href: guardAwareHref(href),
+      onClick: handleClick,
+      className: "inline-flex max-w-full items-center gap-1 font-mono text-xs font-medium text-brand-blue hover:underline",
+      title: `Open receipt ${policy.source_receipt_id ?? label} in Evidence`,
+      children: label
+    }
+  );
+}
+function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVariant = false }) {
   const handleClear = reactExports.useCallback(() => onClear?.(policy), [onClear, policy]);
   const cloudManaged = cloudVariant || isCloudManagedPolicy(policy.source);
   const display = resolvePolicyDisplay(policy);
@@ -2292,36 +2409,40 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, cloudVariant = false
   const family = resolvePolicyMatcherFamily(policy);
   const Icon = resolveFamilyIcon(family);
   const title = resolvePolicyRowTitle(policy, display);
+  const subtitle = resolvePolicyRowSubtitle(policy, display);
+  const folder = resolvePolicyRowFolder(policy);
+  const frequency = resolvePolicyRowFrequency(policy);
   const scopeTag = scopeLabel(policy.scope, "policy");
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: RULE_GRID_CLASS, role: "listitem", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "hidden items-center justify-center md:flex", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4", "aria-hidden": "true" }) }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 md:col-start-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 md:hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4", "aria-hidden": "true" }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: resolveActionTone(policy.action), children: policyActionLabel(policy.action) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 md:col-start-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold leading-snug text-brand-dark", children: title }),
-      display.kindLine ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-500", children: display.kindLine }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex flex-wrap gap-3 text-xs text-slate-600 md:hidden", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: resolvePolicyRowSourceLabel(policy) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: scopeTag }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: harnessDisplayName(policy.harness) })
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(EvidenceTableRow, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableCell, { className: "w-10", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4", "aria-hidden": "true" }) }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableCell, { className: "w-[88px] whitespace-nowrap", children: /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyActionBadge, { action: policy.action }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(EvidenceTableCell, { className: "min-w-[240px] max-w-[360px]", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-semibold leading-snug text-brand-dark", children: title }),
+      subtitle ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-500", children: subtitle }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 space-y-1 text-xs text-slate-600 lg:hidden", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-slate-700", children: "Folder:" }),
+          " ",
+          folder ?? "Not recorded"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-slate-700", children: "Frequency:" }),
+          " ",
+          frequency
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-slate-700", children: "App:" }),
+          " ",
+          harnessDisplayName(policy.harness)
+        ] })
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "hidden text-sm text-brand-dark md:col-start-4 md:block", children: cloudManaged ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "blue", children: resolvePolicyRowSourceLabel(policy) }) : resolvePolicyRowSourceLabel(policy) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "hidden md:col-start-5 md:block", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "blue", children: scopeTag }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "hidden text-sm md:col-start-6 md:block", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-brand-blue", children: harnessDisplayName(policy.harness) }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "hidden whitespace-nowrap text-xs text-slate-500 md:col-start-7 md:block", children: policy.updated_at ? formatRelativeTime(policy.updated_at) : "—" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "hidden min-w-0 md:col-start-8 md:block", children: [
-      !cloudManaged ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "a",
-        {
-          href: guardAwareHref(resolvePolicyEvidenceHref(policy)),
-          className: "max-w-full truncate font-mono text-xs font-medium text-brand-blue hover:underline",
-          title: resolvePolicyApprovalRecordLabel(policy),
-          children: resolvePolicyApprovalRecordLabel(policy)
-        }
-      ) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableCell, { className: "hidden w-[96px] lg:table-cell", children: cloudManaged ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "blue", children: resolvePolicyRowSourceLabel(policy) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-brand-dark", children: resolvePolicyRowSourceLabel(policy) }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableCell, { className: "hidden w-[104px] lg:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "blue", children: scopeTag }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableCell, { className: "hidden w-[96px] lg:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-brand-blue", children: harnessDisplayName(policy.harness) }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableCell, { className: "hidden w-[104px] whitespace-nowrap text-xs text-slate-500 lg:table-cell", children: policy.updated_at ? formatRelativeTime(policy.updated_at) : "—" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(EvidenceTableCell, { className: "hidden min-w-[120px] lg:table-cell", children: [
+      !cloudManaged ? /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyEvidenceLink, { policy, onNavigate }) : null,
       cloudManaged && cloudControlsUrl ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "a",
         {
@@ -2336,7 +2457,7 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, cloudVariant = false
         }
       ) : null
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "hidden items-center justify-end md:col-start-9 md:flex", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(EvidenceTableCell, { className: "hidden w-[88px] text-right lg:table-cell", children: [
       cloudManaged ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1 text-xs font-medium text-slate-500", title: "Read-only Cloud policy", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
         "Policy"
@@ -2349,7 +2470,7 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, cloudVariant = false
           className: "inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-red-600",
           children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
-            "Remove rule"
+            "Remove"
           ]
         }
       ) : null
@@ -2360,6 +2481,7 @@ function PolicyRuleTable({
   policies,
   cloudControlsUrl,
   onClearPolicy,
+  onNavigate,
   emptyTitle,
   emptyBody,
   cloudVariant = false,
@@ -2389,24 +2511,25 @@ function PolicyRuleTable({
     return /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: emptyTitle, body: emptyBody, tone: "teach" });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: RULE_HEADER_CLASS, "aria-hidden": "true", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", {}),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Action" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Rule description" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Source" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Scope" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: cloudVariant ? "Applies to" : "Harness" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Last updated" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: cloudVariant ? "Policy" : "Approval record" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-right", children: cloudVariant ? "" : "Actions" })
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(EvidenceTable, { label: cloudVariant ? "Cloud policy rules" : "Remembered policy rules", tableClassName: TABLE_MIN_WIDTH_CLASS, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(EvidenceTableHead, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableHeader, { className: "w-10" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableHeader, { children: "Action" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableHeader, { children: "Rule" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableHeader, { className: "hidden lg:table-cell", children: "Source" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableHeader, { className: "hidden lg:table-cell", children: "Scope" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableHeader, { className: "hidden lg:table-cell", children: cloudVariant ? "Applies to" : "App" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableHeader, { className: "hidden lg:table-cell", children: "Updated" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableHeader, { className: "hidden lg:table-cell", children: cloudVariant ? "Policy" : "Approval record" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableHeader, { className: "hidden text-right lg:table-cell", children: cloudVariant ? "" : "Actions" })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "list", children: visiblePolicies.map((policy) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableBody, { children: visiblePolicies.map((policy) => /* @__PURE__ */ jsxRuntimeExports.jsx(
         PolicyRuleRow,
         {
           policy,
           cloudControlsUrl,
           onClear: onClearPolicy,
+          onNavigate,
           cloudVariant
         },
         `${policy.harness}-${policy.scope}-${policy.artifact_id ?? policy.publisher ?? "global"}-${policy.updated_at ?? ""}-${policy.source}`
@@ -2444,6 +2567,7 @@ function GroupedPolicySection({
   policies,
   cloudControlsUrl,
   onClearPolicy,
+  onNavigate,
   emptyTitle,
   emptyBody,
   defaultOpen = true,
@@ -2492,6 +2616,7 @@ function GroupedPolicySection({
         policies,
         cloudControlsUrl,
         onClearPolicy,
+        onNavigate,
         emptyTitle,
         emptyBody,
         cloudVariant,
@@ -2546,7 +2671,8 @@ function PolicyRememberedCloudRules({
 function PolicyRememberedLocalRules({
   policies,
   cloudControlsUrl,
-  onClearPolicy
+  onClearPolicy,
+  onNavigate
 }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     GroupedPolicySection,
@@ -2557,6 +2683,7 @@ function PolicyRememberedLocalRules({
       policies,
       cloudControlsUrl,
       onClearPolicy,
+      onNavigate,
       emptyTitle: "No local remembered rules yet",
       emptyBody: "Approve or block in Inbox and Guard remembers the decision here in plain language.",
       defaultOpen: true,
@@ -2652,7 +2779,8 @@ function PolicyRememberedRulesTab({
   snapshot,
   cloudControlsUrl,
   onClearPolicy,
-  onOpenCloudExceptions
+  onOpenCloudExceptions,
+  onNavigate
 }) {
   const [searchQuery, setSearchQuery] = reactExports.useState("");
   const [appFilter, setAppFilter] = reactExports.useState("");
@@ -2786,7 +2914,8 @@ function PolicyRememberedRulesTab({
         {
           policies: localRules,
           cloudControlsUrl,
-          onClearPolicy
+          onClearPolicy,
+          onNavigate
         }
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyRememberedCloudRules, { policies: cloudRules, cloudControlsUrl })
@@ -3341,6 +3470,7 @@ function PolicyWorkspace$1({
   onOpenSettings,
   onOpenInbox,
   onOpenCloudExceptions,
+  onNavigate,
   exceptionRequestOpen = false,
   onExceptionRequestOpenChange,
   onReloadPolicy,
@@ -3354,7 +3484,8 @@ function PolicyWorkspace$1({
         snapshot,
         cloudControlsUrl: resolveCloudPolicyControlsUrl(snapshot),
         onClearPolicy,
-        onOpenCloudExceptions: onOpenCloudExceptions ?? (() => void 0)
+        onOpenCloudExceptions: onOpenCloudExceptions ?? (() => void 0),
+        onNavigate
       }
     ) });
   }
@@ -3532,7 +3663,8 @@ function PolicyWorkspacePage(props) {
         exceptionRequestOpen,
         onExceptionRequestOpenChange: setExceptionRequestOpen,
         onReloadPolicy: handleReloadPolicy,
-        reloadingPolicy: reloading
+        reloadingPolicy: reloading,
+        onNavigate: props.onNavigate
       }
     ) })
   ] });
