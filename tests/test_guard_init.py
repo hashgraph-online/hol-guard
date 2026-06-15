@@ -89,8 +89,9 @@ def test_guard_init_cloud_step_uses_connect_browser_open_and_finalization(tmp_pa
     assert output["cloud"]["browser_opened"] is True
     assert output["cloud"]["wait_timeout_seconds"] == 11
     assert output["cloud"]["announce_copy_present"] is False
-    assert output["cloud"]["milestone"] == "first_sync_pending"
-    assert output["cloud"]["sync_attempted"] is False
+    assert output["cloud"]["status"] == "retry_required"
+    assert output["cloud"]["milestone"] == "first_sync_failed"
+    assert "sync_attempted" not in output["cloud"]
 
 
 def test_guard_init_human_cloud_step_announces_approval_before_waiting(tmp_path, capsys, monkeypatch) -> None:
