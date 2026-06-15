@@ -238,6 +238,7 @@ export function App() {
   const [approvalGate, setApprovalGate] = useState<GuardApprovalGatePublicConfig | null>(null);
   const [guardVersion, setGuardVersion] = useState<string | null>(null);
   const resolutionInFlight = useRef(false);
+  const bulkApproveInFlight = useRef(false);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -605,20 +606,32 @@ export function App() {
   }, [resolvedRequestId]);
 
   const handleBulkApprove = useCallback(async (ids: string[], gateCredentials?: BulkGateCredentials) => {
-    const results = await Promise.allSettled(
-      ids.map((id) =>
-        resolveRequestWithQueueResult({ requestId: id, action: "allow", scope: "artifact", reason: "", ...gateCredentials })
-      )
-    );
-    const succeeded = results.filter((r) => r.status === "fulfilled").length;
-    const failed = results.length - succeeded;
-    const label =
-      failed === 0
-        ? `${succeeded} item${succeeded !== 1 ? "s" : ""} approved.`
-        : `${succeeded} approved, ${failed} failed. Retry the failed items manually.`;
-    setResolutionMessage(label);
-    navigate("/inbox");
-    await refreshStateAfterAction();
+    if (bulkApproveInFlight.current) {
+      return;
+    }
+    bulkApproveInFlight.current = true;
+    try {
+      const results = await Promise.allSettled(
+        ids.map((id) =>
+          resolveRequestWithQueueResult({ requestId: id, action: "allow", scope: "artifact", reason: "", ...gateCredentials })
+        )
+      );
+      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.length - succeeded;
+      if (failed > 0) {
+        throw new Error(
+          failed === results.length
+            ? "Bulk approval failed. Retry the selected items manually."
+            : `${succeeded} approved, ${failed} failed. Retry the failed items manually.`
+        );
+      }
+      const label = `${succeeded} item${succeeded !== 1 ? "s" : ""} approved.`;
+      setResolutionMessage(label);
+      navigate("/inbox");
+      await refreshStateAfterAction();
+    } finally {
+      bulkApproveInFlight.current = false;
+    }
   }, [refreshStateAfterAction, setResolutionMessage]);
 
   const handleBulkBlock = useCallback(async (ids: string[], reason: string, gateCredentials?: BulkGateCredentials) => {

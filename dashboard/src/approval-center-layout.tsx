@@ -65,6 +65,7 @@ import {
   buildCodexResumeUx,
 } from "./approval-center-utils";
 import { requiresApprovalPasswordPrompt } from "./approval-gate-utils";
+import type { BulkGateCredentials } from "./approval-gate-utils";
 import {
   WhyThisPaused,
   ApproveConsequence,
@@ -86,6 +87,11 @@ import {
   countSensitiveFileReadGroups,
   type QueueSortDirection,
 } from "./queue-state";
+import {
+  buildBulkGateCredentials,
+  QueueBulkApproveFlow,
+  type BulkApproveFlowStep,
+} from "./queue-bulk-approve-flow";
 import {
   buildDecisionPayload,
   filterScopeChoicesForRequest,
@@ -131,11 +137,7 @@ type RuntimeState =
   | { kind: "error"; message: string }
   | { kind: "ready"; snapshot: GuardRuntimeSnapshot };
 
-export type BulkGateCredentials = {
-  approval_password?: string;
-  approval_totp_code?: string;
-  approval_gate_use_cooldown?: boolean;
-};
+export type { BulkGateCredentials } from "./approval-gate-utils";
 
 type LayoutProps = {
   view: AppView;
@@ -169,7 +171,7 @@ type LayoutProps = {
     approval_totp_code?: string;
     approval_gate_use_cooldown?: boolean;
   }) => void;
-  onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void;
+  onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void | Promise<void>;
   onBulkBlock?: (ids: string[], reason: string, gateCredentials?: BulkGateCredentials) => void;
   onRepair?: () => Promise<void>;
   onClearEvidence?: () => void;
@@ -385,7 +387,7 @@ function MobileQueueDrawer(props: {
   approvalGate?: GuardApprovalGatePublicConfig | null;
   onClose: () => void;
   onOpenRequest: (requestId: string) => void;
-  onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void;
+  onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void | Promise<void>;
   onBulkBlock?: (ids: string[], reason: string, gateCredentials?: BulkGateCredentials) => void;
 }) {
   return (
@@ -436,7 +438,7 @@ function QueueWorkspace(props: {
   onOpenRequest: (requestId: string) => void;
   onGoHome: () => void;
   onResolve: LayoutProps["onResolve"];
-  onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void;
+  onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void | Promise<void>;
   onBulkBlock?: (ids: string[], reason: string, gateCredentials?: BulkGateCredentials) => void;
   onRetry?: () => void;
   onRepair?: () => Promise<void>;
@@ -614,7 +616,7 @@ function QueueBrowser(props: {
   items: GuardApprovalRequest[];
   approvalGate?: GuardApprovalGatePublicConfig | null;
   onOpenRequest: (requestId: string) => void;
-  onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void;
+  onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void | Promise<void>;
   onBulkBlock?: (ids: string[], reason: string, gateCredentials?: BulkGateCredentials) => void;
 }) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -622,9 +624,12 @@ function QueueBrowser(props: {
   const [sortDirection, setSortDirection] = useState<QueueSortDirection>("newest");
   const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
+  const [bulkFlowStep, setBulkFlowStep] = useState<BulkApproveFlowStep>("collapsed");
+  const [selectedBulkIds, setSelectedBulkIds] = useState<Set<string>>(() => new Set());
   const [bulkApprovePassword, setBulkApprovePassword] = useState("");
   const [bulkApproveTotpCode, setBulkApproveTotpCode] = useState("");
   const [bulkApproveUseCooldown, setBulkApproveUseCooldown] = useState(false);
+  const [bulkApproveError, setBulkApproveError] = useState<string | null>(null);
   const harnesses = Array.from(new Set(props.items.map((item) => item.harness).filter(isDisplayableHarness))).sort();
 
   const filteredItems = useMemo(() => {
@@ -690,11 +695,6 @@ function QueueBrowser(props: {
     [groups, isReadOnlyGroup]
   );
 
-  const bulkEligibleActionCount = useMemo(
-    () => bulkApproveActionCount(bulkEligibleGroups),
-    [bulkEligibleGroups]
-  );
-
   const sensitiveFileReadCount = useMemo(
     () => countSensitiveFileReadGroups(groups),
     [groups]
@@ -702,12 +702,68 @@ function QueueBrowser(props: {
 
   const showBulkApprove =
     props.onBulkApprove !== undefined &&
-    bulkEligibleGroups.length > 0;
+    bulkEligibleGroups.length >= 2;
 
   const showBulkGateFields =
     showBulkApprove &&
     props.approvalGate?.enabled === true &&
     props.approvalGate.configured === true;
+
+  const selectedBulkGroups = useMemo(
+    () => bulkEligibleGroups.filter((group) => selectedBulkIds.has(group.primary.request_id)),
+    [bulkEligibleGroups, selectedBulkIds]
+  );
+
+  const resetBulkFlow = useCallback(() => {
+    setBulkFlowStep("collapsed");
+    setSelectedBulkIds(new Set());
+    setBulkApprovePassword("");
+    setBulkApproveTotpCode("");
+    setBulkApproveUseCooldown(false);
+    setBulkApproveError(null);
+  }, []);
+
+  const handleBulkFlowStart = useCallback(() => {
+    setBulkFlowStep("select");
+    setSelectedBulkIds(new Set());
+    setBulkApproveError(null);
+  }, []);
+
+  const handleBulkSelectAll = useCallback(() => {
+    setSelectedBulkIds(new Set(bulkApprovePrimaryIds(bulkEligibleGroups)));
+  }, [bulkEligibleGroups]);
+
+  const handleBulkClearSelection = useCallback(() => {
+    setSelectedBulkIds(new Set());
+  }, []);
+
+  const handleBulkContinueToReview = useCallback(() => {
+    if (selectedBulkIds.size === 0) {
+      return;
+    }
+    setBulkFlowStep("review");
+    setBulkApproveError(null);
+  }, [selectedBulkIds.size]);
+
+  const handleBulkBackToSelect = useCallback(() => {
+    if (bulkFlowStep === "submitting" || bulkFlowStep === "completed") {
+      return;
+    }
+    setBulkFlowStep("select");
+    setBulkApproveError(null);
+  }, [bulkFlowStep]);
+
+  const handleBulkToggleSelect = useCallback((requestId: string) => {
+    setSelectedBulkIds((current) => {
+      const next = new Set(current);
+      if (next.has(requestId)) {
+        next.delete(requestId);
+      } else {
+        next.add(requestId);
+      }
+      return next;
+    });
+  }, []);
 
   const handleBulkApprovePasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setBulkApprovePassword(event.target.value);
@@ -720,17 +776,38 @@ function QueueBrowser(props: {
     setBulkApproveUseCooldown(event.target.checked);
   }, []);
 
-  const handleBulkApprove = useCallback(() => {
-    const ids = bulkApprovePrimaryIds(bulkEligibleGroups);
-    const gateCredentials: BulkGateCredentials | undefined = showBulkGateFields
-      ? {
-          approval_password: bulkApprovePassword,
-          approval_totp_code: bulkApproveTotpCode,
-          approval_gate_use_cooldown: bulkApproveUseCooldown
-        }
-      : undefined;
-    props.onBulkApprove?.(ids, gateCredentials);
-  }, [props.onBulkApprove, bulkEligibleGroups, showBulkGateFields, bulkApprovePassword, bulkApproveTotpCode, bulkApproveUseCooldown]);
+  const handleBulkConfirmApprove = useCallback(async () => {
+    if (bulkFlowStep === "submitting" || bulkFlowStep === "completed" || selectedBulkGroups.length === 0) {
+      return;
+    }
+    const ids = bulkApprovePrimaryIds(selectedBulkGroups);
+    const gateCredentials = buildBulkGateCredentials(
+      showBulkGateFields,
+      bulkApprovePassword,
+      bulkApproveTotpCode,
+      bulkApproveUseCooldown
+    );
+    setBulkFlowStep("submitting");
+    setBulkApproveError(null);
+    try {
+      await props.onBulkApprove?.(ids, gateCredentials);
+      setBulkFlowStep("completed");
+      setBulkApprovePassword("");
+      setBulkApproveTotpCode("");
+      setBulkApproveUseCooldown(false);
+    } catch (error) {
+      setBulkFlowStep("review");
+      setBulkApproveError(error instanceof Error ? error.message : "Bulk approval failed.");
+    }
+  }, [
+    bulkApprovePassword,
+    bulkApproveTotpCode,
+    bulkApproveUseCooldown,
+    bulkFlowStep,
+    props.onBulkApprove,
+    selectedBulkGroups,
+    showBulkGateFields,
+  ]);
 
   const blockEligibleGroups = useMemo(() => bulkBlockEligibleGroups(groups), [groups]);
   const blockEligibleActionCount = useMemo(() => bulkApproveActionCount(blockEligibleGroups), [blockEligibleGroups]);
@@ -749,60 +826,27 @@ function QueueBrowser(props: {
   return (
     <section>
       {showBulkApprove && (
-        <div className="mb-4 space-y-2">
-          {showBulkGateFields && (
-            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <label className="block">
-                <span className="sr-only">Approval password</span>
-                <input
-                  type="password"
-                  value={bulkApprovePassword}
-                  onChange={handleBulkApprovePasswordChange}
-                  placeholder="Approval password"
-                  autoComplete="current-password"
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                />
-              </label>
-              {props.approvalGate?.totp_enabled === true && (
-                <label className="block">
-                  <span className="sr-only">Authenticator code</span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={bulkApproveTotpCode}
-                    onChange={handleBulkApproveTotpCodeChange}
-                    placeholder="Authenticator code"
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                  />
-                </label>
-              )}
-              {(props.approvalGate?.cooldown_seconds ?? 0) > 0 && props.approvalGate?.totp_enabled !== true && (
-                <label className="flex items-center gap-2 text-xs text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={bulkApproveUseCooldown}
-                    onChange={handleBulkApproveUseCooldownChange}
-                    className="rounded"
-                  />
-                  Skip password for next approvals (use cooldown)
-                </label>
-              )}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={handleBulkApprove}
-            className="rounded-full border border-brand-blue/30 bg-white px-4 py-2 text-sm font-medium text-brand-blue shadow-sm transition-colors hover:bg-brand-blue/5"
-          >
-            Approve all read-only actions ({bulkEligibleActionCount})
-          </button>
-          {sensitiveFileReadCount > 0 && (
-            <p className="text-xs text-brand-attention">
-              {sensitiveFileReadCount} sensitive file {sensitiveFileReadCount === 1 ? "read" : "reads"} excluded — review individually for informed consent.
-            </p>
-          )}
-        </div>
+        <QueueBulkApproveFlow
+          step={bulkFlowStep}
+          eligibleGroups={bulkEligibleGroups}
+          selectedGroups={selectedBulkGroups}
+          sensitiveFileReadCount={sensitiveFileReadCount}
+          approvalGate={props.approvalGate ?? null}
+          bulkApprovePassword={bulkApprovePassword}
+          bulkApproveTotpCode={bulkApproveTotpCode}
+          bulkApproveUseCooldown={bulkApproveUseCooldown}
+          errorMessage={bulkApproveError}
+          onStart={handleBulkFlowStart}
+          onSelectAll={handleBulkSelectAll}
+          onClearSelection={handleBulkClearSelection}
+          onContinueToReview={handleBulkContinueToReview}
+          onBackToSelect={handleBulkBackToSelect}
+          onCancel={resetBulkFlow}
+          onConfirmApprove={handleBulkConfirmApprove}
+          onBulkApprovePasswordChange={handleBulkApprovePasswordChange}
+          onBulkApproveTotpCodeChange={handleBulkApproveTotpCodeChange}
+          onBulkApproveUseCooldownChange={handleBulkApproveUseCooldownChange}
+        />
       )}
       {!showBulkApprove && sensitiveFileReadCount > 0 && (
         <div className="mb-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2">
@@ -881,6 +925,10 @@ function QueueBrowser(props: {
               group={group}
               activeRequestId={props.activeRequestId}
               onOpenRequest={props.onOpenRequest}
+              selectionMode={bulkFlowStep === "select"}
+              selectable={isReadOnlyQueueGroup(group)}
+              selected={selectedBulkIds.has(group.primary.request_id)}
+              onToggleSelect={handleBulkToggleSelect}
             />
           ))
         ) : (
@@ -906,6 +954,10 @@ function QueueCardRow(props: {
   group: ReturnType<typeof groupDuplicates>[number];
   activeRequestId: string | null;
   onOpenRequest: (requestId: string) => void;
+  selectionMode?: boolean;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (requestId: string) => void;
 }) {
   const handleClick = useCallback(() => {
     props.onOpenRequest(props.group.primary.request_id);
@@ -917,6 +969,10 @@ function QueueCardRow(props: {
       duplicateCount={props.group.duplicateCount}
       active={props.group.primary.request_id === props.activeRequestId}
       onClick={handleClick}
+      selectionMode={props.selectionMode === true}
+      selectable={props.selectable === true}
+      selected={props.selected === true}
+      onToggleSelect={props.onToggleSelect}
     />
   );
 }
@@ -973,7 +1029,16 @@ function QueueApprovalShareButton(props: { item: GuardApprovalRequest }) {
   );
 }
 
-function QueueCard(props: { item: GuardApprovalRequest; duplicateCount: number; active: boolean; onClick: () => void }) {
+function QueueCard(props: {
+  item: GuardApprovalRequest;
+  duplicateCount: number;
+  active: boolean;
+  onClick: () => void;
+  selectionMode?: boolean;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (requestId: string) => void;
+}) {
   const summary = buildQueueSummary(props.item);
   const fileReadPath = resolveFileReadPath(props.item);
   const isBlocked = props.item.policy_action === "block";
@@ -987,6 +1052,13 @@ function QueueCard(props: { item: GuardApprovalRequest; duplicateCount: number; 
     },
     [props.onClick]
   );
+  const handleCheckboxChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      event.stopPropagation();
+      props.onToggleSelect?.(props.item.request_id);
+    },
+    [props.item.request_id, props.onToggleSelect]
+  );
   return (
     <div
       className={`group/item w-full border-l-4 px-4 py-3.5 transition-all duration-150 hover:bg-brand-blue/[0.035] ${
@@ -996,6 +1068,21 @@ function QueueCard(props: { item: GuardApprovalRequest; duplicateCount: number; 
       }`}
     >
       <div className="flex items-start justify-between gap-3">
+        {props.selectionMode && props.selectable && (
+          <label
+            className="mt-1 shrink-0"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              checked={props.selected}
+              onChange={handleCheckboxChange}
+              className="h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30"
+            />
+            <span className="sr-only">Select for bulk approval</span>
+          </label>
+        )}
         <div
           role="button"
           tabIndex={0}
