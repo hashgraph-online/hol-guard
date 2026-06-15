@@ -5,6 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard import shim_probe
+from codex_plugin_scanner.guard.config import load_guard_config
+from codex_plugin_scanner.guard.daemon.server import _SUPPLY_CHAIN_PACKAGE_ACTIONS
+from codex_plugin_scanner.guard.local_supply_chain import build_local_supply_chain_posture
 from codex_plugin_scanner.guard.package_firewall_action_rate_limit import (
     PackageFirewallActionRateLimiter,
 )
@@ -24,20 +27,16 @@ from codex_plugin_scanner.guard.runtime.package_intent_common import (
 from codex_plugin_scanner.guard.runtime.package_intent_parser import (
     parse_package_intent,
 )
+from codex_plugin_scanner.guard.runtime.supply_chain import detect_supply_chain_risk
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
 )
+from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_supply_chain import (
     supply_chain_bundle_schema_statement,
     supply_chain_eval_cache_schema_statement,
 )
-
-ROOT = Path(__file__).resolve().parents[1]
-
-
-def read_source(relative_path: str) -> str:
-    return (ROOT / relative_path).read_text(encoding="utf-8")
 
 
 def test_gpfr242_reuses_package_intent_parser_and_artifact_builder(tmp_path: Path) -> None:
@@ -95,7 +94,19 @@ def test_gpfr243_reuses_package_shim_status_and_probe_helpers() -> None:
     }
 
 
-def test_gpfr244_reuses_local_posture_entitlement_rate_receipt_and_cache_helpers() -> None:
+def test_gpfr244_reuses_local_posture_builder(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    posture = build_local_supply_chain_posture(
+        store,
+        load_guard_config(store.guard_home),
+        now="2026-06-14T00:00:00+00:00",
+    )
+
+    assert posture["health_status"] == "degraded"
+    assert "package_manager_protection" in posture
+
+
+def test_gpfr244_reuses_entitlement_and_rate_limit_helpers() -> None:
     entitlement = {"allowed": True, "reason": "paid_oauth_entitlement_active", "tier": "team"}
     assert package_firewall_operation_allowed(entitlement, "install", has_installed_managers=False)
     assert package_firewall_action_states(entitlement, has_installed_managers=True)["sync"] == "available"
@@ -106,6 +117,8 @@ def test_gpfr244_reuses_local_posture_entitlement_rate_receipt_and_cache_helpers
     assert allowed is False
     assert retry_after > 0
 
+
+def test_gpfr244_reuses_receipt_and_cache_helpers() -> None:
     receipt = package_firewall_receipt_metadata(
         operation="test",
         result={
@@ -125,12 +138,8 @@ def test_gpfr244_reuses_local_posture_entitlement_rate_receipt_and_cache_helpers
     assert "guard_supply_chain_bundle_cache" in supply_chain_bundle_schema_statement()
     assert "guard_supply_chain_eval_cache" in supply_chain_eval_cache_schema_statement()
 
-    local_supply_chain_source = read_source("src/codex_plugin_scanner/guard/local_supply_chain.py")
-    assert "resolve_package_firewall_entitlement" in local_supply_chain_source
-    assert "sync_supply_chain_bundle" in local_supply_chain_source
 
-
-def test_gpfr245_reuses_runtime_supply_chain_bundle_evaluation_models() -> None:
+def test_gpfr245_reuses_package_evaluation_model() -> None:
     evaluation = PackageRequestEvaluation(
         bundle_version="bundle-v1",
         cache_status="hit",
@@ -154,28 +163,22 @@ def test_gpfr245_reuses_runtime_supply_chain_bundle_evaluation_models() -> None:
     )
 
     assert evaluation.to_dict()["decision"] == "block"
-    supply_chain_runtime = read_source("src/codex_plugin_scanner/guard/runtime/supply_chain.py")
-    package_eval_source = read_source("src/codex_plugin_scanner/guard/runtime/supply_chain_package_eval.py")
-    assert "detect_supply_chain_risk" in supply_chain_runtime
-    assert "evaluate_cached_supply_chain_bundle" in package_eval_source
-    assert "load_supply_chain_bundle_response" in package_eval_source
+
+
+def test_gpfr245_reuses_runtime_supply_chain_detection() -> None:
+    signals = detect_supply_chain_risk('{"scripts":{"postinstall":"curl https://example.invalid"}}')
+
+    assert signals
+    assert signals[0].signal_id == "supply-chain.postinstall-network-send"
 
 
 def test_gpfr246_daemon_exposes_cloud_package_shim_endpoint_contract() -> None:
-    server_source = read_source("src/codex_plugin_scanner/guard/daemon/server.py")
-
-    for route in (
-        '"/v1/supply-chain/package-shims"',
-        '"/v1/supply-chain/package-shims/connect"',
-        '"/v1/supply-chain/package-shims/install"',
-        '"/v1/supply-chain/package-shims/repair"',
-        '"/v1/supply-chain/package-shims/test"',
-        '"/v1/supply-chain/package-shims/remove"',
-    ):
-        assert route in server_source
-    for handler in (
-        "_handle_supply_chain_package_firewall_status",
-        "_handle_supply_chain_package_firewall_action",
-        "_run_supply_chain_package_action",
-    ):
-        assert handler in server_source
+    assert {
+        "audit",
+        "connect",
+        "install",
+        "remove",
+        "repair",
+        "sync",
+        "test",
+    } <= _SUPPLY_CHAIN_PACKAGE_ACTIONS
