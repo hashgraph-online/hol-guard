@@ -1,3 +1,9 @@
+export type BulkGateCredentials = {
+  approval_password?: string;
+  approval_totp_code?: string;
+  approval_gate_use_cooldown?: boolean;
+};
+
 export function approvalGateCooldownLabel(seconds: number): string {
   if (seconds === 0) return "Every approval";
   if (seconds === 900) return "15 minutes";

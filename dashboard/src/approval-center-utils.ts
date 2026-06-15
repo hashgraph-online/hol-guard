@@ -692,6 +692,38 @@ export function isCodexHarness(harness: string): boolean {
   return normalizeHarnessSlug(harness) === "codex";
 }
 
+export type BulkApproveRiskLine = {
+  requestId: string;
+  title: string;
+  path: string | null;
+  harnessLabel: string;
+  duplicateCount: number;
+  summary: string;
+};
+
+export function summarizeBulkApproveSelection(
+  groups: Array<{ primary: GuardApprovalRequest; duplicateCount: number }>
+): BulkApproveRiskLine[] {
+  return groups.map((group) => ({
+    requestId: group.primary.request_id,
+    title: resolveDecisionV2Title(group.primary) ?? displayArtifactName(group.primary),
+    path: resolveFileReadPath(group.primary),
+    harnessLabel: harnessDisplayName(group.primary.harness),
+    duplicateCount: group.duplicateCount,
+    summary: buildQueueSummary(group.primary),
+  }));
+}
+
+export function buildBulkApproveConsequenceCopy(actionCount: number): string {
+  if (actionCount <= 0) {
+    return "No read-only file reads are selected.";
+  }
+  if (actionCount === 1) {
+    return "Guard will allow one read-only file access and remember this retry only.";
+  }
+  return `Guard will allow ${actionCount} read-only file accesses. Each decision applies to this retry only, not future edits, writes, or different paths.`;
+}
+
 export function buildCodexResumeUx(resume: GuardCodexResumeResult): CodexResumeUx {
   if (resume.status === "pending" || resume.status === "in_progress") {
     return {

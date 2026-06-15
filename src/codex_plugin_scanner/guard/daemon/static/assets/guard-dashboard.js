@@ -13630,6 +13630,25 @@ function resolveTerminalLabel(item) {
 function isCodexHarness(harness) {
   return normalizeHarnessSlug(harness) === "codex";
 }
+function summarizeBulkApproveSelection(groups) {
+  return groups.map((group) => ({
+    requestId: group.primary.request_id,
+    title: resolveDecisionV2Title(group.primary) ?? displayArtifactName(group.primary),
+    path: resolveFileReadPath(group.primary),
+    harnessLabel: harnessDisplayName(group.primary.harness),
+    duplicateCount: group.duplicateCount,
+    summary: buildQueueSummary(group.primary)
+  }));
+}
+function buildBulkApproveConsequenceCopy(actionCount) {
+  if (actionCount <= 0) {
+    return "No read-only file reads are selected.";
+  }
+  if (actionCount === 1) {
+    return "Guard will allow one read-only file access and remember this retry only.";
+  }
+  return `Guard will allow ${actionCount} read-only file accesses. Each decision applies to this retry only, not future edits, writes, or different paths.`;
+}
 function buildCodexResumeUx(resume) {
   if (resume.status === "pending" || resume.status === "in_progress") {
     return {
@@ -24119,6 +24138,236 @@ function QueueChipFilter(props) {
     ))
   ] });
 }
+function QueueBulkApproveFlow(props) {
+  if (props.step === "completed") {
+    const approvedCount = props.completedActionCount ?? 0;
+    const approvedUnit = approvedCount === 1 ? "action was" : "actions were";
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4 rounded-xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-brand-green-text", children: [
+        approvedCount,
+        " read-only ",
+        approvedUnit,
+        " approved. This bulk approval cannot be repeated."
+      ] })
+    ] }) });
+  }
+  if (props.eligibleGroups.length < 2) {
+    return null;
+  }
+  const selectedActionCount = bulkApproveActionCount(props.selectedGroups);
+  const riskLines = summarizeBulkApproveSelection(props.selectedGroups);
+  const showBulkGateFields = props.approvalGate?.enabled === true && props.approvalGate?.configured === true;
+  if (props.step === "collapsed") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4 space-y-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: props.onStart,
+          className: "rounded-full border border-brand-blue/30 bg-white px-4 py-2 text-sm font-medium text-brand-blue shadow-sm transition-colors hover:bg-brand-blue/5",
+          children: "Approve multiple read-only reads"
+        }
+      ),
+      props.sensitiveFileReadCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-brand-attention", children: [
+        props.sensitiveFileReadCount,
+        " sensitive file",
+        " ",
+        props.sensitiveFileReadCount === 1 ? "read is" : "reads are",
+        " excluded from bulk approval. Review those individually."
+      ] })
+    ] });
+  }
+  const previewLines = riskLines.slice(0, 5);
+  const hiddenCount = Math.max(0, riskLines.length - previewLines.length);
+  const selectedCount = props.selectedGroups.length;
+  const selectedUnit = selectedActionCount === 1 ? "action" : "actions";
+  const stepHeading = props.step === "select" ? "Select read-only file reads" : `Review ${selectedActionCount} selected ${selectedUnit}`;
+  const confirmLabel = props.step === "submitting" ? "Approving..." : `Approve ${selectedActionCount} read-only ${selectedUnit}`;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: stepHeading }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-muted-foreground", children: [
+        "Step ",
+        props.step === "select" ? "1" : "2",
+        " of 2"
+      ] })
+    ] }),
+    props.step === "select" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-muted-foreground", children: "Choose the non-sensitive file reads you want to allow in one pass. Sensitive paths stay in the queue for individual review." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: props.onSelectAll,
+            className: "rounded-full border border-brand-blue/30 px-3 py-1.5 text-xs font-medium text-brand-blue transition-colors hover:bg-brand-blue/5",
+            children: [
+              "Select all eligible (",
+              props.eligibleGroups.length,
+              ")"
+            ]
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: props.onClearSelection,
+            disabled: selectedCount === 0,
+            className: "rounded-full px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-brand-dark disabled:opacity-50",
+            children: "Clear selection"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: props.onContinueToReview,
+            disabled: selectedCount === 0,
+            className: "rounded-full bg-brand-blue px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50",
+            children: [
+              "Continue (",
+              selectedCount,
+              " selected)"
+            ]
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: props.onCancel,
+            className: "rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-brand-dark",
+            children: "Cancel"
+          }
+        )
+      ] })
+    ] }),
+    (props.step === "review" || props.step === "submitting") && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-muted-foreground", children: buildBulkApproveConsequenceCopy(selectedActionCount) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "space-y-2 rounded-lg bg-slate-50 px-3 py-2", children: [
+        previewLines.map((line) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-xs text-brand-dark", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: line.harnessLabel }),
+          line.path !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block truncate font-mono text-[11px] text-brand-dark/70", children: line.path }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-brand-dark/70", children: line.title }),
+          line.duplicateCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mt-0.5 block text-muted-foreground", children: [
+            "Includes ",
+            line.duplicateCount,
+            " duplicate ",
+            line.duplicateCount === 1 ? "retry" : "retries",
+            "."
+          ] })
+        ] }, line.requestId)),
+        hiddenCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-xs text-muted-foreground", children: [
+          "and ",
+          hiddenCount,
+          " more selected reads"
+        ] })
+      ] }),
+      props.sensitiveFileReadCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 rounded-lg bg-brand-attention/[0.06] px-3 py-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-brand-attention", children: [
+          props.sensitiveFileReadCount,
+          " sensitive file",
+          " ",
+          props.sensitiveFileReadCount === 1 ? "read remains" : "reads remain",
+          " in the queue and will not be approved here."
+        ] })
+      ] }),
+      showBulkGateFields && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Approval password" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "password",
+              value: props.bulkApprovePassword,
+              onChange: props.onBulkApprovePasswordChange,
+              placeholder: "Approval password",
+              autoComplete: "current-password",
+              disabled: props.step === "submitting",
+              className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+            }
+          )
+        ] }),
+        props.approvalGate?.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Authenticator code" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "text",
+              inputMode: "numeric",
+              pattern: "[0-9]*",
+              value: props.bulkApproveTotpCode,
+              onChange: props.onBulkApproveTotpCodeChange,
+              placeholder: "Authenticator code",
+              disabled: props.step === "submitting",
+              className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+            }
+          )
+        ] }),
+        (props.approvalGate?.cooldown_seconds ?? 0) > 0 && props.approvalGate?.totp_enabled !== true && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 text-xs text-slate-600", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "checkbox",
+              checked: props.bulkApproveUseCooldown,
+              onChange: props.onBulkApproveUseCooldownChange,
+              disabled: props.step === "submitting",
+              className: "rounded"
+            }
+          ),
+          "Skip password for next approvals (use cooldown)"
+        ] })
+      ] }),
+      props.errorMessage !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-purple", role: "alert", children: props.errorMessage }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: props.onConfirmApprove,
+            disabled: props.step === "submitting",
+            className: "rounded-full bg-brand-blue px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60",
+            children: confirmLabel
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: props.onBackToSelect,
+            disabled: props.step === "submitting",
+            className: "rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50",
+            children: "Back"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: props.onCancel,
+            disabled: props.step === "submitting",
+            className: "rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-brand-dark disabled:opacity-50",
+            children: "Cancel"
+          }
+        )
+      ] })
+    ] })
+  ] });
+}
+function buildBulkGateCredentials(showGateFields, password, totpCode, useCooldown) {
+  if (!showGateFields) {
+    return void 0;
+  }
+  return {
+    approval_password: password,
+    approval_totp_code: totpCode,
+    approval_gate_use_cooldown: useCooldown
+  };
+}
 const scopeOptions = [
   {
     value: "artifact",
@@ -24485,9 +24734,13 @@ function QueueBrowser(props) {
   const [sortDirection, setSortDirection] = reactExports.useState("newest");
   const [page, setPage] = reactExports.useState(1);
   const [showFilters, setShowFilters] = reactExports.useState(false);
+  const [bulkFlowStep, setBulkFlowStep] = reactExports.useState("collapsed");
+  const [selectedBulkIds, setSelectedBulkIds] = reactExports.useState(() => /* @__PURE__ */ new Set());
   const [bulkApprovePassword, setBulkApprovePassword] = reactExports.useState("");
   const [bulkApproveTotpCode, setBulkApproveTotpCode] = reactExports.useState("");
   const [bulkApproveUseCooldown, setBulkApproveUseCooldown] = reactExports.useState(false);
+  const [bulkApproveError, setBulkApproveError] = reactExports.useState(null);
+  const [bulkCompletedActionCount, setBulkCompletedActionCount] = reactExports.useState(null);
   const harnesses = Array.from(new Set(props.items.map((item) => item.harness).filter(isDisplayableHarness))).sort();
   const filteredItems = reactExports.useMemo(() => {
     const byHarness = harnessFilter === "all" ? props.items : props.items.filter((item) => item.harness === harnessFilter);
@@ -24537,16 +24790,62 @@ function QueueBrowser(props) {
     () => groups.filter(isReadOnlyGroup),
     [groups, isReadOnlyGroup]
   );
-  const bulkEligibleActionCount = reactExports.useMemo(
-    () => bulkApproveActionCount(bulkEligibleGroups),
-    [bulkEligibleGroups]
-  );
   const sensitiveFileReadCount = reactExports.useMemo(
     () => countSensitiveFileReadGroups(groups),
     [groups]
   );
-  const showBulkApprove = props.onBulkApprove !== void 0 && bulkEligibleGroups.length > 0;
+  const showBulkApprove = props.onBulkApprove !== void 0 && (bulkEligibleGroups.length >= 2 || bulkFlowStep === "completed");
   const showBulkGateFields = showBulkApprove && props.approvalGate?.enabled === true && props.approvalGate.configured === true;
+  const selectedBulkGroups = reactExports.useMemo(
+    () => bulkEligibleGroups.filter((group) => selectedBulkIds.has(group.primary.request_id)),
+    [bulkEligibleGroups, selectedBulkIds]
+  );
+  const resetBulkFlow = reactExports.useCallback(() => {
+    setBulkFlowStep("collapsed");
+    setSelectedBulkIds(/* @__PURE__ */ new Set());
+    setBulkApprovePassword("");
+    setBulkApproveTotpCode("");
+    setBulkApproveUseCooldown(false);
+    setBulkApproveError(null);
+    setBulkCompletedActionCount(null);
+  }, []);
+  const handleBulkFlowStart = reactExports.useCallback(() => {
+    setBulkFlowStep("select");
+    setSelectedBulkIds(/* @__PURE__ */ new Set());
+    setBulkApproveError(null);
+    setBulkCompletedActionCount(null);
+  }, []);
+  const handleBulkSelectAll = reactExports.useCallback(() => {
+    setSelectedBulkIds(new Set(bulkApprovePrimaryIds(bulkEligibleGroups)));
+  }, [bulkEligibleGroups]);
+  const handleBulkClearSelection = reactExports.useCallback(() => {
+    setSelectedBulkIds(/* @__PURE__ */ new Set());
+  }, []);
+  const handleBulkContinueToReview = reactExports.useCallback(() => {
+    if (selectedBulkIds.size === 0) {
+      return;
+    }
+    setBulkFlowStep("review");
+    setBulkApproveError(null);
+  }, [selectedBulkIds.size]);
+  const handleBulkBackToSelect = reactExports.useCallback(() => {
+    if (bulkFlowStep === "submitting" || bulkFlowStep === "completed") {
+      return;
+    }
+    setBulkFlowStep("select");
+    setBulkApproveError(null);
+  }, [bulkFlowStep]);
+  const handleBulkToggleSelect = reactExports.useCallback((requestId) => {
+    setSelectedBulkIds((current) => {
+      const next = new Set(current);
+      if (next.has(requestId)) {
+        next.delete(requestId);
+      } else {
+        next.add(requestId);
+      }
+      return next;
+    });
+  }, []);
   const handleBulkApprovePasswordChange = reactExports.useCallback((event) => {
     setBulkApprovePassword(event.target.value);
   }, []);
@@ -24556,15 +24855,40 @@ function QueueBrowser(props) {
   const handleBulkApproveUseCooldownChange = reactExports.useCallback((event) => {
     setBulkApproveUseCooldown(event.target.checked);
   }, []);
-  const handleBulkApprove = reactExports.useCallback(() => {
-    const ids = bulkApprovePrimaryIds(bulkEligibleGroups);
-    const gateCredentials = showBulkGateFields ? {
-      approval_password: bulkApprovePassword,
-      approval_totp_code: bulkApproveTotpCode,
-      approval_gate_use_cooldown: bulkApproveUseCooldown
-    } : void 0;
-    props.onBulkApprove?.(ids, gateCredentials);
-  }, [props.onBulkApprove, bulkEligibleGroups, showBulkGateFields, bulkApprovePassword, bulkApproveTotpCode, bulkApproveUseCooldown]);
+  const handleBulkConfirmApprove = reactExports.useCallback(async () => {
+    if (bulkFlowStep === "submitting" || bulkFlowStep === "completed" || selectedBulkGroups.length === 0) {
+      return;
+    }
+    const ids = bulkApprovePrimaryIds(selectedBulkGroups);
+    const approvedActionCount = bulkApproveActionCount(selectedBulkGroups);
+    const gateCredentials = buildBulkGateCredentials(
+      showBulkGateFields,
+      bulkApprovePassword,
+      bulkApproveTotpCode,
+      bulkApproveUseCooldown
+    );
+    setBulkFlowStep("submitting");
+    setBulkApproveError(null);
+    try {
+      setBulkCompletedActionCount(approvedActionCount);
+      await props.onBulkApprove?.(ids, gateCredentials);
+      setBulkFlowStep("completed");
+      setBulkApprovePassword("");
+      setBulkApproveTotpCode("");
+      setBulkApproveUseCooldown(false);
+    } catch (error) {
+      setBulkFlowStep("review");
+      setBulkApproveError(error instanceof Error ? error.message : "Bulk approval failed.");
+    }
+  }, [
+    bulkApprovePassword,
+    bulkApproveTotpCode,
+    bulkApproveUseCooldown,
+    bulkFlowStep,
+    props.onBulkApprove,
+    selectedBulkGroups,
+    showBulkGateFields
+  ]);
   const blockEligibleGroups = reactExports.useMemo(() => bulkBlockEligibleGroups(groups), [groups]);
   const blockEligibleActionCount = reactExports.useMemo(() => bulkApproveActionCount(blockEligibleGroups), [blockEligibleGroups]);
   const showBulkBlock = props.onBulkBlock !== void 0 && blockEligibleGroups.length > 0;
@@ -24574,70 +24898,31 @@ function QueueBrowser(props) {
     props.onBulkBlock?.(ids, reason, gateCredentials);
   }, [props.onBulkBlock, blockEligibleGroups]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
-    showBulkApprove && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4 space-y-2", children: [
-      showBulkGateFields && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Approval password" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              type: "password",
-              value: bulkApprovePassword,
-              onChange: handleBulkApprovePasswordChange,
-              placeholder: "Approval password",
-              autoComplete: "current-password",
-              className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-            }
-          )
-        ] }),
-        props.approvalGate?.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Authenticator code" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              type: "text",
-              inputMode: "numeric",
-              pattern: "[0-9]*",
-              value: bulkApproveTotpCode,
-              onChange: handleBulkApproveTotpCodeChange,
-              placeholder: "Authenticator code",
-              className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-            }
-          )
-        ] }),
-        (props.approvalGate?.cooldown_seconds ?? 0) > 0 && props.approvalGate?.totp_enabled !== true && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 text-xs text-slate-600", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              type: "checkbox",
-              checked: bulkApproveUseCooldown,
-              onChange: handleBulkApproveUseCooldownChange,
-              className: "rounded"
-            }
-          ),
-          "Skip password for next approvals (use cooldown)"
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          type: "button",
-          onClick: handleBulkApprove,
-          className: "rounded-full border border-brand-blue/30 bg-white px-4 py-2 text-sm font-medium text-brand-blue shadow-sm transition-colors hover:bg-brand-blue/5",
-          children: [
-            "Approve all read-only actions (",
-            bulkEligibleActionCount,
-            ")"
-          ]
-        }
-      ),
-      sensitiveFileReadCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-brand-attention", children: [
+    showBulkApprove && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      QueueBulkApproveFlow,
+      {
+        step: bulkFlowStep,
+        eligibleGroups: bulkEligibleGroups,
+        selectedGroups: selectedBulkGroups,
+        completedActionCount: bulkCompletedActionCount,
         sensitiveFileReadCount,
-        " sensitive file ",
-        sensitiveFileReadCount === 1 ? "read" : "reads",
-        " excluded — review individually for informed consent."
-      ] })
-    ] }),
+        approvalGate: props.approvalGate ?? null,
+        bulkApprovePassword,
+        bulkApproveTotpCode,
+        bulkApproveUseCooldown,
+        errorMessage: bulkApproveError,
+        onStart: handleBulkFlowStart,
+        onSelectAll: handleBulkSelectAll,
+        onClearSelection: handleBulkClearSelection,
+        onContinueToReview: handleBulkContinueToReview,
+        onBackToSelect: handleBulkBackToSelect,
+        onCancel: resetBulkFlow,
+        onConfirmApprove: handleBulkConfirmApprove,
+        onBulkApprovePasswordChange: handleBulkApprovePasswordChange,
+        onBulkApproveTotpCodeChange: handleBulkApproveTotpCodeChange,
+        onBulkApproveUseCooldownChange: handleBulkApproveUseCooldownChange
+      }
+    ),
     !showBulkApprove && sensitiveFileReadCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-brand-attention", children: [
       sensitiveFileReadCount,
       " sensitive file ",
@@ -24720,7 +25005,11 @@ function QueueBrowser(props) {
       {
         group,
         activeRequestId: props.activeRequestId,
-        onOpenRequest: props.onOpenRequest
+        onOpenRequest: props.onOpenRequest,
+        selectionMode: bulkFlowStep === "select",
+        selectable: isReadOnlyQueueGroup(group),
+        selected: selectedBulkIds.has(group.primary.request_id),
+        onToggleSelect: handleBulkToggleSelect
       },
       group.primary.request_id
     )) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: "No matches", body: "Try a different search or filter to find waiting actions." }) }) }),
@@ -24748,7 +25037,11 @@ function QueueCardRow(props) {
       item: props.group.primary,
       duplicateCount: props.group.duplicateCount,
       active: props.group.primary.request_id === props.activeRequestId,
-      onClick: handleClick
+      onClick: handleClick,
+      selectionMode: props.selectionMode === true,
+      selectable: props.selectable === true,
+      selected: props.selected === true,
+      onToggleSelect: props.onToggleSelect
     }
   );
 }
@@ -24816,11 +25109,38 @@ function QueueCard(props) {
     },
     [props.onClick]
   );
+  const handleCheckboxChange = reactExports.useCallback(
+    (event) => {
+      event.stopPropagation();
+      props.onToggleSelect?.(props.item.request_id);
+    },
+    [props.item.request_id, props.onToggleSelect]
+  );
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "div",
     {
       className: `group/item w-full border-l-4 px-4 py-3.5 transition-all duration-150 hover:bg-brand-blue/[0.035] ${props.active ? "border-brand-blue bg-brand-blue/[0.06]" : "border-transparent bg-white/70"}`,
       children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
+        props.selectionMode && props.selectable && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "label",
+          {
+            className: "mt-1 shrink-0",
+            onClick: (event) => event.stopPropagation(),
+            onKeyDown: (event) => event.stopPropagation(),
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "checkbox",
+                  checked: props.selected,
+                  onChange: handleCheckboxChange,
+                  className: "h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Select for bulk approval" })
+            ]
+          }
+        ),
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "div",
           {
@@ -26094,6 +26414,7 @@ function App() {
   const [approvalGate, setApprovalGate] = reactExports.useState(null);
   const [guardVersion, setGuardVersion] = reactExports.useState(null);
   const resolutionInFlight = reactExports.useRef(false);
+  const bulkApproveInFlight = reactExports.useRef(false);
   reactExports.useEffect(() => {
     function handleKeyDown(event) {
       const target = event.target;
@@ -26418,17 +26739,29 @@ function App() {
     setCodexResume(updated);
   }, [resolvedRequestId]);
   const handleBulkApprove = reactExports.useCallback(async (ids, gateCredentials) => {
-    const results = await Promise.allSettled(
-      ids.map(
-        (id) => resolveRequestWithQueueResult({ requestId: id, action: "allow", scope: "artifact", reason: "", ...gateCredentials })
-      )
-    );
-    const succeeded = results.filter((r) => r.status === "fulfilled").length;
-    const failed = results.length - succeeded;
-    const label = failed === 0 ? `${succeeded} item${succeeded !== 1 ? "s" : ""} approved.` : `${succeeded} approved, ${failed} failed. Retry the failed items manually.`;
-    setResolutionMessage(label);
-    navigate("/inbox");
-    await refreshStateAfterAction();
+    if (bulkApproveInFlight.current) {
+      return;
+    }
+    bulkApproveInFlight.current = true;
+    try {
+      const results = await Promise.allSettled(
+        ids.map(
+          (id) => resolveRequestWithQueueResult({ requestId: id, action: "allow", scope: "artifact", reason: "", ...gateCredentials })
+        )
+      );
+      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.length - succeeded;
+      await refreshStateAfterAction();
+      if (failed > 0) {
+        throw new Error(
+          failed === results.length ? "Bulk approval failed. Retry the selected items manually." : `${succeeded} approved, ${failed} failed. Retry the failed items manually.`
+        );
+      }
+      const label = `${succeeded} item${succeeded !== 1 ? "s" : ""} approved.`;
+      setResolutionMessage(label);
+    } finally {
+      bulkApproveInFlight.current = false;
+    }
   }, [refreshStateAfterAction, setResolutionMessage]);
   const handleBulkBlock = reactExports.useCallback(async (ids, reason, gateCredentials) => {
     const results = await Promise.allSettled(
