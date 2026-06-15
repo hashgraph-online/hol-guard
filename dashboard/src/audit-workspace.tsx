@@ -24,6 +24,9 @@ import type { AuditRemediationAction } from "./guard-api";
 import type { GuardApprovalGatePublicConfig, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 import { resolveManagerCoverageStatus } from "./supply-chain-protection-stats";
+import { PackageWorkbenchPanel } from "./package-workbench-panel";
+import { AuditRunProgress } from "./audit-run-progress";
+import type { SupplyChainAuditSession } from "./use-supply-chain-audit-session";
 
 export type AuditSeverity = "critical" | "high" | "medium" | "low" | "info";
 
@@ -418,9 +421,10 @@ type AuditWorkspaceProps = {
   snapshot: GuardRuntimeSnapshot;
   receipts: GuardReceipt[];
   approvalGate: GuardApprovalGatePublicConfig | null;
+  auditSession: SupplyChainAuditSession;
 };
 
-export function AuditWorkspace({ snapshot, receipts, approvalGate }: AuditWorkspaceProps) {
+export function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession }: AuditWorkspaceProps) {
   const [filter, setFilter] = useState<AuditFilterState>({
     severityFilter: "all",
     harnessFilter: "",
@@ -555,6 +559,16 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate }: AuditWorksp
 
   return (
     <div className="space-y-6">
+      <AuditRunProgress phase={auditSession.auditPhase} running={auditSession.auditRunning} />
+
+      <PackageWorkbenchPanel
+        auditConnectGate={auditSession.auditConnectGate}
+        auditError={auditSession.auditError}
+        auditSnapshot={auditSession.auditSnapshot}
+        auditRunning={auditSession.auditRunning}
+        onRunAudit={auditSession.handleRunAudit}
+      />
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm text-slate-500">

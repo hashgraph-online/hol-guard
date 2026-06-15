@@ -4,11 +4,15 @@ import {
   HiMiniArrowDown,
   HiMiniArrowUp,
   HiMiniBugAnt,
+  HiMiniChevronLeft,
+  HiMiniChevronRight,
   HiMiniExclamationTriangle,
   HiMiniMagnifyingGlass,
+  HiMiniXMark,
 } from "react-icons/hi2";
-import { SectionLabel, Tag, ActionButton, EmptyState } from "./approval-center-primitives";
+import { SectionLabel, Tag, ActionButton, EmptyState, IconActionButton } from "./approval-center-primitives";
 import { formatRelativeTime } from "./approval-center-utils";
+import { GuardModalLayer } from "./guard-modal-layer";
 import type {
   PackageWorkbenchFilters,
   PackageWorkbenchSortKey,
@@ -24,6 +28,8 @@ import {
 } from "./supply-chain-audit-normalize";
 import { ConnectFlowCard } from "./supply-chain-firewall-views";
 import type { AuditConnectGateViewState } from "./supply-chain-firewall-panel";
+
+const WORKBENCH_PAGE_SIZE = 25;
 
 type PackageWorkbenchPanelProps = {
   auditConnectGate?: AuditConnectGateViewState | null;
@@ -72,75 +78,128 @@ const severityTone = (
   return "default";
 };
 
+function humanizeReasonMessage(code: string, message: string): string {
+  if (code === "unknown_package") {
+    return "Guard Cloud has not indexed this package yet. It is not treated as a security finding.";
+  }
+  if (code === "no_cached_match") {
+    return "No local intel match yet. Sync Guard Cloud or retry after the next bundle refresh.";
+  }
+  return message;
+}
+
 type WorkbenchHeaderProps = {
   auditSnapshot: SupplyChainAuditSnapshot;
+  flaggedCount: number;
 };
 
-function WorkbenchHeader({ auditSnapshot }: WorkbenchHeaderProps) {
+function WorkbenchHeader({ auditSnapshot, flaggedCount }: WorkbenchHeaderProps) {
+  const manifestSummary =
+    auditSnapshot.manifestPaths.length > 0
+      ? `${auditSnapshot.manifestPaths.length} manifest${auditSnapshot.manifestPaths.length === 1 ? "" : "s"}`
+      : null;
+  const lockfileSummary =
+    auditSnapshot.lockfilePaths.length > 0
+      ? `${auditSnapshot.lockfilePaths.length} lockfile${auditSnapshot.lockfilePaths.length === 1 ? "" : "s"}`
+      : null;
+  const scanSummary = [manifestSummary, lockfileSummary].filter((entry) => entry !== null).join(" · ");
+
   return (
-    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-      <Tag tone={decisionTone(auditSnapshot.decision)}>{auditSnapshot.decision}</Tag>
-      <span>
-        {auditSnapshot.inventory.totalPackages} package
-        {auditSnapshot.inventory.totalPackages === 1 ? "" : "s"} indexed
-      </span>
-      <span aria-hidden="true">·</span>
-      <span>Last audit {formatRelativeTime(auditSnapshot.generatedAt)}</span>
-      {auditSnapshot.source !== null && (
-        <>
-          <span aria-hidden="true">·</span>
-          <span className="capitalize">{auditSnapshot.source} intel</span>
-        </>
-      )}
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+        <Tag tone={decisionTone(auditSnapshot.decision)}>{auditSnapshot.decision}</Tag>
+        <span>
+          {auditSnapshot.inventory.totalPackages} package
+          {auditSnapshot.inventory.totalPackages === 1 ? "" : "s"} indexed
+        </span>
+        <span aria-hidden="true">·</span>
+        <span>
+          {flaggedCount} need review
+        </span>
+        <span aria-hidden="true">·</span>
+        <span>Last audit {formatRelativeTime(auditSnapshot.generatedAt)}</span>
+        {auditSnapshot.source !== null && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span className="capitalize">{auditSnapshot.source} intel</span>
+          </>
+        )}
+      </div>
+      {scanSummary.length > 0 ? (
+        <p className="text-[11px] text-slate-400">Scanned {scanSummary} across this workspace.</p>
+      ) : null}
     </div>
   );
 }
 
 type FindingDetailPanelProps = {
   finding: SupplyChainAuditFinding;
+  onClose: () => void;
 };
 
-function FindingDetailPanel({ finding }: FindingDetailPanelProps) {
+function FindingDetailPanel({ finding, onClose }: FindingDetailPanelProps) {
+  const handleClose = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
   return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <p className="text-sm font-semibold text-brand-dark">{finding.packageName}</p>
-        <Tag tone="default">{finding.ecosystem}</Tag>
-        <Tag tone={decisionTone(finding.decision)}>{finding.decision}</Tag>
-        <Tag tone={severityTone(finding.severity)}>{finding.severity}</Tag>
-      </div>
-      {finding.reasons.length > 0 ? (
-        <ul className="mt-3 space-y-2">
-          {finding.reasons.map((reason) => (
-            <li key={`${finding.id}-${reason.code}`} className="text-xs leading-relaxed text-slate-600">
-              <span className="font-semibold text-slate-700">{reason.code}</span>
-              <span className="text-slate-400"> · </span>
-              {reason.message}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-3 text-xs text-slate-500">No advisory detail recorded for this package yet.</p>
-      )}
-      <div className="mt-4">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-          Advisory aliases
-        </p>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {finding.advisoryAliases.map((alias) => (
-            <span
-              key={`${finding.id}-${alias}`}
-              className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 font-mono text-[11px] text-slate-600"
-            >
-              {alias}
-            </span>
-          ))}
-        </div>
-        {finding.advisoryAliases.length === 0 ? (
-          <p className="mt-2 text-[11px] text-slate-500">
-            No linked CVE or GHSA aliases for this finding.
+    <div className="max-h-[min(85vh,40rem)] overflow-y-auto rounded-2xl border border-slate-100 bg-white shadow-xl">
+      <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-slate-100 bg-white/95 px-4 py-3 backdrop-blur-sm">
+        <div className="min-w-0">
+          <p className="text-base font-semibold text-brand-dark">{finding.packageName}</p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {finding.ecosystem}
+            {finding.namespace !== null ? ` · ${finding.namespace}` : ""}
           </p>
-        ) : null}
+        </div>
+        <IconActionButton
+          variant="ghost"
+          label="Close finding detail"
+          icon={<HiMiniXMark className="h-4 w-4" />}
+          onClick={handleClose}
+        />
+      </div>
+      <div className="px-4 py-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Tag tone={decisionTone(finding.decision)}>{finding.decision}</Tag>
+          <Tag tone={severityTone(finding.severity)}>{finding.severity}</Tag>
+        </div>
+        {finding.reasons.length > 0 ? (
+          <ul className="mt-4 space-y-3">
+            {finding.reasons.map((reason) => (
+              <li
+                key={`${finding.id}-${reason.code}`}
+                className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5 text-xs leading-relaxed text-slate-600"
+              >
+                <span className="font-semibold text-slate-700">{reason.code}</span>
+                <span className="text-slate-400"> · </span>
+                {humanizeReasonMessage(reason.code, reason.message)}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-4 text-xs text-slate-500">No advisory detail recorded for this package yet.</p>
+        )}
+        <div className="mt-5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+            Advisory aliases
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {finding.advisoryAliases.map((alias) => (
+              <span
+                key={`${finding.id}-${alias}`}
+                className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 font-mono text-[11px] text-slate-600"
+              >
+                {alias}
+              </span>
+            ))}
+          </div>
+          {finding.advisoryAliases.length === 0 ? (
+            <p className="mt-2 text-[11px] text-slate-500">
+              No linked CVE or GHSA aliases for this finding.
+            </p>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -178,6 +237,48 @@ function FindingRow({ finding, selected, onSelect }: FindingRowProps) {
         <Tag tone={severityTone(finding.severity)}>{finding.severity}</Tag>
       </div>
     </button>
+  );
+}
+
+type WorkbenchPaginationProps = {
+  page: number;
+  pageCount: number;
+  total: number;
+  onPageChange: (page: number) => void;
+};
+
+function WorkbenchPagination({ page, pageCount, total, onPageChange }: WorkbenchPaginationProps) {
+  const handlePrevious = useCallback(() => {
+    onPageChange(Math.max(0, page - 1));
+  }, [onPageChange, page]);
+  const handleNext = useCallback(() => {
+    onPageChange(Math.min(pageCount - 1, page + 1));
+  }, [onPageChange, page, pageCount]);
+
+  if (pageCount <= 1) {
+    return (
+      <p className="text-xs text-slate-500">
+        Showing {total} finding{total === 1 ? "" : "s"}
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <p className="text-xs text-slate-500">
+        Page {page + 1} of {pageCount} · {total} finding{total === 1 ? "" : "s"}
+      </p>
+      <div className="flex items-center gap-1">
+        <ActionButton variant="outline" onClick={handlePrevious} disabled={page === 0}>
+          <HiMiniChevronLeft className="h-4 w-4" aria-hidden="true" />
+          Previous
+        </ActionButton>
+        <ActionButton variant="outline" onClick={handleNext} disabled={page >= pageCount - 1}>
+          Next
+          <HiMiniChevronRight className="h-4 w-4" aria-hidden="true" />
+        </ActionButton>
+      </div>
+    </div>
   );
 }
 
@@ -415,6 +516,7 @@ export function PackageWorkbenchPanel({
   }>({ sortKey: "severity", sortDirection: "desc" });
   const { sortKey, sortDirection } = sortState;
   const [selectedId, setSelectedId] = useState("");
+  const [page, setPage] = useState(0);
 
   const findings = auditSnapshot?.findings ?? [];
   const ecosystems = useMemo(() => packageWorkbenchEcosystems(findings), [findings]);
@@ -433,25 +535,35 @@ export function PackageWorkbenchPanel({
     () => sortedFindings.find((finding) => finding.id === selectedId) ?? null,
     [selectedId, sortedFindings],
   );
+  const pageCount = Math.max(1, Math.ceil(sortedFindings.length / WORKBENCH_PAGE_SIZE));
+  const safePage = page >= pageCount ? 0 : page;
+  const pagedFindings = useMemo(() => {
+    const start = safePage * WORKBENCH_PAGE_SIZE;
+    return sortedFindings.slice(start, start + WORKBENCH_PAGE_SIZE);
+  }, [safePage, sortedFindings]);
 
   const handleSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setFilters((prev) => ({ ...prev, search: event.target.value }));
     setSelectedId("");
+    setPage(0);
   }, []);
 
   const handleEcosystemChange = useCallback((ecosystem: string) => {
     setFilters((prev) => ({ ...prev, ecosystem }));
     setSelectedId("");
+    setPage(0);
   }, []);
 
   const handleDecisionChange = useCallback((decision: PackageWorkbenchFilters["decision"]) => {
     setFilters((prev) => ({ ...prev, decision }));
     setSelectedId("");
+    setPage(0);
   }, []);
 
   const handleSeverityChange = useCallback((severity: PackageWorkbenchFilters["severity"]) => {
     setFilters((prev) => ({ ...prev, severity }));
     setSelectedId("");
+    setPage(0);
   }, []);
 
   const handleSortChange = useCallback((nextSortKey: PackageWorkbenchSortKey) => {
@@ -464,10 +576,20 @@ export function PackageWorkbenchPanel({
       }
       return { sortKey: nextSortKey, sortDirection: "desc" };
     });
+    setPage(0);
   }, []);
 
   const handleSelectFinding = useCallback((id: string) => {
-    setSelectedId((prev) => (prev === id ? "" : id));
+    setSelectedId(id);
+  }, []);
+
+  const handleCloseFinding = useCallback(() => {
+    setSelectedId("");
+  }, []);
+
+  const handlePageChange = useCallback((nextPage: number) => {
+    setPage(nextPage);
+    setSelectedId("");
   }, []);
 
   return (
@@ -475,11 +597,11 @@ export function PackageWorkbenchPanel({
       <div className="border-b border-slate-100 px-4 py-3">
         <SectionLabel>Audit findings</SectionLabel>
         <p className="mt-0.5 text-sm text-slate-500">
-          Review flagged packages from the latest workspace audit. Filter, sort, and inspect advisory detail.
+          Packages that need review from the latest workspace audit. Filter, sort, and open a finding for detail.
         </p>
         {auditSnapshot !== null && (
           <div className="mt-2">
-            <WorkbenchHeader auditSnapshot={auditSnapshot} />
+            <WorkbenchHeader auditSnapshot={auditSnapshot} flaggedCount={findings.length} />
           </div>
         )}
       </div>
@@ -516,12 +638,22 @@ export function PackageWorkbenchPanel({
             onSeverityChange={handleSeverityChange}
             onSortChange={handleSortChange}
           />
+          <WorkbenchPagination
+            page={safePage}
+            pageCount={pageCount}
+            total={sortedFindings.length}
+            onPageChange={handlePageChange}
+          />
           {sortedFindings.length === 0 ? (
             <p className="py-6 text-center text-sm text-slate-500">No packages match the current filters.</p>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-slate-100" role="table" aria-label="Package audit findings">
+            <div
+              className="overflow-hidden rounded-xl border border-slate-100"
+              role="table"
+              aria-label="Package audit findings"
+            >
               <div
-                className="hidden border-b border-slate-100 bg-slate-50 px-4 py-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3"
+                className="sticky top-0 z-[1] hidden border-b border-slate-100 bg-slate-50 px-4 py-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3"
                 role="row"
               >
                 <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400" role="columnheader">
@@ -531,8 +663,8 @@ export function PackageWorkbenchPanel({
                   Decision · Severity
                 </span>
               </div>
-              <div role="rowgroup">
-                {sortedFindings.map((finding) => (
+              <div className="max-h-[min(60vh,32rem)] overflow-y-auto overscroll-y-contain" role="rowgroup">
+                {pagedFindings.map((finding) => (
                   <FindingRow
                     key={finding.id}
                     finding={finding}
@@ -543,9 +675,17 @@ export function PackageWorkbenchPanel({
               </div>
             </div>
           )}
-          {selectedFinding !== null && <FindingDetailPanel finding={selectedFinding} />}
         </div>
       )}
+      {selectedFinding !== null ? (
+        <GuardModalLayer
+          ariaLabel={`Finding detail for ${selectedFinding.packageName}`}
+          onClose={handleCloseFinding}
+          panelClassName="w-full max-w-2xl"
+        >
+          <FindingDetailPanel finding={selectedFinding} onClose={handleCloseFinding} />
+        </GuardModalLayer>
+      ) : null}
     </div>
   );
 }
