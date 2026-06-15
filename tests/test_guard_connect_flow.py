@@ -146,8 +146,16 @@ def test_connect_status_requires_retry_when_oauth_not_configured(tmp_path: Path)
 
     assert payload["status"] == "retry_required"
     assert payload["milestone"] == "first_sync_failed"
+    assert payload["reason"] == "Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again."
     assert payload["recovery_command"] == "hol-guard connect"
     assert payload["repair_message"] == "Run hol-guard connect again to repair local Guard Cloud authorization."
+    latest_state = payload["latest_connect_state"]
+    assert isinstance(latest_state, dict)
+    assert latest_state["status"] == "retry_required"
+    assert latest_state["milestone"] == "first_sync_failed"
+    assert latest_state["reason"] == (
+        "Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again."
+    )
 
 
 def test_browser_connect_caches_paid_package_firewall_entitlement(tmp_path: Path) -> None:
