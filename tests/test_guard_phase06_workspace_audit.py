@@ -11,6 +11,7 @@ import pytest
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server
+from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard.local_supply_chain import (
     audit_receipt_metadata,
     build_workspace_audit_payload,
@@ -656,6 +657,58 @@ def test_audit_receipt_metadata_includes_prioritized_package_findings() -> None:
     assert isinstance(findings, list)
     assert len(findings) == 1
     assert findings[0]["name"] == "risky-lib"
+
+
+def test_audit_receipt_metadata_skips_informational_unknown_packages() -> None:
+    metadata = audit_receipt_metadata(
+        {
+            "lockfile_paths": ["uv.lock"],
+            "manifest_paths": ["pyproject.toml"],
+            "inventory": {"total_packages": 2},
+            "evaluation": {
+                "decision": "monitor",
+                "packages": [
+                    {
+                        "name": "aiohappyeyeballs",
+                        "ecosystem": "pypi",
+                        "decision": "monitor",
+                        "reasons": [
+                            {
+                                "code": "unknown_package",
+                                "message": "Guard has no materialized package intelligence yet.",
+                                "severity": "low",
+                            }
+                        ],
+                    },
+                    {
+                        "name": "risky-lib",
+                        "ecosystem": "pypi",
+                        "decision": "warn",
+                        "reasons": [{"code": "known_vuln", "message": "known vulnerability", "severity": "high"}],
+                    },
+                ],
+            },
+        }
+    )
+
+    findings = metadata["scanner_evidence"]["package_findings"]
+    assert isinstance(findings, list)
+    assert len(findings) == 1
+    assert findings[0]["name"] == "risky-lib"
+
+
+def test_workspace_files_discovers_nested_manifests(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    nested = workspace_dir / "dashboard"
+    nested.mkdir(parents=True)
+    _write_text(nested / "package.json", '{"name":"dashboard","dependencies":{}}')
+    _write_text(workspace_dir / "pyproject.toml", "[project]\nname = 'root'\n")
+
+    manifest_paths, lockfile_paths = local_supply_chain_module._workspace_files(workspace_dir)
+
+    assert "pyproject.toml" in manifest_paths
+    assert "dashboard/package.json" in manifest_paths
+    assert lockfile_paths == ()
 
 
 def test_workspace_audit_without_inventory_marks_incomplete_and_sync_required(

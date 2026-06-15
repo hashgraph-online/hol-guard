@@ -93,6 +93,29 @@ _LOCKFILE_CANDIDATES = (
     "composer.lock",
     "Gemfile.lock",
 )
+_WORKSPACE_AUDIT_DISCOVERY_SKIP_DIRS = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        "node_modules",
+        ".venv",
+        "venv",
+        "__pycache__",
+        ".tox",
+        "dist",
+        "build",
+        ".next",
+        "target",
+        ".guard",
+        ".worktrees",
+        "worktrees",
+    }
+)
+_WORKSPACE_AUDIT_DISCOVERY_MAX_DEPTH = 3
+_MANIFEST_CANDIDATE_SET = frozenset(_MANIFEST_CANDIDATES)
+_LOCKFILE_CANDIDATE_SET = frozenset(_LOCKFILE_CANDIDATES)
+_INFORMATIONAL_REASON_CODES = frozenset({"unknown_package", "no_cached_match"})
 _PACKAGE_MANAGER_BY_ECOSYSTEM = {
     "npm": "npm",
     "pypi": "pip",
@@ -616,6 +639,30 @@ def _enrich_evaluation_packages_with_advisory_aliases(
     return {**evaluation, "packages": enriched_packages}
 
 
+def _package_reason_codes(item: dict[str, object]) -> frozenset[str]:
+    reasons = item.get("reasons")
+    if not isinstance(reasons, list):
+        return frozenset()
+    codes: set[str] = set()
+    for reason in reasons:
+        if not isinstance(reason, dict):
+            continue
+        code = str(reason.get("code") or "").strip()
+        if code:
+            codes.add(code)
+    return frozenset(codes)
+
+
+def _is_actionable_package_finding(item: dict[str, object]) -> bool:
+    decision = str(item.get("decision") or "monitor")
+    if decision in {"block", "ask", "warn"}:
+        return True
+    reason_codes = _package_reason_codes(item)
+    if not reason_codes:
+        return decision not in {"allow", "monitor"}
+    return not reason_codes.issubset(_INFORMATIONAL_REASON_CODES)
+
+
 def _audit_package_findings_for_receipt(
     package_items: list[dict[str, object]],
     *,
@@ -625,9 +672,9 @@ def _audit_package_findings_for_receipt(
     decision_rank_map = {"block": 4, "ask": 3, "warn": 2, "monitor": 1, "allow": 0}
     ranked: list[tuple[int, int, dict[str, object]]] = []
     for item in package_items:
-        decision = str(item.get("decision") or "monitor")
-        if decision in {"allow", "monitor"} and not item.get("reasons"):
+        if not _is_actionable_package_finding(item):
             continue
+        decision = str(item.get("decision") or "monitor")
         severity_rank = _package_severity_rank(item)
         decision_rank = decision_rank_map.get(decision, 0)
         ranked.append((decision_rank, severity_rank, item))
@@ -1549,7 +1596,32 @@ def _workspace_scan_intent(
     )
 
 
+def _discover_workspace_audit_paths(workspace_dir: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    workspace_root = workspace_dir.expanduser().resolve()
+    manifests: list[str] = []
+    lockfiles: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(workspace_root, topdown=True):
+        current = Path(dirpath)
+        try:
+            depth = len(current.relative_to(workspace_root).parts)
+        except ValueError:
+            continue
+        if depth >= _WORKSPACE_AUDIT_DISCOVERY_MAX_DEPTH:
+            dirnames[:] = []
+        dirnames[:] = [name for name in dirnames if name not in _WORKSPACE_AUDIT_DISCOVERY_SKIP_DIRS]
+        for filename in filenames:
+            relative = (current / filename).relative_to(workspace_root).as_posix()
+            if filename in _MANIFEST_CANDIDATE_SET and relative not in manifests:
+                manifests.append(relative)
+            elif filename in _LOCKFILE_CANDIDATE_SET and relative not in lockfiles:
+                lockfiles.append(relative)
+    return tuple(manifests), tuple(lockfiles)
+
+
 def _workspace_files(workspace_dir: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    discovered = _discover_workspace_audit_paths(workspace_dir)
+    if discovered[0] or discovered[1]:
+        return discovered
     return (
         existing_relative_paths(workspace_dir, _MANIFEST_CANDIDATES),
         existing_relative_paths(workspace_dir, _LOCKFILE_CANDIDATES),

@@ -120,6 +120,9 @@
     --color-indigo-100: oklch(93% .034 272.788);
     --color-indigo-200: oklch(87% .065 274.039);
     --color-indigo-300: oklch(78.5% .115 274.713);
+    --color-violet-50: oklch(96.9% .016 293.756);
+    --color-violet-600: oklch(54.1% .281 293.009);
+    --color-violet-700: oklch(49.1% .27 292.581);
     --color-purple-50: oklch(97.7% .014 308.299);
     --color-purple-200: oklch(90.2% .063 306.703);
     --color-purple-500: oklch(62.7% .265 303.9);
@@ -127,6 +130,8 @@
     --color-rose-50: oklch(96.9% .015 12.422);
     --color-rose-200: oklch(89.2% .058 10.001);
     --color-rose-300: oklch(81% .117 11.638);
+    --color-rose-600: oklch(58.6% .253 17.585);
+    --color-rose-700: oklch(51.4% .222 16.935);
     --color-rose-900: oklch(41% .159 10.272);
     --color-slate-50: oklch(98.4% .003 247.858);
     --color-slate-100: oklch(96.8% .007 247.896);
@@ -1013,12 +1018,12 @@
     height: calc(var(--spacing) * 72);
   }
 
-  .h-\[88px\] {
-    height: 88px;
-  }
-
   .h-\[88vh\] {
     height: 88vh;
+  }
+
+  .h-\[96px\] {
+    height: 96px;
   }
 
   .h-auto {
@@ -1043,6 +1048,14 @@
 
   .max-h-\[min\(34rem\,48vh\)\] {
     max-height: min(34rem, 48vh);
+  }
+
+  .max-h-\[min\(60vh\,32rem\)\] {
+    max-height: min(60vh, 32rem);
+  }
+
+  .max-h-\[min\(85vh\,40rem\)\] {
+    max-height: min(85vh, 40rem);
   }
 
   .min-h-0 {
@@ -1319,6 +1332,10 @@
 
   .min-w-\[120px\] {
     min-width: 120px;
+  }
+
+  .min-w-\[148px\] {
+    min-width: 148px;
   }
 
   .min-w-\[160px\] {
@@ -1696,6 +1713,10 @@
 
   .overflow-y-auto {
     overflow-y: auto;
+  }
+
+  .overscroll-y-contain {
+    overscroll-behavior-y: contain;
   }
 
   .rounded {
@@ -2507,16 +2528,6 @@
     }
   }
 
-  .bg-brand-blue\/70 {
-    background-color: var(--brand-blue);
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .bg-brand-blue\/70 {
-      background-color: color-mix(in oklab, var(--brand-blue) 70%, transparent);
-    }
-  }
-
   .bg-brand-blue\/\[0\.03\] {
     background-color: var(--brand-blue);
   }
@@ -2648,6 +2659,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .bg-brand-green\/12 {
       background-color: color-mix(in oklab, var(--brand-green) 12%, transparent);
+    }
+  }
+
+  .bg-brand-green\/15 {
+    background-color: var(--brand-green);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-brand-green\/15 {
+      background-color: color-mix(in oklab, var(--brand-green) 15%, transparent);
     }
   }
 
@@ -2973,6 +2994,16 @@
     }
   }
 
+  .bg-slate-200\/80 {
+    background-color: #e2e8f0cc;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-slate-200\/80 {
+      background-color: color-mix(in oklab, var(--color-slate-200) 80%, transparent);
+    }
+  }
+
   .bg-slate-200\/90 {
     background-color: #e2e8f0e6;
   }
@@ -3037,6 +3068,10 @@
 
   .bg-transparent {
     background-color: #0000;
+  }
+
+  .bg-violet-50 {
+    background-color: var(--color-violet-50);
   }
 
   .bg-white {
@@ -4147,6 +4182,14 @@
     color: var(--color-red-700);
   }
 
+  .text-rose-600 {
+    color: var(--color-rose-600);
+  }
+
+  .text-rose-700 {
+    color: var(--color-rose-700);
+  }
+
   .text-rose-900 {
     color: var(--color-rose-900);
   }
@@ -4181,6 +4224,14 @@
 
   .text-slate-900 {
     color: var(--color-slate-900);
+  }
+
+  .text-violet-600 {
+    color: var(--color-violet-600);
+  }
+
+  .text-violet-700 {
+    color: var(--color-violet-700);
   }
 
   .text-white {
@@ -4308,6 +4359,10 @@
 
   .opacity-90 {
     opacity: .9;
+  }
+
+  .opacity-95 {
+    opacity: .95;
   }
 
   .opacity-100 {
@@ -5796,10 +5851,6 @@
       grid-template-columns: minmax(0, 1fr) 300px;
     }
 
-    .lg\:grid-cols-\[minmax\(0\,1fr\)_340px\] {
-      grid-template-columns: minmax(0, 1fr) 340px;
-    }
-
     .lg\:grid-cols-\[minmax\(0\,1fr\)_420px\] {
       grid-template-columns: minmax(0, 1fr) 420px;
     }
@@ -5910,6 +5961,10 @@
 
     .xl\:grid-cols-\[minmax\(0\,1\.08fr\)_minmax\(340px\,0\.92fr\)\] {
       grid-template-columns: minmax(0, 1.08fr) minmax(340px, .92fr);
+    }
+
+    .xl\:grid-cols-\[minmax\(0\,1fr\)_380px\] {
+      grid-template-columns: minmax(0, 1fr) 380px;
     }
 
     .xl\:items-start {
