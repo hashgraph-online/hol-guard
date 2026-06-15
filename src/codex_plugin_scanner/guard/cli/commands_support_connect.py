@@ -34,9 +34,13 @@ def _resolve_policy_expiry(args: argparse.Namespace) -> str | None:
     return (datetime.now(timezone.utc) + timedelta(hours=float(hours))).isoformat()
 
 def _guard_doctor_connect_health_payload(store: GuardStore) -> dict[str, object]:
-    latest_state = store.get_effective_guard_connect_state(now=_now())
+    oauth_storage_health = store.get_oauth_local_credential_health()
+    latest_state = normalize_connect_state_for_missing_oauth(
+        latest_state=store.get_effective_guard_connect_state(now=_now()),
+        oauth_storage_health=oauth_storage_health,
+    )
     payload: dict[str, object] = {
-        "oauth_storage_health": _guard_doctor_oauth_storage_health_payload(store),
+        "oauth_storage_health": _guard_doctor_oauth_storage_health_payload_from_health(oauth_storage_health),
         "connect_recovery_command": connect_recovery_command(latest_state),
     }
     if isinstance(latest_state, dict):
@@ -44,7 +48,11 @@ def _guard_doctor_connect_health_payload(store: GuardStore) -> dict[str, object]
     return payload
 
 def _guard_doctor_oauth_storage_health_payload(store: GuardStore) -> dict[str, str]:
-    oauth_storage_health = store.get_oauth_local_credential_health()
+    return _guard_doctor_oauth_storage_health_payload_from_health(
+        store.get_oauth_local_credential_health(),
+    )
+
+def _guard_doctor_oauth_storage_health_payload_from_health(oauth_storage_health: dict[str, object]) -> dict[str, str]:
     state = "unknown"
     if isinstance(oauth_storage_health, dict):
         raw_state = oauth_storage_health.get("state")
