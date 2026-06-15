@@ -15,6 +15,8 @@ _HOOK_ARGV_ENV = "HOL_GUARD_HOOK_ARGV"
 _INHERIT_ENV_KEYS = ("PATH", "HOME", "USER", "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL", "SYSTEMROOT")
 
 _PLUGIN_TEMPLATE = """// Managed by HOL Guard. Re-run `hol-guard install opencode` after moving Guard home.
+import { spawn as nodeSpawn } from "node:child_process";
+
 const GUARD_HOME = __GUARD_HOME__;
 const GUARD_PYTHON = __GUARD_PYTHON__;
 const GUARD_HOOK_LAUNCHER = __GUARD_HOOK_LAUNCHER__;
@@ -50,28 +52,8 @@ async function spawnGuardProcess(options: {
   env: Record<string, string>;
   stdin: string;
 }): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-  const bun = (globalThis as { Bun?: { spawn?: Function } }).Bun;
-  if (typeof bun?.spawn === "function") {
-    const proc = bun.spawn(options.command, {
-      cwd: options.cwd,
-      env: options.env,
-      stdin: new Blob([options.stdin]),
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const stdoutPromise = new Response(proc.stdout).text();
-    const stderrPromise = new Response(proc.stderr).text();
-    const exitCode = await proc.exited;
-    return {
-      exitCode,
-      stdout: await stdoutPromise,
-      stderr: await stderrPromise,
-    };
-  }
-
-  const { spawn } = await import("node:child_process");
   return new Promise((resolve, reject) => {
-    const proc = spawn(options.command[0], options.command.slice(1), {
+    const proc = nodeSpawn(options.command[0], options.command.slice(1), {
       cwd: options.cwd,
       env: options.env,
       stdio: ["pipe", "pipe", "pipe"],
