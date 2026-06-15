@@ -113,12 +113,14 @@ export function PolicyCloudExceptionsTab({
     [exceptions, selectedExceptionId],
   );
 
+  const firstActiveId = groups.active[0]?.id ?? null;
+
   useEffect(() => {
-    if (loadState !== "ready" || groups.active.length === 0) {
+    if (loadState !== "ready" || !firstActiveId) {
       return;
     }
-    setSelectedExceptionId((current) => current ?? groups.active[0]?.id ?? null);
-  }, [groups.active, loadState]);
+    setSelectedExceptionId((current) => current ?? firstActiveId);
+  }, [firstActiveId, loadState]);
 
   return (
     <>

@@ -160,6 +160,39 @@ const SAFETY_ITEMS = [
   },
 ] as const;
 
+function resolveSafetyScopeTarget(
+  scope: RequestScopeValue,
+  artifactId: string,
+  publisher: string,
+  harness: string,
+  workingDirectory: string,
+): string {
+  if (scope === "artifact") {
+    return artifactId || "Selected artifact";
+  }
+  if (scope === "publisher") {
+    return publisher || "Publisher";
+  }
+  if (scope === "harness") {
+    return harness;
+  }
+  if (scope === "workspace") {
+    return workingDirectory || "Project folder";
+  }
+  return "Team policy";
+}
+
+function resolveResultActionLabel(scope: RequestScopeValue): string {
+  if (scope === "artifact") {
+    return "this exact action";
+  }
+  if (scope === "workspace") {
+    return "matching actions in this project";
+  }
+  const scopeForLabel = scope === "team-policy" ? "global" : scope;
+  return scopeLabel(scopeForLabel, "policy");
+}
+
 export function SafetyPreview({
   scope,
   harness,
@@ -170,16 +203,7 @@ export function SafetyPreview({
   expiresLabel,
 }: SafetyPreviewProps) {
   const blast = resolveRequestScopeBlastRadius(scope);
-  const scopeTarget =
-    scope === "artifact"
-      ? artifactId || "Selected artifact"
-      : scope === "publisher"
-        ? publisher || "Publisher"
-        : scope === "harness"
-          ? harness
-          : scope === "workspace"
-            ? workingDirectory || "Project folder"
-            : "Team policy";
+  const scopeTarget = resolveSafetyScopeTarget(scope, artifactId, publisher, harness, workingDirectory);
 
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
@@ -281,8 +305,7 @@ type ResultPreviewProps = {
 
 export function ResultPreview({ scope, harness, expiresLabel }: ResultPreviewProps) {
   const showHarness = (scope === "artifact" || scope === "harness") && harness.trim();
-  const actionLabel =
-    scope === "artifact" ? "this exact action" : scope === "workspace" ? "matching actions in this project" : scopeLabel(scope === "team-policy" ? "global" : scope, "policy");
+  const actionLabel = resolveResultActionLabel(scope);
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">

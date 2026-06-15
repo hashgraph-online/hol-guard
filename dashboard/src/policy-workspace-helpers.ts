@@ -297,11 +297,12 @@ export function resolvePolicyRowTitle(policy: GuardPolicyDecision, display: Poli
   const artifactId = policy.artifact_id?.trim();
   if (artifactId && !artifactId.startsWith("family:")) {
     const slashIndex = artifactId.lastIndexOf("/");
-    if (slashIndex >= 0 && slashIndex < artifactId.length - 1) {
-      return artifactId.slice(slashIndex + 1);
-    }
-    if (artifactId.length <= 64) {
-      return artifactId;
+    const candidate =
+      slashIndex >= 0 && slashIndex < artifactId.length - 1
+        ? artifactId.slice(slashIndex + 1)
+        : artifactId;
+    if (candidate.length <= 64) {
+      return candidate;
     }
   }
 

@@ -489,6 +489,31 @@ const SAFETY_ITEMS = [
     detail: "Local daemon will enforce only after receiving signed bundle ack."
   }
 ];
+function resolveSafetyScopeTarget(scope, artifactId, publisher, harness, workingDirectory) {
+  if (scope === "artifact") {
+    return artifactId || "Selected artifact";
+  }
+  if (scope === "publisher") {
+    return publisher || "Publisher";
+  }
+  if (scope === "harness") {
+    return harness;
+  }
+  if (scope === "workspace") {
+    return workingDirectory || "Project folder";
+  }
+  return "Team policy";
+}
+function resolveResultActionLabel(scope) {
+  if (scope === "artifact") {
+    return "this exact action";
+  }
+  if (scope === "workspace") {
+    return "matching actions in this project";
+  }
+  const scopeForLabel = scope === "team-policy" ? "global" : scope;
+  return scopeLabel(scopeForLabel, "policy");
+}
 function SafetyPreview({
   scope,
   harness,
@@ -499,7 +524,7 @@ function SafetyPreview({
   expiresLabel
 }) {
   const blast = resolveRequestScopeBlastRadius(scope);
-  const scopeTarget = scope === "artifact" ? artifactId || "Selected artifact" : scope === "publisher" ? publisher || "Publisher" : scope === "harness" ? harness : scope === "workspace" ? workingDirectory || "Project folder" : "Team policy";
+  const scopeTarget = resolveSafetyScopeTarget(scope, artifactId, publisher, harness, workingDirectory);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-slate-50/80 p-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-slate-500", children: "Safety preview" }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
@@ -585,7 +610,7 @@ function SourceReceiptSummary({ receipt }) {
 }
 function ResultPreview({ scope, harness, expiresLabel }) {
   const showHarness = (scope === "artifact" || scope === "harness") && harness.trim();
-  const actionLabel = scope === "artifact" ? "this exact action" : scope === "workspace" ? "matching actions in this project" : scopeLabel(scope === "team-policy" ? "global" : scope, "policy");
+  const actionLabel = resolveResultActionLabel(scope);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-slate-500", children: "Result preview" }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-sm leading-relaxed text-brand-dark", children: [
@@ -865,6 +890,52 @@ function PolicyCloudExceptionRequestPanel({
     sourceReceiptId,
     workingDirectory
   ]);
+  reactExports.useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!saved) {
+        return;
+      }
+      const draft = JSON.parse(saved);
+      if (draft.scope) {
+        setScope(draft.scope);
+      }
+      if (draft.harness) {
+        setHarness(draft.harness);
+      }
+      if (draft.artifactId) {
+        setArtifactId(draft.artifactId);
+      }
+      if (draft.publisher) {
+        setPublisher(draft.publisher);
+      }
+      if (draft.workingDirectory) {
+        setWorkingDirectory(draft.workingDirectory);
+      }
+      if (draft.sourceReceiptId) {
+        setSourceReceiptId(draft.sourceReceiptId);
+      }
+      if (draft.requestedBy) {
+        setRequestedBy(draft.requestedBy);
+      }
+      if (draft.owner) {
+        setOwner(draft.owner);
+      }
+      if (draft.reason) {
+        setReason(draft.reason);
+      }
+      if (draft.requestedExpiresAt) {
+        setRequestedExpiresAt(draft.requestedExpiresAt);
+      }
+      if (draft.linkedTicket) {
+        setLinkedTicket(draft.linkedTicket);
+      }
+      if (draft.maxUses) {
+        setMaxUses(draft.maxUses);
+      }
+    } catch {
+    }
+  }, []);
   const handleBack = reactExports.useCallback(() => {
     setStepIndex((current) => Math.max(0, current - 1));
   }, []);
@@ -1815,11 +1886,9 @@ function resolvePolicyRowTitle(policy, display) {
   const artifactId = policy.artifact_id?.trim();
   if (artifactId && !artifactId.startsWith("family:")) {
     const slashIndex = artifactId.lastIndexOf("/");
-    if (slashIndex >= 0 && slashIndex < artifactId.length - 1) {
-      return artifactId.slice(slashIndex + 1);
-    }
-    if (artifactId.length <= 64) {
-      return artifactId;
+    const candidate = slashIndex >= 0 && slashIndex < artifactId.length - 1 ? artifactId.slice(slashIndex + 1) : artifactId;
+    if (candidate.length <= 64) {
+      return candidate;
     }
   }
   const headline = display.headline.trim();
@@ -2041,12 +2110,13 @@ function PolicyCloudExceptionsTab({
     () => exceptions.find((item) => item.id === selectedExceptionId) ?? null,
     [exceptions, selectedExceptionId]
   );
+  const firstActiveId = groups.active[0]?.id ?? null;
   reactExports.useEffect(() => {
-    if (loadState !== "ready" || groups.active.length === 0) {
+    if (loadState !== "ready" || !firstActiveId) {
       return;
     }
-    setSelectedExceptionId((current) => current ?? groups.active[0]?.id ?? null);
-  }, [groups.active, loadState]);
+    setSelectedExceptionId((current) => current ?? firstActiveId);
+  }, [firstActiveId, loadState]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     requestOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       PolicyCloudExceptionRequestPanel,
@@ -2583,6 +2653,17 @@ function PolicyRememberedRulesTab({
   const [searchQuery, setSearchQuery] = reactExports.useState("");
   const [appFilter, setAppFilter] = reactExports.useState("");
   const [familyFilter, setFamilyFilter] = reactExports.useState("");
+  const searchInputRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    const handleKeyDown = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
   const handleSearchChange = reactExports.useCallback((event) => {
     setSearchQuery(event.target.value);
   }, []);
@@ -2651,6 +2732,7 @@ function PolicyRememberedRulesTab({
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "input",
             {
+              ref: searchInputRef,
               type: "search",
               placeholder: "Search by app, action, or reason…",
               value: searchQuery,

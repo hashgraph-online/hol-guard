@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { ActionButton, SectionLabel } from "./approval-center-primitives";
 import { harnessDisplayName } from "./approval-center-utils";
@@ -302,6 +302,67 @@ export function PolicyCloudExceptionRequestPanel({
     sourceReceiptId,
     workingDirectory,
   ]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!saved) {
+        return;
+      }
+      const draft = JSON.parse(saved) as Partial<{
+        scope: RequestScopeValue;
+        harness: string;
+        artifactId: string;
+        publisher: string;
+        workingDirectory: string;
+        sourceReceiptId: string;
+        requestedBy: string;
+        owner: string;
+        reason: string;
+        requestedExpiresAt: string;
+        linkedTicket: string;
+        maxUses: string;
+      }>;
+      if (draft.scope) {
+        setScope(draft.scope);
+      }
+      if (draft.harness) {
+        setHarness(draft.harness);
+      }
+      if (draft.artifactId) {
+        setArtifactId(draft.artifactId);
+      }
+      if (draft.publisher) {
+        setPublisher(draft.publisher);
+      }
+      if (draft.workingDirectory) {
+        setWorkingDirectory(draft.workingDirectory);
+      }
+      if (draft.sourceReceiptId) {
+        setSourceReceiptId(draft.sourceReceiptId);
+      }
+      if (draft.requestedBy) {
+        setRequestedBy(draft.requestedBy);
+      }
+      if (draft.owner) {
+        setOwner(draft.owner);
+      }
+      if (draft.reason) {
+        setReason(draft.reason);
+      }
+      if (draft.requestedExpiresAt) {
+        setRequestedExpiresAt(draft.requestedExpiresAt);
+      }
+      if (draft.linkedTicket) {
+        setLinkedTicket(draft.linkedTicket);
+      }
+      if (draft.maxUses) {
+        setMaxUses(draft.maxUses);
+      }
+    } catch {
+      // ignore restore failures
+    }
+  }, []);
 
   const handleBack = useCallback(() => {
     setStepIndex((current) => Math.max(0, current - 1));

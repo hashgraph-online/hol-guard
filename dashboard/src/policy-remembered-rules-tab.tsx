@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { HiMiniMagnifyingGlass } from "react-icons/hi2";
 import { harnessDisplayName, policyActionLabel } from "./approval-center-utils";
@@ -35,6 +35,18 @@ export function PolicyRememberedRulesTab({
   const [searchQuery, setSearchQuery] = useState("");
   const [appFilter, setAppFilter] = useState("");
   const [familyFilter, setFamilyFilter] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const handleSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(event.target.value);
@@ -115,6 +127,7 @@ export function PolicyRememberedRulesTab({
           <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2">
             <HiMiniMagnifyingGlass className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
             <input
+              ref={searchInputRef}
               type="search"
               placeholder="Search by app, action, or reason…"
               value={searchQuery}
