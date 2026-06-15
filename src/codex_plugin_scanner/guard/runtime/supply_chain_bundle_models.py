@@ -437,6 +437,7 @@ class SupplyChainBundleResponse:
     """Signed supply-chain bundle response from Guard Cloud."""
 
     bundle: SupplyChainBundle
+    # Preserves the exact bundle JSON from Guard Cloud for hash/signature verification.
     signed_bundle: dict[str, object]
     payload_hash: str
     signature: str
@@ -445,7 +446,7 @@ class SupplyChainBundleResponse:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "bundle": self.signed_bundle,
+            "bundle": dict(self.signed_bundle),
             "payloadHash": self.payload_hash,
             "signature": self.signature,
             "signatureAlgorithm": self.signature_algorithm,
