@@ -282,17 +282,26 @@ def _cursor_conversation_id(payload: dict[str, object]) -> str | None:
         value = _optional_string(payload.get(key))
         if value is not None:
             return value
-    return _optional_string(os.environ.get("CURSOR_SESSION_ID"))
+    for env_key in ("CURSOR_SESSION_ID", "CURSOR_TRACE_ID"):
+        value = _optional_string(os.environ.get(env_key))
+        if value is not None:
+            return value
+    return None
 
 def _cursor_shell_command_from_payload(payload: Mapping[str, object]) -> str | None:
-    from ..adapters.cursor_native_approval import normalize_cursor_shell_command
+    from ..adapters.cursor_native_approval import (
+        is_lean_ctx_wrapper_command,
+        normalize_cursor_shell_command,
+    )
 
-    command = _optional_string(payload.get("command"))
-    if command is None:
-        command = _hook_command_text(payload)
-    if command is None:
-        return None
-    return normalize_cursor_shell_command(command)
+    tool_input_command = _hook_command_text(payload)
+    top_level = _optional_string(payload.get("command"))
+    if tool_input_command is not None:
+        if top_level is None or is_lean_ctx_wrapper_command(top_level):
+            return normalize_cursor_shell_command(tool_input_command)
+    if top_level is not None:
+        return normalize_cursor_shell_command(top_level)
+    return None
 
 def _cursor_shell_command_fingerprint(command: str) -> str:
     from ..adapters.cursor_native_approval import normalize_cursor_shell_command
@@ -359,9 +368,13 @@ def _cursor_pending_shell_is_fresh(pending: Mapping[str, object], *, now: str) -
     return 0 <= age_seconds <= _CURSOR_PENDING_SHELL_MAX_AGE_SECONDS
 
 def _cursor_after_shell_observed(payload: Mapping[str, object]) -> bool:
+    event_name = (_hook_event_name(payload) or "").strip().lower()
     duration = payload.get("duration")
     if isinstance(duration, (int, float)) and not isinstance(duration, bool):
         return duration >= 0
+    if event_name == "aftermcpexecution":
+        result_json = payload.get("result_json")
+        return isinstance(result_json, str) and bool(result_json.strip())
     output = payload.get("output")
     return isinstance(output, str)
 

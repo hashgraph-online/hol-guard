@@ -37,7 +37,16 @@ def _review_runtime_artifact_hook(
     runtime_artifact_hash = state.runtime_artifact_hash
     scanner_evidence_payload = state.scanner_evidence_payload
     stored_policy_action = state.stored_policy_action
-    if policy_action in {"block", "sandbox-required", "require-reapproval"}:
+    from ..adapters.cursor_hooks import cursor_hook_requires_approval_center_queue
+
+    cursor_native_queue = (
+        _canonical_harness_name(args.harness) == "cursor"
+        and cursor_hook_requires_approval_center_queue(
+            policy_action=policy_action,
+            guard_payload=response_payload,
+        )
+    )
+    if policy_action in {"block", "sandbox-required", "require-reapproval"} or cursor_native_queue:
         native_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
         additional_context = _claude_prompt_additional_context(
             harness=args.harness,
@@ -115,13 +124,18 @@ def _review_runtime_artifact_hook(
             approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
             approval_center_url = ensure_guard_daemon(guard_home)
             runtime_detection = _runtime_detection(args.harness, runtime_artifact)
+            queued_policy_action = (
+                "require-reapproval"
+                if cursor_native_queue and policy_action in {"warn", "review"}
+                else policy_action
+            )
             evaluation_payload = {
                 "artifacts": [
                     {
                         "artifact_id": artifact_id,
                         "artifact_name": artifact_name,
                         "artifact_hash": runtime_artifact_hash,
-                        "policy_action": policy_action,
+                        "policy_action": queued_policy_action,
                         "changed_fields": changed_capabilities,
                         "artifact_type": runtime_artifact.artifact_type,
                         "source_scope": runtime_artifact.source_scope,
@@ -210,6 +224,10 @@ def _review_runtime_artifact_hook(
                 _canonical_harness_name(args.harness) == "cursor"
                 and event_name == "PreToolUse"
                 and runtime_artifact.artifact_type == "tool_action_request"
+                and cursor_hook_requires_approval_center_queue(
+                    policy_action=policy_action,
+                    guard_payload=response_payload,
+                )
             ):
                 from ..adapters.cursor_hooks import cursor_hook_would_prompt_user
 

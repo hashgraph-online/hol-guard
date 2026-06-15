@@ -1,4 +1,4 @@
-"""Cursor native shell approval attestation for afterShell observer hooks."""
+"""Cursor native approval attestation for afterShell and afterMCP observer hooks."""
 
 from __future__ import annotations
 
@@ -17,6 +17,11 @@ _MANAGED_HOOK_ENV = "HOL_GUARD_MANAGED_CURSOR_HOOK"
 _AFTER_SHELL_PROOF_ENV = "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF"
 _APPROVAL_BINDING_ENV = "HOL_GUARD_CURSOR_APPROVAL_BINDING"
 _AFTER_SHELL_PROOF_EVENT = "afterShellExecution"
+_AFTER_MCP_PROOF_EVENT = "afterMCPExecution"
+_CURSOR_BLOCKING_OBSERVER_EVENTS = {
+    "beforeShellExecution": _AFTER_SHELL_PROOF_EVENT,
+    "beforeMCPExecution": _AFTER_MCP_PROOF_EVENT,
+}
 _MAX_CURSOR_SHELL_NORMALIZE_BYTES = 8192
 _LEAN_CTX_COMMAND_MARKER = "lean-ctx"
 
@@ -106,11 +111,37 @@ def _cursor_shell_binding_segment(conversation_id: str) -> str:
     return cleaned
 
 
-def cursor_after_shell_proof_message(
+def is_lean_ctx_wrapper_command(command: str) -> bool:
+    stripped = command.strip()
+    if not stripped:
+        return False
+    first_token = stripped.split(maxsplit=1)[0]
+    return Path(first_token).name.lower() == _LEAN_CTX_COMMAND_MARKER
+
+
+def cursor_observer_event_for_blocking(blocking_event: str) -> str | None:
+    return _CURSOR_BLOCKING_OBSERVER_EVENTS.get(blocking_event.strip())
+
+
+def cursor_observer_event_for_payload(payload: Mapping[str, object]) -> str:
+    for key in ("hook_event_name", "hookEventName", "cursor_source_hook_event"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            normalized = value.strip()
+            if normalized in {_AFTER_SHELL_PROOF_EVENT, _AFTER_MCP_PROOF_EVENT}:
+                return normalized
+            mapped = cursor_observer_event_for_blocking(normalized)
+            if mapped is not None:
+                return mapped
+    return _AFTER_SHELL_PROOF_EVENT
+
+
+def cursor_after_observer_proof_message(
     *,
     conversation_id: str,
     command: str,
     approval_binding: str,
+    observer_event: str,
 ) -> bytes:
     return (
         chr(0)
@@ -119,10 +150,24 @@ def cursor_after_shell_proof_message(
                 conversation_id.strip(),
                 command.strip(),
                 approval_binding.strip(),
-                _AFTER_SHELL_PROOF_EVENT,
+                observer_event.strip(),
             )
         )
         .encode("utf-8")
+    )
+
+
+def cursor_after_shell_proof_message(
+    *,
+    conversation_id: str,
+    command: str,
+    approval_binding: str,
+) -> bytes:
+    return cursor_after_observer_proof_message(
+        conversation_id=conversation_id,
+        command=command,
+        approval_binding=approval_binding,
+        observer_event=_AFTER_SHELL_PROOF_EVENT,
     )
 
 
@@ -246,6 +291,25 @@ def ensure_cursor_approval_binding(payload: Mapping[str, object]) -> str:
     return f"hol-guard:{secrets.token_urlsafe(24)}"
 
 
+def compute_cursor_after_observer_proof(
+    *,
+    secret: bytes,
+    conversation_id: str,
+    command: str,
+    approval_binding: str,
+    observer_event: str,
+) -> str:
+    normalized_command = normalize_cursor_shell_command(command)
+    message = cursor_after_observer_proof_message(
+        conversation_id=conversation_id,
+        command=normalized_command,
+        approval_binding=approval_binding,
+        observer_event=observer_event,
+    )
+    digest = hmac.new(secret, message, hashlib.sha256).hexdigest()
+    return digest
+
+
 def compute_cursor_after_shell_proof(
     *,
     secret: bytes,
@@ -253,14 +317,34 @@ def compute_cursor_after_shell_proof(
     command: str,
     approval_binding: str,
 ) -> str:
-    normalized_command = normalize_cursor_shell_command(command)
-    message = cursor_after_shell_proof_message(
+    return compute_cursor_after_observer_proof(
+        secret=secret,
         conversation_id=conversation_id,
-        command=normalized_command,
+        command=command,
         approval_binding=approval_binding,
+        observer_event=_AFTER_SHELL_PROOF_EVENT,
     )
-    digest = hmac.new(secret, message, hashlib.sha256).hexdigest()
-    return digest
+
+
+def verify_cursor_after_observer_proof(
+    *,
+    secret: bytes,
+    conversation_id: str,
+    command: str,
+    approval_binding: str,
+    proof: str,
+    observer_event: str,
+) -> bool:
+    if not proof.strip():
+        return False
+    expected = compute_cursor_after_observer_proof(
+        secret=secret,
+        conversation_id=conversation_id,
+        command=command,
+        approval_binding=approval_binding,
+        observer_event=observer_event,
+    )
+    return hmac.compare_digest(expected, proof.strip())
 
 
 def verify_cursor_after_shell_proof(
@@ -271,15 +355,14 @@ def verify_cursor_after_shell_proof(
     approval_binding: str,
     proof: str,
 ) -> bool:
-    if not proof.strip():
-        return False
-    expected = compute_cursor_after_shell_proof(
+    return verify_cursor_after_observer_proof(
         secret=secret,
         conversation_id=conversation_id,
         command=command,
         approval_binding=approval_binding,
+        proof=proof,
+        observer_event=_AFTER_SHELL_PROOF_EVENT,
     )
-    return hmac.compare_digest(expected, proof.strip())
 
 
 def managed_cursor_hook_invocation(env: Mapping[str, str] | None = None) -> bool:
@@ -292,7 +375,7 @@ def after_shell_proof_from_env(env: Mapping[str, str] | None = None) -> str | No
     return _optional_string(source.get(_AFTER_SHELL_PROOF_ENV))
 
 
-def cursor_after_shell_trusted(
+def cursor_after_observer_trusted(
     *,
     guard_home: Path,
     pending: Mapping[str, object],
@@ -323,34 +406,64 @@ def cursor_after_shell_trusted(
         return False
     if not hmac.compare_digest(expected_proof.strip(), proof.strip()):
         return False
+    observer_event = _optional_string(pending.get("observer_event")) or cursor_observer_event_for_payload(
+        payload
+    )
     try:
         secret = ensure_cursor_hook_attestation_secret(guard_home)
     except OSError:
         return False
-    return verify_cursor_after_shell_proof(
+    return verify_cursor_after_observer_proof(
         secret=secret,
         conversation_id=conversation_id,
         command=normalize_cursor_shell_command(command),
         approval_binding=payload_binding,
         proof=proof,
+        observer_event=observer_event,
+    )
+
+
+def cursor_after_shell_trusted(
+    *,
+    guard_home: Path,
+    pending: Mapping[str, object],
+    payload: Mapping[str, object],
+    conversation_id: str,
+    command: str,
+    env: Mapping[str, str] | None = None,
+) -> bool:
+    return cursor_after_observer_trusted(
+        guard_home=guard_home,
+        pending=pending,
+        payload=payload,
+        conversation_id=conversation_id,
+        command=command,
+        env=env,
     )
 
 
 __all__ = [
     "after_shell_proof_from_env",
+    "compute_cursor_after_observer_proof",
     "compute_cursor_after_shell_proof",
+    "cursor_after_observer_proof_message",
+    "cursor_after_observer_trusted",
     "cursor_after_shell_proof_message",
     "cursor_after_shell_trusted",
     "cursor_generation_id",
     "cursor_hook_attestation_secret_path",
+    "cursor_observer_event_for_blocking",
+    "cursor_observer_event_for_payload",
     "cursor_shell_binding_path",
     "ensure_cursor_approval_binding",
     "ensure_cursor_hook_attestation_secret",
+    "is_lean_ctx_wrapper_command",
     "managed_cursor_hook_invocation",
     "normalize_cursor_shell_command",
     "read_cursor_shell_binding_file",
     "remove_cursor_shell_binding_file",
     "resolve_cursor_approval_binding",
+    "verify_cursor_after_observer_proof",
     "verify_cursor_after_shell_proof",
     "write_cursor_shell_binding_file",
 ]

@@ -20,7 +20,7 @@ _BLOCKING_MANAGED_HOOK_EVENTS = (
     "beforeMCPExecution",
     "beforeReadFile",
 )
-_OBSERVER_MANAGED_HOOK_EVENTS = ("afterShellExecution",)
+_OBSERVER_MANAGED_HOOK_EVENTS = ("afterShellExecution", "afterMCPExecution")
 _MANAGED_HOOK_EVENTS = _BLOCKING_MANAGED_HOOK_EVENTS + _OBSERVER_MANAGED_HOOK_EVENTS
 _MANAGED_HOOK_TIMEOUT_SECONDS = 45
 _LEGACY_MANAGED_COMMAND_MARKERS = (
@@ -63,6 +63,19 @@ def _cursor_shell_hook_payload(normalized: dict[str, object], *, hook_event_name
     return payload
 
 
+def _cursor_mcp_hook_payload(normalized: dict[str, object], *, hook_event_name: str) -> dict[str, object]:
+    payload = dict(normalized)
+    payload["hook_event_name"] = hook_event_name
+    tool_input = _tool_input_dict(payload.get("tool_input"))
+    payload["tool_input"] = tool_input
+    tool_name = payload.get("tool_name")
+    if isinstance(tool_name, str) and tool_name.strip():
+        payload["tool_name"] = tool_name.strip()
+    else:
+        payload.setdefault("tool_name", "MCP")
+    return payload
+
+
 def prepare_cursor_hook_payload(payload: Mapping[str, object]) -> dict[str, object]:
     """Map Cursor hook stdin JSON into Guard hook normalization shape."""
 
@@ -70,22 +83,22 @@ def prepare_cursor_hook_payload(payload: Mapping[str, object]) -> dict[str, obje
     raw_event = _raw_hook_event_name(normalized)
     if raw_event == "aftershellexecution":
         return _cursor_shell_hook_payload(normalized, hook_event_name="afterShellExecution")
+    if raw_event == "aftermcpexecution":
+        return _cursor_mcp_hook_payload(normalized, hook_event_name="afterMCPExecution")
     if raw_event == "beforeshellexecution":
-        return _cursor_shell_hook_payload(normalized, hook_event_name="PreToolUse")
+        prepared = _cursor_shell_hook_payload(normalized, hook_event_name="PreToolUse")
+        prepared["cursor_source_hook_event"] = "beforeShellExecution"
+        return prepared
     if raw_event == "beforemcpexecution":
-        normalized["hook_event_name"] = "PreToolUse"
-        tool_name = normalized.get("tool_name")
-        if isinstance(tool_name, str) and tool_name.strip():
-            normalized["tool_name"] = tool_name.strip()
-        else:
-            normalized.setdefault("tool_name", "MCP")
-        tool_input = _tool_input_dict(normalized.get("tool_input"))
+        prepared = _cursor_mcp_hook_payload(normalized, hook_event_name="PreToolUse")
+        tool_input = _tool_input_dict(prepared.get("tool_input"))
         for key in ("url", "command"):
             value = normalized.get(key)
             if isinstance(value, str) and value.strip():
                 tool_input.setdefault(key, value.strip())
-        normalized["tool_input"] = tool_input
-        return normalized
+        prepared["tool_input"] = tool_input
+        prepared["cursor_source_hook_event"] = "beforeMCPExecution"
+        return prepared
     if raw_event == "beforereadfile":
         normalized["hook_event_name"] = "PreToolUse"
         normalized.setdefault("tool_name", "Read")
@@ -130,6 +143,19 @@ def cursor_hook_would_prompt_user(
         policy_action == "warn"
         and guard_payload is not None
         and _guard_payload_has_actionable_risk_for_policy(guard_payload)
+    )
+
+
+def cursor_hook_requires_approval_center_queue(
+    *,
+    policy_action: str,
+    guard_payload: Mapping[str, object] | None = None,
+) -> bool:
+    """Return True when Cursor native prompts should also appear in the approval center."""
+
+    return cursor_hook_would_prompt_user(
+        policy_action=policy_action,
+        guard_payload=guard_payload,
     )
 
 
@@ -620,27 +646,40 @@ def _cursor_shell_hook_payload(normalized: dict[str, object], hook_event_name: s
     return payload
 
 
+def _cursor_mcp_hook_payload(normalized: dict[str, object], hook_event_name: str) -> dict[str, object]:
+    payload = dict(normalized)
+    payload["hook_event_name"] = hook_event_name
+    tool_input = _tool_input_dict(payload.get("tool_input"))
+    payload["tool_input"] = tool_input
+    tool_name = payload.get("tool_name")
+    if isinstance(tool_name, str) and tool_name.strip():
+        payload["tool_name"] = tool_name.strip()
+    else:
+        payload.setdefault("tool_name", "MCP")
+    return payload
+
+
 def _prepare_cursor_hook_payload(payload: dict[str, object]) -> dict[str, object]:
     normalized = _infer_cursor_hook_event_name(payload)
     raw_event = _raw_hook_event_name(normalized)
     if raw_event == "aftershellexecution":
         return _cursor_shell_hook_payload(normalized, "afterShellExecution")
+    if raw_event == "aftermcpexecution":
+        return _cursor_mcp_hook_payload(normalized, "afterMCPExecution")
     if raw_event == "beforeshellexecution":
-        return _cursor_shell_hook_payload(normalized, "PreToolUse")
+        prepared = _cursor_shell_hook_payload(normalized, "PreToolUse")
+        prepared["cursor_source_hook_event"] = "beforeShellExecution"
+        return prepared
     if raw_event == "beforemcpexecution":
-        normalized["hook_event_name"] = "PreToolUse"
-        tool_name = normalized.get("tool_name")
-        if isinstance(tool_name, str) and tool_name.strip():
-            normalized["tool_name"] = tool_name.strip()
-        else:
-            normalized.setdefault("tool_name", "MCP")
-        tool_input = _tool_input_dict(normalized.get("tool_input"))
+        prepared = _cursor_mcp_hook_payload(normalized, "PreToolUse")
+        tool_input = _tool_input_dict(prepared.get("tool_input"))
         for key in ("url", "command"):
             value = normalized.get(key)
             if isinstance(value, str) and value.strip():
                 tool_input.setdefault(key, value.strip())
-        normalized["tool_input"] = tool_input
-        return normalized
+        prepared["tool_input"] = tool_input
+        prepared["cursor_source_hook_event"] = "beforeMCPExecution"
+        return prepared
     if raw_event == "beforereadfile":
         normalized["hook_event_name"] = "PreToolUse"
         normalized.setdefault("tool_name", "Read")
@@ -807,15 +846,21 @@ def _normalize_cursor_shell_command(command: str) -> str:
 
 
 def _cursor_shell_command(payload: Mapping[str, object]) -> str | None:
-    command = payload.get("command")
-    if isinstance(command, str) and command.strip():
-        return _normalize_cursor_shell_command(command)
     tool_input = payload.get("tool_input")
+    nested_command: str | None = None
     if isinstance(tool_input, dict):
         nested = tool_input.get("command")
         if isinstance(nested, str) and nested.strip():
-            return _normalize_cursor_shell_command(nested)
-    return None
+            nested_command = _normalize_cursor_shell_command(nested)
+    command = payload.get("command")
+    if isinstance(command, str) and command.strip():
+        top_level = _normalize_cursor_shell_command(command)
+        if nested_command is not None:
+            first_token = command.strip().split(maxsplit=1)[0]
+            if Path(first_token).name.lower() == "lean-ctx":
+                return nested_command
+        return top_level
+    return nested_command
 
 
 def _cursor_shell_binding_path(conversation_id: str, command: str) -> Path:
@@ -858,8 +903,9 @@ def _load_cursor_hook_attestation_secret() -> bytes | None:
     return secret or None
 
 
-def _compute_cursor_after_shell_proof(
+def _compute_cursor_after_observer_proof(
     payload: Mapping[str, object],
+    observer_event: str,
     approval_binding: str | None = None,
 ) -> str | None:
     conversation_id = _cursor_conversation_id(payload)
@@ -869,7 +915,7 @@ def _compute_cursor_after_shell_proof(
     if conversation_id is None or command is None or resolved_binding is None or secret is None:
         return None
     message = chr(0).join(
-        (conversation_id, command, resolved_binding, "afterShellExecution")
+        (conversation_id, command, resolved_binding, observer_event.strip())
     ).encode("utf-8")
     return hmac.new(secret, message, hashlib.sha256).hexdigest()
 
@@ -901,9 +947,9 @@ def main() -> int:
             guard_argv.extend(["--workspace", workspace])
     guard_env = _hook_process_env()
     guard_env["HOL_GUARD_MANAGED_CURSOR_HOOK"] = "1"
-    if hook_event_name.strip().lower() == "aftershellexecution":
+    if hook_event_name.strip().lower() in {"aftershellexecution", "aftermcpexecution"}:
         approval_binding = _resolve_approval_binding(prepared)
-        proof = _compute_cursor_after_shell_proof(prepared, approval_binding)
+        proof = _compute_cursor_after_observer_proof(prepared, hook_event_name, approval_binding)
         if approval_binding:
             guard_env["HOL_GUARD_CURSOR_APPROVAL_BINDING"] = approval_binding
         if proof:
@@ -950,7 +996,7 @@ def main() -> int:
         except json.JSONDecodeError:
             guard_payload = {}
     policy_action = str(guard_payload.get("policy_action") or "allow")
-    if hook_event_name.strip().lower() == "aftershellexecution":
+    if hook_event_name.strip().lower() in {"aftershellexecution", "aftermcpexecution"}:
         print("{}")
         return 0
     if proc.returncode != 0 and not guard_payload:
