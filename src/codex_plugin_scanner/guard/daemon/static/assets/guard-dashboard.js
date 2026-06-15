@@ -26744,6 +26744,7 @@ function App() {
       );
       const succeeded = results.filter((r) => r.status === "fulfilled").length;
       const failed = results.length - succeeded;
+      await refreshStateAfterAction();
       if (failed > 0) {
         throw new Error(
           failed === results.length ? "Bulk approval failed. Retry the selected items manually." : `${succeeded} approved, ${failed} failed. Retry the failed items manually.`
@@ -26752,7 +26753,6 @@ function App() {
       const label = `${succeeded} item${succeeded !== 1 ? "s" : ""} approved.`;
       setResolutionMessage(label);
       navigate("/inbox");
-      await refreshStateAfterAction();
     } finally {
       bulkApproveInFlight.current = false;
     }
