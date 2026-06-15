@@ -1987,10 +1987,12 @@ def sync_local_guard_cloud_proof(
     store: GuardStore,
     *,
     auth_context: dict[str, object] | None = None,
+    now: str | None = None,
 ) -> dict[str, object]:
     """Publish the local Guard runtime session before syncing receipts."""
-    reconcile_connect_state_with_oauth_entitlement(store, now=_now())
+    resolved_now = now or _now()
     with store.hold_cloud_sync_lock():
+        reconcile_connect_state_with_oauth_entitlement(store, now=resolved_now)
         resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
         runtime_summary = sync_runtime_session(
             store,
