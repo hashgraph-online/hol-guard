@@ -11,7 +11,6 @@
       --tw-skew-x: initial;
       --tw-skew-y: initial;
       --tw-space-y-reverse: 0;
-      --tw-space-x-reverse: 0;
       --tw-divide-y-reverse: 0;
       --tw-border-style: solid;
       --tw-gradient-position: initial;
@@ -1615,6 +1614,10 @@
     margin-block-end: calc(calc(var(--spacing) * 20) * calc(1 - var(--tw-space-y-reverse)));
   }
 
+  .gap-x-2 {
+    column-gap: calc(var(--spacing) * 2);
+  }
+
   .gap-x-3 {
     column-gap: calc(var(--spacing) * 3);
   }
@@ -1627,12 +1630,6 @@
     column-gap: calc(var(--spacing) * 8);
   }
 
-  :where(.-space-x-2 > :not(:last-child)) {
-    --tw-space-x-reverse: 0;
-    margin-inline-start: calc(calc(var(--spacing) * -2) * var(--tw-space-x-reverse));
-    margin-inline-end: calc(calc(var(--spacing) * -2) * calc(1 - var(--tw-space-x-reverse)));
-  }
-
   .gap-y-0\.5 {
     row-gap: calc(var(--spacing) * .5);
   }
@@ -1643,10 +1640,6 @@
 
   .gap-y-2 {
     row-gap: calc(var(--spacing) * 2);
-  }
-
-  .gap-y-3 {
-    row-gap: calc(var(--spacing) * 3);
   }
 
   .gap-y-4 {
@@ -1826,10 +1819,6 @@
     .border-accent\/20 {
       border-color: color-mix(in oklab, hsl(var(--accent)) 20%, transparent);
     }
-  }
-
-  .border-amber-100 {
-    border-color: var(--color-amber-100);
   }
 
   .border-amber-200 {
@@ -2308,13 +2297,13 @@
     background-color: var(--color-amber-50);
   }
 
-  .bg-amber-50\/40 {
-    background-color: #fffbeb66;
+  .bg-amber-50\/30 {
+    background-color: #fffbeb4d;
   }
 
   @supports (color: color-mix(in lab, red, red)) {
-    .bg-amber-50\/40 {
-      background-color: color-mix(in oklab, var(--color-amber-50) 40%, transparent);
+    .bg-amber-50\/30 {
+      background-color: color-mix(in oklab, var(--color-amber-50) 30%, transparent);
     }
   }
 
@@ -4630,6 +4619,10 @@
     scrollbar-gutter: stable;
   }
 
+  .ring-inset {
+    --tw-ring-inset: inset;
+  }
+
   .group-open\:rotate-90:is(:where(.group):is([open], :popover-open, :open) *) {
     rotate: 90deg;
   }
@@ -4658,6 +4651,10 @@
     color: var(--color-slate-400);
   }
 
+  .first\:pt-0:first-child {
+    padding-top: calc(var(--spacing) * 0);
+  }
+
   .last\:mb-0:last-child {
     margin-bottom: calc(var(--spacing) * 0);
   }
@@ -4672,6 +4669,10 @@
     border-bottom-width: 0;
   }
 
+  .last\:pb-0:last-child {
+    padding-bottom: calc(var(--spacing) * 0);
+  }
+
   @media (hover: hover) {
     .hover\:-translate-y-0\.5:hover {
       --tw-translate-y: calc(var(--spacing) * -.5);
@@ -4680,16 +4681,6 @@
 
     .hover\:border-amber-300:hover {
       border-color: var(--color-amber-300);
-    }
-
-    .hover\:border-brand-blue\/20:hover {
-      border-color: var(--brand-blue);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .hover\:border-brand-blue\/20:hover {
-        border-color: color-mix(in oklab, var(--brand-blue) 20%, transparent);
-      }
     }
 
     .hover\:border-brand-blue\/30:hover {
@@ -4815,16 +4806,6 @@
     @supports (color: color-mix(in lab, red, red)) {
       .hover\:bg-brand-blue\/90:hover {
         background-color: color-mix(in oklab, var(--brand-blue) 90%, transparent);
-      }
-    }
-
-    .hover\:bg-brand-blue\/\[0\.02\]:hover {
-      background-color: var(--brand-blue);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .hover\:bg-brand-blue\/\[0\.02\]:hover {
-        background-color: color-mix(in oklab, var(--brand-blue) 2%, transparent);
       }
     }
 
@@ -5581,6 +5562,10 @@
   }
 
   @media (min-width: 48rem) {
+    .md\:col-span-8 {
+      grid-column: span 8 / span 8;
+    }
+
     .md\:col-start-1 {
       grid-column-start: 1;
     }
@@ -5609,6 +5594,14 @@
       grid-column-start: 7;
     }
 
+    .md\:col-start-8 {
+      grid-column-start: 8;
+    }
+
+    .md\:col-start-9 {
+      grid-column-start: 9;
+    }
+
     .md\:block {
       display: block;
     }
@@ -5629,6 +5622,10 @@
       display: table-cell;
     }
 
+    .md\:max-w-md {
+      max-width: var(--container-md);
+    }
+
     .md\:max-w-sm {
       max-width: var(--container-sm);
     }
@@ -5645,8 +5642,12 @@
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
-    .md\:grid-cols-\[72px_minmax\(220px\,1\.4fr\)_100px_96px_88px_104px_minmax\(120px\,1fr\)\] {
-      grid-template-columns: 72px minmax(220px, 1.4fr) 100px 96px 88px 104px minmax(120px, 1fr);
+    .md\:grid-cols-\[40px_72px_minmax\(200px\,1\.4fr\)_88px_96px_88px_104px_minmax\(120px\,1fr\)_72px\] {
+      grid-template-columns: 40px 72px minmax(200px, 1.4fr) 88px 96px 88px 104px minmax(120px, 1fr) 72px;
+    }
+
+    .md\:grid-cols-\[72px_minmax\(140px\,1\.3fr\)_88px_72px_36px_36px_88px_80px_72px\] {
+      grid-template-columns: 72px minmax(140px, 1.3fr) 88px 72px 36px 36px 88px 80px 72px;
     }
 
     .md\:grid-cols-\[180px_minmax\(0\,1fr\)\] {
@@ -5665,12 +5666,20 @@
       align-items: center;
     }
 
-    .md\:items-end {
-      align-items: flex-end;
-    }
-
     .md\:items-start {
       align-items: flex-start;
+    }
+
+    .md\:justify-center {
+      justify-content: center;
+    }
+
+    .md\:gap-1 {
+      gap: calc(var(--spacing) * 1);
+    }
+
+    .md\:gap-x-2 {
+      column-gap: calc(var(--spacing) * 2);
     }
 
     .md\:gap-x-3 {
@@ -5693,6 +5702,22 @@
 
     .lg\:col-span-2 {
       grid-column: span 2 / span 2;
+    }
+
+    .lg\:col-span-3 {
+      grid-column: span 3 / span 3;
+    }
+
+    .lg\:col-start-1 {
+      grid-column-start: 1;
+    }
+
+    .lg\:col-start-2 {
+      grid-column-start: 2;
+    }
+
+    .lg\:col-start-3 {
+      grid-column-start: 3;
     }
 
     .lg\:block {
@@ -5769,10 +5794,6 @@
 
     .lg\:grid-cols-\[minmax\(0\,1fr\)_300px\] {
       grid-template-columns: minmax(0, 1fr) 300px;
-    }
-
-    .lg\:grid-cols-\[minmax\(0\,1fr\)_320px\] {
-      grid-template-columns: minmax(0, 1fr) 320px;
     }
 
     .lg\:grid-cols-\[minmax\(0\,1fr\)_340px\] {
@@ -6370,12 +6391,6 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 }
 
 @property --tw-space-y-reverse {
-  syntax: "*";
-  inherits: false;
-  initial-value: 0;
-}
-
-@property --tw-space-x-reverse {
   syntax: "*";
   inherits: false;
   initial-value: 0;

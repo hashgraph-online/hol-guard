@@ -1,11 +1,22 @@
 import { useCallback, useMemo, useState, type ChangeEvent } from "react";
-import { HiMiniChevronDown, HiMiniChevronUp, HiMiniMagnifyingGlass } from "react-icons/hi2";
+import {
+  HiMiniCheckCircle,
+  HiMiniChevronDown,
+  HiMiniChevronRight,
+  HiMiniChevronUp,
+  HiMiniCommandLine,
+  HiMiniFolder,
+  HiMiniGlobeAlt,
+  HiMiniMagnifyingGlass,
+  HiMiniPuzzlePiece,
+} from "react-icons/hi2";
 import { Badge, EmptyState, Tag } from "./approval-center-primitives";
 import { formatRelativeTime, harnessDisplayName, scopeLabel } from "./approval-center-utils";
 import type { GuardCloudException } from "./guard-types";
 import type { GuardCloudExceptionRequestItem } from "./guard-api";
 import {
   isCloudExceptionAckFailure,
+  resolveCloudExceptionEffectLabel,
   resolveCloudExceptionExpiryTimestamp,
   resolveCloudExceptionExpiryValue,
   resolveCloudExceptionHeadline,
@@ -58,6 +69,19 @@ function PersonAvatar({ label }: { label: string | null | undefined }) {
   );
 }
 
+function resolveRowIcon(scope: GuardCloudException["scope"]) {
+  if (scope === "artifact") {
+    return HiMiniCommandLine;
+  }
+  if (scope === "publisher" || scope === "workspace") {
+    return HiMiniFolder;
+  }
+  if (scope === "harness") {
+    return HiMiniPuzzlePiece;
+  }
+  return HiMiniGlobeAlt;
+}
+
 function ExceptionTableRow({
   item,
   selected,
@@ -71,6 +95,8 @@ function ExceptionTableRow({
   const expiryValue = resolveCloudExceptionExpiryValue(item);
   const headline = resolveCloudExceptionHeadline(item);
   const ackStatus = resolveAckStatusLabel(item);
+  const effectLabel = resolveCloudExceptionEffectLabel(item.effect);
+  const RowIcon = resolveRowIcon(item.scope);
 
   return (
     <button
@@ -82,8 +108,9 @@ function ExceptionTableRow({
         selected ? "bg-brand-blue/[0.04] ring-1 ring-inset ring-brand-blue/20" : ""
       }`}
     >
-      <div className="md:col-start-1">
-        <Badge tone="success">{item.effect}</Badge>
+      <div className="flex items-center gap-2 md:col-start-1">
+        <RowIcon className="hidden h-4 w-4 shrink-0 text-slate-400 md:block" aria-hidden="true" />
+        <Badge tone="success">{effectLabel}</Badge>
       </div>
       <div className="min-w-0 md:col-start-2">
         <p className="truncate text-sm font-semibold text-brand-dark">{headline}</p>
@@ -110,8 +137,12 @@ function ExceptionTableRow({
       <div className="hidden whitespace-nowrap text-xs text-slate-500 md:col-start-8 md:block">
         {item.last_used_at ? formatRelativeTime(item.last_used_at) : "—"}
       </div>
-      <div className="hidden md:col-start-9 md:block">
+      <div className="hidden md:col-start-9 md:flex md:items-center md:gap-1">
+        {ackStatus.tone === "success" ? (
+          <HiMiniCheckCircle className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+        ) : null}
         <Badge tone={ackStatus.tone}>{ackStatus.label}</Badge>
+        <HiMiniChevronRight className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
       </div>
     </button>
   );

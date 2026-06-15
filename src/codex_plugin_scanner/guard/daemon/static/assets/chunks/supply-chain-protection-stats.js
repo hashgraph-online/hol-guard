@@ -65,6 +65,15 @@ function isSupplyChainSyncConnectError(error) {
   const code = readHarnessActionErrorCode(error);
   return code !== null && SUPPLY_CHAIN_CONNECT_ERROR_CODES.has(code);
 }
+function isSupplyChainSyncRetryableError(error) {
+  if (!isGuardHarnessActionError(error)) {
+    return false;
+  }
+  if (readHarnessActionErrorCode(error) !== "supply_chain_sync_unavailable") {
+    return false;
+  }
+  return error.payload?.retryable === true;
+}
 function readHarnessActionUserMessage(error, fallback) {
   if (error instanceof Error && GUARD_FETCH_NETWORK_ERROR_MESSAGE.test(error.message)) {
     return "Guard lost connection while syncing supply-chain intel. Confirm the local daemon is still running, then try again.";
@@ -277,12 +286,13 @@ function buildSupplyChainStats(snapshot) {
 export {
   ApprovalProofInline as A,
   isSupplyChainSyncConnectError as a,
-  resolveApprovalGateSyncFailure as b,
-  isApprovalGateRequiredError as c,
-  readHarnessActionUserMessage as d,
-  ApprovalProofModal as e,
-  buildSupplyChainStats as f,
-  resolveManagerCoverageStatus as g,
+  isSupplyChainSyncRetryableError as b,
+  readHarnessActionUserMessage as c,
+  resolveApprovalGateSyncFailure as d,
+  isApprovalGateRequiredError as e,
+  ApprovalProofModal as f,
+  buildSupplyChainStats as g,
+  resolveManagerCoverageStatus as h,
   isGuardHarnessActionError as i,
   readHarnessActionErrorCode as r,
   useResolvedApprovalGate as u

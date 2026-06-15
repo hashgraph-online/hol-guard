@@ -1,5 +1,5 @@
-import { aQ as isSupplyChainAuditIncomplete, aR as readString$1, aS as isRecord$2, au as GuardHarnessActionError, r as reactExports, j as jsxRuntimeExports, d as HiMiniCheckCircle, aw as HiMiniArrowPath, w as HiMiniExclamationTriangle, ac as Tag, m as formatRelativeTime, aT as HiMiniClock, aU as IconActionButton, I as HiMiniXCircle, ax as HiMiniTrash, l as HiMiniShieldCheck, F as HiMiniWrenchScrewdriver, aV as HiMiniBeaker, aW as ActivationSummary, aX as ActionResultPanel, ad as HiMiniMagnifyingGlass, b as EmptyState, A as ActionButton, aY as HiMiniBugAnt, o as HiMiniXMark, aZ as GuardModalLayer, a_ as ConnectFlowCard, aO as HiMiniArrowTopRightOnSquare, a$ as HiMiniCloudArrowDown, b0 as fetchPackageFirewallStatus, b1 as runPackageAudit, b2 as resolveSupplyChainAuditFailure, b3 as runPackageSync, b4 as startPackageFirewallConnect, b5 as runPackageFirewallAction, b6 as parseInterceptProofSnapshot, b7 as openPackageFirewallShell, S as SectionLabel, b8 as EntitlementNotice, b9 as fetchSupplyChainBundle, B as Badge, ba as HiMiniDocumentMagnifyingGlass, bb as HiMiniShieldExclamation, bc as HiMiniComputerDesktop, t as HiMiniCloud, bd as HiMiniArrowDown, be as HiMiniArrowUp, ah as HiMiniArrowLeft, bf as HiMiniArrowRight, aE as HiMiniCloudArrowUp, bg as HiMiniInformationCircle, bh as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
-import { i as isGuardHarnessActionError, a as isSupplyChainSyncConnectError, r as readHarnessActionErrorCode, A as ApprovalProofInline, u as useResolvedApprovalGate, b as resolveApprovalGateSyncFailure, c as isApprovalGateRequiredError, d as readHarnessActionUserMessage, e as ApprovalProofModal, f as buildSupplyChainStats } from "./supply-chain-protection-stats.js";
+import { a_ as isSupplyChainAuditIncomplete, a$ as readString$1, b0 as isRecord$2, au as GuardHarnessActionError, r as reactExports, j as jsxRuntimeExports, d as HiMiniCheckCircle, aw as HiMiniArrowPath, w as HiMiniExclamationTriangle, ac as Tag, m as formatRelativeTime, b1 as HiMiniClock, b2 as IconActionButton, I as HiMiniXCircle, ax as HiMiniTrash, l as HiMiniShieldCheck, F as HiMiniWrenchScrewdriver, aV as HiMiniBeaker, b3 as ActivationSummary, b4 as ActionResultPanel, ad as HiMiniMagnifyingGlass, b as EmptyState, A as ActionButton, b5 as HiMiniBugAnt, o as HiMiniXMark, b6 as GuardModalLayer, b7 as ConnectFlowCard, aY as HiMiniArrowTopRightOnSquare, b8 as HiMiniCloudArrowDown, b9 as fetchPackageFirewallStatus, ba as runPackageAudit, bb as resolveSupplyChainAuditFailure, bc as runPackageSync, bd as startPackageFirewallConnect, be as openPackageFirewallAuthorizeWindow, bf as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, bg as runPackageFirewallAction, bh as parseInterceptProofSnapshot, bi as openPackageFirewallShell, S as SectionLabel, bj as EntitlementNotice, bk as fetchSupplyChainBundle, B as Badge, bl as HiMiniDocumentMagnifyingGlass, bm as HiMiniShieldExclamation, bn as HiMiniComputerDesktop, t as HiMiniCloud, bo as HiMiniArrowDown, bp as HiMiniArrowUp, ah as HiMiniArrowLeft, aU as HiMiniArrowRight, aF as HiMiniCloudArrowUp, bq as HiMiniInformationCircle, br as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
+import { i as isGuardHarnessActionError, a as isSupplyChainSyncConnectError, r as readHarnessActionErrorCode, A as ApprovalProofInline, u as useResolvedApprovalGate, b as isSupplyChainSyncRetryableError, c as readHarnessActionUserMessage, d as resolveApprovalGateSyncFailure, e as isApprovalGateRequiredError, f as ApprovalProofModal, g as buildSupplyChainStats } from "./supply-chain-protection-stats.js";
 import { resolveFeedStaleness } from "./feed-health-workspace.js";
 import { r as resolveHomeProtectionStatus } from "./home-protection-module.js";
 import { S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-hub-workspace.js";
@@ -1578,6 +1578,16 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
             return;
           }
         }
+        if (isSupplyChainSyncRetryableError(err)) {
+          const message = readHarnessActionUserMessage(
+            err,
+            "Guard Cloud is temporarily unavailable. Try syncing again in a few minutes."
+          );
+          setAuditRecoveryError(message);
+          setAuditRecoveryPhase("ready");
+          setLastFailed({ op: "sync", manager: null, message });
+          return;
+        }
         const failure = resolveApprovalGateSyncFailure(err, {
           hasCredentials: credentials !== void 0
         });
@@ -1615,7 +1625,10 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     setConnectError(null);
     setActivationAssistError(null);
     try {
-      await startPackageFirewallConnect();
+      const connectFlow = await startPackageFirewallConnect();
+      if (connectFlow?.authorize_url && !openPackageFirewallAuthorizeWindow(connectFlow.authorize_url)) {
+        setConnectError(PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE);
+      }
       await refreshAfterOp();
       await onStateChanged?.();
     } catch (error) {
@@ -1773,6 +1786,16 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
             setAuditRecoveryError(null);
             return;
           }
+        }
+        if (isSupplyChainSyncRetryableError(err)) {
+          const message2 = readHarnessActionUserMessage(
+            err,
+            "Guard Cloud is temporarily unavailable. Try syncing again in a few minutes."
+          );
+          setAuditRecoveryPhase("ready");
+          setAuditRecoveryError(message2);
+          setLastFailed({ op, manager: null, message: message2 });
+          return;
         }
         const message = readHarnessActionUserMessage(err, "Operation failed.");
         setLastFailed({ op, manager: null, message });
