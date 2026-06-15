@@ -2583,7 +2583,7 @@ export async function fetchPackageFirewallStatus(): Promise<PackageFirewallStatu
 
 export async function startPackageFirewallConnect(): Promise<PackageFirewallStatusResponse["connect_flow"]> {
   const status = await startGuardCloudConnect();
-  return normalizePackageFirewallConnectFlow(status.connect_flow);
+  return status.connect_flow;
 }
 
 export async function fetchSupplyChainBundle(): Promise<SupplyChainBundle | null> {
