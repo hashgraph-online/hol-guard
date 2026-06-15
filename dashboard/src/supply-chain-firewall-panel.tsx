@@ -165,6 +165,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   onAuditErrorChange?: (message: string | null) => void;
   onStateChanged?: () => Promise<void> | void;
   onAuditCompleted?: (resultDetail: Record<string, unknown>) => void;
+  onAuditStarted?: () => void;
   onAuditRunningChange?: (running: boolean) => void;
   runAuditRef?: MutableRefObject<(() => void) | null>;
 },
@@ -177,6 +178,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     onAuditErrorChange,
     onStateChanged,
     onAuditCompleted,
+    onAuditStarted,
     onAuditRunningChange,
     runAuditRef,
   } = props;
@@ -285,6 +287,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       setConnectError(null);
       setActivationAssistError(null);
       onAuditErrorChange?.(null);
+      onAuditStarted?.();
       onAuditRunningChange?.(true);
       const statusWorkspaceDir =
         panelLoad.phase === "loaded" ? panelLoad.data.audit_workspace_dir ?? null : null;
@@ -344,6 +347,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       clearAuditConnectGate,
       closeAuditRecovery,
       onAuditCompleted,
+      onAuditStarted,
       onAuditErrorChange,
       onAuditRunningChange,
       onStateChanged,

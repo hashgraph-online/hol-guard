@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import {
   HiMiniExclamationTriangle,
   HiMiniCheckCircle,
@@ -6,36 +6,31 @@ import {
   HiMiniArrowPath,
   HiMiniChevronDown,
   HiMiniChevronUp,
+  HiMiniBugAnt,
 } from "react-icons/hi2";
 import { SectionLabel, Badge, Tag, ActionButton, EmptyState } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
 import type {
-  GuardApprovalGatePublicConfig,
   GuardManagedInstall,
   GuardRuntimeSnapshot,
   PackageManagerProtection,
   SupplyChainAuditSnapshot,
 } from "./guard-types";
-import { derivePackageWorkbenchFromReceipts, fetchReceipts, normalizeSupplyChainAuditSnapshot } from "./guard-api";
-import { resolveSupplyChainAuditFailure } from "./supply-chain-audit-connect";
-import { PackageFirewallPanel, type PackageFirewallPanelHandle } from "./supply-chain-firewall-panel";
-import type { AuditConnectGateViewState } from "./supply-chain-firewall-panel";
+import { fetchReceipts } from "./guard-api";
+import type { PackageFirewallPanelHandle } from "./supply-chain-firewall-panel";
 import { SupplyChainBundlePanel } from "./supply-chain-bundle-panel";
 import {
   deriveSupplyChainEvidenceRail,
   type SupplyChainEvidenceRailSnapshot,
 } from "./supply-chain-evidence-rail";
-import {
-  SupplyChainEvidenceRail,
-} from "./supply-chain-evidence-rail-panel";
+import { SupplyChainEvidenceRail } from "./supply-chain-evidence-rail-panel";
 import { resolveSupplyChainCloudCapabilities } from "./supply-chain-cloud-capabilities";
 import { SupplyChainCloudCapabilitiesPanel } from "./supply-chain-cloud-capabilities-panel";
-import { PackageWorkbenchPanel } from "./package-workbench-panel";
 import { resolveSupplyChainIssues, type SupplyChainIssueAction } from "./supply-chain-issues";
-import { resolveSupplyChainAuditWorkspaceDir } from "./supply-chain-audit-workspace";
 import { resolveSupplyChainWorkspaceHero } from "./supply-chain-workspace-hero-state";
 import { SupplyChainStatusHeader } from "./supply-chain-status-header";
 import { SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout";
+import type { RefObject } from "react";
 
 export { buildSupplyChainStats } from "./supply-chain-protection-stats";
 
@@ -109,31 +104,73 @@ function AppFirewallRow({ install, protection }: AppFirewallRowProps) {
   );
 }
 
+type SupplyChainAuditTeaserProps = {
+  auditSnapshot: SupplyChainAuditSnapshot | null;
+  auditRunning: boolean;
+  onOpenAudit: () => void;
+};
+
+function auditTeaserBody(
+  auditRunning: boolean,
+  auditSnapshot: SupplyChainAuditSnapshot | null,
+): string {
+  if (auditRunning) {
+    return "Audit is running on the Audit tab.";
+  }
+  if (auditSnapshot !== null) {
+    const packageLabel = auditSnapshot.findings.length === 1 ? "package" : "packages";
+    return `${auditSnapshot.findings.length} ${packageLabel} need review across ${auditSnapshot.inventory.totalPackages} indexed.`;
+  }
+  return "Run an audit to index dependencies and surface packages that need review.";
+}
+
+function SupplyChainAuditTeaser({ auditSnapshot, auditRunning, onOpenAudit }: SupplyChainAuditTeaserProps) {
+  const handleOpenAudit = useCallback(() => {
+    onOpenAudit();
+  }, [onOpenAudit]);
+  const teaserBody = auditTeaserBody(auditRunning, auditSnapshot);
+
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <SectionLabel>Workspace audit</SectionLabel>
+          <p className="mt-1 text-sm text-slate-500">{teaserBody}</p>
+        </div>
+        <ActionButton variant="outline" onClick={handleOpenAudit}>
+          <HiMiniBugAnt className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          Open Audit tab
+        </ActionButton>
+      </div>
+    </div>
+  );
+}
+
 type SupplyChainWorkspaceProps = {
   snapshot: GuardRuntimeSnapshot;
-  approvalGate: GuardApprovalGatePublicConfig | null;
   onGoHome: () => void;
   onRuntimeRefresh?: () => Promise<void> | void;
+  firewallPanelRef: RefObject<PackageFirewallPanelHandle | null>;
+  onAuditNavigate: () => void;
+  auditSnapshot: SupplyChainAuditSnapshot | null;
+  auditRunning: boolean;
 };
 
 export function SupplyChainWorkspace({
   snapshot,
-  approvalGate,
   onGoHome,
   onRuntimeRefresh,
+  firewallPanelRef,
+  onAuditNavigate,
+  auditSnapshot,
+  auditRunning,
 }: SupplyChainWorkspaceProps) {
   const protection = snapshot.supply_chain?.package_manager_protection;
   const managedInstalls = useMemo(
     () => snapshot.managed_installs ?? [],
     [snapshot.managed_installs],
   );
-  const [auditSnapshot, setAuditSnapshot] = useState<SupplyChainAuditSnapshot | null>(null);
   const [evidenceRail, setEvidenceRail] = useState<SupplyChainEvidenceRailSnapshot | null>(null);
-  const [auditRunning, setAuditRunning] = useState(false);
-  const [auditError, setAuditError] = useState<string | null>(null);
-  const [auditConnectGate, setAuditConnectGate] = useState<AuditConnectGateViewState | null>(null);
-  const runAuditRef = useRef<(() => void) | null>(null);
-  const firewallPanelRef = useRef<PackageFirewallPanelHandle>(null);
   const [issueActionPending, setIssueActionPending] = useState(false);
 
   const handleIssueAction = useCallback(
@@ -153,8 +190,8 @@ export function SupplyChainWorkspace({
         return;
       }
       if (action.kind === "firewall_audit") {
+        onAuditNavigate();
         panel.runAudit();
-        panel.scrollIntoView();
         return;
       }
 
@@ -172,14 +209,9 @@ export function SupplyChainWorkspace({
         setIssueActionPending(false);
       }
     },
-    [onRuntimeRefresh],
+    [firewallPanelRef, onAuditNavigate, onRuntimeRefresh],
   );
 
-
-  const auditWorkspaceDir = useMemo(
-    () => resolveSupplyChainAuditWorkspaceDir(managedInstalls),
-    [managedInstalls],
-  );
   const supplyChainIssues = useMemo(() => resolveSupplyChainIssues(snapshot), [snapshot]);
   const workspaceHero = useMemo(
     () => resolveSupplyChainWorkspaceHero(snapshot, { openIssueCount: supplyChainIssues.length }),
@@ -198,11 +230,9 @@ export function SupplyChainWorkspace({
         if (cancelled) {
           return;
         }
-        setAuditSnapshot(derivePackageWorkbenchFromReceipts(receipts));
         setEvidenceRail(deriveSupplyChainEvidenceRail(receipts));
       } catch {
         if (!cancelled) {
-          setAuditSnapshot(null);
           setEvidenceRail(null);
         }
       }
@@ -212,30 +242,6 @@ export function SupplyChainWorkspace({
       cancelled = true;
     };
   }, [snapshot.generated_at, snapshot.receipt_count]);
-
-  const handleAuditCompleted = useCallback((resultDetail: Record<string, unknown>) => {
-    const failureMessage = resolveSupplyChainAuditFailure(resultDetail);
-    if (failureMessage !== null) {
-      setAuditSnapshot(null);
-      setAuditError(failureMessage);
-      return;
-    }
-    const normalized = normalizeSupplyChainAuditSnapshot(resultDetail);
-    setAuditSnapshot(normalized);
-    setAuditError(null);
-  }, []);
-
-  const handleAuditErrorChange = useCallback((message: string | null) => {
-    setAuditError(message);
-  }, []);
-
-  const handleAuditRunningChange = useCallback((running: boolean) => {
-    setAuditRunning(running);
-  }, []);
-
-  const handleRunAudit = useCallback(() => {
-    runAuditRef.current?.();
-  }, []);
 
   return (
     <div className={SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS} data-testid="supply-chain-workspace">
@@ -260,27 +266,13 @@ export function SupplyChainWorkspace({
 
       {evidenceRail !== null ? <SupplyChainEvidenceRail rail={evidenceRail} /> : null}
 
-      <PackageWorkbenchPanel
-        auditConnectGate={auditConnectGate}
-        auditError={auditError}
+      <SupplyChainAuditTeaser
         auditSnapshot={auditSnapshot}
         auditRunning={auditRunning}
-        onRunAudit={handleRunAudit}
+        onOpenAudit={onAuditNavigate}
       />
 
       <SupplyChainBundlePanel />
-
-      <PackageFirewallPanel
-        ref={firewallPanelRef}
-        approvalGate={approvalGate}
-        auditWorkspaceDir={auditWorkspaceDir}
-        onAuditConnectGateChange={setAuditConnectGate}
-        onAuditErrorChange={handleAuditErrorChange}
-        onStateChanged={onRuntimeRefresh}
-        onAuditCompleted={handleAuditCompleted}
-        onAuditRunningChange={handleAuditRunningChange}
-        runAuditRef={runAuditRef}
-      />
 
       <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">

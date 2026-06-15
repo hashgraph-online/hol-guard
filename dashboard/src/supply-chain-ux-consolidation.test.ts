@@ -12,6 +12,9 @@ function assert(condition: boolean, message: string): void {
 const here = dirname(fileURLToPath(import.meta.url));
 
 const workspaceSource = readFileSync(join(here, "supply-chain-workspace.tsx"), "utf8");
+const hubSource = readFileSync(join(here, "supply-chain-hub-workspace.tsx"), "utf8");
+const auditSource = readFileSync(join(here, "audit-workspace.tsx"), "utf8");
+const workbenchSource = readFileSync(join(here, "package-workbench-panel.tsx"), "utf8");
 const controlsSource = readFileSync(join(here, "supply-chain-firewall-controls.tsx"), "utf8");
 const issueFocusSource = readFileSync(join(here, "supply-chain-issue-focus.tsx"), "utf8");
 
@@ -24,12 +27,36 @@ assert(
   "workspace uses unified status header",
 );
 assert(
-  !workspaceSource.includes("SupplyChainAuditFindingsSummary"),
-  "workspace drops duplicate audit findings summary",
+  workspaceSource.includes("SupplyChainAuditTeaser"),
+  "workspace shows compact audit teaser instead of full workbench",
 );
 assert(
-  workspaceSource.includes("PackageWorkbenchPanel"),
-  "workspace keeps single audit findings workbench",
+  !workspaceSource.includes("PackageWorkbenchPanel"),
+  "workspace drops full audit findings workbench",
+);
+assert(
+  auditSource.includes("PackageWorkbenchPanel"),
+  "audit tab hosts package workbench",
+);
+assert(
+  auditSource.includes("AuditRunProgress"),
+  "audit tab shows progressive audit steps",
+);
+assert(
+  hubSource.includes("useSupplyChainAuditSession"),
+  "hub owns shared audit session state",
+);
+assert(
+  hubSource.includes("onAuditStarted={auditSession.handleAuditStarted}"),
+  "hub wires audit start navigation into firewall panel",
+);
+assert(
+  workbenchSource.includes("GuardModalLayer"),
+  "workbench opens finding detail in modal layer",
+);
+assert(
+  workbenchSource.includes("max-h-[min(60vh,32rem)]"),
+  "workbench table scrolls within viewport",
 );
 assert(
   workspaceSource.includes("supply-chain-workspace-hero-state"),

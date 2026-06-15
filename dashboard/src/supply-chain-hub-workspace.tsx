@@ -1,7 +1,10 @@
-import { lazy, Suspense, useCallback } from "react";
+import { lazy, Suspense, useCallback, useMemo, useRef } from "react";
 import type { GuardApprovalGatePublicConfig, GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 import { WorkspacePageHeader } from "./workspace-page-header";
 import { SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout";
+import { PackageFirewallPanel, type PackageFirewallPanelHandle } from "./supply-chain-firewall-panel";
+import { useSupplyChainAuditSession } from "./use-supply-chain-audit-session";
+import { resolveSupplyChainAuditWorkspaceDir } from "./supply-chain-audit-workspace";
 
 const SupplyChainWorkspace = lazy(() =>
   import("./supply-chain-workspace").then((m) => ({ default: m.SupplyChainWorkspace }))
@@ -45,6 +48,16 @@ export function SupplyChainHubWorkspace(props: {
   onRuntimeRefresh?: () => Promise<void> | void;
 }) {
   const tab = viewToTab(props.activeView);
+  const firewallPanelRef = useRef<PackageFirewallPanelHandle>(null);
+  const auditSession = useSupplyChainAuditSession({
+    snapshot: props.snapshot,
+    onNavigate: props.onNavigate,
+  });
+
+  const auditWorkspaceDir = useMemo(
+    () => resolveSupplyChainAuditWorkspaceDir(props.snapshot.managed_installs ?? []),
+    [props.snapshot.managed_installs],
+  );
 
   const handleTabChange = useCallback(
     (value: HubTab) => {
@@ -67,18 +80,40 @@ export function SupplyChainHubWorkspace(props: {
         {tab === "supply-chain" && (
           <SupplyChainWorkspace
             snapshot={props.snapshot}
-            approvalGate={props.approvalGate}
             onGoHome={props.onGoHome}
             onRuntimeRefresh={props.onRuntimeRefresh}
+            firewallPanelRef={firewallPanelRef}
+            onAuditNavigate={() => props.onNavigate("/audit")}
+            auditSnapshot={auditSession.auditSnapshot}
+            auditRunning={auditSession.auditRunning}
           />
         )}
         {tab === "audit" && (
-          <AuditWorkspace snapshot={props.snapshot} receipts={props.receipts} approvalGate={props.approvalGate} />
+          <AuditWorkspace
+            snapshot={props.snapshot}
+            receipts={props.receipts}
+            approvalGate={props.approvalGate}
+            auditSession={auditSession}
+          />
         )}
         {tab === "feed-health" && (
           <FeedHealthWorkspace snapshot={props.snapshot} onOpenSettings={props.onOpenSettings} />
         )}
       </Suspense>
+      <div className={tab === "supply-chain" ? undefined : "hidden"} aria-hidden={tab !== "supply-chain"}>
+        <PackageFirewallPanel
+          ref={firewallPanelRef}
+          approvalGate={props.approvalGate}
+          auditWorkspaceDir={auditWorkspaceDir}
+          onAuditConnectGateChange={auditSession.setAuditConnectGate}
+          onAuditErrorChange={auditSession.handleAuditErrorChange}
+          onStateChanged={props.onRuntimeRefresh}
+          onAuditStarted={auditSession.handleAuditStarted}
+          onAuditCompleted={auditSession.handleAuditCompleted}
+          onAuditRunningChange={auditSession.handleAuditRunningChange}
+          runAuditRef={auditSession.runAuditRef}
+        />
+      </div>
     </div>
   );
 }
