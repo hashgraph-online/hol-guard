@@ -375,14 +375,26 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
         status, payload = _read_json_response(
             _request(
                 daemon.port,
-                "/v1/supply-chain/package-shims/connect",
+                "/v1/cloud/connect",
                 token=token,
                 payload={},
             ),
         )
         assert status == 202
-        assert payload["state"] == "running"
-        assert payload["authorize_url"] == "https://hol.org/mock-authorize"
+        assert payload["connect_required"] is True
+        assert payload["connect_flow"]["state"] == "running"
+        assert payload["connect_flow"]["authorize_url"] == "https://hol.org/mock-authorize"
+        status, running = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims",
+                method="GET",
+                token=token,
+            ),
+        )
+        assert status == 200
+        assert running["connect_flow"]["state"] == "running"
+        assert running["connect_flow"]["authorize_url"] == "https://hol.org/mock-authorize"
         for _ in range(20):
             status, refreshed = _read_json_response(
                 _request(
