@@ -919,6 +919,12 @@ def _build_runtime_cloud_context(
     remote_policy = store.get_sync_payload("policy") or {}
     team_policy_pack = store.get_sync_payload("team_policy_pack") or {}
     alert_preferences = store.get_sync_payload("alert_preferences") or {}
+    policy_bundle = _sync_payload_dict(store, "policy_bundle")
+    policy_bundle_last_error = _sync_payload_dict(store, "policy_bundle_last_error")
+    acknowledgement = policy_bundle.get("acknowledgement")
+    cloud_policy_last_ack_at = (
+        _optional_string(acknowledgement.get("acknowledgedAt")) if isinstance(acknowledgement, dict) else None
+    )
     remote_payload_active = any((sync_summary, remote_policy, team_policy_pack, alert_preferences))
     cloud_state = _resolve_runtime_cloud_state(
         sync_configured=cloud_profile is not None,
@@ -964,7 +970,18 @@ def _build_runtime_cloud_context(
         "inbox_url": inbox_url,
         "fleet_url": fleet_url,
         "connect_url": connect_url,
+        "cloud_policy_bundle_hash": _optional_string(policy_bundle.get("bundleHash")),
+        "cloud_policy_bundle_version": _optional_string(policy_bundle.get("bundleVersion")),
+        "cloud_policy_rollout_state": _optional_string(policy_bundle.get("rolloutState")),
+        "cloud_policy_sync_error": _optional_string(policy_bundle_last_error.get("reason")),
+        "cloud_policy_last_ack_at": cloud_policy_last_ack_at,
+        "team_policy_active": bool(team_policy_pack),
     }
+
+
+def _sync_payload_dict(store: GuardStore, key: str) -> dict[str, object]:
+    payload = store.get_sync_payload(key) or {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def _build_runtime_device_context(store: GuardStore) -> dict[str, object]:
