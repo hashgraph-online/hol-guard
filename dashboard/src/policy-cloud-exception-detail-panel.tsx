@@ -1,9 +1,10 @@
 import { HiMiniCloudArrowUp, HiMiniXMark } from "react-icons/hi2";
-import { Badge, SectionLabel } from "./approval-center-primitives";
+import { ActionButton, Badge, SectionLabel, Tag } from "./approval-center-primitives";
 import { formatRelativeTime, scopeLabel } from "./approval-center-utils";
 import type { GuardCloudException } from "./guard-types";
 import {
   isCloudExceptionAckFailure,
+  isCloudExceptionActive,
   resolveCloudExceptionBlastRadius,
   resolveCloudExceptionExpiryTimestamp,
   resolveCloudExceptionExpiryValue,
@@ -89,6 +90,8 @@ export function PolicyCloudExceptionDetailPanel({
   const headline = resolveCloudExceptionHeadline(exception);
   const blast = resolveCloudExceptionBlastRadius(exception.scope);
   const whyCopy = resolveCloudExceptionWhyCopy(exception);
+  const isActive = isCloudExceptionActive(exception);
+  const isEnforcedLocally = exception.ack_status === "synced";
 
   return (
     <aside
@@ -97,7 +100,7 @@ export function PolicyCloudExceptionDetailPanel({
     >
       <div className="mb-4 flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <SectionLabel>Exception detail</SectionLabel>
+          <SectionLabel>Cloud exception</SectionLabel>
           <h3 className="mt-1 break-words text-lg font-semibold text-brand-dark">{headline}</h3>
         </div>
         <button
@@ -111,9 +114,10 @@ export function PolicyCloudExceptionDetailPanel({
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
+        {isActive ? <Badge tone="success">Active</Badge> : <Badge tone="default">Expired</Badge>}
+        {isEnforcedLocally ? <Tag tone="slate">Enforced locally</Tag> : null}
         <Badge tone="success">{exception.effect}</Badge>
-        <Badge tone="default">{scopeLabel(exception.scope)}</Badge>
-        {isCloudExceptionAckFailure(exception) ? <Badge tone="warning">{ackCopy.label}</Badge> : null}
+        {!isEnforcedLocally ? <Badge tone="warning">{ackCopy.label}</Badge> : null}
       </div>
 
       <div className="space-y-4">
@@ -126,7 +130,7 @@ export function PolicyCloudExceptionDetailPanel({
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Blast radius</p>
           <p className="mt-1 text-sm font-medium text-brand-dark">{blast.label}</p>
           <p className="mt-1 text-sm text-slate-600">{blast.detail}</p>
-          <DetailField label="Scope exact" value={headline} />
+          <DetailField label="Scope (exact)" value={scopeLabel(exception.scope, "policy")} />
         </div>
 
         <PersonRow label="Owner" value={exception.owner} />
@@ -160,16 +164,11 @@ export function PolicyCloudExceptionDetailPanel({
       </div>
 
       {cloudControlsUrl ? (
-        <div className="mt-5">
-          <a
-            href={cloudControlsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-blue hover:underline"
-          >
-            <HiMiniCloudArrowUp className="h-4 w-4" aria-hidden="true" />
-            Review in Guard Cloud
-          </a>
+        <div className="mt-5 w-full">
+          <ActionButton href={cloudControlsUrl} variant="secondary">
+            <HiMiniCloudArrowUp className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            Open in Guard Cloud
+          </ActionButton>
         </div>
       ) : null}
     </aside>

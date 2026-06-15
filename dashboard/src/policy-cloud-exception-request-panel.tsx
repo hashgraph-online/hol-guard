@@ -8,9 +8,9 @@ import type { GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 import {
   RequestModalShell,
   RequestStepper,
+  REQUEST_STEPS,
   SafetyPreview,
   ScopeCardGrid,
-  type RequestStep,
 } from "./policy-cloud-exception-request-layout";
 
 const SCOPE_OPTIONS: Array<{
@@ -74,25 +74,6 @@ function resolveDefaultWorkingDirectory(snapshot: GuardRuntimeSnapshot): string 
   return install?.workspace?.trim() ?? "";
 }
 
-function resolveActiveStep(
-  sourceReceiptId: string,
-  scope: GuardCloudExceptionRequestCreateInput["scope"],
-  reason: string,
-  owner: string,
-  requestedBy: string,
-): RequestStep {
-  if (!sourceReceiptId.trim()) {
-    return "Source";
-  }
-  if (!scope) {
-    return "Scope";
-  }
-  if (!reason.trim() || !owner.trim() || !requestedBy.trim()) {
-    return "Guardrails";
-  }
-  return "Submit";
-}
-
 export function PolicyCloudExceptionRequestPanel({
   snapshot,
   onSubmitted,
@@ -118,8 +99,9 @@ export function PolicyCloudExceptionRequestPanel({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [stepIndex, setStepIndex] = useState(0);
 
-  const activeStep = resolveActiveStep(sourceReceiptId, scope, reason, owner, requestedBy);
+  const activeStep = REQUEST_STEPS[stepIndex] ?? "Source";
   const expiryLabel = useMemo(() => {
     const date = new Date(requestedExpiresAt);
     return Number.isNaN(date.getTime()) ? "Not set" : date.toLocaleString();
@@ -231,6 +213,24 @@ export function PolicyCloudExceptionRequestPanel({
     onSubmitted();
   }, [onSubmitted]);
 
+  const canAdvanceFromSource = Boolean(sourceReceiptId.trim());
+  const canAdvanceFromScope =
+    (scope !== "artifact" || artifactId.trim()) &&
+    (scope !== "publisher" || publisher.trim()) &&
+    (scope !== "workspace" || workingDirectory.trim()) &&
+    ((scope === "harness" || scope === "artifact") ? harness.trim() : true);
+  const canAdvanceFromGuardrails =
+    reason.trim().length > 0 && owner.trim().length > 0 && requestedBy.trim().length > 0;
+  const canSubmit = canAdvanceFromSource && canAdvanceFromScope && canAdvanceFromGuardrails;
+
+  const handleBack = useCallback(() => {
+    setStepIndex((current) => Math.max(0, current - 1));
+  }, []);
+
+  const handleNext = useCallback(() => {
+    setStepIndex((current) => Math.min(REQUEST_STEPS.length - 1, current + 1));
+  }, []);
+
   if (receiptOptions.length === 0) {
     return (
       <RequestModalShell
@@ -275,14 +275,39 @@ export function PolicyCloudExceptionRequestPanel({
       stepper={<RequestStepper activeStep={activeStep} />}
       onCancel={onCancel}
       footer={
-        <form className="flex flex-wrap gap-2" onSubmit={handleSubmit}>
-          <ActionButton variant="primary" type="submit" disabled={submitting}>
-            {submitting ? "Submitting…" : "Submit to Guard Cloud"}
-          </ActionButton>
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <ActionButton variant="secondary" type="button" onClick={onCancel} disabled={submitting}>
             Cancel
           </ActionButton>
-        </form>
+          <div className="flex flex-wrap gap-2">
+            {stepIndex > 0 ? (
+              <ActionButton variant="secondary" type="button" onClick={handleBack} disabled={submitting}>
+                Back
+              </ActionButton>
+            ) : null}
+            {activeStep !== "Submit" ? (
+              <ActionButton
+                variant="primary"
+                type="button"
+                onClick={handleNext}
+                disabled={
+                  submitting ||
+                  (activeStep === "Source" && !canAdvanceFromSource) ||
+                  (activeStep === "Scope" && !canAdvanceFromScope) ||
+                  (activeStep === "Guardrails" && !canAdvanceFromGuardrails)
+                }
+              >
+                Next
+              </ActionButton>
+            ) : (
+              <form onSubmit={handleSubmit}>
+                <ActionButton variant="primary" type="submit" disabled={submitting || !canSubmit}>
+                  {submitting ? "Submitting…" : "Submit to Guard Cloud"}
+                </ActionButton>
+              </form>
+            )}
+          </div>
+        </div>
       }
     >
       <p className="mb-4 text-sm text-brand-dark/75">
@@ -290,138 +315,172 @@ export function PolicyCloudExceptionRequestPanel({
       </p>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_280px] lg:items-start">
-        <div className="space-y-4 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
-          <SectionLabel>Source</SectionLabel>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium text-brand-dark">Source receipt</span>
-            <select
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              value={sourceReceiptId}
-              onChange={handleReceiptChange}
-              required
-            >
-              {receiptOptions.map((receipt: GuardReceipt) => (
-                <option key={receipt.receipt_id} value={receipt.receipt_id}>
-                  {harnessDisplayName(receipt.harness)} · {receipt.artifact_name ?? receipt.artifact_id}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="space-y-4 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
-          <SectionLabel>Scope</SectionLabel>
-          <ScopeCardGrid options={SCOPE_OPTIONS} value={scope} onChange={setScope} />
-
-          {scope === "artifact" ? (
+        {activeStep === "Source" ? (
+          <div className="space-y-4 rounded-xl border border-slate-100 bg-slate-50/50 p-4 lg:col-span-2">
+            <SectionLabel>Source</SectionLabel>
             <label className="block space-y-1">
-              <span className="text-sm font-medium text-brand-dark">Artifact fingerprint</span>
-              <input
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                value={artifactId}
-                onChange={handleArtifactIdChange}
-                required
-              />
-            </label>
-          ) : null}
-
-          {scope === "publisher" ? (
-            <label className="block space-y-1">
-              <span className="text-sm font-medium text-brand-dark">Publisher</span>
-              <input
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                value={publisher}
-                onChange={handlePublisherChange}
-                required
-              />
-            </label>
-          ) : null}
-
-          {scope === "harness" || scope === "artifact" ? (
-            <label className="block space-y-1">
-              <span className="text-sm font-medium text-brand-dark">App</span>
+              <span className="text-sm font-medium text-brand-dark">Source receipt</span>
               <select
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                value={harness}
-                onChange={handleHarnessChange}
+                value={sourceReceiptId}
+                onChange={handleReceiptChange}
                 required
               >
-                {harnessOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {harnessDisplayName(option)}
+                {receiptOptions.map((receipt: GuardReceipt) => (
+                  <option key={receipt.receipt_id} value={receipt.receipt_id}>
+                    {harnessDisplayName(receipt.harness)} · {receipt.artifact_name ?? receipt.artifact_id}
                   </option>
                 ))}
               </select>
             </label>
-          ) : null}
+          </div>
+        ) : null}
 
-          {scope === "workspace" ? (
+        {activeStep === "Scope" ? (
+          <div className="space-y-4 rounded-xl border border-slate-100 bg-slate-50/50 p-4 lg:col-span-2">
+            <SectionLabel>Scope</SectionLabel>
+            <ScopeCardGrid options={SCOPE_OPTIONS} value={scope} onChange={setScope} />
+
+            {scope === "artifact" ? (
+              <label className="block space-y-1">
+                <span className="text-sm font-medium text-brand-dark">Artifact fingerprint</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  value={artifactId}
+                  onChange={handleArtifactIdChange}
+                  required
+                />
+              </label>
+            ) : null}
+
+            {scope === "publisher" ? (
+              <label className="block space-y-1">
+                <span className="text-sm font-medium text-brand-dark">Publisher</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  value={publisher}
+                  onChange={handlePublisherChange}
+                  required
+                />
+              </label>
+            ) : null}
+
+            {scope === "harness" || scope === "artifact" ? (
+              <label className="block space-y-1">
+                <span className="text-sm font-medium text-brand-dark">App</span>
+                <select
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  value={harness}
+                  onChange={handleHarnessChange}
+                  required
+                >
+                  {harnessOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {harnessDisplayName(option)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
+            {scope === "workspace" ? (
+              <label className="block space-y-1">
+                <span className="text-sm font-medium text-brand-dark">Project folder</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  value={workingDirectory}
+                  onChange={handleWorkingDirectoryChange}
+                  required
+                />
+              </label>
+            ) : null}
+          </div>
+        ) : null}
+
+        {activeStep === "Guardrails" ? (
+          <div className="space-y-4 rounded-xl border border-slate-100 bg-white p-4 lg:col-span-2">
+            <SectionLabel>Guardrails</SectionLabel>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="block space-y-1">
+                <span className="text-sm font-medium text-brand-dark">Requested by</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  type="email"
+                  value={requestedBy}
+                  onChange={handleRequestedByChange}
+                  required
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-sm font-medium text-brand-dark">Risk owner</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  type="email"
+                  value={owner}
+                  onChange={handleOwnerChange}
+                  required
+                />
+              </label>
+            </div>
             <label className="block space-y-1">
-              <span className="text-sm font-medium text-brand-dark">Project folder</span>
+              <span className="text-sm font-medium text-brand-dark">Reason (required)</span>
+              <textarea
+                className="min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={reason}
+                onChange={handleReasonChange}
+                maxLength={280}
+                required
+              />
+              <p className="text-xs text-slate-500">{reason.trim().length}/280</p>
+            </label>
+            <label className="block space-y-1 md:max-w-sm">
+              <span className="text-sm font-medium text-brand-dark">Requested expiry (required)</span>
               <input
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                value={workingDirectory}
-                onChange={handleWorkingDirectoryChange}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                type="datetime-local"
+                value={toDatetimeLocalValue(requestedExpiresAt)}
+                onChange={handleExpiryChange}
                 required
               />
             </label>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
-        <SafetyPreview
-          scope={scope}
-          harness={harness}
-          artifactId={artifactId}
-          publisher={publisher}
-          workingDirectory={workingDirectory}
-          reason={reason}
-          expiresLabel={expiryLabel}
-        />
-      </div>
+        {activeStep === "Submit" ? (
+          <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4 lg:col-span-2">
+            <SectionLabel>Review and submit</SectionLabel>
+            <p className="text-sm text-brand-dark">
+              Guard Cloud will review this request. If approved, the exception syncs as a signed bundle entry on this
+              device.
+            </p>
+            <dl className="grid gap-2 text-sm text-slate-600">
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-slate-500">Scope</dt>
+                <dd className="font-medium text-brand-dark">{scope}</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-slate-500">Reason</dt>
+                <dd className="text-brand-dark">{reason.trim()}</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-slate-500">Expires</dt>
+                <dd className="text-brand-dark">{expiryLabel}</dd>
+              </div>
+            </dl>
+          </div>
+        ) : null}
 
-      <div className="mt-4 space-y-4 rounded-xl border border-slate-100 bg-white p-4">
-        <SectionLabel>Guardrails</SectionLabel>
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="block space-y-1">
-            <span className="text-sm font-medium text-brand-dark">Requested by</span>
-            <input
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              type="email"
-              value={requestedBy}
-              onChange={handleRequestedByChange}
-              required
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium text-brand-dark">Risk owner</span>
-            <input
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              type="email"
-              value={owner}
-              onChange={handleOwnerChange}
-              required
-            />
-          </label>
-        </div>
-        <label className="block space-y-1">
-          <span className="text-sm font-medium text-brand-dark">Reason</span>
-          <textarea
-            className="min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-            value={reason}
-            onChange={handleReasonChange}
-            required
+        {activeStep !== "Source" ? (
+          <SafetyPreview
+            scope={scope}
+            harness={harness}
+            artifactId={artifactId}
+            publisher={publisher}
+            workingDirectory={workingDirectory}
+            reason={reason}
+            expiresLabel={expiryLabel}
           />
-        </label>
-        <label className="block space-y-1 md:max-w-sm">
-          <span className="text-sm font-medium text-brand-dark">Expires</span>
-          <input
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-            type="datetime-local"
-            value={toDatetimeLocalValue(requestedExpiresAt)}
-            onChange={handleExpiryChange}
-            required
-          />
-        </label>
+        ) : null}
       </div>
 
       {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
