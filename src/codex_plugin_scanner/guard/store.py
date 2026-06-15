@@ -5198,9 +5198,8 @@ class GuardStore:
             oauth_configured = bool(oauth_storage_health.get("configured"))
             latest_status = str(latest_state.get("status") or "")
             latest_milestone = str(latest_state.get("milestone") or "")
-            if (
-                (oauth_state == "degraded" or not oauth_configured)
-                and (latest_status == "connected" or latest_milestone in {"first_sync_pending", "sync_not_available"})
+            if (oauth_state == "degraded" or not oauth_configured) and (
+                latest_status == "connected" or latest_milestone in {"first_sync_pending", "sync_not_available"}
             ):
                 return self._coerce_guard_connect_state_status(
                     state=latest_state,
