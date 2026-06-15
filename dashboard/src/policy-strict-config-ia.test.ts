@@ -17,6 +17,7 @@ assert(!workspaceSource.includes("StrictModeView"), "legacy strict mode view rem
 assert(tabSource.includes("fetchSettings"), "strict config tab loads settings");
 assert(tabSource.includes("Evaluation order"), "strict config tab shows evaluation order");
 assert(tabSource.includes("Policy simulator"), "strict config tab includes simulator");
-assert(tabSource.includes("Signed Cloud bundle ack"), "strict config tab explains bundle acknowledgement");
+assert(tabSource.includes("Local enforcement preview"), "strict config tab shows enforcement preview");
+assert(tabSource.includes("Run simulation"), "strict config tab exposes run simulation");
 
 console.log("policy-strict-config-ia.test.ts: all assertions passed");

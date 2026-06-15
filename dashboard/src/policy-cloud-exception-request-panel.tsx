@@ -20,23 +20,23 @@ const SCOPE_OPTIONS: Array<{
 }> = [
   {
     value: "artifact",
-    label: "One specific action",
-    description: "Limit the exception to a single artifact fingerprint.",
+    label: "Exact action",
+    description: "Limit the exception to one specific action fingerprint.",
   },
   {
     value: "publisher",
-    label: "Publisher",
-    description: "Apply to packages or plugins from one publisher.",
-  },
-  {
-    value: "harness",
-    label: "App",
-    description: "Apply across one harness such as Codex or Cursor.",
+    label: "This cwd",
+    description: "Reuse within the current working directory scope.",
   },
   {
     value: "workspace",
-    label: "Project",
+    label: "This project",
     description: "Apply within the current project folder on this device.",
+  },
+  {
+    value: "harness",
+    label: "This harness",
+    description: "Apply across one harness such as Codex or Cursor.",
   },
 ];
 
@@ -286,7 +286,7 @@ export function PolicyCloudExceptionRequestPanel({
       }
     >
       <p className="mb-4 text-sm text-brand-dark/75">
-        Submit a governed risk acceptance to Guard Cloud. This does not create a local remembered rule.
+        Ask Guard Cloud to create a policy override. Local Review handles reusable approvals.
       </p>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_280px] lg:items-start">

@@ -182,11 +182,11 @@ export function scopeLabel(scope: string, variant: "review" | "policy" = "review
       case "workspace":
         return "This project";
       case "harness":
-        return "This app";
+        return "This harness";
       case "publisher":
-        return "This source";
+        return "This cwd";
       case "global":
-        return "Every project";
+        return "Team policy";
       default:
         return scope;
     }

@@ -116,7 +116,7 @@ export function PolicyRememberedRulesTab({
             <HiMiniMagnifyingGlass className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
             <input
               type="search"
-              placeholder="Search command, project, path, or app…"
+              placeholder="Search by app, action, or reason…"
               value={searchQuery}
               onChange={handleSearchChange}
               aria-label="Search policies"
