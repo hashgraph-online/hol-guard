@@ -88,7 +88,7 @@ def test_connect_repair_clears_revoked_sign_in_and_points_to_connect(tmp_path, m
     assert "Cleared expired Guard Cloud sign-in" in str(payload["repair_message"])
 
 
-def test_invalid_grant_refresh_uses_disconnect_reconnect_message(tmp_path, monkeypatch) -> None:
+def test_invalid_grant_refresh_preserves_sign_in_until_explicit_repair(tmp_path, monkeypatch) -> None:
     store = _store_with_oauth_credentials(tmp_path)
 
     def _fake_urlopen(request, timeout):
@@ -100,7 +100,7 @@ def test_invalid_grant_refresh_uses_disconnect_reconnect_message(tmp_path, monke
         guard_runner_module._resolve_guard_sync_auth_context(store)
 
     assert "hol-guard disconnect" in str(error.value)
-    assert store.get_oauth_local_credentials(allow_primary=True) is None
+    assert store.get_oauth_local_credentials(allow_primary=True) is not None
 
 
 def test_prepare_guard_cloud_connect_authorization_tolerates_network_errors(tmp_path, monkeypatch) -> None:
