@@ -176,6 +176,14 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         managed_servers = managed_stdio_servers(detection)
         skipped_servers = skipped_stdio_server_names(detection)
         target_config_path = self._managed_install_config_path(context)
+        target_payload, parse_error, _parse_reason = _load_json_or_jsonc(target_config_path)
+        if target_config_path.is_file() and (parse_error or not isinstance(target_payload, dict)):
+            raise OpenCodeInstallConfigError(
+                "Refusing to modify an invalid OpenCode root config. "
+                "Fix opencode.json (or opencode.jsonc) syntax and retry install."
+            )
+        if not isinstance(target_payload, dict):
+            target_payload = {}
         original_text = None
         if target_config_path.is_file():
             original_text = target_config_path.read_text(encoding="utf-8")
@@ -201,14 +209,6 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             + "\n",
             encoding="utf-8",
         )
-        target_payload, parse_error, _parse_reason = _load_json_or_jsonc(target_config_path)
-        if target_config_path.is_file() and (parse_error or not isinstance(target_payload, dict)):
-            raise OpenCodeInstallConfigError(
-                "Refusing to modify an invalid OpenCode root config. "
-                "Fix opencode.json (or opencode.jsonc) syntax and retry install."
-            )
-        if not isinstance(target_payload, dict):
-            target_payload = {}
         existing_workspace_server_names = self._workspace_server_names(context)
         _apply_install_baseline(target_payload)
         target_payload["permission"] = self._managed_permission_payload(

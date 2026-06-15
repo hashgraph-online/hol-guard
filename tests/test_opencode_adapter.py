@@ -614,6 +614,8 @@ class TestOpenCodeResiliency:
         with pytest.raises(OpenCodeInstallConfigError):
             OpenCodeHarnessAdapter().install(ctx)
         assert config.read_text(encoding="utf-8") == original + ","
+        assert not OpenCodeHarnessAdapter._backup_path(ctx).exists()
+        assert not OpenCodeHarnessAdapter._state_path(ctx, config).exists()
 
     def test_install_parses_json_with_comments(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
