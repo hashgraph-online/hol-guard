@@ -24180,9 +24180,12 @@ function QueueBulkApproveFlow(props) {
   const previewLines = riskLines.slice(0, 5);
   const hiddenCount = Math.max(0, riskLines.length - previewLines.length);
   const selectedCount = props.selectedGroups.length;
+  const selectedUnit = selectedActionCount === 1 ? "action" : "actions";
+  const stepHeading = props.step === "select" ? "Select read-only file reads" : `Review ${selectedActionCount} selected ${selectedUnit}`;
+  const confirmLabel = props.step === "submitting" ? "Approving..." : `Approve ${selectedActionCount} read-only ${selectedUnit}`;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: props.step === "select" ? "Select read-only file reads" : `Review ${selectedActionCount} selected ${selectedActionCount === 1 ? "action" : "actions"}` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: stepHeading }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-muted-foreground", children: [
         "Step ",
         props.step === "select" ? "1" : "2",
@@ -24327,7 +24330,7 @@ function QueueBulkApproveFlow(props) {
             onClick: props.onConfirmApprove,
             disabled: props.step === "submitting",
             className: "rounded-full bg-brand-blue px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60",
-            children: props.step === "submitting" ? "Approving..." : `Approve ${selectedActionCount} read-only ${selectedActionCount === 1 ? "action" : "actions"}`
+            children: confirmLabel
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx(

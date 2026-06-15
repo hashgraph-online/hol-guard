@@ -80,14 +80,21 @@ export function QueueBulkApproveFlow(props: QueueBulkApproveFlowProps) {
   const previewLines = riskLines.slice(0, 5);
   const hiddenCount = Math.max(0, riskLines.length - previewLines.length);
   const selectedCount = props.selectedGroups.length;
+  const selectedUnit = selectedActionCount === 1 ? "action" : "actions";
+  const stepHeading =
+    props.step === "select"
+      ? "Select read-only file reads"
+      : `Review ${selectedActionCount} selected ${selectedUnit}`;
+  const confirmLabel =
+    props.step === "submitting"
+      ? "Approving..."
+      : `Approve ${selectedActionCount} read-only ${selectedUnit}`;
 
   return (
     <div className="mb-4 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-brand-dark">
-          {props.step === "select"
-            ? "Select read-only file reads"
-            : `Review ${selectedActionCount} selected ${selectedActionCount === 1 ? "action" : "actions"}`}
+          {stepHeading}
         </p>
         <p className="text-xs text-muted-foreground">
           Step {props.step === "select" ? "1" : "2"} of 2
@@ -227,9 +234,7 @@ export function QueueBulkApproveFlow(props: QueueBulkApproveFlowProps) {
               disabled={props.step === "submitting"}
               className="rounded-full bg-brand-blue px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {props.step === "submitting"
-                ? "Approving..."
-                : `Approve ${selectedActionCount} read-only ${selectedActionCount === 1 ? "action" : "actions"}`}
+              {confirmLabel}
             </button>
             <button
               type="button"
