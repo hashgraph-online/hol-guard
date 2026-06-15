@@ -4006,6 +4006,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/update/status",
         }:
             return True
+        # Hosted dashboard access is blocked for these routes, but local
+        # loopback/dashboard sessions still use them until the route deletion
+        # slice lands.
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"] and path_parts[2] in _HEADLESS_APP_ACTIONS:
             return True
         if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
