@@ -1,3 +1,5 @@
+"""Hosted dashboard origins cannot drive local-only daemon control routes."""
+
 from __future__ import annotations
 
 import urllib.error
@@ -15,6 +17,10 @@ from tests.test_guard_headless_daemon_api import _dashboard_token_for, _read_jso
     ("method", "path", "payload"),
     [
         ("POST", "/v1/apps/connect", {"harness": "codex", "operation": "install"}),
+        ("POST", "/v1/apps/repair", {"harness": "codex", "operation": "repair"}),
+        ("POST", "/v1/apps/status", {"harness": "codex", "operation": "status"}),
+        ("POST", "/v1/apps/test", {"harness": "codex", "operation": "scan"}),
+        ("POST", "/v1/apps/disconnect", {"harness": "codex", "operation": "remove"}),
         (
             "POST",
             "/v1/supply-chain/package-shims/install",

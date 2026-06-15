@@ -62,9 +62,12 @@ def _read_json_response_with_headers(
 
 
 def _default_origin_for_path(path: str) -> str:
-    if path.startswith("/v1/apps/") or path.startswith("/v1/supply-chain/"):
-        return "http://127.0.0.1:6174"
-    if path == "/v1/policy/sync" or path.startswith("/v1/requests"):
+    if (
+        path.startswith("/v1/apps/")
+        or path.startswith("/v1/supply-chain/")
+        or path == "/v1/policy/sync"
+        or path.startswith("/v1/requests")
+    ):
         return "http://127.0.0.1:6174"
     return "https://hol.org"
 
