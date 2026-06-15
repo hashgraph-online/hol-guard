@@ -101,12 +101,61 @@ const camelCaseAliases = normalizeSupplyChainAuditSnapshot({
 const lodashFinding = camelCaseAliases?.findings.find((finding) => finding.packageName === "lodash");
 assert(lodashFinding !== undefined, "SCSR173-B: camelCase advisory ids normalize");
 assert(
-  lodashFinding!.advisoryAliases.includes("GHSA-xx99-yy88-zz77"),
+  lodashFinding!.advisoryAliases.includes("GHSA-XX99-YY88-ZZ77"),
   "SCSR173-B: relatedAdvisoryIds preserved",
 );
 assert(
   lodashFinding!.advisoryAliases.includes("CVE-2024-12345"),
   "SCSR173-B: reason advisoryId preserved",
+);
+
+const cloudAdvisoryIds = normalizeSupplyChainAuditSnapshot({
+  generated_at: "2026-06-09T12:00:00.000Z",
+  source: "cloud",
+  evaluation: {
+    decision: "block",
+    packages: [
+      {
+        name: "minimist",
+        ecosystem: "npm",
+        decision: "block",
+        advisoryIds: ["GHSA-vh95-rmgr-6w4w"],
+        reasons: [{ code: "known_malware", message: "Known malware", severity: "critical" }],
+      },
+    ],
+  },
+});
+const cloudFinding = cloudAdvisoryIds?.findings.find((finding) => finding.packageName === "minimist");
+assert(cloudFinding !== undefined, "SCSR173-C: cloud advisoryIds normalize");
+assert(
+  cloudFinding!.advisoryAliases.includes("GHSA-VH95-RMGR-6W4W"),
+  "SCSR173-C: cloud advisoryIds surface as aliases",
+);
+
+const enrichedAliases = normalizeSupplyChainAuditSnapshot({
+  generated_at: "2026-06-09T12:00:00.000Z",
+  evaluation: {
+    decision: "block",
+    packages: [
+      {
+        name: "lodash",
+        ecosystem: "npm",
+        decision: "block",
+        advisoryAliases: ["GHSA-xx99-yy88-zz77", "CVE-2024-12345"],
+        reasons: [],
+      },
+    ],
+  },
+});
+const enrichedFinding = enrichedAliases?.findings.find((finding) => finding.packageName === "lodash");
+assert(enrichedFinding !== undefined, "SCSR173-D: backend advisoryAliases normalize");
+assert(
+  enrichedFinding!.advisoryAliases.includes("CVE-2024-12345"),
+  "SCSR173-D: backend advisoryAliases preserved",
+);
+assert(
+  !enrichedFinding!.advisoryAliases.some((alias) => alias.includes("pending")),
+  "SCSR173-D: pending alias stubs are not emitted",
 );
 
 const receipt: GuardReceipt = {

@@ -136,9 +136,11 @@ function FindingDetailPanel({ finding }: FindingDetailPanelProps) {
             </span>
           ))}
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">
-          CVE and GHSA aliases are stubbed here until linked advisory intel is available in Guard Cloud.
-        </p>
+        {finding.advisoryAliases.length === 0 ? (
+          <p className="mt-2 text-[11px] text-slate-500">
+            No linked CVE or GHSA aliases for this finding.
+          </p>
+        ) : null}
       </div>
     </div>
   );

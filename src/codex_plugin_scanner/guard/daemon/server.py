@@ -2313,6 +2313,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             result=result,
             managers=managers,
             workspace_dir=context.workspace_dir,
+            store=self.server.store,  # type: ignore[attr-defined]
         )
         receipt = self._record_headless_receipt(
             harness="package-firewall",
