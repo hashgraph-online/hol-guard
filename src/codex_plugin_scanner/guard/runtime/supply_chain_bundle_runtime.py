@@ -95,6 +95,7 @@ def load_supply_chain_bundle_response(raw_json: str | dict[str, object]) -> Supp
         raise SupplyChainBundleMalformedError("Bundle response must include verification keys")
     return SupplyChainBundleResponse(
         bundle=SupplyChainBundle.from_dict(raw_bundle),
+        signed_bundle=raw_bundle,
         payload_hash=_require_string(data, "payloadHash"),
         signature=_require_string(data, "signature"),
         signature_algorithm=signature_algorithm,
@@ -156,7 +157,7 @@ def verify_supply_chain_bundle_response(
 ) -> None:
     """Verify payload hash, freshness, rollback, keyring anchor, and RSA-PSS signature."""
 
-    canonical_payload = canonical_supply_chain_bundle_payload(response.bundle)
+    canonical_payload = canonical_supply_chain_bundle_payload(response.signed_bundle)
     if hashlib.sha256(canonical_payload).hexdigest() != response.payload_hash:
         raise SupplyChainBundlePayloadHashError("Bundle payloadHash does not match the canonical payload")
     if cached_bundle_version is not None:

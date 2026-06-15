@@ -260,6 +260,39 @@ class SupplyChainBundlePolicyRule:
 
 
 @dataclass(frozen=True, slots=True)
+class SupplyChainBundleEmergencyDeny:
+    """Emergency denylist entry inside the supply-chain bundle."""
+
+    ecosystem: str
+    name: str
+    namespace: str | None
+    reason: str
+    recommended_fix_version: str | None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "ecosystem": self.ecosystem,
+            "name": self.name,
+            "namespace": self.namespace,
+            "reason": self.reason,
+            "recommendedFixVersion": self.recommended_fix_version,
+        }
+
+    @staticmethod
+    def from_dict(data: dict[str, object]) -> SupplyChainBundleEmergencyDeny:
+        reason = _require_string(data, "reason")
+        if reason not in {"critical_active_exploit", "known_exploited", "known_malware"}:
+            raise SupplyChainBundleMalformedError(f"Unsupported emergency deny reason: {reason!r}")
+        return SupplyChainBundleEmergencyDeny(
+            ecosystem=_require_string(data, "ecosystem"),
+            name=_require_string(data, "name"),
+            namespace=_optional_string(data, "namespace"),
+            reason=reason,
+            recommended_fix_version=_optional_string(data, "recommendedFixVersion"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class SupplyChainBundleSourceHash:
     """Source-hash metadata inside the supply-chain bundle."""
 
@@ -293,6 +326,7 @@ class SupplyChainBundle:
 
     advisories: tuple[SupplyChainBundleAdvisory, ...]
     bundle_version: str
+    emergency_denylist: tuple[SupplyChainBundleEmergencyDeny, ...]
     expires_at: str
     feed_snapshot_hash: str
     generated_at: str
@@ -321,6 +355,7 @@ class SupplyChainBundle:
         return {
             "advisories": [item.to_dict() for item in self.advisories],
             "bundleVersion": self.bundle_version,
+            "emergencyDenylist": [item.to_dict() for item in self.emergency_denylist],
             "expiresAt": self.expires_at,
             "feedSnapshotHash": self.feed_snapshot_hash,
             "generatedAt": self.generated_at,
@@ -337,11 +372,16 @@ class SupplyChainBundle:
     @staticmethod
     def from_dict(data: dict[str, object]) -> SupplyChainBundle:
         raw_advisories = data.get("advisories")
+        raw_emergency_denylist = data.get("emergencyDenylist")
         raw_packages = data.get("packages")
         raw_policy_rules = data.get("policyRules")
         raw_source_hashes = data.get("sourceHashes")
         if not isinstance(raw_advisories, list):
             raise SupplyChainBundleMalformedError("Bundle advisories must be a list")
+        if raw_emergency_denylist is None:
+            raw_emergency_denylist = []
+        if not isinstance(raw_emergency_denylist, list):
+            raise SupplyChainBundleMalformedError("Bundle emergencyDenylist must be a list")
         if not isinstance(raw_packages, list):
             raise SupplyChainBundleMalformedError("Bundle packages must be a list")
         if not isinstance(raw_policy_rules, list):
@@ -353,6 +393,11 @@ class SupplyChainBundle:
                 SupplyChainBundleAdvisory.from_dict(item) for item in raw_advisories if isinstance(item, dict)
             ),
             bundle_version=_require_string(data, "bundleVersion"),
+            emergency_denylist=tuple(
+                SupplyChainBundleEmergencyDeny.from_dict(item)
+                for item in raw_emergency_denylist
+                if isinstance(item, dict)
+            ),
             expires_at=_require_string(data, "expiresAt"),
             feed_snapshot_hash=_require_string(data, "feedSnapshotHash"),
             generated_at=_require_string(data, "generatedAt"),
@@ -371,6 +416,8 @@ class SupplyChainBundle:
         )
         if len(bundle.advisories) != len(raw_advisories):
             raise SupplyChainBundleMalformedError("Bundle advisories must contain only objects")
+        if len(bundle.emergency_denylist) != len(raw_emergency_denylist):
+            raise SupplyChainBundleMalformedError("Bundle emergencyDenylist must contain only objects")
         if len(bundle.packages) != len(raw_packages):
             raise SupplyChainBundleMalformedError("Bundle packages must contain only objects")
         if len(bundle.policy_rules) != len(raw_policy_rules):
@@ -390,6 +437,7 @@ class SupplyChainBundleResponse:
     """Signed supply-chain bundle response from Guard Cloud."""
 
     bundle: SupplyChainBundle
+    signed_bundle: dict[str, object]
     payload_hash: str
     signature: str
     signature_algorithm: str
@@ -397,7 +445,7 @@ class SupplyChainBundleResponse:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "bundle": self.bundle.to_dict(),
+            "bundle": self.signed_bundle,
             "payloadHash": self.payload_hash,
             "signature": self.signature,
             "signatureAlgorithm": self.signature_algorithm,
