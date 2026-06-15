@@ -6712,6 +6712,7 @@ url = http://127.0.0.1:8787/guard-canary
             store: GuardStore,
             *,
             auth_context: dict[str, object] | None = None,
+            now: str | None = None,
         ) -> dict[str, object]:
             del store
             assert auth_context is None
