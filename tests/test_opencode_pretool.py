@@ -73,10 +73,14 @@ def test_pretool_plugin_source_embeds_guard_paths(tmp_path: Path) -> None:
     source = pretool_plugin_source(ctx)
     assert str(ctx.guard_home.resolve()) in source
     assert "tool.execute.before" in source
-    assert "stdin: new Blob([JSON.stringify(payload)])" in source
+    assert "spawnGuardProcess" in source
+    assert "node:child_process" in source
     assert "normalizeCommand" in source
-    assert '.stream()' not in source.split("Bun.spawn", 1)[1].split("});", 1)[0]
-    assert "stdoutPromise" in source
+    spawn_block = source.split("async function spawnGuardProcess", 1)[1].split("async function runGuardHook", 1)[0]
+    assert "globalThis" in spawn_block
+    assert "Bun" in spawn_block
+    assert "stdin: new Blob([options.stdin])" in spawn_block
+    assert '.stream()' not in spawn_block
     assert "try {" in source
     assert 'source_scope: directory?.trim() ? "project" : "global"' in source
     assert "GUARD_HOOK_LAUNCHER" in source
@@ -84,8 +88,8 @@ def test_pretool_plugin_source_embeds_guard_paths(tmp_path: Path) -> None:
     assert "GUARD_INHERIT_ENV_KEYS" in source
     assert "HOL_GUARD_HOOK_ARGV" in source
     assert "cwd: GUARD_HOME" in source
-    spawn_block = source.split("Bun.spawn(", 1)[1].split("});", 1)[0]
-    assert "cwd: workspace" not in spawn_block
+    run_block = source.split("async function runGuardHook", 1)[1].split("function parseGuardPayload", 1)[0]
+    assert "cwd: workspace" not in run_block
     assert '"-m",' not in source
     assert '-m",' not in source
 
@@ -175,10 +179,22 @@ def test_pretool_hook_env_blocks_workspace_import_shadowing(tmp_path: Path) -> N
 
 def test_pretool_plugin_source_does_not_spawn_python_m_module(tmp_path: Path) -> None:
     source = pretool_plugin_source(_ctx(tmp_path))
-    spawn_block = source.split("Bun.spawn(", 1)[1].split("});", 1)[0]
-    assert "codex_plugin_scanner.cli" not in spawn_block
-    assert '"-c"' in spawn_block or "'-c'" in spawn_block or "-c" in spawn_block
-    assert "GUARD_HOOK_LAUNCHER" in spawn_block
+    run_block = source.split("return spawnGuardProcess({", 1)[1].split("});", 1)[0]
+    assert "codex_plugin_scanner.cli" not in run_block
+    assert '"-c"' in run_block or "'-c'" in run_block or "-c" in run_block
+    assert "GUARD_HOOK_LAUNCHER" in run_block
+
+
+def test_pretool_plugin_source_includes_node_spawn_fallback(tmp_path: Path) -> None:
+    spawn_block = pretool_plugin_source(_ctx(tmp_path)).split("async function spawnGuardProcess", 1)[1].split(
+        "async function runGuardHook",
+        1,
+    )[0]
+    assert "typeof bun?.spawn === \"function\"" in spawn_block
+    assert 'await import("node:child_process")' in spawn_block
+    assert 'proc.stdout?.setEncoding("utf8")' in spawn_block
+    assert 'proc.stdin?.on("error", () => {})' in spawn_block
+    assert "proc.stdin?.end(options.stdin)" in spawn_block
 
 
 def test_install_pretool_plugin_writes_managed_and_global_copies(tmp_path: Path) -> None:
