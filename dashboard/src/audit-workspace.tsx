@@ -25,7 +25,6 @@ import type { GuardApprovalGatePublicConfig, GuardReceipt, GuardRuntimeSnapshot 
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 import { resolveManagerCoverageStatus } from "./supply-chain-protection-stats";
 import { PackageWorkbenchPanel } from "./package-workbench-panel";
-import { AuditRunProgress } from "./audit-run-progress";
 import type { SupplyChainAuditSession } from "./use-supply-chain-audit-session";
 
 export type AuditSeverity = "critical" | "high" | "medium" | "low" | "info";
@@ -559,13 +558,13 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession 
 
   return (
     <div className="space-y-6">
-      <AuditRunProgress phase={auditSession.auditPhase} running={auditSession.auditRunning} />
-
       <PackageWorkbenchPanel
         auditConnectGate={auditSession.auditConnectGate}
         auditError={auditSession.auditError}
         auditSnapshot={auditSession.auditSnapshot}
         auditRunning={auditSession.auditRunning}
+        auditPhase={auditSession.auditPhase}
+        cloudState={snapshot.cloud_state}
         onRunAudit={auditSession.handleRunAudit}
       />
 

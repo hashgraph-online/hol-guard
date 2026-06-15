@@ -265,6 +265,24 @@ function normalizePackageFindings(value: unknown): SupplyChainAuditFinding[] {
   return findings;
 }
 
+const INFORMATIONAL_REASON_CODES = new Set(["unknown_package", "no_cached_match"]);
+
+export function isActionablePackageFinding(finding: SupplyChainAuditFinding): boolean {
+  if (finding.decision === "block" || finding.decision === "ask" || finding.decision === "warn") {
+    return true;
+  }
+  if (finding.reasons.length === 0) {
+    return finding.decision !== "allow" && finding.decision !== "monitor";
+  }
+  return finding.reasons.some((reason) => !INFORMATIONAL_REASON_CODES.has(reason.code));
+}
+
+export function deriveActionableFindings(
+  packages: SupplyChainAuditFinding[],
+): SupplyChainAuditFinding[] {
+  return packages.filter(isActionablePackageFinding);
+}
+
 function packageRecordsFromEvaluation(evaluation: Record<string, unknown> | null): SupplyChainAuditFinding[] {
   if (evaluation === null) {
     return [];
@@ -291,9 +309,25 @@ export function normalizeSupplyChainAuditSnapshot(
     return null;
   }
   const evaluation = isRecord(raw.evaluation) ? raw.evaluation : null;
+  const inventoryPackages = normalizePackageFindings(raw.package_inventory);
+  const evaluationPackages = packageRecordsFromEvaluation(evaluation);
+  let packages: SupplyChainAuditFinding[];
+  if (evaluationPackages.length > 0) {
+    packages = evaluationPackages;
+  } else if (inventoryPackages.length > 0) {
+    packages = inventoryPackages;
+  } else {
+    packages = normalizePackageFindings(raw.package_findings);
+  }
   const findingsFromEvidence = normalizePackageFindings(raw.package_findings);
-  const findings =
-    findingsFromEvidence.length > 0 ? findingsFromEvidence : packageRecordsFromEvaluation(evaluation);
+  let findings: SupplyChainAuditFinding[];
+  if (packages.length > 0) {
+    findings = deriveActionableFindings(packages);
+  } else if (findingsFromEvidence.length > 0) {
+    findings = findingsFromEvidence;
+  } else {
+    findings = [];
+  }
   const generatedAt =
     readString(raw.generated_at) ?? readString(raw.generatedAt) ?? new Date(0).toISOString();
   const inventory = normalizeInventory(isRecord(raw.inventory) ? raw.inventory : null);
@@ -301,6 +335,7 @@ export function normalizeSupplyChainAuditSnapshot(
   const manifestPaths = readStringArray(raw.manifest_paths);
   const lockfilePaths = readStringArray(raw.lockfile_paths);
   const hasAuditContext =
+    packages.length > 0 ||
     findings.length > 0 ||
     inventory.totalPackages > 0 ||
     evaluation !== null;
@@ -312,6 +347,7 @@ export function normalizeSupplyChainAuditSnapshot(
     source: readString(raw.source),
     decision,
     inventory,
+    packages,
     findings,
     manifestPaths,
     lockfilePaths,
@@ -337,7 +373,8 @@ export function derivePackageWorkbenchFromReceipts(receipts: GuardReceipt[]): Su
         audit_status: evidenceRaw.audit_status,
         evaluation: {
           decision: evidenceRaw.audit_decision,
-          packages: evidenceRaw.package_findings,
+          packages:
+            evidenceRaw.package_inventory ?? evidenceRaw.package_findings,
         },
         inventory: {
           total_packages: evidenceRaw.total_packages,

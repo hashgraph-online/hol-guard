@@ -697,6 +697,49 @@ def test_audit_receipt_metadata_skips_informational_unknown_packages() -> None:
     assert findings[0]["name"] == "risky-lib"
 
 
+def test_audit_receipt_metadata_includes_full_package_inventory() -> None:
+    metadata = audit_receipt_metadata(
+        {
+            "lockfile_paths": ["package-lock.json"],
+            "manifest_paths": ["package.json"],
+            "inventory": {"total_packages": 3},
+            "evaluation": {
+                "decision": "warn",
+                "packages": [
+                    {
+                        "name": "clean-lib",
+                        "ecosystem": "npm",
+                        "decision": "monitor",
+                        "reasons": [],
+                    },
+                    {
+                        "name": "risky-lib",
+                        "ecosystem": "npm",
+                        "decision": "block",
+                        "reasons": [{"code": "known_malware", "message": "known malware", "severity": "critical"}],
+                    },
+                    {
+                        "name": "requests",
+                        "ecosystem": "pypi",
+                        "decision": "monitor",
+                        "reasons": [{"code": "unknown_package", "message": "not indexed", "severity": "low"}],
+                    },
+                ],
+            },
+        }
+    )
+
+    evidence = metadata["scanner_evidence"]
+    inventory = evidence.get("package_inventory")
+    findings = evidence.get("package_findings")
+    assert isinstance(inventory, list)
+    assert len(inventory) == 3
+    assert {item["ecosystem"] for item in inventory} == {"npm", "pypi"}
+    assert isinstance(findings, list)
+    assert len(findings) == 1
+    assert findings[0]["name"] == "risky-lib"
+
+
 def test_workspace_files_discovers_nested_manifests(tmp_path: Path) -> None:
     workspace_dir = tmp_path / "workspace"
     nested = workspace_dir / "dashboard"
