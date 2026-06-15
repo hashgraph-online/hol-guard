@@ -70,7 +70,7 @@ async function spawnGuardProcess(options: {
   }
 
   const { spawn } = await import("node:child_process");
-  return await new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const proc = spawn(options.command[0], options.command.slice(1), {
       cwd: options.cwd,
       env: options.env,
@@ -78,16 +78,19 @@ async function spawnGuardProcess(options: {
     });
     let stdout = "";
     let stderr = "";
-    proc.stdout?.on("data", (chunk: Buffer | string) => {
-      stdout += String(chunk);
+    proc.stdout?.setEncoding("utf8");
+    proc.stderr?.setEncoding("utf8");
+    proc.stdout?.on("data", (chunk: string) => {
+      stdout += chunk;
     });
-    proc.stderr?.on("data", (chunk: Buffer | string) => {
-      stderr += String(chunk);
+    proc.stderr?.on("data", (chunk: string) => {
+      stderr += chunk;
     });
     proc.on("error", reject);
     proc.on("close", (code: number | null) => {
       resolve({ exitCode: code ?? 1, stdout, stderr });
     });
+    proc.stdin?.on("error", () => {});
     proc.stdin?.end(options.stdin);
   });
 }

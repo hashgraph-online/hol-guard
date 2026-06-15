@@ -192,6 +192,8 @@ def test_pretool_plugin_source_includes_node_spawn_fallback(tmp_path: Path) -> N
     )[0]
     assert "typeof bun?.spawn === \"function\"" in spawn_block
     assert 'await import("node:child_process")' in spawn_block
+    assert 'proc.stdout?.setEncoding("utf8")' in spawn_block
+    assert 'proc.stdin?.on("error", () => {})' in spawn_block
     assert "proc.stdin?.end(options.stdin)" in spawn_block
 
 
