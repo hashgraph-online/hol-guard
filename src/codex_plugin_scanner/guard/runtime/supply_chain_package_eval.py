@@ -1122,6 +1122,34 @@ def _primary_bundle_advisory_id(
     return package.related_advisory_ids[0]
 
 
+def _bundle_advisory_aliases(
+    bundle_response: SupplyChainBundleResponse,
+    package: SupplyChainBundlePackage,
+) -> list[str]:
+    advisory_ids = list(package.related_advisory_ids)
+    primary_id = _primary_bundle_advisory_id(bundle_response, package)
+    if primary_id is not None and primary_id not in advisory_ids:
+        advisory_ids.append(primary_id)
+    if not advisory_ids:
+        return []
+    advisory_lookup: dict[str, tuple[str, ...]] = {}
+    for advisory in bundle_response.bundle.advisories:
+        alias_tuple = (advisory.advisory_id, *advisory.aliases)
+        upper_tuple = tuple(alias.upper() for alias in alias_tuple)
+        advisory_lookup[advisory.advisory_id.upper()] = upper_tuple
+        for alias in alias_tuple:
+            advisory_lookup.setdefault(alias.upper(), upper_tuple)
+    aliases: list[str] = []
+    seen: set[str] = set()
+    for advisory_id in advisory_ids:
+        for alias in advisory_lookup.get(advisory_id.upper(), (advisory_id.upper(),)):
+            if alias in seen:
+                continue
+            seen.add(alias)
+            aliases.append(alias)
+    return aliases
+
+
 def _heuristic_result(
     *,
     artifact: GuardArtifact,
@@ -1652,7 +1680,8 @@ def _bundle_package_result(
     resolved_version: str,
 ) -> dict[str, object]:
     severity = package.normalized_severity if stale is False else "unknown"
-    return {
+    advisory_aliases = _bundle_advisory_aliases(bundle_response, package)
+    result: dict[str, object] = {
         "decision": decision,
         "ecosystem": package.ecosystem,
         "name": package.name,
@@ -1666,6 +1695,7 @@ def _bundle_package_result(
         "packageManager": _optional_string(target.get("package_manager")) or "npm",
         "redactedCommand": _optional_string(target.get("redacted_command")),
         "alias": _optional_string(target.get("alias")),
+        "relatedAdvisoryIds": list(package.related_advisory_ids),
         "reasons": (
             {
                 "advisoryId": _primary_bundle_advisory_id(bundle_response, package),
@@ -1676,6 +1706,9 @@ def _bundle_package_result(
             },
         ),
     }
+    if advisory_aliases:
+        result["advisoryAliases"] = advisory_aliases
+    return result
 
 
 def _system_package_monitor_result(target: dict[str, object]) -> dict[str, object]:

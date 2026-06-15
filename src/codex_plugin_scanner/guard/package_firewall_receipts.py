@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .local_supply_chain import audit_receipt_metadata
+from .store import GuardStore
 
 
 def _read_string_list(value: object) -> list[str]:
@@ -78,12 +79,13 @@ def package_firewall_receipt_metadata(
     result: dict[str, object],
     managers: tuple[str, ...] | None = None,
     workspace_dir: Path | None = None,
+    store: GuardStore | None = None,
 ) -> dict[str, object]:
     """Build receipt override fields for package-firewall headless operations."""
 
     manager_subset = _resolve_manager_subset(managers, result, operation)
     if operation == "audit":
-        metadata = audit_receipt_metadata(result, workspace_dir=workspace_dir)
+        metadata = audit_receipt_metadata(result, workspace_dir=workspace_dir, store=store)
         scanner_evidence = metadata.get("scanner_evidence")
         if isinstance(scanner_evidence, dict):
             enriched = dict(scanner_evidence)
