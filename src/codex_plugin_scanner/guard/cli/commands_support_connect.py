@@ -37,7 +37,6 @@ def _guard_doctor_connect_health_payload(store: GuardStore) -> dict[str, object]
     oauth_storage_health = store.get_oauth_local_credential_health()
     latest_state = normalize_connect_state_for_missing_oauth(
         latest_state=store.get_effective_guard_connect_state(now=_now()),
-        cloud_profile=store.get_cloud_sync_profile(),
         oauth_storage_health=oauth_storage_health,
     )
     payload: dict[str, object] = {

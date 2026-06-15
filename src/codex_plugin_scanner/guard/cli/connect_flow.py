@@ -1146,7 +1146,6 @@ def build_connect_status_payload(
     oauth_storage_health = store.get_oauth_local_credential_health()
     latest_state = normalize_connect_state_for_missing_oauth(
         latest_state=latest_state,
-        cloud_profile=cloud_profile,
         oauth_storage_health=oauth_storage_health,
     )
     oauth_repair_required = (
@@ -1203,10 +1202,9 @@ def build_connect_status_payload(
 def normalize_connect_state_for_missing_oauth(
     *,
     latest_state: dict[str, object] | None,
-    cloud_profile: dict[str, str] | None,
     oauth_storage_health: dict[str, object],
 ) -> dict[str, object] | None:
-    if latest_state is None or cloud_profile is not None:
+    if latest_state is None:
         return latest_state
     oauth_state = str(oauth_storage_health.get("state") or "")
     oauth_configured = bool(oauth_storage_health.get("configured"))

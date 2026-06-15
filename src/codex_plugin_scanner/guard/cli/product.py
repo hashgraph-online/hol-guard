@@ -256,7 +256,6 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
     last_sync_at = _optional_string(sync_summary.get("synced_at"))
     latest_connect_state = normalize_connect_state_for_missing_oauth(
         latest_state=store.get_effective_guard_connect_state(now=_now()),
-        cloud_profile=cloud_profile,
         oauth_storage_health=oauth_storage_health,
     )
     connect_retry_required = _connect_retry_required(latest_connect_state)
