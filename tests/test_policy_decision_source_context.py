@@ -342,6 +342,50 @@ def test_list_policy_decisions_enriches_harness_exact_match_policy_from_receipt(
     assert direct_item["remembered_command"] == "pnpm install lodash"
 
 
+def test_list_policy_decisions_does_not_fall_back_across_regular_hash_mismatch(tmp_path) -> None:
+    store = _store(tmp_path)
+    artifact_id = "opencode:project:package-request:exact1"
+    store.add_receipt(
+        GuardReceipt(
+            receipt_id="receipt-mismatch-1",
+            timestamp="2026-06-14T12:00:00+00:00",
+            harness="opencode",
+            artifact_id=artifact_id,
+            artifact_hash="88a55337a11b7c7f6f4f2f3b9f7c4d1a88a55337a11b7c7f6f4f2f3b9f7c4d1a",
+            policy_decision="allow",
+            capabilities_summary="Package install via pnpm",
+            changed_capabilities=("package-request",),
+            provenance_summary="hook event for package install",
+            artifact_name="pnpm install lodash",
+            source_scope="/srv/projects/hol-guard",
+        )
+    )
+    store.upsert_policy(
+        PolicyDecision(
+            harness="opencode",
+            scope="artifact",
+            action="allow",
+            artifact_id=artifact_id,
+            artifact_hash="sha256:differenthash11b7c7f6f4f2f3b9f7c4d1a88a55337a11b7c7f6f4f2f3b9f7c4d1a",
+            workspace="/srv/projects/hol-guard",
+            reason="approved in review",
+            source="local",
+        ),
+        "2026-06-14T12:01:00+00:00",
+    )
+
+    item = store.list_policy_decisions(harness="opencode")[0]
+    assert "source_receipt_id" not in item
+    assert "remembered_command" not in item
+
+    with store._connect() as connection:
+        row = connection.execute("select * from policy_decisions").fetchone()
+        assert row is not None
+        direct_item = GuardStore._policy_decision_dict_from_row(connection, row)
+    assert "source_receipt_id" not in direct_item
+    assert "remembered_command" not in direct_item
+
+
 def test_list_policy_decisions_keeps_inventory_context_with_global_policy(tmp_path) -> None:
     store = _store(tmp_path)
     with store._connect() as connection:
