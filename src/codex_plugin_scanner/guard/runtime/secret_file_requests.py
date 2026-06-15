@@ -6479,9 +6479,13 @@ def _python_module_subcommand(module_root: str, module_args: list[str]) -> str |
 
 
 def _static_shell_segment_is_safe(args: list[str]) -> bool:
-    return all(
-        "$" not in arg and "`" not in arg and "$(" not in arg and "<(" not in arg and ">(" not in arg for arg in args
-    )
+    return all(_static_shell_arg_is_safe(arg) for arg in args)
+
+
+def _static_shell_arg_is_safe(arg: str) -> bool:
+    if "`" in arg or "$(" in arg or "<(" in arg or ">(" in arg:
+        return False
+    return "$" not in arg.replace("$?", "")
 
 
 def _contains_unmodeled_inline_interpreter_eval(

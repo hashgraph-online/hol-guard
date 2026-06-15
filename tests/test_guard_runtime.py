@@ -14054,6 +14054,81 @@ def test_guard_hook_codex_does_not_block_simple_pytest_command(tmp_path, capsys,
     assert "approval_requests" not in output
 
 
+def test_guard_runtime_allows_literal_exit_code_echo_after_safe_pytest(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {
+            "command": (
+                "cd sub && .venv/bin/python -m pytest "
+                "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+                'test_release_checklist_references_smoke_evidence -q 2>&1; echo "__EXIT_CODE__:$?"'
+            )
+        },
+        cwd=tmp_path,
+    )
+
+    assert match is None
+
+
+def test_guard_hook_codex_does_not_block_safe_pytest_exit_code_echo(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "event": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": (
+                "cd sub && .venv/bin/python -m pytest "
+                "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+                'test_release_checklist_references_smoke_evidence -q 2>&1; echo "__EXIT_CODE__:$?"'
+            )
+        },
+        "source_scope": "project",
+    }
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+    )
+
+    assert rc == 0
+    assert output["recorded"] is True
+    assert output["policy_action"] == "warn"
+    assert "approval_requests" not in output
+
+
+@pytest.mark.parametrize(
+    ("command_suffix",),
+    [
+        ('echo "$HOME"',),
+        ('echo "${VAR}"',),
+        ('printf "$PATH"',),
+    ],
+)
+def test_guard_runtime_keeps_static_shell_expansions_blocked_after_safe_pytest(tmp_path, command_suffix):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {
+            "command": (
+                "cd sub && .venv/bin/python -m pytest "
+                "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+                "test_release_checklist_references_smoke_evidence -q 2>&1; "
+                f"{command_suffix}"
+            )
+        },
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
 def test_guard_runtime_keeps_mutating_pytest_flags_sensitive(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",
