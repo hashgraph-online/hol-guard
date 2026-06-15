@@ -71,11 +71,13 @@ assert(chromeSource.includes(".focus()"), "policy tablist moves focus on arrow k
 assert(pageSource.includes("PolicyUnderlineTabBar"), "policy page mounts underline tab bar");
 
 const listSource = readSource("policy-cloud-exceptions-list.tsx");
-assert(listSource.includes('aria-label="Cloud exception groups"'), "grouped list exposes list label");
+assert(listSource.includes('placeholder="Search exceptions…"'), "exception list exposes search");
+assert(listSource.includes("Active on this device"), "exception list groups active section");
 assert(listSource.includes("aria-pressed"), "exception cards expose selection state");
 
 const detailSource = readSource("policy-cloud-exception-detail-panel.tsx");
 assert(detailSource.includes('aria-label="Cloud exception details"'), "detail panel exposes label");
+assert(detailSource.includes("Open in Guard Cloud"), "detail panel links to Guard Cloud");
 
 const requestSource = readSource("policy-cloud-exception-request-panel.tsx");
 const requestLayoutSource = readSource("policy-cloud-exception-request-layout.tsx");
