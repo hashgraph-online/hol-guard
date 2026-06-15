@@ -309,9 +309,8 @@ def _cursor_shell_command_from_payload(payload: Mapping[str, object]) -> str | N
         return normalize_cursor_shell_command(tool_input_command)
     if top_level is not None:
         return normalize_cursor_shell_command(top_level)
-    if tool_input_command is not None:
-        return normalize_cursor_shell_command(tool_input_command)
     return None
+
 
 def _cursor_shell_command_fingerprint(command: str) -> str:
     from ..adapters.cursor_native_approval import normalize_cursor_shell_command

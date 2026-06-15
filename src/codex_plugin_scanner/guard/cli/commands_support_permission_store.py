@@ -307,6 +307,8 @@ def _persist_cursor_native_permission_after_shell(
         return False
     runtime_artifact = _cursor_runtime_artifact_from_pending(pending)
     runtime_artifact_hash = _optional_string(pending.get("artifact_hash"))
+    if runtime_artifact is not None and runtime_artifact_hash is None:
+        runtime_artifact_hash = artifact_hash(runtime_artifact)
     if runtime_artifact is None:
         action_envelope = _hook_action_envelope(
             harness=harness,

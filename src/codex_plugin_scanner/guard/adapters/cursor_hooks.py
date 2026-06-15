@@ -853,6 +853,9 @@ def _normalize_cursor_shell_command(command: str) -> str:
     return stripped
 
 
+# Installed hook helpers below mirror cursor_native_approval.py; keep both copies in sync.
+
+
 def _cursor_hook_payload_is_mcp_execution(payload: Mapping[str, object]) -> bool:
     source_event = payload.get("cursor_source_hook_event")
     if isinstance(source_event, str) and source_event.strip().lower() == "beforemcpexecution":
