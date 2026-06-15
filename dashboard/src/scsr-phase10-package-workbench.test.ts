@@ -58,7 +58,8 @@ const auditPayload = {
 
 const snapshot = normalizeSupplyChainAuditSnapshot(auditPayload, "receipt-audit-1");
 assert(snapshot !== null, "SCSR166: audit payload normalizes into workbench snapshot");
-assert(snapshot!.findings.length === 3, "SCSR167: all evaluated packages surface as findings");
+assert(snapshot!.packages.length === 3, "SCSR167: all evaluated packages surface in inventory");
+assert(snapshot!.findings.length === 2, "SCSR167-B: actionable findings exclude clean monitor packages");
 assert(snapshot!.inventory.totalPackages === 3, "SCSR168: inventory totals normalize");
 
 const sorted = sortPackageWorkbenchFindings(snapshot!.findings, "severity");
@@ -186,7 +187,8 @@ const receipt: GuardReceipt = {
 
 const derived = derivePackageWorkbenchFromReceipts([receipt]);
 assert(derived !== null, "SCSR174: latest audit receipt hydrates workbench snapshot");
-assert(derived!.findings.length === 3, "SCSR175: receipt package_findings hydrate findings table");
+assert(derived!.packages.length === 3, "SCSR175: receipt package_findings hydrate full inventory");
+assert(derived!.findings.length === 2, "SCSR175-B: receipt findings stay actionable-only");
 
 assert(
   normalizeSupplyChainAuditSnapshot({ generated_at: "2026-06-09T12:00:00.000Z" }) === null,

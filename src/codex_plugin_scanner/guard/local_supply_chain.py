@@ -663,6 +663,22 @@ def _is_actionable_package_finding(item: dict[str, object]) -> bool:
     return not reason_codes.issubset(_INFORMATIONAL_REASON_CODES)
 
 
+def _audit_package_inventory_for_receipt(
+    package_items: list[dict[str, object]],
+    *,
+    limit: int = 500,
+    bundle: dict[str, object] | None = None,
+) -> list[dict[str, object]]:
+    ranked = sorted(
+        package_items,
+        key=lambda item: (
+            str(item.get("ecosystem") or ""),
+            str(item.get("name") or ""),
+        ),
+    )
+    return [_enrich_package_with_advisory_aliases(item, bundle=bundle) for item in ranked[:limit]]
+
+
 def _audit_package_findings_for_receipt(
     package_items: list[dict[str, object]],
     *,
@@ -773,6 +789,7 @@ def audit_receipt_metadata(
     blocked_packages = [item for item in package_items if str(item.get("decision") or "") == "block"]
     bundle = _cached_supply_chain_bundle_payload(store) if store is not None else None
     package_findings = _audit_package_findings_for_receipt(package_items, bundle=bundle)
+    package_inventory = _audit_package_inventory_for_receipt(package_items, bundle=bundle)
     policy_decision = "allow"
     if decision == "block":
         policy_decision = "block"
@@ -799,6 +816,7 @@ def audit_receipt_metadata(
             "manifest_hashes": path_hashes["manifest_hashes"],
             "lockfile_hashes": path_hashes["lockfile_hashes"],
             "total_packages": inventory_summary.get("total_packages", len(package_items)),
+            "package_inventory": package_inventory,
             "package_findings": package_findings,
         },
     }

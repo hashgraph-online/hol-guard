@@ -1,7 +1,7 @@
 import { HiMiniArrowPath, HiMiniCheckCircle } from "react-icons/hi2";
 import type { AuditRunPhase } from "./use-supply-chain-audit-session";
 
-type AuditRunProgressProps = {
+type AuditProgressProps = {
   phase: AuditRunPhase;
   running: boolean;
 };
@@ -11,8 +11,8 @@ type StepState = "pending" | "active" | "done";
 const STEPS: Array<{ id: AuditRunPhase; label: string }> = [
   { id: "preparing", label: "Prepare workspace" },
   { id: "scanning", label: "Scan manifests and lockfiles" },
-  { id: "evaluating", label: "Evaluate packages" },
-  { id: "finalizing", label: "Build findings" },
+  { id: "evaluating", label: "Evaluate packages against Guard intel" },
+  { id: "finalizing", label: "Prepare results" },
 ];
 
 function stepState(stepId: AuditRunPhase, phase: AuditRunPhase, running: boolean): StepState {
@@ -54,18 +54,38 @@ function stepBubbleClass(state: StepState): string {
   return "border border-slate-200 bg-white text-slate-400";
 }
 
-export function AuditRunProgress({ phase, running }: AuditRunProgressProps) {
-  if (!running && phase === "idle") {
+export function AuditProgressStepList({ phase, running }: AuditProgressProps) {
+  return (
+    <ol className="space-y-2" aria-live="polite" aria-busy={running} data-testid="audit-run-progress">
+      {STEPS.map((step, index) => {
+        const state = stepState(step.id, phase, running);
+        return (
+          <li key={step.id} className={`flex items-center gap-2 text-sm ${stepTextClass(state)}`}>
+            <span
+              className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${stepBubbleClass(state)}`}
+              aria-hidden="true"
+            >
+              {state === "done" ? "✓" : index + 1}
+            </span>
+            {step.label}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+export function auditProgressActive(phase: AuditRunPhase, running: boolean): boolean {
+  return running || phase !== "idle";
+}
+
+export function AuditRunProgress({ phase, running }: AuditProgressProps) {
+  if (!auditProgressActive(phase, running)) {
     return null;
   }
 
   return (
-    <section
-      className="rounded-2xl border border-brand-blue/15 bg-brand-blue/[0.03] px-4 py-4"
-      aria-live="polite"
-      aria-busy={running}
-      data-testid="audit-run-progress"
-    >
+    <section className="rounded-2xl border border-brand-blue/15 bg-brand-blue/[0.03] px-4 py-4">
       <div className="flex items-center gap-2">
         {running ? (
           <HiMiniArrowPath className="h-4 w-4 shrink-0 animate-spin text-brand-blue" aria-hidden="true" />
@@ -76,25 +96,9 @@ export function AuditRunProgress({ phase, running }: AuditRunProgressProps) {
           {running ? "Workspace audit in progress" : "Workspace audit complete"}
         </p>
       </div>
-      <ol className="mt-4 space-y-2">
-        {STEPS.map((step, index) => {
-          const state = stepState(step.id, phase, running);
-          return (
-            <li
-              key={step.id}
-              className={`flex items-center gap-2 text-sm ${stepTextClass(state)}`}
-            >
-              <span
-                className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${stepBubbleClass(state)}`}
-                aria-hidden="true"
-              >
-                {state === "done" ? "✓" : index + 1}
-              </span>
-              {step.label}
-            </li>
-          );
-        })}
-      </ol>
+      <div className="mt-4">
+        <AuditProgressStepList phase={phase} running={running} />
+      </div>
     </section>
   );
 }

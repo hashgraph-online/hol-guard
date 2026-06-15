@@ -39,8 +39,20 @@ assert(
   "audit tab hosts package workbench",
 );
 assert(
-  auditSource.includes("AuditRunProgress"),
-  "audit tab shows progressive audit steps",
+  !auditSource.includes("AuditRunProgress"),
+  "audit tab does not mount a separate progress card",
+);
+assert(
+  workbenchSource.includes("AuditProgressStepList"),
+  "workbench embeds progressive audit steps in one panel",
+);
+assert(
+  workbenchSource.includes("Run audit again"),
+  "workbench keeps re-run audit action after completion",
+);
+assert(
+  workbenchSource.includes('viewMode === "all"'),
+  "workbench exposes full package inventory view",
 );
 assert(
   hubSource.includes("useSupplyChainAuditSession"),
