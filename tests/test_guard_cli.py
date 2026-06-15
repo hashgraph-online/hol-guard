@@ -6652,7 +6652,8 @@ url = http://127.0.0.1:8787/guard-canary
         assert run_rc == 0
         assert connect_rc == 0
         assert opened == ["https://hol.org/guard/oauth/device"]
-        assert connect_output["status"] == "connected"
+        assert connect_output["status"] == "retry_required"
+        assert connect_output["milestone"] == "first_sync_failed"
         assert connect_output["connect_mode"] == "device_code"
         assert connect_output["browser_opened"] is True
         assert connect_output["user_code"] == "ABCD-EFGH"
@@ -7091,7 +7092,8 @@ url = http://127.0.0.1:8787/guard-canary
 
         assert login_rc == 0
         assert opened == ["https://hol.org/guard/oauth/device"]
-        assert login_output["status"] == "connected"
+        assert login_output["status"] == "retry_required"
+        assert login_output["milestone"] == "first_sync_failed"
         assert login_output["connect_mode"] == "device_code"
         assert login_output["browser_opened"] is True
         assert login_output["user_code"] == "ZXCV-BNMQ"
