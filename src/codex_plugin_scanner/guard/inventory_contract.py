@@ -617,6 +617,10 @@ def _item_from_artifact(
 
     workspace_id = None
     device_id = None
+    analyzer_id = None
+    analyzer_spec_version = None
+    analyzer_version = None
+    policy_version = None
     installation_id = None
     upload_id = None
     challenge_id = None
@@ -629,6 +633,18 @@ def _item_from_artifact(
         workspace_id = raw_workspace_id if isinstance(raw_workspace_id, str) and raw_workspace_id else None
         raw_device_id = trust_attestation_context.get("deviceId")
         device_id = raw_device_id if isinstance(raw_device_id, str) and raw_device_id else None
+        raw_analyzer_id = trust_attestation_context.get("analyzerId")
+        analyzer_id = raw_analyzer_id if isinstance(raw_analyzer_id, str) and raw_analyzer_id else None
+        raw_analyzer_spec_version = trust_attestation_context.get("analyzerSpecVersion")
+        analyzer_spec_version = (
+            raw_analyzer_spec_version
+            if isinstance(raw_analyzer_spec_version, str) and raw_analyzer_spec_version
+            else None
+        )
+        raw_analyzer_version = trust_attestation_context.get("analyzerVersion")
+        analyzer_version = (
+            raw_analyzer_version if isinstance(raw_analyzer_version, str) and raw_analyzer_version else None
+        )
         raw_installation_id = trust_attestation_context.get("installationId")
         installation_id = raw_installation_id if isinstance(raw_installation_id, str) and raw_installation_id else None
         raw_upload_id = trust_attestation_context.get("uploadId")
@@ -640,6 +656,8 @@ def _item_from_artifact(
         raw_sequence = trust_attestation_context.get("sequence")
         if isinstance(raw_sequence, int):
             sequence = raw_sequence
+        raw_policy_version = trust_attestation_context.get("policyVersion")
+        policy_version = raw_policy_version if isinstance(raw_policy_version, str) and raw_policy_version else None
         raw_expires_at = trust_attestation_context.get("expiresAt")
         expires_at = raw_expires_at if isinstance(raw_expires_at, str) and raw_expires_at else None
         raw_signing_config = trust_attestation_context.get("signingConfig")
@@ -649,6 +667,9 @@ def _item_from_artifact(
     safe_metadata = apply_trust_attestation_metadata(
         safe_metadata,
         agent_id=f"{harness}:local",
+        analyzer_id=analyzer_id,
+        analyzer_spec_version=analyzer_spec_version,
+        analyzer_version=analyzer_version,
         item_id=artifact_id,
         item_kind=item_kind,
         content_hash=content_hash,
@@ -656,6 +677,7 @@ def _item_from_artifact(
         expires_at=expires_at,
         installation_id=installation_id,
         nonce=nonce,
+        policy_version=policy_version,
         sequence=sequence,
         upload_id=upload_id,
         workspace_id=workspace_id,
