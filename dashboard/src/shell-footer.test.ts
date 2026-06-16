@@ -26,6 +26,8 @@ assert(labels.includes("Docs"), "footer includes Docs");
 assert(labels.includes("Guard Cloud"), "footer includes Guard Cloud");
 assert(labels.includes("GitHub"), "footer includes GitHub");
 assert(labels.includes(GITHUB_ISSUE_BUTTON_LABEL), "footer includes report bug link");
+assert(!labels.includes("Privacy"), "footer does not include Privacy link");
+assert(!labels.includes("Terms"), "footer does not include Terms link");
 
 const bugLink = SHELL_FOOTER_RESOURCE_LINKS.find((link) => link.href === GITHUB_ISSUE_LINK);
 assert(bugLink !== undefined, "footer bug link uses the shared GitHub issue URL");
