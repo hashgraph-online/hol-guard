@@ -244,6 +244,29 @@ def test_bulk_allow_read_only_once_resolves_plain_reads_only(tmp_path: Path) -> 
     assert store.get_approval_request("req-secret")["status"] == "pending"
 
 
+def test_bulk_allow_read_only_once_resolves_multiple_plain_reads(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    plain1 = _file_read_request("req-plain-1")
+    plain2 = _file_read_request("req-plain-2")
+    store.add_approval_request(plain1, "2026-06-16T00:00:00+00:00")
+    store.add_approval_request(plain2, "2026-06-16T00:00:00+00:00")
+
+    result = bulk_allow_read_only_once(
+        store=store,
+        request_ids=["req-plain-1", "req-plain-2"],
+        approval_gate_input=ApprovalGateInput(password=PASSWORD),
+        now="2026-06-16T00:01:00+00:00",
+    )
+
+    assert result["resolved_count"] == 2
+    failed = result["failed"]
+    assert isinstance(failed, list)
+    assert len(failed) == 0
+    assert store.get_approval_request("req-plain-1")["status"] == "resolved"
+    assert store.get_approval_request("req-plain-2")["status"] == "resolved"
+
+
 def test_bulk_allow_read_once_daemon_route(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)

@@ -1517,18 +1517,7 @@ def _is_sensitive_file_read_request(request: Mapping[str, object]) -> bool:
         return False
     if _bulk_target_paths_are_secret(request):
         return True
-    envelope = request.get("action_envelope_json")
-    command = ""
-    if isinstance(envelope, dict):
-        command = str(envelope.get("command") or "")
-    command = command or str(request.get("launch_target") or "")
-    text = _bulk_queue_category_text(request)
-    secret_read_action = (
-        (isinstance(envelope, dict) and envelope.get("action_type") == "file_read")
-        or str(request.get("artifact_type") or "") == "file_read_request"
-        or (_bulk_read_command(command) and _bulk_has_secret_path_text(text))
-    )
-    return secret_read_action and _bulk_has_secret_signal(request)
+    return _bulk_has_secret_signal(request)
 
 
 def is_bulk_allow_once_eligible(request: Mapping[str, object]) -> bool:
@@ -1562,7 +1551,6 @@ def bulk_allow_read_only_once(
 
     resolved_count = 0
     failed: list[dict[str, str]] = []
-    gate_input_for_request = approval_gate_input
 
     for request_id in request_ids:
         if not isinstance(request_id, str) or not request_id.strip():
@@ -1584,11 +1572,10 @@ def bulk_allow_read_only_once(
                 now=resolved_at,
                 return_queue_result=False,
                 resolve_scope_matches=True,
-                approval_gate_input=gate_input_for_request,
+                approval_gate_input=approval_gate_input,
                 persist_policy=False,
             )
             resolved_count += 1
-            gate_input_for_request = None
         except (ApprovalRequestNotFoundError, ApprovalRequestAlreadyResolvedError, ValueError) as error:
             failed.append({"request_id": normalized_id, "error": str(error)})
 
