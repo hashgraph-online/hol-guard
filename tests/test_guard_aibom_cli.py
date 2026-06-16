@@ -342,6 +342,28 @@ def test_resolve_trust_attestation_context_includes_workspace_device_for_v2(
     assert context["workspaceId"] == "workspace-1"
     assert context["deviceId"] == "device-1"
     assert context["installationId"] == "device-1"
+    assert context["uploadId"] is None
+    assert context["challengeId"] is None
+    assert context["nonce"] is None
+    assert context["sequence"] is None
+    assert context["expiresAt"] is None
+
+
+def test_resolve_trust_attestation_context_includes_upload_session_bindings_for_sync(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    monkeypatch.setattr(store, "get_or_create_installation_id", lambda: "device-1")
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", "1")
+
+    context = aibom_cli._resolve_trust_attestation_context(
+        store,
+        generated_at="2026-06-10T12:00:00+00:00",
+        include_upload_session_bindings=True,
+    )
+
     assert isinstance(context["uploadId"], str) and context["uploadId"].startswith("guard-aibom-upload-")
     assert isinstance(context["challengeId"], str) and context["challengeId"].startswith("guard-aibom-challenge-")
     assert isinstance(context["nonce"], str) and context["nonce"]
@@ -351,9 +373,29 @@ def test_resolve_trust_attestation_context_includes_workspace_device_for_v2(
     second_context = aibom_cli._resolve_trust_attestation_context(
         store,
         generated_at="2026-06-10T12:05:00+00:00",
+        include_upload_session_bindings=True,
     )
 
     assert second_context["sequence"] == 2
+
+
+def test_resolve_trust_attestation_context_tolerates_invalid_generated_at_for_sync(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    monkeypatch.setattr(store, "get_or_create_installation_id", lambda: "device-1")
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", "1")
+
+    context = aibom_cli._resolve_trust_attestation_context(
+        store,
+        generated_at="not-a-timestamp",
+        include_upload_session_bindings=True,
+    )
+
+    assert context["expiresAt"] is None
+    assert context["sequence"] == 1
 
 
 def test_sync_aibom_snapshots_404_backoff_isolated_from_guard_events_summary(
