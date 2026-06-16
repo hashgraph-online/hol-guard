@@ -1,4 +1,5 @@
 import type { GuardPolicyDecision } from "./guard-types";
+import type { PolicySortState } from "./policy-workspace-helpers";
 import { GroupedPolicySection } from "./policy-workspace-views";
 
 type PolicyRememberedLocalRulesProps = {
@@ -6,6 +7,8 @@ type PolicyRememberedLocalRulesProps = {
   cloudControlsUrl: string | null;
   onClearPolicy?: (policy: GuardPolicyDecision) => void;
   onNavigate?: (pathname: string) => void;
+  sort: PolicySortState;
+  onSortChange: (sort: PolicySortState) => void;
 };
 
 export function PolicyRememberedLocalRules({
@@ -13,6 +16,8 @@ export function PolicyRememberedLocalRules({
   cloudControlsUrl,
   onClearPolicy,
   onNavigate,
+  sort,
+  onSortChange,
 }: PolicyRememberedLocalRulesProps) {
   return (
     <GroupedPolicySection
@@ -26,7 +31,8 @@ export function PolicyRememberedLocalRules({
       emptyTitle="No local remembered rules yet"
       emptyBody="Approve or block in Inbox and Guard remembers the decision here in plain language."
       defaultOpen
-      viewAllLabel="View all local rules ({count}) →"
+      sort={sort}
+      onSortChange={onSortChange}
     />
   );
 }
