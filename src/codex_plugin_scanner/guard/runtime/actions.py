@@ -419,6 +419,29 @@ def normalize_grok_hook_payload(
     )
 
 
+def normalize_zcode_hook_payload(
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    """Normalize a z.ai ZCode hook payload into a typed action envelope.
+
+    ZCode speaks the Claude Code wire protocol, so payloads normalize onto the
+    shared Guard shape through the ZCode hook helpers.
+    """
+
+    from ..adapters.zcode_hooks import prepare_zcode_hook_payload
+
+    return _normalize_action_payload(
+        prepare_zcode_hook_payload(payload),
+        harness="zcode",
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+
+
 def normalize_harness_payload(
     harness: str,
     event_name: str,
@@ -441,6 +464,8 @@ def normalize_harness_payload(
         "openclaw": normalize_openclaw_payload,
         "cursor": normalize_cursor_hook_payload,
         "grok": normalize_grok_hook_payload,
+        "zcode": normalize_zcode_hook_payload,
+        "zai": normalize_zcode_hook_payload,
     }
     normalizer = normalizers.get(normalized_harness)
     if normalizer is None:

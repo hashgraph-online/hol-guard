@@ -51,7 +51,8 @@
         "openclaw",
         "antigravity",
         "kimi",
-        "grok"
+        "grok",
+        "zcode"
     ],
     "action_categories": [
         "secrets",
