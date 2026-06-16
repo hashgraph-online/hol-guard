@@ -2438,6 +2438,38 @@ class GuardStore:
         with self._connect() as connection:
             return self._cloud_workspace_id_from_connection(connection)
 
+    def next_aibom_trust_attestation_sequence(self, now: str) -> int:
+        state_key = "aibom_trust_attestation_sequence"
+        with self._connect() as connection:
+            row = connection.execute(
+                "select payload_json from sync_state where state_key = ?",
+                (state_key,),
+            ).fetchone()
+            current_sequence = 0
+            if row is not None:
+                try:
+                    payload = json.loads(str(row["payload_json"]))
+                except json.JSONDecodeError:
+                    payload = None
+                if isinstance(payload, dict):
+                    raw_sequence = payload.get("sequence")
+                    if isinstance(raw_sequence, int) and raw_sequence >= 0:
+                        current_sequence = raw_sequence
+                    elif isinstance(raw_sequence, str) and raw_sequence.isdigit():
+                        current_sequence = int(raw_sequence)
+            next_sequence = current_sequence + 1
+            connection.execute(
+                """
+                insert into sync_state (state_key, payload_json, updated_at)
+                values (?, ?, ?)
+                on conflict(state_key) do update set
+                  payload_json = excluded.payload_json,
+                  updated_at = excluded.updated_at
+                """,
+                (state_key, json.dumps({"sequence": next_sequence}), now),
+            )
+        return next_sequence
+
     def upsert_policy(
         self,
         decision: PolicyDecision,

@@ -7,7 +7,7 @@ import os
 import urllib.error
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -77,7 +77,7 @@ def collect_aibom_snapshots(
     return tuple(snapshots)
 
 
-def _resolve_trust_attestation_context(store: GuardStore) -> dict[str, object]:
+def _resolve_trust_attestation_context(store: GuardStore, *, generated_at: str) -> dict[str, object]:
     from .runtime.trust_attestation import (
         resolve_guard_oauth_trust_attestation_signing_config,
         resolve_trust_attestation_signing_config,
@@ -89,9 +89,21 @@ def _resolve_trust_attestation_context(store: GuardStore) -> dict[str, object]:
     if signing_config is None:
         signing_config = resolve_trust_attestation_signing_config()
     enable_v2 = trust_attestation_v2_enabled()
+    installation_id = store.get_or_create_installation_id() if enable_v2 else None
+    expires_at = (
+        (_aware_utc_timestamp(generated_at) + timedelta(minutes=15)).isoformat().replace("+00:00", "Z")
+        if enable_v2
+        else None
+    )
     return {
-        "deviceId": store.get_or_create_installation_id() if enable_v2 else None,
+        "challengeId": f"guard-aibom-challenge-{uuid.uuid4().hex}" if enable_v2 else None,
+        "deviceId": installation_id,
+        "expiresAt": expires_at,
+        "installationId": installation_id,
+        "nonce": uuid.uuid4().hex if enable_v2 else None,
+        "sequence": store.next_aibom_trust_attestation_sequence(generated_at) if enable_v2 else None,
         "signingConfig": signing_config,
+        "uploadId": f"guard-aibom-upload-{uuid.uuid4().hex}" if enable_v2 else None,
         "workspaceId": store.get_cloud_workspace_id() if enable_v2 else None,
     }
 
@@ -107,7 +119,7 @@ def build_inventory_json_payload(
         context,
         generated_at=generated_at,
         options=options,
-        trust_attestation_context=_resolve_trust_attestation_context(store),
+        trust_attestation_context=_resolve_trust_attestation_context(store, generated_at=generated_at),
     )
     metadata_by_artifact = _metadata_lookup_from_snapshots(snapshots)
     items: list[dict[str, object]] = []
@@ -139,7 +151,7 @@ def build_aibom_status_payload(
         context,
         generated_at=generated_at,
         options=options,
-        trust_attestation_context=_resolve_trust_attestation_context(store),
+        trust_attestation_context=_resolve_trust_attestation_context(store, generated_at=generated_at),
     )
     sync_summary = _sync_summary(store)
     layer_summary, trust_summary, drift_summary = summarize_aibom_layers(
@@ -171,7 +183,7 @@ def build_aibom_export_payload(
         context,
         generated_at=generated_at,
         options=options,
-        trust_attestation_context=_resolve_trust_attestation_context(store),
+        trust_attestation_context=_resolve_trust_attestation_context(store, generated_at=generated_at),
     )
     serialized_snapshots = [serialize_inventory_snapshot(snapshot) for snapshot in snapshots]
     artifacts = _artifact_rows_from_store(store, snapshots)
@@ -336,7 +348,7 @@ def sync_aibom_snapshots(
         raise GuardSyncNotConfiguredError("Guard Cloud workspace is not configured. Run `hol-guard connect` first.")
 
     resolved_options = options or _AIBOM_CLOUD_SYNC_OPTIONS
-    trust_attestation_context = _resolve_trust_attestation_context(store)
+    trust_attestation_context = _resolve_trust_attestation_context(store, generated_at=generated_at)
     snapshots = collect_aibom_snapshots(
         context,
         generated_at=generated_at,
