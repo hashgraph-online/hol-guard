@@ -1,4 +1,5 @@
 import type { GuardSettings } from "./guard-types";
+import { policyActionLabel } from "./approval-center-utils";
 
 export const STRICT_POLICY_LAYER_OPTIONS = [
   { value: "none", label: "No match" },
@@ -35,6 +36,39 @@ export type StrictPolicySimulationResult = {
   winningStep: (typeof STRICT_POLICY_EVALUATION_ORDER)[number];
   path: string[];
 };
+
+export const STRICT_POLICY_DEFAULTS = {
+  default_action: "block",
+  changed_hash_action: "review",
+  new_network_domain_action: "review",
+  subprocess_action: "review",
+  destructive_shell: "block",
+} as const;
+
+export type StrictScenarioId = "first-time" | "remembered-allow" | "cloud-exception";
+
+export function resolveStrictScenarioOutcome(
+  scenarioId: StrictScenarioId,
+  settings: GuardSettings,
+): { outcome: string; reasoning: string } {
+  if (scenarioId === "remembered-allow") {
+    return {
+      outcome: "allow",
+      reasoning: "Because a remembered allow rule matches before Cloud policy.",
+    };
+  }
+  if (scenarioId === "cloud-exception") {
+    return {
+      outcome: "allow",
+      reasoning: "Because an active Cloud exception overrides team policy.",
+    };
+  }
+  const outcome = settings.new_network_domain_action;
+  return {
+    outcome,
+    reasoning: `Because New network domain action is set to ${policyActionLabel(outcome)}.`,
+  };
+}
 
 export function fingerprintLocalPolicySettings(settings: GuardSettings): string {
   const payload = JSON.stringify({

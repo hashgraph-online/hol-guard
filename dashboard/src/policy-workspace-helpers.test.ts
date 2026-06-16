@@ -7,6 +7,7 @@ import {
   resolvePolicyRowFolder,
   resolvePolicyRowFrequency,
   resolvePolicyRowSubtitle,
+  resolvePolicyRowSourceLabel,
   resolvePolicyRowTitle,
   resolveWorkspaceLabel,
   formatPolicyScopePath,
@@ -74,8 +75,13 @@ const hashOnlyHref = resolvePolicyEvidenceHref(
 assert(hashOnlyHref.includes("search=62de981049ed"), "POL-H9: hash fallback strips sha256 prefix");
 
 assert(
-  resolvePolicyApprovalRecordLabel(enrichedPackageRule) === "receipt-abc123",
-  "POL-H10: approval record label uses receipt id",
+  resolvePolicyApprovalRecordLabel(enrichedPackageRule) === "receipt_abc123.json",
+  "POL-H10: approval record label uses receipt json filename",
+);
+
+assert(
+  resolvePolicyRowSourceLabel(enrichedPackageRule) === "Local",
+  "POL-H23: source column shows Local for local rules",
 );
 
 const scannerLabelRule = basePolicy({

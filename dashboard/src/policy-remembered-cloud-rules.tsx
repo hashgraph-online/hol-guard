@@ -1,14 +1,19 @@
 import type { GuardPolicyDecision } from "./guard-types";
+import type { PolicySortState } from "./policy-workspace-helpers";
 import { GroupedPolicySection } from "./policy-workspace-views";
 
 type PolicyRememberedCloudRulesProps = {
   policies: GuardPolicyDecision[];
   cloudControlsUrl: string | null;
+  sort: PolicySortState;
+  onSortChange: (sort: PolicySortState) => void;
 };
 
 export function PolicyRememberedCloudRules({
   policies,
   cloudControlsUrl,
+  sort,
+  onSortChange,
 }: PolicyRememberedCloudRulesProps) {
   return (
     <GroupedPolicySection
@@ -21,7 +26,8 @@ export function PolicyRememberedCloudRules({
       emptyBody="Connect Guard Cloud to sync shared policy bundles."
       defaultOpen={policies.length > 0}
       cloudVariant
-      viewAllLabel="View all cloud rules ({count}) →"
+      sort={sort}
+      onSortChange={onSortChange}
     />
   );
 }
