@@ -21,7 +21,13 @@ import { formatRelativeTime, harnessDisplayName } from "./approval-center-utils"
 import { runAuditRemediation, guardAwareHref } from "./guard-api";
 import { isApprovalGateRequiredError } from "./harness-action-errors";
 import type { AuditRemediationAction } from "./guard-api";
-import type { GuardApprovalGatePublicConfig, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
+import type {
+  GuardApprovalGatePublicConfig,
+  GuardReceipt,
+  GuardRuntimeSnapshot,
+  GuardSupplyChainScannerEvidence,
+} from "./guard-types";
+import { isSupplyChainAuditEvidence } from "./guard-types";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 import { resolveManagerCoverageStatus } from "./supply-chain-protection-stats";
 import { PackageWorkbenchPanel } from "./package-workbench-panel";
@@ -48,10 +54,6 @@ export type AuditRemediationRequest = {
   manager: string;
   label: string;
 };
-
-function isSupplyChainAuditEvidence(value: unknown): value is Record<string, unknown> & { operation: "audit" } {
-  return typeof value === "object" && value !== null && (value as Record<string, unknown>).operation === "audit";
-}
 
 function auditSeverityForDecision(decision: string, blockedCount: number): AuditSeverity {
   if (decision === "block" || blockedCount > 0) {

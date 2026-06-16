@@ -5,7 +5,7 @@ import { groupPoliciesByHarness, resolveSecurityModeCopy } from "./policy-worksp
 import { resolveFeedSourceMode, resolveFeedStaleness } from "./feed-health-workspace";
 import type { GuardRuntimeSnapshot, GuardManagedInstall, GuardReceipt, GuardPolicyDecision, PackageManagerProtection } from "./guard-types";
 
-function assert(condition: boolean, message: string): void {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
   }
@@ -244,7 +244,7 @@ const auditWithUnprotected = deriveFrontendAuditResults(
 const pipIssue = auditWithUnprotected.find((r) => r.id === "unprotected-pip");
 assert(pipIssue !== undefined, "SCRG162-D: unprotected pip should be flagged");
 assert(pipIssue!.severity === "high", "SCRG162-E: unprotected manager should be high severity");
-assert(pipIssue!.remediation.includes("Guard"), "SCRG162-F: remediation should point back to Guard action");
+assert(pipIssue!.remediation !== null && pipIssue.remediation.includes("Guard"), "SCRG162-F: remediation should point back to Guard action");
 
 const auditWithInstalledUnprotected = deriveFrontendAuditResults(
   [],

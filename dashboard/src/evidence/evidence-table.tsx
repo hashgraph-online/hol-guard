@@ -33,7 +33,7 @@ export function EvidenceTableHead({ children }: EvidenceTableHeadProps) {
 }
 
 interface EvidenceTableHeaderProps {
-  children: ReactNode;
+  children?: ReactNode;
   className?: string;
 }
 

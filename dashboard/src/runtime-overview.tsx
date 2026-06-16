@@ -261,7 +261,7 @@ export function DeviceProofCard(props: DeviceProofCardProps) {
 export type PackageManagerProtectionCopy = {
   pathLabel: string;
   pathDetail: string;
-  pathTone: "green" | "attention" | "slate";
+  pathTone: "green" | "attention" | "blue" | "slate";
   protectedList: string[];
   unprotectedList: string[];
 };

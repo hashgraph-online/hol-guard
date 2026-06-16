@@ -1023,7 +1023,7 @@ function PolicyDecisionRow(props: {
   onRequestClear: (key: string) => void;
   onConfirmClear: () => void;
   onCancelClear: () => void;
-  rowConfirmRef?: RefObject<HTMLDivElement>;
+  rowConfirmRef?: RefObject<HTMLDivElement | null>;
 }) {
   const { policy, rowKey, isConfirming, inFlight, showClearButton } = props;
   const label = clearLabelForScope(policy.scope);

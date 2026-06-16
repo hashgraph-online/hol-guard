@@ -13,7 +13,8 @@ import {
   HiMiniDocumentText,
 } from "react-icons/hi2";
 import { useState } from "react";
-import type { GuardReceipt, RiskSignalV2 } from "../guard-types";
+import type { GuardReceipt } from "../guard-types";
+import { isRiskSignalEvidence } from "../guard-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
 import { plainEnglishDescription, resolveActionTitle, resolveActionType, resolveActionSubtitle, resolveActionDetail } from "./plain-english";
 import { detectCategory, getCategoryInfo } from "./categories";
@@ -296,7 +297,7 @@ export function EvidenceActionDetail({
   const actionType = resolveActionType(receipt);
   const actionSubtitle = resolveActionSubtitle(receipt);
   const actionDetail = resolveActionDetail(receipt);
-  const signals = receipt.scanner_evidence ?? [];
+  const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
   const primarySignal = signals[0];
   let copyLabel = "Copy receipt ID";
   if (copied) {

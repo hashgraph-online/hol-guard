@@ -99,6 +99,7 @@ const demoPolicy: GuardPolicyDecision = {
   publisher: demoRequests[1].publisher,
   action: "allow",
   reason: "approved locally after diff review",
+  source: "local",
   updated_at: "2026-04-10T18:42:00Z"
 };
 

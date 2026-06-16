@@ -10,7 +10,7 @@ function assert(condition: boolean, message: string): void {
 const baseSnapshot: GuardRuntimeSnapshot = {
   generated_at: new Date().toISOString(),
   approval_center_url: null,
-  runtime_state: {},
+  runtime_state: null,
   device: {
     installation_id: "install-1",
     device_label: "Test Machine",
