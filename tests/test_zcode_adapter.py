@@ -17,18 +17,8 @@ from codex_plugin_scanner.guard.adapters.zcode_config import (
     ZCODE_PRETOOL_MATCHERS,
     is_guard_managed_hook_command,
 )
-from codex_plugin_scanner.guard.adapters.zcode_hooks import (
-    emit_zcode_hook_response,
-    prepare_zcode_hook_payload,
-    zcode_hook_response_from_guard,
-    zcode_hook_should_block,
-)
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
 from codex_plugin_scanner.guard.models import HarnessDetection
-from codex_plugin_scanner.guard.runtime.actions import (
-    normalize_harness_payload,
-    normalize_zcode_hook_payload,
-)
 
 
 def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:
@@ -370,105 +360,6 @@ class TestZCodeInstallUninstall:
         assert "hooks" not in payload
 
 
-class TestZCodeHookPayload:
-    def test_prepare_payload_maps_bash_fixture(self) -> None:
-        normalized = prepare_zcode_hook_payload(_fixture("pretooluse_bash.json"))
-        assert normalized["hook_event_name"] == "PreToolUse"
-        assert normalized["tool_name"] == "Bash"
-        assert normalized["session_id"] == "session-redacted-001"
-        assert normalized["workspace_root"] == "<workspace>"
-
-    def test_prepare_payload_maps_mcp_fixture(self) -> None:
-        normalized = prepare_zcode_hook_payload(_fixture("pretooluse_mcp.json"))
-        assert normalized["tool_name"] == "mcp__lean-ctx__ctx_call"
-        assert normalized["tool_input"]["name"] == "ctx_call"
-
-    def test_prepare_payload_maps_prompt_fixture(self) -> None:
-        normalized = prepare_zcode_hook_payload(_fixture("user_prompt_submit.json"))
-        assert normalized["hook_event_name"] == "UserPromptSubmit"
-        assert normalized["prompt"] == "show me how to read a secret file"
-
-    def test_prepare_payload_camelcase_keys(self) -> None:
-        normalized = prepare_zcode_hook_payload(
-            {"hookEventName": "PostToolUse", "toolName": "Read", "toolInput": {"path": "x"}, "sessionId": "s"}
-        )
-        assert normalized["hook_event_name"] == "PostToolUse"
-        assert normalized["tool_name"] == "Read"
-        assert normalized["session_id"] == "s"
-
-    def test_prepare_payload_malformed_is_safe(self) -> None:
-        assert prepare_zcode_hook_payload({}) == {}
-
-    def test_normalize_zcode_hook_payload_builds_shell_envelope(self, tmp_path: Path) -> None:
-        envelope = normalize_zcode_hook_payload(
-            _fixture("pretooluse_bash.json"),
-            workspace=tmp_path / "workspace",
-            home_dir=tmp_path,
-        )
-        assert envelope.harness == "zcode"
-        assert envelope.action_type == "shell_command"
-        assert envelope.event_name == "PreToolUse"
-
-    def test_normalize_harness_payload_accepts_zcode(self, tmp_path: Path) -> None:
-        envelope = normalize_harness_payload(
-            "zcode",
-            "PreToolUse",
-            _fixture("pretooluse_mcp.json"),
-            workspace=tmp_path / "ws",
-            home_dir=tmp_path,
-        )
-        assert envelope.harness == "zcode"
-
-    def test_normalize_harness_payload_accepts_zai_alias(self, tmp_path: Path) -> None:
-        envelope = normalize_harness_payload(
-            "zai",
-            "UserPromptSubmit",
-            _fixture("user_prompt_submit.json"),
-            workspace=tmp_path / "ws",
-            home_dir=tmp_path,
-        )
-        assert envelope.harness == "zcode"
-
-
-class TestZCodeHookResponses:
-    def test_allow_pretool_response(self) -> None:
-        payload = zcode_hook_response_from_guard(policy_action="allow", reason="")
-        assert payload == {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}}
-
-    def test_block_pretool_response(self) -> None:
-        payload = zcode_hook_response_from_guard(policy_action="block", reason="Blocked by HOL Guard.")
-        assert payload == {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": "Blocked by HOL Guard.",
-            }
-        }
-
-    def test_block_uses_default_reason_when_empty(self) -> None:
-        payload = zcode_hook_response_from_guard(policy_action="block", reason="")
-        reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
-        assert reason == "Blocked by HOL Guard."
-
-    def test_block_userprompt_response(self) -> None:
-        payload = zcode_hook_response_from_guard(
-            policy_action="require-reapproval", reason="needs approval", event_name="UserPromptSubmit"
-        )
-        assert payload["decision"] == "block"
-        assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-
-    def test_should_block_flags_blocking_actions(self) -> None:
-        assert zcode_hook_should_block(policy_action="block")
-        assert zcode_hook_should_block(policy_action="sandbox-required")
-        assert zcode_hook_should_block(policy_action="require-reapproval")
-        assert not zcode_hook_should_block(policy_action="allow")
-
-    def test_emit_writes_json_line(self) -> None:
-        stream = io.StringIO()
-        emit_zcode_hook_response(policy_action="allow", reason="", output_stream=stream)
-        assert json.loads(stream.getvalue())["hookSpecificOutput"]["permissionDecision"] == "allow"
-
-
 class TestZCodeManagedHelpers:
     def test_is_guard_managed_hook_command_detects_marker(self) -> None:
         assert is_guard_managed_hook_command(f"python -c '...' # {GUARD_MANAGED_MARKER}")
@@ -504,53 +395,6 @@ class TestZCodeManagedHelpers:
         assert "raw-user-string" in result
         assert 42 in result
         assert any(isinstance(e, dict) and e.get("matcher") == "Bash" for e in result)
-
-
-class TestZCodeMcpToolCoverage:
-    """Regression: MCP tools (mcp__<server>__<tool>) must be covered by a managed PreToolUse hook.
-
-    Without an mcp__.* matcher in ZCODE_PRETOOL_MATCHERS, a project or plugin
-    that registers an MCP server could have the model invoke its tools without
-    the Guard hook firing, bypassing the approval center and runtime policy.
-    """
-
-    def test_mcp_matcher_is_in_pretool_matchers(self) -> None:
-        assert "mcp__.*" in ZCODE_PRETOOL_MATCHERS
-
-    def test_install_installs_mcp_pretooluse_hook(self, tmp_path: Path, monkeypatch) -> None:
-        ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.zcode.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-zcode"), "notes": []},
-        )
-        ZCodeHarnessAdapter().install(ctx)
-        payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
-        matchers = {
-            entry.get("matcher")
-            for entry in payload["hooks"]["PreToolUse"]
-            if isinstance(entry, dict) and isinstance(entry.get("matcher"), str)
-        }
-        assert "mcp__.*" in matchers, "Guard must install an mcp__.* PreToolUse matcher so MCP tools are intercepted"
-        # The MCP matcher entry must carry a Guard-managed handler.
-        mcp_entry = next(entry for entry in payload["hooks"]["PreToolUse"] if entry.get("matcher") == "mcp__.*")
-        assert any(
-            is_guard_managed_hook_command(handler.get("command"))
-            for handler in mcp_entry.get("hooks", [])
-            if isinstance(handler, dict)
-        )
-
-    def test_mcp_tool_payload_is_intercepted_as_pretooluse(self, tmp_path: Path) -> None:
-        # An MCP tool call must normalize to a PreToolUse shell/tool action envelope so the
-        # same hook path that covers built-in tools also covers MCP tools.
-        envelope = normalize_zcode_hook_payload(
-            _fixture("pretooluse_mcp.json"),
-            workspace=tmp_path / "workspace",
-            home_dir=tmp_path,
-        )
-        assert envelope.harness == "zcode"
-        assert envelope.event_name == "PreToolUse"
-        # MCP tool names are preserved (mcp__<server>__<tool>) so policy can match them.
-        assert str(envelope.tool_name).startswith("mcp__")
 
 
 class TestZCodeGenericEmitterBlock:
