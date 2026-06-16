@@ -16149,9 +16149,7 @@ const SHELL_FOOTER_RESOURCE_LINKS = [
   { href: "https://hol.org/guard/docs", label: "Docs" },
   { href: "https://hol.org/guard", label: "Guard Cloud" },
   { href: "https://github.com/hashgraph-online/hol-guard", label: "GitHub" },
-  { href: GITHUB_ISSUE_LINK, label: GITHUB_ISSUE_BUTTON_LABEL },
-  { href: "https://hol.org/points/legal/privacy", label: "Privacy" },
-  { href: "https://hol.org/points/legal/terms", label: "Terms" }
+  { href: GITHUB_ISSUE_LINK, label: GITHUB_ISSUE_BUTTON_LABEL }
 ];
 function ShellFooter() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("footer", { className: "mt-auto border-t border-slate-200 bg-[#f8fafc]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mx-auto flex max-w-6xl flex-col gap-3 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8", children: [
@@ -16168,7 +16166,7 @@ function ShellFooter() {
           children: "Apache-2.0"
         }
       ),
-      ". Built by Hashgraph Online."
+      "."
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { "aria-label": "Guard resources", className: "flex flex-wrap gap-x-4 gap-y-1", children: SHELL_FOOTER_RESOURCE_LINKS.map((link) => /* @__PURE__ */ jsxRuntimeExports.jsx(
       "a",

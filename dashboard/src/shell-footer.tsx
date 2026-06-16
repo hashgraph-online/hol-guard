@@ -8,8 +8,6 @@ export const SHELL_FOOTER_RESOURCE_LINKS = [
   { href: "https://hol.org/guard", label: "Guard Cloud" },
   { href: "https://github.com/hashgraph-online/hol-guard", label: "GitHub" },
   { href: GITHUB_ISSUE_LINK, label: GITHUB_ISSUE_BUTTON_LABEL },
-  { href: "https://hol.org/points/legal/privacy", label: "Privacy" },
-  { href: "https://hol.org/points/legal/terms", label: "Terms" },
 ] as const;
 
 export function ShellFooter() {
@@ -26,7 +24,7 @@ export function ShellFooter() {
           >
             Apache-2.0
           </a>
-          . Built by Hashgraph Online.
+          .
         </p>
         <nav aria-label="Guard resources" className="flex flex-wrap gap-x-4 gap-y-1">
           {SHELL_FOOTER_RESOURCE_LINKS.map((link) => (
