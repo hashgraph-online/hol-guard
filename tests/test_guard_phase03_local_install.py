@@ -367,8 +367,10 @@ def test_update_syncs_dashboard_assets_after_partial_stale_upgrade(monkeypatch: 
     )
     monkeypatch.setattr(update_commands, "_sync_dashboard_assets", lambda: {"notes": ["synced dashboard"]})
 
+    captured_commands: list[list[str]] = []
+
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        assert command == ["pipx", "upgrade", "hol-guard"]
+        captured_commands.append(command)
         return subprocess.CompletedProcess(command, 0, "installed hol-guard 2.0.400", "")
 
     monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
@@ -376,6 +378,10 @@ def test_update_syncs_dashboard_assets_after_partial_stale_upgrade(monkeypatch: 
     payload, exit_code = update_commands.run_guard_update(dry_run=False)
 
     assert exit_code == 0
+    assert captured_commands == [
+        ["pipx", "upgrade", "hol-guard"],
+        ["pipx", "install", "--force", "hol-guard"],
+    ]
     assert payload["status"] == "stale"
     assert payload["changed"] is True
     assert payload["dashboard_sync"] == {"notes": ["synced dashboard"]}
