@@ -24,6 +24,7 @@ export function ShellFooter() {
           >
             Apache-2.0
           </a>
+          .
         </p>
         <nav aria-label="Guard resources" className="flex flex-wrap gap-x-4 gap-y-1">
           {SHELL_FOOTER_RESOURCE_LINKS.map((link) => (
