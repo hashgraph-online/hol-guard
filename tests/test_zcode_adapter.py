@@ -506,6 +506,53 @@ class TestZCodeManagedHelpers:
         assert any(isinstance(e, dict) and e.get("matcher") == "Bash" for e in result)
 
 
+class TestZCodeMcpToolCoverage:
+    """Regression: MCP tools (mcp__<server>__<tool>) must be covered by a managed PreToolUse hook.
+
+    Without an mcp__.* matcher in ZCODE_PRETOOL_MATCHERS, a project or plugin
+    that registers an MCP server could have the model invoke its tools without
+    the Guard hook firing, bypassing the approval center and runtime policy.
+    """
+
+    def test_mcp_matcher_is_in_pretool_matchers(self) -> None:
+        assert "mcp__.*" in ZCODE_PRETOOL_MATCHERS
+
+    def test_install_installs_mcp_pretooluse_hook(self, tmp_path: Path, monkeypatch) -> None:
+        ctx = _ctx(tmp_path)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.zcode.install_guard_shim",
+            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-zcode"), "notes": []},
+        )
+        ZCodeHarnessAdapter().install(ctx)
+        payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
+        matchers = {
+            entry.get("matcher")
+            for entry in payload["hooks"]["PreToolUse"]
+            if isinstance(entry, dict) and isinstance(entry.get("matcher"), str)
+        }
+        assert "mcp__.*" in matchers, "Guard must install an mcp__.* PreToolUse matcher so MCP tools are intercepted"
+        # The MCP matcher entry must carry a Guard-managed handler.
+        mcp_entry = next(entry for entry in payload["hooks"]["PreToolUse"] if entry.get("matcher") == "mcp__.*")
+        assert any(
+            is_guard_managed_hook_command(handler.get("command"))
+            for handler in mcp_entry.get("hooks", [])
+            if isinstance(handler, dict)
+        )
+
+    def test_mcp_tool_payload_is_intercepted_as_pretooluse(self, tmp_path: Path) -> None:
+        # An MCP tool call must normalize to a PreToolUse shell/tool action envelope so the
+        # same hook path that covers built-in tools also covers MCP tools.
+        envelope = normalize_zcode_hook_payload(
+            _fixture("pretooluse_mcp.json"),
+            workspace=tmp_path / "workspace",
+            home_dir=tmp_path,
+        )
+        assert envelope.harness == "zcode"
+        assert envelope.event_name == "PreToolUse"
+        # MCP tool names are preserved (mcp__<server>__<tool>) so policy can match them.
+        assert str(envelope.tool_name).startswith("mcp__")
+
+
 class TestZCodeGenericEmitterBlock:
     def test_block_emits_deny_json_and_exit_two(self, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload

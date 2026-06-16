@@ -34,7 +34,9 @@ ZCODE_MARKETPLACE_FILE = "marketplace.json"
 
 GUARD_MANAGED_MARKER = "HOL_GUARD_MANAGED_ZCODE"
 
-# Claude Code tool matchers ZCode surfaces. MCP tools arrive as mcp__<server>__<tool>.
+# Claude Code tool matchers ZCode surfaces. MCP tools arrive as mcp__<server>__<tool>;
+# the mcp__.* matcher must be present so the PreToolUse hook fires for MCP calls too,
+# otherwise an MCP server's tools could be invoked without Guard interception.
 ZCODE_PRETOOL_MATCHERS = (
     "Bash",
     "Read",
@@ -44,6 +46,7 @@ ZCODE_PRETOOL_MATCHERS = (
     "Grep",
     "WebFetch",
     "WebSearch",
+    "mcp__.*",
     "run_terminal_command",
     "run_command",
     "read_file",
