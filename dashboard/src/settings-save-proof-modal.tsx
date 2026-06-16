@@ -59,7 +59,13 @@ export function requiresSettingsSaveProof(kind: SettingsSaveProofMode | null): b
 export function resolveSettingsSaveProofModalCopy(input: {
   mode: SettingsSaveProofMode;
   gateSettingsChanged: boolean;
-  maintenanceAction?: "clear-approvals" | "clear-queue" | "revoke-cooldown" | "disable-totp";
+  maintenanceAction?:
+    | "clear-approvals"
+    | "clear-queue"
+    | "revoke-cooldown"
+    | "disable-totp"
+    | "import-settings"
+    | "reset-settings";
 }): { title: string; detail: string; confirmLabel: string } {
   if (input.mode === "setup-gate") {
     return {
@@ -102,6 +108,20 @@ export function resolveSettingsSaveProofModalCopy(input: {
         title: "Disconnect authenticator",
         detail: "Confirm your approval password and a current app code to remove this second factor.",
         confirmLabel: "Disconnect",
+      };
+    }
+    if (input.maintenanceAction === "import-settings") {
+      return {
+        title: "Import settings",
+        detail: "Guard needs fresh proof before it replaces your local settings from a file.",
+        confirmLabel: "Import settings",
+      };
+    }
+    if (input.maintenanceAction === "reset-settings") {
+      return {
+        title: "Reset settings",
+        detail: "Guard needs fresh proof before it restores every local setting to defaults.",
+        confirmLabel: "Reset settings",
       };
     }
     return {
