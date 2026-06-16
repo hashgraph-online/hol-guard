@@ -415,6 +415,28 @@ export type GuardReceipt = {
   action_envelope_json?: GuardActionEnvelope | null;
 };
 
+export type ReceiptScannerEvidence = NonNullable<GuardReceipt["scanner_evidence"]>[number];
+
+function isScannerEvidenceRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+export function isRiskSignalEvidence(signal: ReceiptScannerEvidence): signal is RiskSignalV2 {
+  return isScannerEvidenceRecord(signal) && typeof signal.signal_id === "string";
+}
+
+export function isSupplyChainScannerEvidence(
+  value: ReceiptScannerEvidence,
+): value is GuardSupplyChainScannerEvidence {
+  return isScannerEvidenceRecord(value) && typeof value.operation === "string";
+}
+
+export function isSupplyChainAuditEvidence(
+  value: ReceiptScannerEvidence,
+): value is GuardSupplyChainScannerEvidence & { operation: "audit" } {
+  return isSupplyChainScannerEvidence(value) && value.operation === "audit";
+}
+
 export type GuardReceiptAnalyticsBucket = {
   date_key: string;
   label: string;

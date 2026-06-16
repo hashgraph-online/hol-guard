@@ -13,7 +13,8 @@ import {
   HiMiniDocumentText,
 } from "react-icons/hi2";
 import { useState } from "react";
-import type { GuardReceipt, RiskSignalV2 } from "../guard-types";
+import type { GuardReceipt } from "../guard-types";
+import { isRiskSignalEvidence } from "../guard-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
 import { plainEnglishDescription, resolveActionTitle, resolveActionType, resolveActionSubtitle, resolveActionDetail } from "./plain-english";
 import { detectCategory, getCategoryInfo } from "./categories";
@@ -23,12 +24,6 @@ import { DecisionBadge } from "./decision-badge";
 interface EvidenceActionDetailProps {
   receipt: GuardReceipt | null;
   onClose: () => void;
-}
-
-type ReceiptScannerEvidence = NonNullable<GuardReceipt["scanner_evidence"]>[number];
-
-function isRiskSignalEvidence(signal: ReceiptScannerEvidence): signal is RiskSignalV2 {
-  return "signal_id" in signal && typeof signal.signal_id === "string";
 }
 
 function SeverityIcon({ severity }: { severity: string }) {

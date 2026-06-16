@@ -27,6 +27,7 @@ import type {
   GuardRuntimeSnapshot,
   GuardSupplyChainScannerEvidence,
 } from "./guard-types";
+import { isSupplyChainAuditEvidence } from "./guard-types";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 import { resolveManagerCoverageStatus } from "./supply-chain-protection-stats";
 import { PackageWorkbenchPanel } from "./package-workbench-panel";
@@ -53,14 +54,6 @@ export type AuditRemediationRequest = {
   manager: string;
   label: string;
 };
-
-type ReceiptScannerEvidence = NonNullable<GuardReceipt["scanner_evidence"]>[number];
-
-function isSupplyChainAuditEvidence(
-  value: ReceiptScannerEvidence,
-): value is GuardSupplyChainScannerEvidence & { operation: "audit" } {
-  return "operation" in value && value.operation === "audit";
-}
 
 function auditSeverityForDecision(decision: string, blockedCount: number): AuditSeverity {
   if (decision === "block" || blockedCount > 0) {

@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import type { ButtonHTMLAttributes, ChangeEvent, ReactNode, Ref } from "react";
+import type { ButtonHTMLAttributes, AnchorHTMLAttributes, ChangeEvent, ReactNode, Ref } from "react";
 import {
   HiMiniArrowTopRightOnSquare,
   HiMiniCloud,
@@ -398,6 +398,25 @@ type ActionButtonProps = {
   type?: ButtonHTMLAttributes<HTMLButtonElement>["type"];
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "className" | "onClick" | "type">;
 
+function anchorPropsFromButtonProps(
+  props: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "className" | "onClick" | "type">,
+): AnchorHTMLAttributes<HTMLAnchorElement> {
+  const {
+    disabled: _disabled,
+    form: _form,
+    formAction: _formAction,
+    formEncType: _formEncType,
+    formMethod: _formMethod,
+    formNoValidate: _formNoValidate,
+    formTarget: _formTarget,
+    name: _name,
+    value: _value,
+    type: _type,
+    ...rest
+  } = props;
+  return rest;
+}
+
 export const ActionButton = forwardRef<HTMLButtonElement | HTMLAnchorElement, ActionButtonProps>(
   ({ children, href, variant, disabled, onClick, className: customClassName, type, ...buttonProps }, ref) => {
     const className = `${actionButtonClass(variant)}${customClassName ? ` ${customClassName}` : ""}`;
@@ -410,6 +429,7 @@ export const ActionButton = forwardRef<HTMLButtonElement | HTMLAnchorElement, Ac
           rel={href.startsWith("https://") ? "noreferrer" : undefined}
           onClick={onClick}
           className={className}
+          {...anchorPropsFromButtonProps(buttonProps)}
         >
           {children}
         </a>

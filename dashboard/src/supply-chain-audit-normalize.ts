@@ -1,6 +1,5 @@
 import type {
   GuardReceipt,
-  GuardSupplyChainScannerEvidence,
   PackageWorkbenchFilters,
   PackageWorkbenchSortKey,
   SupplyChainAuditDecision,
@@ -10,6 +9,7 @@ import type {
   SupplyChainAuditSeverity,
   SupplyChainAuditSnapshot,
 } from "./guard-types";
+import { isSupplyChainAuditEvidence } from "./guard-types";
 import { isSupplyChainAuditIncomplete } from "./supply-chain-audit-result";
 
 const SEVERITY_RANK: Record<SupplyChainAuditSeverity, number> = {
@@ -295,14 +295,6 @@ function packageRecordsFromEvaluation(evaluation: Record<string, unknown> | null
   return normalizePackageFindings(evaluation.package_findings);
 }
 
-type ReceiptScannerEvidence = NonNullable<GuardReceipt["scanner_evidence"]>[number];
-
-function isAuditEvidence(
-  value: ReceiptScannerEvidence,
-): value is GuardSupplyChainScannerEvidence & { operation: "audit" } {
-  return "operation" in value && value.operation === "audit";
-}
-
 export function normalizeSupplyChainAuditSnapshot(
   raw: unknown,
   receiptId: string | null = null,
@@ -363,10 +355,10 @@ export function normalizeSupplyChainAuditSnapshot(
 export function derivePackageWorkbenchFromReceipts(receipts: GuardReceipt[]): SupplyChainAuditSnapshot | null {
   const auditReceipts = receipts
     .filter((receipt) => receipt.harness === "package-firewall")
-    .filter((receipt) => (receipt.scanner_evidence ?? []).some((entry) => isAuditEvidence(entry)))
+    .filter((receipt) => (receipt.scanner_evidence ?? []).some((entry) => isSupplyChainAuditEvidence(entry)))
     .sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp));
   for (const receipt of auditReceipts) {
-    const evidenceRaw = (receipt.scanner_evidence ?? []).find((entry) => isAuditEvidence(entry));
+    const evidenceRaw = (receipt.scanner_evidence ?? []).find((entry) => isSupplyChainAuditEvidence(entry));
     if (evidenceRaw === undefined) {
       continue;
     }

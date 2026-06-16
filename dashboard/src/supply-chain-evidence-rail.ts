@@ -1,8 +1,8 @@
 import type {
   GuardReceipt,
   GuardRuntimeSnapshot,
-  GuardSupplyChainScannerEvidence,
 } from "./guard-types";
+import { isSupplyChainScannerEvidence } from "./guard-types";
 
 export type SupplyChainEvidenceRailKind = "block" | "audit" | "sync";
 
@@ -28,16 +28,8 @@ export type SupplyChainCloudDegradedState = {
   detail: string;
 };
 
-type ReceiptScannerEvidence = NonNullable<GuardReceipt["scanner_evidence"]>[number];
-
-function isSupplyChainEvidence(
-  value: ReceiptScannerEvidence,
-): value is GuardSupplyChainScannerEvidence {
-  return "operation" in value && typeof value.operation === "string";
-}
-
-function readOperation(value: ReceiptScannerEvidence): string | null {
-  if (!isSupplyChainEvidence(value)) {
+function readOperation(value: NonNullable<GuardReceipt["scanner_evidence"]>[number]): string | null {
+  if (!isSupplyChainScannerEvidence(value)) {
     return null;
   }
   const trimmed = value.operation.trim();

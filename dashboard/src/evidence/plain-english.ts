@@ -2,16 +2,10 @@ import type {
   GuardReceipt,
   GuardApprovalRequest,
   GuardActionEnvelope,
-  RiskSignalV2,
 } from "../guard-types";
+import { isRiskSignalEvidence } from "../guard-types";
 import { harnessDisplayName } from "../approval-center-utils";
 import { detectCategory, type ReceiptCategory } from "./categories";
-
-type ReceiptScannerEvidence = NonNullable<GuardReceipt["scanner_evidence"]>[number];
-
-function isRiskSignalEvidence(signal: ReceiptScannerEvidence): signal is RiskSignalV2 {
-  return "signal_id" in signal && typeof signal.signal_id === "string";
-}
 
 function getArtifactType(receipt: GuardReceipt): string {
   return (receipt.artifact_type ?? "").toLowerCase();
