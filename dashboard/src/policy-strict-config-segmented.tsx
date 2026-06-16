@@ -40,8 +40,8 @@ export function StrictConfigActionSegmented({
   const showAdvanced = !PRIMARY_STRICT_ACTION_VALUES.has(value);
 
   return (
-    <div className="flex flex-col gap-4 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 items-start gap-3 sm:max-w-[45%]">
+    <div className="grid gap-4 py-5 first:pt-0 last:pb-0 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-6">
+      <div className="flex min-w-0 items-start gap-3">
         {Icon ? (
           <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
             <Icon className="h-4 w-4" aria-hidden="true" />
@@ -52,9 +52,9 @@ export function StrictConfigActionSegmented({
           {help ? <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{help}</p> : null}
         </div>
       </div>
-      <div className="sm:shrink-0">
+      <div className="min-w-0 lg:justify-self-end">
         <div
-          className="inline-flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-slate-50/80 p-1"
+          className="inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-slate-200 bg-slate-100/80 p-1"
           role="group"
           aria-label={label}
         >
