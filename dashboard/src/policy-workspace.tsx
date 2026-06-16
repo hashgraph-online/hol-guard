@@ -82,6 +82,7 @@ export function PolicyWorkspace({
     <div id="policy-panel-strict" role="tabpanel" aria-labelledby="policy-tab-strict">
       <PolicyStrictConfigTab
         snapshot={snapshot}
+        cloudControlsUrl={resolveCloudPolicyControlsUrl(snapshot)}
         onOpenSettings={onOpenSettings}
         onOpenInbox={onOpenInbox}
         onReloadPolicy={onReloadPolicy}
