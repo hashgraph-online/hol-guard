@@ -1887,6 +1887,16 @@
     }
   }
 
+  .border-amber-200\/80 {
+    border-color: #fee685cc;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-amber-200\/80 {
+      border-color: color-mix(in oklab, var(--color-amber-200) 80%, transparent);
+    }
+  }
+
   .border-amber-300 {
     border-color: var(--color-amber-300);
   }
@@ -5909,6 +5919,10 @@
       padding-inline: calc(var(--spacing) * 8);
     }
 
+    .lg\:pt-5 {
+      padding-top: calc(var(--spacing) * 5);
+    }
+
     .lg\:pl-20 {
       padding-left: calc(var(--spacing) * 20);
     }
@@ -5930,6 +5944,10 @@
 
     .xl\:top-6 {
       top: calc(var(--spacing) * 6);
+    }
+
+    .xl\:col-span-1 {
+      grid-column: span 1 / span 1;
     }
 
     .xl\:block {
