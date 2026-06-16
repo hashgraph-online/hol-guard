@@ -14834,6 +14834,55 @@ def test_guard_hook_codex_post_tool_use_blocks_authrc_output(
     assert "credential-looking output" in payload["stopReason"]
 
 
+def test_guard_hook_codex_post_tool_use_explains_merged_stderr_capture(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": (
+                "cd sub && .venv/bin/python -m pytest "
+                "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+                'test_release_checklist_references_smoke_evidence -q 2>&1; echo "__EXIT_CODE__:$?"'
+            )
+        },
+        "tool_response": {"stdout": "HOL_GUARD_FAKE_CREDENTIAL=fixture-only\n"},
+        "source_scope": "project",
+    }
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+            "--policy-action",
+            "block",
+        ]
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert rc == 0
+    assert payload["continue"] is False
+    assert "Combined stdout/stderr looked credential-like before it reached Codex." in payload["stopReason"]
+    assert payload["stopReason"].count("Open HOL Guard to approve or keep this blocked") == 1
+    assert "http://127.0.0.1:4455/requests/" in payload["stopReason"]
+
+
 def test_guard_hook_codex_post_tool_use_browser_approval_resumes_result(
     tmp_path,
     capsys,
