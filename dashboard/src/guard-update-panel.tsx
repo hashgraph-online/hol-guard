@@ -43,6 +43,15 @@ function updateHelpCopy(status: GuardUpdateStatus | null | undefined, phase: Gua
   if (phase === "error") {
     return "The update did not finish. Try again or run hol-guard update from your terminal.";
   }
+  if (status?.update_suppressed) {
+    if (status.retry_command) {
+      return `Automatic update already ran but this install is still behind. Run ${status.retry_command} in your terminal.`;
+    }
+    if (status.update_attempt_message) {
+      return status.update_attempt_message;
+    }
+    return "Automatic update already ran but this install is still behind the latest release.";
+  }
   if (status?.update_available) {
     return "This restarts Guard for a moment. Open approvals will stay saved.";
   }
@@ -63,6 +72,7 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
   const showUpdateButton =
     props.updateStatus?.update_available === true &&
     props.updateStatus.auto_updatable &&
+    props.updateStatus.update_suppressed !== true &&
     phase !== "updating" &&
     phase !== "reconnecting";
   const showReinstallButton =
@@ -168,15 +178,22 @@ export function useGuardUpdate(options?: { onReconnected?: () => void }) {
   const waitForReconnect = useCallback(
     async (expectedPreviousVersion: string, expectedLatestVersion: string | null): Promise<boolean> => {
       reconnectStartedAt.current = Date.now();
+      let sawUpdateInProgress = false;
       while (Date.now() - (reconnectStartedAt.current ?? Date.now()) < RECONNECT_TIMEOUT_MS) {
         try {
-          const origin = await reconnectGuardDaemonAfterUpdate({
+          const reconnectResult = await reconnectGuardDaemonAfterUpdate({
             expectedPreviousVersion,
             expectedLatestVersion,
+            sawUpdateInProgress,
           });
-          if (!origin) {
+          if (!reconnectResult) {
             throw new Error("Guard daemon not found");
           }
+          sawUpdateInProgress = reconnectResult.sawUpdateInProgress;
+          if (!reconnectResult.origin) {
+            throw new Error("Guard daemon not ready");
+          }
+          const { origin } = reconnectResult;
           if (origin !== window.location.origin) {
             redirectToGuardDaemonOrigin(origin, readGuardToken());
             return true;

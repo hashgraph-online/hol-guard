@@ -494,7 +494,7 @@ function requireReact_production() {
   react_production.useTransition = function() {
     return ReactSharedInternals.H.useTransition();
   };
-  react_production.version = "19.2.7";
+  react_production.version = "19.2.5";
   return react_production;
 }
 var hasRequiredReact;
@@ -516,7 +516,7 @@ var hasRequiredScheduler_production;
 function requireScheduler_production() {
   if (hasRequiredScheduler_production) return scheduler_production;
   hasRequiredScheduler_production = 1;
-  (function(exports) {
+  (function(exports$1) {
     function push(heap, node) {
       var index = heap.length;
       heap.push(node);
@@ -550,15 +550,15 @@ function requireScheduler_production() {
       var diff = a.sortIndex - b.sortIndex;
       return 0 !== diff ? diff : a.id - b.id;
     }
-    exports.unstable_now = void 0;
+    exports$1.unstable_now = void 0;
     if ("object" === typeof performance && "function" === typeof performance.now) {
       var localPerformance = performance;
-      exports.unstable_now = function() {
+      exports$1.unstable_now = function() {
         return localPerformance.now();
       };
     } else {
       var localDate = Date, initialTime = localDate.now();
-      exports.unstable_now = function() {
+      exports$1.unstable_now = function() {
         return localDate.now() - initialTime;
       };
     }
@@ -585,12 +585,12 @@ function requireScheduler_production() {
     }
     var isMessageLoopRunning = false, taskTimeoutID = -1, frameInterval = 5, startTime = -1;
     function shouldYieldToHost() {
-      return needsPaint ? true : exports.unstable_now() - startTime < frameInterval ? false : true;
+      return needsPaint ? true : exports$1.unstable_now() - startTime < frameInterval ? false : true;
     }
     function performWorkUntilDeadline() {
       needsPaint = false;
       if (isMessageLoopRunning) {
-        var currentTime = exports.unstable_now();
+        var currentTime = exports$1.unstable_now();
         startTime = currentTime;
         var hasMoreWork = true;
         try {
@@ -610,7 +610,7 @@ function requireScheduler_production() {
                     var continuationCallback = callback(
                       currentTask.expirationTime <= currentTime
                     );
-                    currentTime = exports.unstable_now();
+                    currentTime = exports$1.unstable_now();
                     if ("function" === typeof continuationCallback) {
                       currentTask.callback = continuationCallback;
                       advanceTimers(currentTime);
@@ -660,27 +660,27 @@ function requireScheduler_production() {
       };
     function requestHostTimeout(callback, ms) {
       taskTimeoutID = localSetTimeout(function() {
-        callback(exports.unstable_now());
+        callback(exports$1.unstable_now());
       }, ms);
     }
-    exports.unstable_IdlePriority = 5;
-    exports.unstable_ImmediatePriority = 1;
-    exports.unstable_LowPriority = 4;
-    exports.unstable_NormalPriority = 3;
-    exports.unstable_Profiling = null;
-    exports.unstable_UserBlockingPriority = 2;
-    exports.unstable_cancelCallback = function(task) {
+    exports$1.unstable_IdlePriority = 5;
+    exports$1.unstable_ImmediatePriority = 1;
+    exports$1.unstable_LowPriority = 4;
+    exports$1.unstable_NormalPriority = 3;
+    exports$1.unstable_Profiling = null;
+    exports$1.unstable_UserBlockingPriority = 2;
+    exports$1.unstable_cancelCallback = function(task) {
       task.callback = null;
     };
-    exports.unstable_forceFrameRate = function(fps) {
+    exports$1.unstable_forceFrameRate = function(fps) {
       0 > fps || 125 < fps ? console.error(
         "forceFrameRate takes a positive int between 0 and 125, forcing frame rates higher than 125 fps is not supported"
       ) : frameInterval = 0 < fps ? Math.floor(1e3 / fps) : 5;
     };
-    exports.unstable_getCurrentPriorityLevel = function() {
+    exports$1.unstable_getCurrentPriorityLevel = function() {
       return currentPriorityLevel;
     };
-    exports.unstable_next = function(eventHandler) {
+    exports$1.unstable_next = function(eventHandler) {
       switch (currentPriorityLevel) {
         case 1:
         case 2:
@@ -698,10 +698,10 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports.unstable_requestPaint = function() {
+    exports$1.unstable_requestPaint = function() {
       needsPaint = true;
     };
-    exports.unstable_runWithPriority = function(priorityLevel, eventHandler) {
+    exports$1.unstable_runWithPriority = function(priorityLevel, eventHandler) {
       switch (priorityLevel) {
         case 1:
         case 2:
@@ -720,8 +720,8 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports.unstable_scheduleCallback = function(priorityLevel, callback, options) {
-      var currentTime = exports.unstable_now();
+    exports$1.unstable_scheduleCallback = function(priorityLevel, callback, options) {
+      var currentTime = exports$1.unstable_now();
       "object" === typeof options && null !== options ? (options = options.delay, options = "number" === typeof options && 0 < options ? currentTime + options : currentTime) : options = currentTime;
       switch (priorityLevel) {
         case 1:
@@ -751,8 +751,8 @@ function requireScheduler_production() {
       options > currentTime ? (priorityLevel.sortIndex = options, push(timerQueue, priorityLevel), null === peek(taskQueue) && priorityLevel === peek(timerQueue) && (isHostTimeoutScheduled ? (localClearTimeout(taskTimeoutID), taskTimeoutID = -1) : isHostTimeoutScheduled = true, requestHostTimeout(handleTimeout, options - currentTime))) : (priorityLevel.sortIndex = timeout, push(taskQueue, priorityLevel), isHostCallbackScheduled || isPerformingWork || (isHostCallbackScheduled = true, isMessageLoopRunning || (isMessageLoopRunning = true, schedulePerformWorkUntilDeadline())));
       return priorityLevel;
     };
-    exports.unstable_shouldYield = shouldYieldToHost;
-    exports.unstable_wrapCallback = function(callback) {
+    exports$1.unstable_shouldYield = shouldYieldToHost;
+    exports$1.unstable_wrapCallback = function(callback) {
       var parentPriorityLevel = currentPriorityLevel;
       return function() {
         var previousPriorityLevel = currentPriorityLevel;
@@ -922,7 +922,7 @@ function requireReactDom_production() {
   reactDom_production.useFormStatus = function() {
     return ReactSharedInternals.H.useHostTransitionStatus();
   };
-  reactDom_production.version = "19.2.7";
+  reactDom_production.version = "19.2.5";
   return reactDom_production;
 }
 var hasRequiredReactDom;
@@ -12366,12 +12366,12 @@ function requireReactDomClient_production() {
     }
   };
   var isomorphicReactPackageVersion$jscomp$inline_1840 = React2.version;
-  if ("19.2.7" !== isomorphicReactPackageVersion$jscomp$inline_1840)
+  if ("19.2.5" !== isomorphicReactPackageVersion$jscomp$inline_1840)
     throw Error(
       formatProdErrorMessage(
         527,
         isomorphicReactPackageVersion$jscomp$inline_1840,
-        "19.2.7"
+        "19.2.5"
       )
     );
   ReactDOMSharedInternals.findDOMNode = function(componentOrElement) {
@@ -12389,10 +12389,10 @@ function requireReactDomClient_production() {
   };
   var internals$jscomp$inline_2347 = {
     bundleType: 0,
-    version: "19.2.7",
+    version: "19.2.5",
     rendererPackageName: "react-dom",
     currentDispatcherRef: ReactSharedInternals,
-    reconcilerVersion: "19.2.7"
+    reconcilerVersion: "19.2.5"
   };
   if ("undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__) {
     var hook$jscomp$inline_2348 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
@@ -12459,7 +12459,7 @@ function requireReactDomClient_production() {
     listenToAllSupportedEvents(container2);
     return new ReactDOMHydrationRoot(initialChildren);
   };
-  reactDomClient_production.version = "19.2.7";
+  reactDomClient_production.version = "19.2.5";
   return reactDomClient_production;
 }
 var hasRequiredClient;
@@ -14209,13 +14209,19 @@ function updateReconnectSucceeded(status, options) {
   if (!options.expectedPreviousVersion) {
     return true;
   }
+  if (status.update_in_progress === true) {
+    return false;
+  }
   if (status.update_available !== true) {
     return true;
   }
   if (options.expectedLatestVersion && status.current_version === options.expectedLatestVersion) {
     return true;
   }
-  return status.current_version !== options.expectedPreviousVersion;
+  if (status.current_version !== options.expectedPreviousVersion) {
+    return true;
+  }
+  return options.sawUpdateInProgress === true;
 }
 async function initializeGuardDashboardSessionAtOrigin(origin, guardToken) {
   try {
@@ -14265,36 +14271,47 @@ async function reconnectGuardDaemonAfterUpdate(options) {
   const reconnectOptions = options ?? {};
   const awaitingVersionChange = Boolean(reconnectOptions.expectedPreviousVersion);
   const ports = buildGuardDaemonCandidatePorts(preferredGuardDaemonPort());
+  let sawUpdateInProgress = reconnectOptions.sawUpdateInProgress === true;
   for (let index = 0; index < ports.length; index += GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE) {
     const batch = ports.slice(index, index + GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE);
     const results = await Promise.all(
       batch.map(async (port) => {
-        const origin2 = `http://127.0.0.1:${port}`;
-        if (!await probeGuardDaemonHealth(origin2)) {
+        const origin = `http://127.0.0.1:${port}`;
+        if (!await probeGuardDaemonHealth(origin)) {
           return null;
         }
         try {
-          const status = await fetchGuardUpdateStatusAtOrigin(origin2, guardToken);
-          if (awaitingVersionChange && !updateReconnectSucceeded(status, reconnectOptions)) {
-            return null;
+          const status = await fetchGuardUpdateStatusAtOrigin(origin, guardToken);
+          if (status.update_in_progress === true) {
+            return { origin: null, status: null, sawUpdateInProgress: true };
           }
-          return { origin: origin2, status };
+          if (awaitingVersionChange && !updateReconnectSucceeded(status, { ...reconnectOptions, sawUpdateInProgress })) {
+            return { origin: null, status: null, sawUpdateInProgress };
+          }
+          return { origin, status, sawUpdateInProgress };
         } catch {
           return null;
         }
       })
     );
-    const active = results.find((result) => result !== null);
-    if (!active) {
-      continue;
+    const active = results.find((result) => result !== null && result.origin !== null && result.status !== null);
+    if (active?.origin && active.status) {
+      saveGuardDaemonOrigin(active.origin);
+      const refreshedToken = await initializeGuardDashboardSessionAtOrigin(active.origin, guardToken);
+      if (refreshedToken) {
+        saveGuardToken(refreshedToken);
+      }
+      return {
+        origin: active.origin,
+        status: active.status,
+        sawUpdateInProgress: active.sawUpdateInProgress
+      };
     }
-    const { origin } = active;
-    saveGuardDaemonOrigin(origin);
-    const refreshedToken = await initializeGuardDashboardSessionAtOrigin(origin, guardToken);
-    if (refreshedToken) {
-      saveGuardToken(refreshedToken);
+    const partial = results.find((result) => result !== null);
+    if (partial) {
+      sawUpdateInProgress = partial.sawUpdateInProgress;
+      return { origin: null, status: null, sawUpdateInProgress };
     }
-    return origin;
   }
   return null;
 }
@@ -15590,7 +15607,10 @@ function normalizeGuardUpdateStatus(raw) {
     blocked_reason: stringValue(value.blocked_reason),
     recovery_reinstall_available: value.recovery_reinstall_available === true ? true : void 0,
     recovery_reinstall_command: typeof value.recovery_reinstall_command === "string" ? value.recovery_reinstall_command : void 0,
-    update_in_progress: typeof value.update_in_progress === "boolean" ? value.update_in_progress : void 0
+    update_in_progress: typeof value.update_in_progress === "boolean" ? value.update_in_progress : void 0,
+    update_suppressed: value.update_suppressed === true ? true : void 0,
+    retry_command: typeof value.retry_command === "string" ? value.retry_command : void 0,
+    update_attempt_message: typeof value.update_attempt_message === "string" ? value.update_attempt_message : void 0
   };
 }
 async function fetchGuardUpdateStatus() {
@@ -16203,6 +16223,15 @@ function updateHelpCopy(status, phase) {
   if (phase === "error") {
     return "The update did not finish. Try again or run hol-guard update from your terminal.";
   }
+  if (status?.update_suppressed) {
+    if (status.retry_command) {
+      return `Automatic update already ran but this install is still behind. Run ${status.retry_command} in your terminal.`;
+    }
+    if (status.update_attempt_message) {
+      return status.update_attempt_message;
+    }
+    return "Automatic update already ran but this install is still behind the latest release.";
+  }
   if (status?.update_available) {
     return "This restarts Guard for a moment. Open approvals will stay saved.";
   }
@@ -16218,7 +16247,7 @@ function GuardUpdatePanel(props) {
   const version = props.guardVersion ?? props.updateStatus?.current_version ?? null;
   const phase = props.updatePhase ?? "idle";
   const helpCopy = updateHelpCopy(props.updateStatus, phase);
-  const showUpdateButton = props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && phase !== "updating" && phase !== "reconnecting";
+  const showUpdateButton = props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && props.updateStatus.update_suppressed !== true && phase !== "updating" && phase !== "reconnecting";
   const showReinstallButton = props.updateStatus?.recovery_reinstall_available === true && props.updateStatus.auto_updatable !== true && phase !== "updating" && phase !== "reconnecting";
   const busy = phase === "updating" || phase === "reconnecting";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: props.compact ? "space-y-1" : "space-y-2", children: [
@@ -16305,15 +16334,22 @@ function useGuardUpdate(options) {
   const waitForReconnect = reactExports.useCallback(
     async (expectedPreviousVersion, expectedLatestVersion) => {
       reconnectStartedAt.current = Date.now();
+      let sawUpdateInProgress = false;
       while (Date.now() - (reconnectStartedAt.current ?? Date.now()) < RECONNECT_TIMEOUT_MS) {
         try {
-          const origin = await reconnectGuardDaemonAfterUpdate({
+          const reconnectResult = await reconnectGuardDaemonAfterUpdate({
             expectedPreviousVersion,
-            expectedLatestVersion
+            expectedLatestVersion,
+            sawUpdateInProgress
           });
-          if (!origin) {
+          if (!reconnectResult) {
             throw new Error("Guard daemon not found");
           }
+          sawUpdateInProgress = reconnectResult.sawUpdateInProgress;
+          if (!reconnectResult.origin) {
+            throw new Error("Guard daemon not ready");
+          }
+          const { origin } = reconnectResult;
           if (origin !== window.location.origin) {
             redirectToGuardDaemonOrigin(origin, readGuardToken());
             return true;
@@ -27075,12 +27111,12 @@ export {
   HiMiniExclamationCircle as J,
   HiMiniClipboardDocumentCheck as K,
   HiMiniClipboard as L,
-  getDefaultExportFromCjs as M,
-  HiMiniKey as N,
-  HiMiniLockClosed as O,
+  requireReact as M,
+  getDefaultExportFromCjs as N,
+  HiMiniKey as O,
   ProofStrip as P,
-  HiMiniBellAlert as Q,
-  React as R,
+  HiMiniLockClosed as Q,
+  HiMiniBellAlert as R,
   SectionLabel as S,
   HiMiniAdjustmentsHorizontal as T,
   HiMiniCog6Tooth as U,

@@ -8,7 +8,10 @@ import time
 from pathlib import Path
 
 from codex_plugin_scanner.guard.cli.update_commands import run_guard_update
-from codex_plugin_scanner.guard.daemon.dashboard_update import clear_dashboard_update_lock
+from codex_plugin_scanner.guard.daemon.dashboard_update import (
+    clear_dashboard_update_lock,
+    write_dashboard_update_outcome,
+)
 from codex_plugin_scanner.guard.daemon.manager import (
     _retire_guard_daemon_pid,
     clear_guard_daemon_state,
@@ -34,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
             dry_run=False,
             force_pypi_reinstall=args.force_pypi_reinstall,
         )
+        write_dashboard_update_outcome(guard_home, update_payload)
         if exit_code != 0:
             message = update_payload.get("message") or update_payload.get("error") or "Guard update failed."
             print(str(message), file=sys.stderr)
