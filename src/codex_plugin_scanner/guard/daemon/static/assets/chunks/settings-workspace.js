@@ -1,4 +1,4 @@
-import { M as requireReact, N as getDefaultExportFromCjs, j as jsxRuntimeExports, r as reactExports, v as useFocusTrap, O as HiMiniKey, S as SectionLabel, A as ActionButton, l as HiMiniShieldCheck, Q as HiMiniLockClosed, R as HiMiniBellAlert, T as HiMiniAdjustmentsHorizontal, U as HiMiniCog6Tooth, V as HiMiniCircleStack, W as TabBar, y as HiMiniChevronRight, X as resolveProtectionLevelCopy, Y as fetchSettings, Z as fetchRuntimeSnapshot, _ as updateSettings, $ as clearPolicy, a0 as clearReviewQueue, a1 as revokeApprovalGateCooldown, a2 as disableApprovalGateTotp, a3 as enrollApprovalGateTotp, a4 as verifyApprovalGateTotp, a5 as clearEvidence, a6 as exportDiagnostics, a7 as repairApprovalCenter, a8 as exportSettings, a9 as importSettings, aa as resetSettings, ab as setupDesktopNotifications, b as EmptyState, e as GuardHero, ac as Tag, ad as HiMiniMagnifyingGlass, d as HiMiniCheckCircle, w as HiMiniExclamationTriangle, ae as approvalGateCooldownLabel, o as HiMiniXMark } from "../guard-dashboard.js";
+import { M as requireReact, N as getDefaultExportFromCjs, j as jsxRuntimeExports, r as reactExports, v as useFocusTrap, O as HiMiniKey, S as SectionLabel, A as ActionButton, l as HiMiniShieldCheck, Q as HiMiniLockClosed, R as HiMiniBellAlert, T as HiMiniAdjustmentsHorizontal, U as HiMiniCog6Tooth, V as HiMiniCircleStack, W as TabBar, y as HiMiniChevronRight, X as resolveProtectionLevelCopy, Y as fetchSettings, Z as fetchRuntimeSnapshot, _ as updateSettings, $ as clearPolicy, a0 as clearReviewQueue, a1 as revokeApprovalGateCooldown, a2 as disableApprovalGateTotp, a3 as importSettings, a4 as resetSettings, a5 as enrollApprovalGateTotp, a6 as verifyApprovalGateTotp, a7 as clearEvidence, a8 as exportDiagnostics, a9 as repairApprovalCenter, aa as exportSettings, ab as setupDesktopNotifications, b as EmptyState, e as GuardHero, ac as Tag, ad as HiMiniMagnifyingGlass, d as HiMiniCheckCircle, w as HiMiniExclamationTriangle, ae as approvalGateCooldownLabel, o as HiMiniXMark } from "../guard-dashboard.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, s as securityLevelLabel } from "./app-catalog.js";
 var lib = {};
 var propTypes = { exports: {} };
@@ -1327,6 +1327,20 @@ function resolveSettingsSaveProofModalCopy(input) {
         confirmLabel: "Disconnect"
       };
     }
+    if (input.maintenanceAction === "import-settings") {
+      return {
+        title: "Import settings",
+        detail: "Guard needs fresh proof before it replaces your local settings from a file.",
+        confirmLabel: "Import settings"
+      };
+    }
+    if (input.maintenanceAction === "reset-settings") {
+      return {
+        title: "Reset settings",
+        detail: "Guard needs fresh proof before it restores every local setting to defaults.",
+        confirmLabel: "Reset settings"
+      };
+    }
     return {
       title: "Confirm your identity",
       detail: "Guard needs fresh proof before this cleanup can continue.",
@@ -1775,6 +1789,14 @@ function buildClearReviewQueuePayload(input) {
     status: "pending",
     ...input.approvalPassword ? { approval_password: input.approvalPassword } : {},
     ...input.approvalTotpCode ? { approval_totp_code: input.approvalTotpCode } : {}
+  };
+}
+function buildApprovalGateWriteProof(credentials) {
+  const approvalPassword = credentials?.currentPassword?.trim() ?? "";
+  const approvalTotpCode = credentials?.totpCode?.trim() ?? "";
+  return {
+    ...approvalPassword.length > 0 ? { approval_password: approvalPassword } : {},
+    ...approvalTotpCode.length > 0 ? { approval_totp_code: approvalTotpCode } : {}
   };
 }
 function resolveTotpSetupStep(enrollment) {
@@ -2458,6 +2480,40 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       setTotpActionPending(null);
     }
   }, [onApprovalGateChange]);
+  const executeImportSettings = reactExports.useCallback(async (settingsExport, proof) => {
+    setImportingSettings(true);
+    setActionMessage(null);
+    try {
+      const payload = await importSettings(settingsExport, buildApprovalGateWriteProof(proof));
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      applyLoadedSettingsPayload(normalizedPayload);
+      setActionMessage("Settings imported.");
+      setActionMessageKind("success");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to import settings.");
+      setActionMessageKind("error");
+      throw error;
+    } finally {
+      setImportingSettings(false);
+    }
+  }, [applyLoadedSettingsPayload]);
+  const executeResetSettings = reactExports.useCallback(async (proof) => {
+    setResettingSettings(true);
+    setActionMessage(null);
+    try {
+      const payload = await resetSettings(buildApprovalGateWriteProof(proof));
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      applyLoadedSettingsPayload(normalizedPayload);
+      setActionMessage("Settings reset to defaults.");
+      setActionMessageKind("success");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to reset settings.");
+      setActionMessageKind("error");
+      throw error;
+    } finally {
+      setResettingSettings(false);
+    }
+  }, [applyLoadedSettingsPayload]);
   const handleProofModalConfirm = reactExports.useCallback(async (proof) => {
     if (pendingProofAction === null) {
       return;
@@ -2467,6 +2523,13 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     try {
       if (pendingProofAction.kind === "save") {
         await executeSave(proof);
+      } else if (pendingProofAction.action === "import-settings") {
+        if (pendingProofAction.importExport === void 0) {
+          throw new Error("Missing settings import payload.");
+        }
+        await executeImportSettings(pendingProofAction.importExport, proof);
+      } else if (pendingProofAction.action === "reset-settings") {
+        await executeResetSettings(proof);
       } else {
         await executeMaintenanceWithProof(pendingProofAction.action, proof);
       }
@@ -2477,7 +2540,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     } finally {
       setProofModalPending(false);
     }
-  }, [pendingProofAction, executeSave, executeMaintenanceWithProof]);
+  }, [pendingProofAction, executeSave, executeImportSettings, executeResetSettings, executeMaintenanceWithProof]);
   const handleSave = reactExports.useCallback(() => {
     if (draft === null) {
       return;
@@ -2701,40 +2764,37 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    setImportingSettings(true);
     setActionMessage(null);
     try {
       const text = await file.text();
       const parsed = JSON.parse(text);
-      const payload = await importSettings(parsed, buildApprovalGateWriteProof());
-      const normalizedPayload = normalizeSettingsPayload(payload);
-      applyLoadedSettingsPayload(normalizedPayload);
-      setActionMessage("Settings imported.");
-      setActionMessageKind("success");
+      const savedGateEnabled = savedSettingsRef.current?.approval_gate?.enabled === true;
+      if (savedGateEnabled) {
+        openProofModal("maintenance", {
+          kind: "maintenance",
+          action: "import-settings",
+          importExport: parsed
+        });
+        return;
+      }
+      await executeImportSettings(parsed);
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to import settings.");
       setActionMessageKind("error");
-    } finally {
-      setImportingSettings(false);
     }
-  }, [applyLoadedSettingsPayload, buildApprovalGateWriteProof]);
+  }, [executeImportSettings, openProofModal]);
   const handleResetSettings = reactExports.useCallback(async () => {
     if (!window.confirm("Reset all local Guard settings to defaults? This cannot be undone.")) return;
-    setResettingSettings(true);
-    setActionMessage(null);
-    try {
-      const payload = await resetSettings(buildApprovalGateWriteProof());
-      const normalizedPayload = normalizeSettingsPayload(payload);
-      applyLoadedSettingsPayload(normalizedPayload);
-      setActionMessage("Settings reset to defaults.");
-      setActionMessageKind("success");
-    } catch (error) {
-      setActionMessage(error instanceof Error ? error.message : "Unable to reset settings.");
-      setActionMessageKind("error");
-    } finally {
-      setResettingSettings(false);
+    const savedGateEnabled = savedSettingsRef.current?.approval_gate?.enabled === true;
+    if (savedGateEnabled) {
+      openProofModal("maintenance", { kind: "maintenance", action: "reset-settings" });
+      return;
     }
-  }, [applyLoadedSettingsPayload, buildApprovalGateWriteProof]);
+    try {
+      await executeResetSettings();
+    } catch {
+    }
+  }, [executeResetSettings, openProofModal]);
   const handleSetupNotifications = reactExports.useCallback(async () => {
     setSettingUpNotifications(true);
     setActionMessage(null);
@@ -3136,7 +3196,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
           maintenanceAction: pendingProofAction.kind === "maintenance" ? pendingProofAction.action : void 0
         }),
         error: proofModalError,
-        pending: proofModalPending || saving,
+        pending: proofModalPending || saving || importingSettings || resettingSettings,
         onCancel: closeProofModal,
         onConfirm: handleProofModalConfirm
       }
@@ -3615,6 +3675,7 @@ export {
   SettingsWorkspace,
   TotpEnrollmentQrPanel,
   applyApprovalGateDraft,
+  buildApprovalGateWriteProof,
   buildClearPolicyPayload,
   buildClearReviewQueuePayload,
   buildTotpQrImageOptions,

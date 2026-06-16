@@ -89,4 +89,13 @@ assert(
   "save-proof: change-password rejects mismatched passwords",
 );
 
+assert(
+  resolveSettingsSaveProofModalCopy({ mode: "maintenance", gateSettingsChanged: false, maintenanceAction: "import-settings" }).confirmLabel === "Import settings",
+  "save-proof: import settings maintenance copy",
+);
+assert(
+  resolveSettingsSaveProofModalCopy({ mode: "maintenance", gateSettingsChanged: false, maintenanceAction: "reset-settings" }).confirmLabel === "Reset settings",
+  "save-proof: reset settings maintenance copy",
+);
+
 console.log("settings-save-proof-modal.test.ts: all assertions passed");
