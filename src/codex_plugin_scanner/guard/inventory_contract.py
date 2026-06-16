@@ -642,7 +642,9 @@ def _item_from_artifact(
             else None
         )
         raw_analyzer_version = trust_attestation_context.get("analyzerVersion")
-        analyzer_version = raw_analyzer_version if isinstance(raw_analyzer_version, str) and raw_analyzer_version else None
+        analyzer_version = (
+            raw_analyzer_version if isinstance(raw_analyzer_version, str) and raw_analyzer_version else None
+        )
         raw_installation_id = trust_attestation_context.get("installationId")
         installation_id = raw_installation_id if isinstance(raw_installation_id, str) and raw_installation_id else None
         raw_upload_id = trust_attestation_context.get("uploadId")

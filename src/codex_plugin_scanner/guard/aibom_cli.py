@@ -12,8 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from codex_plugin_scanner.version import __version__
-
+from ..version import __version__
 from .adapters.base import HarnessContext
 from .inventory_cisco import run_cisco_inventory_scans
 from .inventory_contract import (
