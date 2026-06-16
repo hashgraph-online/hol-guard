@@ -14,7 +14,7 @@ from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 
 from .adapters import get_adapter
 from .adapters.base import HarnessContext
-from .approval_gate import ApprovalGateInput, require_approval_decision
+from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approval_decision
 from .cli.connect_flow import (
     connect_retry_refresh_race_from_reason,
     resolve_guard_cloud_repair_detail,
@@ -321,6 +321,7 @@ def apply_approval_resolution(
     return_queue_result: bool = False,
     resolve_scope_matches: bool = True,
     approval_gate_input: ApprovalGateInput | None = None,
+    approval_gate_grant: ApprovalGateGrant | None = None,
     persist_policy: bool = True,
 ) -> dict[str, object]:
     request = store.get_approval_request(request_id)
@@ -354,15 +355,16 @@ def apply_approval_resolution(
         reason=reason,
     )
     resolved_at = now or _now()
-    approval_gate_grant = require_approval_decision(
+    resolved_gate_grant = require_approval_decision(
         store.guard_home,
         action=decision.action,
         scope=scope,
         approval_gate_input=approval_gate_input,
+        approval_gate_grant=approval_gate_grant,
         now=resolved_at,
     )
     if persist_policy:
-        store.upsert_policy(decision, resolved_at, approval_gate_grant=approval_gate_grant)
+        store.upsert_policy(decision, resolved_at, approval_gate_grant=resolved_gate_grant)
     resolution_harness = None if scope == "global" else str(request["harness"])
     if return_queue_result:
         result = store.resolve_request_with_queue_result(
@@ -371,7 +373,7 @@ def apply_approval_resolution(
             resolution_scope=scope,
             reason=reason,
             resolved_at=resolved_at,
-            approval_gate_grant=approval_gate_grant,
+            approval_gate_grant=resolved_gate_grant,
         )
         if result.get("resolved") is not True:
             error = result.get("error")
@@ -394,7 +396,7 @@ def apply_approval_resolution(
                 resolution_scope=scope,
                 reason=reason,
                 resolved_at=resolved_at,
-                approval_gate_grant=approval_gate_grant,
+                approval_gate_grant=resolved_gate_grant,
             )
             if resolved_scope_ids:
                 _refresh_queue_result(store, result, resolved_scope_ids)
@@ -416,7 +418,7 @@ def apply_approval_resolution(
             resolution_scope=scope,
             reason=reason,
             resolved_at=resolved_at,
-            approval_gate_grant=approval_gate_grant,
+            approval_gate_grant=resolved_gate_grant,
         )
     if request_id not in resolved_ids:
         store.resolve_approval_request(
@@ -425,7 +427,7 @@ def apply_approval_resolution(
             resolution_scope=scope,
             reason=reason,
             resolved_at=resolved_at,
-            approval_gate_grant=approval_gate_grant,
+            approval_gate_grant=resolved_gate_grant,
         )
     updated = store.get_approval_request(request_id)
     if updated is None:
@@ -1576,8 +1578,24 @@ def bulk_allow_read_only_once(
     if not gate.enabled or not gate.configured:
         raise ValueError("bulk_approve_gate_required")
 
+    if len(request_ids) == 0:
+        return {
+            "resolved_count": 0,
+            "failed": [],
+            "resolution_summary": "0 read-only file reads approved once.",
+        }
+
+    bulk_resolution_action = "allow"
+    bulk_resolution_scope = "artifact"
     resolved_count = 0
     failed: list[dict[str, str]] = []
+    bulk_gate_grant = require_approval_decision(
+        store.guard_home,
+        action=bulk_resolution_action,
+        scope=bulk_resolution_scope,
+        approval_gate_input=approval_gate_input,
+        now=resolved_at,
+    )
 
     for request_id in request_ids:
         if not isinstance(request_id, str) or not request_id.strip():
@@ -1592,14 +1610,14 @@ def bulk_allow_read_only_once(
             apply_approval_resolution(
                 store=store,
                 request_id=normalized_id,
-                action="allow",
-                scope="artifact",
+                action=bulk_resolution_action,
+                scope=bulk_resolution_scope,
                 workspace=None,
                 reason="bulk approve once",
                 now=resolved_at,
                 return_queue_result=False,
                 resolve_scope_matches=True,
-                approval_gate_input=approval_gate_input,
+                approval_gate_grant=bulk_gate_grant,
                 persist_policy=False,
             )
             resolved_count += 1
