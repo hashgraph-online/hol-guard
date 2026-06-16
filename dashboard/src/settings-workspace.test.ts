@@ -100,7 +100,7 @@ assert(isFineTuningEditable("relaxed") === false, "fine-tuning: relaxed level is
 
 assert(resolveTotpSetupStep(null) === "confirm", "totp-setup: fresh setup starts at password confirmation");
 assert(
-  resolveTotpSetupStep({ provisioning_uri: "otpauth://totp/test", manual_key: "abcd", expires_at: "2026-01-01T00:00:00Z" }) === "scan",
+  resolveTotpSetupStep({ otpauth_uri: "otpauth://totp/test", manual_key: "abcd", expires_at: "2026-01-01T00:00:00Z" }) === "scan",
   "totp-setup: pending enrollment resumes at QR scan step",
 );
 

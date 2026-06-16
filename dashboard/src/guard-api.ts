@@ -49,6 +49,7 @@ import type {
   GuardReceiptHarnessStat,
   GuardRuntimeSnapshot,
   GuardCloudConnectStatusResponse,
+  SupplyChainBundle,
   SupplyChainSnapshot,
   GuardSettingsPayload,
   GuardSettingsExport,
@@ -96,10 +97,14 @@ type ApprovalRequestListPayload = {
   status?: unknown;
 };
 
-type RuntimeSnapshotPayload = Omit<GuardRuntimeSnapshot, "items" | "supply_chain"> & {
+type RuntimeSnapshotPayload = Omit<
+  GuardRuntimeSnapshot,
+  "items" | "queue_summary" | "supply_chain" | "managed_installs"
+> & {
   items?: RawGuardApprovalRequest[] | null;
   queue_summary?: unknown;
   supply_chain?: unknown;
+  managed_installs?: unknown;
 };
 
 type QueueResolutionPayload = Omit<
@@ -2723,7 +2728,7 @@ export type AuditRemediationInput = {
 export async function runAuditRemediation(input: AuditRemediationInput): Promise<PackageFirewallActionResponse> {
   if (isGuardDemoMode()) {
     return {
-      entitlement: { allowed: true, tier: "demo" },
+      entitlement: { allowed: true, reason: "demo", tier: "demo", upgrade_cta: null, upgrade_url: null },
       operation: input.action,
       receipt: null,
       result: `${input.action} completed for ${input.manager}.`,

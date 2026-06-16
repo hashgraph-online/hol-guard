@@ -4,7 +4,7 @@ import {
   SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS,
 } from "./supply-chain-workspace-layout";
 
-function assert(condition: boolean, message: string): void {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
   }
@@ -36,7 +36,7 @@ assert(repairStat.label === "Needs path fix", "SCSR165: repair stat avoids PATH 
 const partialAlerts = resolveSupplyChainPostureAlerts({
   generated_at: new Date().toISOString(),
   approval_center_url: null,
-  runtime_state: {},
+  runtime_state: null,
   device: {
     installation_id: "install-1",
     device_label: "Test Machine",

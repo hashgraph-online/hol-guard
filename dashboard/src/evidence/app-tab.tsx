@@ -11,10 +11,13 @@ import { detectCategory, getCategoryInfo } from "./categories";
 import { guardAwareHref } from "../guard-api";
 import { Sparkline } from "./sparkline";
 import { ScopedEvidenceTable } from "./scoped-evidence-table";
+import type { EvidenceDecision } from "./evidence-types";
 
 interface AppTabProps {
   receipts: GuardReceipt[];
 }
+
+type AppDecisionFilter = Extract<EvidenceDecision, "all" | "allow" | "block">;
 
 function hashString(str: string): number {
   let hash = 0;
@@ -77,7 +80,7 @@ function AppListCard({ harness, items, onSelect }: AppListCardProps) {
 function AppTabRaw({ receipts }: AppTabProps) {
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [decisionFilter, setDecisionFilter] = useState<string>("all");
+  const [decisionFilter, setDecisionFilter] = useState<AppDecisionFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("");
 
   const appReceipts = useMemo(
@@ -133,6 +136,13 @@ function AppTabRaw({ receipts }: AppTabProps) {
 
   const handleCategoryFilter = useCallback((category: string) => {
     setCategoryFilter(category);
+  }, []);
+
+  const handleDecisionFilterChange = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextValue = event.target.value;
+    if (nextValue === "all" || nextValue === "allow" || nextValue === "block") {
+      setDecisionFilter(nextValue);
+    }
   }, []);
 
   const categories = useMemo(() => {
@@ -203,7 +213,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
           </div>
           <select
             value={decisionFilter}
-            onChange={(e) => setDecisionFilter(e.target.value)}
+            onChange={handleDecisionFilterChange}
             className="min-h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
           >
             <option value="all">All decisions</option>
