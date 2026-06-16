@@ -55,11 +55,7 @@ export function QueueConnectionError(props: {
             </ActionButton>
           )}
           {props.approvalUrl !== null && (
-            <ActionButton
-              href={props.approvalUrl}
-              variant="outline"
-              onClick={() => window.location.reload()}
-            >
+            <ActionButton href={props.approvalUrl} variant="outline">
               Open dashboard
             </ActionButton>
           )}
