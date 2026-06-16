@@ -431,8 +431,14 @@ def test_inventory_snapshot_signs_local_trust_metadata_with_workspace_device_bin
         home_dir=tmp_path,
         workspace_dir=plugin_dir,
         trust_attestation_context={
+            "challengeId": "guard-aibom-challenge-1",
             "deviceId": "device-alpha",
+            "expiresAt": "2026-06-10T12:15:00Z",
+            "installationId": "device-alpha",
+            "nonce": "nonce-alpha",
+            "sequence": 7,
             "signingConfig": signing_config,
+            "uploadId": "guard-aibom-upload-1",
             "workspaceId": "workspace-alpha",
         },
     )
@@ -445,15 +451,31 @@ def test_inventory_snapshot_signs_local_trust_metadata_with_workspace_device_bin
     assert isinstance(attestation, dict)
     assert attestation.get("signatureAlgorithm") == GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256
     assert attestation.get("publicJwkThumbprint") == dpop_key_material.public_jwk_thumbprint
+    assert metadata.get("attestationBindings") == {
+        "challengeId": "guard-aibom-challenge-1",
+        "deviceId": "device-alpha",
+        "expiresAt": "2026-06-10T12:15:00Z",
+        "installationId": "device-alpha",
+        "nonce": "nonce-alpha",
+        "sequence": 7,
+        "uploadId": "guard-aibom-upload-1",
+        "workspaceId": "workspace-alpha",
+    }
     verify_trust_attestation(
         payload=build_trust_attestation_payload(
             agent_id=snapshot.agent_id,
+            challenge_id="guard-aibom-challenge-1",
             item_id=plugin_item.item_id,
             item_kind=plugin_item.item_kind,
             content_hash=plugin_item.content_hash,
             captured_at=str(trust.get("capturedAt")),
+            expires_at="2026-06-10T12:15:00Z",
             evidence_hash=str(metadata.get("evidenceHash")),
+            installation_id="device-alpha",
+            nonce="nonce-alpha",
+            sequence=7,
             scope="trust_resolution",
+            upload_id="guard-aibom-upload-1",
             workspace_id="workspace-alpha",
             device_id="device-alpha",
         ),
@@ -473,12 +495,18 @@ def test_inventory_snapshot_signs_local_trust_metadata_with_workspace_device_bin
     verify_trust_attestation(
         payload=build_trust_attestation_payload(
             agent_id=snapshot.agent_id,
+            challenge_id="guard-aibom-challenge-1",
             item_id=plugin_item.item_id,
             item_kind=plugin_item.item_kind,
             content_hash=plugin_item.content_hash,
             captured_at=str(local_layer.get("capturedAt")),
+            expires_at="2026-06-10T12:15:00Z",
             evidence_hash=str(layer_metadata.get("evidenceHash")),
+            installation_id="device-alpha",
+            nonce="nonce-alpha",
+            sequence=7,
             scope="trust_layer",
+            upload_id="guard-aibom-upload-1",
             workspace_id="workspace-alpha",
             device_id="device-alpha",
             layer_id=str(local_layer.get("layerId")),
