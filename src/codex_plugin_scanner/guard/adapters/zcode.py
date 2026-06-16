@@ -417,9 +417,13 @@ def _is_managed_handler(handler: object) -> bool:
 
 
 def _merge_hook_entry(entries: list[object], matcher: str | None, handler: dict[str, object]) -> list[object]:
-    """Add or refresh the Guard handler for a given matcher, preserving user hooks."""
+    """Add or refresh the Guard handler for a given matcher, preserving user hooks.
 
-    normalized: list[object] = [entry for entry in entries if isinstance(entry, dict)]
+    Non-dict entries (kept defensively by ``_prune_managed_entries``) are
+    passed through unchanged so the merge never drops user data.
+    """
+
+    normalized: list[object] = list(entries)
     matcher_key = matcher.strip() if isinstance(matcher, str) and matcher.strip() else None
     for index, entry in enumerate(normalized):
         if not isinstance(entry, dict):

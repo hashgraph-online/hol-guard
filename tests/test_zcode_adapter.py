@@ -495,6 +495,16 @@ class TestZCodeManagedHelpers:
         commands = [h["command"] for h in read_entry["hooks"]]
         assert commands == [f"new # {GUARD_MANAGED_MARKER}"]
 
+    def test_merge_hook_entry_preserves_non_dict_entries(self) -> None:
+        # Non-dict entries (defensively kept by _prune_managed_entries) must
+        # survive the merge so user data is never silently dropped on install.
+        handler = {"type": "command", "command": f"x # {GUARD_MANAGED_MARKER}"}
+        entries: list[object] = ["raw-user-string", 42, {"matcher": "Bash", "hooks": []}]
+        result = _merge_hook_entry(entries, "Bash", handler)
+        assert "raw-user-string" in result
+        assert 42 in result
+        assert any(isinstance(e, dict) and e.get("matcher") == "Bash" for e in result)
+
 
 class TestZCodeGenericEmitterBlock:
     def test_block_emits_deny_json_and_exit_two(self, tmp_path: Path) -> None:

@@ -1,14 +1,12 @@
 """z.ai ZCode config, hook JSON, and detection helpers for HOL Guard.
 
-ZCode stores its CLI app config under ``~/.zcode/``. The CLI config file
-(``~/.zcode/cli/config.json``) is Claude-Code-shaped: it carries an ``mcp``
-section (``mcp.servers.<name>``), a ``plugins`` section
-(``plugins.enabledPlugins.<name@marketplace>``), and an optional ``hooks``
-section using Claude Code's hook group schema. Plugins are cached under
-``~/.zcode/cli/plugins/cache/<marketplace>/<plugin>/<version>/`` with a
-``.zcode-plugin/plugin.json`` manifest, a ``.zcode-plugin-seed.json``
-provenance file, ``hooks/hooks.json``, ``.mcp.json``, ``skills/`` and
-``commands/`` trees.
+ZCode stores its CLI app config under ``~/.zcode/``. ``~/.zcode/cli/config.json``
+is Claude-Code-shaped: an ``mcp`` section (``mcp.servers.<name>``), a ``plugins``
+section (``plugins.enabledPlugins.<name@marketplace>``), and an optional
+``hooks`` section using Claude Code's hook group schema. Plugins are cached
+under ``~/.zcode/cli/plugins/cache/<marketplace>/<plugin>/<version>/`` with a
+``.zcode-plugin/plugin.json`` manifest, a ``.zcode-plugin-seed.json`` provenance
+file, ``hooks/hooks.json``, ``.mcp.json``, ``skills/`` and ``commands/`` trees.
 """
 
 from __future__ import annotations
@@ -115,14 +113,12 @@ def _mcp_transport(server_config: dict[str, object]) -> str:
     return "stdio"
 
 
-def _server_command(server_config: dict[str, object]) -> str | None:
+def _mcp_endpoint(server_config: dict[str, object]) -> tuple[str | None, str | None]:
+    """Return the (command, url) endpoint for an MCP server config, if any."""
+
     command = server_config.get("command")
-    return command if isinstance(command, str) else None
-
-
-def _server_url(server_config: dict[str, object]) -> str | None:
     url = server_config.get("url")
-    return url if isinstance(url, str) else None
+    return (command if isinstance(command, str) else None, url if isinstance(url, str) else None)
 
 
 def append_cli_config_artifacts(
@@ -142,8 +138,7 @@ def append_cli_config_artifacts(
             for server_name, server_config in servers.items():
                 if not isinstance(server_name, str) or not isinstance(server_config, dict):
                     continue
-                command = _server_command(server_config)
-                url = _server_url(server_config)
+                command, url = _mcp_endpoint(server_config)
                 if command is None and url is None:
                     continue
                 artifacts.append(
@@ -207,48 +202,35 @@ def _append_hook_groups(
             if not isinstance(entry, dict):
                 continue
             matcher = entry.get("matcher")
-            nested_hooks = entry.get("hooks")
+            collected: list[tuple[str, str]] = []
             direct_command = entry.get("command")
             if isinstance(direct_command, str) and direct_command.strip():
-                artifacts.append(
-                    GuardArtifact(
-                        artifact_id=f"{harness}:{scope}:hook:{event_name.lower()}:{index}",
-                        name=_hook_name(event_name, matcher),
-                        harness=harness,
-                        artifact_type="hook",
-                        source_scope=scope,
-                        config_path=str(config_path),
-                        command=direct_command,
-                        metadata={
-                            "event": event_name,
-                            "matcher": matcher,
-                            "managed": is_guard_managed_hook_command(direct_command),
-                        },
-                    )
-                )
+                collected.append((f"{event_name.lower()}:{index}", direct_command))
+            nested_hooks = entry.get("hooks")
             if isinstance(nested_hooks, list):
                 for nested_index, hook_entry in enumerate(nested_hooks):
                     if not isinstance(hook_entry, dict):
                         continue
                     command = hook_entry.get("command")
-                    if not isinstance(command, str) or not command.strip():
-                        continue
-                    artifacts.append(
-                        GuardArtifact(
-                            artifact_id=f"{harness}:{scope}:hook:{event_name.lower()}:{index}:{nested_index}",
-                            name=_hook_name(event_name, matcher),
-                            harness=harness,
-                            artifact_type="hook",
-                            source_scope=scope,
-                            config_path=str(config_path),
-                            command=command,
-                            metadata={
-                                "event": event_name,
-                                "matcher": matcher,
-                                "managed": is_guard_managed_hook_command(command),
-                            },
-                        )
+                    if isinstance(command, str) and command.strip():
+                        collected.append((f"{event_name.lower()}:{index}:{nested_index}", command))
+            for artifact_suffix, command in collected:
+                artifacts.append(
+                    GuardArtifact(
+                        artifact_id=f"{harness}:{scope}:hook:{artifact_suffix}",
+                        name=_hook_name(event_name, matcher),
+                        harness=harness,
+                        artifact_type="hook",
+                        source_scope=scope,
+                        config_path=str(config_path),
+                        command=command,
+                        metadata={
+                            "event": event_name,
+                            "matcher": matcher,
+                            "managed": is_guard_managed_hook_command(command),
+                        },
                     )
+                )
 
 
 def _hook_name(event_name: str, matcher: object) -> str:
@@ -354,8 +336,7 @@ def append_plugin_manifest_artifacts(
             for server_name, server_config in servers.items():
                 if not isinstance(server_name, str) or not isinstance(server_config, dict):
                     continue
-                command = _server_command(server_config)
-                url = _server_url(server_config)
+                command, url = _mcp_endpoint(server_config)
                 if command is None and url is None:
                     continue
                 artifacts.append(
@@ -485,50 +466,6 @@ def append_marketplace_artifacts(
     )
 
 
-def build_guard_managed_pretooluse_group(hook_command: str, *, timeout_seconds: int = 30) -> dict[str, object]:
-    """Build the Guard-managed PreToolUse hook group for the ZCode config."""
-
-    entries: list[dict[str, object]] = []
-    for matcher in ZCODE_PRETOOL_MATCHERS:
-        entries.append(
-            {
-                "matcher": matcher,
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": hook_command,
-                        "timeout": timeout_seconds,
-                    }
-                ],
-            }
-        )
-    return {"PreToolUse": entries}
-
-
-def build_guard_managed_userprompt_group(hook_command: str, *, timeout_seconds: int = 30) -> dict[str, object]:
-    """Build the Guard-managed UserPromptSubmit hook group for the ZCode config."""
-
-    return {
-        "UserPromptSubmit": [
-            {
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": hook_command,
-                        "timeout": timeout_seconds,
-                    }
-                ],
-            }
-        ]
-    }
-
-
-def managed_hook_command(marker_comment: str) -> str:
-    """Return the comment line that tags a managed hook command for ZCode."""
-
-    return marker_comment
-
-
 __all__ = [
     "GUARD_MANAGED_MARKER",
     "ZCODE_BUNDLE_IDENTIFIER",
@@ -556,8 +493,5 @@ __all__ = [
     "append_marketplace_artifacts",
     "append_plugin_manifest_artifacts",
     "append_skill_artifacts",
-    "build_guard_managed_pretooluse_group",
-    "build_guard_managed_userprompt_group",
     "is_guard_managed_hook_command",
-    "managed_hook_command",
 ]
