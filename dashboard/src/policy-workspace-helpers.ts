@@ -402,9 +402,11 @@ export function sortPolicyDecisions(
       case "app":
         return compareText(harnessDisplayName(left.harness), harnessDisplayName(right.harness));
       case "updated": {
-        const leftTime = new Date(left.updated_at || 0).getTime();
-        const rightTime = new Date(right.updated_at || 0).getTime();
-        return direction * (leftTime - rightTime);
+        const leftTime = left.updated_at ? new Date(left.updated_at).getTime() : 0;
+        const rightTime = right.updated_at ? new Date(right.updated_at).getTime() : 0;
+        const leftVal = Number.isNaN(leftTime) ? 0 : leftTime;
+        const rightVal = Number.isNaN(rightTime) ? 0 : rightTime;
+        return direction * (leftVal - rightVal);
       }
       case "approval":
         return compareText(

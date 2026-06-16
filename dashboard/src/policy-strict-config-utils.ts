@@ -1,4 +1,5 @@
 import type { GuardSettings } from "./guard-types";
+import { policyActionLabel } from "./approval-center-utils";
 
 export const STRICT_POLICY_LAYER_OPTIONS = [
   { value: "none", label: "No match" },
@@ -67,18 +68,6 @@ export function resolveStrictScenarioOutcome(
     outcome,
     reasoning: `Because New network domain action is set to ${policyActionLabel(outcome)}.`,
   };
-}
-
-function policyActionLabel(action: string): string {
-  const labels: Record<string, string> = {
-    allow: "Allow",
-    warn: "Warn",
-    review: "Review",
-    block: "Block",
-    "require-reapproval": "Ask every time",
-    "sandbox-required": "Sandbox required",
-  };
-  return labels[action] ?? action.replace(/_/g, " ");
 }
 
 export function fingerprintLocalPolicySettings(settings: GuardSettings): string {

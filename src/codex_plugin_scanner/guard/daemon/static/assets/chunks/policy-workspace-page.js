@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, S as SectionLabel, o as HiMiniXMark, B as Badge, ac as Tag, aA as HiMiniCommandLine, w as HiMiniExclamationTriangle, b0 as scopeLabel, h as harnessDisplayName, A as ActionButton, b1 as guardAwareHref, m as formatRelativeTime, b2 as HiMiniDocumentText, d as HiMiniCheckCircle, b3 as HiMiniCloudArrowUp, b4 as HiMiniCheck, b5 as HiMiniCodeBracket, b6 as HiMiniClipboardDocument, b7 as HiMiniUsers, aG as HiMiniBeaker, b8 as HiMiniFolder, b9 as HiMiniInformationCircle, O as HiMiniLockClosed, l as HiMiniShieldCheck, r as reactExports, ba as createCloudExceptionRequest, b as EmptyState, ad as HiMiniMagnifyingGlass, p as HiMiniChevronUp, q as HiMiniChevronDown, y as HiMiniChevronRight, bb as HiMiniPuzzlePiece, bc as HiMiniGlobeAlt, aE as HiMiniClock, bd as policyActionLabel$1, be as fetchCloudExceptions, bf as fetchCloudExceptionRequests, bg as downloadBlob, bh as PaginationControls, bi as HiMiniEllipsisVertical, bj as HiMiniNoSymbol, aM as HiMiniArrowTopRightOnSquare, bk as HiMiniCube, aw as HiMiniArrowPath, t as HiMiniCloud, T as HiMiniAdjustmentsHorizontal, bl as HiMiniArrowDownTray, Y as fetchSettings, _ as updateSettings, x as HiMiniBolt, bm as HiMiniQueueList, bn as HiMiniArrowRight, bo as HiMiniPlay, a_ as WorkspacePageHeader, a$ as __vitePreload } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, S as SectionLabel, o as HiMiniXMark, B as Badge, ac as Tag, aA as HiMiniCommandLine, w as HiMiniExclamationTriangle, b0 as scopeLabel, h as harnessDisplayName, A as ActionButton, b1 as guardAwareHref, m as formatRelativeTime, b2 as HiMiniDocumentText, d as HiMiniCheckCircle, b3 as HiMiniCloudArrowUp, b4 as HiMiniCheck, b5 as HiMiniCodeBracket, b6 as HiMiniClipboardDocument, b7 as HiMiniUsers, aG as HiMiniBeaker, b8 as HiMiniFolder, b9 as HiMiniInformationCircle, O as HiMiniLockClosed, l as HiMiniShieldCheck, r as reactExports, ba as createCloudExceptionRequest, b as EmptyState, ad as HiMiniMagnifyingGlass, p as HiMiniChevronUp, q as HiMiniChevronDown, y as HiMiniChevronRight, bb as HiMiniPuzzlePiece, bc as HiMiniGlobeAlt, aE as HiMiniClock, bd as policyActionLabel, be as fetchCloudExceptions, bf as fetchCloudExceptionRequests, bg as downloadBlob, bh as PaginationControls, bi as HiMiniNoSymbol, aM as HiMiniArrowTopRightOnSquare, bj as HiMiniCube, aw as HiMiniArrowPath, t as HiMiniCloud, T as HiMiniAdjustmentsHorizontal, bk as HiMiniArrowDownTray, Y as fetchSettings, _ as updateSettings, x as HiMiniBolt, bl as HiMiniQueueList, bm as HiMiniArrowRight, bn as HiMiniPlay, a_ as WorkspacePageHeader, a$ as __vitePreload } from "../guard-dashboard.js";
 const CLOUD_EXCEPTION_EXPIRING_SOON_DAYS = 7;
 function parseCloudExceptionTimestamp(value) {
   if (!value || !value.trim()) {
@@ -1767,7 +1767,7 @@ function resolveActionVerb(action) {
   if (action === "block") {
     return "Block";
   }
-  return policyActionLabel$1(action);
+  return policyActionLabel(action);
 }
 function resolveRememberSentence(policy, commandLabel) {
   const app = harnessDisplayName(policy.harness);
@@ -1935,7 +1935,7 @@ function resolvePolicyRowTitle(policy, display) {
     }
   }
   const headline = display.headline.trim();
-  const verb = policyActionLabel$1(policy.action);
+  const verb = policyActionLabel(policy.action);
   if (headline.toLowerCase().startsWith(verb.toLowerCase())) {
     return headline.slice(verb.length).trim() || headline;
   }
@@ -1967,9 +1967,11 @@ function sortPolicyDecisions(policies, sort) {
       case "app":
         return compareText(harnessDisplayName(left.harness), harnessDisplayName(right.harness));
       case "updated": {
-        const leftTime = new Date(left.updated_at || 0).getTime();
-        const rightTime = new Date(right.updated_at || 0).getTime();
-        return direction * (leftTime - rightTime);
+        const leftTime = left.updated_at ? new Date(left.updated_at).getTime() : 0;
+        const rightTime = right.updated_at ? new Date(right.updated_at).getTime() : 0;
+        const leftVal = Number.isNaN(leftTime) ? 0 : leftTime;
+        const rightVal = Number.isNaN(rightTime) ? 0 : rightTime;
+        return direction * (leftVal - rightVal);
       }
       case "approval":
         return compareText(
@@ -2299,15 +2301,16 @@ function PolicyActiveModeCard({ snapshot }) {
   ] });
 }
 function escapeCsvCell(value) {
-  if (/[",\n]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
+  const str = value ?? "";
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
   }
-  return value;
+  return str;
 }
 function policyExportRow(policy) {
   const display = resolvePolicyDisplay(policy);
   return [
-    policyActionLabel$1(policy.action),
+    policyActionLabel(policy.action),
     resolvePolicyRowTitle(policy, display),
     display.kindLine ?? "",
     resolvePolicyRowSourceLabel(policy),
@@ -2486,7 +2489,7 @@ function PolicyActionBadge({ action }) {
       "Block"
     ] });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900", children: policyActionLabel$1(action) });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900", children: policyActionLabel(action) });
 }
 function resolveFamilyIcon(family) {
   if (family === "package-request") {
@@ -2604,7 +2607,7 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVar
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableCell, { className: "hidden w-[88px] lg:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-brand-dark", children: resolvePolicyRowSourceLabel(policy) }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableCell, { className: "hidden w-[104px] lg:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "text-sm font-medium text-brand-blue hover:underline", children: scopeTag }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableCell, { className: "hidden w-[104px] lg:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-blue", children: scopeTag }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableCell, { className: "hidden w-[96px] lg:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-brand-blue", children: harnessDisplayName(policy.harness) }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableCell, { className: "hidden w-[104px] whitespace-nowrap text-xs text-slate-500 lg:table-cell", children: policy.updated_at ? formatRelativeTime(policy.updated_at) : "—" }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs(EvidenceTableCell, { className: "hidden min-w-[132px] lg:table-cell", children: [
@@ -2632,15 +2635,6 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVar
           onClick: handleClear,
           className: "inline-flex items-center gap-1 text-xs font-medium text-rose-600 hover:text-rose-700",
           children: "Remove rule"
-        }
-      ) : null,
-      !cloudManaged ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          className: "rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-brand-dark",
-          "aria-label": "More actions",
-          children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEllipsisVertical, { className: "h-4 w-4", "aria-hidden": "true" })
         }
       ) : null
     ] }) })
@@ -3032,7 +3026,7 @@ function PolicyRememberedRulesTab({
         display.pathLine,
         display.projectLabel,
         harnessDisplayName(policy.harness),
-        policyActionLabel$1(policy.action)
+        policyActionLabel(policy.action)
       ].filter(Boolean).join(" ").toLowerCase();
       return displayHaystack.includes(query);
     });
@@ -3206,17 +3200,6 @@ function resolveStrictScenarioOutcome(scenarioId, settings) {
     outcome,
     reasoning: `Because New network domain action is set to ${policyActionLabel(outcome)}.`
   };
-}
-function policyActionLabel(action) {
-  const labels = {
-    allow: "Allow",
-    warn: "Warn",
-    review: "Review",
-    block: "Block",
-    "require-reapproval": "Ask every time",
-    "sandbox-required": "Sandbox required"
-  };
-  return labels[action] ?? action.replace(/_/g, " ");
 }
 function fingerprintLocalPolicySettings(settings) {
   const payload = JSON.stringify({
@@ -3620,7 +3603,7 @@ function PolicyStrictConfigTab({
   const lastReloadFormatted = formatPolicyDateTime(lastReloadAt);
   const lastAckAt = snapshot.cloud_policy_last_ack_at?.trim() ?? null;
   const daemonAckLabel = cloudBundleCopy?.tone === "green" ? "Acknowledged" : cloudBundleCopy?.label ?? "Pending";
-  const expectedAction = scenarioOutcome?.outcome ?? settings.new_network_domain_action;
+  const expectedAction = scenarioOutcome?.outcome ?? settings?.new_network_domain_action ?? "review";
   const expectedReasoning = scenarioOutcome?.reasoning ?? "";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
@@ -3679,7 +3662,7 @@ function PolicyStrictConfigTab({
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-[10px] font-semibold uppercase tracking-wider text-slate-500", children: "Daemon ack" }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("dd", { className: "mt-1.5 flex items-center gap-1.5 text-sm text-brand-dark", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 text-emerald-600", "aria-hidden": "true" }),
+              cloudBundleCopy?.tone === "green" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 text-emerald-600", "aria-hidden": "true" }) : null,
               /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
                 daemonAckLabel,
                 lastAckAt ? ` · ${formatRelativeTime(lastAckAt)}` : ""
@@ -3861,7 +3844,7 @@ function PolicyStrictConfigTab({
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 space-y-2", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-medium uppercase tracking-wide text-slate-500", children: "Expected action" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: resolveExpectedActionTone(expectedAction), children: policyActionLabel$1(expectedAction) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: resolveExpectedActionTone(expectedAction), children: policyActionLabel(expectedAction) }),
           expectedReasoning ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: expectedReasoning }) : null
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "secondary", onClick: handleRunSimulation, children: [
@@ -3871,7 +3854,7 @@ function PolicyStrictConfigTab({
         simulationVisible && simulation ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 rounded-xl border border-slate-100 bg-white p-4", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-brand-dark", children: [
             "Policy simulator outcome: ",
-            policyActionLabel$1(simulation.outcome),
+            policyActionLabel(simulation.outcome),
             " (",
             simulation.winningStep,
             ")"

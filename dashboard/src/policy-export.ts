@@ -8,11 +8,12 @@ import {
   resolvePolicyRowTitle,
 } from "./policy-workspace-helpers";
 
-function escapeCsvCell(value: string): string {
-  if (/[",\n]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
+function escapeCsvCell(value: string | null | undefined): string {
+  const str = value ?? "";
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
   }
-  return value;
+  return str;
 }
 
 function policyExportRow(policy: GuardPolicyDecision): string[] {

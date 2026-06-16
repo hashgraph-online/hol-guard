@@ -12787,9 +12787,6 @@ function HiMiniExclamationTriangle(props) {
 function HiMiniExclamationCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
-function HiMiniEllipsisVertical(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10 3a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM10 8.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM11.5 15.5a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0Z" }, "child": [] }] })(props);
-}
 function HiMiniDocumentText(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -27177,24 +27174,23 @@ export {
   fetchCloudExceptionRequests as bf,
   downloadBlob as bg,
   PaginationControls as bh,
-  HiMiniEllipsisVertical as bi,
-  HiMiniNoSymbol as bj,
-  HiMiniCube as bk,
-  HiMiniArrowDownTray as bl,
-  HiMiniQueueList as bm,
-  HiMiniArrowRight as bn,
-  HiMiniPlay as bo,
-  Surface as bp,
-  HiMiniCheckBadge as bq,
-  fetchSupplyChainBundle as br,
-  HiMiniDocumentMagnifyingGlass as bs,
-  HiMiniShieldExclamation as bt,
-  HiMiniComputerDesktop as bu,
-  HiMiniChevronLeft as bv,
-  HiMiniArrowDown as bw,
-  HiMiniArrowUp as bx,
-  runAuditRemediation as by,
-  HiMiniSignal as bz,
+  HiMiniNoSymbol as bi,
+  HiMiniCube as bj,
+  HiMiniArrowDownTray as bk,
+  HiMiniQueueList as bl,
+  HiMiniArrowRight as bm,
+  HiMiniPlay as bn,
+  Surface as bo,
+  HiMiniCheckBadge as bp,
+  fetchSupplyChainBundle as bq,
+  HiMiniDocumentMagnifyingGlass as br,
+  HiMiniShieldExclamation as bs,
+  HiMiniComputerDesktop as bt,
+  HiMiniChevronLeft as bu,
+  HiMiniArrowDown as bv,
+  HiMiniArrowUp as bw,
+  runAuditRemediation as bx,
+  HiMiniSignal as by,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,

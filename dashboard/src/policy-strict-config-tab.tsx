@@ -326,7 +326,7 @@ export function PolicyStrictConfigTab({
   const lastReloadFormatted = formatPolicyDateTime(lastReloadAt);
   const lastAckAt = snapshot.cloud_policy_last_ack_at?.trim() ?? null;
   const daemonAckLabel = cloudBundleCopy?.tone === "green" ? "Acknowledged" : cloudBundleCopy?.label ?? "Pending";
-  const expectedAction = scenarioOutcome?.outcome ?? settings.new_network_domain_action;
+  const expectedAction = scenarioOutcome?.outcome ?? settings?.new_network_domain_action ?? "review";
   const expectedReasoning = scenarioOutcome?.reasoning ?? "";
 
   return (
@@ -387,7 +387,9 @@ export function PolicyStrictConfigTab({
             <div>
               <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Daemon ack</dt>
               <dd className="mt-1.5 flex items-center gap-1.5 text-sm text-brand-dark">
-                <HiMiniCheckCircle className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                {cloudBundleCopy?.tone === "green" ? (
+                  <HiMiniCheckCircle className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                ) : null}
                 <span>
                   {daemonAckLabel}
                   {lastAckAt ? ` · ${formatRelativeTime(lastAckAt)}` : ""}

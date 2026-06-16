@@ -11,7 +11,6 @@ import {
   HiMiniShieldCheck,
   HiMiniNoSymbol,
   HiMiniCheckCircle,
-  HiMiniEllipsisVertical,
   HiMiniArrowTopRightOnSquare,
 } from "react-icons/hi2";
 import { EmptyState, PaginationControls, Tag } from "./approval-center-primitives";
@@ -227,9 +226,7 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVar
       </EvidenceTableCell>
 
       <EvidenceTableCell className="hidden w-[104px] lg:table-cell">
-        <button type="button" className="text-sm font-medium text-brand-blue hover:underline">
-          {scopeTag}
-        </button>
+        <span className="text-sm font-medium text-brand-blue">{scopeTag}</span>
       </EvidenceTableCell>
 
       <EvidenceTableCell className="hidden w-[96px] lg:table-cell">
@@ -267,15 +264,6 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVar
               className="inline-flex items-center gap-1 text-xs font-medium text-rose-600 hover:text-rose-700"
             >
               Remove rule
-            </button>
-          ) : null}
-          {!cloudManaged ? (
-            <button
-              type="button"
-              className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-brand-dark"
-              aria-label="More actions"
-            >
-              <HiMiniEllipsisVertical className="h-4 w-4" aria-hidden="true" />
             </button>
           ) : null}
         </div>
