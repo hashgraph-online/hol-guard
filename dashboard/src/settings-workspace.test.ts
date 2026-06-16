@@ -1,6 +1,7 @@
 import {
   buildClearPolicyPayload,
   buildClearReviewQueuePayload,
+  buildApprovalGateWriteProof,
   formatTotpEnrollmentExpiry,
   buildTotpQrImageOptions,
   formatTotpManualKey,
@@ -47,6 +48,17 @@ const clearQueuePayload = buildClearReviewQueuePayload({
 assert(clearQueuePayload.status === "pending", "T744: clearReviewQueue payload should target pending reviews");
 assert(clearQueuePayload.approval_password === "local-password", "T744: clearReviewQueue payload should include approval password");
 assert(clearQueuePayload.approval_totp_code === "123456", "T744: clearReviewQueue payload should include authenticator code");
+
+const writeProof = buildApprovalGateWriteProof({
+  currentPassword: "local-password",
+  totpCode: "123456",
+});
+assert(writeProof.approval_password === "local-password", "settings-write-proof: should map approval password");
+assert(writeProof.approval_totp_code === "123456", "settings-write-proof: should map authenticator code");
+assert(
+  Object.keys(buildApprovalGateWriteProof()).length === 0,
+  "settings-write-proof: empty credentials should omit proof fields",
+);
 
 assert(typeof repairApprovalCenter === "function", "T739: repairApprovalCenter should be exported as a function");
 assert(typeof setupDesktopNotifications === "function", "T740: setupDesktopNotifications should be exported as a function");

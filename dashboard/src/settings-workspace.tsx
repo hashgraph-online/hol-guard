@@ -29,6 +29,7 @@ import {
   fetchSettings,
   importSettings,
   resetSettings,
+  type ApprovalGateWriteProof,
   type GuardApprovalGateTotpEnrollment,
   updateSettings,
   clearPolicy,
@@ -106,6 +107,17 @@ export function buildClearReviewQueuePayload(input: {
     status: "pending",
     ...(input.approvalPassword ? { approval_password: input.approvalPassword } : {}),
     ...(input.approvalTotpCode ? { approval_totp_code: input.approvalTotpCode } : {}),
+  };
+}
+
+export function buildApprovalGateWriteProof(
+  credentials?: Pick<SettingsSaveProofCredentials, "currentPassword" | "totpCode">,
+): ApprovalGateWriteProof {
+  const approvalPassword = credentials?.currentPassword?.trim() ?? "";
+  const approvalTotpCode = credentials?.totpCode?.trim() ?? "";
+  return {
+    ...(approvalPassword.length > 0 ? { approval_password: approvalPassword } : {}),
+    ...(approvalTotpCode.length > 0 ? { approval_totp_code: approvalTotpCode } : {}),
   };
 }
 
@@ -461,7 +473,17 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const [proofModalPending, setProofModalPending] = useState(false);
   const [pendingProofAction, setPendingProofAction] = useState<
     | { kind: "save" }
-    | { kind: "maintenance"; action: "clear-approvals" | "clear-queue" | "revoke-cooldown" | "disable-totp" }
+    | {
+        kind: "maintenance";
+        action:
+          | "clear-approvals"
+          | "clear-queue"
+          | "revoke-cooldown"
+          | "disable-totp"
+          | "import-settings"
+          | "reset-settings";
+        importExport?: GuardSettingsExport;
+      }
     | null
   >(null);
 
@@ -883,6 +905,45 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     }
   }, [onApprovalGateChange]);
 
+  const executeImportSettings = useCallback(async (
+    settingsExport: GuardSettingsExport,
+    proof?: SettingsSaveProofCredentials,
+  ) => {
+    setImportingSettings(true);
+    setActionMessage(null);
+    try {
+      const payload = await importSettings(settingsExport, buildApprovalGateWriteProof(proof));
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      applyLoadedSettingsPayload(normalizedPayload);
+      setActionMessage("Settings imported.");
+      setActionMessageKind("success");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to import settings.");
+      setActionMessageKind("error");
+      throw error;
+    } finally {
+      setImportingSettings(false);
+    }
+  }, [applyLoadedSettingsPayload]);
+
+  const executeResetSettings = useCallback(async (proof?: SettingsSaveProofCredentials) => {
+    setResettingSettings(true);
+    setActionMessage(null);
+    try {
+      const payload = await resetSettings(buildApprovalGateWriteProof(proof));
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      applyLoadedSettingsPayload(normalizedPayload);
+      setActionMessage("Settings reset to defaults.");
+      setActionMessageKind("success");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to reset settings.");
+      setActionMessageKind("error");
+      throw error;
+    } finally {
+      setResettingSettings(false);
+    }
+  }, [applyLoadedSettingsPayload]);
+
   const handleProofModalConfirm = useCallback(async (proof: SettingsSaveProofCredentials) => {
     if (pendingProofAction === null) {
       return;
@@ -892,6 +953,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     try {
       if (pendingProofAction.kind === "save") {
         await executeSave(proof);
+      } else if (pendingProofAction.action === "import-settings") {
+        if (pendingProofAction.importExport === undefined) {
+          throw new Error("Missing settings import payload.");
+        }
+        await executeImportSettings(pendingProofAction.importExport, proof);
+      } else if (pendingProofAction.action === "reset-settings") {
+        await executeResetSettings(proof);
       } else {
         await executeMaintenanceWithProof(pendingProofAction.action, proof);
       }
@@ -902,7 +970,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     } finally {
       setProofModalPending(false);
     }
-  }, [pendingProofAction, executeSave, executeMaintenanceWithProof]);
+  }, [pendingProofAction, executeSave, executeImportSettings, executeResetSettings, executeMaintenanceWithProof]);
 
   const handleSave = useCallback(() => {
     if (draft === null) {
@@ -1148,41 +1216,39 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    setImportingSettings(true);
     setActionMessage(null);
     try {
       const text = await file.text();
       const parsed = JSON.parse(text) as GuardSettingsExport;
-      const payload = await importSettings(parsed, buildApprovalGateWriteProof());
-      const normalizedPayload = normalizeSettingsPayload(payload);
-      applyLoadedSettingsPayload(normalizedPayload);
-      setActionMessage("Settings imported.");
-      setActionMessageKind("success");
+      const savedGateEnabled = savedSettingsRef.current?.approval_gate?.enabled === true;
+      if (savedGateEnabled) {
+        openProofModal("maintenance", {
+          kind: "maintenance",
+          action: "import-settings",
+          importExport: parsed,
+        });
+        return;
+      }
+      await executeImportSettings(parsed);
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to import settings.");
       setActionMessageKind("error");
-    } finally {
-      setImportingSettings(false);
     }
-  }, [applyLoadedSettingsPayload, buildApprovalGateWriteProof]);
+  }, [executeImportSettings, openProofModal]);
 
   const handleResetSettings = useCallback(async () => {
     if (!window.confirm("Reset all local Guard settings to defaults? This cannot be undone.")) return;
-    setResettingSettings(true);
-    setActionMessage(null);
-    try {
-      const payload = await resetSettings(buildApprovalGateWriteProof());
-      const normalizedPayload = normalizeSettingsPayload(payload);
-      applyLoadedSettingsPayload(normalizedPayload);
-      setActionMessage("Settings reset to defaults.");
-      setActionMessageKind("success");
-    } catch (error) {
-      setActionMessage(error instanceof Error ? error.message : "Unable to reset settings.");
-      setActionMessageKind("error");
-    } finally {
-      setResettingSettings(false);
+    const savedGateEnabled = savedSettingsRef.current?.approval_gate?.enabled === true;
+    if (savedGateEnabled) {
+      openProofModal("maintenance", { kind: "maintenance", action: "reset-settings" });
+      return;
     }
-  }, [applyLoadedSettingsPayload, buildApprovalGateWriteProof]);
+    try {
+      await executeResetSettings();
+    } catch {
+      // executeResetSettings already surfaces the error message.
+    }
+  }, [executeResetSettings, openProofModal]);
 
   const handleSetupNotifications = useCallback(async () => {
     setSettingUpNotifications(true);
@@ -1667,7 +1733,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
               : undefined,
           })}
           error={proofModalError}
-          pending={proofModalPending || saving}
+          pending={proofModalPending || saving || importingSettings || resettingSettings}
           onCancel={closeProofModal}
           onConfirm={handleProofModalConfirm}
         />
