@@ -354,6 +354,7 @@ def _codex_post_tool_output_artifact(
     )
     runtime_request_summary = _codex_tool_output_runtime_summary(
         local_secret_source,
+        command_text=command_text,
         merged_output_capture=merged_output_capture,
     )
     metadata: dict[str, object] = {
@@ -370,6 +371,7 @@ def _codex_post_tool_output_artifact(
         "runtime_request_summary": runtime_request_summary,
         "runtime_request_reason": _codex_tool_output_runtime_reason(
             local_secret_source,
+            command_text=command_text,
             merged_output_capture=merged_output_capture,
         ),
     }
