@@ -1578,12 +1578,21 @@ def bulk_allow_read_only_once(
     if not gate.enabled or not gate.configured:
         raise ValueError("bulk_approve_gate_required")
 
+    if len(request_ids) == 0:
+        return {
+            "resolved_count": 0,
+            "failed": [],
+            "resolution_summary": "0 read-only file reads approved once.",
+        }
+
+    bulk_resolution_action = "allow"
+    bulk_resolution_scope = "artifact"
     resolved_count = 0
     failed: list[dict[str, str]] = []
     bulk_gate_grant = require_approval_decision(
         store.guard_home,
-        action="allow",
-        scope="artifact",
+        action=bulk_resolution_action,
+        scope=bulk_resolution_scope,
         approval_gate_input=approval_gate_input,
         now=resolved_at,
     )
@@ -1601,8 +1610,8 @@ def bulk_allow_read_only_once(
             apply_approval_resolution(
                 store=store,
                 request_id=normalized_id,
-                action="allow",
-                scope="artifact",
+                action=bulk_resolution_action,
+                scope=bulk_resolution_scope,
                 workspace=None,
                 reason="bulk approve once",
                 now=resolved_at,
