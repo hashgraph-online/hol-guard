@@ -613,9 +613,7 @@ def _item_from_artifact(
         raw_device_id = trust_attestation_context.get("deviceId")
         device_id = raw_device_id if isinstance(raw_device_id, str) and raw_device_id else None
         raw_installation_id = trust_attestation_context.get("installationId")
-        installation_id = (
-            raw_installation_id if isinstance(raw_installation_id, str) and raw_installation_id else None
-        )
+        installation_id = raw_installation_id if isinstance(raw_installation_id, str) and raw_installation_id else None
         raw_upload_id = trust_attestation_context.get("uploadId")
         upload_id = raw_upload_id if isinstance(raw_upload_id, str) and raw_upload_id else None
         raw_challenge_id = trust_attestation_context.get("challengeId")

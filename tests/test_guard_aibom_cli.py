@@ -293,60 +293,67 @@ def test_sync_aibom_snapshots_if_due_retries_empty_sync_after_interval(
 
 def test_inventory_snapshot_event_includes_device_id() -> None:
     snapshot = GuardAgentInventorySnapshot(
-        snapshot_id='snapshot-aibom-1',
-        agent_id='codex:local',
-        agent_type='codex',
-        generated_at='2026-06-10T12:00:00+00:00',
-        runtime_version='test',
+        snapshot_id="snapshot-aibom-1",
+        agent_id="codex:local",
+        agent_type="codex",
+        generated_at="2026-06-10T12:00:00+00:00",
+        runtime_version="test",
     )
 
     event = aibom_cli._inventory_snapshot_event(
         snapshot=snapshot,
-        workspace_id='workspace-1',
-        device_id='device-1',
-        generated_at='2026-06-10T12:00:00+00:00',
+        workspace_id="workspace-1",
+        device_id="device-1",
+        generated_at="2026-06-10T12:00:00+00:00",
     )
 
-    assert event['deviceId'] == 'device-1'
+    assert event["deviceId"] == "device-1"
 
 
 def test_resolve_trust_attestation_context_defaults_to_v1(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / 'guard')
-    monkeypatch.setattr(store, 'get_cloud_workspace_id', lambda: 'workspace-1')
-    monkeypatch.setattr(store, 'get_or_create_installation_id', lambda: 'device-1')
-    monkeypatch.delenv('GUARD_AIBOM_TRUST_ATTESTATION_V2', raising=False)
+    store = GuardStore(tmp_path / "guard")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    monkeypatch.setattr(store, "get_or_create_installation_id", lambda: "device-1")
+    monkeypatch.delenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", raising=False)
 
     context = aibom_cli._resolve_trust_attestation_context(
         store,
-        generated_at='2026-06-10T12:00:00+00:00',
+        generated_at="2026-06-10T12:00:00+00:00",
     )
 
-    assert context['workspaceId'] is None
-    assert context['deviceId'] is None
+    assert context["workspaceId"] is None
+    assert context["deviceId"] is None
 
 
 def test_resolve_trust_attestation_context_includes_workspace_device_for_v2(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    store = GuardStore(tmp_path / 'guard')
-    monkeypatch.setattr(store, 'get_cloud_workspace_id', lambda: 'workspace-1')
-    monkeypatch.setattr(store, 'get_or_create_installation_id', lambda: 'device-1')
-    monkeypatch.setenv('GUARD_AIBOM_TRUST_ATTESTATION_V2', '1')
+    store = GuardStore(tmp_path / "guard")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    monkeypatch.setattr(store, "get_or_create_installation_id", lambda: "device-1")
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", "1")
 
     context = aibom_cli._resolve_trust_attestation_context(
         store,
-        generated_at='2026-06-10T12:00:00+00:00',
+        generated_at="2026-06-10T12:00:00+00:00",
     )
 
-    assert context['workspaceId'] == 'workspace-1'
-    assert context['deviceId'] == 'device-1'
-    assert context['installationId'] == 'device-1'
-    assert isinstance(context['uploadId'], str) and context['uploadId'].startswith('guard-aibom-upload-')
-    assert isinstance(context['challengeId'], str) and context['challengeId'].startswith('guard-aibom-challenge-')
-    assert isinstance(context['nonce'], str) and context['nonce']
-    assert context['sequence'] == 1
-    assert context['expiresAt'] == '2026-06-10T12:15:00Z'
+    assert context["workspaceId"] == "workspace-1"
+    assert context["deviceId"] == "device-1"
+    assert context["installationId"] == "device-1"
+    assert isinstance(context["uploadId"], str) and context["uploadId"].startswith("guard-aibom-upload-")
+    assert isinstance(context["challengeId"], str) and context["challengeId"].startswith("guard-aibom-challenge-")
+    assert isinstance(context["nonce"], str) and context["nonce"]
+    assert context["sequence"] == 1
+    assert context["expiresAt"] == "2026-06-10T12:15:00Z"
+
+    second_context = aibom_cli._resolve_trust_attestation_context(
+        store,
+        generated_at="2026-06-10T12:05:00+00:00",
+    )
+
+    assert second_context["sequence"] == 2
 
 
 def test_sync_aibom_snapshots_404_backoff_isolated_from_guard_events_summary(
@@ -410,9 +417,7 @@ def test_sync_aibom_snapshots_404_backoff_isolated_from_guard_events_summary(
     assert aibom_backoff.get("sync_reason") == "guard_events_endpoint_unavailable"
 
 
-def test_collect_aibom_snapshots_passes_cisco_runs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_collect_aibom_snapshots_passes_cisco_runs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import aibom_cli
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
 
@@ -492,9 +497,7 @@ def test_collect_aibom_snapshots_passes_cisco_runs(
     assert snapshot_kwargs["cisco_runs"] == cisco_runs
 
 
-def test_sync_aibom_snapshots_uses_cloud_sync_cisco_defaults(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_sync_aibom_snapshots_uses_cloud_sync_cisco_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import aibom_cli
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
@@ -539,7 +542,8 @@ def test_sync_aibom_snapshots_uses_cloud_sync_cisco_defaults(
 
 
 def test_guard_aibom_sync_command_uses_cloud_sync_cisco_defaults(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard")
     context = HarnessContext(

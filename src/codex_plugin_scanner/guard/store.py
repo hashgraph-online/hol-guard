@@ -2441,6 +2441,7 @@ class GuardStore:
     def next_aibom_trust_attestation_sequence(self, now: str) -> int:
         state_key = "aibom_trust_attestation_sequence"
         with self._connect() as connection:
+            connection.execute("begin immediate")
             row = connection.execute(
                 "select payload_json from sync_state where state_key = ?",
                 (state_key,),
