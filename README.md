@@ -20,7 +20,7 @@
 
 | If you want to... | Install | Start with |
 | :--- | :--- | :--- |
-| protect Codex, Claude Code, Copilot CLI, Hermes, Cursor, Gemini, or OpenCode before tools run | `hol-guard` | `hol-guard start` |
+| protect Codex, Claude Code, Copilot CLI, Hermes, Cursor, Gemini, OpenCode, or ZCode before tools run | `hol-guard` | `hol-guard start` |
 | lint and verify packages in CI before release | `plugin-scanner` | `plugin-scanner verify .` |
 
 ## Guard Quickstart
@@ -138,6 +138,8 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
   Guard installs managed `PreToolUse` and `UserPromptSubmit` hooks in `~/.kimi-code/config.toml`, blocks with exit code `2` and a JSON `permissionDecision: "deny"` response, and fails open on hook crash or timeout.
 - `grok`
   Guard installs managed Grok hook JSON under `~/.grok/hooks/` plus permission deny rules in `~/.grok/managed_config.toml`, blocks with exit code `2` and a Grok-native `{"decision":"deny"}` response, and never reads `~/.grok/auth`.
+- `zcode`
+  Guard detects `~/.zcode/cli/config.json`, configured MCP servers, enabled plugins, the plugin cache, and plugin manifests; installs managed `PreToolUse` and `UserPromptSubmit` hooks in the config `hooks` section without touching user `mcp` or `plugins`; and blocks with exit code `2` and a `permissionDecision: "deny"` response.
 - `hermes`
   Guard installs a managed Hermes overlay bundle, routes MCP servers through Guard proxies, and prefers native-or-center delivery for blocked requests.
 - `gemini`

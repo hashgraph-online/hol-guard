@@ -19,6 +19,7 @@ _ADAPTER_SPECS: tuple[tuple[str, str], ...] = (
     (".kimi", "KimiHarnessAdapter"),
     (".openclaw", "OpenClawHarnessAdapter"),
     (".opencode", "OpenCodeHarnessAdapter"),
+    (".zcode", "ZCodeHarnessAdapter"),
 )
 
 
