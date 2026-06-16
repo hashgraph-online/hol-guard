@@ -166,6 +166,7 @@ def _redacted_path(path: str | Path | None, home_dir: Path) -> str | None:
         return None
     return redact_local_path(str(path), home_dir=home_dir)
 
+
 def _recommended_harness(harnesses: list[dict[str, object]]) -> dict[str, object] | None:
     if not harnesses:
         return None

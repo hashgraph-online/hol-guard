@@ -428,6 +428,8 @@ def _codex_post_tool_output_artifact(
         config_path=config_path,
         metadata=metadata,
     )
+
+
 def _codex_text_contains_sensitive_path_token(text: str, *, cwd: Path | None) -> bool:
     return bool(_codex_sensitive_path_matches_in_text(text, cwd=cwd))
 
