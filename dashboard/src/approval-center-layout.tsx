@@ -251,6 +251,7 @@ function renderInboxContent(props: LayoutProps): ReactNode {
       onResolve={props.onResolve}
       onGoHome={props.onGoHome}
       onRetryResume={props.onRetryResume}
+      onBulkApprove={props.onBulkApprove}
     />
   );
 }

@@ -85,8 +85,11 @@ import {
   type SemanticGroupId,
 } from "./queue-state";
 import { plainEnglishRequestTitle, whyPaused } from "./evidence/plain-english";
-import { requiresApprovalPasswordPrompt } from "./approval-gate-utils";
+import { requiresApprovalPasswordPrompt, type BulkGateCredentials } from "./approval-gate-utils";
 import { ApprovalPasswordModal } from "./approval-center-review-cards";
+import { guardAwareHref } from "./guard-api";
+import { QueueBulkApproveFlow } from "./queue-bulk-approve-flow";
+import { useQueueBulkApprove } from "./use-queue-bulk-approve";
 
 export type ReviewViewModel = {
   item: GuardApprovalRequest;
@@ -116,6 +119,7 @@ type ReviewWorkspaceProps = {
     approval_gate_use_cooldown?: boolean;
   }) => Promise<void> | void;
   onGoHome: () => void;
+  onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void | Promise<void>;
 };
 
 const scopeChoices = [
@@ -239,6 +243,13 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
     }
   }, [currentPage, pagedRequests, activeRequestId, props.onOpenRequest]);
 
+  const bulkApprove = useQueueBulkApprove({
+    items: requests,
+    approvalGate: props.approvalGate ?? null,
+    onBulkApprove: props.onBulkApprove,
+    settingsHref: guardAwareHref("/settings"),
+  });
+
   if (requests.length === 0) {
     return <ReviewEmptyState runtime={props.runtime} resolutionMessage={props.resolutionMessage} codexResume={props.codexResume} onRetryResume={props.onRetryResume} />;
   }
@@ -259,6 +270,18 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
         progress={progress}
         activeHarness={activeItem.harness}
       />
+
+      {bulkApprove.bulkFlowProps !== null && (
+        <QueueBulkApproveFlow {...bulkApprove.bulkFlowProps} />
+      )}
+      {bulkApprove.showSensitiveOnlyWarning && (
+        <div className="rounded-lg border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2">
+          <p className="text-xs text-brand-attention">
+            {bulkApprove.sensitiveFileReadCount} sensitive file{" "}
+            {bulkApprove.sensitiveFileReadCount === 1 ? "read" : "reads"} in queue — review each path before approving.
+          </p>
+        </div>
+      )}
 
       <div className="md:hidden">
         <button
@@ -295,6 +318,10 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
             onDateToChange={setDateTo}
             onPageChange={setPage}
             onOpenRequest={handleOpenRequest}
+            selectionMode={bulkApprove.bulkSelection.selectionMode}
+            isBulkSelectable={bulkApprove.bulkSelection.isSelectable}
+            isBulkSelected={bulkApprove.bulkSelection.isSelected}
+            onBulkToggleSelect={bulkApprove.bulkSelection.onToggle}
             ref={queueRef}
           />
         </div>
@@ -366,6 +393,10 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   onDateToChange: (date: string) => void;
   onPageChange: (page: number) => void;
   onOpenRequest: (requestId: string) => void;
+  selectionMode?: boolean;
+  isBulkSelectable?: (item: GuardApprovalRequest) => boolean;
+  isBulkSelected?: (item: GuardApprovalRequest) => boolean;
+  onBulkToggleSelect?: (item: GuardApprovalRequest) => void;
 }>(({
   requests,
   allFilteredRequests,
@@ -389,6 +420,10 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   onDateToChange,
   onPageChange,
   onOpenRequest,
+  selectionMode = false,
+  isBulkSelectable,
+  isBulkSelected,
+  onBulkToggleSelect,
 }, ref) => {
   const [showFilters, setShowFilters] = useState(false);
 
@@ -559,6 +594,10 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
               active={item.request_id === activeRequestId}
               index={index}
               onOpenRequest={onOpenRequest}
+              selectionMode={selectionMode}
+              selectable={isBulkSelectable?.(item) === true}
+              selected={isBulkSelected?.(item) === true}
+              onToggleSelect={onBulkToggleSelect}
             />
           ))
         ) : (
@@ -625,11 +664,15 @@ function SemanticFilterButton(props: {
   );
 }
 
-function QueueItemRow({ item, active, index, onOpenRequest }: {
+function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = false, selectable = false, selected = false, onToggleSelect }: {
   item: GuardApprovalRequest;
   active: boolean;
   index: number;
   onOpenRequest: (requestId: string) => void;
+  selectionMode?: boolean;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (item: GuardApprovalRequest) => void;
 }) {
   const isBlocked = item.policy_action === "block";
   const category = resolveQueueCategory(item);
@@ -638,21 +681,47 @@ function QueueItemRow({ item, active, index, onOpenRequest }: {
   const handleClick = useCallback(() => {
     onOpenRequest(item.request_id);
   }, [item.request_id, onOpenRequest]);
+  const handleCheckboxChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      event.stopPropagation();
+      onToggleSelect?.(item);
+    },
+    [item, onToggleSelect],
+  );
   return (
-    <button
-      onClick={handleClick}
-      role="option"
-      aria-selected={active}
-      aria-posinset={index + 1}
-      aria-setsize={undefined}
-      tabIndex={active ? 0 : -1}
-      className={`w-full rounded-lg py-2.5 px-2 text-left transition-all ${
+    <div
+      className={`w-full rounded-lg py-2.5 px-2 transition-all ${
         active
-          ? "border-brand-blue bg-brand-blue/[0.06]"
-          : "border-transparent bg-white hover:bg-slate-50"
+          ? "border border-brand-blue bg-brand-blue/[0.06]"
+          : "border border-transparent bg-white hover:bg-slate-50"
       }`}
     >
       <div className="flex items-center justify-between gap-2">
+        {selectionMode && selectable && (
+          <label
+            className="shrink-0"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={handleCheckboxChange}
+              className="h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30"
+            />
+            <span className="sr-only">Select for bulk approval</span>
+          </label>
+        )}
+        <button
+          type="button"
+          onClick={handleClick}
+          role="option"
+          aria-selected={active}
+          aria-posinset={index + 1}
+          aria-setsize={undefined}
+          tabIndex={active ? 0 : -1}
+          className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+        >
         <div className="flex min-w-0 items-center gap-2">
           <span
             className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
@@ -674,8 +743,9 @@ function QueueItemRow({ item, active, index, onOpenRequest }: {
         >
           <CategoryIcon className="h-4 w-4" aria-hidden="true" />
         </span>
+        </button>
       </div>
-    </button>
+    </div>
   );
 }
 
