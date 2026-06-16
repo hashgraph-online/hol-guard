@@ -396,8 +396,10 @@ def test_update_marks_plain_pipx_upgrade_as_stale_when_version_does_not_change(
         lambda name: "/mock-home/.local/bin/hol-guard" if name == "hol-guard" else None,
     )
 
+    captured_commands: list[list[str]] = []
+
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        assert command == ["pipx", "upgrade", "hol-guard"]
+        captured_commands.append(command)
         return subprocess.CompletedProcess(
             command,
             0,
@@ -410,11 +412,57 @@ def test_update_marks_plain_pipx_upgrade_as_stale_when_version_does_not_change(
     payload, exit_code = update_commands.run_guard_update(dry_run=False)
 
     assert exit_code == 0
+    assert captured_commands == [
+        ["pipx", "upgrade", "hol-guard"],
+        ["pipx", "install", "--force", "hol-guard"],
+    ]
     assert payload["status"] == "stale"
     assert payload["changed"] is False
     assert payload["resulting_version"] == "2.0.584"
     assert payload["retry_command"] == "pipx install --force hol-guard"
     assert "behind PyPI 2.0.585 after the update attempt" in str(payload["message"])
+
+
+def test_update_retries_force_pipx_install_when_upgrade_reaches_latest_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.584")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.585")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(
+        update_commands.shutil,
+        "which",
+        lambda name: "/mock-home/.local/bin/hol-guard" if name == "hol-guard" else None,
+    )
+
+    captured_commands: list[list[str]] = []
+    version_reads = iter(["2.0.584", "2.0.585"])
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: next(version_reads))
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured_commands.append(command)
+        if command == ["pipx", "upgrade", "hol-guard"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                "hol-guard is already at latest version 2.0.584",
+                "upgrading hol-guard...\n",
+            )
+        assert command == ["pipx", "install", "--force", "hol-guard"]
+        return subprocess.CompletedProcess(command, 0, "installed hol-guard 2.0.585", "")
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False)
+
+    assert exit_code == 0
+    assert captured_commands == [
+        ["pipx", "upgrade", "hol-guard"],
+        ["pipx", "install", "--force", "hol-guard"],
+    ]
+    assert payload["status"] == "updated"
+    assert payload["resulting_version"] == "2.0.585"
 
 
 def test_update_switches_git_install_to_pypi_when_release_is_newer(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,4 +1,4 @@
-import { buildGuardDaemonCandidatePorts, normalizeGuardUpdateStatus } from "./guard-api";
+import { buildGuardDaemonCandidatePorts, normalizeGuardUpdateStatus, updateReconnectSucceeded } from "./guard-api";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -73,5 +73,51 @@ assert(
 const candidatePorts = buildGuardDaemonCandidatePorts(5474);
 assert(candidatePorts.length === 25, "candidate port scan should probe 25 ports");
 assert(candidatePorts[0] === 5474, "candidate ports should start from the preferred port");
+
+const staleReconnectStatus = normalizeGuardUpdateStatus({
+  current_version: "2.0.741",
+  latest_version: "2.0.743",
+  installer: "pipx",
+  version_check: {
+    source: "pypi",
+    status: "stale",
+    current_version: "2.0.741",
+    latest_version: "2.0.743",
+    update_available: true,
+  },
+  auto_updatable: true,
+  update_available: true,
+  update_in_progress: false,
+});
+
+assert(
+  updateReconnectSucceeded(staleReconnectStatus, {
+    expectedPreviousVersion: "2.0.741",
+    expectedLatestVersion: "2.0.743",
+    sawUpdateInProgress: true,
+  }) === true,
+  "reconnect should succeed after update cycle when install remains stale",
+);
+assert(
+  updateReconnectSucceeded(staleReconnectStatus, {
+    expectedPreviousVersion: "2.0.741",
+    expectedLatestVersion: "2.0.743",
+    sawUpdateInProgress: false,
+  }) === false,
+  "reconnect should wait until update cycle starts",
+);
+
+const suppressed = normalizeGuardUpdateStatus({
+  current_version: "2.0.741",
+  latest_version: "2.0.743",
+  auto_updatable: true,
+  update_available: true,
+  update_suppressed: true,
+  retry_command: "pipx install --force hol-guard",
+  update_attempt_message: "HOL Guard 2.0.741 is behind PyPI 2.0.743 after the update attempt.",
+});
+
+assert(suppressed.update_suppressed === true, "update_suppressed should normalize");
+assert(suppressed.retry_command === "pipx install --force hol-guard", "retry_command should normalize");
 
 console.log("guard-update.test.ts: all tests passed");

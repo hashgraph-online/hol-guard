@@ -120,48 +120,64 @@ def run_guard_update(
         payload["changed"] = False
         payload["message"] = _planned_update_message(version_check=version_check, use_pypi=use_pypi)
         return payload, 0
-    try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            check=False,
-            text=True,
-        )
-    except OSError as error:
-        payload["status"] = "failed"
-        payload["changed"] = False
-        payload["error"] = redact_sensitive_text(str(error))
-        payload["message"] = "HOL Guard update failed before the installer started."
-        return payload, 1
-    payload["stdout"] = _normalize_output_text(result.stdout)
-    payload["stderr"] = _normalize_output_text(result.stderr)
-    payload["return_code"] = result.returncode
-    importlib.invalidate_caches()
-    payload["resulting_version"] = _current_version_from_subprocess()
-    initial_version_check = payload.get("version_check")
-    resulting_version = str(payload.get("resulting_version") or current_version)
-    post_version_check = _version_check_payload(resulting_version)
-    payload["post_version_check"] = post_version_check
-    payload["version_check"] = _merge_version_checks(
-        initial_version_check,
-        post_version_check,
-        resulting_version,
-    )
+    active_command = command
+    attempted_force_retry = False
     nonzero_success_note: str | None = None
-    if result.returncode != 0:
-        if _version_changed(current_version, resulting_version):
-            nonzero_success_note = (
-                "Installer exited with code "
-                f"{result.returncode} after version changed. "
-                "Review stderr for any follow-up action."
+    while True:
+        try:
+            result = subprocess.run(
+                active_command,
+                capture_output=True,
+                check=False,
+                text=True,
             )
-        payload["status"] = "failed"
-        payload["changed"] = False
-        payload["message"] = "HOL Guard update failed."
-        if nonzero_success_note is None:
+        except OSError as error:
+            payload["status"] = "failed"
+            payload["changed"] = False
+            payload["error"] = redact_sensitive_text(str(error))
+            payload["message"] = "HOL Guard update failed before the installer started."
             return payload, 1
-    payload["status"] = _success_status(payload)
-    payload["changed"] = _version_changed(current_version, resulting_version) or payload["status"] == "updated"
+        payload["command"] = active_command
+        payload["stdout"] = _normalize_output_text(result.stdout)
+        payload["stderr"] = _normalize_output_text(result.stderr)
+        payload["return_code"] = result.returncode
+        importlib.invalidate_caches()
+        payload["resulting_version"] = _current_version_from_subprocess()
+        initial_version_check = payload.get("version_check")
+        resulting_version = str(payload.get("resulting_version") or current_version)
+        post_version_check = _version_check_payload(resulting_version)
+        payload["post_version_check"] = post_version_check
+        payload["version_check"] = _merge_version_checks(
+            initial_version_check,
+            post_version_check,
+            resulting_version,
+        )
+        if result.returncode != 0:
+            if _version_changed(current_version, resulting_version):
+                nonzero_success_note = (
+                    "Installer exited with code "
+                    f"{result.returncode} after version changed. "
+                    "Review stderr for any follow-up action."
+                )
+            payload["status"] = "failed"
+            payload["changed"] = False
+            payload["message"] = "HOL Guard update failed."
+            if nonzero_success_note is None:
+                return payload, 1
+        payload["status"] = _success_status(payload)
+        payload["changed"] = _version_changed(current_version, resulting_version) or payload["status"] == "updated"
+        if (
+            not attempted_force_retry
+            and not force_pypi_reinstall
+            and payload.get("status") == "stale"
+        ):
+            retry_command = _update_command(installer, use_pypi=True)
+            if retry_command != active_command:
+                attempted_force_retry = True
+                active_command = retry_command
+                payload["upgrade_source"] = "pypi"
+                continue
+        break
     stale_retry_command = _stale_retry_command(payload)
     if stale_retry_command:
         payload["retry_command"] = stale_retry_command

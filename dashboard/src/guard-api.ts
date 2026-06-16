@@ -308,12 +308,15 @@ export async function discoverGuardDaemonOrigin(preferredPort = preferredGuardDa
   return probeGuardDaemonCandidatePortsInBatches(ports, async (_port, origin) => probeGuardDaemonHealth(origin));
 }
 
-function updateReconnectSucceeded(
+export function updateReconnectSucceeded(
   status: GuardUpdateStatus,
   options: GuardUpdateReconnectOptions,
 ): boolean {
   if (!options.expectedPreviousVersion) {
     return true;
+  }
+  if (status.update_in_progress === true) {
+    return false;
   }
   if (status.update_available !== true) {
     return true;
@@ -324,7 +327,10 @@ function updateReconnectSucceeded(
   ) {
     return true;
   }
-  return status.current_version !== options.expectedPreviousVersion;
+  if (status.current_version !== options.expectedPreviousVersion) {
+    return true;
+  }
+  return options.sawUpdateInProgress === true;
 }
 
 async function initializeGuardDashboardSessionAtOrigin(
@@ -384,11 +390,12 @@ export function redirectToGuardDaemonOrigin(
 
 export async function reconnectGuardDaemonAfterUpdate(
   options?: GuardUpdateReconnectOptions,
-): Promise<string | null> {
+): Promise<{ origin: string; status: GuardUpdateStatus; sawUpdateInProgress: boolean } | null> {
   const guardToken = readGuardToken();
   const reconnectOptions = options ?? {};
   const awaitingVersionChange = Boolean(reconnectOptions.expectedPreviousVersion);
   const ports = buildGuardDaemonCandidatePorts(preferredGuardDaemonPort());
+  let sawUpdateInProgress = reconnectOptions.sawUpdateInProgress === true;
 
   for (let index = 0; index < ports.length; index += GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE) {
     const batch = ports.slice(index, index + GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE);
@@ -400,7 +407,11 @@ export async function reconnectGuardDaemonAfterUpdate(
         }
         try {
           const status = await fetchGuardUpdateStatusAtOrigin(origin, guardToken);
-          if (awaitingVersionChange && !updateReconnectSucceeded(status, reconnectOptions)) {
+          if (status.update_in_progress === true) {
+            sawUpdateInProgress = true;
+            return null;
+          }
+          if (awaitingVersionChange && !updateReconnectSucceeded(status, { ...reconnectOptions, sawUpdateInProgress })) {
             return null;
           }
           return { origin, status };
@@ -415,14 +426,14 @@ export async function reconnectGuardDaemonAfterUpdate(
       continue;
     }
 
-    const { origin } = active;
+    const { origin, status } = active;
     saveGuardDaemonOrigin(origin);
     const refreshedToken = await initializeGuardDashboardSessionAtOrigin(origin, guardToken);
     if (refreshedToken) {
       saveGuardToken(refreshedToken);
     }
 
-    return origin;
+    return { origin, status, sawUpdateInProgress };
   }
 
   return null;
@@ -2069,6 +2080,10 @@ export function normalizeGuardUpdateStatus(raw: unknown): GuardUpdateStatus {
         : undefined,
     update_in_progress:
       typeof value.update_in_progress === "boolean" ? value.update_in_progress : undefined,
+    update_suppressed: value.update_suppressed === true ? true : undefined,
+    retry_command: typeof value.retry_command === "string" ? value.retry_command : undefined,
+    update_attempt_message:
+      typeof value.update_attempt_message === "string" ? value.update_attempt_message : undefined,
   };
 }
 

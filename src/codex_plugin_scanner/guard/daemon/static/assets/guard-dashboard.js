@@ -14209,13 +14209,19 @@ function updateReconnectSucceeded(status, options) {
   if (!options.expectedPreviousVersion) {
     return true;
   }
+  if (status.update_in_progress === true) {
+    return false;
+  }
   if (status.update_available !== true) {
     return true;
   }
   if (options.expectedLatestVersion && status.current_version === options.expectedLatestVersion) {
     return true;
   }
-  return status.current_version !== options.expectedPreviousVersion;
+  if (status.current_version !== options.expectedPreviousVersion) {
+    return true;
+  }
+  return options.sawUpdateInProgress === true;
 }
 async function initializeGuardDashboardSessionAtOrigin(origin, guardToken) {
   try {
@@ -14265,6 +14271,7 @@ async function reconnectGuardDaemonAfterUpdate(options) {
   const reconnectOptions = options ?? {};
   const awaitingVersionChange = Boolean(reconnectOptions.expectedPreviousVersion);
   const ports = buildGuardDaemonCandidatePorts(preferredGuardDaemonPort());
+  let sawUpdateInProgress = reconnectOptions.sawUpdateInProgress === true;
   for (let index = 0; index < ports.length; index += GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE) {
     const batch = ports.slice(index, index + GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE);
     const results = await Promise.all(
@@ -14274,11 +14281,15 @@ async function reconnectGuardDaemonAfterUpdate(options) {
           return null;
         }
         try {
-          const status = await fetchGuardUpdateStatusAtOrigin(origin2, guardToken);
-          if (awaitingVersionChange && !updateReconnectSucceeded(status, reconnectOptions)) {
+          const status2 = await fetchGuardUpdateStatusAtOrigin(origin2, guardToken);
+          if (status2.update_in_progress === true) {
+            sawUpdateInProgress = true;
             return null;
           }
-          return { origin: origin2, status };
+          if (awaitingVersionChange && !updateReconnectSucceeded(status2, { ...reconnectOptions, sawUpdateInProgress })) {
+            return null;
+          }
+          return { origin: origin2, status: status2 };
         } catch {
           return null;
         }
@@ -14288,13 +14299,13 @@ async function reconnectGuardDaemonAfterUpdate(options) {
     if (!active) {
       continue;
     }
-    const { origin } = active;
+    const { origin, status } = active;
     saveGuardDaemonOrigin(origin);
     const refreshedToken = await initializeGuardDashboardSessionAtOrigin(origin, guardToken);
     if (refreshedToken) {
       saveGuardToken(refreshedToken);
     }
-    return origin;
+    return { origin, status, sawUpdateInProgress };
   }
   return null;
 }
@@ -15590,7 +15601,10 @@ function normalizeGuardUpdateStatus(raw) {
     blocked_reason: stringValue(value.blocked_reason),
     recovery_reinstall_available: value.recovery_reinstall_available === true ? true : void 0,
     recovery_reinstall_command: typeof value.recovery_reinstall_command === "string" ? value.recovery_reinstall_command : void 0,
-    update_in_progress: typeof value.update_in_progress === "boolean" ? value.update_in_progress : void 0
+    update_in_progress: typeof value.update_in_progress === "boolean" ? value.update_in_progress : void 0,
+    update_suppressed: value.update_suppressed === true ? true : void 0,
+    retry_command: typeof value.retry_command === "string" ? value.retry_command : void 0,
+    update_attempt_message: typeof value.update_attempt_message === "string" ? value.update_attempt_message : void 0
   };
 }
 async function fetchGuardUpdateStatus() {
@@ -16203,6 +16217,15 @@ function updateHelpCopy(status, phase) {
   if (phase === "error") {
     return "The update did not finish. Try again or run hol-guard update from your terminal.";
   }
+  if (status?.update_suppressed) {
+    if (status.retry_command) {
+      return `Automatic update already ran but this install is still behind. Run ${status.retry_command} in your terminal.`;
+    }
+    if (status.update_attempt_message) {
+      return status.update_attempt_message;
+    }
+    return "Automatic update already ran but this install is still behind the latest release.";
+  }
   if (status?.update_available) {
     return "This restarts Guard for a moment. Open approvals will stay saved.";
   }
@@ -16218,7 +16241,7 @@ function GuardUpdatePanel(props) {
   const version = props.guardVersion ?? props.updateStatus?.current_version ?? null;
   const phase = props.updatePhase ?? "idle";
   const helpCopy = updateHelpCopy(props.updateStatus, phase);
-  const showUpdateButton = props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && phase !== "updating" && phase !== "reconnecting";
+  const showUpdateButton = props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && props.updateStatus.update_suppressed !== true && phase !== "updating" && phase !== "reconnecting";
   const showReinstallButton = props.updateStatus?.recovery_reinstall_available === true && props.updateStatus.auto_updatable !== true && phase !== "updating" && phase !== "reconnecting";
   const busy = phase === "updating" || phase === "reconnecting";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: props.compact ? "space-y-1" : "space-y-2", children: [
@@ -16305,15 +16328,19 @@ function useGuardUpdate(options) {
   const waitForReconnect = reactExports.useCallback(
     async (expectedPreviousVersion, expectedLatestVersion) => {
       reconnectStartedAt.current = Date.now();
+      let sawUpdateInProgress = false;
       while (Date.now() - (reconnectStartedAt.current ?? Date.now()) < RECONNECT_TIMEOUT_MS) {
         try {
-          const origin = await reconnectGuardDaemonAfterUpdate({
+          const reconnectResult = await reconnectGuardDaemonAfterUpdate({
             expectedPreviousVersion,
-            expectedLatestVersion
+            expectedLatestVersion,
+            sawUpdateInProgress
           });
-          if (!origin) {
+          if (!reconnectResult) {
             throw new Error("Guard daemon not found");
           }
+          sawUpdateInProgress = reconnectResult.sawUpdateInProgress;
+          const { origin } = reconnectResult;
           if (origin !== window.location.origin) {
             redirectToGuardDaemonOrigin(origin, readGuardToken());
             return true;
