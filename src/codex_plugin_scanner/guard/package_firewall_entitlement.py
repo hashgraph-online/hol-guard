@@ -203,6 +203,33 @@ def _requires_guard_cloud_connect(
     return not (bundle is not None and bool(bundle.get("allowed")))
 
 
+def reconcile_connect_state_with_oauth_entitlement(
+    store: GuardStore,
+    *,
+    now: str,
+) -> dict[str, object] | None:
+    """Clear stale sync_not_available when OAuth credentials reflect a paid plan."""
+    latest_state = store.get_effective_guard_connect_state(now=now)
+    if not isinstance(latest_state, dict):
+        return None
+    milestone = _optional_string(latest_state.get("milestone"))
+    if milestone != "sync_not_available":
+        return None
+    oauth_payload = store.get_sync_payload("oauth_local_credentials")
+    oauth_fields = _oauth_entitlement_fields_from_sync_payload(oauth_payload)
+    if not isinstance(oauth_fields, dict):
+        return None
+    plan_id = _optional_string(oauth_fields.get("supply_chain_plan_id"))
+    if plan_id is None or plan_id.lower() not in PACKAGE_FIREWALL_PAID_TIERS:
+        return None
+    return store.record_latest_guard_connect_sync_result(
+        status="connected",
+        milestone="first_sync_pending",
+        now=now,
+        reason=None,
+    )
+
+
 def resolve_package_firewall_entitlement(
     store: GuardStore,
     *,

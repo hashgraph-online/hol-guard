@@ -32,6 +32,7 @@ def test_finalize_guard_connect_payload_keeps_first_sync_pending_on_transient_sy
         _store: GuardStore,
         *,
         auth_context: dict[str, object] | None = None,
+        now: str | None = None,
     ) -> dict[str, object]:
         assert auth_context is None
         raise RuntimeError("temporary receipt sync failure")
@@ -80,6 +81,7 @@ def test_finalize_guard_connect_payload_keeps_first_sync_pending_on_sync_lock_ti
         _store: GuardStore,
         *,
         auth_context: dict[str, object] | None = None,
+        now: str | None = None,
     ) -> dict[str, object]:
         assert auth_context is None
         raise TimeoutError("Timed out waiting for Guard Cloud sync lock.")
@@ -121,6 +123,7 @@ def test_finalize_guard_connect_payload_uses_fresh_oauth_access_token_once(tmp_p
         _store: GuardStore,
         *,
         auth_context: dict[str, object] | None = None,
+        now: str | None = None,
     ) -> dict[str, object]:
         sync_calls.append(auth_context)
         return {
@@ -223,6 +226,7 @@ def test_daemon_finalize_guard_connect_payload_uses_fresh_oauth_access_token_onc
         _store: GuardStore,
         *,
         auth_context: dict[str, object] | None = None,
+        now: str | None = None,
     ) -> dict[str, object]:
         sync_calls.append(auth_context)
         return {
@@ -324,6 +328,7 @@ def test_daemon_finalize_guard_connect_payload_keeps_first_sync_pending_on_sync_
         _store: GuardStore,
         *,
         auth_context: dict[str, object] | None = None,
+        now: str | None = None,
     ) -> dict[str, object]:
         assert auth_context is None
         raise TimeoutError("Timed out waiting for Guard Cloud sync lock.")
@@ -457,6 +462,7 @@ def test_finalize_guard_connect_payload_keeps_reauth_failures_in_retry_required_
         _store: GuardStore,
         *,
         auth_context: dict[str, object] | None = None,
+        now: str | None = None,
     ) -> dict[str, object]:
         assert auth_context is None
         raise guard_commands_module.GuardSyncAuthorizationExpiredError("reauth required")
@@ -498,7 +504,12 @@ def test_headless_first_sync_auth_expiry_marks_connect_state_for_repair(tmp_path
         lambda: {"configured": True, "state": "healthy"},
     )
 
-    def _raise_auth_expired(_store: GuardStore) -> dict[str, object]:
+    def _raise_auth_expired(
+        _store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+        now: str | None = None,
+    ) -> dict[str, object]:
         raise guard_commands_module.GuardSyncAuthorizationExpiredError("reauth required")
 
     def _record_queue(*, store: GuardStore) -> dict[str, object]:

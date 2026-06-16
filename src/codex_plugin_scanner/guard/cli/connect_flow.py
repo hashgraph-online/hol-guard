@@ -19,7 +19,10 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 from ...version import __version__
-from ..package_firewall_entitlement import build_oauth_package_firewall_entitlement
+from ..package_firewall_entitlement import (
+    build_oauth_package_firewall_entitlement,
+    reconcile_connect_state_with_oauth_entitlement,
+)
 from ..runtime.runner import prepare_guard_cloud_connect_authorization
 from ..store import GuardStore
 from ..store_connect import build_connect_state_response
@@ -866,6 +869,7 @@ def _persist_oauth_local_credentials(
         runtime_label=runtime_label,
         now=now,
     )
+    reconcile_connect_state_with_oauth_entitlement(store, now=now)
 
 
 def run_guard_disconnect_command(

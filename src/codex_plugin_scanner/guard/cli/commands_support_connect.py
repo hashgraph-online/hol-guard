@@ -255,6 +255,7 @@ def _finalize_guard_connect_payload(
         sync_payload = sync_local_guard_cloud_proof(
             store,
             auth_context=resolved_sync_auth_context,
+            now=now,
         )
     except GuardSyncNotAvailableError as error:
         store.record_latest_guard_connect_sync_result(
