@@ -78,6 +78,10 @@ def _run_guard_hook_command(
         from ..adapters.grok_hooks import prepare_grok_hook_payload
 
         payload = _normalize_hook_payload(prepare_grok_hook_payload(payload), harness=args.harness)
+    if _canonical_harness_name(args.harness) == "zcode":
+        from ..adapters.zcode_hooks import prepare_zcode_hook_payload
+
+        payload = _normalize_hook_payload(prepare_zcode_hook_payload(payload), harness=args.harness)
     managed_install = _managed_install_for(store, args.harness)
     workspace_was_explicit = workspace is not None
     runtime_workspace = workspace

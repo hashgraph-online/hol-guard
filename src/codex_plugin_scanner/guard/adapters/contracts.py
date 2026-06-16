@@ -139,6 +139,7 @@ _DISPLAY_NAMES = {
     "antigravity": "Antigravity",
     "kimi": "Kimi",
     "grok": "Grok",
+    "zcode": "ZCode",
 }
 
 
@@ -313,6 +314,23 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
             "prompt policy but PreToolUse hooks still run when installed."
         ),
         smoke_command="hol-guard install grok --dry-run",
+    ),
+    HarnessProtectionContract(
+        harness="zcode",
+        install_aliases=("zcode", "zai", "z-code", "zai-zcode"),
+        config_paths=(
+            "~/.zcode/cli/config.json",
+            "~/.zcode/cli/plugins/",
+        ),
+        event_surfaces=("shell", "prompt", "mcp_tool", "file_read"),
+        native_approval=False,
+        browser_fallback=True,
+        resume_support=False,
+        known_blind_spots=(
+            "Inline edits applied directly by the model without a tool call are not visible to Guard, "
+            "and background sessions that run without an active terminal do not surface hook events."
+        ),
+        smoke_command="hol-guard install zcode --dry-run",
     ),
 )
 

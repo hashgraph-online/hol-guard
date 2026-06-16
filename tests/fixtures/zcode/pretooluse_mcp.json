@@ -1,0 +1,12 @@
+{
+  "hookEventName": "pre_tool_use",
+  "sessionId": "session-redacted-002",
+  "cwd": "<workspace>",
+  "workspaceRoot": "<workspace>",
+  "toolName": "mcp__lean-ctx__ctx_call",
+  "toolInput": {
+    "name": "ctx_call",
+    "arguments": {"tool": "shell", "command": "ls"}
+  },
+  "timestamp": "2026-06-16T12:00:01Z"
+}

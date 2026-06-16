@@ -206,6 +206,16 @@ def _run_hook_generic_payload(
                 reason=block_reason,
                 output_stream=output_stream,
             )
+        elif _canonical_harness_name(args.harness) == "zcode":
+            from ..adapters.zcode_hooks import emit_zcode_hook_response
+
+            emit_zcode_hook_response(
+                policy_action=policy_action,
+                reason=block_reason,
+                event_name=hook_event_name,
+                payload=payload_map,
+                output_stream=output_stream,
+            )
         # Kimi surfaces stderr to the user as the blocking explanation.
         _emit_native_hook_block_stderr(block_reason)
         return 2
@@ -241,6 +251,17 @@ def _run_hook_generic_payload(
             emit_grok_hook_response(
                 policy_action=policy_action,
                 reason=reason,
+                output_stream=output_stream,
+            )
+            return 0 if policy_action not in {"block", "sandbox-required", "require-reapproval"} else 2
+        if _canonical_harness_name(args.harness) == "zcode":
+            from ..adapters.zcode_hooks import emit_zcode_hook_response
+
+            emit_zcode_hook_response(
+                policy_action=policy_action,
+                reason=reason,
+                event_name=hook_event_name,
+                payload=payload_map,
                 output_stream=output_stream,
             )
             return 0 if policy_action not in {"block", "sandbox-required", "require-reapproval"} else 2
