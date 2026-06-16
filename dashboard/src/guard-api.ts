@@ -390,7 +390,7 @@ export function redirectToGuardDaemonOrigin(
 
 export async function reconnectGuardDaemonAfterUpdate(
   options?: GuardUpdateReconnectOptions,
-): Promise<{ origin: string; status: GuardUpdateStatus; sawUpdateInProgress: boolean } | null> {
+): Promise<{ origin: string | null; status: GuardUpdateStatus | null; sawUpdateInProgress: boolean } | null> {
   const guardToken = readGuardToken();
   const reconnectOptions = options ?? {};
   const awaitingVersionChange = Boolean(reconnectOptions.expectedPreviousVersion);
@@ -408,32 +408,37 @@ export async function reconnectGuardDaemonAfterUpdate(
         try {
           const status = await fetchGuardUpdateStatusAtOrigin(origin, guardToken);
           if (status.update_in_progress === true) {
-            sawUpdateInProgress = true;
-            return null;
+            return { origin: null, status: null, sawUpdateInProgress: true };
           }
           if (awaitingVersionChange && !updateReconnectSucceeded(status, { ...reconnectOptions, sawUpdateInProgress })) {
-            return null;
+            return { origin: null, status: null, sawUpdateInProgress };
           }
-          return { origin, status };
+          return { origin, status, sawUpdateInProgress };
         } catch {
           return null;
         }
       }),
     );
 
-    const active = results.find((result) => result !== null);
-    if (!active) {
-      continue;
+    const active = results.find((result) => result !== null && result.origin !== null && result.status !== null);
+    if (active?.origin && active.status) {
+      saveGuardDaemonOrigin(active.origin);
+      const refreshedToken = await initializeGuardDashboardSessionAtOrigin(active.origin, guardToken);
+      if (refreshedToken) {
+        saveGuardToken(refreshedToken);
+      }
+      return {
+        origin: active.origin,
+        status: active.status,
+        sawUpdateInProgress: active.sawUpdateInProgress,
+      };
     }
 
-    const { origin, status } = active;
-    saveGuardDaemonOrigin(origin);
-    const refreshedToken = await initializeGuardDashboardSessionAtOrigin(origin, guardToken);
-    if (refreshedToken) {
-      saveGuardToken(refreshedToken);
+    const partial = results.find((result) => result !== null);
+    if (partial) {
+      sawUpdateInProgress = partial.sawUpdateInProgress;
+      return { origin: null, status: null, sawUpdateInProgress };
     }
-
-    return { origin, status, sawUpdateInProgress };
   }
 
   return null;

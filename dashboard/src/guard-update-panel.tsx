@@ -190,6 +190,9 @@ export function useGuardUpdate(options?: { onReconnected?: () => void }) {
             throw new Error("Guard daemon not found");
           }
           sawUpdateInProgress = reconnectResult.sawUpdateInProgress;
+          if (!reconnectResult.origin) {
+            throw new Error("Guard daemon not ready");
+          }
           const { origin } = reconnectResult;
           if (origin !== window.location.origin) {
             redirectToGuardDaemonOrigin(origin, readGuardToken());

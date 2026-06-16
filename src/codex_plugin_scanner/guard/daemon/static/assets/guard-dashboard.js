@@ -14276,36 +14276,42 @@ async function reconnectGuardDaemonAfterUpdate(options) {
     const batch = ports.slice(index, index + GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE);
     const results = await Promise.all(
       batch.map(async (port) => {
-        const origin2 = `http://127.0.0.1:${port}`;
-        if (!await probeGuardDaemonHealth(origin2)) {
+        const origin = `http://127.0.0.1:${port}`;
+        if (!await probeGuardDaemonHealth(origin)) {
           return null;
         }
         try {
-          const status2 = await fetchGuardUpdateStatusAtOrigin(origin2, guardToken);
-          if (status2.update_in_progress === true) {
-            sawUpdateInProgress = true;
-            return null;
+          const status = await fetchGuardUpdateStatusAtOrigin(origin, guardToken);
+          if (status.update_in_progress === true) {
+            return { origin: null, status: null, sawUpdateInProgress: true };
           }
-          if (awaitingVersionChange && !updateReconnectSucceeded(status2, { ...reconnectOptions, sawUpdateInProgress })) {
-            return null;
+          if (awaitingVersionChange && !updateReconnectSucceeded(status, { ...reconnectOptions, sawUpdateInProgress })) {
+            return { origin: null, status: null, sawUpdateInProgress };
           }
-          return { origin: origin2, status: status2 };
+          return { origin, status, sawUpdateInProgress };
         } catch {
           return null;
         }
       })
     );
-    const active = results.find((result) => result !== null);
-    if (!active) {
-      continue;
+    const active = results.find((result) => result !== null && result.origin !== null && result.status !== null);
+    if (active?.origin && active.status) {
+      saveGuardDaemonOrigin(active.origin);
+      const refreshedToken = await initializeGuardDashboardSessionAtOrigin(active.origin, guardToken);
+      if (refreshedToken) {
+        saveGuardToken(refreshedToken);
+      }
+      return {
+        origin: active.origin,
+        status: active.status,
+        sawUpdateInProgress: active.sawUpdateInProgress
+      };
     }
-    const { origin, status } = active;
-    saveGuardDaemonOrigin(origin);
-    const refreshedToken = await initializeGuardDashboardSessionAtOrigin(origin, guardToken);
-    if (refreshedToken) {
-      saveGuardToken(refreshedToken);
+    const partial = results.find((result) => result !== null);
+    if (partial) {
+      sawUpdateInProgress = partial.sawUpdateInProgress;
+      return { origin: null, status: null, sawUpdateInProgress };
     }
-    return { origin, status, sawUpdateInProgress };
   }
   return null;
 }
@@ -16340,6 +16346,9 @@ function useGuardUpdate(options) {
             throw new Error("Guard daemon not found");
           }
           sawUpdateInProgress = reconnectResult.sawUpdateInProgress;
+          if (!reconnectResult.origin) {
+            throw new Error("Guard daemon not ready");
+          }
           const { origin } = reconnectResult;
           if (origin !== window.location.origin) {
             redirectToGuardDaemonOrigin(origin, readGuardToken());
