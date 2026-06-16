@@ -166,11 +166,7 @@ def run_guard_update(
                 return payload, 1
         payload["status"] = _success_status(payload)
         payload["changed"] = _version_changed(current_version, resulting_version) or payload["status"] == "updated"
-        if (
-            not attempted_force_retry
-            and not force_pypi_reinstall
-            and payload.get("status") == "stale"
-        ):
+        if not attempted_force_retry and not force_pypi_reinstall and payload.get("status") == "stale":
             retry_command = _update_command(installer, use_pypi=True)
             if retry_command != active_command:
                 attempted_force_retry = True
