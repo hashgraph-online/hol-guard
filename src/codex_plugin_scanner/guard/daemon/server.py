@@ -53,6 +53,7 @@ from ..approvals import (
     ApprovalRequestAlreadyResolvedError,
     ApprovalRequestNotFoundError,
     apply_approval_resolution,
+    bulk_allow_read_only_once,
     build_runtime_snapshot,
 )
 from ..cli.connect_flow import (
@@ -1392,6 +1393,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/requests/clear":
             self._handle_requests_clear(payload)
+            return
+        if parsed.path == "/v1/requests/bulk-allow-once":
+            self._handle_bulk_allow_read_once(payload)
             return
         if parsed.path == "/v1/policy/sync":
             self._handle_headless_policy_sync(payload)
@@ -3048,6 +3052,45 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         self._write_json({"cleared": cleared, "status": status, "harness": harness})
 
+    def _handle_bulk_allow_read_once(self, payload: dict[str, object]) -> None:
+        request_ids = payload.get("request_ids")
+        if not isinstance(request_ids, list) or len(request_ids) == 0:
+            self._write_json({"error": "missing_request_ids", "resolved_count": 0, "failed": []}, status=400)
+            return
+        normalized_ids = [
+            str(item).strip()
+            for item in request_ids
+            if isinstance(item, str) and str(item).strip()
+        ]
+        if len(normalized_ids) == 0:
+            self._write_json({"error": "missing_request_ids", "resolved_count": 0, "failed": []}, status=400)
+            return
+        try:
+            result = bulk_allow_read_only_once(
+                store=self.server.store,  # type: ignore[attr-defined]
+                request_ids=normalized_ids,
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+            )
+        except ValueError as error:
+            if str(error) == "bulk_approve_gate_required":
+                self._write_json(
+                    {"error": str(error), "resolved_count": 0, "failed": []},
+                    status=403,
+                )
+                return
+            self._write_json(
+                {"error": str(error), "resolved_count": 0, "failed": []},
+                status=400,
+            )
+            return
+        except ApprovalGateError as error:
+            error_payload = error.to_payload()
+            error_payload.setdefault("resolved_count", 0)
+            error_payload.setdefault("failed", [])
+            self._write_json(error_payload, status=error.status)
+            return
+        self._write_json(result)
+
     def _harness_context(self, payload: dict[str, object]) -> HarnessContext:
         del payload
         return HarnessContext(
@@ -3982,6 +4025,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/operations/block",
             "/v1/policy/sync",
             "/v1/requests/clear",
+            "/v1/requests/bulk-allow-once",
             "/v1/requests/remote-once",
             "/v1/settings/import",
             "/v1/settings/reset",
@@ -4625,6 +4669,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/policy/clear",
             "/v1/policy/sync",
             "/v1/requests/clear",
+            "/v1/requests/bulk-allow-once",
             "/v1/requests/remote-once",
             "/v1/settings",
             "/v1/settings/import",

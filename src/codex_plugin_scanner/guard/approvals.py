@@ -1385,6 +1385,220 @@ def _runtime_headline_detail(headline_state: str) -> str:
     return details.get(headline_state, "This machine is protected locally.")
 
 
+_BULK_SECRET_TEXT_HINTS = (
+    "credential",
+    "secret",
+    ".env",
+    "token",
+    "api key",
+    "apikey",
+    "password",
+    "private key",
+    "ssh key",
+    "aws_access_key",
+    "github_token",
+)
+
+
+def _bulk_queue_category_text(request: Mapping[str, object]) -> str:
+    envelope = request.get("action_envelope_json")
+    envelope_fields: list[str] = []
+    if isinstance(envelope, dict):
+        for key in (
+            "action_type",
+            "command",
+            "tool_name",
+            "prompt_excerpt",
+            "mcp_server",
+            "mcp_tool",
+            "package_manager",
+            "package_name",
+            "script_name",
+        ):
+            value = envelope.get(key)
+            if isinstance(value, str) and value:
+                envelope_fields.append(value)
+        target_paths = envelope.get("target_paths")
+        if isinstance(target_paths, list):
+            envelope_fields.extend(str(path) for path in target_paths if isinstance(path, str))
+        decision_signals = envelope.get("signals")
+        if isinstance(decision_signals, list):
+            for signal in decision_signals:
+                if isinstance(signal, dict):
+                    for key in ("category", "title", "plain_reason"):
+                        value = signal.get(key)
+                        if isinstance(value, str) and value:
+                            envelope_fields.append(value)
+    return " ".join(
+        [
+            str(request.get("artifact_name") or ""),
+            str(request.get("artifact_type") or ""),
+            str(request.get("risk_headline") or ""),
+            str(request.get("risk_summary") or ""),
+            str(request.get("trigger_summary") or ""),
+            str(request.get("launch_summary") or ""),
+            str(request.get("why_now") or ""),
+            str(request.get("launch_target") or ""),
+            *_string_list(request.get("risk_signals")),
+            *envelope_fields,
+        ]
+    )
+
+
+def _bulk_decision_v2_categories(request: Mapping[str, object]) -> tuple[str, ...]:
+    decision_v2 = request.get("decision_v2_json")
+    if not isinstance(decision_v2, dict):
+        return ()
+    signals = decision_v2.get("signals")
+    if not isinstance(signals, list):
+        return ()
+    categories: list[str] = []
+    for signal in signals:
+        if isinstance(signal, dict):
+            category = signal.get("category")
+            if isinstance(category, str) and category:
+                categories.append(category)
+    return tuple(categories)
+
+
+def _bulk_has_secret_signal(request: Mapping[str, object]) -> bool:
+    categories = _bulk_decision_v2_categories(request)
+    if "secret" in categories:
+        return True
+    lowered = _bulk_queue_category_text(request).lower()
+    return any(hint in lowered for hint in _BULK_SECRET_TEXT_HINTS)
+
+
+def _bulk_read_command(command: str) -> bool:
+    import re
+
+    return re.search(r"\b(?:cat|grep|rg|sed\s+-n|awk|less|more|head|tail)\b", command.lower()) is not None
+
+
+def _bulk_has_secret_path_text(text: str) -> bool:
+    lowered = text.lower()
+    return any(
+        hint in lowered
+        for hint in (".env", "token", "secret", "credential", "password", "private key", "api key")
+    )
+
+
+def _bulk_is_file_read_request(request: Mapping[str, object]) -> bool:
+    envelope = request.get("action_envelope_json")
+    artifact_type = str(request.get("artifact_type") or "")
+    if isinstance(envelope, dict) and envelope.get("action_type") == "file_read":
+        return True
+    if artifact_type == "file_read_request":
+        return True
+    command = ""
+    if isinstance(envelope, dict):
+        command = str(envelope.get("command") or "")
+    command = command or str(request.get("launch_target") or "")
+    return _bulk_read_command(command) and _bulk_has_secret_path_text(_bulk_queue_category_text(request))
+
+
+def _bulk_target_paths_are_secret(request: Mapping[str, object]) -> bool:
+    from .runtime.secret_sensitivity import classify_secret_path
+
+    envelope = request.get("action_envelope_json")
+    if not isinstance(envelope, dict):
+        return False
+    target_paths = envelope.get("target_paths")
+    if not isinstance(target_paths, list):
+        return False
+    for path in target_paths:
+        if isinstance(path, str) and classify_secret_path(path) is not None:
+            return True
+    return False
+
+
+def _is_sensitive_file_read_request(request: Mapping[str, object]) -> bool:
+    if not _bulk_is_file_read_request(request):
+        return False
+    if _bulk_target_paths_are_secret(request):
+        return True
+    envelope = request.get("action_envelope_json")
+    command = ""
+    if isinstance(envelope, dict):
+        command = str(envelope.get("command") or "")
+    command = command or str(request.get("launch_target") or "")
+    text = _bulk_queue_category_text(request)
+    secret_read_action = (
+        (isinstance(envelope, dict) and envelope.get("action_type") == "file_read")
+        or str(request.get("artifact_type") or "") == "file_read_request"
+        or (_bulk_read_command(command) and _bulk_has_secret_path_text(text))
+    )
+    return secret_read_action and _bulk_has_secret_signal(request)
+
+
+def is_bulk_allow_once_eligible(request: Mapping[str, object]) -> bool:
+    if str(request.get("status") or "") != "pending":
+        return False
+    if str(request.get("policy_action") or "") == "block":
+        return False
+    envelope = request.get("action_envelope_json")
+    artifact_type = str(request.get("artifact_type") or "")
+    is_file_read = (
+        isinstance(envelope, dict) and envelope.get("action_type") == "file_read"
+    ) or artifact_type == "file_read_request"
+    if not is_file_read:
+        return False
+    return not _is_sensitive_file_read_request(request)
+
+
+def bulk_allow_read_only_once(
+    *,
+    store: GuardStore,
+    request_ids: Sequence[str],
+    approval_gate_input: ApprovalGateInput | None,
+    now: str | None = None,
+) -> dict[str, object]:
+    from .approval_gate import public_config
+
+    resolved_at = now or _now()
+    gate = public_config(store.guard_home, now=resolved_at)
+    if not gate.enabled or not gate.configured:
+        raise ValueError("bulk_approve_gate_required")
+
+    resolved_count = 0
+    failed: list[dict[str, str]] = []
+    gate_input_for_request = approval_gate_input
+
+    for request_id in request_ids:
+        if not isinstance(request_id, str) or not request_id.strip():
+            failed.append({"request_id": str(request_id), "error": "invalid_request_id"})
+            continue
+        normalized_id = request_id.strip()
+        request = store.get_approval_request(normalized_id)
+        if request is None or not is_bulk_allow_once_eligible(request):
+            failed.append({"request_id": normalized_id, "error": "ineligible"})
+            continue
+        try:
+            apply_approval_resolution(
+                store=store,
+                request_id=normalized_id,
+                action="allow",
+                scope="artifact",
+                workspace=None,
+                reason="bulk approve once",
+                now=resolved_at,
+                return_queue_result=False,
+                resolve_scope_matches=True,
+                approval_gate_input=gate_input_for_request,
+                persist_policy=False,
+            )
+            resolved_count += 1
+            gate_input_for_request = None
+        except (ApprovalRequestNotFoundError, ApprovalRequestAlreadyResolvedError, ValueError) as error:
+            failed.append({"request_id": normalized_id, "error": str(error)})
+
+    return {
+        "resolved_count": resolved_count,
+        "failed": failed,
+        "resolution_summary": f"{resolved_count} read-only file reads approved once.",
+    }
+
+
 def _optional_string(value: object) -> str | None:
     return value if isinstance(value, str) and value else None
 

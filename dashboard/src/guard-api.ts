@@ -2020,6 +2020,44 @@ export async function resolveRequestWithQueueResult(input: {
   return normalizeQueueResolution(payload);
 }
 
+export type BulkAllowReadOnceResult = {
+  resolved_count: number;
+  failed: Array<{ request_id: string; error: string }>;
+  resolution_summary: string;
+};
+
+export async function bulkAllowReadOnce(input: {
+  requestIds: string[];
+  approval_password?: string;
+  approval_totp_code?: string;
+}): Promise<BulkAllowReadOnceResult> {
+  if (isGuardDemoMode()) {
+    return {
+      resolved_count: input.requestIds.length,
+      failed: [],
+      resolution_summary: `${input.requestIds.length} read-only file reads approved once.`,
+    };
+  }
+  const payload = await readJson<BulkAllowReadOnceResult>("/v1/requests/bulk-allow-once", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders(),
+    },
+    body: JSON.stringify({
+      request_ids: input.requestIds,
+      ...(input.approval_password !== undefined ? { approval_password: input.approval_password } : {}),
+      ...(input.approval_totp_code !== undefined ? { approval_totp_code: input.approval_totp_code } : {}),
+      approval_gate_use_cooldown: false,
+    }),
+  });
+  return {
+    resolved_count: payload.resolved_count ?? 0,
+    failed: Array.isArray(payload.failed) ? payload.failed : [],
+    resolution_summary: payload.resolution_summary ?? "",
+  };
+}
+
 export async function clearEvidence(): Promise<void> {
   if (isGuardDemoMode()) {
     return;

@@ -15,6 +15,7 @@ import {
   fetchSettings,
   fetchGuardUpdateStatus,
   guardAwareHref,
+  bulkAllowReadOnce,
   repairApprovalCenter,
   resolveRequestWithQueueResult,
   retryResume,
@@ -609,24 +610,27 @@ export function App() {
     if (bulkApproveInFlight.current) {
       return;
     }
+    if (!gateCredentials?.approval_password?.trim()) {
+      throw new Error("Bulk approval requires an approval password.");
+    }
     bulkApproveInFlight.current = true;
     try {
-      const results = await Promise.allSettled(
-        ids.map((id) =>
-          resolveRequestWithQueueResult({ requestId: id, action: "allow", scope: "artifact", reason: "", ...gateCredentials })
-        )
-      );
-      const succeeded = results.filter((r) => r.status === "fulfilled").length;
-      const failed = results.length - succeeded;
+      const result = await bulkAllowReadOnce({
+        requestIds: ids,
+        approval_password: gateCredentials.approval_password,
+        approval_totp_code: gateCredentials.approval_totp_code,
+      });
       await refreshStateAfterAction();
-      if (failed > 0) {
+      if (result.failed.length > 0) {
+        const succeeded = result.resolved_count;
+        const failed = result.failed.length;
         throw new Error(
-          failed === results.length
+          failed === ids.length
             ? "Bulk approval failed. Retry the selected items manually."
             : `${succeeded} approved, ${failed} failed. Retry the failed items manually.`
         );
       }
-      const label = `${succeeded} item${succeeded !== 1 ? "s" : ""} approved.`;
+      const label = `${result.resolved_count} item${result.resolved_count !== 1 ? "s" : ""} approved.`;
       setResolutionMessage(label);
     } finally {
       bulkApproveInFlight.current = false;
