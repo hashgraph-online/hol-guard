@@ -136,6 +136,48 @@ function renderInboxContent(props: LayoutProps): ReactNode {
   );
 }
 
+function renderViewContent(props: LayoutProps): ReactNode {
+  if (props.view === "home") {
+    return props.homeContent;
+  }
+  if (props.view === "evidence") {
+    return (
+      <ReceiptsWorkspace
+        receipts={props.receipts}
+        runtime={props.runtime}
+        onClearEvidence={props.onClearEvidence}
+        onNavigate={props.onNavigate}
+      />
+    );
+  }
+  if (props.view === "fleet") {
+    return props.fleetContent;
+  }
+  if (props.view === "app-detail") {
+    return props.appDetailContent;
+  }
+  if (props.view === "settings") {
+    return props.settingsContent;
+  }
+  if (props.view === "about") {
+    return props.aboutContent ?? null;
+  }
+  if (props.view === "policy") {
+    return props.policyContent ?? null;
+  }
+  if (
+    props.view === "supply-chain" ||
+    props.view === "audit" ||
+    props.view === "feed-health"
+  ) {
+    return props.supplyChainHubContent ?? null;
+  }
+  if (props.view === "inbox") {
+    return renderInboxContent(props);
+  }
+  return null;
+}
+
 export function ApprovalCenterLayout(props: LayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
@@ -203,30 +245,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
       >
         <main id="main-content" className="flex-1 p-4 sm:p-6 lg:p-8" tabIndex={-1}>
           <div className={props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl"}>
-            {props.view === "home" ? (
-              props.homeContent
-            ) : props.view === "evidence" ? (
-              <ReceiptsWorkspace
-                receipts={props.receipts}
-                runtime={props.runtime}
-                onClearEvidence={props.onClearEvidence}
-                onNavigate={props.onNavigate}
-              />
-            ) : props.view === "fleet" ? (
-              props.fleetContent
-            ) : props.view === "app-detail" ? (
-              props.appDetailContent
-            ) : props.view === "settings" ? (
-              props.settingsContent
-            ) : props.view === "about" ? (
-              props.aboutContent ?? null
-            ) : props.view === "policy" ? (
-              props.policyContent ?? null
-            ) : props.view === "supply-chain" || props.view === "audit" || props.view === "feed-health" ? (
-              props.supplyChainHubContent ?? null
-            ) : props.view === "inbox" ? (
-              renderInboxContent(props)
-            ) : null}
+            {renderViewContent(props)}
           </div>
         </main>
         <ShellFooter />
