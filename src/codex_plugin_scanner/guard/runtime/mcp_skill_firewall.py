@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
 import re
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..models import GuardArtifact
 from .mcp_protection import (
@@ -16,10 +17,14 @@ from .mcp_protection import (
     build_mcp_server_identity,
     build_mcp_tool_identity,
 )
-from .skill_protection import SkillIdentity, build_skill_identity
 
 if TYPE_CHECKING:
     from .actions import GuardActionEnvelope
+
+
+def _skill_protection_module():
+    return importlib.import_module(".skill_protection", __package__)
+
 
 _PACKAGE_MANAGER_PATTERN = re.compile(
     r"\b(npm|pnpm|yarn|bun|pip|uv|cargo|gem|brew)\b",
@@ -132,7 +137,7 @@ def portal_mcp_tool_identity(
 
 
 def skill_identity_metadata(
-    identity: SkillIdentity,
+    identity: Any,
     *,
     publisher: str | None = None,
 ) -> dict[str, object]:
@@ -155,7 +160,7 @@ def skill_identity_metadata(
 
 
 def portal_skill_identity(
-    identity: SkillIdentity,
+    identity: Any,
     *,
     publisher: str | None = None,
 ) -> dict[str, object]:
@@ -318,7 +323,7 @@ def _firewall_for_skill(artifact: GuardArtifact) -> dict[str, object] | None:
     content = _read_text_file(artifact.config_path)
     if content is None:
         return None
-    identity = build_skill_identity(content, skill_path=artifact.config_path)
+    identity = _skill_protection_module().build_skill_identity(content, skill_path=artifact.config_path)
     skill = portal_skill_identity(identity, publisher=artifact.publisher)
     return build_mcp_skill_firewall_fingerprints(skill=skill)
 

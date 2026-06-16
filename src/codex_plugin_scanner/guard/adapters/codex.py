@@ -70,9 +70,7 @@ def _artifact_from_guard_proxy_args(
     source_scope = source_scope_value if isinstance(source_scope_value, str) and source_scope_value else fallback_scope
     config_path_value = parsed.get("config-path")
     config_path = (
-        config_path_value
-        if isinstance(config_path_value, str) and config_path_value
-        else str(fallback_config_path)
+        config_path_value if isinstance(config_path_value, str) and config_path_value else str(fallback_config_path)
     )
     transport_value = parsed.get("transport")
     transport = transport_value if isinstance(transport_value, str) and transport_value else "stdio"
@@ -869,9 +867,7 @@ class CodexHarnessAdapter(HarnessAdapter):
         hook_state = codex_native_hook_state(context)
         warning_items = payload.get("warnings")
         warnings = (
-            [str(item) for item in warning_items if isinstance(item, str)]
-            if isinstance(warning_items, list)
-            else []
+            [str(item) for item in warning_items if isinstance(item, str)] if isinstance(warning_items, list) else []
         )
         if bool(hook_state["config_present"]) and not bool(hook_state["codex_hooks_enabled"]):
             warnings.append(

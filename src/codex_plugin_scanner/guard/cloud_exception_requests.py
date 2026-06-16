@@ -121,9 +121,9 @@ def submit_cloud_exception_request(
     try:
         prepare_guard_cloud_connect_authorization(store)
         resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    except GuardSyncNotConfiguredError as error:
-        raise CloudExceptionRequestError(str(error), status=401) from error
     except GuardSyncAuthorizationExpiredError as error:
+        raise CloudExceptionRequestError(str(error), status=401) from error
+    except GuardSyncNotConfiguredError as error:
         raise CloudExceptionRequestError(str(error), status=401) from error
     request_url = normalized_cloud_exception_requests_url(str(resolved_auth_context["sync_url"]))
     body = json.dumps(normalized).encode("utf-8")
@@ -165,9 +165,9 @@ def fetch_cloud_exception_requests(
     try:
         prepare_guard_cloud_connect_authorization(store)
         resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    except GuardSyncNotConfiguredError as error:
-        raise CloudExceptionRequestError(str(error), status=401) from error
     except GuardSyncAuthorizationExpiredError as error:
+        raise CloudExceptionRequestError(str(error), status=401) from error
+    except GuardSyncNotConfiguredError as error:
         raise CloudExceptionRequestError(str(error), status=401) from error
     request_url = normalized_cloud_exception_requests_url(str(resolved_auth_context["sync_url"]))
     request = _guard_sync_request(

@@ -1,7 +1,6 @@
 """Guard CLI Claude hook helpers."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
@@ -9,15 +8,33 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ._commands_shared import _now
-    from .commands_support_claude_approval import _claude_guard_approval_question_message, _claude_permission_notice_prefers_ask_user_question, _claude_permission_prompt_additional_context, _claude_permission_prompt_system_message, _claude_permission_prompt_terminal_notice, _claude_permission_request_additional_context, _claude_permission_request_system_message, _claude_permission_request_terminal_notice, _is_claude_permission_prompt_notification, _is_claude_permission_request, _resolve_claude_permission_request_policy_action
+    from .commands_support_claude_approval import (
+        _claude_guard_approval_question_message,
+        _claude_permission_notice_prefers_ask_user_question,
+        _claude_permission_prompt_additional_context,
+        _claude_permission_prompt_system_message,
+        _claude_permission_prompt_terminal_notice,
+        _claude_permission_request_additional_context,
+        _claude_permission_request_system_message,
+        _claude_permission_request_terminal_notice,
+        _is_claude_permission_prompt_notification,
+        _is_claude_permission_request,
+        _resolve_claude_permission_request_policy_action,
+    )
     from .commands_support_hook_payload import _emit_native_hook_notification_stderr, _emit_native_hook_response
-    from .commands_support_hook_state import _emit_claude_permission_request_passthrough, _load_claude_permission_notice, _mark_claude_pending_permission_prompt_seen, _peek_claude_permission_notice
+    from .commands_support_hook_state import (
+        _emit_claude_permission_request_passthrough,
+        _load_claude_permission_notice,
+        _mark_claude_pending_permission_prompt_seen,
+        _peek_claude_permission_notice,
+    )
     from .commands_support_prompts import _runtime_artifact_native_reason
     from .commands_support_runtime_artifacts import _optional_string
 
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
 
 def _run_hook_claude_permission_request(
     args: argparse.Namespace,
@@ -141,6 +158,7 @@ def _run_hook_claude_permission_prompt_notification(
         output_stream=output_stream,
     )
     return 0
+
 
 __all__ = [
     "_run_hook_claude_permission_prompt_notification",

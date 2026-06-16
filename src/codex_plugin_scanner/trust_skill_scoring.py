@@ -144,12 +144,8 @@ def build_skill_domain(
     repository = normalized["repository"]
     homepage = normalized["homepage"]
     commit = normalized["commit"]
-    has_author = (
-        isinstance(manifest, dict)
-        and isinstance(manifest.get("author"), dict)
-        and isinstance(manifest["author"].get("name"), str)
-        and bool(manifest["author"].get("name"))
-    )
+    author = manifest.get("author") if isinstance(manifest, dict) and isinstance(manifest.get("author"), dict) else None
+    has_author = isinstance(author, dict) and isinstance(author.get("name"), str) and bool(author.get("name"))
     all_frontmatter_valid = len(frontmatters) == len(skill_files) and all(
         has_required_skill_frontmatter(payload) for payload in frontmatters
     )
@@ -280,8 +276,8 @@ def build_skill_domain(
             True,
         ),
         "upvotes": (
-            {"score": hcs_28_upvote_score(int(manifest.get("upvotes", 0)))}
-            if isinstance(manifest, dict) and isinstance(manifest.get("upvotes"), int)
+            {"score": hcs_28_upvote_score(upvotes)}
+            if isinstance(manifest, dict) and isinstance((upvotes := manifest.get("upvotes")), int)
             else None,
             {
                 "score": (

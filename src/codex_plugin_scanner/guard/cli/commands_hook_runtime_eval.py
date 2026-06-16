@@ -1,7 +1,6 @@
 """Guard CLI runtime artifact hook evaluation."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
@@ -12,18 +11,31 @@ if TYPE_CHECKING:
     from .commands_support_hook_payload import _coalesce_string
     from .commands_support_hook_state import _cursor_native_shell_is_approved
     from .commands_support_interaction import _emit, _record_harness_usage_for_hook
-    from .commands_support_permission_store import _persist_claude_native_permission_for_runtime_artifact, _record_cursor_pending_shell_permission
+    from .commands_support_permission_store import (
+        _persist_claude_native_permission_for_runtime_artifact,
+        _record_cursor_pending_shell_permission,
+    )
     from .commands_support_prompts import _runtime_artifact_native_reason
     from .commands_support_runtime_artifacts import _hook_event_name, _optional_string
-    from .commands_support_runtime_policy import _runtime_artifact_policy_action, _runtime_data_flow_summary, _runtime_stored_policy_action
-    from .commands_support_runtime_resolution import _canonical_harness_name, _legacy_claude_alias_runtime_artifact, _queue_claude_native_approval_gate_fallback, _runtime_capabilities_summary, _runtime_request_summary, _runtime_requested_path
+    from .commands_support_runtime_policy import (
+        _runtime_artifact_policy_action,
+        _runtime_data_flow_summary,
+        _runtime_stored_policy_action,
+    )
+    from .commands_support_runtime_resolution import (
+        _canonical_harness_name,
+        _legacy_claude_alias_runtime_artifact,
+        _queue_claude_native_approval_gate_fallback,
+        _runtime_capabilities_summary,
+        _runtime_request_summary,
+        _runtime_requested_path,
+    )
 
 
 from ..models import GuardAction
 from ._commands_shared import *
-from .commands_parser_helpers import *
-
 from .commands_hook_runtime_state import RuntimeArtifactHookState
+from .commands_parser_helpers import *
 
 
 def _resolved_guard_action(value: object, fallback: GuardAction) -> GuardAction:
@@ -40,6 +52,7 @@ def _resolved_guard_action(value: object, fallback: GuardAction) -> GuardAction:
     if value == "require-reapproval":
         return "require-reapproval"
     return fallback
+
 
 def _evaluate_runtime_artifact_hook(
     args: argparse.Namespace,
@@ -205,13 +218,10 @@ def _evaluate_runtime_artifact_hook(
     )
     scanner_evidence_payload = [signal.to_dict() for signal in scanner_evidence]
     package_policy_action: GuardAction | None = (
-        _resolved_guard_action(package_evaluation.policy_action, "warn")
-        if package_evaluation is not None
-        else None
+        _resolved_guard_action(package_evaluation.policy_action, "warn") if package_evaluation is not None else None
     )
-    if (
-        package_policy_action is not None
-        and guard_action_severity(package_policy_action) > guard_action_severity(policy_action)
+    if package_policy_action is not None and guard_action_severity(package_policy_action) > guard_action_severity(
+        policy_action
     ):
         policy_action = package_policy_action
     if data_flow_signals:
@@ -256,10 +266,7 @@ def _evaluate_runtime_artifact_hook(
         risk_signals = list(artifact_risk_signals(runtime_artifact))
         risk_summary = artifact_risk_summary(runtime_artifact)
     if package_controls_pre_scanner_summary and package_evaluation is not None:
-        risk_signals = [
-            str(item.get("message") or item.get("code") or "")
-            for item in package_evaluation.reasons
-        ]
+        risk_signals = [str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons]
         risk_summary = package_evaluation.risk_summary
         scanner_evidence_payload.extend(
             {
@@ -377,6 +384,7 @@ def _evaluate_runtime_artifact_hook(
         scanner_evidence_payload=scanner_evidence_payload,
         stored_policy_action=stored_policy_action,
     )
+
 
 __all__ = [
     "_evaluate_runtime_artifact_hook",

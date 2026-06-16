@@ -1,15 +1,30 @@
 """Guard CLI helper definitions."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .commands_support_codex_commands import _codex_command_parts_may_read_local_content, _codex_command_reads_environment_pipeline, _codex_local_secret_source_label, _codex_pipeline_segment_may_read_local_content, _codex_post_tool_command_is_read_only_source_inspection, _codex_post_tool_command_text, _codex_shell_split, _codex_source_inspection_can_skip_secret_output, _codex_tool_output_request_summary, _codex_tool_output_runtime_summary
-    from .commands_support_codex_paths import _PROMPT_PATH_TOKEN_PATTERN, _codex_prompt_credential_file_artifact, _collect_codex_tool_response_text, _with_codex_prompt_display_metadata
+    from .commands_support_codex_commands import (
+        _codex_command_parts_may_read_local_content,
+        _codex_command_reads_environment_pipeline,
+        _codex_local_secret_source_label,
+        _codex_pipeline_segment_may_read_local_content,
+        _codex_post_tool_command_is_read_only_source_inspection,
+        _codex_post_tool_command_text,
+        _codex_shell_split,
+        _codex_source_inspection_can_skip_secret_output,
+        _codex_tool_output_request_summary,
+        _codex_tool_output_runtime_summary,
+    )
+    from .commands_support_codex_paths import (
+        _PROMPT_PATH_TOKEN_PATTERN,
+        _codex_prompt_credential_file_artifact,
+        _collect_codex_tool_response_text,
+        _with_codex_prompt_display_metadata,
+    )
     from .commands_support_codex_reads import _split_codex_safe_read_only_pipeline
     from .commands_support_hook_payload import _coalesce_string
     from .commands_support_runtime_policy import _runtime_data_flow_summary
@@ -19,10 +34,12 @@ if TYPE_CHECKING:
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
+
 def _optional_string(value: object | None) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
+
 
 _HOOK_EVENT_NAME_MAP = {
     "userpromptsubmitted": "UserPromptSubmit",
@@ -31,6 +48,7 @@ _HOOK_EVENT_NAME_MAP = {
     "permissionrequest": "PermissionRequest",
 }
 
+
 def _hook_event_name(payload: dict[str, object]) -> str | None:
     for key in ("event", "hook_event_name", "hookEventName", "hook_name"):
         value = payload.get(key)
@@ -38,6 +56,7 @@ def _hook_event_name(payload: dict[str, object]) -> str | None:
             normalized = value.strip()
             return _HOOK_EVENT_NAME_MAP.get(normalized.lower(), normalized)
     return None
+
 
 def _artifact_id_from_event(harness: str, payload: dict[str, object]) -> str:
     source_scope = _coalesce_string(payload.get("source_scope"), "project")
@@ -54,10 +73,12 @@ def _artifact_id_from_event(harness: str, payload: dict[str, object]) -> str:
         return f"{harness}:{source_scope}:{event_name.strip().lower()}"
     return f"{harness}:{source_scope}:hook"
 
+
 def _string_list(value: object | None) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if isinstance(item, str) and item.strip()]
+
 
 def _merged_prompt_runtime_artifact(harness: str, artifacts: list[GuardArtifact]) -> GuardArtifact:
     if len(artifacts) == 1:
@@ -103,6 +124,7 @@ def _merged_prompt_runtime_artifact(harness: str, artifacts: list[GuardArtifact]
             "runtime_request_summary": request_summary,
         },
     )
+
 
 def _hook_runtime_artifact(
     *,
@@ -222,6 +244,7 @@ def _hook_runtime_artifact(
         source_scope=source_scope,
     )
 
+
 def _runtime_data_flow_artifact(
     *,
     harness: str,
@@ -262,6 +285,7 @@ def _runtime_data_flow_artifact(
         },
     )
 
+
 _CODEX_PROMPT_SECRET_KEY_MARKERS = ("TOKEN", "SECRET", "PASSWORD", "PASS", "API_KEY", "API-KEY", "AUTH", "CREDENTIAL")
 
 _CODEX_TOOL_RESPONSE_MAX_DEPTH = 5
@@ -269,6 +293,7 @@ _CODEX_TOOL_RESPONSE_MAX_DEPTH = 5
 _CODEX_TOOL_RESPONSE_TEXT_LIMIT = 20000
 
 _CODEX_PROMPT_FILE_FINGERPRINT_LENGTH = 24
+
 
 def _codex_post_tool_output_artifact(
     *,
@@ -331,9 +356,7 @@ def _codex_post_tool_output_artifact(
         "tool_name": tool_name,
         "command_text": command_text,
         "action_class": (
-            "credential exfiltration shell command"
-            if references_local_content
-            else "credential-looking tool output"
+            "credential exfiltration shell command" if references_local_content else "credential-looking tool output"
         ),
         "guard_default_action": runtime_default_action,
         "request_summary": request_summary,
@@ -356,8 +379,10 @@ def _codex_post_tool_output_artifact(
         metadata=metadata,
     )
 
+
 def _codex_command_references_sensitive_local_source(command_text: str, *, cwd: Path | None) -> bool:
     return bool(_codex_sensitive_local_source_matches(command_text, cwd=cwd))
+
 
 def _codex_sensitive_local_source_matches(command_text: str, *, cwd: Path | None) -> list[SecretPathMatch]:
     matches = _codex_sensitive_path_matches_in_text(command_text, cwd=cwd)
@@ -379,6 +404,7 @@ def _codex_sensitive_local_source_matches(command_text: str, *, cwd: Path | None
             matches.append(path_match)
     return _dedupe_codex_secret_path_matches(matches)
 
+
 def _dedupe_codex_secret_path_matches(matches: list[SecretPathMatch]) -> list[SecretPathMatch]:
     deduped: list[SecretPathMatch] = []
     seen: set[tuple[str, str]] = set()
@@ -390,12 +416,15 @@ def _dedupe_codex_secret_path_matches(matches: list[SecretPathMatch]) -> list[Se
         deduped.append(match)
     return deduped
 
+
 def _codex_token_is_url(token: str) -> bool:
     parsed = urllib.parse.urlparse(token)
     return bool(parsed.scheme and parsed.netloc)
 
+
 def _codex_text_contains_sensitive_path_token(text: str, *, cwd: Path | None) -> bool:
     return bool(_codex_sensitive_path_matches_in_text(text, cwd=cwd))
+
 
 def _codex_sensitive_path_matches_in_text(text: str, *, cwd: Path | None) -> list[SecretPathMatch]:
     matches: list[SecretPathMatch] = []
@@ -415,6 +444,7 @@ def _codex_sensitive_path_matches_in_text(text: str, *, cwd: Path | None) -> lis
             matches.append(local_match)
     return matches
 
+
 def _codex_url_like_local_path_tokens(text: str) -> tuple[str, ...]:
     separators = frozenset(" \t\r\n'\"`<>|;(){}[]")
     tokens: list[str] = []
@@ -427,6 +457,7 @@ def _codex_url_like_local_path_tokens(text: str) -> tuple[str, ...]:
         if 0 < len(token) <= 255 and _codex_token_is_url(token):
             tokens.append(token)
     return tuple(tokens)
+
 
 def _codex_existing_local_path_match(token: str, *, cwd: Path | None) -> SecretPathMatch | None:
     if cwd is None:
@@ -448,6 +479,7 @@ def _codex_existing_local_path_match(token: str, *, cwd: Path | None) -> SecretP
     relative_candidate = candidate.relative_to(base_dir)
     return classify_secret_path(str(relative_candidate), cwd=cwd)
 
+
 def _codex_path_token_is_url_path(text: str, start: int) -> bool:
     prefix = text[:start].lower()
     last_separator = max(prefix.rfind(separator) for separator in " \t\r\n'\"`<>|;(){}[]")
@@ -461,8 +493,10 @@ def _codex_path_token_is_url_path(text: str, start: int) -> bool:
         scheme = token_prefix[:-1]
     return _codex_token_prefix_is_url_scheme(scheme)
 
+
 def _codex_token_prefix_is_url_scheme(scheme: str) -> bool:
     return bool(scheme) and scheme[0].isalpha() and all(char.isalnum() or char in "+.-" for char in scheme)
+
 
 def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None) -> bool:
     if _codex_command_references_sensitive_local_source(command_text, cwd=cwd):
@@ -482,6 +516,7 @@ def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None
     except ValueError:
         return True
     return _codex_command_parts_may_read_local_content(parts, cwd=cwd)
+
 
 __all__ = [
     "_CODEX_PROMPT_FILE_FINGERPRINT_LENGTH",

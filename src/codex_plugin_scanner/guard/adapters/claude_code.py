@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import sys
 from collections.abc import Callable
@@ -10,8 +11,6 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from ...path_support import iter_safe_matching_files, resolves_within_root
-from ..aibom_detection import extend_detection_with_workspace_aibom
-from ..daemon import guard_daemon_url_for_home, load_guard_daemon_url
 from ..models import GuardArtifact, HarnessDetection
 from ..runtime.harness_attribution import cursor_hook_query_extras
 from ..shims import install_guard_shim, remove_guard_shim
@@ -34,6 +33,22 @@ CLAUDE_GUARD_SESSION_START_TIMEOUT_SECONDS = 10
 CLAUDE_GUARD_STOP_TIMEOUT_SECONDS = 10
 CLAUDE_SETTINGS_FILES = ("settings.json", "settings.local.json")
 CLAUDE_GUARD_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
+
+
+def _aibom_detection_module():
+    return importlib.import_module("..aibom_detection", __package__)
+
+
+def _daemon_module():
+    return importlib.import_module("..daemon", __package__)
+
+
+def guard_daemon_url_for_home(guard_home: Path) -> str:
+    return _daemon_module().guard_daemon_url_for_home(guard_home)
+
+
+def load_guard_daemon_url(guard_home: Path) -> str | None:
+    return _daemon_module().load_guard_daemon_url(guard_home)
 
 
 def _guard_command_handler(
@@ -512,7 +527,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             artifacts=tuple(artifacts),
             warnings=(),
         )
-        return extend_detection_with_workspace_aibom(
+        return _aibom_detection_module().extend_detection_with_workspace_aibom(
             detection,
             home_dir=context.home_dir,
             workspace_dir=context.workspace_dir,

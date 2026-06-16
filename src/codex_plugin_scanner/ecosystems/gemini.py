@@ -53,14 +53,16 @@ class GeminiAdapter:
         context_file = manifest.get("contextFileName")
         if isinstance(context_file, str) and context_file.strip():
             components["context_files"] = (context_file,)
+        raw_name = manifest.get("name")
+        raw_version = manifest.get("version")
 
         return NormalizedPackage(
             ecosystem=Ecosystem.GEMINI,
             package_kind=candidate.package_kind,
             root_path=root,
             manifest_path=candidate.manifest_path,
-            name=manifest.get("name") if isinstance(manifest.get("name"), str) else None,
-            version=manifest.get("version") if isinstance(manifest.get("version"), str) else None,
+            name=raw_name if isinstance(raw_name, str) else None,
+            version=raw_version if isinstance(raw_version, str) else None,
             metadata={
                 key: value for key in ("description", "publisher") if isinstance((value := manifest.get(key)), str)
             },

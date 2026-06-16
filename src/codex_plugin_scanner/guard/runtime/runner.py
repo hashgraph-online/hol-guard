@@ -14,7 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from base64 import urlsafe_b64encode
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -74,6 +74,31 @@ from .supply_chain_bundle_models import SupplyChainVerificationKey
 from .supply_chain_support import ecosystem_support_matrix
 
 
+def detect_harness(harness: str, context: HarnessContext) -> HarnessDetection:
+    from ..consumer import detect_harness as _detect_harness
+
+    return _detect_harness(harness, context)
+
+
+def evaluate_detection(
+    detection: HarnessDetection,
+    store: GuardStore,
+    config: GuardConfig,
+    *,
+    default_action: str | None = None,
+    persist: bool = True,
+):
+    from ..consumer import evaluate_detection as _evaluate_detection
+
+    return _evaluate_detection(detection, store, config, default_action=default_action, persist=persist)
+
+
+def get_adapter(harness: str):
+    from ..adapters import get_adapter as _get_adapter
+
+    return _get_adapter(harness)
+
+
 def _computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
     return computed_policy_bundle_hash(policy_bundle)
 
@@ -87,21 +112,20 @@ _APPROVAL_METADATA_KEYS = (
 )
 
 
-_default_detector_registry: tuple[Callable[[], tuple[Any, ...]], DetectorRegistry] | None = None
+_DEFAULT_DETECTOR_REGISTRY: tuple[Callable[[], tuple[Any, ...]], DetectorRegistry] | None = None
 _DEFAULT_DETECTOR_REGISTRY_LOCK = threading.Lock()
 
 
 def _get_default_detector_registry() -> DetectorRegistry:
-    global _default_detector_registry
     factory = register_default_detectors
-    cached = _default_detector_registry
+    cached = _DEFAULT_DETECTOR_REGISTRY
     if cached is not None and cached[0] is factory:
         return cached[1]
     with _DEFAULT_DETECTOR_REGISTRY_LOCK:
-        cached = _default_detector_registry
+        cached = _DEFAULT_DETECTOR_REGISTRY
         if cached is None or cached[0] is not factory:
             cached = (factory, DetectorRegistry(factory()))
-            _default_detector_registry = cached
+            globals()["_DEFAULT_DETECTOR_REGISTRY"] = cached
     return cached[1]
 
 
@@ -375,9 +399,6 @@ def guard_run(
     blocked_resolver: Callable[[HarnessDetection, dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Evaluate local harness state and optionally launch the harness."""
-
-    from ..consumer import detect_harness, evaluate_detection
-    from ..adapters import get_adapter
 
     detection = _detection_with_prompt_artifacts(detect_harness(harness, context), context, passthrough_args)
     if blocked_resolver is None:
@@ -2281,7 +2302,7 @@ def _guard_http_header_value(response: object, header_name: str) -> str | None:
         if callable(header_items):
             target_header = header_name.lower()
             raw_header_items = header_items()
-            if not isinstance(raw_header_items, Sequence):
+            if not isinstance(raw_header_items, Iterable):
                 raw_header_items = ()
             for header_item in raw_header_items:
                 if not isinstance(header_item, tuple) or len(header_item) != 2:
@@ -2589,17 +2610,14 @@ def _persist_rotated_oauth_refresh_token(
     ):
         raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
     supply_chain_firewall: bool | None
-    if (
-        isinstance(package_firewall_entitlement, dict)
-        and isinstance(package_firewall_entitlement.get("supply_chain_firewall"), bool)
+    if isinstance(package_firewall_entitlement, dict) and isinstance(
+        package_firewall_entitlement.get("supply_chain_firewall"), bool
     ):
         supply_chain_firewall = bool(package_firewall_entitlement.get("supply_chain_firewall"))
     else:
         credentials_supply_chain_firewall = credentials.get("supply_chain_firewall")
         supply_chain_firewall = (
-            credentials_supply_chain_firewall
-            if isinstance(credentials_supply_chain_firewall, bool)
-            else None
+            credentials_supply_chain_firewall if isinstance(credentials_supply_chain_firewall, bool) else None
         )
     store.set_oauth_local_credentials(
         issuer=issuer,
@@ -3747,7 +3765,7 @@ def _record_synced_alert_events(
                     "reason": _optional_string(item.get("reason")),
                 },
                 now,
-    )
+            )
     current_time = _parse_iso_timestamp(now)
     for item in exceptions:
         artifact_id = _optional_string(item.get("artifactId"))

@@ -6,7 +6,7 @@ import hashlib
 import re
 from collections.abc import Callable
 
-from codex_plugin_scanner.guard.types import PromptRequest, RemediationAction
+from codex_plugin_scanner.guard.types import PromptRequest, PromptRequestClass, RemediationAction
 
 _SAME_SENTENCE_120 = r"[^.!?;\n]{0,120}"
 _INSTRUCTION_OVERRIDE_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -280,7 +280,7 @@ def detect_prompt_injection_requests(prompt_text: str) -> tuple[PromptRequest, .
 
 def _request(
     *,
-    request_class: str,
+    request_class: PromptRequestClass,
     matched_text: str,
     summary: str,
     severity: int,
@@ -299,7 +299,7 @@ def _request(
     )
 
 
-def _request_id(request_class: str, matched_text: str, normalized_prompt: str) -> str:
+def _request_id(request_class: PromptRequestClass, matched_text: str, normalized_prompt: str) -> str:
     return hashlib.sha256(f"{request_class}:{matched_text}:{normalized_prompt.lower()}".encode()).hexdigest()
 
 

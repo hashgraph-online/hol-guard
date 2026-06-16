@@ -27,8 +27,12 @@ def build_plugin_domain(plugin_dir: Path, categories: tuple[CategoryResult, ...]
     author_map = author if isinstance(author, dict) else {}
     author_name = author_map.get("name")
     has_author = isinstance(author_name, str) and bool(author_name)
-    has_homepage = is_https_url(manifest.get("homepage") if isinstance(manifest, dict) else None)
-    has_repository = is_https_url(manifest.get("repository") if isinstance(manifest, dict) else None)
+    raw_homepage = manifest.get("homepage") if isinstance(manifest, dict) else None
+    raw_repository = manifest.get("repository") if isinstance(manifest, dict) else None
+    homepage: str | None = raw_homepage if isinstance(raw_homepage, str) else None
+    repository: str | None = raw_repository if isinstance(raw_repository, str) else None
+    has_homepage = is_https_url(homepage)
+    has_repository = is_https_url(repository)
     keywords = manifest.get("keywords") if isinstance(manifest, dict) else None
     keyword_count = len(keywords) if isinstance(keywords, list) else 0
     interface_category = interface_map.get("category")

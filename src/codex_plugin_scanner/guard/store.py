@@ -5385,9 +5385,7 @@ class GuardStore:
             self._credential_payload_token_hash(previous_payload) if previous_payload is not None else None
         )
         previous_workspace_id = (
-            _string_value(previous_payload.get("workspace_id"))
-            if previous_payload is not None
-            else None
+            _string_value(previous_payload.get("workspace_id")) if previous_payload is not None else None
         )
         previous_workspace = previous_workspace_id.strip() if previous_workspace_id is not None else None
         effective_workspace_id = normalized_workspace_id

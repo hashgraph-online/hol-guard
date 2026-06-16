@@ -253,7 +253,7 @@ def _directory_path(path: str | Path) -> Path:
     directory = Path(path).expanduser()
     if not directory.is_absolute():
         directory = Path.cwd() / directory
-    return directory.resolve(strict=False)
+    return directory.absolute()
 
 
 def _output_lines(value: str) -> list[str]:

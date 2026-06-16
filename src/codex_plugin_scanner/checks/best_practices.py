@@ -55,6 +55,15 @@ def check_skills_directory(plugin_dir: Path) -> CheckResult:
             message="No skills field declared, check not applicable",
             applicable=False,
         )
+    if not isinstance(skills, str):
+        return CheckResult(
+            name="Skills directory exists if declared",
+            passed=False,
+            points=0,
+            max_points=3,
+            message='Manifest "skills" field must be a string path',
+            findings=(),
+        )
     skills_path = plugin_dir / skills
     if skills_path.is_dir():
         return CheckResult(
@@ -104,6 +113,15 @@ def check_skill_frontmatter(plugin_dir: Path) -> CheckResult:
             max_points=0,
             message="No skills field declared, check not applicable",
             applicable=False,
+        )
+    if not isinstance(skills, str):
+        return CheckResult(
+            name="SKILL.md frontmatter",
+            passed=False,
+            points=0,
+            max_points=4,
+            message='Manifest "skills" field must be a string path',
+            findings=(),
         )
     skills_path = plugin_dir / skills
     if not skills_path.is_dir():

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
 import hashlib
 import json
+from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, TypeGuard, TypedDict
+from typing import Any, TypedDict, TypeGuard
 
 from ...models import ScanOptions
 from ..adapters.base import HarnessContext
@@ -15,7 +15,15 @@ from ..approval_gate import ApprovalGateGrant
 from ..capabilities import compute_capability_delta, normalize_artifact_capabilities, severity_from_deltas
 from ..config import GuardConfig
 from ..incident import build_incident_context
-from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, DecisionScope, GuardAction, GuardArtifact, HarnessDetection, PolicyDecision
+from ..models import (
+    DECISION_SCOPE_VALUES,
+    GUARD_ACTION_VALUES,
+    DecisionScope,
+    GuardAction,
+    GuardArtifact,
+    HarnessDetection,
+    PolicyDecision,
+)
 from ..policy import build_decision_v2, decide_action
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals_typed, artifact_risk_summary, summarize_signals
@@ -29,8 +37,8 @@ from ..types import (
     GuardVerdict,
     GuardVerdictAction,
     HistoryContext,
-    PublisherTrust,
     ProvenanceBundle,
+    PublisherTrust,
     ReviewPriority,
 )
 
@@ -720,7 +728,7 @@ def evaluate_detection(
                 "blocked": blocked,
             },
             now,
-    )
+        )
     if persist:
         from ..access_graph_events import queue_access_graph_snapshot
 
@@ -751,7 +759,7 @@ def record_policy(
     source: str = "local",
     expires_at: str | None = None,
     approval_gate_grant: ApprovalGateGrant | None = None,
-    ) -> dict[str, object]:
+) -> dict[str, object]:
     """Persist an allow or deny action."""
 
     if not _is_guard_action(action):

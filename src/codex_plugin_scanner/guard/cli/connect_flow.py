@@ -11,6 +11,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -222,8 +223,11 @@ def _oauth_response_header_value(response: object, header_name: str) -> str | No
         if callable(header_items):
             target_header = header_name.lower()
             items = header_items()
-            if isinstance(items, list):
-                for current_name, current_value in items:
+            if isinstance(items, Iterable):
+                for header_item in items:
+                    if not isinstance(header_item, tuple) or len(header_item) != 2:
+                        continue
+                    current_name, current_value = header_item
                     if isinstance(current_name, str) and current_name.lower() == target_header:
                         value = current_value
                         break
@@ -341,7 +345,7 @@ def start_guard_loopback_callback_listener(
             self.end_headers()
             self.wfile.write(b"HOL Guard connected. Return to your terminal.")
 
-        def log_message(self, format: str, *args: object) -> None:
+        def log_message(self, format: str, *args: object) -> None:  # noqa: A002
             return
 
     for host in _LOOPBACK_HOSTS:

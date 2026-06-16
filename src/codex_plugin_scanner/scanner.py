@@ -17,6 +17,7 @@ from .checks.opencode import run_opencode_checks
 from .checks.operational_security import run_operational_security_checks
 from .checks.security import run_security_checks
 from .checks.skill_security import resolve_skill_security_context, run_skill_security_checks
+from .ecosystems.base import EcosystemAdapter
 from .ecosystems.detect import detect_packages
 from .ecosystems.registry import get_default_adapters, resolve_ecosystem
 from .ecosystems.types import Ecosystem, NormalizedPackage, PackageCandidate
@@ -129,7 +130,7 @@ def _score_categories(categories: tuple[CategoryResult, ...]) -> int:
     return 100 if max_points == 0 else round((earned_points / max_points) * 100)
 
 
-def _build_adapter_map() -> dict[Ecosystem, object]:
+def _build_adapter_map() -> dict[Ecosystem, EcosystemAdapter]:
     adapters = get_default_adapters()
     return {adapter.ecosystem_id: adapter for adapter in adapters}
 

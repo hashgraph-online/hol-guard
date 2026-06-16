@@ -1,7 +1,6 @@
 """Guard CLI command dispatch helpers."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
@@ -9,14 +8,31 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
-    from .commands_support_connect import _announce_guard_device_connect_copy, _build_guard_device_connect_payload, _finalize_guard_connect_payload, _guard_ci_safe_connect_options, _manual_guard_login_payload
+    from .commands_support_connect import (
+        _announce_guard_device_connect_copy,
+        _build_guard_device_connect_payload,
+        _finalize_guard_connect_payload,
+        _guard_ci_safe_connect_options,
+        _manual_guard_login_payload,
+    )
     from .commands_support_interaction import _emit
-    from .commands_support_service import _guard_service_login_payload, _guard_service_status_payload, _guard_service_sync_failure_message, _guard_service_sync_payload, _guard_sync_failure_message, _handle_daemon_repair, _handle_daemon_status, _handle_daemon_stop, _validated_supply_chain_sync_payload
+    from .commands_support_service import (
+        _guard_service_login_payload,
+        _guard_service_status_payload,
+        _guard_service_sync_failure_message,
+        _guard_service_sync_payload,
+        _guard_sync_failure_message,
+        _handle_daemon_repair,
+        _handle_daemon_status,
+        _handle_daemon_stop,
+        _validated_supply_chain_sync_payload,
+    )
 
 
+from ..runtime.command_queue import command_queue_status
 from ._commands_shared import *
 from .commands_parser_helpers import *
-from ..runtime.command_queue import command_queue_status
+
 
 def _run_guard_login_command(
     args: argparse.Namespace,
@@ -42,14 +58,13 @@ def _run_guard_login_command(
         use_browser_oauth=False,
         open_device_browser=True,
         wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
-        announce_copy=None
-        if getattr(args, "json", False)
-        else _announce_guard_device_connect_copy,
+        announce_copy=None if getattr(args, "json", False) else _announce_guard_device_connect_copy,
     )
     if payload is None:
         return exit_code
     _emit("connect", payload, getattr(args, "json", False))
     return exit_code
+
 
 def _run_guard_remote_pair_command(
     args: argparse.Namespace,
@@ -72,6 +87,7 @@ def _run_guard_remote_pair_command(
         finalize_connect_payload=_finalize_guard_connect_payload,
         now=_now(),
     )
+
 
 def _run_guard_connect_command(
     args: argparse.Namespace,
@@ -115,16 +131,12 @@ def _run_guard_connect_command(
             use_browser_oauth=False,
             open_device_browser=True,
             wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
-            announce_copy=None
-            if getattr(args, "json", False)
-            else _announce_guard_device_connect_copy,
+            announce_copy=None if getattr(args, "json", False) else _announce_guard_device_connect_copy,
         )
         if payload is None:
             return exit_code
         _emit("connect", payload, getattr(args, "json", False))
         return exit_code
-    print("connect subcommand is required", file=sys.stderr)
-    return 2
     if bool(getattr(args, "headless", False)):
         payload, exit_code = _build_guard_device_connect_payload(
             store=store,
@@ -132,9 +144,7 @@ def _run_guard_connect_command(
             use_browser_oauth=False,
             open_device_browser=bool(getattr(args, "open_browser", False)),
             wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
-            announce_copy=None
-            if getattr(args, "json", False)
-            else _announce_guard_device_connect_copy,
+            announce_copy=None if getattr(args, "json", False) else _announce_guard_device_connect_copy,
             ci_safe=ci_safe,
             machine_label=machine_label,
         )
@@ -142,6 +152,8 @@ def _run_guard_connect_command(
             return exit_code
         _emit("connect", payload, getattr(args, "json", False))
         return exit_code
+    return 2
+
 
 def _run_guard_disconnect_command(
     args: argparse.Namespace,
@@ -169,6 +181,7 @@ def _run_guard_disconnect_command(
         return 1
     _emit("disconnect", payload, getattr(args, "json", False))
     return 0
+
 
 def _run_guard_bridge_command(
     args: argparse.Namespace,
@@ -208,6 +221,7 @@ def _run_guard_bridge_command(
     bridge.run()
     return 0
 
+
 def _run_guard_sync_command(
     args: argparse.Namespace,
     *,
@@ -242,6 +256,7 @@ def _run_guard_sync_command(
         return 1
     _emit("sync", payload, getattr(args, "json", False))
     return 0
+
 
 def _run_guard_cloud_command(
     args: argparse.Namespace,
@@ -278,6 +293,7 @@ def _run_guard_cloud_command(
         return 0
     print("cloud subcommand is required", file=sys.stderr)
     return 2
+
 
 def _run_guard_supply_chain_command(
     args: argparse.Namespace,
@@ -318,9 +334,7 @@ def _run_guard_supply_chain_command(
             before_workspace_dir=(
                 Path(str(before_workspace)).expanduser() if isinstance(before_workspace, str) else None
             ),
-            after_workspace_dir=(
-                Path(str(after_workspace)).expanduser() if isinstance(after_workspace, str) else None
-            ),
+            after_workspace_dir=(Path(str(after_workspace)).expanduser() if isinstance(after_workspace, str) else None),
         )
         _emit("supply-chain-audit", payload, getattr(args, "json", False))
         return exit_code
@@ -356,6 +370,7 @@ def _run_guard_supply_chain_command(
         return exit_code
     print("supply-chain subcommand is required", file=sys.stderr)
     return 2
+
 
 def _run_guard_service_command(
     args: argparse.Namespace,
@@ -397,6 +412,7 @@ def _run_guard_service_command(
     print("service subcommand is required", file=sys.stderr)
     return 2
 
+
 def _run_guard_device_command(
     args: argparse.Namespace,
     *,
@@ -432,6 +448,7 @@ def _run_guard_device_command(
     print("device subcommand is required", file=sys.stderr)
     return 2
 
+
 def _run_guard_daemon_command(
     args: argparse.Namespace,
     *,
@@ -460,6 +477,7 @@ def _run_guard_daemon_command(
     _emit("doctor", {"daemon_url": f"http://127.0.0.1:{daemon.port}"}, getattr(args, "json", False))
     return 0
 
+
 def _run_guard_commands_command(
     args: argparse.Namespace,
     *,
@@ -478,6 +496,7 @@ def _run_guard_commands_command(
         return 0
     print("commands subcommand is required", file=sys.stderr)
     return 2
+
 
 __all__ = [
     "_run_guard_bridge_command",

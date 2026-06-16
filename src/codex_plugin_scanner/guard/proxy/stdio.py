@@ -171,7 +171,7 @@ def _readline_with_timeout(
         if isinstance(stream, io.StringIO):
             return stream.readline()
         raise ProxyIoTimeoutError(source=source, timeout_seconds=timeout_seconds)
-    result_queue: queue.Queue[tuple[bool, object]] = queue.Queue(maxsize=1)
+    result_queue: queue.Queue[tuple[bool, str | BaseException]] = queue.Queue(maxsize=1)
 
     def _reader() -> None:
         try:
@@ -186,7 +186,9 @@ def _readline_with_timeout(
         raise ProxyIoTimeoutError(source=source, timeout_seconds=timeout_seconds) from exc
     if ok:
         return result if isinstance(result, str) else ""
-    raise result
+    if isinstance(result, BaseException):
+        raise result
+    raise RuntimeError("guard_proxy_io_failed")
 
 
 def _quarantine_process(process: subprocess.Popen[str]) -> None:

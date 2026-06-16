@@ -12,6 +12,7 @@ class HarnessContextLike(Protocol):
     @property
     def guard_home(self) -> Path: ...
 
+
 _PACKAGE_SHIM_MANIFEST = "manifest.json"
 
 

@@ -103,6 +103,8 @@ class EcosystemAdapter(Protocol):
 
     def detect(self, root: Path) -> list[PackageCandidate]:
         """Detect package candidates for this ecosystem."""
+        raise NotImplementedError
 
     def parse(self, candidate: PackageCandidate) -> NormalizedPackage:
         """Parse a detected package candidate into normalized form."""
+        raise NotImplementedError

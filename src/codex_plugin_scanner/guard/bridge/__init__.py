@@ -204,6 +204,9 @@ def _validate_webhook_url(url: str) -> str:
         address = ipaddress.ip_address(hostname)
     except ValueError:
         return parsed.geturl()
+    mapped_address = address.ipv4_mapped if isinstance(address, ipaddress.IPv6Address) else None
+    if mapped_address is not None and (mapped_address.is_loopback or mapped_address.is_link_local):
+        raise ValueError("Guard Bridge webhook URL must not target loopback.")
     if address.is_loopback or address.is_link_local:
         raise ValueError("Guard Bridge webhook URL must not target loopback.")
     return parsed.geturl()

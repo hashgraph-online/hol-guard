@@ -751,9 +751,7 @@ def build_doctor_report(plugin_dir: str | Path, component: str) -> dict[str, obj
         for case in verify.cases
         if component == "all" or case.component == component
     ]
-    filtered_traces = [
-        trace for trace in verify.traces if component in {"all", "mcp"} or trace.component == component
-    ]
+    filtered_traces = [trace for trace in verify.traces if component in {"all", "mcp"} or trace.component == component]
     trace_entries = [
         {
             "name": trace.name,

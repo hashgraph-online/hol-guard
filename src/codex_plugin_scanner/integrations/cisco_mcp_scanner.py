@@ -36,8 +36,7 @@ T = TypeVar("T")
 
 
 class _CiscoAnalyzer(Protocol):
-    async def analyze(self, content: str, metadata: dict[str, str]) -> list[object] | tuple[object, ...]:
-        ...
+    async def analyze(self, content: str, metadata: dict[str, str]) -> list[object] | tuple[object, ...]: ...
 
 
 class _CiscoAnalyzerFactory(Protocol):

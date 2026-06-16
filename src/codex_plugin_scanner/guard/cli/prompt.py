@@ -362,7 +362,12 @@ def build_prompt_artifacts(
     for item in evaluation_artifacts:
         artifact_id = str(item.get("artifact_id"))
         artifact = artifacts_by_id.get(artifact_id)
-        changed_fields = tuple(str(field) for field in item.get("changed_fields", []) if isinstance(field, str))
+        raw_changed_fields = item.get("changed_fields")
+        changed_fields = (
+            tuple(str(field) for field in raw_changed_fields if isinstance(field, str))
+            if isinstance(raw_changed_fields, list)
+            else ()
+        )
         if artifact is None:
             prompt_artifacts.append(
                 PromptArtifact(

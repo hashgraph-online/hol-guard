@@ -24,6 +24,7 @@ from .shim_probe import (
 )
 from .stable_digest import stable_digest_hex
 
+
 class HarnessContextLike(Protocol):
     @property
     def home_dir(self) -> Path: ...
@@ -526,9 +527,7 @@ def activate_package_shims(
 def package_shim_status(context: HarnessContext) -> dict[str, object]:
     manifest = _load_package_shim_manifest(context)
     installed_managers = [
-        manager
-        for manager in _string_items(manifest.get("installed_managers"))
-        if manager in _PACKAGE_SHIM_COMMANDS
+        manager for manager in _string_items(manifest.get("installed_managers")) if manager in _PACKAGE_SHIM_COMMANDS
     ]
     last_test_at = manifest.get("last_test_at", {})
     normalized_last_tests = last_test_at if isinstance(last_test_at, dict) else {}
@@ -648,9 +647,7 @@ def uninstall_package_shims(
 ) -> dict[str, object]:
     manifest = _load_package_shim_manifest(context)
     manifest_managers = tuple(
-        manager
-        for manager in _string_items(manifest.get("installed_managers"))
-        if manager in _PACKAGE_SHIM_COMMANDS
+        manager for manager in _string_items(manifest.get("installed_managers")) if manager in _PACKAGE_SHIM_COMMANDS
     )
     requested_managers = _normalize_package_shim_managers(managers) if managers else manifest_managers
     shim_dir = context.guard_home / "package-shims" / "bin"
@@ -667,15 +664,11 @@ def uninstall_package_shims(
     if remaining:
         manifest_hashes = _string_map(manifest.get("content_hashes"))
         content_hashes = {
-            manager: hash_value
-            for manager, hash_value in manifest_hashes.items()
-            if manager in remaining
+            manager: hash_value for manager, hash_value in manifest_hashes.items() if manager in remaining
         }
         manifest_last_tests = _string_map(manifest.get("last_test_at"))
         last_test_at = {
-            manager: timestamp
-            for manager, timestamp in manifest_last_tests.items()
-            if manager in remaining
+            manager: timestamp for manager, timestamp in manifest_last_tests.items() if manager in remaining
         }
         _write_package_shim_manifest(
             context,
@@ -987,11 +980,7 @@ def _string_items(value: object) -> tuple[str, ...]:
 def _string_map(value: object) -> dict[str, str]:
     if not isinstance(value, dict):
         return {}
-    return {
-        key: item
-        for key, item in value.items()
-        if isinstance(key, str) and isinstance(item, str)
-    }
+    return {key: item for key, item in value.items() if isinstance(key, str) and isinstance(item, str)}
 
 
 def _write_package_shim_manifest(context: HarnessContext, payload: dict[str, object]) -> None:

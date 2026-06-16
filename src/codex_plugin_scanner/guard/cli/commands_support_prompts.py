@@ -5,18 +5,44 @@
 
 from __future__ import annotations
 
+import importlib
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..models import GuardAction
     from ._commands_shared import _NAMED_SECURITY_LEVELS, _SETTINGS_POLICY_RISK_ACTIONS, _guard_risk_action_key
-    from .commands_support_hook_payload import _copilot_hook_permission_decision
-    from .commands_support_runtime_policy import _ensure_terminal_punctuation, _native_hook_reason
-    from .commands_support_runtime_resolution import _canonical_harness_name
 
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
+
+def _hook_payload_module():
+    return importlib.import_module(".commands_support_hook_payload", __package__)
+
+
+def _runtime_policy_module():
+    return importlib.import_module(".commands_support_runtime_policy", __package__)
+
+
+def _runtime_resolution_module():
+    return importlib.import_module(".commands_support_runtime_resolution", __package__)
+
+
+def _canonical_harness_name(value: str) -> str:
+    return _runtime_resolution_module()._canonical_harness_name(value)
+
+
+def _ensure_terminal_punctuation(message: str) -> str:
+    return _runtime_policy_module()._ensure_terminal_punctuation(message)
+
+
+def _native_hook_reason(*values: object | None) -> str:
+    return _runtime_policy_module()._native_hook_reason(*values)
+
+
+def _copilot_hook_permission_decision(policy_action: str) -> str:
+    return _hook_payload_module()._copilot_hook_permission_decision(policy_action)
 
 
 def _guard_action_from_cli(value: object) -> GuardAction:

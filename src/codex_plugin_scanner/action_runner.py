@@ -276,6 +276,7 @@ def main() -> int:
     registry_payload_path_value = ""
     submission_issues: list[SubmissionIssue] = []
     submission_eligible = False
+    return_code = 0
     output_values = {
         "mode": mode,
         "score": "",
@@ -459,6 +460,7 @@ def main() -> int:
 
         output_values["report_path"] = report_path_value
 
+        highest_severity = max_severity(result.findings)
         severity_failed = should_fail_for_severity(result, fail_on)
         output_values.update(
             {
@@ -467,7 +469,7 @@ def main() -> int:
                 "grade_label": GRADE_LABELS.get(result.grade, "Unknown"),
                 "policy_pass": "true" if policy_eval.policy_pass else "false",
                 "verify_pass": "true" if verification is not None and verification.verify_pass else "",
-                "max_severity": max_severity(result.findings).value if result.findings else "none",
+                "max_severity": highest_severity.value if highest_severity is not None else "none",
                 "findings_total": str(sum(result.severity_counts.values())),
             }
         )

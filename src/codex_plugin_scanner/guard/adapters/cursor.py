@@ -317,8 +317,14 @@ class CursorHarnessAdapter(HarnessAdapter):
             display_name="Cursor CLI (cursor agent)",
         )
         profile = ensure_guard_shim_path_in_shell_profile(context)
+        raw_agent_notes = agent_shim.get("notes")
+        agent_notes = (
+            [str(note) for note in raw_agent_notes if isinstance(note, str)]
+            if isinstance(raw_agent_notes, (list, tuple))
+            else []
+        )
         notes = [
-            *agent_shim.get("notes", ()),
+            *agent_notes,
             "Use guard-cursor-agent for the standalone cursor-agent binary.",
             "Use guard-cursor agent ... when launching through the Cursor app CLI.",
             f"Guard launcher shims live in {context.guard_home / 'bin'}.",
@@ -410,7 +416,8 @@ class CursorHarnessAdapter(HarnessAdapter):
     @staticmethod
     def _refresh_guard_proxy_entry(server_config: dict[str, object]) -> dict[str, object]:
         refreshed = dict(server_config)
-        args = tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str))
+        raw_args = server_config.get("args")
+        args = tuple(str(value) for value in raw_args if isinstance(value, str)) if isinstance(raw_args, list) else ()
         refreshed["command"] = sys.executable
         refreshed["args"] = list(args)
         return refreshed

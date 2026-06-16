@@ -125,11 +125,12 @@ def _usage_events(
         events.append(("harness.mcp.used", subject_id, _compact_payload(payload)))
     skill = _skill_details(raw_payload)
     if skill is not None:
+        skill_id = _string_from_keys(skill, ("skillId", "skillName")) or "unknown"
         subject_id = _subject_id(
             "skill",
             action.harness,
             action.event_name,
-            skill.get("skillId") or skill.get("skillName") or "unknown",
+            skill_id,
             request_id or action.action_id,
             occurred_at,
         )

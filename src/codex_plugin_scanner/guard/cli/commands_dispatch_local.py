@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import importlib
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -19,7 +20,6 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
-from .product import build_guard_start_payload, build_guard_status_payload
 
 def _run_guard_scan_command(
     args: argparse.Namespace,
@@ -176,7 +176,7 @@ def _run_guard_start_command(
     context = _require_guard_context(context)
     store = _require_guard_store(store)
     config = _require_guard_config(config)
-    payload = build_guard_start_payload(context, store, config)
+    payload = importlib.import_module(".product", __package__).build_guard_start_payload(context, store, config)
     _emit("start", payload, getattr(args, "json", False))
     return 0
 
@@ -194,7 +194,7 @@ def _run_guard_status_command(
     context = _require_guard_context(context)
     store = _require_guard_store(store)
     config = _require_guard_config(config)
-    payload = build_guard_status_payload(context, store, config)
+    payload = importlib.import_module(".product", __package__).build_guard_status_payload(context, store, config)
     _emit("status", payload, getattr(args, "json", False))
     return 0
 

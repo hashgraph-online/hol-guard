@@ -101,9 +101,7 @@ else:
                 self.border_style = border_style
 
             @classmethod
-            def fit(
-                cls, renderable: object, *, title: str | None = None, border_style: str | None = None
-            ) -> Panel:
+            def fit(cls, renderable: object, *, title: str | None = None, border_style: str | None = None) -> Panel:
                 return cls(renderable, title=title, border_style=border_style)
 
             def __str__(self) -> str:
@@ -179,6 +177,8 @@ else:
 
         box = _FallbackBox()
 
+_RICH_AVAILABLE = _rich_available
+
 Renderer: TypeAlias = Callable[[Console, PayloadDict], None]
 PlainTextRenderer: TypeAlias = Callable[[PayloadDict], str]
 
@@ -226,7 +226,7 @@ def emit_guard_payload(command: str, payload: PayloadDict, as_json: bool) -> Non
         return
 
     redacted_payload = _coerce_object_dict(_redact_payload(payload))
-    if not _rich_available:
+    if not _RICH_AVAILABLE:
         plain_renderer = _PLAIN_TEXT_RENDERERS.get(command)
         if plain_renderer is None:
             redacted_output = redact_text(_safe_json_output_text(command, payload))

@@ -248,8 +248,12 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             + "\n",
             encoding="utf-8",
         )
+        raw_notes = shim_manifest.get("notes")
+        shim_notes = (
+            [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
+        )
         notes = [
-            *list(shim_manifest.get("notes", [])),
+            *shim_notes,
             "Guard installed an OpenCode pretool plugin that reviews bash and shell commands through "
             "hol-guard hook before execution.",
             "Guard updated the global OpenCode root config at ~/.config/opencode/opencode.json with "
@@ -304,8 +308,12 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             state_path.unlink()
         shim_manifest = remove_guard_shim(self.harness, context)
         plugin_manifest = remove_pretool_plugin(context)
+        raw_notes = shim_manifest.get("notes")
+        shim_notes = (
+            [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
+        )
         notes = [
-            *list(shim_manifest.get("notes", [])),
+            *shim_notes,
             "Guard removed the OpenCode pretool plugin from the global plugin directory.",
             "Guard leaves the OpenCode runtime overlay on disk for auditability, but it is ignored unless you "
             "launch through Guard.",

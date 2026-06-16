@@ -71,9 +71,7 @@ class GuardSurfaceRuntime:
         contract = build_surface_server_contract()
         protocol_payload = contract.get("protocol")
         protocol_bundle: dict[str, object] = (
-            {str(key): value for key, value in protocol_payload.items()}
-            if isinstance(protocol_payload, dict)
-            else {}
+            {str(key): value for key, value in protocol_payload.items()} if isinstance(protocol_payload, dict) else {}
         )
         protocol_bundle["negotiated_version"] = negotiated_version
         return {
@@ -444,9 +442,7 @@ def _parse_artifact(payload: dict[str, object]) -> GuardArtifact:
         config_path=str(payload.get("config_path") or ""),
         command=str(payload.get("command")) if isinstance(payload.get("command"), str) else None,
         args=(
-            tuple(str(item) for item in args_payload if isinstance(item, str))
-            if isinstance(args_payload, list)
-            else ()
+            tuple(str(item) for item in args_payload if isinstance(item, str)) if isinstance(args_payload, list) else ()
         ),
         url=str(payload.get("url")) if isinstance(payload.get("url"), str) else None,
         transport=str(payload.get("transport")) if isinstance(payload.get("transport"), str) else None,

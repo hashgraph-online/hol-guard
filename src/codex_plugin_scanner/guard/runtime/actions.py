@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import re
 from collections.abc import Mapping
@@ -118,6 +119,10 @@ _GENERIC_WINDOWS_UNC_PATH_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_./\\:-])(?P<path>\\\\[^\\\s'\"<>|]+\\[^\\\s'\"<>|]+(?:\\[^\\\s'\"<>|]+)+)"
 )
 _PROMPT_EXCERPT_LIMIT = 240
+
+
+def _package_intent_parser_module():
+    return importlib.import_module(".package_intent_parser", __package__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -487,9 +492,11 @@ def _normalize_action_payload(
     workspace_label = redacted_workspace_label(workspace, home_dir=home_dir)
     workspace_hash = _workspace_hash(workspace)
     workspace_path = Path(workspace) if workspace is not None else None
-    from .package_intent_parser import parse_package_intent
-
-    package_intent = parse_package_intent(raw_command, workspace=workspace_path) if raw_command else None
+    package_intent = (
+        _package_intent_parser_module().parse_package_intent(raw_command, workspace=workspace_path)
+        if raw_command
+        else None
+    )
     package_targets = (
         tuple(target.raw_spec for target in package_intent.targets if target.raw_spec)
         if package_intent is not None

@@ -94,6 +94,8 @@ def cloud_evaluate_response_to_decision_evidence_v1(
     package_intent_hash: str,
     command_shape: Mapping[str, object],
 ) -> dict[str, object]:
+    reasons = response.get("reasons")
+    evidence_ids = response.get("evidenceIds")
     return {
         "contractVersion": DECISION_EVIDENCE_CONTRACT_VERSION,
         "decision": response.get("decision"),
@@ -104,6 +106,6 @@ def cloud_evaluate_response_to_decision_evidence_v1(
         "policyVersion": response.get("policyVersion"),
         "packageIntentHash": package_intent_hash,
         "commandShape": dict(command_shape),
-        "reasons": list(response.get("reasons") or []),
-        "evidenceIds": list(response.get("evidenceIds") or []),
+        "reasons": list(reasons) if isinstance(reasons, list) else [],
+        "evidenceIds": list(evidence_ids) if isinstance(evidence_ids, list) else [],
     }

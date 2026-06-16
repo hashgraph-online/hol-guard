@@ -101,6 +101,7 @@ class GeminiHarnessAdapter(HarnessAdapter):
             self._append_found_path(found_paths, manifest_path)
             raw_name = payload.get("name")
             extension_name = raw_name if isinstance(raw_name, str) else manifest_path.parent.name
+            publisher_value = payload.get("publisher")
             artifacts.append(
                 GuardArtifact(
                     artifact_id=f"gemini:{scope}:{extension_name}",
@@ -109,7 +110,7 @@ class GeminiHarnessAdapter(HarnessAdapter):
                     artifact_type="extension",
                     source_scope=scope,
                     config_path=str(manifest_path),
-                    publisher=payload.get("publisher") if isinstance(payload.get("publisher"), str) else None,
+                    publisher=publisher_value if isinstance(publisher_value, str) else None,
                     metadata={"context_file": payload.get("contextFileName")},
                 )
             )

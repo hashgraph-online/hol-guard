@@ -1,7 +1,6 @@
 """Guard CLI helper definitions."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
@@ -10,13 +9,29 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ._commands_shared import _now
     from .commands_support_hook_payload import _hook_action_envelope
-    from .commands_support_hook_state import _append_cursor_pending_shell_key, _claude_pending_permission_index_key, _claude_pending_permission_state_key, _cursor_after_shell_observed, _cursor_conversation_id, _cursor_pending_shell_index_key, _cursor_pending_shell_is_fresh, _cursor_pending_shell_state_key, _cursor_shell_command_fingerprint, _cursor_shell_command_from_payload, _load_claude_pending_permission, _record_cursor_native_shell_allow_state, _remove_claude_pending_permission, _sync_payload_list_from_row
+    from .commands_support_hook_state import (
+        _append_cursor_pending_shell_key,
+        _claude_pending_permission_index_key,
+        _claude_pending_permission_state_key,
+        _cursor_after_shell_observed,
+        _cursor_conversation_id,
+        _cursor_pending_shell_index_key,
+        _cursor_pending_shell_is_fresh,
+        _cursor_pending_shell_state_key,
+        _cursor_shell_command_fingerprint,
+        _cursor_shell_command_from_payload,
+        _load_claude_pending_permission,
+        _record_cursor_native_shell_allow_state,
+        _remove_claude_pending_permission,
+        _sync_payload_list_from_row,
+    )
     from .commands_support_runtime_artifacts import _hook_runtime_artifact, _optional_string, _string_list
     from .commands_support_runtime_resolution import _runtime_capabilities_summary
 
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
 
 def _cursor_runtime_artifact_from_pending(pending: Mapping[str, object]) -> GuardArtifact | None:
     artifact_id = _optional_string(pending.get("artifact_id"))
@@ -36,6 +51,7 @@ def _cursor_runtime_artifact_from_pending(pending: Mapping[str, object]) -> Guar
         config_path=config_path,
         command=command,
     )
+
 
 def _record_cursor_pending_shell_permission(
     *,
@@ -113,6 +129,7 @@ def _record_cursor_pending_shell_permission(
         )
         return
 
+
 def _attach_cursor_pending_approval_request_ids(
     *,
     store: GuardStore,
@@ -150,6 +167,7 @@ def _attach_cursor_pending_approval_request_ids(
     except (OSError, sqlite3.Error):
         return
 
+
 def _load_cursor_pending_shell_permission(
     store: GuardStore,
     *,
@@ -186,6 +204,7 @@ def _load_cursor_pending_shell_permission(
             return candidate
     return None
 
+
 def _remove_cursor_pending_shell_permission(
     store: GuardStore,
     *,
@@ -217,6 +236,7 @@ def _remove_cursor_pending_shell_permission(
                 connection.execute("delete from sync_state where state_key = ?", (index_key,))
     except (OSError, sqlite3.Error):
         return
+
 
 def _persist_cursor_native_permission_policy(
     *,
@@ -255,6 +275,7 @@ def _persist_cursor_native_permission_policy(
         return False
     return True
 
+
 def _resolve_cursor_pending_approval_requests(
     *,
     store: GuardStore,
@@ -276,6 +297,7 @@ def _resolve_cursor_pending_approval_requests(
                 reason=reason,
                 resolved_at=now,
             )
+
 
 def _persist_cursor_native_permission_after_shell(
     *,
@@ -386,6 +408,7 @@ def _persist_cursor_native_permission_after_shell(
     )
     return True
 
+
 def _persist_claude_native_permission_policy(
     *,
     store: GuardStore,
@@ -422,6 +445,7 @@ def _persist_claude_native_permission_policy(
     except (ApprovalGateError, OSError, sqlite3.Error):
         return False
     return True
+
 
 def _persist_claude_native_permission_for_runtime_artifact(
     *,
@@ -466,6 +490,7 @@ def _persist_claude_native_permission_for_runtime_artifact(
         )
     return True
 
+
 def _discard_claude_pending_permissions(store: GuardStore, payload: dict[str, object]) -> int:
     session_id = _optional_string(payload.get("session_id"))
     if session_id is None:
@@ -485,6 +510,7 @@ def _discard_claude_pending_permissions(store: GuardStore, payload: dict[str, ob
     except (OSError, sqlite3.Error):
         return 0
     return len(pending_keys)
+
 
 __all__ = [
     "_attach_cursor_pending_approval_request_ids",

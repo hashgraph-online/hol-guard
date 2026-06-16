@@ -10,7 +10,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ._commands_shared import _now
     from .commands_support_codex_git import _git_repo_root
-    from .commands_support_connect import _announce_guard_device_connect_copy, _finalize_guard_connect_payload, _run_guard_device_connect_flow
+    from .commands_support_connect import (
+        _announce_guard_device_connect_copy,
+        _finalize_guard_connect_payload,
+        _run_guard_device_connect_flow,
+    )
     from .commands_support_hook_payload import _open_approval_center
     from .commands_support_interaction import _emit
 
@@ -231,9 +235,10 @@ def _run_init_command(
             approved_any = True
             if step_id == "dashboard":
                 try:
-                    approval_center_url = ensure_guard_daemon(context.guard_home)
+                    dashboard_url = ensure_guard_daemon(context.guard_home)
+                    approval_center_url = dashboard_url
                     open_result = _open_approval_center(
-                        approval_center_url,
+                        dashboard_url,
                         store=store,
                         config=config,
                         open_key="init",

@@ -1,7 +1,6 @@
 """Guard CLI command dispatch helpers."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
@@ -11,14 +10,23 @@ if TYPE_CHECKING:
     from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
     from .commands_support_connect import _filter_policy_items
     from .commands_support_interaction import _emit
-    from .commands_support_prompts import _run_approval_password_settings_command, _run_approval_totp_settings_command, _update_guard_cli_settings
-    from .commands_support_runtime_policy import _guard_cli_settings_payload, _guard_settings_doctor_payload, _guard_settings_explain_payload
+    from .commands_support_prompts import (
+        _run_approval_password_settings_command,
+        _run_approval_totp_settings_command,
+        _update_guard_cli_settings,
+    )
+    from .commands_support_runtime_policy import (
+        _guard_cli_settings_payload,
+        _guard_settings_doctor_payload,
+        _guard_settings_explain_payload,
+    )
     from .commands_support_service import _build_abom_payload, _guard_sync_failure_message
 
 
-from ..aibom_cli import AibomCliOptions, AibomExportFormat, _AIBOM_CLOUD_SYNC_OPTIONS
+from ..aibom_cli import _AIBOM_CLOUD_SYNC_OPTIONS, AibomCliOptions, AibomExportFormat
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
 
 def _run_guard_diff_command(
     args: argparse.Namespace,
@@ -42,6 +50,7 @@ def _run_guard_diff_command(
     _emit("diff", payload, getattr(args, "json", False))
     return 0
 
+
 def _run_guard_receipts_command(
     args: argparse.Namespace,
     *,
@@ -56,6 +65,7 @@ def _run_guard_receipts_command(
     store = _require_guard_store(store)
     _emit("receipts", {"generated_at": _now(), "items": store.list_receipts()}, getattr(args, "json", False))
     return 0
+
 
 def _run_guard_history_command(
     args: argparse.Namespace,
@@ -98,6 +108,7 @@ def _run_guard_history_command(
     _emit("history", {"error": "Use: hol-guard history explain <receipt_id>"}, getattr(args, "json", False))
     return 1
 
+
 def _run_guard_inventory_command(
     args: argparse.Namespace,
     *,
@@ -123,6 +134,7 @@ def _run_guard_inventory_command(
         payload = {"generated_at": generated_at, "items": store.list_inventory()}
     _emit("inventory", payload, getattr(args, "json", False))
     return 0
+
 
 def _run_guard_aibom_command(
     args: argparse.Namespace,
@@ -207,6 +219,7 @@ def _run_guard_aibom_command(
     _emit("aibom", payload, True)
     return 0
 
+
 def _run_guard_abom_command(
     args: argparse.Namespace,
     *,
@@ -225,6 +238,7 @@ def _run_guard_abom_command(
         return 0
     _emit("abom", payload, True)
     return 0
+
 
 def _run_guard_policies_command(
     args: argparse.Namespace,
@@ -345,11 +359,7 @@ def _run_guard_policies_command(
         preserve_all_local = bool(getattr(args, "preserve_all_local", False))
         clear_unselected = bool(getattr(args, "clear_unselected", False))
         migratable_statuses = {"missing_integrity", "unknown_key"}
-        preserve_ids = {
-            int(value)
-            for value in (getattr(args, "decision_ids", None) or [])
-            if isinstance(value, int)
-        }
+        preserve_ids = {int(value) for value in (getattr(args, "decision_ids", None) or []) if isinstance(value, int)}
         if not preserve_all_local and not preserve_ids and not clear_unselected:
             _emit(
                 "policies",
@@ -400,6 +410,7 @@ def _run_guard_policies_command(
     items = _filter_policy_items(policy_items, active_only=True)
     _emit("policies", {"generated_at": _now(), "items": items}, getattr(args, "json", False))
     return 0
+
 
 def _run_guard_settings_command(
     args: argparse.Namespace,
@@ -455,6 +466,7 @@ def _run_guard_settings_command(
         return 0
     _emit("settings", _guard_cli_settings_payload(config), getattr(args, "json", False))
     return 0
+
 
 __all__ = [
     "_run_guard_abom_command",

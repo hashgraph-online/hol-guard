@@ -8,9 +8,11 @@ import os
 import shlex
 import subprocess
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
+from uuid import uuid4
 
 from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
 from .config import GuardConfig
@@ -940,22 +942,27 @@ def _review_reason(
 
 
 def _build_install_receipt(request: ProtectRequest, verdict: ProtectVerdict) -> GuardReceipt:
-    from .receipts import build_receipt
-
     primary_target = request.targets[0]
     artifact_hash = _command_fingerprint(list(request.command))
     capabilities_summary = f"{request.executor} {request.install_kind.replace('_', ' ')}"
     provenance_summary = shlex.join(request.command)
-    return build_receipt(
+    changed_capabilities = list(verdict.risk_signals)
+    sample = ", ".join(changed_capabilities[:3])
+    suffix = " ..." if len(changed_capabilities) > 3 else ""
+    diff_summary = f"{len(changed_capabilities)} change(s): {sample}{suffix}" if changed_capabilities else None
+    return GuardReceipt(
+        receipt_id=f"guard-receipt-{uuid4()}",
+        timestamp=datetime.now(timezone.utc).isoformat(),
         harness=request.harness or request.package_manager or request.executor,
         artifact_id=primary_target.artifact_id,
         artifact_hash=artifact_hash,
         policy_decision=verdict.action,
         capabilities_summary=capabilities_summary,
-        changed_capabilities=list(verdict.risk_signals),
+        changed_capabilities=tuple(changed_capabilities),
         provenance_summary=provenance_summary,
         artifact_name=primary_target.artifact_name,
         source_scope="install",
+        diff_summary=diff_summary,
     )
 
 

@@ -1,7 +1,6 @@
 """Guard CLI Copilot hook helpers."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
@@ -10,8 +9,19 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ._commands_shared import _hook_command_text, _now
     from .commands_support_hook_payload import _action_envelope_json, _approval_surface_policy_for_flow
-    from .commands_support_interaction import _attach_primary_approval_link, _codex_browser_wait_metadata, _emit, _preferred_approval_review_url, _record_harness_usage_for_hook, _should_emit_copilot_hook_response
-    from .commands_support_prompts import _copilot_hook_reason, _emit_copilot_hook_response, _emit_copilot_permission_request_response
+    from .commands_support_interaction import (
+        _attach_primary_approval_link,
+        _codex_browser_wait_metadata,
+        _emit,
+        _preferred_approval_review_url,
+        _record_harness_usage_for_hook,
+        _should_emit_copilot_hook_response,
+    )
+    from .commands_support_prompts import (
+        _copilot_hook_reason,
+        _emit_copilot_hook_response,
+        _emit_copilot_permission_request_response,
+    )
     from .commands_support_runtime_artifacts import _optional_string
     from .commands_support_runtime_policy import _localize_pending_approval_copy, _native_approval_center_context
     from .commands_support_runtime_resolution import _canonical_harness_name, _runtime_detection
@@ -19,6 +29,7 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
 
 def _run_hook_copilot_pretool(
     args: argparse.Namespace,
@@ -303,6 +314,7 @@ def _run_hook_copilot_permission_request(
         return 0
     _emit("hook", response_payload, getattr(args, "json", False))
     return 1
+
 
 __all__ = [
     "_run_hook_copilot_permission_request",

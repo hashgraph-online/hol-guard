@@ -293,9 +293,7 @@ def _command_parts(server_config: dict[str, object]) -> tuple[str | None, tuple[
     command = server_config.get("command")
     args_payload = server_config.get("args")
     args = (
-        tuple(str(value) for value in args_payload if isinstance(value, str))
-        if isinstance(args_payload, list)
-        else ()
+        tuple(str(value) for value in args_payload if isinstance(value, str)) if isinstance(args_payload, list) else ()
     )
     if isinstance(command, str):
         return command, args

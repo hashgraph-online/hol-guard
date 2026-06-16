@@ -340,8 +340,8 @@ def opencode_config_uses_guard_proxy(config_path: Path) -> bool:
     mcp = payload.get("mcp")
     if not isinstance(mcp, dict):
         return False
-    native_servers: dict[str, dict] = {}
-    companions: dict[str, dict] = {}
+    native_servers: dict[str, dict[str, object]] = {}
+    companions: dict[str, dict[str, object]] = {}
     for name, server in mcp.items():
         if not isinstance(name, str) or not isinstance(server, dict):
             continue

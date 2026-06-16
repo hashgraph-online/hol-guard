@@ -6,6 +6,7 @@ import argparse
 import difflib
 import re
 from pathlib import Path
+from typing import NoReturn
 
 _INVALID_CHOICE_PATTERN = re.compile(r"invalid choice: '([^']+)' \(choose from ([^)]+)\)")
 
@@ -13,7 +14,7 @@ _INVALID_CHOICE_PATTERN = re.compile(r"invalid choice: '([^']+)' \(choose from (
 class FriendlyArgumentParser(argparse.ArgumentParser):
     """Augment argparse errors with command recovery hints."""
 
-    def error(self, message: str) -> None:
+    def error(self, message: str) -> NoReturn:
         message = _rewrite_invalid_choice_message(self, message)
         hint = _error_hint(message, self.prog)
         if hint:

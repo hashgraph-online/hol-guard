@@ -119,6 +119,11 @@ def test_run_guard_remote_pair_command_persists_credentials_and_installs_runtime
 ) -> None:
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.remote_pair_flow.os.geteuid",
+        lambda: 1000,
+        raising=False,
+    )
 
     def fake_claim(**_kwargs: object) -> dict[str, object]:
         return {
@@ -201,6 +206,11 @@ def test_run_guard_remote_pair_command_wraps_local_save_oserror(
 ) -> None:
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.remote_pair_flow.os.geteuid",
+        lambda: 1000,
+        raising=False,
+    )
 
     def fake_claim(**_kwargs: object) -> dict[str, object]:
         return {

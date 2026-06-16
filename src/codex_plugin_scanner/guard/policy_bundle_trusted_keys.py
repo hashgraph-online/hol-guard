@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import time
 from dataclasses import dataclass
 
 from .runtime.supply_chain_bundle_base import _parse_iso_timestamp
 
 _VERIFICATION_KEY_STATES = frozenset({"active", "grace", "revoked"})
+
+
+def _policy_bundle_parser_module():
+    return importlib.import_module(".policy_bundle_parser", __package__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,9 +223,7 @@ def validate_synced_policy_bundle(
         sync_payload=sync_payload,
         supply_chain_keyring=supply_chain_keyring,
     )
-    from .policy_bundle_parser import validated_policy_bundle_payload
-
-    validated_bundle, rejection_reason = validated_policy_bundle_payload(
+    validated_bundle, rejection_reason = _policy_bundle_parser_module().validated_policy_bundle_payload(
         policy_bundle,
         trusted_verification_keys=trusted_keys,
         anchored_verification_keys=anchored_keys,

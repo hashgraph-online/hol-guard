@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Mapping
 from datetime import datetime, timezone
 
 CONNECT_STATE_VERSION = "guard-connect-state.v1"
@@ -178,11 +179,11 @@ def mark_connect_result(
 
 
 def build_connect_state_response(
-    payload: dict[str, object],
+    payload: Mapping[str, object],
     *,
     poll_after_ms: int | None = None,
 ) -> dict[str, object]:
-    response = dict(payload)
+    response: dict[str, object] = dict(payload)
     response["version"] = CONNECT_STATE_VERSION
     response["poll_after_ms"] = poll_after_ms if poll_after_ms is not None else _resolve_poll_after_ms(response)
     response["proof"] = _coerce_proof(response.get("proof"))

@@ -41,7 +41,7 @@ _APPROVAL_CENTER_LOCATOR_FILE = "approval-center-locator.json"
 
 _START_LOCKS: dict[str, threading.Lock] = {}
 _START_LOCKS_GUARD = threading.Lock()
-_last_ephemeral_reap_at = 0.0
+_LAST_EPHEMERAL_REAP_AT = 0.0
 _runtime_fingerprint_cache: str | None = None
 
 
@@ -574,11 +574,13 @@ def _set_private_mode(path: Path, mode: int) -> None:
 
 
 def _reap_stale_ephemeral_guard_daemons(*, exclude_guard_home: Path | None = None) -> None:
-    global _last_ephemeral_reap_at
     now = time.monotonic()
-    if now - _last_ephemeral_reap_at < _EPHEMERAL_GUARD_DAEMON_REAP_INTERVAL_SECONDS:
+    last_reap_at = globals().get("_LAST_EPHEMERAL_REAP_AT", 0.0)
+    if not isinstance(last_reap_at, (int, float)):
+        last_reap_at = 0.0
+    if now - float(last_reap_at) < _EPHEMERAL_GUARD_DAEMON_REAP_INTERVAL_SECONDS:
         return
-    _last_ephemeral_reap_at = now
+    globals()["_LAST_EPHEMERAL_REAP_AT"] = now
     temp_root = Path(tempfile.gettempdir())
     candidate_paths = list(_ephemeral_guard_daemon_state_paths(temp_root))
     exclude_resolved = exclude_guard_home.resolve() if exclude_guard_home is not None else None

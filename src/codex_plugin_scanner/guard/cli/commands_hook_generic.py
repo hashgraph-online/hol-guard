@@ -1,25 +1,60 @@
 """Guard CLI generic hook fallback flow."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ._commands_shared import _HOOK_DAEMON_FAILURE_STATUSES, _HOOK_DAEMON_FAIL_MODES, _HOOK_DAEMON_PERMISSIVE_REASON, _HOOK_DAEMON_PRESERVED_DENY_REASON, _HOOK_DAEMON_STRICT_REASON
+    from ._commands_shared import (
+        _HOOK_DAEMON_FAIL_MODES,
+        _HOOK_DAEMON_FAILURE_STATUSES,
+        _HOOK_DAEMON_PERMISSIVE_REASON,
+        _HOOK_DAEMON_PRESERVED_DENY_REASON,
+        _HOOK_DAEMON_STRICT_REASON,
+    )
     from .commands_support_claude_approval import _claude_native_pretooluse_terminal_notice
-    from .commands_support_hook_payload import _coalesce_string, _emit_native_hook_block_stderr, _emit_native_hook_notification_stderr, _emit_native_hook_response
-    from .commands_support_interaction import _emit, _record_harness_usage_for_hook, _should_emit_claude_native_pretooluse_notice, _should_emit_copilot_hook_response, _should_emit_native_hook_exit_block, _should_emit_native_hook_json_response, _should_emit_native_hook_response
-    from .commands_support_prompts import _codex_prompt_block_system_message, _copilot_hook_reason, _decision_v2_harness_message, _emit_copilot_hook_response
-    from .commands_support_runtime_artifacts import _artifact_id_from_event, _hook_event_name, _optional_string, _string_list
-    from .commands_support_runtime_policy import _ensure_terminal_punctuation, _localize_pending_approval_copy, _native_approval_center_context, _native_hook_reason, _native_hook_reason_for_harness
+    from .commands_support_hook_payload import (
+        _coalesce_string,
+        _emit_native_hook_block_stderr,
+        _emit_native_hook_notification_stderr,
+        _emit_native_hook_response,
+    )
+    from .commands_support_interaction import (
+        _emit,
+        _record_harness_usage_for_hook,
+        _should_emit_claude_native_pretooluse_notice,
+        _should_emit_copilot_hook_response,
+        _should_emit_native_hook_exit_block,
+        _should_emit_native_hook_json_response,
+        _should_emit_native_hook_response,
+    )
+    from .commands_support_prompts import (
+        _codex_prompt_block_system_message,
+        _copilot_hook_reason,
+        _decision_v2_harness_message,
+        _emit_copilot_hook_response,
+    )
+    from .commands_support_runtime_artifacts import (
+        _artifact_id_from_event,
+        _hook_event_name,
+        _optional_string,
+        _string_list,
+    )
+    from .commands_support_runtime_policy import (
+        _ensure_terminal_punctuation,
+        _localize_pending_approval_copy,
+        _native_approval_center_context,
+        _native_hook_reason,
+        _native_hook_reason_for_harness,
+    )
     from .commands_support_runtime_resolution import _canonical_harness_name, _copilot_hook_stage
 
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
 
 def _run_hook_generic_payload(
     args: argparse.Namespace,
@@ -242,6 +277,7 @@ def _run_hook_generic_payload(
         getattr(args, "json", False),
     )
     return 1 if policy_action in {"block", "require-reapproval"} else 0
+
 
 __all__ = [
     "_run_hook_generic_payload",

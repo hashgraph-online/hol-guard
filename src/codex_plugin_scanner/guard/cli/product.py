@@ -186,9 +186,9 @@ def _recommended_harness(harnesses: list[dict[str, object]]) -> dict[str, object
         key=lambda item: (
             0 if bool(item["installed"]) else 1,
             0 if _int_payload_value(item, "artifact_count", 0) > 0 else 1,
-            0 if bool(item["command_available"]) else 1,
             _approval_experience_rank(item.get("approval_flow")),
             priority.get(str(item["harness"]), len(HARNESS_PRIORITY)),
+            0 if bool(item["command_available"]) else 1,
         ),
     )
 

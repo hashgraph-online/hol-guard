@@ -1,22 +1,48 @@
 """Guard CLI helper definitions."""
 
 # fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
+import importlib
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ._commands_shared import _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS, _hook_command_text, _now
     from .commands_support_hook_payload import _browser_url_with_guard_params
-    from .commands_support_hook_state import _update_codex_browser_operation_status
-    from .commands_support_runtime_artifacts import _optional_string
-    from .commands_support_runtime_resolution import _canonical_harness_name
 
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
+
+def _runtime_artifacts_module():
+    return importlib.import_module(".commands_support_runtime_artifacts", __package__)
+
+
+def _hook_state_module():
+    return importlib.import_module(".commands_support_hook_state", __package__)
+
+
+def _runtime_resolution_module():
+    return importlib.import_module(".commands_support_runtime_resolution", __package__)
+
+
+def _optional_string(value: object | None) -> str | None:
+    return _runtime_artifacts_module()._optional_string(value)
+
+
+def _update_codex_browser_operation_status(
+    response_payload: dict[str, object],
+    daemon_client: object | None,
+    status: str,
+) -> None:
+    _hook_state_module()._update_codex_browser_operation_status(response_payload, daemon_client, status)
+
+
+def _canonical_harness_name(value: str) -> str:
+    return _runtime_resolution_module()._canonical_harness_name(value)
 
 def _run_apps_command(
     args: argparse.Namespace,

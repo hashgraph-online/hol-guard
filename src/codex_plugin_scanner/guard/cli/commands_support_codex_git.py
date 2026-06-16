@@ -1,19 +1,32 @@
 """Guard CLI helper definitions."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .commands_support_codex_commands import _CODEX_GIT_DIFF_BOOLEAN_OPTIONS, _CODEX_GIT_DIFF_DISALLOWED_OPTIONS, _CODEX_GIT_DIFF_OPTIONAL_VALUE_OPTIONS, _CODEX_GIT_DIFF_VALUE_OPTIONS, _CODEX_GIT_GLOBAL_VALUE_FLAGS, _CODEX_SAFE_GIT_GLOBAL_BOOLEAN_FLAGS, _CodexSedReadOnlyArgs
-    from .commands_support_codex_paths import _codex_search_target_is_source_like, _git_config_enables_diff_helper, _git_config_logical_lines, _git_config_value_without_inline_comment
+    from .commands_support_codex_commands import (
+        _CODEX_GIT_DIFF_BOOLEAN_OPTIONS,
+        _CODEX_GIT_DIFF_DISALLOWED_OPTIONS,
+        _CODEX_GIT_DIFF_OPTIONAL_VALUE_OPTIONS,
+        _CODEX_GIT_DIFF_VALUE_OPTIONS,
+        _CODEX_GIT_GLOBAL_VALUE_FLAGS,
+        _CODEX_SAFE_GIT_GLOBAL_BOOLEAN_FLAGS,
+        _CodexSedReadOnlyArgs,
+    )
+    from .commands_support_codex_paths import (
+        _codex_search_target_is_source_like,
+        _git_config_enables_diff_helper,
+        _git_config_logical_lines,
+        _git_config_value_without_inline_comment,
+    )
 
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
 
 def _parse_codex_sed_read_only_args(args: list[str]) -> _CodexSedReadOnlyArgs | None:
     scripts: list[str] = []
@@ -61,9 +74,11 @@ def _parse_codex_sed_read_only_args(args: list[str]) -> _CodexSedReadOnlyArgs | 
         saw_print_suppression=saw_print_suppression,
     )
 
+
 def _codex_count_arg_is_bounded(value: str) -> bool:
     normalized = value.strip()
     return bool(re.fullmatch(r"\d{1,6}", normalized))
+
 
 def _git_grep_search_args(args: list[str]) -> list[str] | None:
     index = 0
@@ -83,6 +98,7 @@ def _git_grep_search_args(args: list[str]) -> list[str] | None:
         return None
     return None
 
+
 def _codex_git_diff_targets_are_source_like(args: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:
     diff_args = _git_diff_args(args)
     if diff_args is None:
@@ -93,6 +109,7 @@ def _codex_git_diff_targets_are_source_like(args: list[str], *, cwd: Path | None
         and all(_codex_search_target_is_source_like(target, cwd=cwd, home_dir=home_dir) for target in targets)
         and _git_diff_external_helpers_are_disabled_or_unconfigured(diff_args, cwd=cwd)
     )
+
 
 def _git_diff_args(args: list[str]) -> list[str] | None:
     index = 0
@@ -105,6 +122,7 @@ def _git_diff_args(args: list[str]) -> list[str] | None:
             continue
         return None
     return None
+
 
 def _git_diff_path_args(args: list[str]) -> list[str]:
     paths: list[str] = []
@@ -152,12 +170,14 @@ def _git_diff_path_args(args: list[str]) -> list[str]:
         return []
     return paths
 
+
 def _git_diff_external_helpers_are_disabled_or_unconfigured(args: list[str], *, cwd: Path | None) -> bool:
     has_no_ext_diff = "--no-ext-diff" in args
     has_no_textconv = "--no-textconv" in args
     if has_no_ext_diff and has_no_textconv:
         return True
     return _git_repo_diff_helpers_are_unconfigured(cwd)
+
 
 def _git_repo_diff_helpers_are_unconfigured(cwd: Path | None) -> bool:
     if cwd is None:
@@ -178,6 +198,7 @@ def _git_repo_diff_helpers_are_unconfigured(cwd: Path | None) -> bool:
             return False
     return True
 
+
 def _git_repo_config_paths(cwd: Path) -> tuple[Path, ...]:
     current = cwd.resolve()
     if current.is_file():
@@ -197,6 +218,7 @@ def _git_repo_config_paths(cwd: Path) -> tuple[Path, ...]:
             return tuple(paths)
     return _git_global_config_paths()
 
+
 def _git_repo_root(cwd: Path) -> Path | None:
     current = cwd.absolute()
     if current.is_file():
@@ -205,6 +227,7 @@ def _git_repo_root(cwd: Path) -> Path | None:
         if (candidate / ".git").exists():
             return candidate
     return None
+
 
 def _git_global_config_paths() -> tuple[Path, ...]:
     paths: list[Path] = []
@@ -227,6 +250,7 @@ def _git_global_config_paths() -> tuple[Path, ...]:
             paths.append(xdg_config_home / "git" / "config")
     return tuple(paths)
 
+
 def _git_dir_from_file(git_file: Path) -> Path | None:
     try:
         content = git_file.read_text(encoding="utf-8", errors="ignore").strip()
@@ -241,6 +265,7 @@ def _git_dir_from_file(git_file: Path) -> Path | None:
         git_dir = (git_file.parent / git_dir).resolve()
     return git_dir
 
+
 def _git_common_dir(git_dir: Path) -> Path:
     common_dir_file = git_dir / "commondir"
     if not common_dir_file.is_file():
@@ -253,6 +278,7 @@ def _git_common_dir(git_dir: Path) -> Path:
     if not common_dir.is_absolute():
         common_dir = (git_dir / common_dir).resolve()
     return common_dir
+
 
 def _git_config_tree_disables_diff_helpers(config_path: Path, *, seen_paths: set[Path], repo_dir: Path | None) -> bool:
     normalized_path = config_path.expanduser().resolve()
@@ -276,6 +302,7 @@ def _git_config_tree_disables_diff_helpers(config_path: Path, *, seen_paths: set
         if not _git_config_tree_disables_diff_helpers(included_path, seen_paths=seen_paths, repo_dir=repo_dir):
             return False
     return True
+
 
 def _git_config_include_paths(
     config_text: str,
@@ -311,6 +338,7 @@ def _git_config_include_paths(
             include_path = (base_dir / include_path).resolve()
         paths.append(include_path)
     return tuple(paths)
+
 
 def _git_include_section_is_active(
     section: str,
@@ -349,6 +377,7 @@ def _git_include_section_is_active(
         return _git_hasconfig_condition_matches(condition[len("hasconfig:") :], repo_dir=repo_dir)
     return False
 
+
 def _git_gitdir_condition_matches(pattern: str, *, base_dir: Path, repo_dir: Path, case_sensitive: bool) -> bool:
     pattern_text = _git_gitdir_condition_pattern(pattern, base_dir=base_dir)
     patterns = _git_gitdir_condition_patterns(pattern_text)
@@ -360,14 +389,17 @@ def _git_gitdir_condition_matches(pattern: str, *, base_dir: Path, repo_dir: Pat
         return any(fnmatch.fnmatchcase(candidate, item) for candidate in candidates for item in patterns)
     return any(fnmatch.fnmatchcase(candidate.lower(), item.lower()) for candidate in candidates for item in patterns)
 
+
 def _git_path_aliases(path: Path) -> tuple[Path, ...]:
     resolved = path.resolve()
     if resolved == path:
         return (path,)
     return (path, resolved)
 
+
 def _git_gitdir_condition_candidate(path: Path) -> str:
     return path.as_posix().rstrip("/") + "/"
+
 
 def _git_gitdir_condition_patterns(pattern_text: str) -> tuple[str, ...]:
     if pattern_text.endswith("/**"):
@@ -375,6 +407,7 @@ def _git_gitdir_condition_patterns(pattern_text: str) -> tuple[str, ...]:
     if pattern_text.endswith("/"):
         return (pattern_text, f"{pattern_text}**")
     return (pattern_text, f"{pattern_text}/", f"{pattern_text}/**")
+
 
 def _git_gitdir_condition_pattern(pattern: str, *, base_dir: Path) -> str:
     expanded_pattern = pattern.strip()
@@ -385,6 +418,7 @@ def _git_gitdir_condition_pattern(pattern: str, *, base_dir: Path) -> str:
         return (base_dir / pattern_path).resolve().as_posix()
     return f"**/{expanded_pattern}"
 
+
 def _git_effective_git_dir(repo_dir: Path) -> Path | None:
     git_path = repo_dir / ".git"
     if git_path.is_dir():
@@ -392,6 +426,7 @@ def _git_effective_git_dir(repo_dir: Path) -> Path | None:
     if git_path.is_file():
         return _git_dir_from_file(git_path)
     return None
+
 
 def _git_onbranch_condition_matches(pattern: str, *, repo_dir: Path) -> bool:
     git_dir = repo_dir / ".git"
@@ -414,6 +449,7 @@ def _git_onbranch_condition_matches(pattern: str, *, repo_dir: Path) -> bool:
     normalized_pattern = f"{pattern}**" if pattern.endswith("/") else pattern
     return fnmatch.fnmatchcase(head.removeprefix(prefix), normalized_pattern)
 
+
 def _git_hasconfig_condition_matches(condition: str, *, repo_dir: Path) -> bool:
     key_pattern, _, value_pattern = condition.partition(":")
     if not key_pattern or not value_pattern:
@@ -428,6 +464,7 @@ def _git_hasconfig_condition_matches(condition: str, *, repo_dir: Path) -> bool:
         ):
             return True
     return False
+
 
 def _git_remote_urls_from_config_tree(config_path: Path, *, seen_paths: set[Path], repo_dir: Path) -> tuple[str, ...]:
     normalized_path = config_path.expanduser().resolve()
@@ -450,6 +487,7 @@ def _git_remote_urls_from_config_tree(config_path: Path, *, seen_paths: set[Path
         urls.extend(_git_remote_urls_from_config_tree(included_path, seen_paths=seen_paths, repo_dir=repo_dir))
     return tuple(urls)
 
+
 def _git_remote_urls_from_config(config_text: str) -> tuple[str, ...]:
     urls: list[str] = []
     in_remote_section = False
@@ -467,6 +505,7 @@ def _git_remote_urls_from_config(config_text: str) -> tuple[str, ...]:
         if key_match is not None:
             urls.append(_git_config_value_without_inline_comment(key_match.group(1)))
     return tuple(urls)
+
 
 __all__ = [
     "_codex_count_arg_is_bounded",

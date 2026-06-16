@@ -1,11 +1,9 @@
 """Guard CLI command dispatch helpers."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -20,6 +18,7 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
 
 def _run_guard_codex_mcp_proxy_command(
     args: argparse.Namespace,
@@ -49,6 +48,7 @@ def _run_guard_codex_mcp_proxy_command(
     )
     return proxy.serve()
 
+
 def _run_guard_cursor_mcp_proxy_command(
     args: argparse.Namespace,
     *,
@@ -76,6 +76,7 @@ def _run_guard_cursor_mcp_proxy_command(
         server_env_keys=tuple(args.server_env_keys),
     )
     return proxy.serve()
+
 
 def _run_guard_opencode_mcp_proxy_command(
     args: argparse.Namespace,
@@ -105,6 +106,7 @@ def _run_guard_opencode_mcp_proxy_command(
     )
     return proxy.serve()
 
+
 def _run_guard_copilot_mcp_proxy_command(
     args: argparse.Namespace,
     *,
@@ -133,6 +135,7 @@ def _run_guard_copilot_mcp_proxy_command(
     )
     return proxy.serve()
 
+
 def _run_guard_hermes_mcp_proxy_command(
     args: argparse.Namespace,
     *,
@@ -148,6 +151,7 @@ def _run_guard_hermes_mcp_proxy_command(
     store = _require_guard_store(store)
     config = _require_guard_config(config)
     return _run_hermes_mcp_proxy(args=args, context=context, store=store, config=config)
+
 
 def _run_guard_uninstall_command(
     args: argparse.Namespace,
@@ -177,6 +181,7 @@ def _run_guard_uninstall_command(
         return 2
     _emit("uninstall", payload, getattr(args, "json", False))
     return 0
+
 
 def _run_guard_package_shims_command(
     args: argparse.Namespace,
@@ -246,6 +251,7 @@ def _run_guard_package_shims_command(
     _emit("package-shims", payload, getattr(args, "json", False))
     return 0
 
+
 def _run_guard_run_command(
     args: argparse.Namespace,
     *,
@@ -264,12 +270,7 @@ def _run_guard_run_command(
     config = overlay_synced_guard_policy(config, _synced_policy_payload(store))
     interactive_resolver_fn = None
     blocked_resolver_fn = None
-    if (
-        not getattr(args, "json", False)
-        and not bool(args.dry_run)
-        and config.mode == "prompt"
-        and sys.stdin.isatty()
-    ):
+    if not getattr(args, "json", False) and not bool(args.dry_run) and config.mode == "prompt" and sys.stdin.isatty():
         from .prompt import build_prompt_artifacts, resolve_interactive_decisions
 
         def _interactive_resolver_impl(detection, payload):
@@ -284,6 +285,7 @@ def _run_guard_run_command(
                 workspace=str(workspace) if workspace else None,
                 now=_now(),
             )
+
         interactive_resolver_fn = _interactive_resolver_impl
     elif not bool(args.dry_run) and config.mode == "prompt":
         blocked_resolver_fn = _headless_approval_resolver(args=args, context=context, store=store, config=config)
@@ -308,6 +310,7 @@ def _run_guard_run_command(
         return 1
     return_code = payload.get("return_code")
     return int(return_code) if isinstance(return_code, int) else 0
+
 
 __all__ = [
     "_run_guard_codex_mcp_proxy_command",

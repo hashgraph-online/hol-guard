@@ -1,7 +1,6 @@
 """Guard CLI command dispatch helpers."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
@@ -9,15 +8,29 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
-    from .commands_support_connect import _filter_policy_items, _guard_doctor_connect_health_payload, _resolve_policy_expiry, _validate_policy_scope
-    from .commands_support_interaction import _emit, _policy_write_needs_approval_gate, _policy_write_requires_approval_gate
+    from .commands_support_connect import (
+        _filter_policy_items,
+        _guard_doctor_connect_health_payload,
+        _resolve_policy_expiry,
+        _validate_policy_scope,
+    )
+    from .commands_support_interaction import (
+        _emit,
+        _policy_write_needs_approval_gate,
+        _policy_write_requires_approval_gate,
+    )
     from .commands_support_runtime_policy import _runtime_detector_perf_payload, _runtime_detector_registry_payload
-    from .commands_support_service import _build_explain_payload_with_mode, _guard_sync_failure_message, _validated_supply_chain_sync_payload
+    from .commands_support_service import (
+        _build_explain_payload_with_mode,
+        _guard_sync_failure_message,
+        _validated_supply_chain_sync_payload,
+    )
 
 
+from ..runtime.command_queue import command_queue_status, repair_command_queue_state
 from ._commands_shared import *
 from .commands_parser_helpers import *
-from ..runtime.command_queue import command_queue_status, repair_command_queue_state
+
 
 def _run_guard_exceptions_command(
     args: argparse.Namespace,
@@ -41,6 +54,7 @@ def _run_guard_exceptions_command(
     _emit("exceptions", {"generated_at": _now(), "items": items}, getattr(args, "json", False))
     return 0
 
+
 def _run_guard_advisories_command(
     args: argparse.Namespace,
     *,
@@ -59,9 +73,7 @@ def _run_guard_advisories_command(
             payload = _validated_supply_chain_sync_payload(sync_supply_chain_bundle(store))
         except GuardSyncNotConfiguredError as error:
             status = (
-                "auth_expired"
-                if isinstance(error, GuardSyncAuthorizationExpiredError)
-                else "no_cloud_sync_configured"
+                "auth_expired" if isinstance(error, GuardSyncAuthorizationExpiredError) else "no_cloud_sync_configured"
             )
             _emit(
                 "advisories_sync",
@@ -92,15 +104,14 @@ def _run_guard_advisories_command(
         sev_filter = getattr(args, "severity", None)
         if sev_filter and sev_filter in SEVERITY_RANK:
             min_rank = SEVERITY_RANK[sev_filter]
-            all_advs = [
-                a for a in all_advs if SEVERITY_RANK.get(str(a.get("severity", "")).lower(), -1) >= min_rank
-            ]
+            all_advs = [a for a in all_advs if SEVERITY_RANK.get(str(a.get("severity", "")).lower(), -1) >= min_rank]
         _emit(
             "advisories",
             {"generated_at": _now(), "items": all_advs},
             getattr(args, "json", False),
         )
     return 0
+
 
 def _run_guard_events_command(
     args: argparse.Namespace,
@@ -120,6 +131,7 @@ def _run_guard_events_command(
         getattr(args, "json", False),
     )
     return 0
+
 
 def _run_guard_approvals_command(
     args: argparse.Namespace,
@@ -151,6 +163,7 @@ def _run_guard_approvals_command(
     exit_code = payload.get("exit_code")
     return exit_code if isinstance(exit_code, int) else 0
 
+
 def _run_guard_explain_command(
     args: argparse.Namespace,
     *,
@@ -169,6 +182,7 @@ def _run_guard_explain_command(
         payload = _build_explain_payload_with_mode(store, args.target, cisco_mode=args.cisco_mode)
     _emit("explain", payload, getattr(args, "json", False))
     return 0
+
 
 def _run_guard_policy_action_command(
     args: argparse.Namespace,
@@ -216,6 +230,7 @@ def _run_guard_policy_action_command(
         return 4
     _emit(args.guard_command, {"decision": payload}, getattr(args, "json", False))
     return 0
+
 
 def _run_guard_doctor_command(
     args: argparse.Namespace,
@@ -329,6 +344,7 @@ def _run_guard_doctor_command(
     payload["aibom"] = build_aibom_status_payload(store, context, generated_at=_now())
     _emit("doctor", payload, getattr(args, "json", False))
     return 0
+
 
 __all__ = [
     "_run_guard_advisories_command",

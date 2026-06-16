@@ -533,7 +533,7 @@ def _parse_helm_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> Pa
 
 def _build_intent(
     package_manager: str,
-    intent_kind: str,
+    intent_kind: IntentKind,
     command_tokens: tuple[str, ...],
     targets: tuple[PackageIntentTarget, ...],
     *,

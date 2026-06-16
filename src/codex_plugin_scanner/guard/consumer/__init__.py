@@ -25,7 +25,9 @@ def detect_harness(harness: str, context: Any):
     return _service_module().detect_harness(harness, context)
 
 
-def evaluate_detection(detection: Any, store: Any, config: Any, default_action: str | None = None, persist: bool = True):
+def evaluate_detection(
+    detection: Any, store: Any, config: Any, default_action: str | None = None, persist: bool = True
+):
     return _service_module().evaluate_detection(
         detection,
         store,

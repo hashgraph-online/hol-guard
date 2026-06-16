@@ -80,7 +80,7 @@ def build_json_payload(
 ) -> dict[str, object]:
     """Convert a scan result into a JSON-serializable payload."""
 
-    payload = {
+    payload: dict[str, object] = {
         "schema_version": "scan-result.v1",
         "tool_version": __version__,
         "profile": profile,
@@ -337,17 +337,16 @@ def format_sarif(result: ScanResult) -> str:
             },
         }
         if finding.file_path:
-            location = {
-                "physicalLocation": {
-                    "artifactLocation": {"uri": finding.file_path},
-                }
+            physical_location: dict[str, object] = {
+                "artifactLocation": {"uri": finding.file_path},
             }
             if finding.line_number:
-                location["physicalLocation"]["region"] = {"startLine": finding.line_number}
+                physical_location["region"] = {"startLine": finding.line_number}
+            location: dict[str, object] = {"physicalLocation": physical_location}
             result_entry["locations"] = [location]
         results.append(result_entry)
 
-    payload = {
+    payload: dict[str, object] = {
         "version": "2.1.0",
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "runs": [
