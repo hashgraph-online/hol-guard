@@ -16144,6 +16144,7 @@ function buildGitHubIssueUrl(options) {
   return url.toString();
 }
 const GITHUB_ISSUE_LINK = buildGitHubIssueUrl();
+const SHELL_FOOTER_LICENSE_HREF = "https://github.com/hashgraph-online/hol-guard/blob/main/LICENSE";
 const SHELL_FOOTER_RESOURCE_LINKS = [
   { href: "https://hol.org/guard/docs", label: "Docs" },
   { href: "https://hol.org/guard", label: "Guard Cloud" },
@@ -16155,9 +16156,19 @@ const SHELL_FOOTER_RESOURCE_LINKS = [
 function ShellFooter() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("footer", { className: "mt-auto border-t border-slate-200 bg-[#f8fafc]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mx-auto flex max-w-6xl flex-col gap-3 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] font-medium text-slate-400", children: [
-      "© ",
-      (/* @__PURE__ */ new Date()).getFullYear(),
-      " HOL DAO LLC"
+      "HOL Guard is open source under",
+      " ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "a",
+        {
+          href: SHELL_FOOTER_LICENSE_HREF,
+          target: "_blank",
+          rel: "noreferrer",
+          className: "rounded-sm text-slate-500 no-underline transition-colors hover:text-brand-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30",
+          children: "Apache-2.0"
+        }
+      ),
+      ". Built by Hashgraph Online."
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { "aria-label": "Guard resources", className: "flex flex-wrap gap-x-4 gap-y-1", children: SHELL_FOOTER_RESOURCE_LINKS.map((link) => /* @__PURE__ */ jsxRuntimeExports.jsx(
       "a",

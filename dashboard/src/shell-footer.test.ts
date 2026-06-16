@@ -2,13 +2,18 @@ import {
   GITHUB_ISSUE_BUTTON_LABEL,
   GITHUB_ISSUE_LINK,
 } from "./github-issue-link";
-import { SHELL_FOOTER_RESOURCE_LINKS } from "./shell-footer";
+import { SHELL_FOOTER_LICENSE_HREF, SHELL_FOOTER_RESOURCE_LINKS } from "./shell-footer";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
     throw new Error(message);
   }
 }
+
+assert(
+  SHELL_FOOTER_LICENSE_HREF.endsWith("/hol-guard/blob/main/LICENSE"),
+  "footer license link points at the repository LICENSE file"
+);
 
 assert(
   SHELL_FOOTER_RESOURCE_LINKS.length >= 4,
