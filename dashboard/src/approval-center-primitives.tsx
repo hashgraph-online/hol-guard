@@ -33,42 +33,6 @@ import { GuardUpdatePanel } from "./guard-update-panel";
 import { GITHUB_ISSUE_BUTTON_LABEL, GITHUB_ISSUE_LINK } from "./github-issue-link";
 import type { GuardUpdatePhase, GuardUpdateStatus } from "./guard-types";
 
-const footerSections = [
-  {
-    title: "Guard",
-    links: [
-      { href: "https://hol.org/guard", label: "Cloud Dashboard" },
-      { href: "https://hol.org/guard/pricing", label: "Pricing" },
-      { href: "https://hol.org/guard/docs", label: "Docs" }
-    ]
-  },
-  {
-    title: "Docs",
-    links: [
-      { href: "https://hol.org/registry/docs", label: "API Reference" },
-      { href: "https://hol.org/docs/libraries/standards-sdk", label: "Standards SDK" },
-      { href: "https://hol.org/docs/standards/hcs-1", label: "Standards" }
-    ]
-  },
-  {
-    title: "Community",
-    links: [
-      { href: "https://x.com/HashgraphOnline", label: "X" },
-      { href: "https://t.me/hashinals", label: "Telegram" }
-    ]
-  },
-  {
-    title: "More",
-    links: [
-      { href: "https://hol.org/blog", label: "Blog" },
-      { href: "https://github.com/hashgraph-online", label: "GitHub" },
-      { href: GITHUB_ISSUE_LINK, label: GITHUB_ISSUE_BUTTON_LABEL },
-      { href: "https://hol.org/points/legal/privacy", label: "Privacy Policy" },
-      { href: "https://hol.org/points/legal/terms", label: "Terms of Service" }
-    ]
-  }
-] as const;
-
 export type AppView =
   | "home"
   | "inbox"
@@ -282,7 +246,7 @@ export function ShellSidebar(props: {
           </div>
         )}
 
-        <div className="mt-auto pt-6">
+        <div className="mt-auto border-t border-slate-200 pt-4">
           {!collapsed ? (
             <div className="mx-2 overflow-hidden rounded-xl border border-brand-blue/25 bg-gradient-to-br from-brand-blue/[0.05] to-brand-dark/[0.03]">
               <div className="space-y-2 px-3 pb-2.5 pt-3">
@@ -330,43 +294,6 @@ export function ShellSidebar(props: {
         </div>
       </div>
     </aside>
-  );
-}
-
-export function ShellFooter() {
-  return (
-    <footer
-      className="mt-10 bg-gradient-to-r from-[#3f4174] to-brand-blue text-indigo-200"
-      style={{ contain: "layout style paint", minHeight: 200 }}
-    >
-      <nav aria-label="Footer Navigation" className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
-        <div className="mb-8 flex flex-col gap-3 rounded-2xl border border-white/15 bg-white/10 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-white">Found something Guard should fix?</p>
-            <p className="mt-1 text-sm text-indigo-100">Open a prefilled GitHub issue so the maintainers get the right details.</p>
-          </div>
-          <a
-            href={GITHUB_ISSUE_LINK}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-brand-blue no-underline transition-colors hover:bg-indigo-50"
-          >
-            <HiMiniBugAnt className="h-4 w-4" aria-hidden="true" />
-            {GITHUB_ISSUE_BUTTON_LABEL}
-          </a>
-        </div>
-        <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-8 lg:grid-cols-4">
-          {footerSections.map((section) => (
-            <FooterLinkList key={section.title} title={section.title} links={section.links} />
-          ))}
-        </div>
-        <div className="mt-8 border-t border-indigo-200/20 pt-8">
-          <p className="text-center text-[13px] font-medium text-blue-200">
-            Copyright © {new Date().getFullYear()} HOL DAO LLC. All rights reserved.
-          </p>
-        </div>
-      </nav>
-    </footer>
   );
 }
 
@@ -684,38 +611,6 @@ function actionButtonClass(variant: "primary" | "secondary" | "danger" | "outlin
   if (variant === "success") return `${base} ${sizeDefault} bg-[#059669] text-white shadow-lg shadow-emerald-500/15 hover:bg-[#047857] hover:shadow-emerald-500/20`;
   if (variant === "quiet") return `${base} ${sizeDefault} bg-transparent text-brand-dark hover:bg-surface-1`;
   return `${base} ${sizeDefault} bg-brand-blue text-white shadow-lg shadow-brand-blue/20 hover:bg-brand-blue/90 hover:shadow-brand-blue/30`;
-}
-
-function FooterLinkList(props: {
-  title: string;
-  links: ReadonlyArray<{ readonly href: string; readonly label: string }>;
-}) {
-  return (
-    <details className="group border-b border-indigo-200/20 py-2 sm:border-none sm:py-0">
-      <summary className="flex cursor-pointer select-none list-none items-center justify-between py-2 text-[15px] font-bold text-white transition-colors hover:text-indigo-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 rounded-sm [&::-webkit-details-marker]:hidden">
-        {props.title}
-        <span className="text-indigo-300 transition-transform duration-300 group-open:rotate-180">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-        </span>
-      </summary>
-      <ul className="mt-3 space-y-4 pb-4 sm:pb-0">
-        {props.links.map((link) => (
-          <li key={`${props.title}-${link.href}`}>
-            <a
-              href={link.href}
-              target="_blank"
-              rel="noreferrer"
-              className="block p-1 -m-1 text-[15px] font-medium text-indigo-100 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 rounded-sm"
-            >
-              {link.label}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </details>
-  );
 }
 
 export function WelcomeState(props: {
