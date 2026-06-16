@@ -1,8 +1,8 @@
 import {
   formatCloudBundleHashDisplay,
   resolveCloudBundleStatusSubtitle,
-  resolveCloudPolicyBundleCopy,
-} from "./policy-workspace-helpers";
+} from "./policy-guard-cloud-bundle-helpers";
+import { resolveCloudPolicyBundleCopy } from "./policy-workspace-helpers";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -13,6 +13,10 @@ function assert(condition: boolean, message: string): void {
 assert(
   formatCloudBundleHashDisplay("sha256:abcdef1234567890") === "sha256:abcd…",
   "bundle hash display truncates sha256 hashes",
+);
+assert(
+  formatCloudBundleHashDisplay("sha256:abc") === "sha256:abc",
+  "bundle hash display preserves prefix for short hashes",
 );
 assert(formatCloudBundleHashDisplay(null) === "Unavailable", "missing hash shows unavailable");
 

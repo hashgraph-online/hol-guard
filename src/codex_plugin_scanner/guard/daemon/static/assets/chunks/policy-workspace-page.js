@@ -2110,29 +2110,6 @@ function resolveSecurityModeCopy(level) {
     tone: "slate"
   };
 }
-function formatCloudBundleHashDisplay(hash) {
-  if (!hash?.trim()) {
-    return "Unavailable";
-  }
-  const value = hash.trim();
-  const normalized = value.replace(/^sha256:/i, "");
-  if (normalized.length <= 8) {
-    return normalized;
-  }
-  if (value.toLowerCase().startsWith("sha256:")) {
-    return `sha256:${normalized.slice(0, 4)}…`;
-  }
-  return `${normalized.slice(0, 8)}…`;
-}
-function resolveCloudBundleStatusSubtitle(copy) {
-  if (copy.tone === "green") {
-    return "All policies up to date";
-  }
-  if (copy.tone === "attention") {
-    return "Latest sync needs attention";
-  }
-  return copy.label;
-}
 function resolveCloudPolicyBundleCopy(snapshot) {
   const bundleVersion = snapshot.cloud_policy_bundle_version?.trim();
   if (!bundleVersion) {
@@ -2393,6 +2370,27 @@ function downloadPolicies(format, policies) {
   const result = format === "csv" ? exportPoliciesCsv(policies) : exportPoliciesJson(policies);
   downloadBlob(result.blob, result.filename);
 }
+function formatCloudBundleHashDisplay(hash) {
+  if (!hash?.trim()) {
+    return "Unavailable";
+  }
+  const value = hash.trim();
+  const isSha256 = value.toLowerCase().startsWith("sha256:");
+  const normalized = isSha256 ? value.slice(7) : value;
+  if (isSha256) {
+    return normalized.length <= 4 ? value : `sha256:${normalized.slice(0, 4)}…`;
+  }
+  return normalized.length <= 8 ? normalized : `${normalized.slice(0, 8)}…`;
+}
+function resolveCloudBundleStatusSubtitle(copy) {
+  if (copy.tone === "green") {
+    return "All policies up to date";
+  }
+  if (copy.tone === "attention") {
+    return "Latest sync needs attention";
+  }
+  return copy.label;
+}
 function PolicyGuardCloudBundleCard({ snapshot }) {
   const cloudBundleCopy = resolveCloudPolicyBundleCopy(snapshot);
   const cloudControlsUrl = resolveCloudPolicyControlsUrl(snapshot);
@@ -2422,7 +2420,7 @@ function PolicyGuardCloudBundleCard({ snapshot }) {
   }
   const synced = cloudBundleCopy.tone === "green";
   const statusSubtitle = resolveCloudBundleStatusSubtitle(cloudBundleCopy);
-  const showDetail = !synced || cloudBundleCopy.detail !== statusSubtitle;
+  const showDetail = !synced;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Guard Cloud bundle" }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3", children: [

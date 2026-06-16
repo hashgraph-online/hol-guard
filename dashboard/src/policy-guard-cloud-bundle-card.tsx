@@ -6,6 +6,8 @@ import type { GuardRuntimeSnapshot } from "./guard-types";
 import {
   formatCloudBundleHashDisplay,
   resolveCloudBundleStatusSubtitle,
+} from "./policy-guard-cloud-bundle-helpers";
+import {
   resolveCloudPolicyBundleCopy,
   resolveCloudExceptionsConnected,
   resolveCloudPolicyControlsUrl,
@@ -68,7 +70,7 @@ export function PolicyGuardCloudBundleCard({ snapshot }: PolicyGuardCloudBundleC
 
   const synced = cloudBundleCopy.tone === "green";
   const statusSubtitle = resolveCloudBundleStatusSubtitle(cloudBundleCopy);
-  const showDetail = !synced || cloudBundleCopy.detail !== statusSubtitle;
+  const showDetail = !synced;
 
   return (
     <div className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm">
