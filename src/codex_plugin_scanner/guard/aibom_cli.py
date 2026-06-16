@@ -21,6 +21,7 @@ from .inventory_contract import (
     redact_local_path,
     serialize_inventory_snapshot,
 )
+from .store import GuardStore
 
 AibomExportFormat = Literal["json", "markdown"]
 
@@ -54,6 +55,7 @@ def collect_aibom_snapshots(
     *,
     generated_at: str,
     options: AibomCliOptions | None = None,
+    trust_attestation_context: dict[str, object] | None = None,
 ) -> tuple[GuardAgentInventorySnapshot, ...]:
     resolved = options or AibomCliOptions()
     snapshots: list[GuardAgentInventorySnapshot] = []
@@ -77,9 +79,29 @@ def collect_aibom_snapshots(
                 cisco_runs=cisco_runs,
                 include_symlinks=resolved.include_symlinks,
                 follow_unsafe_symlinks=resolved.follow_unsafe_symlinks,
+                trust_attestation_context=trust_attestation_context,
             )
         )
     return tuple(snapshots)
+
+
+def _resolve_trust_attestation_context(store: GuardStore) -> dict[str, object]:
+    from .runtime.trust_attestation import (
+        resolve_guard_oauth_trust_attestation_signing_config,
+        resolve_trust_attestation_signing_config,
+        trust_attestation_v2_enabled,
+    )
+
+    oauth_credentials = store.get_oauth_local_credentials(allow_primary=True)
+    signing_config = resolve_guard_oauth_trust_attestation_signing_config(oauth_credentials)
+    if signing_config is None:
+        signing_config = resolve_trust_attestation_signing_config()
+    enable_v2 = trust_attestation_v2_enabled()
+    return {
+        "deviceId": store.get_or_create_installation_id() if enable_v2 else None,
+        "signingConfig": signing_config,
+        "workspaceId": store.get_cloud_workspace_id() if enable_v2 else None,
+    }
 
 
 def build_inventory_json_payload(
@@ -89,7 +111,12 @@ def build_inventory_json_payload(
     generated_at: str,
     options: AibomCliOptions | None = None,
 ) -> dict[str, object]:
-    snapshots = collect_aibom_snapshots(context, generated_at=generated_at, options=options)
+    snapshots = collect_aibom_snapshots(
+        context,
+        generated_at=generated_at,
+        options=options,
+        trust_attestation_context=_resolve_trust_attestation_context(store),
+    )
     metadata_by_artifact = _metadata_lookup_from_snapshots(snapshots)
     items: list[dict[str, object]] = []
     for item in store.list_inventory():
@@ -116,7 +143,12 @@ def build_aibom_status_payload(
     generated_at: str,
     options: AibomCliOptions | None = None,
 ) -> dict[str, object]:
-    snapshots = collect_aibom_snapshots(context, generated_at=generated_at, options=options)
+    snapshots = collect_aibom_snapshots(
+        context,
+        generated_at=generated_at,
+        options=options,
+        trust_attestation_context=_resolve_trust_attestation_context(store),
+    )
     sync_summary = _sync_summary(store)
     layer_summary, trust_summary, drift_summary = summarize_aibom_layers(
         snapshots,
@@ -143,7 +175,12 @@ def build_aibom_export_payload(
     options: AibomCliOptions | None = None,
     export_format: AibomExportFormat = "json",
 ) -> dict[str, object]:
-    snapshots = collect_aibom_snapshots(context, generated_at=generated_at, options=options)
+    snapshots = collect_aibom_snapshots(
+        context,
+        generated_at=generated_at,
+        options=options,
+        trust_attestation_context=_resolve_trust_attestation_context(store),
+    )
     serialized_snapshots = [serialize_inventory_snapshot(snapshot) for snapshot in snapshots]
     artifacts = _artifact_rows_from_store(store, snapshots)
     layer_summary, trust_summary, drift_summary = summarize_aibom_layers(
@@ -303,10 +340,12 @@ def sync_aibom_snapshots(
         raise guard_sync_not_configured_error("Guard Cloud workspace is not configured. Run `hol-guard connect` first.")
 
     resolved_options = options or _AIBOM_CLOUD_SYNC_OPTIONS
+    trust_attestation_context = _resolve_trust_attestation_context(store)
     snapshots = collect_aibom_snapshots(
         context,
         generated_at=generated_at,
         options=resolved_options,
+        trust_attestation_context=trust_attestation_context,
     )
     if not snapshots:
         synced_at = generated_at
@@ -326,6 +365,11 @@ def sync_aibom_snapshots(
         _inventory_snapshot_event(
             snapshot=snapshot,
             workspace_id=workspace_id,
+            device_id=(
+                str(trust_attestation_context["deviceId"])
+                if isinstance(trust_attestation_context.get("deviceId"), str)
+                else None
+            ),
             generated_at=generated_at,
         )
         for snapshot in snapshots
@@ -579,6 +623,7 @@ def _inventory_snapshot_event(
     *,
     snapshot: GuardAgentInventorySnapshot,
     workspace_id: str,
+    device_id: str | None,
     generated_at: str,
 ) -> dict[str, object]:
     event_id = str(uuid.uuid4())
@@ -589,6 +634,7 @@ def _inventory_snapshot_event(
         "occurredAt": generated_at,
         "source": "edge",
         "workspaceId": workspace_id,
+        "deviceId": device_id,
         "payload": {"snapshot": serialize_inventory_snapshot(snapshot)},
     }
 

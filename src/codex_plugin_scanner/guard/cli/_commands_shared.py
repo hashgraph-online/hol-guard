@@ -196,6 +196,7 @@ from .connect_flow import (
     DEFAULT_GUARD_SYNC_URL,
     build_connect_status_payload,
     connect_recovery_command,
+    connect_state_requires_oauth,
     normalize_connect_state_for_missing_oauth,
     resolve_connect_url,
     run_guard_browser_connect_command,

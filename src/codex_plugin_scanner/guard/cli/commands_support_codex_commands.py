@@ -3,7 +3,7 @@
 # pyright: reportImportCycles=false
 
 # fmt: off
-# ruff: noqa: F403, F405, I001, SIM905
+# ruff: noqa: F403, F405, SIM905
 
 from __future__ import annotations
 
@@ -25,6 +25,15 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from .commands_support_codex_tool_output import (
+    _codex_command_segment_parts,
+    _codex_command_start_indexes,
+    _codex_env_args_clear_environment,
+    _codex_shell_split,
+    _codex_strip_env_wrapper,
+    _codex_unwrapped_command_parts,
+)
+
 
 def _codex_pipeline_segment_may_read_local_content(segment: str, *, index: int, cwd: Path | None) -> bool:
     try:
@@ -54,39 +63,6 @@ def _codex_command_parts_may_read_local_content(parts: list[str], *, cwd: Path |
             return True
     return False
 
-def _codex_command_start_indexes(parts: list[str]) -> list[int]:
-    starts = [0] if parts else []
-    for index, part in enumerate(parts[:-1]):
-        if part in {"&&", "||", ";", "&", "|", "|&"}:
-            starts.append(index + 1)
-    return starts
-
-def _codex_command_segment_parts(parts: list[str], start: int) -> list[str]:
-    end = start
-    while end < len(parts) and parts[end] not in {"&&", "||", ";", "&", "|", "|&"}:
-        end += 1
-    return parts[start:end]
-
-def _codex_command_sequence_is_read_only_source_inspection(parts: list[str], *, cwd: Path | None) -> bool:
-    command_parts = _codex_unwrapped_command_parts(parts)
-    if not command_parts:
-        return False
-    segment = shlex.join(command_parts)
-    return _codex_command_is_read_only_source_search(
-        segment, cwd=cwd, home_dir=None
-    ) or _codex_command_is_read_only_source_view(segment, cwd=cwd, home_dir=None)
-
-def _codex_command_sequence_starts_with_local_reader(parts: list[str], *, cwd: Path | None) -> bool:
-    command_parts = _codex_unwrapped_command_parts(parts)
-    if not command_parts:
-        return False
-    if _codex_command_parts_are_git_grep(command_parts):
-        return True
-    return _codex_command_part_is_local_reader(command_parts, 0, cwd=cwd)
-
-def _codex_command_parts_are_git_grep(parts: list[str]) -> bool:
-    return bool(parts) and Path(parts[0]).name.lower() == "git" and _git_grep_search_args(parts[1:]) is not None
-
 def _codex_command_reads_environment_pipeline(command_text: str) -> bool:
     try:
         parts = _codex_shell_split(command_text)
@@ -108,6 +84,7 @@ def _codex_command_reads_environment_pipeline(command_text: str) -> bool:
         saw_pipeline = True
     return saw_pipeline
 
+
 def _codex_command_parts_are_environment_dump(parts: list[str]) -> bool:
     if not parts:
         return False
@@ -119,6 +96,7 @@ def _codex_command_parts_are_environment_dump(parts: list[str]) -> bool:
     if _codex_env_args_clear_environment(parts[1:]):
         return False
     return not _codex_strip_env_wrapper(parts[1:])
+
 
 def _codex_local_secret_source_label(
     matches: list[SecretPathMatch],
@@ -137,92 +115,25 @@ def _codex_local_secret_source_label(
         return "environment variables"
     return None
 
-def _codex_tool_output_request_summary(
-    *,
-    tool_name: str,
-    command_text: str,
-    local_secret_source: str | None,
-) -> str:
-    if local_secret_source is not None:
-        return f"Codex tool `{tool_name}` read local secrets from {local_secret_source} while running `{command_text}`."
-    return f"Codex tool `{tool_name}` produced credential-looking output while running `{command_text}`."
-
-def _codex_tool_output_runtime_summary(local_secret_source: str | None) -> str:
-    if local_secret_source is not None:
-        return f"Local secrets from {local_secret_source} reached Codex tool output."
-    return "Requests a sensitive native tool action: credential-looking output reached Codex."
-
-def _codex_unwrapped_command_parts(parts: list[str]) -> list[str]:
-    remaining = parts
-    while remaining:
-        executable = Path(remaining[0]).name.lower()
-        if executable == "command":
-            remaining = _codex_strip_command_wrapper(remaining[1:])
-            continue
-        if executable == "env":
-            remaining = _codex_strip_env_wrapper(remaining[1:])
-            continue
-        return remaining
-    return []
-
-def _codex_strip_command_wrapper(parts: list[str]) -> list[str]:
-    index = 0
-    while index < len(parts) and parts[index] in {"-p", "-v", "-V"}:
-        index += 1
-    if index < len(parts) and parts[index] == "--":
-        index += 1
-    return parts[index:]
-
-def _codex_strip_env_wrapper(parts: list[str]) -> list[str]:
-    index = 0
-    while index < len(parts):
-        part = parts[index]
-        if part == "--":
-            return parts[index + 1 :]
-        if part in {"-i", "-0", "--ignore-environment", "--null"}:
-            index += 1
-            continue
-        if part in {"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}:
-            index += 2
-            continue
-        if part.startswith(("--unset=", "--chdir=", "--split-string=")):
-            index += 1
-            continue
-        if part.startswith("-"):
-            index += 1
-            continue
-        if "=" in part and not part.startswith("="):
-            index += 1
-            continue
-        return parts[index:]
-    return []
-
-def _codex_env_args_clear_environment(parts: list[str]) -> bool:
-    saw_clear_environment = False
-    for part in parts:
-        if part == "--":
-            return False
-        if part in {"-i", "--ignore-environment"}:
-            saw_clear_environment = True
-            continue
-        if part.startswith("-"):
-            continue
-        if "=" in part and not part.startswith("="):
-            if _codex_env_assignment_uses_shell_expansion(part):
-                return False
-            continue
+def _codex_command_sequence_is_read_only_source_inspection(parts: list[str], *, cwd: Path | None) -> bool:
+    command_parts = _codex_unwrapped_command_parts(parts)
+    if not command_parts:
         return False
-    return saw_clear_environment
+    segment = shlex.join(command_parts)
+    return _codex_command_is_read_only_source_search(
+        segment, cwd=cwd, home_dir=None
+    ) or _codex_command_is_read_only_source_view(segment, cwd=cwd, home_dir=None)
 
-def _codex_env_assignment_uses_shell_expansion(part: str) -> bool:
-    _, _, value = part.partition("=")
-    return "$" in value or "`" in value
+def _codex_command_sequence_starts_with_local_reader(parts: list[str], *, cwd: Path | None) -> bool:
+    command_parts = _codex_unwrapped_command_parts(parts)
+    if not command_parts:
+        return False
+    if _codex_command_parts_are_git_grep(command_parts):
+        return True
+    return _codex_command_part_is_local_reader(command_parts, 0, cwd=cwd)
 
-def _codex_shell_split(command_text: str) -> list[str]:
-    lexer = shlex.shlex(command_text, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    lexer.commenters = ""
-    return list(lexer)
+def _codex_command_parts_are_git_grep(parts: list[str]) -> bool:
+    return bool(parts) and Path(parts[0]).name.lower() == "git" and _git_grep_search_args(parts[1:]) is not None
 
 def _codex_command_part_is_local_reader(parts: list[str], index: int, *, cwd: Path | None) -> bool:
     local_read_commands = {"cat", "grep", "head", "rg", "sed", "tail"}
@@ -546,12 +457,10 @@ _codex_command_parts_are_environment_dump _codex_command_parts_are_git_grep
 _codex_command_parts_may_read_local_content _codex_command_reads_environment_pipeline
 _codex_command_references_benign_source_dotfile _codex_command_segment_parts
 _codex_command_sequence_is_read_only_source_inspection _codex_command_sequence_starts_with_local_reader
-_codex_command_start_indexes _codex_command_targets_secret_like_source_name _codex_env_args_clear_environment
-_codex_env_assignment_uses_shell_expansion _codex_local_secret_source_label
+_codex_command_start_indexes _codex_command_targets_secret_like_source_name
 _codex_output_is_only_benign_secret_fixture _codex_output_uses_placeholder_private_key_fixture
 _codex_pipeline_segment_may_read_local_content _codex_post_tool_command_is_read_only_source_inspection
 _codex_post_tool_command_text _codex_shell_split _codex_source_inspection_can_skip_secret_output
 _codex_source_name_stem_has_compound_secret_segment
-_codex_strip_command_wrapper _codex_strip_env_wrapper _codex_tool_output_request_summary
-_codex_tool_output_runtime_summary _codex_unwrapped_command_parts
+_codex_unwrapped_command_parts
 """.split()

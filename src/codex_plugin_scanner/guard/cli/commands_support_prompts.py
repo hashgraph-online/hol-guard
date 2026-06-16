@@ -344,11 +344,11 @@ def _decision_v2_has_data_flow_signal(response_payload: dict[str, object]) -> bo
 def _should_use_decision_v2_harness_message(response_payload: dict[str, object], message: str) -> bool:
     if _decision_v2_has_data_flow_signal(response_payload):
         return True
-    generic_messages = {
+    generic_prefixes = (
         "HOL Guard blocked this action.",
         "HOL Guard wants this action reviewed and run in a sandboxed path.",
-    }
-    if message in generic_messages:
+    )
+    if any(message.startswith(prefix) for prefix in generic_prefixes):
         return False
     return not message.startswith("HOL Guard needs a fresh approval because this action changed.")
 

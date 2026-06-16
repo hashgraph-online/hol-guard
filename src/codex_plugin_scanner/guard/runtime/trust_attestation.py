@@ -9,17 +9,23 @@ from dataclasses import dataclass
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric import ec, padding
+from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey, EllipticCurvePublicKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 
 GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION = "guard-aibom-trust-attestation.v1"
+GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V2 = "guard-aibom-trust-attestation.v2"
 GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
+GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256 = "ecdsa-p256-sha256"
+_TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 
 
 @dataclass(frozen=True, slots=True)
 class GuardTrustAttestationSigningConfig:
     active_key_id: str
     private_key_pem: str
+    public_jwk_thumbprint: str | None = None
+    signature_algorithm: str = GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +33,7 @@ class GuardTrustAttestationVerificationKey:
     key_id: str
     public_key_pem: str
     fingerprint_sha256: str
+    public_jwk_thumbprint: str | None = None
 
 
 def canonical_trust_attestation_payload(payload: Mapping[str, object]) -> bytes:
@@ -68,7 +75,34 @@ def build_trust_attestation_verification_key(
         key_id=config.active_key_id,
         public_key_pem=public_key_pem,
         fingerprint_sha256=_public_key_fingerprint(public_key_pem),
+        public_jwk_thumbprint=config.public_jwk_thumbprint,
     )
+
+
+def resolve_guard_oauth_trust_attestation_signing_config(
+    credentials: Mapping[str, object] | None,
+) -> GuardTrustAttestationSigningConfig | None:
+    if not isinstance(credentials, Mapping):
+        return None
+    private_key_pem = _normalize_pem(_sanitize_object_string(credentials.get("dpop_private_key_pem")))
+    public_jwk_thumbprint = _sanitize_object_string(credentials.get("dpop_public_jwk_thumbprint")) or None
+    if not private_key_pem or public_jwk_thumbprint is None:
+        return None
+    try:
+        _load_private_key(private_key_pem)
+    except ValueError:
+        return None
+    return GuardTrustAttestationSigningConfig(
+        active_key_id=public_jwk_thumbprint,
+        private_key_pem=private_key_pem,
+        public_jwk_thumbprint=public_jwk_thumbprint,
+        signature_algorithm=GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
+    )
+
+
+def trust_attestation_v2_enabled(environ: Mapping[str, str] | None = None) -> bool:
+    env = environ or os.environ
+    return _sanitize_env(env.get("GUARD_AIBOM_TRUST_ATTESTATION_V2")).lower() in _TRUTHY_ENV_VALUES
 
 
 def build_trust_attestation_payload(
@@ -80,11 +114,18 @@ def build_trust_attestation_payload(
     captured_at: str,
     evidence_hash: str,
     scope: str,
+    workspace_id: str | None = None,
+    device_id: str | None = None,
     layer_id: str | None = None,
     layer_type: str | None = None,
 ) -> dict[str, object]:
+    payload_version = (
+        GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V2
+        if workspace_id is not None or device_id is not None
+        else GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION
+    )
     payload: dict[str, object] = {
-        "payloadVersion": GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION,
+        "payloadVersion": payload_version,
         "agentId": agent_id,
         "itemId": item_id,
         "itemKind": item_kind,
@@ -93,6 +134,10 @@ def build_trust_attestation_payload(
         "evidenceHash": evidence_hash,
         "scope": scope,
     }
+    if workspace_id is not None:
+        payload["workspaceId"] = workspace_id
+    if device_id is not None:
+        payload["deviceId"] = device_id
     if layer_id is not None:
         payload["layerId"] = layer_id
     if layer_type is not None:
@@ -107,8 +152,11 @@ def apply_trust_attestation_metadata(
     item_id: str,
     item_kind: str,
     content_hash: str,
+    workspace_id: str | None = None,
+    device_id: str | None = None,
+    signing_config: GuardTrustAttestationSigningConfig | None = None,
 ) -> dict[str, object]:
-    config = resolve_trust_attestation_signing_config()
+    config = signing_config or resolve_trust_attestation_signing_config()
     if config is None:
         return metadata
 
@@ -131,6 +179,8 @@ def apply_trust_attestation_metadata(
                     captured_at=captured_at,
                     evidence_hash=evidence_hash,
                     scope="trust_resolution",
+                    workspace_id=workspace_id,
+                    device_id=device_id,
                 ),
                 config=config,
                 signed_at=captured_at,
@@ -172,6 +222,8 @@ def apply_trust_attestation_metadata(
                         captured_at=captured_at,
                         evidence_hash=evidence_hash,
                         scope="trust_layer",
+                        workspace_id=workspace_id,
+                        device_id=device_id,
                         layer_id=layer_id,
                         layer_type=layer_type,
                     ),
@@ -194,24 +246,30 @@ def sign_trust_attestation(
 ) -> dict[str, object]:
     private_key = _load_private_key(config.private_key_pem)
     canonical_payload = canonical_trust_attestation_payload(_payload_with_signed_at(payload, signed_at))
-    signature = private_key.sign(
-        canonical_payload,
-        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
-        hashes.SHA256(),
+    signature = _sign_payload(
+        private_key=private_key,
+        canonical_payload=canonical_payload,
+        signature_algorithm=config.signature_algorithm,
     )
     verification_key = _verification_key_from_private_key(
         private_key,
         key_id=config.active_key_id,
+        public_jwk_thumbprint=config.public_jwk_thumbprint,
     )
     return {
-        "payloadVersion": GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION,
+        "payloadVersion": str(payload.get("payloadVersion") or GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION),
         "payloadHash": hashlib.sha256(canonical_payload).hexdigest(),
         "signature": base64.b64encode(signature).decode("ascii"),
-        "signatureAlgorithm": GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM,
+        "signatureAlgorithm": config.signature_algorithm,
         "signedAt": signed_at,
         "keyId": verification_key.key_id,
         "publicKeyPem": verification_key.public_key_pem,
         "fingerprintSha256": verification_key.fingerprint_sha256,
+        **(
+            {"publicJwkThumbprint": verification_key.public_jwk_thumbprint}
+            if verification_key.public_jwk_thumbprint is not None
+            else {}
+        ),
     }
 
 
@@ -226,6 +284,7 @@ def verify_trust_attestation(
     raw_key_id = envelope.get("keyId")
     raw_public_key_pem = envelope.get("publicKeyPem")
     raw_fingerprint_sha256 = envelope.get("fingerprintSha256")
+    raw_public_jwk_thumbprint = envelope.get("publicJwkThumbprint")
     raw_signature = envelope.get("signature")
     if not isinstance(raw_payload_hash, str) or not raw_payload_hash:
         raise ValueError("Trust attestation envelope is incomplete")
@@ -244,8 +303,12 @@ def verify_trust_attestation(
     key_id: str = raw_key_id
     public_key_pem: str = raw_public_key_pem
     fingerprint_sha256: str = raw_fingerprint_sha256
+    public_jwk_thumbprint = raw_public_jwk_thumbprint if isinstance(raw_public_jwk_thumbprint, str) else None
     signature: str = raw_signature
-    if signature_algorithm != GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM:
+    if signature_algorithm not in {
+        GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM,
+        GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
+    }:
         raise ValueError("Unsupported trust attestation signature algorithm")
     canonical_payload = canonical_trust_attestation_payload(_payload_with_signed_at(payload, envelope.get("signedAt")))
     if hashlib.sha256(canonical_payload).hexdigest() != payload_hash:
@@ -256,34 +319,36 @@ def verify_trust_attestation(
         trusted_key.key_id == key_id
         and trusted_key.fingerprint_sha256 == fingerprint_sha256
         and _normalize_pem(trusted_key.public_key_pem) == _normalize_pem(public_key_pem)
+        and (public_jwk_thumbprint is None or trusted_key.public_jwk_thumbprint == public_jwk_thumbprint)
         for trusted_key in trusted_keys
     ):
         raise ValueError("Trust attestation key is not trusted")
     public_key = serialization.load_pem_public_key(public_key_pem.encode("utf-8"))
-    if not isinstance(public_key, RSAPublicKey):
-        raise ValueError("Trust attestation public key must be RSA")
+    if not isinstance(public_key, (RSAPublicKey, EllipticCurvePublicKey)):
+        raise ValueError("Trust attestation public key must be RSA or EC")
     try:
-        public_key.verify(
-            base64.b64decode(signature),
-            canonical_payload,
-            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
-            hashes.SHA256(),
+        _verify_signature(
+            public_key=public_key,
+            canonical_payload=canonical_payload,
+            signature=base64.b64decode(signature),
+            signature_algorithm=signature_algorithm,
         )
     except InvalidSignature as exc:
         raise ValueError("Trust attestation signature verification failed") from exc
 
 
-def _load_private_key(private_key_pem: str) -> RSAPrivateKey:
+def _load_private_key(private_key_pem: str) -> RSAPrivateKey | EllipticCurvePrivateKey:
     private_key = serialization.load_pem_private_key(private_key_pem.encode("utf-8"), password=None)
-    if not isinstance(private_key, RSAPrivateKey):
-        raise ValueError("Trust attestation private key must be RSA")
+    if not isinstance(private_key, (RSAPrivateKey, EllipticCurvePrivateKey)):
+        raise ValueError("Trust attestation private key must be RSA or EC")
     return private_key
 
 
 def _verification_key_from_private_key(
-    private_key: RSAPrivateKey,
+    private_key: RSAPrivateKey | EllipticCurvePrivateKey,
     *,
     key_id: str,
+    public_jwk_thumbprint: str | None = None,
 ) -> GuardTrustAttestationVerificationKey:
     public_key_pem = (
         private_key.public_key()
@@ -298,7 +363,58 @@ def _verification_key_from_private_key(
         key_id=key_id,
         public_key_pem=public_key_pem,
         fingerprint_sha256=_public_key_fingerprint(public_key_pem),
+        public_jwk_thumbprint=public_jwk_thumbprint,
     )
+
+
+def _sign_payload(
+    *,
+    private_key: RSAPrivateKey | EllipticCurvePrivateKey,
+    canonical_payload: bytes,
+    signature_algorithm: str,
+) -> bytes:
+    if signature_algorithm == GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM:
+        if not isinstance(private_key, RSAPrivateKey):
+            raise ValueError("Trust attestation private key must be RSA")
+        return private_key.sign(
+            canonical_payload,
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+            hashes.SHA256(),
+        )
+    if signature_algorithm == GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256:
+        if not isinstance(private_key, EllipticCurvePrivateKey):
+            raise ValueError("Trust attestation private key must be EC")
+        if not isinstance(private_key.curve, ec.SECP256R1):
+            raise ValueError("Trust attestation EC private key must use P-256")
+        return private_key.sign(canonical_payload, ec.ECDSA(hashes.SHA256()))
+    raise ValueError("Unsupported trust attestation signature algorithm")
+
+
+def _verify_signature(
+    *,
+    public_key: RSAPublicKey | EllipticCurvePublicKey,
+    canonical_payload: bytes,
+    signature: bytes,
+    signature_algorithm: str,
+) -> None:
+    if signature_algorithm == GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM:
+        if not isinstance(public_key, RSAPublicKey):
+            raise ValueError("Trust attestation public key must be RSA")
+        public_key.verify(
+            signature,
+            canonical_payload,
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+            hashes.SHA256(),
+        )
+        return
+    if signature_algorithm == GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256:
+        if not isinstance(public_key, EllipticCurvePublicKey):
+            raise ValueError("Trust attestation public key must be EC")
+        if not isinstance(public_key.curve, ec.SECP256R1):
+            raise ValueError("Trust attestation EC public key must use P-256")
+        public_key.verify(signature, canonical_payload, ec.ECDSA(hashes.SHA256()))
+        return
+    raise ValueError("Unsupported trust attestation signature algorithm")
 
 
 def _payload_with_signed_at(
@@ -318,6 +434,10 @@ def _public_key_fingerprint(public_key_pem: str) -> str:
 
 def _sanitize_env(value: str | None) -> str:
     return value.replace("\\n", "\n").replace("\r\n", "\n").strip().strip("'\"") if isinstance(value, str) else ""
+
+
+def _sanitize_object_string(value: object) -> str:
+    return value.strip() if isinstance(value, str) else ""
 
 
 def _normalize_pem(value: str) -> str:

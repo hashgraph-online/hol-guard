@@ -16114,6 +16114,73 @@ async function runPackageSync(credentials) {
   }
   return normalizePackageFirewallAction(payloadBody);
 }
+const GITHUB_ISSUE_BASE_URL = "https://github.com/hashgraph-online/hol-guard/issues/new";
+const DEFAULT_ISSUE_BODY = [
+  "## What happened?",
+  "",
+  "",
+  "## Expected behavior",
+  "",
+  "",
+  "## Steps to reproduce",
+  "1.",
+  "2.",
+  "3.",
+  "",
+  "## Environment",
+  "- HOL Guard version:",
+  "- OS:",
+  "- AI app or harness:",
+  "",
+  "## Anything else?",
+  ""
+].join("\n");
+const GITHUB_ISSUE_BUTTON_LABEL = "Report a bug";
+function buildGitHubIssueUrl(options) {
+  const url = new URL(GITHUB_ISSUE_BASE_URL);
+  url.searchParams.set("title", "[Bug]: ");
+  url.searchParams.set("body", DEFAULT_ISSUE_BODY);
+  url.searchParams.set("labels", ["bug", "needs-triage"].join(","));
+  return url.toString();
+}
+const GITHUB_ISSUE_LINK = buildGitHubIssueUrl();
+const SHELL_FOOTER_LICENSE_HREF = "https://github.com/hashgraph-online/hol-guard/blob/main/LICENSE";
+const SHELL_FOOTER_RESOURCE_LINKS = [
+  { href: "https://hol.org/guard/docs", label: "Docs" },
+  { href: "https://hol.org/guard", label: "Guard Cloud" },
+  { href: "https://github.com/hashgraph-online/hol-guard", label: "GitHub" },
+  { href: GITHUB_ISSUE_LINK, label: GITHUB_ISSUE_BUTTON_LABEL }
+];
+function ShellFooter() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("footer", { className: "mt-auto border-t border-slate-200 bg-[#f8fafc]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mx-auto flex max-w-6xl flex-col gap-3 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] font-medium text-slate-400", children: [
+      "HOL Guard is open source under",
+      " ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "a",
+        {
+          href: SHELL_FOOTER_LICENSE_HREF,
+          target: "_blank",
+          rel: "noreferrer",
+          className: "rounded-sm text-slate-500 no-underline transition-colors hover:text-brand-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30",
+          children: "Apache-2.0"
+        }
+      ),
+      "."
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { "aria-label": "Guard resources", className: "flex flex-wrap gap-x-4 gap-y-1", children: SHELL_FOOTER_RESOURCE_LINKS.map((link) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "a",
+      {
+        href: link.href,
+        target: "_blank",
+        rel: "noreferrer",
+        className: "rounded-sm text-[11px] font-medium text-slate-500 no-underline transition-colors hover:text-brand-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30",
+        children: link.label
+      },
+      link.href
+    )) })
+  ] }) });
+}
 const UPDATE_STATUS_POLL_MS = 6e4;
 const RECONNECT_POLL_MS = 1500;
 const RECONNECT_TIMEOUT_MS = 18e4;
@@ -16385,6 +16452,18 @@ function ShellHeader(props) {
             children: props.queuedCount > 99 ? "99+" : props.queuedCount
           }
         ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "a",
+          {
+            href: GITHUB_ISSUE_LINK,
+            target: "_blank",
+            rel: "noopener noreferrer",
+            "aria-label": GITHUB_ISSUE_BUTTON_LABEL,
+            title: GITHUB_ISSUE_BUTTON_LABEL,
+            className: "inline-flex min-h-11 shrink-0 items-center rounded-full border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-white no-underline transition-colors duration-150 hover:bg-white/15",
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "h-4 w-4", "aria-hidden": "true" })
+          }
+        ),
         props.guardVersion ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "span",
           {
@@ -16472,9 +16551,10 @@ function ShellSidebar(props) {
       !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "px-3 font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400", children: "Quick Actions" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(SidebarAction, { href: "/", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCommandLine, { className: "h-4 w-4", "aria-hidden": "true" }), children: "Local dashboard" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SidebarAction, { href: "https://hol.org/guard", external: true, icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "h-4 w-4", "aria-hidden": "true" }), children: "Open Guard Cloud" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SidebarAction, { href: "https://hol.org/guard", external: true, icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "h-4 w-4", "aria-hidden": "true" }), children: "Open Guard Cloud" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SidebarAction, { href: GITHUB_ISSUE_LINK, external: true, icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "h-4 w-4", "aria-hidden": "true" }), children: GITHUB_ISSUE_BUTTON_LABEL })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-auto pt-6", children: !collapsed ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-2 overflow-hidden rounded-xl border border-brand-blue/25 bg-gradient-to-br from-brand-blue/[0.05] to-brand-dark/[0.03]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 px-3 pb-2.5 pt-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-auto border-t border-slate-200 pt-4", children: !collapsed ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-2 overflow-hidden rounded-xl border border-brand-blue/25 bg-gradient-to-br from-brand-blue/[0.05] to-brand-dark/[0.03]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 px-3 pb-2.5 pt-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-3.5 w-3.5 text-brand-blue" }),
@@ -16639,7 +16719,7 @@ function SidebarAction(props) {
     {
       href: props.external ? props.href : guardAwareHref(props.href),
       target: props.external ? "_blank" : void 0,
-      rel: props.external ? "noreferrer" : void 0,
+      rel: props.external ? "noopener noreferrer" : void 0,
       title: collapsed ? String(props.children) : void 0,
       className: `flex min-h-10 items-center rounded-lg border border-slate-200 bg-white no-underline transition-colors duration-150 hover:border-brand-blue/30 hover:text-brand-dark ${collapsed ? "justify-center px-2 py-2" : "gap-2.5 px-3 py-2 text-sm font-medium text-slate-700"}`,
       children: [
@@ -24517,34 +24597,37 @@ function ApprovalCenterLayout(props) {
         onBulkBlock: props.onBulkBlock
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ReceiptsWorkspace,
-      {
-        receipts: props.receipts,
-        runtime: props.runtime,
-        onClearEvidence: props.onClearEvidence,
-        onNavigate: props.onNavigate
-      }
-    ) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "about" ? props.aboutContent ?? null : props.view === "policy" ? props.policyContent ?? null : props.view === "supply-chain" || props.view === "audit" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "inbox" ? renderInboxContent(props) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-      QueueWorkspace,
-      {
-        requests: props.requests,
-        detail: props.detail,
-        runtime: props.runtime,
-        activeRequestId: props.activeRequestId,
-        resolutionMessage: props.resolutionMessage,
-        codexResume: props.codexResume,
-        approvalGate: props.approvalGate ?? null,
-        onOpenRequest: props.onOpenRequest,
-        onGoHome: props.onGoHome,
-        onResolve: props.onResolve,
-        onBulkApprove: props.onBulkApprove,
-        onBulkBlock: props.onBulkBlock,
-        onRetry: props.onRetry,
-        onRepair: props.onRepair,
-        onRetryResume: props.onRetryResume
-      }
-    ) }) }) })
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex flex-col transition-all duration-200 lg:min-h-screen ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ReceiptsWorkspace,
+        {
+          receipts: props.receipts,
+          runtime: props.runtime,
+          onClearEvidence: props.onClearEvidence,
+          onNavigate: props.onNavigate
+        }
+      ) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "about" ? props.aboutContent ?? null : props.view === "policy" ? props.policyContent ?? null : props.view === "supply-chain" || props.view === "audit" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "inbox" ? renderInboxContent(props) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+        QueueWorkspace,
+        {
+          requests: props.requests,
+          detail: props.detail,
+          runtime: props.runtime,
+          activeRequestId: props.activeRequestId,
+          resolutionMessage: props.resolutionMessage,
+          codexResume: props.codexResume,
+          approvalGate: props.approvalGate ?? null,
+          onOpenRequest: props.onOpenRequest,
+          onGoHome: props.onGoHome,
+          onResolve: props.onResolve,
+          onBulkApprove: props.onBulkApprove,
+          onBulkBlock: props.onBulkBlock,
+          onRetry: props.onRetry,
+          onRepair: props.onRepair,
+          onRetryResume: props.onRetryResume
+        }
+      ) }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ShellFooter, {})
+    ] })
   ] });
 }
 function MobileQueueDrawer(props) {
@@ -27012,13 +27095,13 @@ export {
   clearReviewQueue as a0,
   revokeApprovalGateCooldown as a1,
   disableApprovalGateTotp as a2,
-  enrollApprovalGateTotp as a3,
-  verifyApprovalGateTotp as a4,
-  clearEvidence as a5,
-  exportDiagnostics as a6,
-  repairApprovalCenter as a7,
-  exportSettings as a8,
-  importSettings as a9,
+  importSettings as a3,
+  resetSettings as a4,
+  enrollApprovalGateTotp as a5,
+  verifyApprovalGateTotp as a6,
+  clearEvidence as a7,
+  exportDiagnostics as a8,
+  repairApprovalCenter as a9,
   HiMiniCommandLine as aA,
   isSupplyChainAuditIncomplete as aB,
   readString$1 as aC,
@@ -27046,7 +27129,7 @@ export {
   EntitlementNotice as aY,
   fetchReceipts as aZ,
   WorkspacePageHeader as a_,
-  resetSettings as aa,
+  exportSettings as aa,
   setupDesktopNotifications as ab,
   Tag as ac,
   HiMiniMagnifyingGlass as ad,
@@ -27089,22 +27172,25 @@ export {
   policyActionLabel as bd,
   fetchCloudExceptions as be,
   fetchCloudExceptionRequests as bf,
-  HiMiniNoSymbol as bg,
-  HiMiniCube as bh,
-  HiMiniQueueList as bi,
-  HiMiniArrowRight as bj,
-  HiMiniPlay as bk,
-  Surface as bl,
-  HiMiniCheckBadge as bm,
-  fetchSupplyChainBundle as bn,
-  HiMiniDocumentMagnifyingGlass as bo,
-  HiMiniShieldExclamation as bp,
-  HiMiniComputerDesktop as bq,
-  HiMiniChevronLeft as br,
-  HiMiniArrowDown as bs,
-  HiMiniArrowUp as bt,
-  runAuditRemediation as bu,
-  HiMiniSignal as bv,
+  downloadBlob as bg,
+  PaginationControls as bh,
+  HiMiniNoSymbol as bi,
+  HiMiniCube as bj,
+  HiMiniArrowDownTray as bk,
+  HiMiniQueueList as bl,
+  HiMiniArrowRight as bm,
+  HiMiniPlay as bn,
+  Surface as bo,
+  HiMiniCheckBadge as bp,
+  fetchSupplyChainBundle as bq,
+  HiMiniDocumentMagnifyingGlass as br,
+  HiMiniShieldExclamation as bs,
+  HiMiniComputerDesktop as bt,
+  HiMiniChevronLeft as bu,
+  HiMiniArrowDown as bv,
+  HiMiniArrowUp as bw,
+  runAuditRemediation as bx,
+  HiMiniSignal as by,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,

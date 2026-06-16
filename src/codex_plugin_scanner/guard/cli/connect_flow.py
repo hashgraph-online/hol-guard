@@ -11,7 +11,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -21,7 +21,10 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 from ...version import __version__
-from ..package_firewall_entitlement import build_oauth_package_firewall_entitlement
+from ..package_firewall_entitlement import (
+    build_oauth_package_firewall_entitlement,
+    reconcile_connect_state_with_oauth_entitlement,
+)
 from ..runtime.runner import prepare_guard_cloud_connect_authorization
 from ..store import GuardStore
 from ..store_connect import build_connect_state_response
@@ -893,6 +896,7 @@ def _persist_oauth_local_credentials(
         runtime_label=runtime_label,
         now=now,
     )
+    reconcile_connect_state_with_oauth_entitlement(store, now=now)
 
 
 def run_guard_disconnect_command(
@@ -1171,9 +1175,11 @@ def build_connect_status_payload(
     latest_state = store.get_effective_guard_connect_state(now=datetime.now(timezone.utc).isoformat())
     cloud_profile = store.get_cloud_sync_profile()
     oauth_storage_health = store.get_oauth_local_credential_health()
+    oauth_required = connect_state_requires_oauth(latest_state=latest_state, cloud_profile=cloud_profile)
     latest_state = normalize_connect_state_for_missing_oauth(
         latest_state=latest_state,
         oauth_storage_health=oauth_storage_health,
+        oauth_required=oauth_required,
     )
     oauth_repair_required = (
         bool(oauth_storage_health.get("configured")) and oauth_storage_health.get("state") == "degraded"
@@ -1194,7 +1200,7 @@ def build_connect_status_payload(
         milestone = "first_sync_failed"
         reason = "Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again."
         recovery_command = CONNECT_COMMAND
-    elif not bool(oauth_storage_health.get("configured")) and status == "connected":
+    elif oauth_required and not bool(oauth_storage_health.get("configured")) and status == "connected":
         status = "retry_required"
         milestone = "first_sync_failed"
         if not isinstance(reason, str) or not reason.strip():
@@ -1220,18 +1226,35 @@ def build_connect_status_payload(
         payload["repair_action"] = "rerun_connect"
         payload["repair_message"] = "Run hol-guard connect to start OAuth Device Code approval."
     elif (oauth_repair_required and cloud_profile is None) or (
-        not bool(oauth_storage_health.get("configured")) and payload["status"] == "retry_required"
+        oauth_required and not bool(oauth_storage_health.get("configured")) and payload["status"] == "retry_required"
     ):
         payload["repair_message"] = "Run hol-guard connect again to repair local Guard Cloud authorization."
     return payload
+
+
+def connect_state_requires_oauth(
+    *,
+    latest_state: Mapping[str, object] | None,
+    cloud_profile: Mapping[str, object] | None,
+) -> bool:
+    request_id = latest_state.get("request_id") if latest_state is not None else None
+    if isinstance(request_id, str) and bool(request_id.strip()):
+        return True
+    auth_mode = cloud_profile.get("auth_mode") if isinstance(cloud_profile, dict) else None
+    if auth_mode == "legacy":
+        return False
+    return auth_mode == "oauth"
 
 
 def normalize_connect_state_for_missing_oauth(
     *,
     latest_state: dict[str, object] | None,
     oauth_storage_health: dict[str, object],
+    oauth_required: bool,
 ) -> dict[str, object] | None:
     if latest_state is None:
+        return latest_state
+    if not oauth_required:
         return latest_state
     oauth_state = str(oauth_storage_health.get("state") or "")
     oauth_configured = bool(oauth_storage_health.get("configured"))
@@ -1261,3 +1284,35 @@ def connect_recovery_command(latest_state: dict[str, object] | None) -> str:
     if status == "connected" and milestone == "first_sync_succeeded":
         return "hol-guard sync"
     return CONNECT_COMMAND
+
+
+def connect_retry_refresh_race_from_reason(reason: str | None) -> bool:
+    return isinstance(reason, str) and "already consumed" in reason.lower()
+
+
+def resolve_guard_cloud_state(
+    *,
+    sync_configured: bool,
+    sync_completed: bool,
+    remote_payload_active: bool,
+    oauth_repair_required: bool = False,
+    connect_retry_required: bool = False,
+) -> str:
+    if not sync_configured:
+        return "local_only"
+    if oauth_repair_required:
+        return "local_only"
+    if connect_retry_required:
+        return "local_only" if sync_completed or remote_payload_active else "paired_waiting"
+    if sync_completed or remote_payload_active:
+        return "paired_active"
+    return "paired_waiting"
+
+
+def resolve_guard_cloud_repair_detail(
+    *,
+    shared_proof_recorded: bool,
+    first_sync_message: str,
+    resume_message: str,
+) -> str:
+    return resume_message if shared_proof_recorded else first_sync_message

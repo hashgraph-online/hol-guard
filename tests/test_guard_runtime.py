@@ -29,6 +29,9 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import render as guard_render_module
+from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
+    _codex_post_tool_output_artifact,
+)
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
@@ -14054,6 +14057,81 @@ def test_guard_hook_codex_does_not_block_simple_pytest_command(tmp_path, capsys,
     assert "approval_requests" not in output
 
 
+def test_guard_runtime_allows_literal_exit_code_echo_after_safe_pytest(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {
+            "command": (
+                "cd sub && .venv/bin/python -m pytest "
+                "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+                'test_release_checklist_references_smoke_evidence -q 2>&1; echo "__EXIT_CODE__:$?"'
+            )
+        },
+        cwd=tmp_path,
+    )
+
+    assert match is None
+
+
+def test_guard_hook_codex_does_not_block_safe_pytest_exit_code_echo(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "event": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": (
+                "cd sub && .venv/bin/python -m pytest "
+                "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+                'test_release_checklist_references_smoke_evidence -q 2>&1; echo "__EXIT_CODE__:$?"'
+            )
+        },
+        "source_scope": "project",
+    }
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+    )
+
+    assert rc == 0
+    assert output["recorded"] is True
+    assert output["policy_action"] == "warn"
+    assert "approval_requests" not in output
+
+
+@pytest.mark.parametrize(
+    ("command_suffix",),
+    [
+        ('echo "$HOME"',),
+        ('echo "${VAR}"',),
+        ('printf "$PATH"',),
+    ],
+)
+def test_guard_runtime_keeps_static_shell_expansions_blocked_after_safe_pytest(tmp_path, command_suffix):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {
+            "command": (
+                "cd sub && .venv/bin/python -m pytest "
+                "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+                "test_release_checklist_references_smoke_evidence -q 2>&1; "
+                f"{command_suffix}"
+            )
+        },
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
 def test_guard_runtime_keeps_mutating_pytest_flags_sensitive(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",
@@ -14717,6 +14795,190 @@ def test_guard_hook_codex_post_tool_use_blocks_credential_looking_output(
     assert payload["continue"] is False
     assert "HOL Guard" in payload["stopReason"]
     assert "credential-looking output" in payload["stopReason"]
+    assert "http://127.0.0.1:4455/requests/" in payload["stopReason"]
+
+
+def test_guard_hook_codex_post_tool_use_blocks_authrc_output(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "cat .authrc"},
+        "tool_response": {"stdout": "HOL_GUARD_FAKE_CREDENTIAL=fixture-only\n"},
+        "source_scope": "project",
+    }
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert rc == 0
+    assert payload["continue"] is False
+    assert "credential-looking output" in payload["stopReason"]
+
+
+def test_guard_hook_codex_post_tool_use_explains_merged_stderr_capture(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": (
+                "cd sub && .venv/bin/python -m pytest "
+                "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+                'test_release_checklist_references_smoke_evidence -q 2>&1; echo "__EXIT_CODE__:$?"'
+            )
+        },
+        "tool_response": {"stdout": "HOL_GUARD_FAKE_CREDENTIAL=fixture-only\n"},
+        "source_scope": "project",
+    }
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+            "--policy-action",
+            "block",
+        ]
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert rc == 0
+    assert payload["continue"] is False
+    assert "Combined stdout/stderr looked credential-like before it reached Codex." in payload["stopReason"]
+    assert payload["stopReason"].count("Open HOL Guard to approve or keep this blocked") == 1
+    assert "http://127.0.0.1:4455/requests/" in payload["stopReason"]
+
+
+def test_codex_post_tool_output_allows_focused_pytest_fake_credential_fixture(tmp_path):
+    artifact = _codex_post_tool_output_artifact(
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": (
+                    "python3 -m pytest "
+                    "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+                    "test_release_checklist_references_smoke_evidence -q"
+                )
+            },
+            "tool_response": {"stdout": "fake_credential=fixture-only\n"},
+        },
+        config_path="codex.json",
+        source_scope="project",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert artifact is None
+
+
+def test_codex_post_tool_output_allows_focused_pytest_fixture_with_status_noise(tmp_path):
+    artifact = _codex_post_tool_output_artifact(
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": (
+                    "python3 -m pytest "
+                    "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+                    "test_release_checklist_references_smoke_evidence -q -s"
+                )
+            },
+            "tool_response": {
+                "stdout": "fake_credential=fixture-only\n.\n1 passed in 0.02s\n",
+            },
+        },
+        config_path="codex.json",
+        source_scope="project",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert artifact is None
+
+
+def test_guard_hook_codex_post_tool_use_blocks_focused_pytest_medium_secret_output(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": (
+                "python3 -m pytest "
+                "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+                "test_release_checklist_references_smoke_evidence -q"
+            )
+        },
+        "tool_response": {"stdout": "Authorization: Bearer guardfixturetoken123456\n"},
+        "source_scope": "project",
+    }
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+            "--policy-action",
+            "block",
+        ]
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert rc == 0
+    assert payload["continue"] is False
+    assert "Focused pytest emitted credential-looking output before it reached Codex." in payload["stopReason"]
+    assert "Pytest can execute repository-controlled code" in payload["stopReason"]
+    assert payload["stopReason"].count("Open HOL Guard to approve or keep this blocked") == 1
     assert "http://127.0.0.1:4455/requests/" in payload["stopReason"]
 
 

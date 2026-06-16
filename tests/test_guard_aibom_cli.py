@@ -12,7 +12,7 @@ from codex_plugin_scanner.guard import aibom_cli
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_dispatch_records as dispatch
 from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
-from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
+from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot, inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -291,6 +291,52 @@ def test_sync_aibom_snapshots_if_due_retries_empty_sync_after_interval(
     assert summary.get("synced") is True
 
 
+def test_inventory_snapshot_event_includes_device_id() -> None:
+    snapshot = GuardAgentInventorySnapshot(
+        snapshot_id='snapshot-aibom-1',
+        agent_id='codex:local',
+        agent_type='codex',
+        generated_at='2026-06-10T12:00:00+00:00',
+        runtime_version='test',
+    )
+
+    event = aibom_cli._inventory_snapshot_event(
+        snapshot=snapshot,
+        workspace_id='workspace-1',
+        device_id='device-1',
+        generated_at='2026-06-10T12:00:00+00:00',
+    )
+
+    assert event['deviceId'] == 'device-1'
+
+
+def test_resolve_trust_attestation_context_defaults_to_v1(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / 'guard')
+    monkeypatch.setattr(store, 'get_cloud_workspace_id', lambda: 'workspace-1')
+    monkeypatch.setattr(store, 'get_or_create_installation_id', lambda: 'device-1')
+    monkeypatch.delenv('GUARD_AIBOM_TRUST_ATTESTATION_V2', raising=False)
+
+    context = aibom_cli._resolve_trust_attestation_context(store)
+
+    assert context['workspaceId'] is None
+    assert context['deviceId'] is None
+
+
+def test_resolve_trust_attestation_context_includes_workspace_device_for_v2(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / 'guard')
+    monkeypatch.setattr(store, 'get_cloud_workspace_id', lambda: 'workspace-1')
+    monkeypatch.setattr(store, 'get_or_create_installation_id', lambda: 'device-1')
+    monkeypatch.setenv('GUARD_AIBOM_TRUST_ATTESTATION_V2', '1')
+
+    context = aibom_cli._resolve_trust_attestation_context(store)
+
+    assert context['workspaceId'] == 'workspace-1'
+    assert context['deviceId'] == 'device-1'
+
+
 def test_sync_aibom_snapshots_404_backoff_isolated_from_guard_events_summary(
     tmp_path: Path,
     monkeypatch,
@@ -474,6 +520,10 @@ def test_sync_aibom_snapshots_uses_cloud_sync_cisco_defaults(
     assert options.cisco_skill_scan == "auto"
     assert options.cisco_mcp_scan == "auto"
     assert options.cisco_timeout_seconds == 30.0
+    trust_attestation_context = collect_kwargs["trust_attestation_context"]
+    assert isinstance(trust_attestation_context, dict)
+    assert trust_attestation_context["deviceId"] is None
+    assert trust_attestation_context["workspaceId"] is None
 
 
 def test_guard_aibom_sync_command_uses_cloud_sync_cisco_defaults(

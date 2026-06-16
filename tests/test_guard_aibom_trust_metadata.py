@@ -9,15 +9,22 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+import pytest
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
+from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.aibom_trust_metadata import trust_resolution_from_domain
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.trust_attestation import (
+    GuardTrustAttestationSigningConfig,
     GuardTrustAttestationVerificationKey,
+    GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
     build_trust_attestation_payload,
+    build_trust_attestation_verification_key,
+    resolve_guard_oauth_trust_attestation_signing_config,
+    sign_trust_attestation,
     verify_trust_attestation,
 )
 from codex_plugin_scanner.trust_models import TrustDomainScore
@@ -62,6 +69,7 @@ def _snapshot_for_artifact(
     generated_at: str,
     home_dir: Path,
     workspace_dir: Path,
+    trust_attestation_context: Mapping[str, object] | None = None,
 ) -> Any:
     detection = HarnessDetection(
         harness="codex",
@@ -75,6 +83,7 @@ def _snapshot_for_artifact(
         generated_at=generated_at,
         home_dir=home_dir,
         workspace_dir=workspace_dir,
+        trust_attestation_context=trust_attestation_context,
     )
 
 
@@ -393,6 +402,64 @@ def test_inventory_snapshot_signs_local_trust_metadata_when_configured(monkeypat
         envelope=attestation,
         trusted_keys=(verification_key,),
     )
+
+
+def test_inventory_snapshot_signs_local_trust_metadata_with_workspace_device_binding(
+    tmp_path: Path,
+) -> None:
+    dpop_key_material = generate_dpop_key_pair()
+    signing_config = resolve_guard_oauth_trust_attestation_signing_config(
+        {
+            "dpop_private_key_pem": dpop_key_material.private_key_pem,
+            "dpop_public_jwk_thumbprint": dpop_key_material.public_jwk_thumbprint,
+        }
+    )
+    assert signing_config is not None
+    verification_key = build_trust_attestation_verification_key(signing_config)
+    plugin_dir = tmp_path
+    _write_good_plugin(plugin_dir)
+    snapshot = _snapshot_for_artifact(
+        artifact=GuardArtifact(
+            artifact_id="codex:project:plugin:trust-demo",
+            name="trust-demo",
+            harness="codex",
+            artifact_type="plugin",
+            source_scope="project",
+            config_path=str(plugin_dir),
+        ),
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=plugin_dir,
+        trust_attestation_context={
+            "deviceId": "device-alpha",
+            "signingConfig": signing_config,
+            "workspaceId": "workspace-alpha",
+        },
+    )
+    plugin_item = next(item for item in snapshot.items if item.item_kind == "plugin")
+    trust = plugin_item.metadata.get("trustResolution")
+    assert isinstance(trust, dict)
+    metadata = trust.get("metadata")
+    assert isinstance(metadata, dict)
+    attestation = metadata.get("attestation")
+    assert isinstance(attestation, dict)
+    assert attestation.get("signatureAlgorithm") == GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256
+    assert attestation.get("publicJwkThumbprint") == dpop_key_material.public_jwk_thumbprint
+    verify_trust_attestation(
+        payload=build_trust_attestation_payload(
+            agent_id=snapshot.agent_id,
+            item_id=plugin_item.item_id,
+            item_kind=plugin_item.item_kind,
+            content_hash=plugin_item.content_hash,
+            captured_at=str(trust.get("capturedAt")),
+            evidence_hash=str(metadata.get("evidenceHash")),
+            scope="trust_resolution",
+            workspace_id="workspace-alpha",
+            device_id="device-alpha",
+        ),
+        envelope=attestation,
+        trusted_keys=(verification_key,),
+    )
     trust_layers = plugin_item.metadata.get("trustLayers")
     assert isinstance(trust_layers, list)
     local_layer = next(
@@ -412,11 +479,56 @@ def test_inventory_snapshot_signs_local_trust_metadata_when_configured(monkeypat
             captured_at=str(local_layer.get("capturedAt")),
             evidence_hash=str(layer_metadata.get("evidenceHash")),
             scope="trust_layer",
+            workspace_id="workspace-alpha",
+            device_id="device-alpha",
             layer_id=str(local_layer.get("layerId")),
             layer_type=str(local_layer.get("layerType")),
         ),
         envelope=layer_attestation,
         trusted_keys=(verification_key,),
+    )
+
+
+def test_p384_key_is_rejected_for_p256_attestation() -> None:
+    private_key = ec.generate_private_key(ec.SECP384R1())
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode('ascii')
+
+    with pytest.raises(ValueError, match='P-256'):
+        sign_trust_attestation(
+            payload=build_trust_attestation_payload(
+                agent_id='agent-1',
+                item_id='plugin:trust-demo',
+                item_kind='plugin',
+                content_hash='sha256:plugin-local',
+                captured_at='2026-06-10T12:00:00+00:00',
+                evidence_hash='resolution-hash',
+                scope='trust_resolution',
+                workspace_id='workspace-alpha',
+                device_id='device-alpha',
+            ),
+            config=GuardTrustAttestationSigningConfig(
+                active_key_id='p384-key',
+                private_key_pem=private_key_pem,
+                public_jwk_thumbprint='p384-key',
+                signature_algorithm=GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
+            ),
+            signed_at='2026-06-10T12:00:00+00:00',
+        )
+
+
+def test_invalid_oauth_private_key_disables_attestation_signing_config() -> None:
+    assert (
+        resolve_guard_oauth_trust_attestation_signing_config(
+            {
+                "dpop_private_key_pem": "-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+                "dpop_public_jwk_thumbprint": "thumbprint-123",
+            }
+        )
+        is None
     )
 
 

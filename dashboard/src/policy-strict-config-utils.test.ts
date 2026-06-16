@@ -1,4 +1,5 @@
 import {
+  resolveStrictScenarioOutcome,
   fingerprintLocalPolicySettings,
   simulateStrictPolicyOutcome,
   STRICT_POLICY_EVALUATION_ORDER,
@@ -74,5 +75,9 @@ assert(
   reapprovalFallback.outcome === "require-reapproval",
   "require-reapproval fallback preserves configured outcome",
 );
+
+const scenario = resolveStrictScenarioOutcome("first-time", baseSettings);
+assert(scenario.outcome === "review", "first-time scenario uses network domain action");
+assert(scenario.reasoning.includes("New network domain action"), "scenario reasoning names control");
 
 console.log("policy-strict-config-utils.test.ts: all assertions passed");

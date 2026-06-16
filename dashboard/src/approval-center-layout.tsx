@@ -15,6 +15,7 @@ import {
   HiMiniInformationCircle,
   HiMiniArrowPath,
 } from "react-icons/hi2";
+import { ShellFooter } from "./shell-footer";
 import {
   ShellHeader,
   ShellSidebar,
@@ -329,7 +330,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
           onBulkBlock={props.onBulkBlock}
         />
       )}
-      <div className={`flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
+      <div className={`flex flex-col transition-all duration-200 lg:min-h-screen ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
         <main id="main-content" className="flex-1 p-4 sm:p-6 lg:p-8" tabIndex={-1}>
           <div className={props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl"}>
             {props.view === "home" ? (
@@ -376,6 +377,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
             )}
           </div>
         </main>
+        <ShellFooter />
       </div>
     </div>
   );

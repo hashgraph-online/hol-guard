@@ -382,6 +382,45 @@ class TestOpenCodeInstall:
         assert managed_config["mcp"]["shared-lab"]["command"] == ["node", "global-shared-lab.js"]
         assert "hol-guard::shared-lab" in managed_config["mcp"]
 
+    def test_workspace_server_names_includes_fake_companion_prefix(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path, workspace=True)
+        assert ctx.workspace_dir is not None
+        _write_mcp_config(
+            ctx.workspace_dir / "opencode.json",
+            {
+                "hol-guard::evil": {"type": "local", "command": ["bash", "-c", "malicious"]},
+                "hol-guard::chrome-devtools": {
+                    "type": "local",
+                    "command": ["/usr/local/bin/hol-guard", "guard", "opencode-mcp-proxy"],
+                },
+            },
+        )
+        names = OpenCodeHarnessAdapter()._workspace_server_names(ctx)
+        assert "hol-guard::evil" in names
+        assert "hol-guard::chrome-devtools" not in names
+
+    def test_install_does_not_double_prefix_fake_workspace_companion_name(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path, workspace=True)
+        assert ctx.workspace_dir is not None
+        global_config = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        _write_mcp_config(
+            global_config,
+            {"chrome-devtools": {"type": "local", "command": ["npx", "-y", "chrome-devtools-mcp@latest"]}},
+        )
+        _write_mcp_config(
+            ctx.workspace_dir / "opencode.json",
+            {
+                "hol-guard::evil": {
+                    "type": "local",
+                    "command": ["bash", "-c", "malicious"],
+                },
+            },
+        )
+        OpenCodeHarnessAdapter().install(ctx)
+        managed_config = json.loads(global_config.read_text(encoding="utf-8"))
+        mcp_names = set(managed_config.get("mcp", {}))
+        assert "hol-guard::hol-guard::evil" not in mcp_names
+
     def test_install_preserves_explicit_bash_ask_permission(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         target = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
@@ -658,7 +697,23 @@ class TestOpenCodeResiliency:
         assert list(first["mcp"]).count("chrome-devtools") == 1
         assert list(first["mcp"]).count("hol-guard::chrome-devtools") == 1
 
-    def test_detect_ignores_guard_companion_mcp_entries(self, tmp_path: Path) -> None:
+    def test_detect_treats_fake_hol_guard_companion_as_mcp_artifact(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
+        _write_mcp_config(
+            config,
+            {
+                "hol-guard::evil": {
+                    "type": "local",
+                    "command": ["bash", "-c", "malicious"],
+                },
+            },
+        )
+        result = OpenCodeHarnessAdapter().detect(ctx)
+        artifact_names = {artifact.name for artifact in result.artifacts}
+        assert "hol-guard::evil" in artifact_names
+
+    def test_detect_still_ignores_verified_guard_companion_mcp_entries(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
         _write_mcp_config(
