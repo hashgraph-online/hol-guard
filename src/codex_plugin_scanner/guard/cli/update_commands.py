@@ -159,6 +159,16 @@ def run_guard_update(
                     f"{result.returncode} after version changed. "
                     "Review stderr for any follow-up action."
                 )
+            conflict_message = _dependency_conflict_message(
+                _installer_output_text(payload.get("stdout"), payload.get("stderr")),
+            )
+            if conflict_message:
+                payload["status"] = "blocked"
+                payload["changed"] = False
+                payload["dependency_conflict"] = True
+                payload["message"] = conflict_message
+                payload.pop("retry_command", None)
+                return payload, 1
             payload["status"] = "failed"
             payload["changed"] = False
             payload["message"] = "HOL Guard update failed."
@@ -167,23 +177,38 @@ def run_guard_update(
         payload["status"] = _success_status(payload)
         payload["changed"] = _version_changed(current_version, resulting_version) or payload["status"] == "updated"
         if not attempted_force_retry and not force_pypi_reinstall and payload.get("status") == "stale":
-            retry_command = _update_command(installer, use_pypi=True)
+            target_version = None
+            active_version_check = payload.get("version_check")
+            if isinstance(active_version_check, dict):
+                latest = active_version_check.get("latest_version")
+                if isinstance(latest, str) and latest.strip():
+                    target_version = latest.strip()
+            retry_command = _update_command(installer, use_pypi=True, target_version=target_version)
             if retry_command != active_command:
                 attempted_force_retry = True
                 active_command = retry_command
                 payload["upgrade_source"] = "pypi"
                 continue
         break
-    stale_retry_command = _stale_retry_command(payload)
+    conflict_message = _dependency_conflict_message(
+        _installer_output_text(payload.get("stdout"), payload.get("stderr")),
+    )
+    if payload.get("status") == "stale" and conflict_message:
+        payload["status"] = "blocked"
+        payload["dependency_conflict"] = True
+        payload["message"] = conflict_message
+        payload.pop("retry_command", None)
+    stale_retry_command = "" if payload.get("status") == "blocked" else _stale_retry_command(payload)
     if stale_retry_command:
         payload["retry_command"] = stale_retry_command
-    payload["message"] = _success_message(
-        status=str(payload["status"]),
-        current_version=current_version,
-        resulting_version=resulting_version,
-        version_check=payload.get("version_check"),
-        retry_command=stale_retry_command,
-    )
+    if payload.get("status") != "blocked":
+        payload["message"] = _success_message(
+            status=str(payload["status"]),
+            current_version=current_version,
+            resulting_version=resulting_version,
+            version_check=payload.get("version_check"),
+            retry_command=stale_retry_command,
+        )
     notes = _success_notes(payload)
     if nonzero_success_note is not None:
         notes = [*notes, nonzero_success_note]
@@ -340,9 +365,14 @@ def _merge_version_checks(
 
 def _stale_retry_command(payload: dict[str, object]) -> str:
     version_check = payload.get("version_check")
+    target_version: str | None = None
+    if isinstance(version_check, dict):
+        latest_version = version_check.get("latest_version")
+        if isinstance(latest_version, str) and latest_version.strip():
+            target_version = latest_version.strip()
     if isinstance(version_check, dict) and version_check.get("update_available") is True:
         installer = str(payload.get("installer") or "pip")
-        return _shell_command(_update_command(installer, use_pypi=True))
+        return _shell_command(_update_command(installer, use_pypi=True, target_version=target_version))
     retry_command = payload.get("retry_command")
     if isinstance(retry_command, str) and retry_command.strip():
         return retry_command.strip()
@@ -360,6 +390,8 @@ def _success_message(
     version_check: object = None,
     retry_command: str = "",
 ) -> str:
+    if status == "blocked":
+        return "HOL Guard update is blocked by incompatible package dependencies."
     if status == "stale":
         latest_version = None
         if isinstance(version_check, dict):
@@ -503,13 +535,40 @@ def _should_upgrade_from_pypi(
     return vcs_install is not None
 
 
-def _update_command(installer: str, *, use_pypi: bool = False) -> list[str]:
+def _hol_guard_package_spec(target_version: str | None = None) -> str:
+    if isinstance(target_version, str) and target_version.strip() and target_version.strip() not in {"unknown"}:
+        return f"hol-guard=={target_version.strip()}"
+    return "hol-guard"
+
+
+def _installer_output_text(stdout: object, stderr: object) -> str:
+    return "\n".join(part.strip() for part in (str(stdout or "").strip(), str(stderr or "").strip()) if part.strip())
+
+
+def _dependency_conflict_message(installer_output: str) -> str | None:
+    lowered = installer_output.lower()
+    if "resolutionimpossible" not in lowered and "conflicting dependencies" not in lowered:
+        return None
+    if "rich" in lowered and "cisco-ai-skill-scanner" in lowered:
+        return (
+            "PyPI cannot install the latest HOL Guard release because hol-guard and "
+            "cisco-ai-skill-scanner require incompatible rich versions. Wait for a fixed "
+            "HOL Guard release, then run hol-guard update again."
+        )
+    return (
+        "PyPI cannot install the latest HOL Guard release because of conflicting package "
+        "dependencies. Check installer output for details."
+    )
+
+
+def _update_command(installer: str, *, use_pypi: bool = False, target_version: str | None = None) -> list[str]:
+    package = _hol_guard_package_spec(target_version)
     if use_pypi:
         if installer == "uv":
-            return ["uv", "tool", "install", "--force", "hol-guard"]
+            return ["uv", "tool", "install", "--force", package]
         if installer == "pipx":
-            return ["pipx", "install", "--force", "hol-guard"]
-        return [sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall", "hol-guard"]
+            return ["pipx", "install", "--force", package]
+        return [sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall", package]
     if installer == "uv":
         return ["uv", "tool", "upgrade", "hol-guard"]
     if installer == "pipx":
