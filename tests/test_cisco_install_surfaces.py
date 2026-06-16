@@ -40,7 +40,7 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "urllib3==2.7.0" in override_entries
     assert "cisco-ai-a2a-scanner" not in dependencies
     assert "cisco-ai-a2a-scanner" not in cisco_extra
-    assert "rich>=14.0.0,<15" in dependency_entries
+    assert "rich>=14.0,<15" in dependency_entries
     assert "rich>=15.0.0" not in dependency_entries
 
 

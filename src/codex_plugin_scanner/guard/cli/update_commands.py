@@ -178,8 +178,9 @@ def run_guard_update(
         payload["changed"] = _version_changed(current_version, resulting_version) or payload["status"] == "updated"
         if not attempted_force_retry and not force_pypi_reinstall and payload.get("status") == "stale":
             target_version = None
-            if isinstance(version_check, dict):
-                latest = version_check.get("latest_version")
+            active_version_check = payload.get("version_check")
+            if isinstance(active_version_check, dict):
+                latest = active_version_check.get("latest_version")
                 if isinstance(latest, str) and latest.strip():
                     target_version = latest.strip()
             retry_command = _update_command(installer, use_pypi=True, target_version=target_version)
@@ -200,13 +201,14 @@ def run_guard_update(
     stale_retry_command = "" if payload.get("status") == "blocked" else _stale_retry_command(payload)
     if stale_retry_command:
         payload["retry_command"] = stale_retry_command
-    payload["message"] = _success_message(
-        status=str(payload["status"]),
-        current_version=current_version,
-        resulting_version=resulting_version,
-        version_check=payload.get("version_check"),
-        retry_command=stale_retry_command,
-    )
+    if payload.get("status") != "blocked":
+        payload["message"] = _success_message(
+            status=str(payload["status"]),
+            current_version=current_version,
+            resulting_version=resulting_version,
+            version_check=payload.get("version_check"),
+            retry_command=stale_retry_command,
+        )
     notes = _success_notes(payload)
     if nonzero_success_note is not None:
         notes = [*notes, nonzero_success_note]
@@ -389,7 +391,7 @@ def _success_message(
     retry_command: str = "",
 ) -> str:
     if status == "blocked":
-        return str(payload.get("message") or "HOL Guard update is blocked by incompatible package dependencies.")
+        return "HOL Guard update is blocked by incompatible package dependencies."
     if status == "stale":
         latest_version = None
         if isinstance(version_check, dict):
@@ -540,11 +542,7 @@ def _hol_guard_package_spec(target_version: str | None = None) -> str:
 
 
 def _installer_output_text(stdout: object, stderr: object) -> str:
-    return "\n".join(
-        part.strip()
-        for part in (str(stdout or "").strip(), str(stderr or "").strip())
-        if part.strip()
-    )
+    return "\n".join(part.strip() for part in (str(stdout or "").strip(), str(stderr or "").strip()) if part.strip())
 
 
 def _dependency_conflict_message(installer_output: str) -> str | None:
