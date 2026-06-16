@@ -90,8 +90,10 @@ import {
 } from "./queue-state";
 import {
   buildBulkGateCredentials,
+  isBulkApproveGateReady,
   QueueBulkApproveFlow,
   type BulkApproveFlowStep,
+  validateBulkApproveCredentials,
 } from "./queue-bulk-approve-flow";
 import {
   buildDecisionPayload,
@@ -630,7 +632,6 @@ function QueueBrowser(props: {
   const [selectedBulkIds, setSelectedBulkIds] = useState<Set<string>>(() => new Set());
   const [bulkApprovePassword, setBulkApprovePassword] = useState("");
   const [bulkApproveTotpCode, setBulkApproveTotpCode] = useState("");
-  const [bulkApproveUseCooldown, setBulkApproveUseCooldown] = useState(false);
   const [bulkApproveError, setBulkApproveError] = useState<string | null>(null);
   const [bulkCompletedActionCount, setBulkCompletedActionCount] = useState<number | null>(null);
   const harnesses = Array.from(new Set(props.items.map((item) => item.harness).filter(isDisplayableHarness))).sort();
@@ -707,10 +708,7 @@ function QueueBrowser(props: {
     props.onBulkApprove !== undefined &&
     (bulkEligibleGroups.length >= 2 || bulkFlowStep === "completed");
 
-  const showBulkGateFields =
-    showBulkApprove &&
-    props.approvalGate?.enabled === true &&
-    props.approvalGate.configured === true;
+  const bulkGateReady = isBulkApproveGateReady(props.approvalGate);
 
   const selectedBulkGroups = useMemo(
     () => bulkEligibleGroups.filter((group) => selectedBulkIds.has(group.primary.request_id)),
@@ -722,17 +720,19 @@ function QueueBrowser(props: {
     setSelectedBulkIds(new Set());
     setBulkApprovePassword("");
     setBulkApproveTotpCode("");
-    setBulkApproveUseCooldown(false);
     setBulkApproveError(null);
     setBulkCompletedActionCount(null);
   }, []);
 
   const handleBulkFlowStart = useCallback(() => {
+    if (!bulkGateReady) {
+      return;
+    }
     setBulkFlowStep("select");
     setSelectedBulkIds(new Set());
     setBulkApproveError(null);
     setBulkCompletedActionCount(null);
-  }, []);
+  }, [bulkGateReady]);
 
   const handleBulkSelectAll = useCallback(() => {
     setSelectedBulkIds(new Set(bulkApprovePrimaryIds(bulkEligibleGroups)));
@@ -777,21 +777,24 @@ function QueueBrowser(props: {
     setBulkApproveTotpCode(event.target.value);
   }, []);
 
-  const handleBulkApproveUseCooldownChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setBulkApproveUseCooldown(event.target.checked);
-  }, []);
-
   const handleBulkConfirmApprove = useCallback(async () => {
     if (bulkFlowStep === "submitting" || bulkFlowStep === "completed" || selectedBulkGroups.length === 0) {
       return;
     }
     const ids = bulkApprovePrimaryIds(selectedBulkGroups);
     const approvedActionCount = bulkApproveActionCount(selectedBulkGroups);
+    const credentialError = validateBulkApproveCredentials(props.approvalGate, {
+      password: bulkApprovePassword,
+      totpCode: bulkApproveTotpCode,
+    });
+    if (credentialError !== null) {
+      setBulkApproveError(credentialError);
+      return;
+    }
     const gateCredentials = buildBulkGateCredentials(
-      showBulkGateFields,
+      props.approvalGate,
       bulkApprovePassword,
       bulkApproveTotpCode,
-      bulkApproveUseCooldown
     );
     setBulkFlowStep("submitting");
     setBulkApproveError(null);
@@ -801,7 +804,6 @@ function QueueBrowser(props: {
       setBulkFlowStep("completed");
       setBulkApprovePassword("");
       setBulkApproveTotpCode("");
-      setBulkApproveUseCooldown(false);
     } catch (error) {
       setBulkFlowStep("review");
       setBulkApproveError(error instanceof Error ? error.message : "Bulk approval failed.");
@@ -809,11 +811,10 @@ function QueueBrowser(props: {
   }, [
     bulkApprovePassword,
     bulkApproveTotpCode,
-    bulkApproveUseCooldown,
     bulkFlowStep,
+    props.approvalGate,
     props.onBulkApprove,
     selectedBulkGroups,
-    showBulkGateFields,
   ]);
 
   const blockEligibleGroups = useMemo(() => bulkBlockEligibleGroups(groups), [groups]);
@@ -840,9 +841,9 @@ function QueueBrowser(props: {
           completedActionCount={bulkCompletedActionCount}
           sensitiveFileReadCount={sensitiveFileReadCount}
           approvalGate={props.approvalGate ?? null}
+          settingsHref={guardAwareHref("/settings")}
           bulkApprovePassword={bulkApprovePassword}
           bulkApproveTotpCode={bulkApproveTotpCode}
-          bulkApproveUseCooldown={bulkApproveUseCooldown}
           errorMessage={bulkApproveError}
           onStart={handleBulkFlowStart}
           onSelectAll={handleBulkSelectAll}
@@ -853,7 +854,6 @@ function QueueBrowser(props: {
           onConfirmApprove={handleBulkConfirmApprove}
           onBulkApprovePasswordChange={handleBulkApprovePasswordChange}
           onBulkApproveTotpCodeChange={handleBulkApproveTotpCodeChange}
-          onBulkApproveUseCooldownChange={handleBulkApproveUseCooldownChange}
         />
       )}
       {!showBulkApprove && sensitiveFileReadCount > 0 && (
