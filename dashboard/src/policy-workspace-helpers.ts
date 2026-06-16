@@ -573,6 +573,35 @@ export function resolveSecurityModeCopy(
   };
 }
 
+export function formatCloudBundleHashDisplay(hash: string | null | undefined): string {
+  if (!hash?.trim()) {
+    return "Unavailable";
+  }
+  const value = hash.trim();
+  const normalized = value.replace(/^sha256:/i, "");
+  if (normalized.length <= 8) {
+    return normalized;
+  }
+  if (value.toLowerCase().startsWith("sha256:")) {
+    return `sha256:${normalized.slice(0, 4)}…`;
+  }
+  return `${normalized.slice(0, 8)}…`;
+}
+
+export function resolveCloudBundleStatusSubtitle(copy: {
+  label: string;
+  detail: string;
+  tone: "green" | "attention" | "slate";
+}): string {
+  if (copy.tone === "green") {
+    return "All policies up to date";
+  }
+  if (copy.tone === "attention") {
+    return "Latest sync needs attention";
+  }
+  return copy.label;
+}
+
 export function resolveCloudPolicyBundleCopy(snapshot: {
   cloud_policy_bundle_version?: string | null;
   cloud_policy_rollout_state?: string | null;

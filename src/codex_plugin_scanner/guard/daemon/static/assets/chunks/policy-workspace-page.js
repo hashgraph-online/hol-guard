@@ -2110,6 +2110,29 @@ function resolveSecurityModeCopy(level) {
     tone: "slate"
   };
 }
+function formatCloudBundleHashDisplay(hash) {
+  if (!hash?.trim()) {
+    return "Unavailable";
+  }
+  const value = hash.trim();
+  const normalized = value.replace(/^sha256:/i, "");
+  if (normalized.length <= 8) {
+    return normalized;
+  }
+  if (value.toLowerCase().startsWith("sha256:")) {
+    return `sha256:${normalized.slice(0, 4)}…`;
+  }
+  return `${normalized.slice(0, 8)}…`;
+}
+function resolveCloudBundleStatusSubtitle(copy) {
+  if (copy.tone === "green") {
+    return "All policies up to date";
+  }
+  if (copy.tone === "attention") {
+    return "Latest sync needs attention";
+  }
+  return copy.label;
+}
 function resolveCloudPolicyBundleCopy(snapshot) {
   const bundleVersion = snapshot.cloud_policy_bundle_version?.trim();
   if (!bundleVersion) {
@@ -2376,7 +2399,7 @@ function PolicyGuardCloudBundleCard({ snapshot }) {
   const cloudConnected = resolveCloudExceptionsConnected(snapshot);
   const lastAckAt = snapshot.cloud_policy_last_ack_at?.trim() ?? snapshot.runtime_state?.last_heartbeat_at?.trim() ?? snapshot.generated_at?.trim() ?? null;
   const policyHash = cloudBundleCopy?.hash?.trim() ?? null;
-  const policyHashShort = policyHash?.slice(0, 8) ?? null;
+  const policyHashDisplay = formatCloudBundleHashDisplay(policyHash);
   const bundleVersion = snapshot.cloud_policy_bundle_version?.trim() ?? null;
   const handleCopyHash = reactExports.useCallback(() => {
     if (!policyHash || !navigator.clipboard?.writeText) {
@@ -2389,8 +2412,8 @@ function PolicyGuardCloudBundleCard({ snapshot }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Guard Cloud bundle" }),
       cloudConnected ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm font-medium text-brand-dark", children: snapshot.cloud_state_label?.trim() || "Connected to Guard Cloud" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/75", children: snapshot.cloud_state_detail?.trim() || "Guard Cloud is connected. Policy bundle details will appear after the next successful sync." })
-      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/75", children: "Guard Cloud is not connected. Remembered Cloud rules appear when Guard Cloud syncs a bundle." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/75", children: snapshot.cloud_state_detail?.trim() || "Guard Cloud is connected. Policy bundle details will appear after the next successful sync." })
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/75", children: "Guard Cloud is not connected. Remembered Cloud rules appear when Guard Cloud syncs a bundle." }),
       cloudControlsUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: cloudControlsUrl, variant: "secondary", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloudArrowUp, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
         "Open Guard Cloud"
@@ -2398,47 +2421,56 @@ function PolicyGuardCloudBundleCard({ snapshot }) {
     ] });
   }
   const synced = cloudBundleCopy.tone === "green";
+  const statusSubtitle = resolveCloudBundleStatusSubtitle(cloudBundleCopy);
+  const showDetail = !synced || cloudBundleCopy.detail !== statusSubtitle;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Guard Cloud bundle" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid flex-1 gap-4 sm:grid-cols-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-wider text-slate-500", children: "Status" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1.5 flex items-center gap-1.5", children: [
-            synced ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 text-emerald-600", "aria-hidden": "true" }) : null,
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: synced ? "green" : "amber", children: synced ? "Synced" : cloudBundleCopy.label })
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid min-w-0 flex-1 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-[10px] font-semibold uppercase tracking-wider text-slate-500", children: "Status" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("dd", { className: "mt-1.5", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-1.5", children: [
+                synced ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 shrink-0 text-emerald-600", "aria-hidden": "true" }) : null,
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: synced ? "green" : "amber", children: synced ? "Synced" : cloudBundleCopy.label })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-500", children: statusSubtitle })
+            ] })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: synced ? "All policies up to date" : cloudBundleCopy.detail })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-wider text-slate-500", children: "Bundle hash" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1.5 flex items-center gap-1.5", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-sm text-brand-dark", children: policyHashShort ?? "Unavailable" }),
-            policyHashShort ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "button",
-              {
-                type: "button",
-                onClick: handleCopyHash,
-                className: "rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-brand-dark",
-                "aria-label": "Copy bundle hash",
-                children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocument, { className: "h-4 w-4", "aria-hidden": "true" })
-              }
-            ) : null
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-[10px] font-semibold uppercase tracking-wider text-slate-500", children: "Bundle hash" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("dd", { className: "mt-1.5 flex min-w-0 items-center gap-1.5", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate font-mono text-sm text-brand-dark", title: policyHash ?? void 0, children: policyHashDisplay }),
+              policyHash ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  onClick: handleCopyHash,
+                  className: "shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-brand-dark",
+                  "aria-label": "Copy bundle hash",
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocument, { className: "h-4 w-4", "aria-hidden": "true" })
+                }
+              ) : null
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 sm:col-span-2 xl:col-span-1", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-[10px] font-semibold uppercase tracking-wider text-slate-500", children: "Last ack" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("dd", { className: "mt-1.5", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-1.5", children: [
+                lastAckAt && synced ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 shrink-0 text-emerald-600", "aria-hidden": "true" }) : null,
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: lastAckAt ? formatRelativeTime(lastAckAt) : "Not yet" })
+              ] }),
+              bundleVersion ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 truncate text-xs text-slate-500", title: bundleVersion, children: bundleVersion }) : null
+            ] })
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-wider text-slate-500", children: "Last ack" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1.5 flex items-center gap-1.5", children: [
-            lastAckAt ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 text-emerald-600", "aria-hidden": "true" }) : null,
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: lastAckAt ? formatRelativeTime(lastAckAt) : "Not yet" })
-          ] }),
-          bundleVersion ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: bundleVersion }) : null
-        ] })
+        cloudControlsUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full shrink-0 sm:w-auto lg:pt-5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: cloudControlsUrl, variant: "secondary", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloudArrowUp, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
+          "Open Guard Cloud"
+        ] }) }) : null
       ] }),
-      cloudControlsUrl ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: cloudControlsUrl, variant: "secondary", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloudArrowUp, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
-        "Open Guard Cloud"
-      ] }) : null
+      showDetail ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-xl border border-amber-200/80 bg-amber-50/60 px-3 py-2 text-sm leading-relaxed text-slate-700", children: cloudBundleCopy.detail }) : null
     ] })
   ] });
 }
