@@ -838,11 +838,15 @@ export type GuardUpdateStatus = {
   recovery_reinstall_available?: boolean;
   recovery_reinstall_command?: string;
   update_in_progress?: boolean;
+  update_suppressed?: boolean;
+  retry_command?: string;
+  update_attempt_message?: string;
 };
 
 export type GuardUpdateReconnectOptions = {
   expectedPreviousVersion?: string | null;
   expectedLatestVersion?: string | null;
+  sawUpdateInProgress?: boolean;
 };
 
 export type GuardUpdateScheduleResult = {

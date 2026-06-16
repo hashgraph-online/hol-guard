@@ -617,12 +617,31 @@ def _item_from_artifact(
 
     workspace_id = None
     device_id = None
+    installation_id = None
+    upload_id = None
+    challenge_id = None
+    nonce = None
+    sequence = None
+    expires_at = None
     signing_config = None
     if isinstance(trust_attestation_context, Mapping):
         raw_workspace_id = trust_attestation_context.get("workspaceId")
         workspace_id = raw_workspace_id if isinstance(raw_workspace_id, str) and raw_workspace_id else None
         raw_device_id = trust_attestation_context.get("deviceId")
         device_id = raw_device_id if isinstance(raw_device_id, str) and raw_device_id else None
+        raw_installation_id = trust_attestation_context.get("installationId")
+        installation_id = raw_installation_id if isinstance(raw_installation_id, str) and raw_installation_id else None
+        raw_upload_id = trust_attestation_context.get("uploadId")
+        upload_id = raw_upload_id if isinstance(raw_upload_id, str) and raw_upload_id else None
+        raw_challenge_id = trust_attestation_context.get("challengeId")
+        challenge_id = raw_challenge_id if isinstance(raw_challenge_id, str) and raw_challenge_id else None
+        raw_nonce = trust_attestation_context.get("nonce")
+        nonce = raw_nonce if isinstance(raw_nonce, str) and raw_nonce else None
+        raw_sequence = trust_attestation_context.get("sequence")
+        if isinstance(raw_sequence, int):
+            sequence = raw_sequence
+        raw_expires_at = trust_attestation_context.get("expiresAt")
+        expires_at = raw_expires_at if isinstance(raw_expires_at, str) and raw_expires_at else None
         raw_signing_config = trust_attestation_context.get("signingConfig")
         if isinstance(raw_signing_config, GuardTrustAttestationSigningConfig):
             signing_config = raw_signing_config
@@ -633,6 +652,12 @@ def _item_from_artifact(
         item_id=artifact_id,
         item_kind=item_kind,
         content_hash=content_hash,
+        challenge_id=challenge_id,
+        expires_at=expires_at,
+        installation_id=installation_id,
+        nonce=nonce,
+        sequence=sequence,
+        upload_id=upload_id,
         workspace_id=workspace_id,
         device_id=device_id,
         signing_config=signing_config,

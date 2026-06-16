@@ -114,6 +114,12 @@ def build_trust_attestation_payload(
     captured_at: str,
     evidence_hash: str,
     scope: str,
+    challenge_id: str | None = None,
+    expires_at: str | None = None,
+    installation_id: str | None = None,
+    nonce: str | None = None,
+    sequence: int | None = None,
+    upload_id: str | None = None,
     workspace_id: str | None = None,
     device_id: str | None = None,
     layer_id: str | None = None,
@@ -138,6 +144,18 @@ def build_trust_attestation_payload(
         payload["workspaceId"] = workspace_id
     if device_id is not None:
         payload["deviceId"] = device_id
+    if installation_id is not None:
+        payload["installationId"] = installation_id
+    if upload_id is not None:
+        payload["uploadId"] = upload_id
+    if challenge_id is not None:
+        payload["challengeId"] = challenge_id
+    if nonce is not None:
+        payload["nonce"] = nonce
+    if sequence is not None:
+        payload["sequence"] = sequence
+    if expires_at is not None:
+        payload["expiresAt"] = expires_at
     if layer_id is not None:
         payload["layerId"] = layer_id
     if layer_type is not None:
@@ -152,6 +170,12 @@ def apply_trust_attestation_metadata(
     item_id: str,
     item_kind: str,
     content_hash: str,
+    challenge_id: str | None = None,
+    expires_at: str | None = None,
+    installation_id: str | None = None,
+    nonce: str | None = None,
+    sequence: int | None = None,
+    upload_id: str | None = None,
     workspace_id: str | None = None,
     device_id: str | None = None,
     signing_config: GuardTrustAttestationSigningConfig | None = None,
@@ -161,6 +185,20 @@ def apply_trust_attestation_metadata(
         return metadata
 
     enriched = dict(metadata)
+    attestation_bindings = {
+        key: value
+        for key, value in {
+            "challengeId": challenge_id,
+            "deviceId": device_id,
+            "expiresAt": expires_at,
+            "installationId": installation_id,
+            "nonce": nonce,
+            "sequence": sequence,
+            "uploadId": upload_id,
+            "workspaceId": workspace_id,
+        }.items()
+        if value is not None
+    }
 
     raw_trust_resolution = enriched.get("trustResolution")
     if isinstance(raw_trust_resolution, dict):
@@ -177,8 +215,14 @@ def apply_trust_attestation_metadata(
                     item_kind=item_kind,
                     content_hash=content_hash,
                     captured_at=captured_at,
+                    challenge_id=challenge_id,
+                    expires_at=expires_at,
                     evidence_hash=evidence_hash,
+                    installation_id=installation_id,
+                    nonce=nonce,
+                    sequence=sequence,
                     scope="trust_resolution",
+                    upload_id=upload_id,
                     workspace_id=workspace_id,
                     device_id=device_id,
                 ),
@@ -186,6 +230,8 @@ def apply_trust_attestation_metadata(
                 signed_at=captured_at,
             )
             resolution_metadata["attestationStatus"] = "signed"
+            if attestation_bindings:
+                resolution_metadata["attestationBindings"] = dict(attestation_bindings)
             trust_resolution["metadata"] = resolution_metadata
             enriched["trustResolution"] = trust_resolution
 
@@ -220,8 +266,14 @@ def apply_trust_attestation_metadata(
                         item_kind=item_kind,
                         content_hash=content_hash,
                         captured_at=captured_at,
+                        challenge_id=challenge_id,
+                        expires_at=expires_at,
                         evidence_hash=evidence_hash,
+                        installation_id=installation_id,
+                        nonce=nonce,
+                        sequence=sequence,
                         scope="trust_layer",
+                        upload_id=upload_id,
                         workspace_id=workspace_id,
                         device_id=device_id,
                         layer_id=layer_id,
@@ -231,6 +283,8 @@ def apply_trust_attestation_metadata(
                     signed_at=captured_at,
                 )
                 layer_metadata["attestationStatus"] = "signed"
+                if attestation_bindings:
+                    layer_metadata["attestationBindings"] = dict(attestation_bindings)
                 layer["metadata"] = layer_metadata
             signed_layers.append(layer)
         enriched["trustLayers"] = signed_layers
