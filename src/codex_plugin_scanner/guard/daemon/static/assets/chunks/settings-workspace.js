@@ -2790,7 +2790,10 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       openProofModal("maintenance", { kind: "maintenance", action: "reset-settings" });
       return;
     }
-    await executeResetSettings();
+    try {
+      await executeResetSettings();
+    } catch {
+    }
   }, [executeResetSettings, openProofModal]);
   const handleSetupNotifications = reactExports.useCallback(async () => {
     setSettingUpNotifications(true);

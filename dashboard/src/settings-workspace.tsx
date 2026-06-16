@@ -1243,7 +1243,11 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       openProofModal("maintenance", { kind: "maintenance", action: "reset-settings" });
       return;
     }
-    await executeResetSettings();
+    try {
+      await executeResetSettings();
+    } catch {
+      // executeResetSettings already surfaces the error message.
+    }
   }, [executeResetSettings, openProofModal]);
 
   const handleSetupNotifications = useCallback(async () => {
