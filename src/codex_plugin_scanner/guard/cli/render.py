@@ -1512,6 +1512,7 @@ def _render_update(console: Console, payload: dict[str, object]) -> None:
         "planned": "blue",
         "current": "blue",
         "stale": "yellow",
+        "blocked": "red",
         "updated": "green",
         "skipped": "yellow",
         "failed": "red",
