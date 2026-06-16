@@ -16114,6 +16114,64 @@ async function runPackageSync(credentials) {
   }
   return normalizePackageFirewallAction(payloadBody);
 }
+const GITHUB_ISSUE_BASE_URL = "https://github.com/hashgraph-online/hol-guard/issues/new";
+const DEFAULT_ISSUE_BODY = [
+  "## What happened?",
+  "",
+  "",
+  "## Expected behavior",
+  "",
+  "",
+  "## Steps to reproduce",
+  "1.",
+  "2.",
+  "3.",
+  "",
+  "## Environment",
+  "- HOL Guard version:",
+  "- OS:",
+  "- AI app or harness:",
+  "",
+  "## Anything else?",
+  ""
+].join("\n");
+const GITHUB_ISSUE_BUTTON_LABEL = "Report a bug";
+function buildGitHubIssueUrl(options) {
+  const url = new URL(GITHUB_ISSUE_BASE_URL);
+  url.searchParams.set("title", "[Bug]: ");
+  url.searchParams.set("body", DEFAULT_ISSUE_BODY);
+  url.searchParams.set("labels", ["bug", "needs-triage"].join(","));
+  return url.toString();
+}
+const GITHUB_ISSUE_LINK = buildGitHubIssueUrl();
+const SHELL_FOOTER_RESOURCE_LINKS = [
+  { href: "https://hol.org/guard/docs", label: "Docs" },
+  { href: "https://hol.org/guard", label: "Guard Cloud" },
+  { href: "https://github.com/hashgraph-online/hol-guard", label: "GitHub" },
+  { href: GITHUB_ISSUE_LINK, label: GITHUB_ISSUE_BUTTON_LABEL },
+  { href: "https://hol.org/points/legal/privacy", label: "Privacy" },
+  { href: "https://hol.org/points/legal/terms", label: "Terms" }
+];
+function ShellFooter() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("footer", { className: "mt-auto border-t border-slate-200 bg-[#f8fafc]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mx-auto flex max-w-6xl flex-col gap-3 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] font-medium text-slate-400", children: [
+      "© ",
+      (/* @__PURE__ */ new Date()).getFullYear(),
+      " HOL DAO LLC"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { "aria-label": "Guard resources", className: "flex flex-wrap gap-x-4 gap-y-1", children: SHELL_FOOTER_RESOURCE_LINKS.map((link) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "a",
+      {
+        href: link.href,
+        target: "_blank",
+        rel: "noreferrer",
+        className: "rounded-sm text-[11px] font-medium text-slate-500 no-underline transition-colors hover:text-brand-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30",
+        children: link.label
+      },
+      link.href
+    )) })
+  ] }) });
+}
 const UPDATE_STATUS_POLL_MS = 6e4;
 const RECONNECT_POLL_MS = 1500;
 const RECONNECT_TIMEOUT_MS = 18e4;
@@ -16328,44 +16386,6 @@ function useGuardUpdate(options) {
     refreshUpdateStatus
   };
 }
-const GITHUB_ISSUE_BASE_URL = "https://github.com/hashgraph-online/hol-guard/issues/new";
-const DEFAULT_ISSUE_BODY = [
-  "## What happened?",
-  "",
-  "",
-  "## Expected behavior",
-  "",
-  "",
-  "## Steps to reproduce",
-  "1.",
-  "2.",
-  "3.",
-  "",
-  "## Environment",
-  "- HOL Guard version:",
-  "- OS:",
-  "- AI app or harness:",
-  "",
-  "## Anything else?",
-  ""
-].join("\n");
-const GITHUB_ISSUE_BUTTON_LABEL = "Report a bug";
-function buildGitHubIssueUrl(options) {
-  const url = new URL(GITHUB_ISSUE_BASE_URL);
-  url.searchParams.set("title", "[Bug]: ");
-  url.searchParams.set("body", DEFAULT_ISSUE_BODY);
-  url.searchParams.set("labels", ["bug", "needs-triage"].join(","));
-  return url.toString();
-}
-const GITHUB_ISSUE_LINK = buildGitHubIssueUrl();
-const SHELL_FOOTER_RESOURCE_LINKS = [
-  { href: "https://hol.org/guard/docs", label: "Docs" },
-  { href: "https://hol.org/guard", label: "Guard Cloud" },
-  { href: "https://github.com/hashgraph-online/hol-guard", label: "GitHub" },
-  { href: GITHUB_ISSUE_LINK, label: GITHUB_ISSUE_BUTTON_LABEL },
-  { href: "https://hol.org/points/legal/privacy", label: "Privacy" },
-  { href: "https://hol.org/points/legal/terms", label: "Terms" }
-];
 function ShellHeader(props) {
   function handleMobileNavigationChange(event) {
     props.onNavigate(event.target.value);
@@ -16561,26 +16581,6 @@ function ShellSidebar(props) {
       ] }) })
     ] })
   ] });
-}
-function ShellFooter() {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("footer", { className: "mt-auto border-t border-slate-200 bg-[#f8fafc]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mx-auto flex max-w-6xl flex-col gap-3 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] font-medium text-slate-400", children: [
-      "© ",
-      (/* @__PURE__ */ new Date()).getFullYear(),
-      " HOL DAO LLC"
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { "aria-label": "Guard resources", className: "flex flex-wrap gap-x-4 gap-y-1", children: SHELL_FOOTER_RESOURCE_LINKS.map((link) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "a",
-      {
-        href: link.href,
-        target: "_blank",
-        rel: "noreferrer",
-        className: "rounded-sm text-[11px] font-medium text-slate-500 no-underline transition-colors hover:text-brand-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30",
-        children: link.label
-      },
-      link.href
-    )) })
-  ] }) });
 }
 function Surface(props) {
   const toneClass = surfaceToneClass(props.tone);

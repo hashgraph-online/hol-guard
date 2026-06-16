@@ -2,7 +2,7 @@ import {
   GITHUB_ISSUE_BUTTON_LABEL,
   GITHUB_ISSUE_LINK,
 } from "./github-issue-link";
-import { SHELL_FOOTER_RESOURCE_LINKS } from "./approval-center-primitives";
+import { SHELL_FOOTER_RESOURCE_LINKS } from "./shell-footer";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -26,6 +26,9 @@ const bugLink = SHELL_FOOTER_RESOURCE_LINKS.find((link) => link.href === GITHUB_
 assert(bugLink !== undefined, "footer bug link uses the shared GitHub issue URL");
 
 const hrefs = new Set(SHELL_FOOTER_RESOURCE_LINKS.map((link) => link.href));
-assert(hrefs.size === SHELL_FOOTER_RESOURCE_LINKS.length, "footer links are unique");
+assert(hrefs.size === SHELL_FOOTER_RESOURCE_LINKS.length, "footer links are unique by href");
+
+const labelSet = new Set(labels);
+assert(labelSet.size === SHELL_FOOTER_RESOURCE_LINKS.length, "footer links are unique by label");
 
 console.log("shell-footer.test.ts: all tests passed");

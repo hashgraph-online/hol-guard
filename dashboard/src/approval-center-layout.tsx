@@ -15,9 +15,9 @@ import {
   HiMiniInformationCircle,
   HiMiniArrowPath,
 } from "react-icons/hi2";
+import { ShellFooter } from "./shell-footer";
 import {
   ShellHeader,
-  ShellFooter,
   ShellSidebar,
   Surface,
   Badge,
