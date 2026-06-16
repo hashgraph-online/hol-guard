@@ -2585,7 +2585,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 _, allowed_origin = resolve_connect_url(connect_url)
                 oauth_client = resolve_guard_oauth_client_config(allowed_origin)
                 callback = session.wait_for_callback(_SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS)
-                if callback.code is None:
+                if callback is None or callback.code is None:
                     raise RuntimeError("Guard OAuth callback missing authorization code.")
                 token_result = exchange_guard_authorization_code(
                     token_endpoint=oauth_client.token_endpoint,
@@ -2774,7 +2774,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 _, allowed_origin = resolve_connect_url(connect_url)
                 oauth_client = resolve_guard_oauth_client_config(allowed_origin)
                 callback = session.wait_for_callback(_SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS)
-                if callback.code is None:
+                if callback is None or callback.code is None:
                     raise RuntimeError("Guard OAuth callback missing authorization code.")
                 token_result = exchange_guard_authorization_code(
                     token_endpoint=oauth_client.token_endpoint,

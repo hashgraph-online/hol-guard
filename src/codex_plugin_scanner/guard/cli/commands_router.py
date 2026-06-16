@@ -82,6 +82,12 @@ def _resolve_guard_handler(mapping: dict[str, str], command: str) -> object | No
     return globals().get(handler_name)
 
 
+def _normalize_guard_handler_result(result: object) -> int:
+    if result is None:
+        return 0
+    return result if isinstance(result, int) else 1
+
+
 def run_guard_command(
     args: argparse.Namespace,
     *,
@@ -92,7 +98,7 @@ def run_guard_command(
     handler = _resolve_guard_handler(_EARLY_HANDLERS, args.guard_command)
     if callable(handler):
         result = handler(args, input_text=input_text, output_stream=output_stream)
-        return result if isinstance(result, int) else 1
+        return _normalize_guard_handler_result(result)
 
     home_override = getattr(args, "home", None)
     guard_home = resolve_guard_home(getattr(args, "guard_home", None) or home_override)
@@ -113,7 +119,7 @@ def run_guard_command(
             input_text=input_text,
             output_stream=output_stream,
         )
-        return result if isinstance(result, int) else 1
+        return _normalize_guard_handler_result(result)
 
     store = GuardStore(guard_home)
     config = load_guard_config(guard_home, workspace=workspace)
@@ -131,7 +137,7 @@ def run_guard_command(
             input_text=input_text,
             output_stream=output_stream,
         )
-        return result if isinstance(result, int) else 1
+        return _normalize_guard_handler_result(result)
     return 1
 
 __all__ = [

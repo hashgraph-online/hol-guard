@@ -19,6 +19,7 @@ from .connect_flow import (
     CONNECT_COMMAND,
     CONNECT_REPAIR_COMMAND,
     CONNECT_STATUS_COMMAND,
+    _int_payload_value,
     connect_recovery_command,
     connect_retry_refresh_race_from_reason,
     connect_state_requires_oauth,
@@ -164,21 +165,6 @@ def _redacted_path(path: str | Path | None, home_dir: Path) -> str | None:
     if path is None:
         return None
     return redact_local_path(str(path), home_dir=home_dir)
-
-
-def _int_payload_value(payload: dict[str, object], key: str, default: int) -> int:
-    value = payload.get(key)
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str):
-        try:
-            return int(value)
-        except ValueError:
-            return default
-    return default
-
 
 def _recommended_harness(harnesses: list[dict[str, object]]) -> dict[str, object] | None:
     if not harnesses:

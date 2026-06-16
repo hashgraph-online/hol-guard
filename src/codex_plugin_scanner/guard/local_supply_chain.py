@@ -185,9 +185,19 @@ def _runtime_runner_module():
     return importlib.import_module(".runtime.runner", __package__)
 
 
-GuardSyncAuthorizationExpiredError = _runtime_runner_module().GuardSyncAuthorizationExpiredError
-GuardSyncNotAvailableError = _runtime_runner_module().GuardSyncNotAvailableError
-GuardSyncNotConfiguredError = _runtime_runner_module().GuardSyncNotConfiguredError
+_LAZY_RUNTIME_RUNNER_EXPORTS = frozenset(
+    {
+        "GuardSyncAuthorizationExpiredError",
+        "GuardSyncNotAvailableError",
+        "GuardSyncNotConfiguredError",
+    }
+)
+
+
+def __getattr__(name: str) -> Any:
+    if name in _LAZY_RUNTIME_RUNNER_EXPORTS:
+        return getattr(_runtime_runner_module(), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _package_firewall_entitlement_module():
