@@ -1,12 +1,65 @@
 """Guard CLI helper definitions."""
 
 # fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
+import importlib
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..models import GuardAction
+    from ._commands_shared import _NAMED_SECURITY_LEVELS, _SETTINGS_POLICY_RISK_ACTIONS, _guard_risk_action_key
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
+
+def _hook_payload_module():
+    return importlib.import_module(".commands_support_hook_payload", __package__)
+
+
+def _runtime_policy_module():
+    return importlib.import_module(".commands_support_runtime_policy", __package__)
+
+
+def _runtime_resolution_module():
+    return importlib.import_module(".commands_support_runtime_resolution", __package__)
+
+
+def _canonical_harness_name(value: str) -> str:
+    return _runtime_resolution_module()._canonical_harness_name(value)
+
+
+def _ensure_terminal_punctuation(message: str) -> str:
+    return _runtime_policy_module()._ensure_terminal_punctuation(message)
+
+
+def _native_hook_reason(*values: object | None) -> str:
+    return _runtime_policy_module()._native_hook_reason(*values)
+
+
+def _copilot_hook_permission_decision(policy_action: str) -> str:
+    return _hook_payload_module()._copilot_hook_permission_decision(policy_action)
+
+
+def _guard_action_from_cli(value: object) -> GuardAction:
+    normalized = str(value).strip()
+    if normalized == "allow":
+        return "allow"
+    if normalized == "warn":
+        return "warn"
+    if normalized == "review":
+        return "review"
+    if normalized == "block":
+        return "block"
+    if normalized == "sandbox-required":
+        return "sandbox-required"
+    if normalized == "require-reapproval":
+        return "require-reapproval"
+    raise ValueError(f"Unsupported Guard action '{normalized}'.")
 
 def _run_approval_password_settings_command(*, args: argparse.Namespace, guard_home: Path) -> dict[str, object]:
     command = str(getattr(args, "settings_approval_password_command", "")).strip().lower()
@@ -146,7 +199,7 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
         return persist_settings({"risk_actions": risk_actions})
     if settings_command == "risk":
         risk_class = _guard_risk_action_key(str(args.risk_class))
-        action = str(args.action)
+        action = _guard_action_from_cli(args.action)
         harness = getattr(args, "harness", None)
         if isinstance(harness, str) and harness.strip():
             harness_key = _canonical_harness_name(harness.strip().lower())
@@ -241,7 +294,7 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
                 "secrets. The approval flow came from HOL Guard, not from Claude alone. HOL Guard will ask you to "
                 "choose Allow once, Allow during this session, or Keep blocked before Claude retries this action."
             )
-        harness_label = {"claude-code": "Claude", "codex": "Codex"}.get(harness, "the harness")
+        harness_label = "Claude" if harness == "claude-code" else "Codex" if harness == "codex" else "the harness"
         return (
             f"HOL Guard blocked {harness_label}'s attempt to use {tool_name} for {path_class} to protect your "
             "local secrets. "
@@ -417,7 +470,7 @@ def _emit_copilot_hook_response(
     reason: str,
     output_stream: TextIO | None = None,
 ) -> None:
-    payload = {"permissionDecision": _copilot_hook_permission_decision(policy_action)}
+    payload: dict[str, object] = {"permissionDecision": _copilot_hook_permission_decision(policy_action)}
     if payload["permissionDecision"] != "allow":
         payload["permissionDecisionReason"] = reason
     _write_json_line(payload, output_stream=output_stream)

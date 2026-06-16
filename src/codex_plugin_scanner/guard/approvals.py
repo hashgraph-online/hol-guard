@@ -9,6 +9,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import TypeGuard
 from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 
 from .adapters import get_adapter
@@ -28,7 +29,15 @@ from .desktop_notifications import (
 from .incident import build_incident_context
 from .local_dashboard_session import build_local_dashboard_session_token
 from .local_supply_chain import build_local_supply_chain_posture
-from .models import GuardApprovalRequest, HarnessDetection, PolicyDecision
+from .models import (
+    DECISION_SCOPE_VALUES,
+    GUARD_ACTION_VALUES,
+    DecisionScope,
+    GuardAction,
+    GuardApprovalRequest,
+    HarnessDetection,
+    PolicyDecision,
+)
 from .risk import artifact_risk_signals, artifact_risk_summary
 from .store import GuardStore, _runtime_scoped_exact_match_key
 
@@ -89,6 +98,14 @@ def _normalize_harness_slug(harness: str | None) -> str | None:
     if normalized in {"claude", "claude-code"}:
         return "claude-code"
     return normalized or None
+
+
+def _is_guard_action(value: object) -> TypeGuard[GuardAction]:
+    return isinstance(value, str) and value in GUARD_ACTION_VALUES
+
+
+def _is_decision_scope(value: object) -> TypeGuard[DecisionScope]:
+    return isinstance(value, str) and value in DECISION_SCOPE_VALUES
 
 
 def _queued_request_dicts(queued: Sequence[object]) -> list[dict[str, object]]:
@@ -160,11 +177,11 @@ def primary_approval_url(
             approval_url.strip().replace("/approvals/", "/requests/"),
             approval_center_url=approval_center_url,
         )
-    request_id = request.get("request_id")
-    if isinstance(request_id, str) and request_id.strip() and isinstance(approval_center_url, str):
+    resolved_request_id = request.get("request_id")
+    if isinstance(resolved_request_id, str) and resolved_request_id.strip() and isinstance(approval_center_url, str):
         center = approval_center_url.strip()
         if center:
-            return build_approval_request_url(center, request_id.strip())
+            return build_approval_request_url(center, resolved_request_id.strip())
     return None
 
 
@@ -213,11 +230,18 @@ def queue_blocked_approvals(
     timestamp = now or _now()
     artifacts_by_id = {artifact.artifact_id: artifact for artifact in detection.artifacts}
     queued: list[dict[str, object]] = []
-    for item in evaluation.get("artifacts", []):
+    artifacts = evaluation.get("artifacts")
+    if not isinstance(artifacts, list):
+        return queued
+    for item in artifacts:
         if not isinstance(item, dict):
             continue
         policy_action = item.get("policy_action")
-        if policy_action not in {"block", "sandbox-required", "require-reapproval"}:
+        if not _is_guard_action(policy_action) or policy_action not in {
+            "block",
+            "sandbox-required",
+            "require-reapproval",
+        }:
             continue
         artifact_id = str(item.get("artifact_id") or "")
         if not artifact_id:
@@ -235,7 +259,7 @@ def queue_blocked_approvals(
             source_scope=_source_scope(item, artifact),
             config_path=_config_path(item, artifact),
             changed_fields=_string_list(item.get("changed_fields")),
-            policy_action=str(policy_action),
+            policy_action=policy_action,
             launch_target=launch_target,
             risk_summary=risk_summary,
         )
@@ -246,7 +270,7 @@ def queue_blocked_approvals(
             artifact_name=_artifact_name(item, artifact_id),
             artifact_type=artifact.artifact_type if artifact is not None else "artifact",
             artifact_hash=str(item.get("artifact_hash") or "unknown"),
-            policy_action=str(policy_action),
+            policy_action=policy_action,
             recommended_scope="publisher" if artifact is not None and artifact.publisher else "artifact",
             changed_fields=tuple(_string_list(item.get("changed_fields"))),
             source_scope=_source_scope(item, artifact),
@@ -304,6 +328,8 @@ def apply_approval_resolution(
         raise ApprovalRequestNotFoundError(f"Unknown approval request: {request_id}")
     if request["status"] != "pending":
         raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
+    if not _is_decision_scope(scope):
+        raise ValueError(f"Unsupported approval scope: {scope}")
     if scope == "workspace" and not workspace:
         raise ValueError(f"Approval request {request_id} requires --workspace for workspace scope.")
     if scope == "publisher" and _string_or_none(request.get("publisher")) is None:
@@ -528,7 +554,7 @@ def _refresh_queue_result(
 ) -> None:
     page = store.list_pending_approval_summaries(limit=10)
     next_request = store.get_next_pending_request()
-    remaining_count = int(page["total_pending_count"])
+    remaining_count = _non_negative_int(page.get("total_pending_count"))
     result["remaining_pending_count"] = remaining_count
     result["next_selectable_request_id"] = next_request["request_id"] if next_request is not None else None
     result["remaining_pending_summaries"] = page["items"]
@@ -702,7 +728,7 @@ def build_runtime_snapshot(
 ) -> dict[str, object]:
     queue_page = store.list_pending_approval_summaries(limit=1)
     queue_items = queue_page["items"] if isinstance(queue_page["items"], list) else []
-    pending_count = int(queue_page["total_pending_count"])
+    pending_count = _non_negative_int(queue_page.get("total_pending_count"))
     pending_requests = store.list_approval_requests(limit=request_limit) if include_items else []
     active_request = store.get_approval_request(active_request_id) if active_request_id else None
     active_is_pending = active_request is not None and active_request.get("status") == "pending"
@@ -1156,9 +1182,9 @@ def _build_cloud_sync_health(
     connect_retry_refresh_race: bool = False,
 ) -> dict[str, object]:
     pending_events = store.count_guard_events_v1(uploaded=False)
-    event_summary = store.get_sync_payload("guard_events_v1_summary") or {}
-    sync_summary = store.get_sync_payload("sync_summary") or {}
-    runtime_summary = store.get_sync_payload("runtime_session_summary") or {}
+    event_summary = _sync_payload_dict(store, "guard_events_v1_summary")
+    sync_summary = _sync_payload_dict(store, "sync_summary")
+    runtime_summary = _sync_payload_dict(store, "runtime_session_summary")
     last_synced_at = _latest_sync_timestamp(
         event_summary.get("synced_at"),
         sync_summary.get("synced_at"),

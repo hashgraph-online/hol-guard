@@ -8,17 +8,16 @@ import os
 import shlex
 import subprocess
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import urlparse
+from uuid import uuid4
 
 from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
 from .config import GuardConfig
-from .local_supply_chain import build_package_protect_payload, recompute_package_protect_artifact_hash
 from .models import GuardReceipt
-from .receipts import build_receipt
 from .redaction import redact_text
-from .store import GuardStore
 
 ProtectAction = Literal["allow", "review", "block"]
 SeverityLabel = Literal["low", "medium", "high", "critical"]
@@ -111,7 +110,7 @@ class ProtectVerdict:
 def build_protect_payload(
     *,
     command: list[str],
-    store: GuardStore,
+    store: Any,
     workspace_dir: Path,
     dry_run: bool,
     now: str,
@@ -126,6 +125,8 @@ def build_protect_payload(
     advisories = store.list_cached_advisories(limit=None)
     cached_verdict = evaluate_protect_request(request, advisories)
     cached_gate = cached_verdict.blocking
+    from .local_supply_chain import build_package_protect_payload
+
     package_payload = build_package_protect_payload(
         command=command,
         store=store,
@@ -233,7 +234,7 @@ def build_protect_payload(
 def _package_saved_approval_covers_current_gate(
     payload: dict[str, object],
     *,
-    store: GuardStore,
+    store: Any,
     workspace_dir: Path,
     command: list[str],
     now: str,
@@ -246,6 +247,8 @@ def _package_saved_approval_covers_current_gate(
     stored_hash = receipt.get("artifact_hash")
     if not isinstance(stored_hash, str) or not stored_hash:
         return False
+    from .local_supply_chain import recompute_package_protect_artifact_hash
+
     current_hash = recompute_package_protect_artifact_hash(
         command,
         store=store,
@@ -273,7 +276,7 @@ def _merge_cached_advisory_into_package_payload(
     *,
     cached_verdict: ProtectVerdict,
     requested_dry_run: bool,
-    store: GuardStore,
+    store: Any,
     now: str,
 ) -> tuple[dict[str, object], int]:
     """Apply locally cached advisory blocks/reviews to package protect results."""
@@ -787,7 +790,8 @@ def _parse_antigravity_mcp_target(raw_payload: str) -> ProtectTarget:
         payload = {}
     if not isinstance(payload, dict):
         payload = {}
-    name = payload.get("name") if isinstance(payload.get("name"), str) else "antigravity-mcp"
+    target_name = payload.get("name")
+    name = target_name if isinstance(target_name, str) else "antigravity-mcp"
     command_or_url = payload.get("url") if isinstance(payload.get("url"), str) else None
     if command_or_url is None and isinstance(payload.get("command"), str):
         command_or_url = payload["command"]
@@ -881,8 +885,12 @@ def _advisory_severity(advisory: dict[str, object]) -> SeverityLabel:
 
 def _advisory_action(advisory: dict[str, object]) -> ProtectAction:
     value = advisory.get("action")
-    if isinstance(value, str) and value in {"allow", "review", "block"}:
-        return value
+    if value == "allow":
+        return "allow"
+    if value == "review":
+        return "review"
+    if value == "block":
+        return "block"
     return "block" if _SEVERITY_ORDER[_advisory_severity(advisory)] >= _SEVERITY_ORDER["high"] else "review"
 
 
@@ -938,16 +946,23 @@ def _build_install_receipt(request: ProtectRequest, verdict: ProtectVerdict) -> 
     artifact_hash = _command_fingerprint(list(request.command))
     capabilities_summary = f"{request.executor} {request.install_kind.replace('_', ' ')}"
     provenance_summary = shlex.join(request.command)
-    return build_receipt(
+    changed_capabilities = list(verdict.risk_signals)
+    sample = ", ".join(changed_capabilities[:3])
+    suffix = " ..." if len(changed_capabilities) > 3 else ""
+    diff_summary = f"{len(changed_capabilities)} change(s): {sample}{suffix}" if changed_capabilities else None
+    return GuardReceipt(
+        receipt_id=f"guard-receipt-{uuid4()}",
+        timestamp=datetime.now(timezone.utc).isoformat(),
         harness=request.harness or request.package_manager or request.executor,
         artifact_id=primary_target.artifact_id,
         artifact_hash=artifact_hash,
         policy_decision=verdict.action,
         capabilities_summary=capabilities_summary,
-        changed_capabilities=list(verdict.risk_signals),
+        changed_capabilities=tuple(changed_capabilities),
         provenance_summary=provenance_summary,
         artifact_name=primary_target.artifact_name,
         source_scope="install",
+        diff_summary=diff_summary,
     )
 
 

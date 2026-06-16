@@ -69,7 +69,10 @@ class GuardSurfaceRuntime:
         negotiated_version = _negotiate_protocol_version(supported_protocol_versions)
         client_id = uuid.uuid4().hex
         contract = build_surface_server_contract()
-        protocol_bundle = dict(contract["protocol"]) if isinstance(contract.get("protocol"), dict) else {}
+        protocol_payload = contract.get("protocol")
+        protocol_bundle: dict[str, object] = (
+            {str(key): value for key, value in protocol_payload.items()} if isinstance(protocol_payload, dict) else {}
+        )
         protocol_bundle["negotiated_version"] = negotiated_version
         return {
             "protocol_version": negotiated_version,
@@ -408,22 +411,28 @@ def _version_key(version: str) -> tuple[int, ...]:
 def _parse_detection(payload: dict[str, object]) -> HarnessDetection:
     artifacts_payload = payload.get("artifacts")
     config_paths_payload = payload.get("config_paths")
+    warnings_payload = payload.get("warnings")
     if not isinstance(artifacts_payload, list) or not isinstance(config_paths_payload, list):
         raise ValueError("invalid_detection_payload")
     artifacts = tuple(_parse_artifact(item) for item in artifacts_payload if isinstance(item, dict))
+    warnings = (
+        tuple(str(item) for item in warnings_payload if isinstance(item, str))
+        if isinstance(warnings_payload, list)
+        else ()
+    )
     return HarnessDetection(
         harness=str(payload.get("harness") or ""),
         installed=bool(payload.get("installed")),
         command_available=bool(payload.get("command_available")),
         config_paths=tuple(str(item) for item in config_paths_payload if isinstance(item, str)),
         artifacts=artifacts,
-        warnings=tuple(str(item) for item in payload.get("warnings", []) if isinstance(item, str))
-        if isinstance(payload.get("warnings"), list)
-        else (),
+        warnings=warnings,
     )
 
 
 def _parse_artifact(payload: dict[str, object]) -> GuardArtifact:
+    args_payload = payload.get("args")
+    metadata_payload = payload.get("metadata")
     return GuardArtifact(
         artifact_id=str(payload.get("artifact_id") or ""),
         name=str(payload.get("name") or ""),
@@ -432,11 +441,15 @@ def _parse_artifact(payload: dict[str, object]) -> GuardArtifact:
         source_scope=str(payload.get("source_scope") or "project"),
         config_path=str(payload.get("config_path") or ""),
         command=str(payload.get("command")) if isinstance(payload.get("command"), str) else None,
-        args=tuple(str(item) for item in payload.get("args", []) if isinstance(item, str))
-        if isinstance(payload.get("args"), list)
-        else (),
+        args=(
+            tuple(str(item) for item in args_payload if isinstance(item, str)) if isinstance(args_payload, list) else ()
+        ),
         url=str(payload.get("url")) if isinstance(payload.get("url"), str) else None,
         transport=str(payload.get("transport")) if isinstance(payload.get("transport"), str) else None,
         publisher=str(payload.get("publisher")) if isinstance(payload.get("publisher"), str) else None,
-        metadata=dict(payload.get("metadata")) if isinstance(payload.get("metadata"), dict) else {},
+        metadata=(
+            {str(key): value for key, value in metadata_payload.items() if isinstance(key, str)}
+            if isinstance(metadata_payload, dict)
+            else {}
+        ),
     )

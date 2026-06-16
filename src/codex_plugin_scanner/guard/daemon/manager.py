@@ -20,7 +20,7 @@ import urllib.request
 from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, TypedDict
 
 from ...version import __version__
 from ..launcher import merge_guard_launcher_env
@@ -42,7 +42,7 @@ _APPROVAL_CENTER_LOCATOR_FILE = "approval-center-locator.json"
 _START_LOCKS: dict[str, threading.Lock] = {}
 _START_LOCKS_GUARD = threading.Lock()
 _LAST_EPHEMERAL_REAP_AT = 0.0
-_RUNTIME_FINGERPRINT_CACHE: str | None = None
+_runtime_fingerprint_cache: str | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -55,6 +55,12 @@ class ApprovalCenterLocator:
     pid: int
     started_at: str
     state_path: Path
+
+
+class _ExistingGuardDaemon(TypedDict):
+    url: str
+    auth_token: str
+    pid: int
 
 
 def _daemon_launcher_env() -> dict[str, str]:
@@ -118,17 +124,24 @@ def ensure_guard_daemon(
                 "--port",
                 str(candidate_port),
             ]
-            kwargs: dict[str, object] = {
-                "stdin": subprocess.DEVNULL,
-                "stdout": subprocess.DEVNULL,
-                "stderr": subprocess.DEVNULL,
-                "env": _daemon_launcher_env(),
-            }
             if os.name == "nt":
-                kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+                process = subprocess.Popen(
+                    command,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    env=_daemon_launcher_env(),
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
+                )
             else:
-                kwargs["start_new_session"] = True
-            process = subprocess.Popen(command, **kwargs)
+                process = subprocess.Popen(
+                    command,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    env=_daemon_launcher_env(),
+                    start_new_session=True,
+                )
             url = _wait_for_guard_daemon_url(
                 guard_home,
                 timeout=timeout,
@@ -299,7 +312,7 @@ def _adoptable_guard_daemon_ports(guard_home: Path) -> list[int]:
     return ordered
 
 
-def _initialize_existing_guard_daemon(guard_home: Path, port: int) -> dict[str, str | int] | None:
+def _initialize_existing_guard_daemon(guard_home: Path, port: int) -> _ExistingGuardDaemon | None:
     url = f"http://127.0.0.1:{port}"
     try:
         with urllib.request.urlopen(_daemon_health_request(f"{url}/healthz"), timeout=1) as response:
@@ -434,7 +447,15 @@ def read_approval_center_locator(guard_home: Path) -> ApprovalCenterLocator | No
     started_at = payload.get("started_at")
     state_path_str = payload.get("state_path")
     guard_home_str = payload.get("guard_home")
-    if not all(isinstance(v, str) for v in (daemon_url, approval_url_base, started_at, state_path_str, guard_home_str)):
+    if not isinstance(daemon_url, str):
+        return None
+    if not isinstance(approval_url_base, str):
+        return None
+    if not isinstance(started_at, str):
+        return None
+    if not isinstance(state_path_str, str):
+        return None
+    if not isinstance(guard_home_str, str):
         return None
     return ApprovalCenterLocator(
         guard_home=Path(guard_home_str),
@@ -553,11 +574,13 @@ def _set_private_mode(path: Path, mode: int) -> None:
 
 
 def _reap_stale_ephemeral_guard_daemons(*, exclude_guard_home: Path | None = None) -> None:
-    global _LAST_EPHEMERAL_REAP_AT
     now = time.monotonic()
-    if now - _LAST_EPHEMERAL_REAP_AT < _EPHEMERAL_GUARD_DAEMON_REAP_INTERVAL_SECONDS:
+    last_reap_at = globals().get("_LAST_EPHEMERAL_REAP_AT", 0.0)
+    if not isinstance(last_reap_at, (int, float)):
+        last_reap_at = 0.0
+    if now - float(last_reap_at) < _EPHEMERAL_GUARD_DAEMON_REAP_INTERVAL_SECONDS:
         return
-    _LAST_EPHEMERAL_REAP_AT = now
+    globals()["_LAST_EPHEMERAL_REAP_AT"] = now
     temp_root = Path(tempfile.gettempdir())
     candidate_paths = list(_ephemeral_guard_daemon_state_paths(temp_root))
     exclude_resolved = exclude_guard_home.resolve() if exclude_guard_home is not None else None
@@ -822,9 +845,9 @@ def _current_guard_daemon_source_root() -> str:
 
 
 def _current_guard_daemon_runtime_fingerprint() -> str:
-    global _RUNTIME_FINGERPRINT_CACHE
-    if _RUNTIME_FINGERPRINT_CACHE is not None:
-        return _RUNTIME_FINGERPRINT_CACHE
+    global _runtime_fingerprint_cache
+    if _runtime_fingerprint_cache is not None:
+        return _runtime_fingerprint_cache
     source_root = Path(_current_guard_daemon_source_root())
     package_root = source_root / "codex_plugin_scanner"
     static_root = package_root / "guard" / "daemon" / "static"
@@ -841,8 +864,8 @@ def _current_guard_daemon_runtime_fingerprint() -> str:
         digest.update(str(path.relative_to(source_root)).encode("utf-8"))
         digest.update(str(stat_result.st_mtime_ns).encode("utf-8"))
         digest.update(str(stat_result.st_size).encode("utf-8"))
-    _RUNTIME_FINGERPRINT_CACHE = digest.hexdigest()
-    return _RUNTIME_FINGERPRINT_CACHE
+    _runtime_fingerprint_cache = digest.hexdigest()
+    return _runtime_fingerprint_cache
 
 
 def _guard_daemon_start_in_progress(guard_home: Path) -> bool:

@@ -21,7 +21,7 @@ from ..local_supply_chain import (
     managed_install_audit_workspace_dirs,
     resolve_supply_chain_audit_workspace_dir,
 )
-from ..models import PolicyDecision
+from ..models import DecisionScope, PolicyDecision
 from ..package_shim_status import record_package_shim_audit_result
 from ..runtime.runner import sync_supply_chain_bundle
 from ..shims import (
@@ -296,7 +296,7 @@ def _execute_policy_sync(
     )
 
 
-def _local_policy_scope(scope: str | None) -> str:
+def _local_policy_scope(scope: str | None) -> DecisionScope:
     """Map Cloud policy scopes onto the narrower local policy model."""
     if scope in {"workspace", "team", "policy", "machine", "project"}:
         return "workspace"

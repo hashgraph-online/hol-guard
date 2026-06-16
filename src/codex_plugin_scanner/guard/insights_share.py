@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -22,6 +23,26 @@ _HARNESS_LABELS: dict[str, str] = {
     "opencode": "OpenCode",
     "windsurf": "Windsurf",
 }
+
+
+def _coerce_int(value: object) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return 0
+        return int(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return 0
+        try:
+            return int(stripped)
+        except ValueError:
+            return 0
+    return 0
 
 
 def _harness_label(harness: str) -> str:
@@ -52,8 +73,8 @@ def build_insights_share_payload(
     display_name: str | None = None,
     overview_stats: dict[str, int] | None = None,
 ) -> dict[str, object]:
-    total = int(analytics.get("total") or 0)
-    blocked = int(analytics.get("blocked") or 0)
+    total = _coerce_int(analytics.get("total"))
+    blocked = _coerce_int(analytics.get("blocked"))
     stop_rate_pct = round((blocked / total) * 100) if total > 0 else 0
     by_harness = analytics.get("by_harness")
     harness_rows = [row for row in by_harness if isinstance(row, dict)] if isinstance(by_harness, list) else []
@@ -62,7 +83,7 @@ def build_insights_share_payload(
 
     harness_breakdown: list[dict[str, object]] = []
     for row in harness_rows[:4]:
-        count = int(row.get("total") or 0)
+        count = _coerce_int(row.get("total"))
         harness_breakdown.append(
             {
                 "harness": _harness_label(str(row.get("harness") or "Unknown app")),
@@ -73,14 +94,14 @@ def build_insights_share_payload(
 
     daily_activity = analytics.get("daily_activity")
     daily_rows = [row for row in daily_activity if isinstance(row, dict)] if isinstance(daily_activity, list) else []
-    peak_day_total = int(analytics.get("peak_day_total") or 0)
-    heatmap_peak = max((int(row.get("total") or 0) for row in daily_rows), default=peak_day_total)
+    peak_day_total = _coerce_int(analytics.get("peak_day_total"))
+    heatmap_peak = max((_coerce_int(row.get("total")) for row in daily_rows), default=peak_day_total)
     heatmap_cells: list[dict[str, object]] = []
     for row in daily_rows[-90:]:
         date_key = str(row.get("date_key") or "")
         if not date_key:
             continue
-        day_total = int(row.get("total") or 0)
+        day_total = _coerce_int(row.get("total"))
         heatmap_cells.append(
             {
                 "date": date_key,
@@ -94,7 +115,7 @@ def build_insights_share_payload(
         date_key = str(row.get("date_key") or "")
         if not date_key:
             continue
-        day_total = int(row.get("total") or 0)
+        day_total = _coerce_int(row.get("total"))
         mini_heatmap_cells.append(
             {
                 "date": date_key,
@@ -109,7 +130,7 @@ def build_insights_share_payload(
         "period": {"label": "all_time", "activityDays": len(daily_rows) or 90},
         "headline": {
             "totalActions": total,
-            "activeDayStreak": int(analytics.get("active_day_streak") or 0),
+            "activeDayStreak": _coerce_int(analytics.get("active_day_streak")),
             "peakDayTotal": peak_day_total,
             "blockedCount": blocked,
             "stopRatePct": stop_rate_pct,
@@ -121,9 +142,9 @@ def build_insights_share_payload(
     }
 
     payload["overviewStats"] = {
-        "pending": int(overview_stats.get("pending") or 0) if overview_stats else 0,
-        "apps": int(overview_stats.get("apps") or 0) if overview_stats else 0,
-        "recorded": int(overview_stats.get("recorded") or 0) if overview_stats else 0,
+        "pending": _coerce_int(overview_stats.get("pending")) if overview_stats else 0,
+        "apps": _coerce_int(overview_stats.get("apps")) if overview_stats else 0,
+        "recorded": _coerce_int(overview_stats.get("recorded")) if overview_stats else 0,
     }
 
     if mini_heatmap_cells:
@@ -140,7 +161,7 @@ def build_insights_share_payload(
         payload["topArtifacts"] = [
             {
                 "label": str(row.get("name") or "Protected action")[:120],
-                "count": int(row.get("total") or 0),
+                "count": _coerce_int(row.get("total")),
             }
             for row in artifact_rows[:3]
         ]

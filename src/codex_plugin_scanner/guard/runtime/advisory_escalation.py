@@ -8,13 +8,14 @@ reviews the risk before the action proceeds.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    from codex_plugin_scanner.guard.models import GuardAction
     from codex_plugin_scanner.guard.runtime.threat_intel import ThreatAdvisory
 
-_ESCALATION_TABLE: dict[str, dict[str, str]] = {
+EscalatedGuardAction = Literal["allow", "warn", "review", "block", "sandbox-required", "require-reapproval", "ask"]
+
+_ESCALATION_TABLE: dict[str, dict[EscalatedGuardAction, EscalatedGuardAction]] = {
     "critical": {
         "allow": "ask",
         "warn": "ask",
@@ -30,9 +31,9 @@ _ESCALATION_THRESHOLD_SEVERITIES = frozenset({"critical", "high"})
 
 
 def escalate_for_advisories(
-    policy_action: GuardAction,
+    policy_action: EscalatedGuardAction,
     matched_advisories: tuple[ThreatAdvisory, ...],
-) -> tuple[GuardAction, str | None]:
+) -> tuple[EscalatedGuardAction, str | None]:
     """Return the escalated policy action and the advisory id that triggered it.
 
     If no advisory warrants escalation, returns the original action and None.
@@ -51,7 +52,7 @@ def escalate_for_advisories(
         escalation_map = _ESCALATION_TABLE.get(advisory.severity.lower(), {})
         escalated = escalation_map.get(policy_action)
         if escalated is not None:
-            return escalated, advisory.advisory_id  # type: ignore[return-value]
+            return escalated, advisory.advisory_id
 
     return policy_action, None
 

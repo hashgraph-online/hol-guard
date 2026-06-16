@@ -2,11 +2,43 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import Protocol
 
-if TYPE_CHECKING:
-    from .adapters.base import HarnessContext
+
+class HarnessContextLike(Protocol):
+    @property
+    def guard_home(self) -> Path: ...
+
+
+_PACKAGE_SHIM_MANIFEST = "manifest.json"
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list | tuple):
+        return []
+    return [str(item) for item in value if isinstance(item, str)]
+
+
+def _package_shim_manifest_path(context: HarnessContextLike) -> Path:
+    return context.guard_home / "package-shims" / _PACKAGE_SHIM_MANIFEST
+
+
+def _load_package_shim_manifest(context: HarnessContextLike) -> dict[str, object]:
+    manifest_path = _package_shim_manifest_path(context)
+    if not manifest_path.exists():
+        return {}
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _write_package_shim_manifest(context: HarnessContextLike, payload: dict[str, object]) -> None:
+    _package_shim_manifest_path(context).write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
 
 
 def enrich_package_shim_status_payload(
@@ -14,10 +46,11 @@ def enrich_package_shim_status_payload(
     manifest: dict[str, object],
 ) -> dict[str, object]:
     bypasses = status.get("bypasses", [])
+    bypass_entries = bypasses if isinstance(bypasses, list | tuple) else ()
     path_broken_managers = sorted(
         {
             str(entry["manager"])
-            for entry in bypasses
+            for entry in bypass_entries
             if isinstance(entry, dict) and isinstance(entry.get("manager"), str)
         }
     )
@@ -38,24 +71,22 @@ def enrich_package_shim_status_payload(
     enriched["testedManagers"] = tested_managers
     enriched["last_intercept_proof_at"] = normalized_last_tests
     enriched["lastInterceptProofAt"] = normalized_last_tests
-    enriched["detectedManagers"] = list(status.get("detected_managers", []))
-    enriched["protectedManagers"] = list(status.get("protected_managers", []))
-    enriched["installedManagers"] = list(status.get("installed_managers", []))
-    enriched["activeManagers"] = list(status.get("active_managers", []))
-    enriched["missingManagers"] = list(status.get("missing_managers", []))
-    enriched["undetectedManagers"] = list(status.get("undetected_managers", []))
+    enriched["detectedManagers"] = _string_list(status.get("detected_managers"))
+    enriched["protectedManagers"] = _string_list(status.get("protected_managers"))
+    enriched["installedManagers"] = _string_list(status.get("installed_managers"))
+    enriched["activeManagers"] = _string_list(status.get("active_managers"))
+    enriched["missingManagers"] = _string_list(status.get("missing_managers"))
+    enriched["undetectedManagers"] = _string_list(status.get("undetected_managers"))
     enriched["last_audit_proof_at"] = normalized_last_audit
     enriched["lastAuditProofAt"] = normalized_last_audit
     return enriched
 
 
 def record_package_shim_audit_result(
-    context: HarnessContext,
+    context: HarnessContextLike,
     *,
     audited_at: str | None = None,
 ) -> None:
-    from .shims import _load_package_shim_manifest, _write_package_shim_manifest
-
     manifest = _load_package_shim_manifest(context)
     manifest["last_audit_at"] = audited_at if audited_at is not None else datetime.now(timezone.utc).isoformat()
     _write_package_shim_manifest(context, manifest)

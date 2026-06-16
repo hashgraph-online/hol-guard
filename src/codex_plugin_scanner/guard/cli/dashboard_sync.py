@@ -247,7 +247,10 @@ def _list_committed_static_files(checkout: Path, static_prefix: str) -> list[str
         return []
     files: list[str] = []
     prefix = f"{static_prefix.rstrip('/')}/"
-    for line in result.stdout.splitlines():
+    stdout = result.stdout
+    if not isinstance(stdout, str):
+        return []
+    for line in stdout.splitlines():
         relative = line.strip()
         if (
             relative == ""

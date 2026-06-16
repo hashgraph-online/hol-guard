@@ -48,7 +48,7 @@ def build_tool_call_artifact(
     tool_schema: object | None = None,
     tool_description: str | None = None,
 ) -> GuardArtifact:
-    metadata = {"server_name": server_name}
+    metadata: dict[str, object] = {"server_name": server_name}
     if server_id is not None:
         metadata["server_id"] = server_id
     if server_fingerprint is not None:

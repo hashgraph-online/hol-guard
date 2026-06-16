@@ -12,8 +12,9 @@ from .version import __version__
 def build_plain_text(result: ScanResult) -> str:
     """Render a scan result as human-readable text."""
 
+    trust_report = result.trust_report
     if getattr(result, "scope", "plugin") == "repository":
-        trust_total = result.trust_report.total if getattr(result, "trust_report", None) else 0.0
+        trust_total = trust_report.total if trust_report is not None else 0.0
         lines = [
             f"🔗 Plugin Scanner v{__version__}",
             f"Scanning repository: {result.plugin_dir}",
@@ -26,7 +27,8 @@ def build_plain_text(result: ScanResult) -> str:
         ]
         for plugin in result.plugin_results:
             plugin_name = plugin.plugin_name or Path(plugin.plugin_dir).name
-            plugin_trust = plugin.trust_report.total if getattr(plugin, "trust_report", None) else 0.0
+            plugin_trust_report = plugin.trust_report
+            plugin_trust = plugin_trust_report.total if plugin_trust_report is not None else 0.0
             lines.append(f"  - {plugin_name}: {plugin.score}/100 ({plugin.grade}), trust {plugin_trust}/100")
         if result.skipped_targets:
             lines += ["", "Skipped entries:"]
@@ -35,7 +37,7 @@ def build_plain_text(result: ScanResult) -> str:
                 lines.append(f"  - {skipped.name}{source_path}: {skipped.reason}")
         lines.append("")
     else:
-        trust_total = result.trust_report.total if getattr(result, "trust_report", None) else 0.0
+        trust_total = trust_report.total if trust_report is not None else 0.0
         lines = [
             f"🔗 Plugin Scanner v{__version__}",
             f"Scanning: {result.plugin_dir}",
@@ -58,12 +60,12 @@ def build_plain_text(result: ScanResult) -> str:
             icon = "✅" if check.passed else "⚠️"
             points = f"+{check.points}" if check.passed else "+0"
             lines.append(f"  {icon} {check.name:<42} {points}")
-        lines.append("")
+            lines.append("")
     counts = ", ".join(f"{severity.value}:{result.severity_counts.get(severity.value, 0)}" for severity in Severity)
     lines += [f"Findings: {counts}", ""]
-    if getattr(result, "trust_report", None) and result.trust_report.domains:
+    if trust_report is not None and trust_report.domains:
         lines.append("Trust Provenance:")
-        for domain in result.trust_report.domains:
+        for domain in trust_report.domains:
             lines.append(f"  - {domain.label}: {domain.score}/100 ({domain.spec_id})")
         lines.append("")
     if result.integrations:

@@ -53,7 +53,7 @@ class NotificationBackend(ABC):
         pass
 
     @abstractmethod
-    def parse_command(self, text: str) -> tuple[str, str | None]:
+    def parse_command(self, text: str) -> tuple[str | None, str | None]:
         """Parse approve/deny commands from text. Returns (command, request_id)."""
         pass
 
@@ -65,7 +65,7 @@ class StderrBackend(NotificationBackend):
         print(f"[Guard Bridge] {message}", file=sys.stderr)
         return True
 
-    def parse_command(self, text: str) -> tuple[str, str | None]:
+    def parse_command(self, text: str) -> tuple[str | None, str | None]:
         return (None, None)
 
 
@@ -85,7 +85,7 @@ class HermesBackend(NotificationBackend):
         except Exception:
             return False
 
-    def parse_command(self, text: str) -> tuple[str, str | None]:
+    def parse_command(self, text: str) -> tuple[str | None, str | None]:
         match = re.match(r"/(approve|deny)\s+([a-f0-9-]+)", text)
         if match:
             return (match.group(1), match.group(2))
@@ -111,7 +111,7 @@ class TelegramBackend(NotificationBackend):
         except Exception:
             return False
 
-    def parse_command(self, text: str) -> tuple[str, str | None]:
+    def parse_command(self, text: str) -> tuple[str | None, str | None]:
         match = re.match(r"/(approve|deny)\s+([a-f0-9-]+)", text)
         if match:
             return (match.group(1), match.group(2))
@@ -138,7 +138,7 @@ class WebhookBackend(NotificationBackend):
         except Exception:
             return False
 
-    def parse_command(self, text: str) -> tuple[str, str | None]:
+    def parse_command(self, text: str) -> tuple[str | None, str | None]:
         match = re.match(r"/(approve|deny)\s+([a-f0-9-]+)", text)
         if match:
             return (match.group(1), match.group(2))
@@ -204,6 +204,9 @@ def _validate_webhook_url(url: str) -> str:
         address = ipaddress.ip_address(hostname)
     except ValueError:
         return parsed.geturl()
+    mapped_address = address.ipv4_mapped if isinstance(address, ipaddress.IPv6Address) else None
+    if mapped_address is not None and (mapped_address.is_loopback or mapped_address.is_link_local):
+        raise ValueError("Guard Bridge webhook URL must not target loopback.")
     if address.is_loopback or address.is_link_local:
         raise ValueError("Guard Bridge webhook URL must not target loopback.")
     return parsed.geturl()

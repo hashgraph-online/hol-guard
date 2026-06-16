@@ -95,6 +95,24 @@ def _artifact_key(artifact_name: str | None, artifact_id: str) -> str:
     return artifact_id.lower()
 
 
+def _coerce_int(value: object) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return 0
+        try:
+            return int(stripped)
+        except ValueError:
+            return 0
+    return 0
+
+
 def _apply_receipt_delta(
     connection: sqlite3.Connection,
     *,
@@ -431,15 +449,15 @@ def load_receipt_analytics(
 
     active_day_streak = 0
     streak_entries = list(reversed(daily_activity))
-    if streak_entries and int(streak_entries[0]["total"]) == 0:
+    if streak_entries and _coerce_int(streak_entries[0]["total"]) == 0:
         streak_entries = streak_entries[1:]
     for entry in streak_entries:
-        if int(entry["total"]) > 0:
+        if _coerce_int(entry["total"]) > 0:
             active_day_streak += 1
         else:
             break
 
-    peak_day_total = max((int(entry["total"]) for entry in daily_activity), default=0)
+    peak_day_total = max((_coerce_int(entry["total"]) for entry in daily_activity), default=0)
 
     return {
         "total": total,

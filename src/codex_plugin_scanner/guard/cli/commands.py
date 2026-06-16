@@ -9,6 +9,7 @@ import sys
 from types import ModuleType
 from typing import Any, TextIO
 
+from ...argparse_utils import FriendlyArgumentParser
 from . import commands_parser as _parser
 from . import commands_support as _support
 
@@ -53,7 +54,14 @@ def _sync_support_overrides() -> None:
     _support._apply_overrides(_iter_facade_overrides())
 
 
-def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def _support_attr(name: str) -> Any:
+    return getattr(_support, name)
+
+
+def add_guard_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
+    | argparse._SubParsersAction[FriendlyArgumentParser],
+) -> None:
     _parser.add_guard_parser(subparsers)
 
 
@@ -68,27 +76,27 @@ def run_guard_command(
     output_stream: TextIO | None = None,
 ) -> int:
     _sync_support_overrides()
-    return _support.run_guard_command(args, input_text=input_text, output_stream=output_stream)
+    return _support_attr("run_guard_command")(args, input_text=input_text, output_stream=output_stream)
 
 
 def _build_guard_device_connect_payload(*args: Any, **kwargs: Any):
     _sync_support_overrides()
-    return _support._build_guard_device_connect_payload(*args, **kwargs)
+    return _support_attr("_build_guard_device_connect_payload")(*args, **kwargs)
 
 
 def _finalize_guard_connect_payload(*args: Any, **kwargs: Any):
     _sync_support_overrides()
-    return _support._finalize_guard_connect_payload(*args, **kwargs)
+    return _support_attr("_finalize_guard_connect_payload")(*args, **kwargs)
 
 
 def _headless_approval_resolver(*args: Any, **kwargs: Any):
     _sync_support_overrides()
-    return _support._headless_approval_resolver(*args, **kwargs)
+    return _support_attr("_headless_approval_resolver")(*args, **kwargs)
 
 
 def _refresh_cloud_policy_bundle(*args: Any, **kwargs: Any):
     _sync_support_overrides()
-    return _support._refresh_cloud_policy_bundle(*args, **kwargs)
+    return _support_attr("_refresh_cloud_policy_bundle")(*args, **kwargs)
 
 
 def __getattr__(name: str) -> Any:

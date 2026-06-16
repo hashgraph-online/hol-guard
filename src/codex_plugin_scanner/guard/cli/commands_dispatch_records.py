@@ -1,13 +1,32 @@
 """Guard CLI command dispatch helpers."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
-from ..aibom_cli import AibomCliOptions, _AIBOM_CLOUD_SYNC_OPTIONS
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
+    from .commands_support_connect import _filter_policy_items
+    from .commands_support_interaction import _emit
+    from .commands_support_prompts import (
+        _run_approval_password_settings_command,
+        _run_approval_totp_settings_command,
+        _update_guard_cli_settings,
+    )
+    from .commands_support_runtime_policy import (
+        _guard_cli_settings_payload,
+        _guard_settings_doctor_payload,
+        _guard_settings_explain_payload,
+    )
+    from .commands_support_service import _build_abom_payload, _guard_sync_failure_message
+
+
+from ..aibom_cli import _AIBOM_CLOUD_SYNC_OPTIONS, AibomCliOptions, AibomExportFormat
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
 
 def _run_guard_diff_command(
     args: argparse.Namespace,
@@ -20,6 +39,9 @@ def _run_guard_diff_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
     detection = detect_harness(args.harness, context)
     payload = evaluate_detection(detection, store, config, default_action="allow", persist=False)
     changed_artifacts = [item for item in payload["artifacts"] if bool(item["changed"])]
@@ -27,6 +49,7 @@ def _run_guard_diff_command(
     payload["changed"] = bool(changed_artifacts)
     _emit("diff", payload, getattr(args, "json", False))
     return 0
+
 
 def _run_guard_receipts_command(
     args: argparse.Namespace,
@@ -39,8 +62,10 @@ def _run_guard_receipts_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
     _emit("receipts", {"generated_at": _now(), "items": store.list_receipts()}, getattr(args, "json", False))
     return 0
+
 
 def _run_guard_history_command(
     args: argparse.Namespace,
@@ -53,6 +78,7 @@ def _run_guard_history_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
     history_cmd = getattr(args, "history_command", None)
     if history_cmd == "explain":
         receipt_id: str = args.receipt_id
@@ -82,6 +108,7 @@ def _run_guard_history_command(
     _emit("history", {"error": "Use: hol-guard history explain <receipt_id>"}, getattr(args, "json", False))
     return 1
 
+
 def _run_guard_inventory_command(
     args: argparse.Namespace,
     *,
@@ -93,9 +120,11 @@ def _run_guard_inventory_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
+    context = _require_guard_context(context)
     generated_at = _now()
     if getattr(args, "json", False):
-        payload = build_inventory_json_payload(
+        payload: dict[str, object] = build_inventory_json_payload(
             store,
             context,
             generated_at=generated_at,
@@ -105,6 +134,7 @@ def _run_guard_inventory_command(
         payload = {"generated_at": generated_at, "items": store.list_inventory()}
     _emit("inventory", payload, getattr(args, "json", False))
     return 0
+
 
 def _run_guard_aibom_command(
     args: argparse.Namespace,
@@ -117,6 +147,8 @@ def _run_guard_aibom_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
+    context = _require_guard_context(context)
     generated_at = _now()
     aibom_options = _aibom_cli_options_from_args(args)
     aibom_command = getattr(args, "aibom_command", None)
@@ -173,7 +205,7 @@ def _run_guard_aibom_command(
         _emit("aibom.sync", payload, getattr(args, "json", False))
         return 0
     export_format = getattr(args, "format", "json")
-    resolved_format = export_format if export_format in {"json", "markdown"} else "json"
+    resolved_format: AibomExportFormat = "markdown" if export_format == "markdown" else "json"
     payload = build_aibom_export_payload(
         store,
         context,
@@ -187,6 +219,7 @@ def _run_guard_aibom_command(
     _emit("aibom", payload, True)
     return 0
 
+
 def _run_guard_abom_command(
     args: argparse.Namespace,
     *,
@@ -198,12 +231,14 @@ def _run_guard_abom_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
     payload = _build_abom_payload(store)
     if args.format == "markdown" and not getattr(args, "json", False):
         print(payload["markdown"])
         return 0
     _emit("abom", payload, True)
     return 0
+
 
 def _run_guard_policies_command(
     args: argparse.Namespace,
@@ -216,6 +251,7 @@ def _run_guard_policies_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
     policies_command = getattr(args, "policies_command", None)
     if policies_command == "clear":
         harness = getattr(args, "harness", None)
@@ -245,7 +281,7 @@ def _run_guard_policies_command(
         scope = getattr(args, "scope", None)
         artifact_id = getattr(args, "artifact_id", None)
         policy_artifact_hash = getattr(args, "artifact_hash", None)
-        workspace = getattr(args, "policy_workspace", None)
+        policy_workspace = getattr(args, "policy_workspace", None)
         publisher = getattr(args, "publisher", None)
         try:
             gate_input = prompt_for_approval_gate(store.guard_home, use_cooldown=False)
@@ -260,7 +296,7 @@ def _run_guard_policies_command(
                 scope=scope,
                 artifact_id=artifact_id,
                 artifact_hash=policy_artifact_hash,
-                workspace=workspace,
+                workspace=str(policy_workspace) if isinstance(policy_workspace, Path) else policy_workspace,
                 publisher=publisher,
                 approval_gate_grant=approval_gate_grant,
             )
@@ -277,7 +313,7 @@ def _run_guard_policies_command(
                 "scope": scope,
                 "artifact_id": artifact_id,
                 "artifact_hash": policy_artifact_hash,
-                "workspace": workspace,
+                "workspace": policy_workspace,
                 "publisher": publisher,
             },
             getattr(args, "json", False),
@@ -323,11 +359,7 @@ def _run_guard_policies_command(
         preserve_all_local = bool(getattr(args, "preserve_all_local", False))
         clear_unselected = bool(getattr(args, "clear_unselected", False))
         migratable_statuses = {"missing_integrity", "unknown_key"}
-        preserve_ids = {
-            int(value)
-            for value in (getattr(args, "decision_ids", None) or [])
-            if isinstance(value, int)
-        }
+        preserve_ids = {int(value) for value in (getattr(args, "decision_ids", None) or []) if isinstance(value, int)}
         if not preserve_all_local and not preserve_ids and not clear_unselected:
             _emit(
                 "policies",
@@ -340,9 +372,10 @@ def _run_guard_policies_command(
             return 2
         if preserve_all_local:
             verify_payload = store.verify_policy_integrity(getattr(args, "harness", None))
+            verify_items = verify_payload.get("items")
             preserve_ids.update(
                 int(item["decision_id"])
-                for item in verify_payload.get("items", [])
+                for item in (verify_items if isinstance(verify_items, list) else [])
                 if isinstance(item, dict)
                 and item.get("integrity_status") in migratable_statuses
                 and isinstance(item.get("decision_id"), int)
@@ -378,6 +411,7 @@ def _run_guard_policies_command(
     _emit("policies", {"generated_at": _now(), "items": items}, getattr(args, "json", False))
     return 0
 
+
 def _run_guard_settings_command(
     args: argparse.Namespace,
     *,
@@ -389,6 +423,9 @@ def _run_guard_settings_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    if guard_home is None:
+        raise RuntimeError("Guard home is required")
+    config = _require_guard_config(config)
     settings_sub = getattr(args, "settings_command", None)
     if settings_sub == "set":
         try:
@@ -429,6 +466,7 @@ def _run_guard_settings_command(
         return 0
     _emit("settings", _guard_cli_settings_payload(config), getattr(args, "json", False))
     return 0
+
 
 __all__ = [
     "_run_guard_abom_command",

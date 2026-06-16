@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import shlex
@@ -16,6 +17,7 @@ from contextlib import suppress
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any, TypeGuard
 from uuid import uuid4
 
 from codex_plugin_scanner.path_support import resolve_path_within_allowed_roots, resolves_within_root
@@ -23,9 +25,7 @@ from codex_plugin_scanner.path_support import resolve_path_within_allowed_roots,
 from .adapters.base import HarnessContext
 from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
 from .config import GuardConfig, resolve_risk_action
-from .models import GuardArtifact
-from .package_firewall_entitlement import resolve_package_firewall_entitlement
-from .receipts import build_receipt
+from .models import GuardAction, GuardArtifact, GuardReceipt
 from .redaction import redact_text
 from .runtime.package_intent_common import (
     PackageIntent,
@@ -39,20 +39,6 @@ from .runtime.package_intent_common import (
     version_target,
 )
 from .runtime.package_manifest_diff import parse_manifest_dependencies, parse_manifest_dependency_changes
-from .runtime.runner import (
-    GuardSyncAuthorizationExpiredError,
-    GuardSyncNotAvailableError,
-    GuardSyncNotConfiguredError,
-    _guard_sync_headers,
-    _resolve_guard_sync_auth_context,
-    sync_local_guard_cloud_proof,
-    sync_supply_chain_bundle,
-)
-from .runtime.supply_chain_package_eval import (
-    PackageRequestEvaluation,
-    SupplyChainUserCopy,
-    evaluate_package_request_artifact,
-)
 from .runtime.supply_chain_support import ecosystem_support_matrix
 from .runtime.workspace_path_guard import (
     read_bytes_within_workspace,
@@ -195,6 +181,88 @@ _AUDIT_SENSITIVE_BASENAMES = frozenset(
 _KNOWN_UNSUPPORTED_LOCKFILE_BASENAMES = frozenset({"bun.lockb"})
 
 
+def _runtime_runner_module():
+    return importlib.import_module(".runtime.runner", __package__)
+
+
+_LAZY_RUNTIME_RUNNER_EXPORTS = frozenset(
+    {
+        "GuardSyncAuthorizationExpiredError",
+        "GuardSyncNotAvailableError",
+        "GuardSyncNotConfiguredError",
+    }
+)
+
+
+def __getattr__(name: str) -> Any:
+    if name in _LAZY_RUNTIME_RUNNER_EXPORTS:
+        return getattr(_runtime_runner_module(), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def _package_firewall_entitlement_module():
+    return importlib.import_module(".package_firewall_entitlement", __package__)
+
+
+def _package_intent_parser_module():
+    return importlib.import_module(".runtime.package_intent_parser", __package__)
+
+
+def _supply_chain_package_eval_module():
+    return importlib.import_module(".runtime.supply_chain_package_eval", __package__)
+
+
+def sync_local_guard_cloud_proof(store: GuardStore) -> dict[str, object]:
+    return _runtime_runner_module().sync_local_guard_cloud_proof(store)
+
+
+def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object] | None:
+    return _runtime_runner_module().sync_supply_chain_bundle(store)
+
+
+def _resolve_guard_sync_auth_context(store: GuardStore):
+    return _runtime_runner_module()._resolve_guard_sync_auth_context(store)
+
+
+def evaluate_package_request_artifact(*args: object, **kwargs: object):
+    return _supply_chain_package_eval_module().evaluate_package_request_artifact(*args, **kwargs)
+
+
+def _is_package_request_evaluation(value: object) -> TypeGuard[Any]:
+    return isinstance(value, _supply_chain_package_eval_module().PackageRequestEvaluation)
+
+
+def _build_guard_receipt(
+    *,
+    harness: str,
+    artifact_id: str,
+    artifact_hash: str,
+    policy_decision: GuardAction,
+    capabilities_summary: str,
+    changed_capabilities: list[str],
+    provenance_summary: str,
+    artifact_name: str | None,
+    source_scope: str | None,
+) -> GuardReceipt:
+    sample = ", ".join(changed_capabilities[:3])
+    suffix = " ..." if len(changed_capabilities) > 3 else ""
+    diff_summary = f"{len(changed_capabilities)} change(s): {sample}{suffix}" if changed_capabilities else None
+    return GuardReceipt(
+        receipt_id=f"guard-receipt-{uuid4()}",
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        harness=harness,
+        artifact_id=artifact_id,
+        artifact_hash=artifact_hash,
+        policy_decision=policy_decision,
+        capabilities_summary=capabilities_summary,
+        changed_capabilities=tuple(changed_capabilities),
+        provenance_summary=provenance_summary,
+        artifact_name=artifact_name,
+        source_scope=source_scope,
+        diff_summary=diff_summary,
+    )
+
+
 def _package_firewall_refresh_state_path(guard_home: Path) -> Path:
     return guard_home / _PACKAGE_FIREWALL_REFRESH_STATE_FILE
 
@@ -225,7 +293,7 @@ def _write_package_firewall_refresh_state(guard_home: Path, last_attempt: float)
 
 
 def build_local_supply_chain_posture(
-    store: GuardStore,
+    store: Any,
     config: GuardConfig,
     *,
     now: str | None = None,
@@ -327,7 +395,7 @@ def build_local_supply_chain_posture(
 
 def build_supply_chain_status_payload(
     *,
-    store: GuardStore,
+    store: Any,
     config: GuardConfig,
     now: str,
 ) -> dict[str, object]:
@@ -341,10 +409,13 @@ def build_supply_chain_status_payload(
     }
 
 
-def resolve_package_firewall_entitlement_with_refresh(store: GuardStore) -> dict[str, object]:
+def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, object]:
     """Resolve package-firewall access and opportunistically heal stale cloud state."""
 
-    entitlement = resolve_package_firewall_entitlement(store)
+    entitlement_module = _package_firewall_entitlement_module()
+    runner = _runtime_runner_module()
+
+    entitlement = entitlement_module.resolve_package_firewall_entitlement(store)
     if bool(entitlement.get("allowed")):
         return entitlement
     if store.get_cloud_sync_profile() is None:
@@ -369,7 +440,7 @@ def resolve_package_firewall_entitlement_with_refresh(store: GuardStore) -> dict
     for refresh in (sync_local_guard_cloud_proof, sync_supply_chain_bundle):
         try:
             refresh(store)
-        except GuardSyncAuthorizationExpiredError as error:
+        except runner.GuardSyncAuthorizationExpiredError as error:
             if str(entitlement.get("reason") or "") == "guard_cloud_connect_required":
                 store.record_latest_guard_connect_sync_result(
                     status="retry_required",
@@ -378,9 +449,9 @@ def resolve_package_firewall_entitlement_with_refresh(store: GuardStore) -> dict
                     reason=str(error),
                 )
             break
-        except (GuardSyncNotAvailableError, GuardSyncNotConfiguredError, OSError, RuntimeError):
+        except (runner.GuardSyncNotAvailableError, runner.GuardSyncNotConfiguredError, OSError, RuntimeError):
             continue
-    return resolve_package_firewall_entitlement(store)
+    return entitlement_module.resolve_package_firewall_entitlement(store)
 
 
 def _is_audit_sensitive_basename(name: str) -> bool:
@@ -402,7 +473,7 @@ def _workspace_has_project_markers(workspace_dir: Path) -> bool:
     return any((resolved / marker).exists() for marker in _MANIFEST_CANDIDATES)
 
 
-def managed_install_audit_workspace_dirs(store: GuardStore) -> tuple[str, ...]:
+def managed_install_audit_workspace_dirs(store: Any) -> tuple[str, ...]:
     installs = store.list_managed_installs()
     ordered = sorted(
         installs,
@@ -546,7 +617,7 @@ def _package_advisory_ids(package: dict[str, object]) -> list[str]:
     return advisory_ids
 
 
-def _cached_supply_chain_bundle_payload(store: GuardStore) -> dict[str, object] | None:
+def _cached_supply_chain_bundle_payload(store: Any) -> dict[str, object] | None:
     workspace_id = store.get_cloud_workspace_id()
     if workspace_id is None:
         return None
@@ -625,7 +696,7 @@ def _enrich_package_with_advisory_aliases(
 
 def _enrich_evaluation_packages_with_advisory_aliases(
     evaluation: dict[str, object],
-    store: GuardStore,
+    store: Any,
 ) -> dict[str, object]:
     packages = evaluation.get("packages")
     if not isinstance(packages, list):
@@ -778,7 +849,7 @@ def audit_receipt_metadata(
     result: dict[str, object],
     *,
     workspace_dir: Path | None = None,
-    store: GuardStore | None = None,
+    store: Any | None = None,
 ) -> dict[str, object]:
     evaluation = result.get("evaluation")
     if not isinstance(evaluation, dict):
@@ -797,8 +868,8 @@ def audit_receipt_metadata(
         policy_decision = "ask"
     inventory = result.get("inventory")
     inventory_summary = inventory if isinstance(inventory, dict) else {}
-    manifest_paths = [str(path) for path in result.get("manifest_paths") or () if isinstance(path, str)]
-    lockfile_paths = [str(path) for path in result.get("lockfile_paths") or () if isinstance(path, str)]
+    manifest_paths = list(_string_items(result.get("manifest_paths")))
+    lockfile_paths = list(_string_items(result.get("lockfile_paths")))
     path_hashes = workspace_audit_path_hashes(workspace_dir, manifest_paths, lockfile_paths)
     return {
         "policy_decision": policy_decision,
@@ -824,7 +895,7 @@ def audit_receipt_metadata(
 
 def build_workspace_scan_payload(
     *,
-    store: GuardStore,
+    store: Any,
     config: GuardConfig,
     workspace_dir: Path,
     now: str,
@@ -841,7 +912,7 @@ def build_workspace_scan_payload(
 
 def build_workspace_audit_payload(
     *,
-    store: GuardStore,
+    store: Any,
     config: GuardConfig,
     workspace_dir: Path,
     now: str,
@@ -852,6 +923,8 @@ def build_workspace_audit_payload(
     before_workspace_dir: Path | None = None,
     after_workspace_dir: Path | None = None,
 ) -> tuple[dict[str, object], int]:
+    runner = _runtime_runner_module()
+
     target_workspace_dir = after_workspace_dir or workspace_dir
     posture = build_local_supply_chain_posture(store, config, now=now)
     diff_summary: dict[str, object] | None = None
@@ -920,7 +993,7 @@ def build_workspace_audit_payload(
                     command_name=command_name,
                     now=now,
                 )
-        except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError, RuntimeError):
+        except (runner.GuardSyncAuthorizationExpiredError, runner.GuardSyncNotConfiguredError, RuntimeError):
             fallback_reason = {
                 "code": "cloud_auth_error",
                 "message": "Guard cloud authorization could not be refreshed, so Guard fell back locally.",
@@ -945,7 +1018,7 @@ def build_workspace_audit_payload(
             now=now,
         )
     evaluation = _enrich_evaluation_packages_with_advisory_aliases(evaluation, store)
-    payload = {
+    payload: dict[str, object] = {
         "generated_at": now,
         "mode": command_name,
         "source": source,
@@ -974,7 +1047,7 @@ def build_workspace_audit_payload(
 
 def _workspace_local_evaluation(
     *,
-    store: GuardStore,
+    store: Any,
     workspace_dir: Path,
     inventory: tuple[dict[str, object], ...],
     manifest_paths: tuple[str, ...],
@@ -1007,7 +1080,7 @@ def _workspace_local_evaluation(
 
 def build_supply_chain_explain_payload(
     *,
-    store: GuardStore,
+    store: Any,
     config: GuardConfig,
     workspace_dir: Path,
     package_spec: str,
@@ -1037,7 +1110,7 @@ def build_supply_chain_explain_payload(
         workspace_dir=workspace_dir,
         now=now,
     )
-    payload = {
+    payload: dict[str, object] = {
         "generated_at": now,
         "request": {
             "package": package_spec,
@@ -1054,7 +1127,7 @@ def build_supply_chain_explain_payload(
 def build_package_protect_payload(
     *,
     command: Sequence[str],
-    store: GuardStore,
+    store: Any,
     workspace_dir: Path,
     dry_run: bool,
     allow_saved_approval_execution: bool = False,
@@ -1063,9 +1136,7 @@ def build_package_protect_payload(
     unsafe_raw_output: bool,
     timeout_seconds: int,
 ) -> tuple[dict[str, object], int] | None:
-    from .runtime.package_intent_parser import parse_package_intent
-
-    intent = parse_package_intent(shlex.join(command), workspace=workspace_dir)
+    intent = _package_intent_parser_module().parse_package_intent(shlex.join(command), workspace=workspace_dir)
     if intent is None:
         return None
     sanitized_intent = replace(intent, redacted_command=shlex.join(redacted_command_tokens(command)))
@@ -1097,7 +1168,7 @@ def build_package_protect_payload(
     )
     verdict_action = _protect_action_for_decision(evaluation.decision)
     risk_signals = tuple(_evaluation_risk_signals(evaluation))
-    receipt_policy_metadata = {
+    receipt_policy_metadata: dict[str, object] = {
         "matched_rule_id": evaluation.matched_rule_id,
         "package_manager": sanitized_intent.package_manager,
         "package_targets": [target.raw_spec for target in sanitized_intent.targets],
@@ -1106,7 +1177,7 @@ def build_package_protect_payload(
     }
     if evaluation.bundle_version is not None:
         receipt_policy_metadata["bundle_version"] = evaluation.bundle_version
-    receipt = build_receipt(
+    receipt = _build_guard_receipt(
         harness=_LOCAL_SUPPLY_CHAIN_HARNESS,
         artifact_id=artifact.artifact_id,
         artifact_hash=artifact_hash,
@@ -1239,14 +1310,14 @@ def build_package_protect_payload(
 
 
 def apply_stored_package_policy_override(
-    evaluation: PackageRequestEvaluation,
+    evaluation: Any,
     *,
-    store: GuardStore,
+    store: Any,
     artifact: GuardArtifact,
     artifact_hash: str,
     workspace_dir: Path,
     now: str,
-) -> PackageRequestEvaluation:
+) -> Any:
     """Apply a saved package approval when the content hash still matches."""
 
     return _apply_stored_package_policy_override(
@@ -1260,14 +1331,14 @@ def apply_stored_package_policy_override(
 
 
 def _apply_stored_package_policy_override(
-    evaluation: PackageRequestEvaluation,
+    evaluation: Any,
     *,
-    store: GuardStore,
+    store: Any,
     artifact: GuardArtifact,
     artifact_hash: str,
     workspace_dir: Path,
     now: str,
-) -> PackageRequestEvaluation:
+) -> Any:
     decision = store.resolve_policy_decision(
         artifact.harness,
         artifact.artifact_id,
@@ -1309,13 +1380,11 @@ def _apply_stored_package_policy_override(
 def recompute_package_protect_artifact_hash(
     command: Sequence[str],
     *,
-    store: GuardStore,
+    store: Any,
     workspace_dir: Path,
     now: str | None = None,
 ) -> str | None:
-    from .runtime.package_intent_parser import parse_package_intent
-
-    intent = parse_package_intent(shlex.join(command), workspace=workspace_dir)
+    intent = _package_intent_parser_module().parse_package_intent(shlex.join(command), workspace=workspace_dir)
     if intent is None:
         return None
     sanitized_intent = replace(intent, redacted_command=shlex.join(redacted_command_tokens(command)))
@@ -1369,7 +1438,7 @@ def _package_target_identities(artifact: GuardArtifact) -> tuple[ProtectTargetId
     return tuple(identities)
 
 
-def _package_matched_cached_advisory_ids(store: GuardStore, artifact: GuardArtifact) -> tuple[str, ...]:
+def _package_matched_cached_advisory_ids(store: Any, artifact: GuardArtifact) -> tuple[str, ...]:
     advisories = store.list_cached_advisories(limit=None)
     identities = _package_target_identities(artifact)
     matched_ids: set[str] = set()
@@ -1383,7 +1452,7 @@ def _package_matched_cached_advisory_ids(store: GuardStore, artifact: GuardArtif
     return tuple(sorted(matched_ids))
 
 
-def _package_feed_snapshot_hash(store: GuardStore) -> str | None:
+def _package_feed_snapshot_hash(store: Any) -> str | None:
     workspace_id = store.get_cloud_workspace_id()
     if workspace_id is None:
         return None
@@ -1398,9 +1467,9 @@ def _package_feed_snapshot_hash(store: GuardStore) -> str | None:
 
 
 def _package_policy_gate_context(
-    store: GuardStore,
+    store: Any,
     artifact: GuardArtifact,
-    evaluation: PackageRequestEvaluation,
+    evaluation: Any,
 ) -> dict[str, object]:
     return {
         "bundle_version": evaluation.bundle_version,
@@ -1417,14 +1486,14 @@ def _package_request_artifact_hash(
     artifact: GuardArtifact,
     *,
     workspace_dir: Path,
-    store: GuardStore,
-    evaluation: PackageRequestEvaluation,
+    store: Any,
+    evaluation: Any,
 ) -> str:
     policy_gate = _package_policy_gate_context(store, artifact, evaluation)
     metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
     targets = metadata.get("targets")
-    manifest_paths = tuple(str(item) for item in metadata.get("manifest_paths", []) if isinstance(item, str))
-    lockfile_paths = tuple(str(item) for item in metadata.get("lockfile_paths", []) if isinstance(item, str))
+    manifest_paths = _string_items(metadata.get("manifest_paths"))
+    lockfile_paths = _string_items(metadata.get("lockfile_paths"))
     has_targets = isinstance(targets, list) and any(isinstance(item, dict) for item in targets)
     if has_targets or (not manifest_paths and not lockfile_paths):
         return stable_digest_hex(
@@ -1456,9 +1525,9 @@ def _package_request_artifact_hash(
 def package_request_policy_hash(
     *,
     artifact: GuardArtifact,
-    store: GuardStore,
+    store: Any,
     workspace_dir: Path,
-    evaluation: PackageRequestEvaluation,
+    evaluation: Any,
 ) -> str:
     """Hash a package request using manifest and lockfile contents."""
 
@@ -1470,12 +1539,12 @@ def package_request_policy_hash(
     )
 
 
-def _evaluation_uses_saved_package_approval(evaluation: PackageRequestEvaluation) -> bool:
+def _evaluation_uses_saved_package_approval(evaluation: Any) -> bool:
     return any(reason.get("code") == "saved_package_approval" for reason in evaluation.reasons)
 
 
 def _package_policy_override_evaluation(
-    evaluation: PackageRequestEvaluation,
+    evaluation: Any,
     *,
     decision: str,
     policy_action: str,
@@ -1484,7 +1553,7 @@ def _package_policy_override_evaluation(
     harness_message: str,
     reason_code: str,
     reason_message: str,
-) -> PackageRequestEvaluation:
+) -> Any:
     reason = {
         "code": reason_code,
         "message": reason_message,
@@ -1499,7 +1568,7 @@ def _package_policy_override_evaluation(
         reasons=(reason, *tuple(item for item in evaluation.reasons if item != reason)),
         packages=packages,
         risk_summary=harness_message,
-        user_copy=SupplyChainUserCopy(
+        user_copy=_supply_chain_package_eval_module().SupplyChainUserCopy(
             title=title,
             summary=summary,
             next_step=None,
@@ -1549,7 +1618,7 @@ def _coerce_command_error_output(error: subprocess.TimeoutExpired | OSError) -> 
     return "\n".join(part for part in parts if part)
 
 
-def _build_package_manager_protection(store: GuardStore) -> dict[str, object]:
+def _build_package_manager_protection(store: Any) -> dict[str, object]:
     context = HarnessContext(
         home_dir=Path.home().resolve(),
         workspace_dir=None,
@@ -1557,11 +1626,11 @@ def _build_package_manager_protection(store: GuardStore) -> dict[str, object]:
     )
     status = package_shim_status(context)
     shim_dir = Path(str(status.get("shim_dir") or store.guard_home / "package-shims" / "bin"))
-    installed_managers = sorted({str(item) for item in status.get("installed_managers", []) if isinstance(item, str)})
-    active_managers = sorted({str(item) for item in status.get("active_managers", []) if isinstance(item, str)})
-    missing_shims = sorted({str(item) for item in status.get("missing_managers", []) if isinstance(item, str)})
+    installed_managers = sorted(set(_string_items(status.get("installed_managers"))))
+    active_managers = sorted(set(_string_items(status.get("active_managers"))))
+    missing_shims = sorted(set(_string_items(status.get("missing_managers"))))
     supported_managers = list(package_shim_supported_managers())
-    protected_managers = sorted({str(item) for item in status.get("protected_managers", []) if isinstance(item, str)})
+    protected_managers = sorted(set(_string_items(status.get("protected_managers"))))
     protected_set = set(protected_managers)
     path_status = str(status.get("path_status") or "missing_from_path")
     staged_managers = set(installed_managers) if path_status == "restart_required" else set()
@@ -1754,7 +1823,7 @@ def _workspace_diff_audit_inventory(
             continue
         for item in parsed_items:
             _merge_inventory_item(inventory_map, item)
-    summary = {
+    summary: dict[str, object] = {
         "changed_package_count": len({item for item in changed_packages}),
         "changed_paths": changed_paths,
     }
@@ -2019,7 +2088,7 @@ def _inventory_from_purl(purl: str | None) -> dict[str, object] | None:
 
 def _should_use_cloud_workspace_audit(
     *,
-    store: GuardStore,
+    store: Any,
     posture: dict[str, object],
 ) -> bool:
     if store.get_cloud_sync_profile() is None or store.get_cloud_workspace_id() is None:
@@ -2038,6 +2107,8 @@ def _run_cloud_workspace_audit(
     token: str | None = None,
     workspace_id: str,
 ) -> tuple[dict[str, object] | None, dict[str, object] | None]:
+    runner = _runtime_runner_module()
+
     resolved_auth_context = auth_context
     if resolved_auth_context is None:
         if not isinstance(sync_url, str) or not sync_url or not isinstance(token, str) or not token:
@@ -2049,7 +2120,7 @@ def _run_cloud_workspace_audit(
         }
     else:
         request_url = _normalized_supply_chain_batch_url(str(resolved_auth_context["sync_url"]), workspace_id)
-        request_headers = _guard_sync_headers(resolved_auth_context, request_url=request_url, method="POST")
+        request_headers = runner._guard_sync_headers(resolved_auth_context, request_url=request_url, method="POST")
     aggregated_packages: list[dict[str, object]] = []
     aggregated_reasons: list[dict[str, object]] = []
     cursor: str | None = None
@@ -2122,7 +2193,7 @@ def _build_cloud_audit_payload(
     *,
     workspace_dir: Path,
     workspace_id: str,
-    store: GuardStore,
+    store: Any,
     manifest_paths: tuple[str, ...],
     lockfile_paths: tuple[str, ...],
     inventory: tuple[dict[str, object], ...],
@@ -2236,13 +2307,13 @@ def _hash_existing_paths(workspace_dir: Path, relative_paths: Sequence[str]) -> 
 def _normalize_cloud_audit_response(response: dict[str, object]) -> dict[str, object]:
     return {
         "decision": str(response.get("decision") or "monitor"),
-        "packages": [item for item in response.get("packages", []) if isinstance(item, dict)],
-        "reasons": [item for item in response.get("reasons", []) if isinstance(item, dict)],
+        "packages": list(_dict_items(response.get("packages"))),
+        "reasons": list(_dict_items(response.get("reasons"))),
         "enforcement": str(response.get("enforcement") or "premium_cloud"),
         "entitlement_state": str(response.get("entitlementState") or "premium"),
         "cache_status": str(response.get("cacheStatus") or "miss"),
-        "processed_count": int(response.get("processedCount") or 0),
-        "total_packages": int(response.get("totalPackages") or 0),
+        "processed_count": _int_value(response.get("processedCount")) or 0,
+        "total_packages": _int_value(response.get("totalPackages")) or 0,
         "status": str(response.get("status") or "completed"),
         "workspace_id": str(response.get("workspaceId") or ""),
     }
@@ -2366,7 +2437,7 @@ def _evaluation_exit_code(decision: str) -> int:
     return 2 if decision in {"block", "ask"} else 0
 
 
-def _protect_action_for_decision(decision: str) -> str:
+def _protect_action_for_decision(decision: str) -> GuardAction:
     if decision == "block":
         return "block"
     if decision == "ask":
@@ -2377,11 +2448,9 @@ def _protect_action_for_decision(decision: str) -> str:
 
 
 def _evaluation_risk_signals(evaluation: object) -> list[str]:
-    if not hasattr(evaluation, "reasons"):
+    if not _is_package_request_evaluation(evaluation):
         return []
     reasons = evaluation.reasons
-    if not isinstance(reasons, tuple):
-        return []
     signals: list[str] = []
     for item in reasons:
         if not isinstance(item, dict):
@@ -2396,19 +2465,14 @@ def _evaluation_risk_signals(evaluation: object) -> list[str]:
 
 
 def _matched_advisories(evaluation: object) -> list[dict[str, object]]:
-    packages = getattr(evaluation, "packages", ())
-    if not isinstance(packages, tuple):
+    if not _is_package_request_evaluation(evaluation):
         return []
+    packages = evaluation.packages
     advisories: list[dict[str, object]] = []
     for item in packages:
         if not isinstance(item, dict):
             continue
-        advisory_ids = item.get("related_advisory_ids")
-        if not isinstance(advisory_ids, list):
-            continue
-        for advisory_id in advisory_ids:
-            if not isinstance(advisory_id, str):
-                continue
+        for advisory_id in _string_items(item.get("related_advisory_ids")):
             advisories.append(
                 {
                     "advisory_id": advisory_id,
@@ -2522,6 +2586,18 @@ def _resolve_next_refresh_at(
 
 def _dict_payload(value: object) -> dict[str, object]:
     return value if isinstance(value, dict) else {}
+
+
+def _dict_items(value: object) -> tuple[dict[str, object], ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, dict))
+
+
+def _string_items(value: object) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(item for item in value if isinstance(item, str))
 
 
 def _string_value(value: object) -> str | None:

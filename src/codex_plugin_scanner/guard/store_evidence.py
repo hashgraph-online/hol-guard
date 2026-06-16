@@ -333,10 +333,12 @@ def export_evidence_csv(
     writer.writerow(("total_rows", payload["total_rows"]))
     writer.writerow(())
     writer.writerow(_EXPORT_COLUMNS)
-    for item in payload["items"]:
-        if not isinstance(item, dict):
-            continue
-        writer.writerow([_sanitize_csv_formula_cell(item.get(column, "")) for column in _EXPORT_COLUMNS])
+    items = payload.get("items")
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            writer.writerow([_sanitize_csv_formula_cell(item.get(column, "")) for column in _EXPORT_COLUMNS])
     return output.getvalue()
 
 

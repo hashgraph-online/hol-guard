@@ -18,7 +18,7 @@ class MarketplaceContext:
     file_path: Path
     repo_root: Path
     marketplace_root: Path
-    payload: dict
+    payload: dict[str, object]
     legacy: bool
 
 
@@ -57,7 +57,7 @@ def marketplace_label(context: MarketplaceContext) -> str:
     return str(context.file_path.relative_to(context.repo_root))
 
 
-def extract_marketplace_source(plugin: dict) -> tuple[str | None, str | None]:
+def extract_marketplace_source(plugin: dict[str, object]) -> tuple[str | None, str | None]:
     source = plugin.get("source")
     if isinstance(source, str):
         return source, None
@@ -84,7 +84,7 @@ def source_reference_is_safe(context: MarketplaceContext, source_ref: str) -> bo
     return is_safe_relative_path(context.repo_root, source_ref)
 
 
-def validate_marketplace_path_requirements(context: MarketplaceContext, plugin: dict) -> str | None:
+def validate_marketplace_path_requirements(context: MarketplaceContext, plugin: dict[str, object]) -> str | None:
     source_ref, source_path = extract_marketplace_source(plugin)
     if source_ref is None:
         return 'missing "source.source"'

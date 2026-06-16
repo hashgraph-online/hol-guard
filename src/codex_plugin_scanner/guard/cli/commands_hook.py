@@ -1,13 +1,34 @@
 """Guard CLI hook command entrypoint."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
-from ._commands_shared import *
-from .commands_parser_helpers import *
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
+    from .commands_support_claude_approval import _persist_claude_guard_question_decision
+    from .commands_support_hook_payload import _hook_action_envelope, _load_hook_payload, _normalize_hook_payload
+    from .commands_support_interaction import _emit
+    from .commands_support_permission_store import (
+        _discard_claude_pending_permissions,
+        _persist_cursor_native_permission_after_shell,
+    )
+    from .commands_support_runtime_artifacts import _hook_event_name, _hook_runtime_artifact
+    from .commands_support_runtime_policy import _runtime_action_data_flow_signals
+    from .commands_support_runtime_resolution import (
+        _canonical_harness_name,
+        _copilot_hook_stage,
+        _copilot_runtime_tool_call,
+        _is_copilot_permission_request,
+        _managed_install_for,
+        _resolve_copilot_workspace_root,
+    )
+    from .commands_support_workspace import _workspace_from_cursor_project_dir
+
+
+from ._commands_shared import *
 from .commands_hook_claude import (
     _run_hook_claude_permission_prompt_notification,
     _run_hook_claude_permission_request,
@@ -20,6 +41,7 @@ from .commands_hook_generic import _run_hook_generic_payload
 from .commands_hook_runtime_eval import _evaluate_runtime_artifact_hook
 from .commands_hook_runtime_finish import _finalize_runtime_artifact_hook
 from .commands_hook_runtime_review import _review_runtime_artifact_hook
+from .commands_parser_helpers import *
 
 
 def _run_guard_hook_command(
@@ -33,6 +55,11 @@ def _run_guard_hook_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    if guard_home is None:
+        raise RuntimeError("Guard home is required")
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
     runtime_harness = getattr(args, "runtime_harness", None)
     if isinstance(runtime_harness, str) and runtime_harness.strip():
         args.harness = runtime_harness.strip()
@@ -59,10 +86,10 @@ def _run_guard_hook_command(
             current_workspace = Path.cwd().resolve()
             if current_workspace.is_dir():
                 runtime_workspace = current_workspace
-    if (
-        _canonical_harness_name(args.harness) == "cursor"
-        and _hook_event_name(payload) in {"afterShellExecution", "afterMCPExecution"}
-    ):
+    if _canonical_harness_name(args.harness) == "cursor" and _hook_event_name(payload) in {
+        "afterShellExecution",
+        "afterMCPExecution",
+    }:
         if runtime_workspace is None:
             runtime_workspace = _workspace_from_cursor_project_dir()
         saved = _persist_cursor_native_permission_after_shell(
@@ -232,6 +259,7 @@ def _run_guard_hook_command(
         runtime_workspace=runtime_workspace,
         store=store,
     )
+
 
 __all__ = [
     "_run_guard_hook_command",

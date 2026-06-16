@@ -131,10 +131,12 @@ def resolve_submission_metadata(
     manifest = load_manifest(plugin_dir) or {}
     interface = manifest.get("interface") if isinstance(manifest.get("interface"), dict) else {}
     manifest_author = manifest.get("author") if isinstance(manifest.get("author"), dict) else {}
+    interface_map = interface if isinstance(interface, dict) else {}
+    manifest_author_map = manifest_author if isinstance(manifest_author, dict) else {}
 
     resolved_name = (
         (plugin_name or "").strip()
-        or str(interface.get("displayName") or "").strip()
+        or str(interface_map.get("displayName") or "").strip()
         or str(manifest.get("name") or "").strip()
         or (github_repository.split("/")[-1] if github_repository else plugin_dir.name)
     )
@@ -146,14 +148,14 @@ def resolve_submission_metadata(
     )
     resolved_description = (
         (description or "").strip()
-        or str(interface.get("shortDescription") or "").strip()
+        or str(interface_map.get("shortDescription") or "").strip()
         or str(manifest.get("description") or "").strip()
         or f"{resolved_name} scored {result.score}/100 with plugin-scanner."
     )
     resolved_author = (
         (author or "").strip()
-        or str(interface.get("developerName") or "").strip()
-        or str(manifest_author.get("name") or "").strip()
+        or str(interface_map.get("developerName") or "").strip()
+        or str(manifest_author_map.get("name") or "").strip()
         or (github_repository.split("/")[0] if github_repository else "")
     )
 

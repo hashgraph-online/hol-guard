@@ -77,8 +77,10 @@ def verifier(state: dict[str, object]) -> dict[str, object] | None:
 def verify_password(password: str, verifier_payload: dict[str, object] | None) -> bool:
     if verifier_payload is None:
         return False
+    iterations = optional_int(verifier_payload.get("iterations"))
+    if iterations is None:
+        return False
     try:
-        iterations = int(verifier_payload["iterations"])
         salt = base64.b64decode(str(verifier_payload["salt"]))
         expected = base64.b64decode(str(verifier_payload["hash"]))
     except (KeyError, TypeError, ValueError):
@@ -93,7 +95,7 @@ def enabled(state: dict[str, object]) -> bool:
 
 def record_failed_attempt(guard_home: Path, state: dict[str, object], *, now: str | None) -> None:
     now_epoch = epoch(now)
-    attempts = int(state.get("failed_attempts", 0)) + 1
+    attempts = (optional_int(state.get("failed_attempts")) or 0) + 1
     state["failed_attempts"] = attempts
     if attempts >= APPROVAL_GATE_LOCKOUT_FAILURES:
         state["locked_until"] = iso_from_epoch(now_epoch + APPROVAL_GATE_LOCKOUT_SECONDS)
@@ -139,9 +141,37 @@ def optional_bool(value: object, fallback: object) -> bool | None:
     return None
 
 
+def optional_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def optional_float(value: object) -> float | None:
+    if isinstance(value, bool):
+        return float(value)
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
 def prune_grants(grants: dict[str, dict[str, object]], now_epoch: float) -> None:
     expired = [
-        grant_id for grant_id, metadata in grants.items() if float(metadata.get("expires_epoch", 0.0)) <= now_epoch
+        grant_id
+        for grant_id, metadata in grants.items()
+        if (optional_float(metadata.get("expires_epoch")) or 0.0) <= now_epoch
     ]
     for grant_id in expired:
         grants.pop(grant_id, None)

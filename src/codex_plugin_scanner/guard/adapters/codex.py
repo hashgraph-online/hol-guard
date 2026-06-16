@@ -3,17 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import re
 import shlex
 import sys
 from copy import deepcopy
 from pathlib import Path
-
-try:  # pragma: no cover - Python 3.11+
-    import tomllib  # type: ignore[attr-defined]
-except ModuleNotFoundError:  # pragma: no cover - Python 3.10
-    import tomli as tomllib  # type: ignore[no-redef]
+from typing import Any
 
 from ..aibom_detection import (
     enrich_mcp_server_metadata,
@@ -34,6 +31,12 @@ from .mcp_servers import (
     proxy_process_env,
     skipped_stdio_server_names,
 )
+
+tomllib: Any
+try:  # pragma: no cover - Python 3.11+
+    import tomllib as tomllib  # type: ignore[attr-defined]
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10
+    tomllib = importlib.import_module("tomli")
 
 
 def _read_toml(path: Path) -> dict[str, object]:
@@ -59,14 +62,22 @@ def _artifact_from_guard_proxy_args(
 
     parsed = _parse_guard_proxy_args(args)
     command = parsed.get("command")
-    if command is None:
+    if not isinstance(command, str) or not command:
         return None
-    name = parsed.get("server-name") or fallback_name
-    source_scope = parsed.get("source-scope") or fallback_scope
-    config_path = parsed.get("config-path") or str(fallback_config_path)
-    transport = parsed.get("transport") or "stdio"
-    server_args = tuple(parsed.get("arg", ()))
-    env_keys = tuple(sorted(parsed.get("server-env-key", ())))
+    name_value = parsed.get("server-name")
+    name = name_value if isinstance(name_value, str) and name_value else fallback_name
+    source_scope_value = parsed.get("source-scope")
+    source_scope = source_scope_value if isinstance(source_scope_value, str) and source_scope_value else fallback_scope
+    config_path_value = parsed.get("config-path")
+    config_path = (
+        config_path_value if isinstance(config_path_value, str) and config_path_value else str(fallback_config_path)
+    )
+    transport_value = parsed.get("transport")
+    transport = transport_value if isinstance(transport_value, str) and transport_value else "stdio"
+    server_args_value = parsed.get("arg")
+    server_args = server_args_value if isinstance(server_args_value, tuple) else ()
+    env_keys_value = parsed.get("server-env-key")
+    env_keys = tuple(sorted(env_keys_value)) if isinstance(env_keys_value, tuple) else ()
     return GuardArtifact(
         artifact_id=f"codex:{source_scope}:{name}",
         name=name,
@@ -854,7 +865,10 @@ class CodexHarnessAdapter(HarnessAdapter):
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
         payload = super().diagnostics(context)
         hook_state = codex_native_hook_state(context)
-        warnings = [str(item) for item in payload.get("warnings", []) if isinstance(item, str)]
+        warning_items = payload.get("warnings")
+        warnings = (
+            [str(item) for item in warning_items if isinstance(item, str)] if isinstance(warning_items, list) else []
+        )
         if bool(hook_state["config_present"]) and not bool(hook_state["codex_hooks_enabled"]):
             warnings.append(
                 "Codex config was found, but native hooks are disabled. Run `hol-guard install codex` or "

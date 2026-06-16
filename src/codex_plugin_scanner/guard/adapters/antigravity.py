@@ -229,15 +229,18 @@ class AntigravityHarnessAdapter(HarnessAdapter):
                 if manifest_payload is not None and isinstance(manifest_payload.get("description"), str)
                 else None
             )
+            resolved_name = display_name if isinstance(display_name, str) and display_name else extension_id
+            resolved_config_path = manifest_path if manifest_payload is not None else Path(location_path)
+            resolved_publisher = publisher if isinstance(publisher, str) else None
             artifacts.append(
                 GuardArtifact(
                     artifact_id=f"antigravity:global:{extension_id}",
-                    name=display_name or extension_id,
+                    name=resolved_name,
                     harness=self.harness,
                     artifact_type="extension",
                     source_scope="global",
-                    config_path=str(manifest_path if manifest_payload else Path(location_path)),
-                    publisher=publisher,
+                    config_path=str(resolved_config_path),
+                    publisher=resolved_publisher,
                     metadata={
                         "display_name": display_name,
                         "description": manifest_description,

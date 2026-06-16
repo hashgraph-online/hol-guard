@@ -193,7 +193,7 @@ def test_redacted_command_shape_parity_matches_portal_contract_fields() -> None:
         / "v1"
         / "supply-chain.ts"
     )
-    if not portal_contract_path.exists():
+    if not portal_contract_path.exists() and len(Path(__file__).resolve().parents) > 4:
         portal_contract_path = (
             Path(__file__).resolve().parents[4]
             / "hol-points-portal"

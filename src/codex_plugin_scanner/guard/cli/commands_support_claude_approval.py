@@ -1,12 +1,34 @@
 """Guard CLI helper definitions."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _CLAUDE_GUARD_APPROVAL_HEADER, _CLAUDE_GUARD_APPROVAL_OPTIONS, _now
+    from .commands_support_hook_state import (
+        _claude_guard_approval_question_text,
+        _claude_pending_permission_index_key,
+        _load_single_claude_pending_permission,
+        _remove_claude_pending_permission,
+        _sync_payload_list_from_row,
+    )
+    from .commands_support_permission_store import _persist_claude_native_permission_policy
+    from .commands_support_runtime_artifacts import _hook_event_name, _optional_string
+    from .commands_support_runtime_policy import (
+        _claude_notification_tool_display_name,
+        _claude_notification_tool_name,
+        _ensure_terminal_punctuation,
+        _runtime_artifact_policy_action,
+    )
+    from .commands_support_runtime_resolution import _canonical_harness_name
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
 
 def _persist_claude_pending_permission_denials(store: GuardStore, payload: dict[str, object]) -> int:
     session_id = _optional_string(payload.get("session_id"))
@@ -78,6 +100,7 @@ def _persist_claude_pending_permission_denials(store: GuardStore, payload: dict[
             return denied
     return denied
 
+
 def _claude_guard_approval_question_message(notice: dict[str, object] | None) -> str:
     tool_name = _optional_string((notice or {}).get("tool_name")) or "this tool"
     reason = _optional_string((notice or {}).get("reason"))
@@ -98,8 +121,10 @@ def _claude_guard_approval_question_message(notice: dict[str, object] | None) ->
         "allow option, retry the same tool once. If the user chooses Keep blocked, do not retry the sensitive action."
     )
 
+
 def _normalize_claude_guard_approval_text(value: str) -> str:
     return " ".join(value.strip().lower().split())
+
 
 def _claude_guard_approval_options_from_value(value: object) -> tuple[str, ...]:
     if not isinstance(value, list):
@@ -117,6 +142,7 @@ def _claude_guard_approval_options_from_value(value: object) -> tuple[str, ...]:
             return ()
         labels.append(label)
     return tuple(labels)
+
 
 def _claude_guard_prompt_contract_from_pending(
     pending: dict[str, object],
@@ -149,6 +175,7 @@ def _claude_guard_prompt_contract_from_pending(
         return None
     return header, question, options
 
+
 def _claude_guard_prompt_contract_from_question_list(
     payload_section: object,
 ) -> tuple[str, str, tuple[str, ...]] | None:
@@ -167,6 +194,7 @@ def _claude_guard_prompt_contract_from_question_list(
         return None
     return header, question, options
 
+
 def _claude_guard_prompt_contract_matches(
     expected_contract: tuple[str, str, tuple[str, ...]],
     actual_contract: tuple[str, str, tuple[str, ...]],
@@ -182,6 +210,7 @@ def _claude_guard_prompt_contract_matches(
     expected_labels = tuple(_normalize_claude_guard_approval_text(option) for option in expected_options)
     actual_labels = tuple(_normalize_claude_guard_approval_text(option) for option in actual_options)
     return actual_labels == expected_labels
+
 
 def _is_claude_guard_approval_question(
     payload: dict[str, object],
@@ -203,6 +232,7 @@ def _is_claude_guard_approval_question(
     response_contract = _claude_guard_prompt_contract_from_question_list(payload.get("tool_response"))
     return response_contract is None or _claude_guard_prompt_contract_matches(expected_contract, response_contract)
 
+
 def _claude_guard_approval_action_for_answer(answer_text: str) -> str | None:
     normalized_answer = _normalize_claude_guard_approval_text(answer_text)
     if normalized_answer == _normalize_claude_guard_approval_text("Keep blocked"):
@@ -214,6 +244,7 @@ def _claude_guard_approval_action_for_answer(answer_text: str) -> str | None:
         return "allow"
     return None
 
+
 def _claude_guard_answer_text_from_value(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value
@@ -222,6 +253,7 @@ def _claude_guard_answer_text_from_value(value: object) -> str | None:
         if label is not None:
             return label
     return None
+
 
 def _claude_guard_approval_answer(payload: dict[str, object], *, expected_question: str | None = None) -> str | None:
     response = payload.get("tool_response")
@@ -261,6 +293,7 @@ def _claude_guard_approval_answer(payload: dict[str, object], *, expected_questi
     if answer_text is None:
         return None
     return _claude_guard_approval_action_for_answer(answer_text)
+
 
 def _persist_claude_guard_question_decision(store: GuardStore, payload: dict[str, object]) -> bool:
     pending_pair = _load_single_claude_pending_permission(store, payload)
@@ -302,6 +335,7 @@ def _persist_claude_guard_question_decision(store: GuardStore, payload: dict[str
         _remove_claude_pending_permission(store, session_id=session_id, pending_key=pending_key)
     return True
 
+
 def _is_claude_permission_prompt_notification(args: argparse.Namespace, payload: dict[str, object]) -> bool:
     return (
         _canonical_harness_name(args.harness) == "claude-code"
@@ -309,12 +343,15 @@ def _is_claude_permission_prompt_notification(args: argparse.Namespace, payload:
         and _optional_string(payload.get("notification_type")) == "permission_prompt"
     )
 
+
 def _is_claude_permission_request(args: argparse.Namespace, payload: dict[str, object]) -> bool:
     return _canonical_harness_name(args.harness) == "claude-code" and _hook_event_name(payload) == "PermissionRequest"
+
 
 def _claude_permission_notice_prefers_ask_user_question(notice: dict[str, object]) -> bool:
     artifact_type = _optional_string(notice.get("artifact_type"))
     return artifact_type != "package_request"
+
 
 def _resolve_claude_permission_request_policy_action(
     *,
@@ -349,6 +386,7 @@ def _resolve_claude_permission_request_policy_action(
         }
     return policy_action, stub
 
+
 def _claude_permission_request_terminal_notice(
     *,
     payload: dict[str, object],
@@ -356,11 +394,9 @@ def _claude_permission_request_terminal_notice(
 ) -> str:
     tool_name = _claude_notification_tool_display_name(payload)
     if tool_name is not None:
-        return (
-            f"HOL Guard: reviewing Claude approval for {tool_name}. "
-            f"{_ensure_terminal_punctuation(native_reason)}"
-        )
+        return f"HOL Guard: reviewing Claude approval for {tool_name}. {_ensure_terminal_punctuation(native_reason)}"
     return f"HOL Guard: reviewing this Claude approval prompt. {_ensure_terminal_punctuation(native_reason)}"
+
 
 def _claude_permission_request_system_message(
     *,
@@ -380,12 +416,14 @@ def _claude_permission_request_system_message(
         f"{_ensure_terminal_punctuation(native_reason)}"
     )
 
+
 def _claude_permission_request_additional_context(native_reason: str) -> str:
     return (
         "This review came from HOL Guard, not from Claude alone. "
         f"{_ensure_terminal_punctuation(native_reason)} "
         "Use Claude's normal Allow / deny controls unless HOL Guard opened a separate approval question."
     )
+
 
 def _claude_permission_prompt_system_message(
     *,
@@ -415,6 +453,7 @@ def _claude_permission_prompt_system_message(
         "retries the action."
     )
 
+
 def _claude_permission_prompt_additional_context(notice: dict[str, object] | None) -> str:
     if notice is not None:
         return _claude_guard_approval_question_message(notice)
@@ -433,6 +472,7 @@ def _claude_permission_prompt_additional_context(notice: dict[str, object] | Non
         "options Allow once, Allow during this session, and Keep blocked. If the user chooses Keep blocked, do not "
         "retry the same action."
     )
+
 
 def _claude_permission_prompt_terminal_notice(
     *,
@@ -457,6 +497,7 @@ def _claude_permission_prompt_terminal_notice(
         "action. Choose Allow once, Allow during this session, or Keep blocked in the HOL Guard prompt."
     )
 
+
 def _claude_native_pretooluse_terminal_notice(*, payload: dict[str, object], reason: str) -> str:
     tool_name = _claude_notification_tool_name(payload)
     if tool_name is not None:
@@ -469,6 +510,7 @@ def _claude_native_pretooluse_terminal_notice(*, payload: dict[str, object], rea
         f"{_ensure_terminal_punctuation(reason)} Guard will route the next approval through a HOL Guard prompt if "
         "Claude asks to continue."
     )
+
 
 __all__ = [
     "_claude_guard_answer_text_from_value",

@@ -23,7 +23,10 @@ from .commands_parser_local import _configure_guard_local_parsers
 from .commands_parser_policy import _configure_guard_policy_parsers
 
 
-def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def add_guard_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
+    | argparse._SubParsersAction[FriendlyArgumentParser],
+) -> None:
     guard_parser = subparsers.add_parser(
         "guard",
         help="Guard commands",
@@ -42,7 +45,7 @@ def add_guard_root_parser(parser: argparse.ArgumentParser) -> None:
 
 def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     "Attach Guard subcommands to a parser."
-    guard_subparsers = guard_parser.add_subparsers(
+    guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser] = guard_parser.add_subparsers(
         dest="guard_command",
         required=True,
         parser_class=FriendlyArgumentParser,

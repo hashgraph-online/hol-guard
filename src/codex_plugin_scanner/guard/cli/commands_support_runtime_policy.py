@@ -5,9 +5,41 @@
 
 from __future__ import annotations
 
+import importlib
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _HOOK_DAEMON_UNREACHABLE_REASON_MARKER, _now
+    from .commands_support_prompts import _prompt_request_classes, _prompt_requires_hard_block
+
+
 from ..store import _runtime_scoped_exact_match_key
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
+
+def _runtime_artifacts_module():
+    return importlib.import_module(".commands_support_runtime_artifacts", __package__)
+
+
+def _interaction_module():
+    return importlib.import_module(".commands_support_interaction", __package__)
+
+
+def _runtime_resolution_module():
+    return importlib.import_module(".commands_support_runtime_resolution", __package__)
+
+
+def _optional_string(value: object | None) -> str | None:
+    return _runtime_artifacts_module()._optional_string(value)
+
+
+def _preferred_approval_review_url(response_payload: Mapping[str, object], *, harness: str) -> str | None:
+    return _interaction_module()._preferred_approval_review_url(response_payload, harness=harness)
+
+
+def _canonical_harness_name(value: str) -> str:
+    return _runtime_resolution_module()._canonical_harness_name(value)
 
 
 def _claude_notification_tool_name(payload: dict[str, object]) -> str | None:

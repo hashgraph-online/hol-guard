@@ -906,7 +906,8 @@ def resolve_request_with_queue_result(
     updated = get_approval_request(connection, request_id)
     next_request = get_next_pending_request(connection, exclude_ids={request_id, *duplicate_ids})
     remaining_page = list_pending_approval_summaries(connection, limit=10)
-    remaining_count = int(remaining_page["total_pending_count"])
+    remaining_count_value = remaining_page.get("total_pending_count")
+    remaining_count = int(remaining_count_value) if isinstance(remaining_count_value, int) else 0
     return {
         "resolved": True,
         "item": updated,
@@ -1074,11 +1075,12 @@ def _unresolved_queue_result(
 ) -> dict[str, object]:
     remaining_page = list_pending_approval_summaries(connection, limit=10)
     next_request = get_next_pending_request(connection)
+    remaining_count_value = remaining_page.get("total_pending_count")
     return {
         "resolved": False,
         "error": error,
         "item": item,
-        "remaining_pending_count": int(remaining_page["total_pending_count"]),
+        "remaining_pending_count": int(remaining_count_value) if isinstance(remaining_count_value, int) else 0,
         "next_selectable_request_id": next_request["request_id"] if next_request is not None else None,
         "remaining_pending_summaries": remaining_page["items"],
         "resolved_duplicate_ids": [],

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import shlex
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 from codex_plugin_scanner.guard.runtime.data_flow import extract_command_segments, extract_pipes
 
@@ -14,7 +14,7 @@ _NPM_OPTIONS_WITH_VALUES = frozenset(
 )
 
 
-def segment_executes_command(command: str, names: set[str]) -> bool:
+def segment_executes_command(command: str, names: Collection[str]) -> bool:
     tokens = command_tokens_after_env_assignments(command)
     return bool(tokens) and tokens[0].lower() in names
 

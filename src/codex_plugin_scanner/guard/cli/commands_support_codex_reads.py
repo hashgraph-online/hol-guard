@@ -1,12 +1,43 @@
 """Guard CLI helper definitions."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .commands_support_codex_commands import (
+        _CODEX_READ_ONLY_PIPE_FILTERS,
+        _CODEX_READ_ONLY_SEARCH_COMMANDS,
+        _CODEX_READ_ONLY_SEARCH_WRAPPERS,
+        _CODEX_READ_ONLY_VIEW_COMMANDS,
+        _codex_unwrapped_command_parts,
+    )
+    from .commands_support_codex_git import (
+        _codex_count_arg_is_bounded,
+        _codex_git_diff_targets_are_source_like,
+        _git_grep_search_args,
+        _parse_codex_sed_read_only_args,
+    )
+    from .commands_support_codex_paths import (
+        _codex_command_has_unquoted_shell_control,
+        _codex_fd_exec_is_bounded_read_only,
+        _codex_fd_targets,
+        _codex_fd_targets_are_source_like,
+        _codex_resolve_source_like_path,
+        _codex_search_target_is_source_like,
+        _codex_search_targets,
+        _codex_search_targets_are_source_like,
+        _git_grep_uses_external_execution,
+        _path_contains_symlink,
+        _shell_wrapper_script_index,
+    )
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
 
 def _codex_source_inspection_target_tokens(parts: list[str]) -> tuple[str, ...]:
     command_parts = _codex_unwrapped_command_parts(parts)
@@ -41,6 +72,7 @@ def _codex_source_inspection_target_tokens(parts: list[str]) -> tuple[str, ...]:
         return _codex_source_inspection_target_tokens(nested_parts)
     return ()
 
+
 def _codex_cat_targets(args: list[str]) -> list[str]:
     targets: list[str] = []
     after_option_terminator = False
@@ -55,6 +87,7 @@ def _codex_cat_targets(args: list[str]) -> list[str]:
             continue
         targets.append(arg)
     return targets
+
 
 def _codex_command_is_read_only_source_inspection(
     command_text: str,
@@ -97,6 +130,7 @@ def _codex_command_is_read_only_source_inspection(
         return False
     return all(_codex_command_is_bounded_read_only_filter(segment) for segment in filter_segments)
 
+
 def _codex_safe_source_cd_cwd(command_text: str, *, cwd: Path | None, home_dir: Path | None) -> Path | None:
     try:
         parts = shlex.split(command_text)
@@ -116,6 +150,7 @@ def _codex_safe_source_cd_cwd(command_text: str, *, cwd: Path | None, home_dir: 
     if _path_contains_symlink(target, base_dir=base_dir):
         return None
     return target
+
 
 def _split_codex_safe_read_only_chain(command: str) -> list[str] | None:
     segments: list[str] = []
@@ -163,6 +198,7 @@ def _split_codex_safe_read_only_chain(command: str) -> list[str] | None:
     segments.append(segment)
     return segments if len(segments) > 1 else None
 
+
 def _codex_command_has_unquoted_glob_metachar(command: str) -> bool:
     quote: str | None = None
     escaped = False
@@ -193,6 +229,7 @@ def _codex_command_has_unquoted_glob_metachar(command: str) -> bool:
             return True
         index += 1
     return False
+
 
 def _split_codex_safe_read_only_pipeline(command: str) -> list[str] | None:
     segments: list[str] = []
@@ -245,6 +282,7 @@ def _split_codex_safe_read_only_pipeline(command: str) -> list[str] | None:
     segments.append(stripped_segment)
     return segments
 
+
 def _strip_codex_safe_stderr_discard(segment: str) -> str | None:
     cleaned_segment = _remove_codex_safe_stderr_discard(segment)
     if cleaned_segment is None:
@@ -258,6 +296,7 @@ def _strip_codex_safe_stderr_discard(segment: str) -> str | None:
     if _codex_command_uses_untrusted_search_binary(parts[0]):
         return None
     return shlex.join(parts)
+
 
 def _remove_codex_safe_stderr_discard(segment: str) -> str | None:
     cleaned: list[str] = []
@@ -303,6 +342,7 @@ def _remove_codex_safe_stderr_discard(segment: str) -> str | None:
         index += 1
     return "".join(cleaned).strip()
 
+
 def _codex_command_is_bounded_read_only_filter(command_text: str) -> bool:
     try:
         parts = shlex.split(command_text)
@@ -318,6 +358,7 @@ def _codex_command_is_bounded_read_only_filter(command_text: str) -> bool:
     if executable == "sed":
         return _codex_sed_args_are_bounded_filter(parts[1:])
     return _codex_head_tail_args_are_bounded_filter(parts[1:])
+
 
 def _codex_command_is_read_only_source_view(
     command_text: str,
@@ -346,6 +387,7 @@ def _codex_command_is_read_only_source_view(
     if executable in {"head", "tail"}:
         return _codex_head_tail_targets_are_source_like(parts[1:], cwd=cwd, home_dir=home_dir)
     return _codex_cat_targets_are_source_like(parts[1:], cwd=cwd, home_dir=home_dir)
+
 
 def _codex_command_is_read_only_source_search(
     command_text: str,
@@ -387,8 +429,10 @@ def _codex_command_is_read_only_source_search(
         return _codex_command_is_read_only_source_search(parts[script_index], cwd=cwd, home_dir=home_dir)
     return False
 
+
 def _codex_command_uses_untrusted_search_binary(executable_token: str) -> bool:
     return executable_token.startswith(".") or "/" in executable_token or "\\" in executable_token
+
 
 def _codex_cat_targets_are_source_like(args: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:
     targets: list[str] = []
@@ -409,9 +453,11 @@ def _codex_cat_targets_are_source_like(args: list[str], *, cwd: Path | None, hom
         _codex_search_target_is_source_like(target, cwd=cwd, home_dir=home_dir) for target in targets
     )
 
+
 def _codex_head_tail_args_are_bounded_filter(args: list[str]) -> bool:
     targets, valid, skip_next = _parse_codex_head_tail_args(args)
     return valid and not skip_next and not targets
+
 
 def _codex_head_tail_targets_are_source_like(args: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:
     targets, valid, skip_next = _parse_codex_head_tail_args(args)
@@ -421,6 +467,7 @@ def _codex_head_tail_targets_are_source_like(args: list[str], *, cwd: Path | Non
         and bool(targets)
         and all(_codex_search_target_is_source_like(target, cwd=cwd, home_dir=home_dir) for target in targets)
     )
+
 
 def _parse_codex_head_tail_args(args: list[str]) -> tuple[list[str], bool, bool]:
     targets: list[str] = []
@@ -455,6 +502,7 @@ def _parse_codex_head_tail_args(args: list[str]) -> tuple[list[str], bool, bool]
         targets.append(arg)
     return targets, True, skip_next
 
+
 def _codex_sed_targets_are_read_only_source_like(args: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:
     parsed = _parse_codex_sed_read_only_args(args)
     if parsed is None:
@@ -466,6 +514,7 @@ def _codex_sed_targets_are_read_only_source_like(args: list[str], *, cwd: Path |
         and all(_codex_search_target_is_source_like(target, cwd=cwd, home_dir=home_dir) for target in parsed.targets)
     )
 
+
 def _codex_sed_args_are_bounded_filter(args: list[str]) -> bool:
     parsed = _parse_codex_sed_read_only_args(args)
     if parsed is None:
@@ -475,6 +524,7 @@ def _codex_sed_args_are_bounded_filter(args: list[str]) -> bool:
         and parsed.saw_print_suppression
         and all(sed_script_is_bounded_print(script) for script in parsed.scripts)
     )
+
 
 __all__ = [
     "_codex_cat_targets",

@@ -1,12 +1,39 @@
 """Guard CLI helper definitions."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .commands_support_codex_commands import (
+        _CODEX_BENIGN_SOURCE_DOTFILES,
+        _CODEX_SEARCH_OPTION_VALUE_FLAGS,
+        _CODEX_SEARCH_OPTION_VALUE_FLAGS_BY_EXECUTABLE,
+        _CODEX_SEARCH_PATTERN_VALUE_FLAGS,
+        _CODEX_SEARCH_UNSAFE_FLAGS,
+        _CODEX_SEARCH_UNSAFE_SHORT_FLAGS_BY_EXECUTABLE,
+        _CODEX_SENSITIVE_SEARCH_BASENAMES,
+        _CODEX_SOURCE_SEARCH_EXTENSIONS,
+        _CODEX_SOURCE_SEARCH_PREFIXES,
+    )
+    from .commands_support_codex_reads import _codex_sed_args_are_bounded_filter
+    from .commands_support_runtime_artifacts import (
+        _CODEX_PROMPT_FILE_FINGERPRINT_LENGTH,
+        _CODEX_TOOL_RESPONSE_MAX_DEPTH,
+        _CODEX_TOOL_RESPONSE_TEXT_LIMIT,
+    )
+    from .commands_support_runtime_resolution import (
+        _redact_codex_prompt_secret_assignments,
+        _resolve_prompt_scan_path,
+        _truncate_codex_display_text,
+    )
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
 
 def _git_config_value_without_inline_comment(raw_value: str) -> str:
     value = raw_value.strip()
@@ -33,10 +60,12 @@ def _git_config_value_without_inline_comment(raw_value: str) -> str:
             return value[:index].strip()
     return value
 
+
 def _git_config_enables_diff_helper(config_text: str) -> bool:
     return any(
         re.match(r"(?i)^\s*(?:command|external|textconv)\s*=", line) for line in _git_config_logical_lines(config_text)
     )
+
 
 def _git_config_logical_lines(config_text: str) -> tuple[str, ...]:
     lines: list[str] = []
@@ -55,6 +84,7 @@ def _git_config_logical_lines(config_text: str) -> tuple[str, ...]:
         lines.append(pending)
     return tuple(lines)
 
+
 def _git_config_line_continues(line: str) -> bool:
     backslashes = 0
     for char in reversed(line):
@@ -62,6 +92,7 @@ def _git_config_line_continues(line: str) -> bool:
             break
         backslashes += 1
     return backslashes % 2 == 1
+
 
 def _git_grep_uses_external_execution(args: list[str]) -> bool:
     return any(
@@ -73,6 +104,7 @@ def _git_grep_uses_external_execution(args: list[str]) -> bool:
         for arg in args
     )
 
+
 def _shell_wrapper_script_index(parts: list[str]) -> int | None:
     for index, arg in enumerate(parts[1:], start=1):
         if arg == "-c":
@@ -80,6 +112,7 @@ def _shell_wrapper_script_index(parts: list[str]) -> int | None:
         if arg.startswith("-") and not arg.startswith("--") and "c" in arg[1:]:
             return index + 1
     return None
+
 
 def _codex_command_has_unquoted_shell_control(command: str) -> bool:
     quote: str | None = None
@@ -110,6 +143,7 @@ def _codex_command_has_unquoted_shell_control(command: str) -> bool:
             return True
     return False
 
+
 def _codex_search_targets_are_source_like(
     args: list[str],
     *,
@@ -124,6 +158,7 @@ def _codex_search_targets_are_source_like(
         _codex_search_target_is_source_like(target, cwd=cwd, home_dir=home_dir) for target in targets
     )
 
+
 def _codex_fd_targets_are_source_like(args: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:
     if fd_args_follow_symlinks(args):
         return False
@@ -132,8 +167,10 @@ def _codex_fd_targets_are_source_like(args: list[str], *, cwd: Path | None, home
         return False
     return all(_codex_search_target_is_source_like(target, cwd=cwd, home_dir=home_dir) for target in targets)
 
+
 def _codex_fd_targets(args: list[str]) -> tuple[str, ...]:
     return fd_search_targets(args) or ("__guard_unsafe_fd_args__",)
+
 
 def _codex_fd_exec_is_bounded_read_only(args: list[str]) -> bool:
     if fd_args_follow_symlinks(args):
@@ -148,6 +185,7 @@ def _codex_fd_exec_is_bounded_read_only(args: list[str]) -> bool:
         return False
     sed_args = [arg for arg in exec_parts[1:] if arg != "{}"]
     return _codex_sed_args_are_bounded_filter(sed_args)
+
 
 def _codex_search_targets(args: list[str], *, executable: str) -> tuple[str, ...]:
     positional: list[str] = []
@@ -193,6 +231,7 @@ def _codex_search_targets(args: list[str], *, executable: str) -> tuple[str, ...
         return tuple(positional[1:])
     return ()
 
+
 def _codex_search_arg_is_unsafe(arg: str, *, executable: str, option_value_flags: frozenset[str]) -> bool:
     if arg in _CODEX_SEARCH_UNSAFE_FLAGS:
         return True
@@ -207,6 +246,7 @@ def _codex_search_arg_is_unsafe(arg: str, *, executable: str, option_value_flags
         if f"-{flag}" in option_value_flags:
             return False
     return False
+
 
 def _codex_search_target_is_source_like(target: str, *, cwd: Path | None, home_dir: Path | None) -> bool:
     stripped = target.strip().strip("'\"")
@@ -264,6 +304,7 @@ def _codex_search_target_is_source_like(target: str, *, cwd: Path | None, home_d
         return True
     return Path(stripped).suffix.lower() in _CODEX_SOURCE_SEARCH_EXTENSIONS
 
+
 def _codex_resolve_source_like_path(target: str, *, cwd: Path | None, home_dir: Path | None) -> Path | None:
     stripped = target.strip().strip("'\"")
     if not stripped:
@@ -281,6 +322,7 @@ def _codex_resolve_source_like_path(target: str, *, cwd: Path | None, home_dir: 
         return target_path
     return (cwd or Path.cwd()).resolve() / target_path
 
+
 def _codex_absolute_search_target_is_source_like(target_path: Path) -> bool:
     parts = [part for part in target_path.parts if part not in {"", "/", "."}]
     if not parts:
@@ -295,6 +337,7 @@ def _codex_absolute_search_target_is_source_like(target_path: Path) -> bool:
     if any(f"/{prefix}" in f"/{normalized}" for prefix in _CODEX_SOURCE_SEARCH_PREFIXES):
         return True
     return target_path.suffix.lower() in _CODEX_SOURCE_SEARCH_EXTENSIONS
+
 
 def _path_contains_symlink(path: Path, *, base_dir: Path) -> bool:
     candidate = base_dir
@@ -312,6 +355,7 @@ def _path_contains_symlink(path: Path, *, base_dir: Path) -> bool:
         except OSError:
             return True
     return False
+
 
 def _collect_codex_tool_response_text(value: object, *, depth: int = 0) -> str:
     if depth > _CODEX_TOOL_RESPONSE_MAX_DEPTH:
@@ -332,6 +376,7 @@ def _collect_codex_tool_response_text(value: object, *, depth: int = 0) -> str:
             :_CODEX_TOOL_RESPONSE_TEXT_LIMIT
         ]
     return ""
+
 
 _PROMPT_PATH_TOKEN_PATTERN = re.compile(
     r"(?<![\w/.-])\.[A-Za-z0-9][A-Za-z0-9_.-]{0,255}|"
@@ -363,6 +408,7 @@ _PROMPT_CONTENT_SCAN_SECRET_BASENAME_MARKERS = frozenset(
         "token",
     }
 )
+
 
 def _codex_prompt_credential_file_artifact(
     *,
@@ -426,9 +472,11 @@ def _codex_prompt_credential_file_artifact(
         )
     return None
 
+
 def _prompt_path_looks_secret_bearing(path: Path) -> bool:
     lowered_name = path.name.lower()
     return any(marker in lowered_name for marker in _PROMPT_CONTENT_SCAN_SECRET_BASENAME_MARKERS)
+
 
 def _with_codex_prompt_display_metadata(artifact: GuardArtifact, *, prompt_text: str) -> GuardArtifact:
     matched_text = artifact.metadata.get("prompt_matched_text")
@@ -444,6 +492,7 @@ def _with_codex_prompt_display_metadata(artifact: GuardArtifact, *, prompt_text:
     }
     return replace(artifact, metadata=metadata)
 
+
 def _codex_prompt_display_text(prompt_text: str, *, requested_path: str | None = None) -> str:
     sanitized_prompt = _sanitize_codex_display_text(prompt_text)
     path_suffix = ""
@@ -451,11 +500,13 @@ def _codex_prompt_display_text(prompt_text: str, *, requested_path: str | None =
         path_suffix = f" for `{_sanitize_codex_display_text(requested_path.strip())}`"
     return f"Codex prompt{path_suffix}: {_truncate_codex_display_text(sanitized_prompt, limit=320)}"
 
+
 def _sanitize_codex_display_text(value: str) -> str:
     collapsed = " ".join(value.strip().split())
     redacted = _redact_codex_prompt_secret_assignments(collapsed)
     sanitized = re.sub(r"/(?:Users|home)/[^/\s]+", "~", redacted)
     return re.sub(r"[A-Za-z]:\\Users\\[^\\\s]+", "~", sanitized)
+
 
 __all__ = [
     "_PROMPT_CONTENT_SCAN_MAX_BYTES",

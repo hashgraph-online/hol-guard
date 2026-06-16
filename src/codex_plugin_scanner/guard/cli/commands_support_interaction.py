@@ -1,12 +1,48 @@
 """Guard CLI helper definitions."""
 
 # fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
+import importlib
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS, _hook_command_text, _now
+    from .commands_support_hook_payload import _browser_url_with_guard_params
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
+
+def _runtime_artifacts_module():
+    return importlib.import_module(".commands_support_runtime_artifacts", __package__)
+
+
+def _hook_state_module():
+    return importlib.import_module(".commands_support_hook_state", __package__)
+
+
+def _runtime_resolution_module():
+    return importlib.import_module(".commands_support_runtime_resolution", __package__)
+
+
+def _optional_string(value: object | None) -> str | None:
+    return _runtime_artifacts_module()._optional_string(value)
+
+
+def _update_codex_browser_operation_status(
+    response_payload: dict[str, object],
+    daemon_client: object | None,
+    status: str,
+) -> None:
+    _hook_state_module()._update_codex_browser_operation_status(response_payload, daemon_client, status)
+
+
+def _canonical_harness_name(value: str) -> str:
+    return _runtime_resolution_module()._canonical_harness_name(value)
 
 def _run_apps_command(
     args: argparse.Namespace,
@@ -62,7 +98,7 @@ def _run_apps_command(
             return 2
         expected_confirmation = uninstall_confirmation_token(canonical_harness)
         if getattr(args, "confirm", None) != expected_confirmation:
-            payload = {
+            payload: dict[str, object] = {
                 "error": "confirmation_required",
                 "harness": canonical_harness,
                 "confirmation_phrase": expected_confirmation,
@@ -336,7 +372,8 @@ def _codex_browser_approval_decision(
             "Approval is still pending in HOL Guard. Approve it in the browser, then retry the same Codex action."
         )
         return None
-    resolved_items = [item for item in wait_result.get("items", []) if isinstance(item, dict)]
+    wait_items = wait_result.get("items")
+    resolved_items = [item for item in (wait_items if isinstance(wait_items, list) else []) if isinstance(item, dict)]
     if any(str(item.get("resolution_action")) == "block" for item in resolved_items):
         _update_codex_browser_operation_status(response_payload, daemon_client, "blocked")
         response_payload["review_hint"] = "Browser decision saved. HOL Guard kept this Codex action blocked."
@@ -417,13 +454,18 @@ def _codex_pretooluse_live_wait_candidate(payload: Mapping[str, object] | None) 
                 or ""
             )
     if not command_text:
+        risk_signals = payload.get("risk_signals")
         text_parts = [
             str(payload.get("artifact_name", "")),
             str(payload.get("risk_summary", "")),
             str(payload.get("risk_headline", "")),
             str(payload.get("trigger_summary", "")),
-            " ".join(str(item) for item in payload.get("risk_signals", []) if isinstance(item, str))
-            if isinstance(payload.get("risk_signals"), list)
+            " ".join(
+                str(item)
+                for item in (risk_signals if isinstance(risk_signals, list) else [])
+                if isinstance(item, str)
+            )
+            if isinstance(risk_signals, list)
             else "",
         ]
         command_text = " ".join(text_parts)
@@ -446,7 +488,7 @@ def _attach_primary_approval_link(
         approval_center_url=approval_center_url,
     )
 
-def _primary_approval_lookup_kwargs(response_payload: dict[str, object], *, harness: str) -> dict[str, object]:
+def _primary_approval_lookup_kwargs(response_payload: dict[str, object], *, harness: str) -> dict[str, str | None]:
     return {
         "harness": harness,
         "approval_center_url": _optional_string(response_payload.get("approval_center_url")),

@@ -5,6 +5,20 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _now
+    from .commands_support_codex_git import _git_repo_root
+    from .commands_support_connect import (
+        _announce_guard_device_connect_copy,
+        _finalize_guard_connect_payload,
+        _run_guard_device_connect_flow,
+    )
+    from .commands_support_hook_payload import _open_approval_center
+    from .commands_support_interaction import _emit
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -214,15 +228,17 @@ def _run_init_command(
 
     for step in init_plan:
         step_id = str(step.get("id") or "")
+        step_payload: dict[str, object]
         if not _approve_init_step(args, step, interactive=interactive):
             step_payload = _skip_init_step_payload(step)
         else:
             approved_any = True
             if step_id == "dashboard":
                 try:
-                    approval_center_url = ensure_guard_daemon(context.guard_home)
+                    dashboard_url = ensure_guard_daemon(context.guard_home)
+                    approval_center_url = dashboard_url
                     open_result = _open_approval_center(
-                        approval_center_url,
+                        dashboard_url,
                         store=store,
                         config=config,
                         open_key="init",
@@ -310,7 +326,7 @@ def _run_init_command(
         if interactive:
             _print_init_step_complete(step, step_payload)
 
-    payload = {
+    payload: dict[str, object] = {
         "generated_at": _now(),
         "status": "needs_attention" if init_failed else ("initialized" if approved_any else "approval_required"),
         "mode": "auto_approved" if bool(getattr(args, "yes", False)) else "progressive",

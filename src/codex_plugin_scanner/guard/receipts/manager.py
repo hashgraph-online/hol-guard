@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
+from typing import TypeGuard
 from uuid import uuid4
 
-from ..models import GuardReceipt
+from ..models import GUARD_ACTION_VALUES, GuardAction, GuardReceipt
 from ..runtime.actions import GuardActionEnvelope
 
 
@@ -42,6 +43,14 @@ def _auto_diff_summary(changed_capabilities: list[str]) -> str:
     return f"{count} change(s): {sample}{suffix}"
 
 
+def _is_guard_action(value: str) -> TypeGuard[GuardAction]:
+    return value in GUARD_ACTION_VALUES
+
+
+def _resolve_policy_decision(value: str) -> GuardAction:
+    return value if _is_guard_action(value) else "require-reapproval"
+
+
 def build_receipt(
     harness: str,
     artifact_id: str,
@@ -63,6 +72,7 @@ def build_receipt(
     resolved_diff_summary = diff_summary
     if resolved_diff_summary is None and changed_capabilities:
         resolved_diff_summary = _auto_diff_summary(changed_capabilities)
+    resolved_policy_decision = _resolve_policy_decision(policy_decision)
 
     return GuardReceipt(
         receipt_id=f"guard-receipt-{uuid4()}",
@@ -70,7 +80,7 @@ def build_receipt(
         harness=harness,
         artifact_id=artifact_id,
         artifact_hash=artifact_hash,
-        policy_decision=policy_decision,  # type: ignore[arg-type]
+        policy_decision=resolved_policy_decision,
         capabilities_summary=capabilities_summary,
         changed_capabilities=tuple(changed_capabilities),
         provenance_summary=provenance_summary,

@@ -13,7 +13,6 @@ from pathlib import Path
 
 from ...path_support import resolves_within_root
 from ..models import GuardArtifact, HarnessDetection
-from ..shims import install_guard_shim, remove_guard_shim
 from .contracts import HarnessCoverageSummary, HarnessSetupContract, HarnessSetupStep, setup_contract_for
 
 
@@ -114,6 +113,8 @@ class HarnessAdapter:
         raise NotImplementedError
 
     def install(self, context: HarnessContext) -> dict[str, object]:
+        from ..shims import install_guard_shim
+
         shim_manifest = install_guard_shim(self.harness, context)
         return {
             "harness": self.harness,
@@ -123,6 +124,8 @@ class HarnessAdapter:
         }
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
+        from ..shims import remove_guard_shim
+
         shim_manifest = remove_guard_shim(self.harness, context)
         return {
             "harness": self.harness,

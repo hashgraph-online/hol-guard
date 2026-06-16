@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
+from collections.abc import Mapping
 from pathlib import Path
+from typing import TypeGuard
 
 from .manager import (
     clear_guard_daemon_state,
@@ -25,6 +27,10 @@ class GuardDaemonTransportError(GuardDaemonRequestError):
 
 _DEFAULT_REQUEST_TIMEOUT_S: float = 5.0
 _STATUS_REQUEST_TIMEOUT_S: float = 0.25
+
+
+def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, Mapping) and all(isinstance(key, str) for key in value)
 
 
 class GuardSurfaceDaemonClient:
@@ -115,7 +121,8 @@ class GuardSurfaceDaemonClient:
             f"/v1/operations/{operation_id}/items",
             {"item_type": item_type, "payload": payload},
         )
-        return dict(response["item"]) if isinstance(response.get("item"), dict) else response
+        item = response.get("item")
+        return dict(item) if _is_string_object_dict(item) else response
 
     def update_operation_status(
         self,
@@ -131,7 +138,8 @@ class GuardSurfaceDaemonClient:
                 "approval_request_ids": approval_request_ids or [],
             },
         )
-        return dict(response["operation"]) if isinstance(response.get("operation"), dict) else response
+        operation = response.get("operation")
+        return dict(operation) if _is_string_object_dict(operation) else response
 
     def _post(
         self,

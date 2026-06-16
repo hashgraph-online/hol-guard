@@ -100,7 +100,16 @@ def check_marketplace_json(plugin_dir: Path) -> CheckResult:
                 ),
             ),
         )
-    for i, plugin in enumerate(data["plugins"]):
+    raw_plugins = data["plugins"]
+    if not isinstance(raw_plugins, list):
+        return CheckResult(
+            name="marketplace.json valid",
+            passed=False,
+            points=0,
+            max_points=5,
+            message='marketplace.json missing "plugins" array',
+        )
+    for i, plugin in enumerate(raw_plugins):
         if not isinstance(plugin, dict):
             return CheckResult(
                 name="marketplace.json valid",
@@ -208,7 +217,8 @@ def check_policy_fields(plugin_dir: Path) -> CheckResult:
             message="No marketplace.json found, check not applicable",
             applicable=False,
         )
-    plugins = context.payload.get("plugins", [])
+    raw_plugins = context.payload.get("plugins")
+    plugins = raw_plugins if isinstance(raw_plugins, list) else []
     if not plugins:
         return CheckResult(
             name="Policy fields present",
@@ -278,7 +288,9 @@ def check_sources_safe(plugin_dir: Path) -> CheckResult:
         )
 
     unsafe: list[str] = []
-    for index, plugin in enumerate(context.payload.get("plugins", [])):
+    raw_plugins = context.payload.get("plugins")
+    plugins = raw_plugins if isinstance(raw_plugins, list) else []
+    for index, plugin in enumerate(plugins):
         if not isinstance(plugin, dict):
             unsafe.append(f"plugin[{index}]=invalid-entry")
             continue

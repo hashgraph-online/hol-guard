@@ -9,6 +9,7 @@ import argparse
 import fnmatch
 import hashlib
 import http.client
+import importlib
 import json
 import os
 import re
@@ -92,12 +93,6 @@ from ..consumer import (
     record_policy,
     run_consumer_scan,
 )
-from ..daemon import (
-    GuardDaemonServer,
-    ensure_guard_daemon,
-    load_guard_surface_daemon_client,
-    repair_approval_center_locator,
-)
 from ..daemon.manager import (
     _guard_daemon_pid_is_running,
     _guard_daemon_pid_matches_command,
@@ -138,14 +133,6 @@ from ..package_firewall_entitlement import (
 )
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS, build_decision_v2, guard_action_severity
 from ..protect import build_protect_payload
-from ..proxy import (
-    CodexMcpGuardProxy,
-    CopilotMcpGuardProxy,
-    CursorMcpGuardProxy,
-    OpenCodeMcpGuardProxy,
-    RemoteGuardProxy,
-    StdioGuardProxy,
-)
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals, artifact_risk_signals_v2, artifact_risk_summary
 from ..runtime.actions import GuardActionEnvelope, normalize_harness_payload
@@ -202,15 +189,7 @@ from ..runtime.supply_chain_package_eval import evaluate_package_request_artifac
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..shims import activate_package_shims, package_shim_status, uninstall_package_shims
 from ..store import GuardStore
-from .approval_commands import (
-    add_approval_parser,
-    run_approval_command,
-    run_approval_open_command,
-    run_approval_resume_command,
-    run_approval_retry_hint_command,
-)
 from .approval_gate_prompt import approval_gate_cli_payload, prompt_for_approval_gate
-from .bootstrap import DEFAULT_ALIAS_NAME, build_guard_bootstrap_payload
 from .connect_flow import (
     CONNECT_SYNC_AUTH_CONTEXT_KEY,
     DEFAULT_GUARD_CONNECT_URL,
@@ -233,7 +212,6 @@ from .install_commands import (
     list_harness_setup_items,
     uninstall_confirmation_token,
 )
-from .product import build_guard_start_payload, build_guard_status_payload
 from .protect_approvals import _queue_local_protect_approvals, _suppress_package_shim_allow_output
 from .remote_pair_flow import dispatch_guard_remote_pair_command
 from .update_commands import run_guard_update
@@ -372,8 +350,49 @@ _SETTINGS_POLICY_RISK_ACTIONS: dict[str, dict[str, dict[str, str]]] = {
     },
 }
 
+def _load_lazy_export(module_name: str, attribute_name: str):
+    return getattr(importlib.import_module(module_name, __package__), attribute_name)
+
+
+GuardDaemonServer = _load_lazy_export("..daemon", "GuardDaemonServer")
+ensure_guard_daemon = _load_lazy_export("..daemon", "ensure_guard_daemon")
+load_guard_surface_daemon_client = _load_lazy_export("..daemon", "load_guard_surface_daemon_client")
+repair_approval_center_locator = _load_lazy_export("..daemon", "repair_approval_center_locator")
+CodexMcpGuardProxy = _load_lazy_export("..proxy", "CodexMcpGuardProxy")
+CopilotMcpGuardProxy = _load_lazy_export("..proxy", "CopilotMcpGuardProxy")
+CursorMcpGuardProxy = _load_lazy_export("..proxy", "CursorMcpGuardProxy")
+OpenCodeMcpGuardProxy = _load_lazy_export("..proxy", "OpenCodeMcpGuardProxy")
+RemoteGuardProxy = _load_lazy_export("..proxy", "RemoteGuardProxy")
+StdioGuardProxy = _load_lazy_export("..proxy", "StdioGuardProxy")
+add_approval_parser = _load_lazy_export(".approval_commands", "add_approval_parser")
+run_approval_command = _load_lazy_export(".approval_commands", "run_approval_command")
+run_approval_open_command = _load_lazy_export(".approval_commands", "run_approval_open_command")
+run_approval_resume_command = _load_lazy_export(".approval_commands", "run_approval_resume_command")
+run_approval_retry_hint_command = _load_lazy_export(".approval_commands", "run_approval_retry_hint_command")
+DEFAULT_ALIAS_NAME = _load_lazy_export(".bootstrap", "DEFAULT_ALIAS_NAME")
+build_guard_bootstrap_payload = _load_lazy_export(".bootstrap", "build_guard_bootstrap_payload")
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _require_guard_store(store: GuardStore | None) -> GuardStore:
+    if store is None:
+        raise RuntimeError("Guard store is required")
+    return store
+
+
+def _require_guard_context(context: HarnessContext | None) -> HarnessContext:
+    if context is None:
+        raise RuntimeError("Guard context is required")
+    return context
+
+
+def _require_guard_config(config: GuardConfig | None) -> GuardConfig:
+    if config is None:
+        raise RuntimeError("Guard config is required")
+    return config
+
 
 __all__ = [name for name in globals() if not name.startswith("__")]

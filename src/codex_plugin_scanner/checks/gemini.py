@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import importlib
+import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING or sys.version_info >= (3, 11):
+    import tomllib
+else:
+    tomllib = importlib.import_module("tomli")
+
 from ..ecosystems.types import NormalizedPackage
 from ..models import CheckResult, Finding, Severity
-from .ecosystem_common import SEMVER_RE
-
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib
-
 from ..path_support import is_safe_relative_path
+from .ecosystem_common import SEMVER_RE
 
 
 def _finding(

@@ -20,11 +20,12 @@ from .quality_artifact import build_quality_artifact, write_quality_artifact
 from .reporting import format_json as render_json
 from .reporting import format_markdown, format_sarif, should_fail_for_severity
 from .rules import get_rule_spec, list_rule_specs
+from .rules.specs import RuleSpec
 from .scanner import scan_plugin
 from .suppressions import apply_severity_overrides, apply_suppressions, compute_effective_score
 from .verification import build_doctor_report, build_verification_payload, verify_plugin
 
-RuleSpecLookup = Callable[[str], object | None]
+RuleSpecLookup = Callable[[str], RuleSpec | None]
 
 
 def _format_scan_json(

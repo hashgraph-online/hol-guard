@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import re
 from pathlib import Path
 
-try:
-    import tomllib  # type: ignore[attr-defined]
-except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redef]
+tomllib = importlib.import_module("tomllib" if __import__("sys").version_info >= (3, 11) else "tomli")
 
 
 _BARE_KEY_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import TypeGuard
 
 from ..config import GuardConfig
-from ..models import GuardAction
+from ..models import GUARD_ACTION_VALUES, GuardAction
 from ..runtime.decisions import GuardDecisionV2, decision_from_legacy_policy_action
 from ..runtime.signals import RiskSignalV2
 
@@ -22,6 +23,10 @@ _GUARD_ACTION_SEVERITY = {
 }
 
 
+def _is_guard_action(value: object) -> TypeGuard[GuardAction]:
+    return isinstance(value, str) and value in GUARD_ACTION_VALUES
+
+
 def decide_action(
     configured_action: str | None,
     default_action: str | None,
@@ -30,15 +35,15 @@ def decide_action(
 ) -> GuardAction:
     """Resolve the effective policy action."""
 
-    if configured_action in VALID_GUARD_ACTIONS:
+    if _is_guard_action(configured_action):
         return configured_action
     if changed:
-        if config.changed_hash_action in VALID_GUARD_ACTIONS:
+        if _is_guard_action(config.changed_hash_action):
             return config.changed_hash_action
         return SAFE_CHANGED_HASH_ACTION
-    if default_action in VALID_GUARD_ACTIONS:
+    if _is_guard_action(default_action):
         return default_action
-    if config.default_action in VALID_GUARD_ACTIONS:
+    if _is_guard_action(config.default_action):
         return config.default_action
     return SAFE_DEFAULT_ACTION
 

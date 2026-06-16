@@ -62,7 +62,7 @@ Consequences:
 
 def _fetch_npm_attestations(package: str, version: str) -> dict[str, Any]:
     """Fetch npm attestation data from the official npm registry API."""
-    encoded = urllib.request.quote(f"{package}/-/{package}-{version}.tgz", safe="@/")
+    encoded = urllib.parse.quote(f"{package}/-/{package}-{version}.tgz", safe="@/")
     url = f"https://registry.npmjs.org/-/npm/v1/attestations/{encoded}"
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=10) as resp:

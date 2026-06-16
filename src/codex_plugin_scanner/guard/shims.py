@@ -11,7 +11,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Protocol
 
 from .launcher import merge_guard_launcher_env
 from .package_shim_status import enrich_package_shim_status_payload
@@ -24,8 +24,19 @@ from .shim_probe import (
 )
 from .stable_digest import stable_digest_hex
 
-if TYPE_CHECKING:
-    from .adapters.base import HarnessContext
+
+class HarnessContextLike(Protocol):
+    @property
+    def home_dir(self) -> Path: ...
+
+    @property
+    def workspace_dir(self) -> Path | None: ...
+
+    @property
+    def guard_home(self) -> Path: ...
+
+
+HarnessContext = HarnessContextLike
 
 _PACKAGE_SHIM_COMMANDS = {
     "bun": "bun",
@@ -79,7 +90,7 @@ _TRUSTED_CLI_LAUNCHER = (
 
 def install_guard_shim(
     harness: str,
-    context: HarnessContext,
+    context: HarnessContextLike,
     *,
     launcher_name: str | None = None,
     display_name: str | None = None,
@@ -112,7 +123,7 @@ def install_guard_shim(
 
 def remove_guard_shim(
     harness: str,
-    context: HarnessContext,
+    context: HarnessContextLike,
     *,
     launcher_name: str | None = None,
     legacy_launcher_names: tuple[str, ...] = (),
@@ -141,7 +152,7 @@ def remove_guard_shim(
     }
 
 
-def _build_python_shim(harness: str, context: HarnessContext, workspace_args: list[str]) -> str:
+def _build_python_shim(harness: str, context: HarnessContextLike, workspace_args: list[str]) -> str:
     command_args = [
         sys.executable,
         *_trusted_python_flags(),
@@ -188,7 +199,7 @@ def _build_windows_script(posix_path: Path) -> str:
     return "\r\n".join(("@echo off", f'"{sys.executable}" "{posix_path}" %*', ""))
 
 
-def _home_override_args(context: HarnessContext) -> list[str]:
+def _home_override_args(context: HarnessContextLike) -> list[str]:
     if not context.home_dir:
         return []
     if context.home_dir.resolve() == Path.home().resolve():
@@ -443,13 +454,12 @@ def install_package_shims(
     existing_manifest = _load_package_shim_manifest(context)
     existing_managers = tuple(
         manager
-        for manager in existing_manifest.get("installed_managers", [])
-        if isinstance(manager, str) and manager in _PACKAGE_SHIM_COMMANDS
+        for manager in _string_items(existing_manifest.get("installed_managers"))
+        if manager in _PACKAGE_SHIM_COMMANDS
     )
     tracked_managers = tuple(dict.fromkeys([*existing_managers, *normalized_managers]))
-    existing_hashes: dict[str, str] = existing_manifest.get("content_hashes", {})
-    existing_last_tests = existing_manifest.get("last_test_at", {})
-    last_test_at = dict(existing_last_tests) if isinstance(existing_last_tests, dict) else {}
+    existing_hashes = _string_map(existing_manifest.get("content_hashes"))
+    last_test_at = dict(_string_map(existing_manifest.get("last_test_at")))
     installed: list[str] = []
     content_hashes: dict[str, str] = dict(existing_hashes)
     for manager in normalized_managers:
@@ -462,7 +472,7 @@ def install_package_shims(
         windows_path.write_text(_build_windows_script(posix_path), encoding="utf-8")
         content_hashes[manager] = build_shim_content_hash(posix_path.read_bytes())
         installed.append(manager)
-    manifest_payload = {
+    manifest_payload: dict[str, object] = {
         "content_hashes": content_hashes,
         "installed_managers": list(tracked_managers),
         "last_test_at": last_test_at,
@@ -517,16 +527,14 @@ def activate_package_shims(
 def package_shim_status(context: HarnessContext) -> dict[str, object]:
     manifest = _load_package_shim_manifest(context)
     installed_managers = [
-        manager
-        for manager in manifest.get("installed_managers", [])
-        if isinstance(manager, str) and manager in _PACKAGE_SHIM_COMMANDS
+        manager for manager in _string_items(manifest.get("installed_managers")) if manager in _PACKAGE_SHIM_COMMANDS
     ]
     last_test_at = manifest.get("last_test_at", {})
     normalized_last_tests = last_test_at if isinstance(last_test_at, dict) else {}
     detected_managers, undetected_managers = _detect_system_package_managers(context)
     detected_set = set(detected_managers)
     shim_dir = context.guard_home / "package-shims" / "bin"
-    stored_hashes: dict[str, str] = manifest.get("content_hashes", {})
+    stored_hashes = _string_map(manifest.get("content_hashes"))
     active_managers: list[str] = []
     protected_managers: list[str] = []
     missing_managers: list[str] = []
@@ -624,11 +632,11 @@ def package_shim_cloud_coverage(
     status = package_shim_status(context)
     return {
         "generatedAt": generated_at or datetime.now(timezone.utc).isoformat(),
-        "configuredManagers": list(status["installed_managers"]),
-        "protectedManagers": list(status["protected_managers"]),
-        "missingManagers": list(status["missing_managers"]),
+        "configuredManagers": list(_string_items(status.get("installed_managers"))),
+        "protectedManagers": list(_string_items(status.get("protected_managers"))),
+        "missingManagers": list(_string_items(status.get("missing_managers"))),
         "pathActive": bool(status["path_active"]),
-        "bypasses": list(status["bypasses"]),
+        "bypasses": list(_dict_items(status.get("bypasses"))),
     }
 
 
@@ -639,9 +647,7 @@ def uninstall_package_shims(
 ) -> dict[str, object]:
     manifest = _load_package_shim_manifest(context)
     manifest_managers = tuple(
-        manager
-        for manager in manifest.get("installed_managers", [])
-        if isinstance(manager, str) and manager in _PACKAGE_SHIM_COMMANDS
+        manager for manager in _string_items(manifest.get("installed_managers")) if manager in _PACKAGE_SHIM_COMMANDS
     )
     requested_managers = _normalize_package_shim_managers(managers) if managers else manifest_managers
     shim_dir = context.guard_home / "package-shims" / "bin"
@@ -656,17 +662,13 @@ def uninstall_package_shims(
     remaining = [manager for manager in manifest_managers if manager not in requested_managers]
     manifest_path = _package_shim_manifest_path(context)
     if remaining:
-        manifest_hashes = manifest.get("content_hashes")
+        manifest_hashes = _string_map(manifest.get("content_hashes"))
         content_hashes = {
-            manager: hash_value
-            for manager, hash_value in (manifest_hashes.items() if isinstance(manifest_hashes, dict) else ())
-            if manager in remaining and isinstance(hash_value, str)
+            manager: hash_value for manager, hash_value in manifest_hashes.items() if manager in remaining
         }
-        manifest_last_tests = manifest.get("last_test_at", {})
+        manifest_last_tests = _string_map(manifest.get("last_test_at"))
         last_test_at = {
-            manager: timestamp
-            for manager, timestamp in (manifest_last_tests.items() if isinstance(manifest_last_tests, dict) else ())
-            if manager in remaining and isinstance(timestamp, str)
+            manager: timestamp for manager, timestamp in manifest_last_tests.items() if manager in remaining
         }
         _write_package_shim_manifest(
             context,
@@ -702,9 +704,7 @@ def repair_package_shims(
     selected_managers = set(_normalize_package_shim_managers(managers)) if managers else None
     managers_to_repair: list[str] = []
     path_repair_required: list[str] = []
-    for detail in status.get("manager_details", []):
-        if not isinstance(detail, dict):
-            continue
+    for detail in _dict_items(status.get("manager_details")):
         manager = detail.get("manager")
         if not isinstance(manager, str):
             continue
@@ -965,6 +965,24 @@ def _load_package_shim_manifest(context: HarnessContext) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _dict_items(value: object) -> tuple[dict[str, object], ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, dict))
+
+
+def _string_items(value: object) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(item for item in value if isinstance(item, str))
+
+
+def _string_map(value: object) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    return {key: item for key, item in value.items() if isinstance(key, str) and isinstance(item, str)}
+
+
 def _write_package_shim_manifest(context: HarnessContext, payload: dict[str, object]) -> None:
     _package_shim_manifest_path(context).write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
 
@@ -976,8 +994,7 @@ def _record_package_shim_test_results(
     tested_at: str | None = None,
 ) -> None:
     manifest = _load_package_shim_manifest(context)
-    last_test_at = manifest.get("last_test_at")
-    normalized_last_tests = dict(last_test_at) if isinstance(last_test_at, dict) else {}
+    normalized_last_tests = dict(_string_map(manifest.get("last_test_at")))
     timestamp = tested_at or datetime.now(timezone.utc).isoformat()
     for result in manager_results:
         manager = result.get("manager")
@@ -1019,16 +1036,15 @@ def probe_package_shim_intercepts(
     """Execute installed package-manager shims to prove intercept wiring is live."""
 
     status = package_shim_status(context)
-    installed = {str(manager) for manager in status.get("installed_managers", []) if isinstance(manager, str)}
-    protected = {str(manager) for manager in status.get("protected_managers", []) if isinstance(manager, str)}
+    installed = set(_string_items(status.get("installed_managers")))
+    protected = set(_string_items(status.get("protected_managers")))
     tested_managers = list(managers or tuple(sorted(installed)))
     path_repair_required = [manager for manager in tested_managers if manager in installed and manager not in protected]
     manager_results: list[dict[str, object]] = []
-    manager_details = status.get("manager_details", [])
     detail_by_manager = {
         str(item.get("manager")): item
-        for item in manager_details
-        if isinstance(item, dict) and isinstance(item.get("manager"), str)
+        for item in _dict_items(status.get("manager_details"))
+        if isinstance(item.get("manager"), str)
     }
     target_workspace = workspace_dir or context.workspace_dir or context.home_dir
     shim_dir = context.guard_home / "package-shims" / "bin"

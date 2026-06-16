@@ -8,7 +8,7 @@ import sys
 import webbrowser
 from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import Any, TextIO
+from typing import IO, Any, TextIO
 
 from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
@@ -26,11 +26,11 @@ from ..mcp_tool_calls import (
     tool_call_risk_categories,
     tool_call_risk_summary,
 )
-from ..models import HarnessDetection
+from ..models import GuardAction, HarnessDetection
 from ..policy.engine import build_decision_v2
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
-from ..runtime.signals import RiskSignalV2
+from ..runtime.signals import RiskSeverityLabel, RiskSignalV2
 from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
@@ -51,6 +51,24 @@ _PACKAGE_POLICY_ACTION_RANK = {
     "require-reapproval": 2,
     "block": 3,
 }
+
+
+def _guard_action(value: str) -> GuardAction:
+    match value:
+        case "allow":
+            return "allow"
+        case "warn":
+            return "warn"
+        case "review":
+            return "review"
+        case "block":
+            return "block"
+        case "sandbox-required":
+            return "sandbox-required"
+        case "require-reapproval":
+            return "require-reapproval"
+        case _:
+            return "review"
 
 
 def _approval_surface_policy_for_browser(configured_policy: object, approval_flow: Mapping[str, object]) -> str:
@@ -170,11 +188,13 @@ class RuntimeMcpGuardProxy:
         try:
             assert process.stdin is not None
             assert process.stdout is not None
+            child_stdin = process.stdin
+            child_stdout = process.stdout
             for message in messages:
                 response, event = self._handle_message(
                     message=message,
-                    child_stdin=process.stdin,
-                    child_stdout=process.stdout,
+                    child_stdin=child_stdin,
+                    child_stdout=child_stdout,
                     client_input=None,
                     server_output=None,
                     approval_callback=inline_approval_callback,
@@ -207,6 +227,8 @@ class RuntimeMcpGuardProxy:
         try:
             assert process.stdin is not None
             assert process.stdout is not None
+            child_stdin = process.stdin
+            child_stdout = process.stdout
             while True:
                 line = input_stream.readline()
                 if not line:
@@ -214,16 +236,16 @@ class RuntimeMcpGuardProxy:
                 message = json.loads(line)
                 response, _ = self._handle_message(
                     message=message,
-                    child_stdin=process.stdin,
-                    child_stdout=process.stdout,
+                    child_stdin=child_stdin,
+                    child_stdout=child_stdout,
                     client_input=input_stream,
                     server_output=output_stream,
                     approval_callback=lambda request: self._request_inline_approval(
                         request,
                         input_stream=input_stream,
                         output_stream=output_stream,
-                        child_stdin=process.stdin,
-                        child_stdout=process.stdout,
+                        child_stdin=child_stdin,
+                        child_stdout=child_stdout,
                     ),
                 )
                 if response is not None:
@@ -254,8 +276,8 @@ class RuntimeMcpGuardProxy:
         self,
         *,
         message: dict[str, Any],
-        child_stdin: TextIO,
-        child_stdout: TextIO,
+        child_stdin: IO[str],
+        child_stdout: IO[str],
         client_input: TextIO | None,
         server_output: TextIO | None,
         approval_callback: Any | None,
@@ -302,6 +324,7 @@ class RuntimeMcpGuardProxy:
         tool_name = str(params.get("name") or "unknown")
         arguments = params.get("arguments")
         tool_definition = self._tool_catalog.get(tool_name, {})
+        tool_description_value = tool_definition.get("description")
         artifact = build_tool_call_artifact(
             harness=self.harness,
             server_name=self.server_name,
@@ -316,7 +339,7 @@ class RuntimeMcpGuardProxy:
             },
             server_identity=self.server_identity,
             tool_schema=tool_definition.get("input_schema"),
-            tool_description=tool_definition.get("description"),
+            tool_description=tool_description_value if isinstance(tool_description_value, str) else None,
         )
         tool_artifact_hash = build_tool_call_hash(artifact, arguments)
         decision = evaluate_tool_call(
@@ -552,8 +575,8 @@ class RuntimeMcpGuardProxy:
         self,
         *,
         message: dict[str, Any],
-        child_stdin: TextIO,
-        child_stdout: TextIO,
+        child_stdin: IO[str],
+        child_stdout: IO[str],
         client_input: TextIO | None,
         server_output: TextIO | None,
         tool_name: str,
@@ -618,7 +641,7 @@ class RuntimeMcpGuardProxy:
             }
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
         decision_v2_payload = build_decision_v2(
-            queue_policy_action,
+            _guard_action(queue_policy_action),
             reason=queue_policy_action,
             signals=_package_reason_signals(package_evaluation.reasons),
         ).to_dict()
@@ -717,8 +740,8 @@ class RuntimeMcpGuardProxy:
         self,
         *,
         message: dict[str, Any],
-        child_stdin: TextIO,
-        child_stdout: TextIO,
+        child_stdin: IO[str],
+        child_stdout: IO[str],
         client_input: TextIO | None,
         server_output: TextIO | None,
         artifact: Any,
@@ -766,15 +789,15 @@ class RuntimeMcpGuardProxy:
         }
 
     @staticmethod
-    def _forward_notification(message: dict[str, Any], child_stdin: TextIO) -> None:
+    def _forward_notification(message: dict[str, Any], child_stdin: IO[str]) -> None:
         child_stdin.write(json.dumps(message) + "\n")
         child_stdin.flush()
 
     def _forward_message(
         self,
         message: dict[str, Any],
-        child_stdin: TextIO,
-        child_stdout: TextIO,
+        child_stdin: IO[str],
+        child_stdout: IO[str],
         *,
         client_input: TextIO | None,
         server_output: TextIO | None,
@@ -862,8 +885,8 @@ class RuntimeMcpGuardProxy:
         self,
         *,
         payload: dict[str, Any],
-        child_stdin: TextIO,
-        child_stdout: TextIO,
+        child_stdin: IO[str],
+        child_stdout: IO[str],
         client_input: TextIO | None,
         server_output: TextIO | None,
     ) -> None:
@@ -932,8 +955,8 @@ class RuntimeMcpGuardProxy:
         *,
         input_stream: TextIO,
         output_stream: TextIO,
-        child_stdin: TextIO,
-        child_stdout: TextIO,
+        child_stdin: IO[str],
+        child_stdout: IO[str],
     ) -> dict[str, Any]:
         request_id = request.get("id")
         output_stream.write(json.dumps(request) + "\n")
@@ -1287,10 +1310,20 @@ def _package_reason_signals(reasons: tuple[dict[str, object], ...]) -> tuple[Ris
     return tuple(signals)
 
 
-def _package_signal_severity(value: str | None) -> str:
-    if value in {"info", "low", "medium", "high", "critical"}:
-        return value
-    return "medium"
+def _package_signal_severity(value: str | None) -> RiskSeverityLabel:
+    match value:
+        case "info":
+            return "info"
+        case "low":
+            return "low"
+        case "medium":
+            return "medium"
+        case "high":
+            return "high"
+        case "critical":
+            return "critical"
+        case _:
+            return "medium"
 
 
 def _optional_text(value: object) -> str | None:

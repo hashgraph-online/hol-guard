@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import importlib
 import io
 import json
 import posixpath
 import re
+import sys
 import tarfile
 import time
 import urllib.error
@@ -14,12 +16,13 @@ import urllib.request
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 from xml.etree import ElementTree as ET
 
-try:
-    import tomllib  # type: ignore[attr-defined]
-except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redef]
+if TYPE_CHECKING:
+    import tomllib
+else:  # pragma: no cover - runtime compatibility
+    tomllib = importlib.import_module("tomllib" if sys.version_info >= (3, 11) else "tomli")
 
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
@@ -160,9 +163,7 @@ class PackageRequestEvaluation:
     ) -> PackageRequestEvaluation:
         user_copy = payload.get("user_copy")
         user_copy_map = user_copy if isinstance(user_copy, dict) else {}
-        cached_packages = tuple(
-            _with_support_metadata(item) for item in payload.get("packages", []) if isinstance(item, dict)
-        )
+        cached_packages = tuple(_with_support_metadata(item) for item in _dict_items(payload.get("packages")))
         policy_action = str(payload.get("policy_action") or "allow")
         normalized_user_copy = _normalize_package_user_copy(
             SupplyChainUserCopy(
@@ -184,7 +185,7 @@ class PackageRequestEvaluation:
             policy_version=policy_version,
             bundle_version=bundle_version,
             workspace_fingerprint=workspace_fingerprint,
-            reasons=tuple(item for item in payload.get("reasons", []) if isinstance(item, dict)),
+            reasons=_dict_items(payload.get("reasons")),
             packages=cached_packages,
             risk_summary=str(payload.get("risk_summary") or "HOL Guard recorded this package request."),
             user_copy=normalized_user_copy,
@@ -387,7 +388,7 @@ def evaluate_package_request_artifact(
         has_bun_binary_fallback = any(
             reason["code"] == "bun_lockfile_binary_fallback"
             for package in fallback_packages
-            for reason in package["reasons"]
+            for reason in _dict_items(package.get("reasons"))
         )
         heuristic = _EvaluationDraft(
             decision="monitor",
@@ -648,7 +649,10 @@ def _evaluate_with_cloud(
         )
     except GuardSyncNotConfiguredError:
         return None, None
-    evaluate_url = _normalized_supply_chain_evaluate_url(auth_context["sync_url"], workspace_id)
+    sync_url = _optional_string(auth_context.get("sync_url"))
+    if sync_url is None:
+        return None, None
+    evaluate_url = _normalized_supply_chain_evaluate_url(sync_url, workspace_id)
     request_payload = _build_request_payload(
         artifact=artifact,
         targets=targets,
@@ -747,10 +751,8 @@ def _evaluate_with_cloud(
             ),
             None,
         )
-    packages = tuple(
-        _package_from_cloud_result(item) for item in response_payload["packages"] if isinstance(item, dict)
-    )
-    reasons = tuple(item for item in response_payload.get("reasons", []) if isinstance(item, dict))
+    packages = tuple(_package_from_cloud_result(item) for item in _dict_items(response_payload.get("packages")))
+    reasons = _dict_items(response_payload.get("reasons"))
     normalized_decision = _normalize_bundle_action(str(response_payload.get("decision") or "monitor"))
     draft = _EvaluationDraft(
         decision=normalized_decision,
@@ -1126,9 +1128,7 @@ def _evaluate_with_bundle(
         entitlement_state="premium" if workspace_id is not None else "free",
         cache_status="stale" if refresh_required else "miss",
         packages=tuple(packages),
-        reasons=tuple(
-            reason for package in packages for reason in package.get("reasons", []) if isinstance(reason, dict)
-        ),
+        reasons=tuple(reason for package in packages for reason in _dict_items(package.get("reasons"))),
         matched_rule_id=winning_rule_id,
         exception_id=winning_rule_id if decision == "allow" else None,
         refresh_required=refresh_required,
@@ -1265,7 +1265,9 @@ def _heuristic_result(
                 packages.append(lockfile_parse_warning)
             continue
         if lockfile_parse_warning is not None:
-            package_result = _with_package_reason(package_result, lockfile_parse_warning["reasons"][0])
+            first_reason = _first_dict_item(lockfile_parse_warning.get("reasons"))
+            if first_reason is not None:
+                package_result = _with_package_reason(package_result, first_reason)
         packages.append(package_result)
     if not packages:
         return None
@@ -1277,7 +1279,7 @@ def _heuristic_result(
         entitlement_state="free",
         cache_status="miss",
         packages=tuple(packages),
-        reasons=tuple(reason for package in packages for reason in package["reasons"]),
+        reasons=tuple(reason for package in packages for reason in _dict_items(package.get("reasons"))),
         matched_rule_id=None,
         exception_id=None,
         refresh_required=False,
@@ -1377,7 +1379,7 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
                 "source_url": source_url,
                 "alias": _optional_string(item.get("alias")),
                 "dependency_group": _optional_string(item.get("dependency_group")),
-                "extras": tuple(item.get("extras")) if isinstance(item.get("extras"), list) else (),
+                "extras": _string_tuple(item.get("extras")),
                 "editable": bool(item.get("editable")),
                 "package_manager": package_manager,
                 "redacted_command": redacted_command,
@@ -1429,7 +1431,7 @@ def _build_request_payload(
     return {
         "commandShape": {
             "argCount": len(str(artifact.metadata.get("redacted_command") or "").split()),
-            "flags": [item for item in artifact.metadata.get("flags", []) if isinstance(item, str)],
+            "flags": list(_string_tuple(artifact.metadata.get("flags"))),
             "packageManager": str(artifact.metadata.get("package_manager") or "unknown"),
             "redacted": True,
             "verb": str(artifact.metadata.get("intent_kind") or "install"),
@@ -1895,7 +1897,7 @@ def _package_from_cloud_result(item: dict[str, object]) -> dict[str, object]:
         "riskScore": item.get("riskScore"),
         "direct": direct,
         "dependencyPath": dependency_path,
-        "reasons": tuple(reason for reason in item.get("reasons", []) if isinstance(reason, dict)),
+        "reasons": _dict_items(item.get("reasons")),
     }
 
 
@@ -3610,6 +3612,24 @@ def _hash_paths(workspace_dir: Path | None, raw_paths: object) -> list[str]:
 
 def _stable_hash(value: object) -> str:
     return stable_digest_hex(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+
+
+def _dict_items(value: object) -> tuple[dict[str, object], ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(item for item in value if isinstance(item, dict))
+
+
+def _first_dict_item(value: object) -> dict[str, object] | None:
+    for item in _dict_items(value):
+        return item
+    return None
+
+
+def _string_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(item for item in value if isinstance(item, str))
 
 
 def _split_namespace_name(value: str) -> tuple[str | None, str]:

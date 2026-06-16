@@ -34,7 +34,7 @@ def manifest_finding(
     )
 
 
-def load_interface(manifest: dict | None) -> dict | None:
+def load_interface(manifest: dict[str, object] | None) -> dict[str, object] | None:
     if manifest is None:
         return None
     interface = manifest.get("interface")

@@ -5,6 +5,40 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .commands_support_claude_approval import _claude_native_pretooluse_terminal_notice
+    from .commands_support_hook_payload import (
+        _emit_native_hook_block_stderr,
+        _emit_native_hook_notification_stderr,
+        _emit_native_hook_response,
+    )
+    from .commands_support_interaction import (
+        _codex_browser_approval_decision,
+        _emit,
+        _record_harness_usage_for_hook,
+        _should_emit_claude_native_pretooluse_notice,
+        _should_emit_copilot_hook_response,
+        _should_emit_native_hook_exit_block,
+        _should_emit_native_hook_json_response,
+        _should_emit_native_hook_response,
+    )
+    from .commands_support_prompts import (
+        _claude_prompt_system_message,
+        _codex_prompt_block_system_message,
+        _copilot_hook_reason,
+        _emit_copilot_hook_response,
+        _runtime_artifact_native_reason,
+    )
+    from .commands_support_runtime_policy import (
+        _native_approval_center_context,
+        _native_hook_reason,
+        _native_hook_reason_for_harness,
+    )
+    from .commands_support_runtime_resolution import _canonical_harness_name
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -123,7 +157,7 @@ def _finalize_runtime_artifact_hook(
         policy_action=policy_action,
     ):
         _emit_native_hook_notification_stderr(
-            _claude_native_pretooluse_terminal_notice(payload=payload, reason=runtime_reason)
+            _claude_native_pretooluse_terminal_notice(payload=dict(payload), reason=runtime_reason)
         )
     if _should_emit_native_hook_response(args) or _should_emit_native_hook_json_response(
         args,

@@ -86,9 +86,9 @@ def package_firewall_receipt_metadata(
     manager_subset = _resolve_manager_subset(managers, result, operation)
     if operation == "audit":
         metadata = audit_receipt_metadata(result, workspace_dir=workspace_dir, store=store)
-        scanner_evidence = metadata.get("scanner_evidence")
-        if isinstance(scanner_evidence, dict):
-            enriched = dict(scanner_evidence)
+        audit_scanner_evidence = metadata.get("scanner_evidence")
+        if isinstance(audit_scanner_evidence, dict):
+            enriched = dict(audit_scanner_evidence)
             enriched["manager_subset"] = manager_subset
             metadata = {**metadata, "scanner_evidence": enriched}
         return metadata
@@ -104,11 +104,10 @@ def package_firewall_receipt_metadata(
             scanner_evidence["intercept_proved"] = intercept_proved
 
     capabilities_summary = f"Package firewall {operation} completed for {len(manager_subset)} manager(s)."
-    if operation == "test" and scanner_evidence.get("intercept_proofs"):
+    intercept_proofs = scanner_evidence.get("intercept_proofs")
+    if operation == "test" and isinstance(intercept_proofs, list) and intercept_proofs:
         proved_count = sum(
-            1
-            for proof in scanner_evidence["intercept_proofs"]
-            if isinstance(proof, dict) and proof.get("evaluator_invoked") is True
+            1 for proof in intercept_proofs if isinstance(proof, dict) and proof.get("evaluator_invoked") is True
         )
         capabilities_summary = (
             f"Intercept test recorded evaluator proof for {proved_count} of {len(manager_subset)} manager(s)."

@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import re
+import sys
 import time
+from typing import TYPE_CHECKING
 from xml.etree import ElementTree as ET
 
-try:
-    import tomllib  # type: ignore[attr-defined]
-except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redef]
+if TYPE_CHECKING or sys.version_info >= (3, 11):
+    import tomllib
+else:
+    tomllib = importlib.import_module("tomli")
 
 from .package_intent_common import (
     ManifestDependencyChange,

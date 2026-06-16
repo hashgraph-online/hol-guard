@@ -248,8 +248,12 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             + "\n",
             encoding="utf-8",
         )
+        raw_notes = shim_manifest.get("notes")
+        shim_notes = (
+            [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
+        )
         notes = [
-            *list(shim_manifest.get("notes", [])),
+            *shim_notes,
             "Guard installed an OpenCode pretool plugin that reviews bash and shell commands through "
             "hol-guard hook before execution.",
             "Guard updated the global OpenCode root config at ~/.config/opencode/opencode.json with "
@@ -304,8 +308,12 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             state_path.unlink()
         shim_manifest = remove_guard_shim(self.harness, context)
         plugin_manifest = remove_pretool_plugin(context)
+        raw_notes = shim_manifest.get("notes")
+        shim_notes = (
+            [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
+        )
         notes = [
-            *list(shim_manifest.get("notes", [])),
+            *shim_notes,
             "Guard removed the OpenCode pretool plugin from the global plugin directory.",
             "Guard leaves the OpenCode runtime overlay on disk for auditability, but it is ignored unless you "
             "launch through Guard.",
@@ -736,14 +744,16 @@ def _persisted_mcp_with_guard_companions(
     managed_names = {
         server.name for server in servers if not OpenCodeHarnessAdapter._skip_global_managed_server(server)
     }
-    stale_companions = [
-        name
-        for name in persisted
-        if isinstance(name, str)
-        and isinstance(persisted.get(name), dict)
-        and is_verified_guard_mcp_companion(name, *_command_parts(persisted[name]))
-        and name.removeprefix(_GUARD_MCP_COMPANION_PREFIX) not in managed_names
-    ]
+    stale_companions: list[str] = []
+    for name, server_config in persisted.items():
+        if not isinstance(name, str) or not isinstance(server_config, dict):
+            continue
+        command, args = _command_parts(server_config)
+        if not is_verified_guard_mcp_companion(name, command, args):
+            continue
+        if name.removeprefix(_GUARD_MCP_COMPANION_PREFIX) in managed_names:
+            continue
+        stale_companions.append(name)
     for name in stale_companions:
         persisted.pop(name, None)
     for server in servers:

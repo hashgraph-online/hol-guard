@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 
 from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..models import GuardArtifact, HarnessDetection
@@ -41,10 +43,11 @@ from .grok_config import (
     remove_managed_block,
 )
 
+tomllib: Any
 try:
-    import tomllib  # type: ignore[attr-defined]
+    import tomllib as tomllib  # type: ignore[attr-defined]
 except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redef]
+    tomllib = importlib.import_module("tomli")
 
 _GROK_HOME_ENV_VAR = "GROK_HOME"
 
@@ -355,6 +358,10 @@ class GrokHarnessAdapter(HarnessAdapter):
             encoding="utf-8",
         )
 
+        raw_notes = shim_manifest.get("notes")
+        shim_notes = (
+            [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
+        )
         return {
             "harness": self.harness,
             "active": True,
@@ -363,7 +370,7 @@ class GrokHarnessAdapter(HarnessAdapter):
             "notes": [
                 "Guard hooks installed in .grok/hooks/hol-guard-*.json",
                 "Guard permission rules installed in .grok/managed_config.toml",
-                *[str(note) for note in shim_manifest.get("notes", [])],
+                *shim_notes,
             ],
         }
 
@@ -394,6 +401,10 @@ class GrokHarnessAdapter(HarnessAdapter):
         if state_path.is_file():
             state_path.unlink()
 
+        raw_notes = shim_manifest.get("notes")
+        shim_notes = (
+            [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
+        )
         return {
             "harness": self.harness,
             "active": False,
@@ -402,7 +413,7 @@ class GrokHarnessAdapter(HarnessAdapter):
             "notes": [
                 "Guard-managed Grok hooks and permission rules removed.",
                 "User .grok/config.toml, auth, skills, plugins, and sessions were preserved.",
-                *[str(note) for note in shim_manifest.get("notes", [])],
+                *shim_notes,
             ],
         }
 
