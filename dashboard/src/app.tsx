@@ -638,23 +638,6 @@ export function App() {
     }
   }, [refreshStateAfterAction, setResolutionMessage]);
 
-  const handleBulkBlock = useCallback(async (ids: string[], reason: string, gateCredentials?: BulkGateCredentials) => {
-    const results = await Promise.allSettled(
-      ids.map((id) =>
-        resolveRequestWithQueueResult({ requestId: id, action: "block", scope: "artifact", reason, ...gateCredentials })
-      )
-    );
-    const succeeded = results.filter((result) => result.status === "fulfilled").length;
-    const failed = results.length - succeeded;
-    const label =
-      failed === 0
-        ? `${succeeded} item${succeeded !== 1 ? "s" : ""} blocked.`
-        : `${succeeded} blocked, ${failed} failed. Retry the failed items manually.`;
-    setResolutionMessage(label);
-    navigate("/inbox");
-    await refreshStateAfterAction();
-  }, [refreshStateAfterAction, setResolutionMessage]);
-
   const handleRetry = useCallback(() => {
     setRuntime({ kind: "loading" });
     setRequests({ kind: "loading" });
@@ -816,7 +799,6 @@ export function App() {
       onOpenRequest={handleOpenRequest}
       onResolve={handleResolve}
       onBulkApprove={handleBulkApprove}
-      onBulkBlock={handleBulkBlock}
       onRetry={handleRetry}
       onRepair={handleRepair}
       onGuardReconnected={handleRetry}
