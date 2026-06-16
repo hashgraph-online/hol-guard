@@ -1506,10 +1506,12 @@ def _bulk_target_paths_are_secret(request: Mapping[str, object]) -> bool:
     target_paths = envelope.get("target_paths")
     if not isinstance(target_paths, list):
         return False
-    for path in target_paths:
-        if isinstance(path, str) and classify_secret_path(path) is not None:
-            return True
-    return False
+    workspace = envelope.get("workspace")
+    workspace_dir = Path(str(workspace)).expanduser() if isinstance(workspace, str) and workspace else None
+    path_context = {"cwd": workspace_dir}
+    return any(
+        isinstance(path, str) and classify_secret_path(path, **path_context) is not None for path in target_paths
+    )
 
 
 def _is_sensitive_file_read_request(request: Mapping[str, object]) -> bool:

@@ -53,8 +53,8 @@ from ..approvals import (
     ApprovalRequestAlreadyResolvedError,
     ApprovalRequestNotFoundError,
     apply_approval_resolution,
-    bulk_allow_read_only_once,
     build_runtime_snapshot,
+    bulk_allow_read_only_once,
 )
 from ..cli.connect_flow import (
     CONNECT_SYNC_AUTH_CONTEXT_KEY,
