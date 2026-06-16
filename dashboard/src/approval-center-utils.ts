@@ -719,9 +719,9 @@ export function buildBulkApproveConsequenceCopy(actionCount: number): string {
     return "No read-only file reads are selected.";
   }
   if (actionCount === 1) {
-    return "Guard will allow one read-only file access and remember this retry only.";
+    return "Guard will approve once for one read-only file access. This applies to the current retry only and does not remember future reads.";
   }
-  return `Guard will allow ${actionCount} read-only file accesses. Each decision applies to this retry only, not future edits, writes, or different paths.`;
+  return `Guard will approve once for ${actionCount} read-only file accesses. Mass approval is risky: you are allowing many paths in one step without reviewing each file individually. Each decision applies to this retry only, not future edits, writes, or different paths.`;
 }
 
 export function buildCodexResumeUx(resume: GuardCodexResumeResult): CodexResumeUx {

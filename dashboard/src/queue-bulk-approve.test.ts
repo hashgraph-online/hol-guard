@@ -3,7 +3,12 @@ import {
   buildBulkApproveConsequenceCopy,
   summarizeBulkApproveSelection,
 } from "./approval-center-utils";
-import { buildBulkGateCredentials } from "./queue-bulk-approve-flow";
+import type { GuardApprovalGatePublicConfig } from "./guard-types";
+import {
+  buildBulkGateCredentials,
+  isBulkApproveGateReady,
+  validateBulkApproveCredentials,
+} from "./queue-bulk-approve-flow";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -73,19 +78,39 @@ assert(summary[0].path === "src/index.ts", "T-BULK-02: summarizeBulkApproveSelec
 assert(summary[1].duplicateCount === 1, "T-BULK-03: summarizeBulkApproveSelection preserves duplicate count");
 
 assert(
-  buildBulkApproveConsequenceCopy(2).includes("2 read-only file accesses"),
-  "T-BULK-04: buildBulkApproveConsequenceCopy pluralizes selected action count"
+  buildBulkApproveConsequenceCopy(2).includes("Mass approval is risky"),
+  "T-BULK-04: buildBulkApproveConsequenceCopy warns about mass approval"
 );
 
 assert(
-  buildBulkApproveConsequenceCopy(1).includes("one read-only file access"),
-  "T-BULK-05: buildBulkApproveConsequenceCopy handles single selection"
+  buildBulkApproveConsequenceCopy(1).includes("approve once"),
+  "T-BULK-05: buildBulkApproveConsequenceCopy handles single selection with approve once copy"
 );
 
-const gateCredentials = buildBulkGateCredentials(true, "secret", "123456", true);
-assert(gateCredentials?.approval_password === "secret", "T-BULK-06: buildBulkGateCredentials includes password when gate fields are shown");
-assert(gateCredentials?.approval_gate_use_cooldown === true, "T-BULK-07: buildBulkGateCredentials includes cooldown preference");
+const readyGate: GuardApprovalGatePublicConfig = {
+  enabled: true,
+  configured: true,
+  cooldown_seconds: 900,
+  cooldown_active: false,
+  cooldown_expires_at: null,
+  locked_until: null,
+  fail_closed: false,
+  strict_all_decisions: false,
+  totp_enabled: false,
+  totp_pending: false,
+};
 
-assert(buildBulkGateCredentials(false, "secret", "", false) === undefined, "T-BULK-08: buildBulkGateCredentials omits credentials when gate fields are hidden");
+assert(isBulkApproveGateReady(readyGate) === true, "T-BULK-06: gate ready when enabled and configured");
+assert(isBulkApproveGateReady({ ...readyGate, configured: false }) === false, "T-BULK-07: gate not ready without password");
+assert(
+  validateBulkApproveCredentials(readyGate, { password: "", totpCode: "" }) !== null,
+  "T-BULK-08: validateBulkApproveCredentials rejects empty password",
+);
+
+const gateCredentials = buildBulkGateCredentials(readyGate, "secret", "123456");
+assert(gateCredentials?.approval_password === "secret", "T-BULK-09: buildBulkGateCredentials includes password when gate is ready");
+assert(gateCredentials?.approval_gate_use_cooldown === false, "T-BULK-10: buildBulkGateCredentials never enables cooldown for bulk");
+
+assert(buildBulkGateCredentials(null, "secret", "") === undefined, "T-BULK-11: buildBulkGateCredentials omits credentials when gate is not ready");
 
 console.log("queue-bulk-approve.test.ts: all tests passed");

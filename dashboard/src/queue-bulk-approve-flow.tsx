@@ -10,6 +10,28 @@ import { bulkApproveActionCount, type QueueGroup } from "./queue-state";
 
 export type BulkApproveFlowStep = "collapsed" | "select" | "review" | "submitting" | "completed";
 
+export function isBulkApproveGateReady(
+  gate: GuardApprovalGatePublicConfig | null | undefined,
+): boolean {
+  return gate?.enabled === true && gate?.configured === true;
+}
+
+export function validateBulkApproveCredentials(
+  gate: GuardApprovalGatePublicConfig | null | undefined,
+  credentials: { password: string; totpCode: string },
+): string | null {
+  if (!isBulkApproveGateReady(gate)) {
+    return "Set up an approval password in Settings before bulk approval.";
+  }
+  if (!credentials.password.trim()) {
+    return "Enter your approval password to continue.";
+  }
+  if (gate?.totp_enabled === true && !credentials.totpCode.trim()) {
+    return "Enter your authenticator code to continue.";
+  }
+  return null;
+}
+
 export type QueueBulkApproveFlowProps = {
   step: BulkApproveFlowStep;
   eligibleGroups: QueueGroup[];
@@ -17,9 +39,9 @@ export type QueueBulkApproveFlowProps = {
   completedActionCount: number | null;
   sensitiveFileReadCount: number;
   approvalGate?: GuardApprovalGatePublicConfig | null;
+  settingsHref: string;
   bulkApprovePassword: string;
   bulkApproveTotpCode: string;
-  bulkApproveUseCooldown: boolean;
   errorMessage: string | null;
   onStart: () => void;
   onSelectAll: () => void;
@@ -30,7 +52,6 @@ export type QueueBulkApproveFlowProps = {
   onConfirmApprove: () => void;
   onBulkApprovePasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onBulkApproveTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  onBulkApproveUseCooldownChange: (event: ChangeEvent<HTMLInputElement>) => void;
 };
 
 export function QueueBulkApproveFlow(props: QueueBulkApproveFlowProps) {
@@ -55,10 +76,33 @@ export function QueueBulkApproveFlow(props: QueueBulkApproveFlowProps) {
 
   const selectedActionCount = bulkApproveActionCount(props.selectedGroups);
   const riskLines = summarizeBulkApproveSelection(props.selectedGroups);
-  const showBulkGateFields =
-    props.approvalGate?.enabled === true && props.approvalGate?.configured === true;
+  const gateReady = isBulkApproveGateReady(props.approvalGate);
+  const credentialError = validateBulkApproveCredentials(props.approvalGate, {
+    password: props.bulkApprovePassword,
+    totpCode: props.bulkApproveTotpCode,
+  });
+  const confirmDisabled =
+    props.step === "submitting" ||
+    (props.step === "review" && credentialError !== null);
 
   if (props.step === "collapsed") {
+    if (!gateReady) {
+      return (
+        <div className="mb-4 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-4 py-3">
+          <p className="text-sm font-semibold text-brand-dark">Bulk approve once requires an approval password</p>
+          <p className="mt-1 text-xs leading-5 text-brand-dark/70">
+            Set up your local approval gate before allowing multiple read-only file reads in one pass.
+            Bulk approval always uses approve once and cannot remember future reads.
+          </p>
+          <a
+            href={props.settingsHref}
+            className="mt-3 inline-flex rounded-full border border-brand-blue/30 bg-white px-4 py-2 text-sm font-medium text-brand-blue no-underline transition-colors hover:bg-brand-blue/5"
+          >
+            Open Settings
+          </a>
+        </div>
+      );
+    }
     return (
       <div className="mb-4 space-y-2">
         <button
@@ -66,7 +110,7 @@ export function QueueBulkApproveFlow(props: QueueBulkApproveFlowProps) {
           onClick={props.onStart}
           className="rounded-full border border-brand-blue/30 bg-white px-4 py-2 text-sm font-medium text-brand-blue shadow-sm transition-colors hover:bg-brand-blue/5"
         >
-          Approve multiple read-only reads
+          Approve once for multiple read-only reads
         </button>
         {props.sensitiveFileReadCount > 0 && (
           <p className="text-xs text-brand-attention">
@@ -90,7 +134,7 @@ export function QueueBulkApproveFlow(props: QueueBulkApproveFlowProps) {
   const confirmLabel =
     props.step === "submitting"
       ? "Approving..."
-      : `Approve ${selectedActionCount} read-only ${selectedUnit}`;
+      : `Approve once (${selectedActionCount} ${selectedUnit})`;
 
   return (
     <div className="mb-4 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -181,8 +225,16 @@ export function QueueBulkApproveFlow(props: QueueBulkApproveFlowProps) {
               </p>
             </div>
           )}
-          {showBulkGateFields && (
+          <div className="flex items-start gap-2 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2">
+            <HiMiniExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0 text-brand-attention" aria-hidden="true" />
+            <p className="text-xs leading-5 text-brand-dark/80">
+              Mass approval is risky. You are allowing multiple file reads without opening each request. Bulk approval
+              only supports approve once and never remembers future reads.
+            </p>
+          </div>
+          {gateReady && (
             <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-xs font-medium text-brand-dark">Confirm with your approval password</p>
               <label className="block">
                 <span className="sr-only">Approval password</span>
                 <input
@@ -210,18 +262,6 @@ export function QueueBulkApproveFlow(props: QueueBulkApproveFlowProps) {
                   />
                 </label>
               )}
-              {(props.approvalGate?.cooldown_seconds ?? 0) > 0 && props.approvalGate?.totp_enabled !== true && (
-                <label className="flex items-center gap-2 text-xs text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={props.bulkApproveUseCooldown}
-                    onChange={props.onBulkApproveUseCooldownChange}
-                    disabled={props.step === "submitting"}
-                    className="rounded"
-                  />
-                  Skip password for next approvals (use cooldown)
-                </label>
-              )}
             </div>
           )}
           {props.errorMessage !== null && (
@@ -233,7 +273,7 @@ export function QueueBulkApproveFlow(props: QueueBulkApproveFlowProps) {
             <button
               type="button"
               onClick={props.onConfirmApprove}
-              disabled={props.step === "submitting"}
+              disabled={confirmDisabled}
               className="rounded-full bg-brand-blue px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {confirmLabel}
@@ -262,17 +302,16 @@ export function QueueBulkApproveFlow(props: QueueBulkApproveFlowProps) {
 }
 
 export function buildBulkGateCredentials(
-  showGateFields: boolean,
+  gate: GuardApprovalGatePublicConfig | null | undefined,
   password: string,
   totpCode: string,
-  useCooldown: boolean
 ): BulkGateCredentials | undefined {
-  if (!showGateFields) {
+  if (!isBulkApproveGateReady(gate)) {
     return undefined;
   }
   return {
-    approval_password: password,
-    approval_totp_code: totpCode,
-    approval_gate_use_cooldown: useCooldown,
+    approval_password: password.trim(),
+    approval_totp_code: totpCode.trim(),
+    approval_gate_use_cooldown: false,
   };
 }
