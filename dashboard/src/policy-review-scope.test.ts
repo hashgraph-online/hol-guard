@@ -9,7 +9,7 @@ function assert(condition: boolean, message: string): void {
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
-const reviewSource = readFileSync(join(here, "approval-center-layout.tsx"), "utf8");
+const reviewSource = readFileSync(join(here, "review-workspace.tsx"), "utf8");
 
 assert(!reviewSource.includes("PolicyCloudExceptionsTab"), "review layout must not mount cloud exceptions tab");
 assert(!reviewSource.includes("policy-cloud-exception"), "review layout must not import cloud exception modules");

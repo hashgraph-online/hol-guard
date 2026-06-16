@@ -14,8 +14,6 @@ import {
   queueCategoriesForItems,
   resolveQueueCategory,
   isDuplicateGroup,
-  bulkBlockEligibleGroups,
-  bulkBlockPrimaryIds,
   filterQueueByDateRange,
   formatQueueRequestDate,
 } from "./queue-state";
@@ -1092,31 +1090,6 @@ assert(
 const grMixedGroups = groupDuplicates([DUP_PRIMARY, DUP_SECONDARY, UNIQUE_REQUEST]);
 
 assert(
-  bulkBlockEligibleGroups(grMixedGroups).length === 1,
-  "T-QS-GR115-01: bulkBlockEligibleGroups returns only groups with duplicates"
-);
-
-assert(
-  bulkBlockEligibleGroups(grMixedGroups)[0].primary.request_id === "req-dup-primary",
-  "T-QS-GR115-02: bulkBlockEligibleGroups returns the correct primary group"
-);
-
-assert(
-  bulkBlockPrimaryIds(grMixedGroups).length === 1,
-  "T-QS-GR115-03: bulkBlockPrimaryIds returns one id for one eligible group"
-);
-
-assert(
-  bulkBlockPrimaryIds(grMixedGroups)[0] === "req-dup-primary",
-  "T-QS-GR115-04: bulkBlockPrimaryIds returns the correct primary request id"
-);
-
-assert(
-  bulkBlockPrimaryIds([uniqueGroup]).length === 0,
-  "T-QS-GR115-05: bulkBlockPrimaryIds returns empty array when no groups have duplicates"
-);
-
-assert(
   resolveStaleRequestRecovery("req-1", [BASE_REQUEST]) === "req-1",
   "T-QS-GR112-03: resolveStaleRequestRecovery keeps active id when still in queue"
 );
@@ -1144,8 +1117,8 @@ assert(
 const allUnique = groupDuplicates([BASE_REQUEST, SECOND_REQUEST_GR112]);
 
 assert(
-  bulkBlockEligibleGroups(allUnique).length === 0,
-  "T-QS-GR114-01: showBulkBlock set is empty when no groups have duplicates"
+  allUnique.filter(isDuplicateGroup).length === 0,
+  "T-QS-GR114-01: no duplicate groups when every queue item is unique"
 );
 
 assert(
