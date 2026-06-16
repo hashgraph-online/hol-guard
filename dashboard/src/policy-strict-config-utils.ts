@@ -36,6 +36,51 @@ export type StrictPolicySimulationResult = {
   path: string[];
 };
 
+export const STRICT_POLICY_DEFAULTS = {
+  default_action: "block",
+  changed_hash_action: "review",
+  new_network_domain_action: "review",
+  subprocess_action: "review",
+  destructive_shell: "block",
+} as const;
+
+export type StrictScenarioId = "first-time" | "remembered-allow" | "cloud-exception";
+
+export function resolveStrictScenarioOutcome(
+  scenarioId: StrictScenarioId,
+  settings: GuardSettings,
+): { outcome: string; reasoning: string } {
+  if (scenarioId === "remembered-allow") {
+    return {
+      outcome: "allow",
+      reasoning: "Because a remembered allow rule matches before Cloud policy.",
+    };
+  }
+  if (scenarioId === "cloud-exception") {
+    return {
+      outcome: "allow",
+      reasoning: "Because an active Cloud exception overrides team policy.",
+    };
+  }
+  const outcome = settings.new_network_domain_action;
+  return {
+    outcome,
+    reasoning: `Because New network domain action is set to ${policyActionLabel(outcome)}.`,
+  };
+}
+
+function policyActionLabel(action: string): string {
+  const labels: Record<string, string> = {
+    allow: "Allow",
+    warn: "Warn",
+    review: "Review",
+    block: "Block",
+    "require-reapproval": "Ask every time",
+    "sandbox-required": "Sandbox required",
+  };
+  return labels[action] ?? action.replace(/_/g, " ");
+}
+
 export function fingerprintLocalPolicySettings(settings: GuardSettings): string {
   const payload = JSON.stringify({
     mode: settings.mode,

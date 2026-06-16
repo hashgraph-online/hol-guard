@@ -370,10 +370,69 @@ export function resolvePolicyRowTitle(policy: GuardPolicyDecision, display: Poli
 }
 
 export function resolvePolicyRowSourceLabel(policy: GuardPolicyDecision): string {
-  if (isCloudManagedPolicy(policy.source)) {
-    return "Team policy";
+  return resolvePolicySourceLabel(policy.source);
+}
+
+export type PolicySortKey = "action" | "rule" | "source" | "scope" | "app" | "updated" | "approval";
+export type PolicySortState = { key: PolicySortKey; direction: "asc" | "desc" } | null;
+
+export function sortPolicyDecisions(
+  policies: GuardPolicyDecision[],
+  sort: PolicySortState,
+): GuardPolicyDecision[] {
+  if (!sort) {
+    return policies;
   }
-  return scopeLabel(policy.scope, "policy");
+  const direction = sort.direction === "asc" ? 1 : -1;
+  const sorted = [...policies];
+  sorted.sort((left, right) => {
+    const compareText = (a: string, b: string) => direction * a.localeCompare(b, undefined, { sensitivity: "base" });
+    switch (sort.key) {
+      case "action":
+        return compareText(left.action, right.action);
+      case "rule": {
+        const leftTitle = resolvePolicyRowTitle(left, resolvePolicyDisplay(left));
+        const rightTitle = resolvePolicyRowTitle(right, resolvePolicyDisplay(right));
+        return compareText(leftTitle, rightTitle);
+      }
+      case "source":
+        return compareText(resolvePolicyRowSourceLabel(left), resolvePolicyRowSourceLabel(right));
+      case "scope":
+        return compareText(scopeLabel(left.scope, "policy"), scopeLabel(right.scope, "policy"));
+      case "app":
+        return compareText(harnessDisplayName(left.harness), harnessDisplayName(right.harness));
+      case "updated": {
+        const leftTime = new Date(left.updated_at || 0).getTime();
+        const rightTime = new Date(right.updated_at || 0).getTime();
+        return direction * (leftTime - rightTime);
+      }
+      case "approval":
+        return compareText(
+          resolvePolicyApprovalRecordLabel(left),
+          resolvePolicyApprovalRecordLabel(right),
+        );
+      default:
+        return 0;
+    }
+  });
+  return sorted;
+}
+
+export function formatPolicyDateTime(timestamp: string | null | undefined): string | null {
+  if (!timestamp?.trim()) {
+    return null;
+  }
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(timestamp));
+  } catch {
+    return null;
+  }
 }
 
 export function resolvePolicyEvidenceSearchTerm(policy: GuardPolicyDecision): string | null {
@@ -423,14 +482,16 @@ export function resolvePolicyEvidenceHref(policy: GuardPolicyDecision): string {
 export function resolvePolicyApprovalRecordLabel(policy: GuardPolicyDecision): string {
   const receiptId = policy.source_receipt_id?.trim();
   if (receiptId) {
-    if (receiptId.length <= 24) {
-      return receiptId;
+    if (/^receipt[_-]/i.test(receiptId) && receiptId.endsWith(".json")) {
+      return receiptId.length <= 28 ? receiptId : `receipt_${receiptId.slice(8, 16)}.json`;
     }
-    return `${receiptId.slice(0, 10)}…${receiptId.slice(-8)}`;
+    const normalized = receiptId.replace(/^receipt[-_]?/i, "").replace(/\.json$/i, "");
+    const shortId = normalized.length <= 8 ? normalized : normalized.slice(0, 8);
+    return `receipt_${shortId}.json`;
   }
   const hash = policy.artifact_hash?.replace(/^sha256:/i, "").slice(0, 8);
   if (hash) {
-    return `hash ${hash}`;
+    return `receipt_${hash}.json`;
   }
   return "View in Evidence";
 }

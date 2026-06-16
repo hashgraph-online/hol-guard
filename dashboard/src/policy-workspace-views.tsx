@@ -8,12 +8,13 @@ import {
   HiMiniCube,
   HiMiniDocumentText,
   HiMiniGlobeAlt,
-  HiMiniLockClosed,
   HiMiniShieldCheck,
   HiMiniNoSymbol,
   HiMiniCheckCircle,
+  HiMiniEllipsisVertical,
+  HiMiniArrowTopRightOnSquare,
 } from "react-icons/hi2";
-import { Tag, EmptyState } from "./approval-center-primitives";
+import { EmptyState, PaginationControls, Tag } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime, scopeLabel, policyActionLabel } from "./approval-center-utils";
 import { guardAwareHref } from "./guard-api";
 import type { GuardPolicyDecision } from "./guard-types";
@@ -32,17 +33,17 @@ import {
   resolvePolicyEvidenceHref,
   resolvePolicyMatcherFamily,
   resolvePolicyRowFolder,
-  resolvePolicyRowFrequency,
   resolvePolicyRowSourceLabel,
-  resolvePolicyRowSubtitle,
   resolvePolicyRowTitle,
+  sortPolicyDecisions,
+  type PolicySortKey,
+  type PolicySortState,
 } from "./policy-workspace-helpers";
 
-export type PolicySortKey = "app" | "updated";
-export type PolicySortState = { key: PolicySortKey; direction: "asc" | "desc" } | null;
+export type { PolicySortKey, PolicySortState };
 
-const PAGE_SIZE = 5;
-const TABLE_MIN_WIDTH_CLASS = "min-w-[980px]";
+const PAGE_SIZE = 10;
+const TABLE_MIN_WIDTH_CLASS = "min-w-[1040px]";
 
 function PolicyActionBadge({ action }: { action: string }) {
   if (action === "allow") {
@@ -84,6 +85,51 @@ function resolveFamilyIcon(family: string | null) {
   return HiMiniShieldCheck;
 }
 
+function PolicySortHeader({
+  label,
+  sortKey,
+  sort,
+  onSortChange,
+  className = "",
+}: {
+  label: string;
+  sortKey: PolicySortKey;
+  sort: PolicySortState;
+  onSortChange: (sort: PolicySortState) => void;
+  className?: string;
+}) {
+  const active = sort?.key === sortKey;
+  const ascending = active && sort?.direction === "asc";
+
+  const handleClick = useCallback(() => {
+    if (!active) {
+      onSortChange({ key: sortKey, direction: sortKey === "updated" ? "desc" : "asc" });
+      return;
+    }
+    onSortChange({ key: sortKey, direction: ascending ? "desc" : "asc" });
+  }, [active, ascending, onSortChange, sortKey]);
+
+  return (
+    <EvidenceTableHeader className={className}>
+      <button
+        type="button"
+        onClick={handleClick}
+        className="inline-flex items-center gap-1 transition-colors hover:text-brand-dark"
+        aria-label={`Sort by ${label}${active ? (ascending ? ", ascending" : ", descending") : ""}`}
+      >
+        {label}
+        {active ? (
+          ascending ? (
+            <HiMiniChevronUp className="h-3 w-3" aria-hidden="true" />
+          ) : (
+            <HiMiniChevronDown className="h-3 w-3" aria-hidden="true" />
+          )
+        ) : null}
+      </button>
+    </EvidenceTableHeader>
+  );
+}
+
 function PolicyEvidenceLink({
   policy,
   onNavigate,
@@ -109,9 +155,10 @@ function PolicyEvidenceLink({
       href={guardAwareHref(href)}
       onClick={handleClick}
       className="inline-flex max-w-full items-center gap-1 font-mono text-xs font-medium text-brand-blue hover:underline"
-      title={`Open receipt ${policy.source_receipt_id ?? label} in Evidence`}
+      title={`Open ${label} in Evidence`}
     >
-      {label}
+      <span className="truncate">{label}</span>
+      <HiMiniArrowTopRightOnSquare className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
     </a>
   );
 }
@@ -132,10 +179,9 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVar
   const family = resolvePolicyMatcherFamily(policy);
   const Icon = resolveFamilyIcon(family);
   const title = resolvePolicyRowTitle(policy, display);
-  const subtitle = resolvePolicyRowSubtitle(policy, display);
-  const folder = resolvePolicyRowFolder(policy);
-  const frequency = resolvePolicyRowFrequency(policy);
+  const kindLine = display.kindLine;
   const scopeTag = scopeLabel(policy.scope, "policy");
+  const folder = resolvePolicyRowFolder(policy);
 
   return (
     <EvidenceTableRow>
@@ -149,32 +195,41 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVar
         <PolicyActionBadge action={policy.action} />
       </EvidenceTableCell>
 
-      <EvidenceTableCell className="min-w-[240px] max-w-[360px]">
-        <p className="font-semibold leading-snug text-brand-dark">{title}</p>
-        {subtitle ? <p className="mt-1 text-xs leading-relaxed text-slate-500">{subtitle}</p> : null}
+      <EvidenceTableCell className="min-w-[220px] max-w-[320px]">
+        <p className="truncate font-semibold leading-snug text-brand-dark" title={title}>
+          {title}
+        </p>
+        {kindLine ? (
+          <p className="mt-0.5 truncate text-xs leading-relaxed text-slate-500" title={kindLine}>
+            {kindLine}
+          </p>
+        ) : null}
         <div className="mt-2 space-y-1 text-xs text-slate-600 lg:hidden">
           <p>
-            <span className="font-medium text-slate-700">Folder:</span> {folder ?? "Not recorded"}
+            <span className="font-medium text-slate-700">Source:</span> {resolvePolicyRowSourceLabel(policy)}
           </p>
           <p>
-            <span className="font-medium text-slate-700">Frequency:</span> {frequency}
+            <span className="font-medium text-slate-700">Scope:</span> {scopeTag}
           </p>
+          {folder ? (
+            <p>
+              <span className="font-medium text-slate-700">Folder:</span> {folder}
+            </p>
+          ) : null}
           <p>
             <span className="font-medium text-slate-700">App:</span> {harnessDisplayName(policy.harness)}
           </p>
         </div>
       </EvidenceTableCell>
 
-      <EvidenceTableCell className="hidden w-[96px] lg:table-cell">
-        {cloudManaged ? (
-          <Tag tone="blue">{resolvePolicyRowSourceLabel(policy)}</Tag>
-        ) : (
-          <span className="text-sm text-brand-dark">{resolvePolicyRowSourceLabel(policy)}</span>
-        )}
+      <EvidenceTableCell className="hidden w-[88px] lg:table-cell">
+        <span className="text-sm text-brand-dark">{resolvePolicyRowSourceLabel(policy)}</span>
       </EvidenceTableCell>
 
       <EvidenceTableCell className="hidden w-[104px] lg:table-cell">
-        <Tag tone="blue">{scopeTag}</Tag>
+        <button type="button" className="text-sm font-medium text-brand-blue hover:underline">
+          {scopeTag}
+        </button>
       </EvidenceTableCell>
 
       <EvidenceTableCell className="hidden w-[96px] lg:table-cell">
@@ -185,7 +240,7 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVar
         {policy.updated_at ? formatRelativeTime(policy.updated_at) : "—"}
       </EvidenceTableCell>
 
-      <EvidenceTableCell className="hidden min-w-[120px] lg:table-cell">
+      <EvidenceTableCell className="hidden min-w-[132px] lg:table-cell">
         {!cloudManaged ? <PolicyEvidenceLink policy={policy} onNavigate={onNavigate} /> : null}
         {cloudManaged && cloudControlsUrl ? (
           <a
@@ -200,23 +255,30 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVar
         ) : null}
       </EvidenceTableCell>
 
-      <EvidenceTableCell className="hidden w-[88px] text-right lg:table-cell">
-        {cloudManaged ? (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500" title="Read-only Cloud policy">
-            <HiMiniLockClosed className="h-3.5 w-3.5" aria-hidden="true" />
-            Policy
-          </span>
-        ) : null}
-        {canClear ? (
-          <button
-            type="button"
-            onClick={handleClear}
-            className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-red-600"
-          >
-            <HiMiniTrash className="h-3.5 w-3.5" aria-hidden="true" />
-            Remove
-          </button>
-        ) : null}
+      <EvidenceTableCell className="hidden w-[108px] text-right lg:table-cell">
+        <div className="flex items-center justify-end gap-2">
+          {cloudManaged ? (
+            <span className="text-xs font-medium text-slate-500">Read-only</span>
+          ) : null}
+          {canClear ? (
+            <button
+              type="button"
+              onClick={handleClear}
+              className="inline-flex items-center gap-1 text-xs font-medium text-rose-600 hover:text-rose-700"
+            >
+              Remove rule
+            </button>
+          ) : null}
+          {!cloudManaged ? (
+            <button
+              type="button"
+              className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-brand-dark"
+              aria-label="More actions"
+            >
+              <HiMiniEllipsisVertical className="h-4 w-4" aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
       </EvidenceTableCell>
     </EvidenceTableRow>
   );
@@ -230,8 +292,8 @@ type PolicyRuleTableProps = {
   emptyTitle: string;
   emptyBody: string;
   cloudVariant?: boolean;
-  totalCount?: number;
-  viewAllLabel?: string;
+  sort: PolicySortState;
+  onSortChange: (sort: PolicySortState) => void;
 };
 
 export function PolicyRuleTable({
@@ -242,32 +304,29 @@ export function PolicyRuleTable({
   emptyTitle,
   emptyBody,
   cloudVariant = false,
-  totalCount,
-  viewAllLabel,
+  sort,
+  onSortChange,
 }: PolicyRuleTableProps) {
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [expanded, setExpanded] = useState(false);
+  const [page, setPage] = useState(1);
+
+  const sortedPolicies = useMemo(() => sortPolicyDecisions(policies, sort), [policies, sort]);
 
   useEffect(() => {
-    setExpanded(false);
-    setVisibleCount(PAGE_SIZE);
-  }, [policies]);
+    setPage(1);
+  }, [policies, sort]);
 
-  const visiblePolicies = useMemo(
-    () => (expanded ? policies : policies.slice(0, visibleCount)),
-    [expanded, policies, visibleCount],
-  );
-  const remaining = policies.length - visiblePolicies.length;
-  const hasMore = !expanded && remaining > 0;
-  const listTotal = totalCount ?? policies.length;
+  const totalPages = Math.max(1, Math.ceil(sortedPolicies.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * PAGE_SIZE;
+  const visiblePolicies = sortedPolicies.slice(pageStart, pageStart + PAGE_SIZE);
 
-  const handleShowMore = useCallback(() => {
-    setVisibleCount((current) => current + PAGE_SIZE);
+  const handlePrevious = useCallback(() => {
+    setPage((current) => Math.max(1, current - 1));
   }, []);
 
-  const handleViewAll = useCallback(() => {
-    setExpanded(true);
-  }, []);
+  const handleNext = useCallback(() => {
+    setPage((current) => Math.min(totalPages, current + 1));
+  }, [totalPages]);
 
   if (policies.length === 0) {
     return <EmptyState title={emptyTitle} body={emptyBody} tone="teach" />;
@@ -276,57 +335,72 @@ export function PolicyRuleTable({
   return (
     <div className="space-y-3">
       <EvidenceTable label={cloudVariant ? "Cloud policy rules" : "Remembered policy rules"} tableClassName={TABLE_MIN_WIDTH_CLASS}>
-          <EvidenceTableHead>
-            <EvidenceTableHeader className="w-10" />
-            <EvidenceTableHeader>Action</EvidenceTableHeader>
-            <EvidenceTableHeader>Rule</EvidenceTableHeader>
-            <EvidenceTableHeader className="hidden lg:table-cell">Source</EvidenceTableHeader>
-            <EvidenceTableHeader className="hidden lg:table-cell">Scope</EvidenceTableHeader>
-            <EvidenceTableHeader className="hidden lg:table-cell">
-              {cloudVariant ? "Applies to" : "App"}
-            </EvidenceTableHeader>
-            <EvidenceTableHeader className="hidden lg:table-cell">Updated</EvidenceTableHeader>
-            <EvidenceTableHeader className="hidden lg:table-cell">
-              {cloudVariant ? "Policy" : "Approval record"}
-            </EvidenceTableHeader>
-            <EvidenceTableHeader className="hidden text-right lg:table-cell">
-              {cloudVariant ? "" : "Actions"}
-            </EvidenceTableHeader>
-          </EvidenceTableHead>
-          <EvidenceTableBody>
-            {visiblePolicies.map((policy) => (
-              <PolicyRuleRow
-                key={`${policy.harness}-${policy.scope}-${policy.artifact_id ?? policy.publisher ?? "global"}-${policy.updated_at ?? ""}-${policy.source}`}
-                policy={policy}
-                cloudControlsUrl={cloudControlsUrl}
-                onClear={onClearPolicy}
-                onNavigate={onNavigate}
-                cloudVariant={cloudVariant}
-              />
-            ))}
-          </EvidenceTableBody>
+        <EvidenceTableHead>
+          <EvidenceTableHeader className="w-10" />
+          <PolicySortHeader label="Action" sortKey="action" sort={sort} onSortChange={onSortChange} className="w-[88px]" />
+          <PolicySortHeader label="Rule" sortKey="rule" sort={sort} onSortChange={onSortChange} className="min-w-[220px]" />
+          <PolicySortHeader
+            label="Source"
+            sortKey="source"
+            sort={sort}
+            onSortChange={onSortChange}
+            className="hidden lg:table-cell"
+          />
+          <PolicySortHeader
+            label="Scope"
+            sortKey="scope"
+            sort={sort}
+            onSortChange={onSortChange}
+            className="hidden lg:table-cell"
+          />
+          <PolicySortHeader
+            label={cloudVariant ? "Applies to" : "App"}
+            sortKey="app"
+            sort={sort}
+            onSortChange={onSortChange}
+            className="hidden lg:table-cell"
+          />
+          <PolicySortHeader
+            label="Updated"
+            sortKey="updated"
+            sort={sort}
+            onSortChange={onSortChange}
+            className="hidden lg:table-cell"
+          />
+          <PolicySortHeader
+            label={cloudVariant ? "Policy" : "Approval record"}
+            sortKey="approval"
+            sort={sort}
+            onSortChange={onSortChange}
+            className="hidden lg:table-cell"
+          />
+          <EvidenceTableHeader className="hidden text-right lg:table-cell">
+            {cloudVariant ? "" : "Actions"}
+          </EvidenceTableHeader>
+        </EvidenceTableHead>
+        <EvidenceTableBody>
+          {visiblePolicies.map((policy) => (
+            <PolicyRuleRow
+              key={`${policy.harness}-${policy.scope}-${policy.artifact_id ?? policy.publisher ?? "global"}-${policy.updated_at ?? ""}-${policy.source}`}
+              policy={policy}
+              cloudControlsUrl={cloudControlsUrl}
+              onClear={onClearPolicy}
+              onNavigate={onNavigate}
+              cloudVariant={cloudVariant}
+            />
+          ))}
+        </EvidenceTableBody>
       </EvidenceTable>
 
-      {hasMore && viewAllLabel ? (
-        <div className="flex justify-center pt-1">
-          <button
-            type="button"
-            onClick={handleViewAll}
-            className="text-sm font-medium text-brand-blue hover:underline"
-          >
-            {viewAllLabel.replace("{count}", String(listTotal))}
-          </button>
-        </div>
-      ) : hasMore ? (
-        <div className="flex justify-center pt-1">
-          <button
-            type="button"
-            onClick={handleShowMore}
-            className="text-sm font-medium text-brand-blue hover:underline"
-          >
-            Show {Math.min(PAGE_SIZE, remaining)} more ({remaining} remaining)
-          </button>
-        </div>
+      {sortedPolicies.length > PAGE_SIZE ? (
+        <PaginationControls
+          page={safePage}
+          totalPages={totalPages}
+          totalItems={sortedPolicies.length}
+          pageSize={PAGE_SIZE}
+          onPrevious={handlePrevious}
+          onNext={handleNext}
+        />
       ) : null}
     </div>
   );
@@ -344,7 +418,8 @@ type GroupedPolicySectionProps = {
   emptyBody: string;
   defaultOpen?: boolean;
   cloudVariant?: boolean;
-  viewAllLabel?: string;
+  sort: PolicySortState;
+  onSortChange: (sort: PolicySortState) => void;
 };
 
 export function GroupedPolicySection({
@@ -359,7 +434,8 @@ export function GroupedPolicySection({
   emptyBody,
   defaultOpen = true,
   cloudVariant = false,
-  viewAllLabel,
+  sort,
+  onSortChange,
 }: GroupedPolicySectionProps) {
   const [open, setOpen] = useState(defaultOpen);
   const handleToggle = useCallback(() => setOpen((current) => !current), []);
@@ -411,8 +487,8 @@ export function GroupedPolicySection({
           emptyTitle={emptyTitle}
           emptyBody={emptyBody}
           cloudVariant={cloudVariant}
-          totalCount={policies.length}
-          viewAllLabel={viewAllLabel}
+          sort={sort}
+          onSortChange={onSortChange}
         />
       ) : null}
     </section>

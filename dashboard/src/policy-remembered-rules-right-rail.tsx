@@ -4,12 +4,11 @@ import {
   HiMiniCloudArrowUp,
   HiMiniFolder,
   HiMiniGlobeAlt,
-  HiMiniShieldCheck,
   HiMiniUsers,
 } from "react-icons/hi2";
-import { ActionButton, SectionLabel, Tag } from "./approval-center-primitives";
+import { ActionButton } from "./approval-center-primitives";
 import type { GuardRuntimeSnapshot } from "./guard-types";
-import { resolveCloudPolicyControlsUrl, resolveSecurityModeCopy } from "./policy-workspace-helpers";
+import { resolveCloudPolicyControlsUrl } from "./policy-workspace-helpers";
 
 const REVIEW_SCOPE_LADDER = [
   {
@@ -48,24 +47,10 @@ export function PolicyRememberedRulesRightRail({
   snapshot,
   onOpenCloudExceptions,
 }: PolicyRememberedRulesRightRailProps) {
-  const modeCopy = resolveSecurityModeCopy(snapshot.security_level);
   const cloudControlsUrl = resolveCloudPolicyControlsUrl(snapshot);
 
   return (
     <aside className="space-y-4 lg:sticky lg:top-4">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <SectionLabel>Active mode</SectionLabel>
-        <div className="mt-3 flex items-start gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue">
-            <HiMiniShieldCheck className="h-5 w-5" aria-hidden="true" />
-          </span>
-          <div>
-            <p className="text-sm font-semibold text-brand-dark">{modeCopy.label}</p>
-            <p className="mt-1 text-sm leading-relaxed text-slate-600">{modeCopy.description}</p>
-          </div>
-        </div>
-      </div>
-
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <p className="font-medium text-brand-dark">Approvals are still fast</p>
         <p className="mt-1 text-xs leading-relaxed text-slate-500">
@@ -89,7 +74,7 @@ export function PolicyRememberedRulesRightRail({
         </ul>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
+      <div className="rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 text-sm text-slate-600 shadow-sm">
         <div className="flex items-start gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue">
             <HiMiniCloud className="h-5 w-5" aria-hidden="true" />
