@@ -57,6 +57,7 @@ override-dependencies = [
     "aiohttp==3.14.1",
     "click==8.4.1",
     "cisco-ai-skill-scanner==2.0.11",
+    "fastapi==0.137.1",
     "importlib-metadata==9.0.0",
     "jsonschema==4.26.0",
     "litellm==1.89.0",

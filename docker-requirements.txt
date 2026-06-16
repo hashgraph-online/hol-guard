@@ -484,10 +484,11 @@ expandvars==1.1.2 \
     --hash=sha256:6c5822b7b756a99a356b915dd1267f52ab8a4efaa135963bd7f4bd5d368f71d7 \
     --hash=sha256:d1652fe4e61914f5b88ada93aaedb396446f55ae4621de45c8cb9f66e5712526
     # via cisco-ai-mcp-scanner
-fastapi==0.137.0 \
-    --hash=sha256:6dcbde8d464f92117c1accb9e42720f8e423fa9b86cb563b1f5862f785a06498 \
-    --hash=sha256:d0565d551f65a803ecff245390840867186f456ef98971f750724eed16e1541c
+fastapi==0.137.1 \
+    --hash=sha256:64f6983c59e45c4b9fdc44e57cb8035c2451ee91ea8e8ec042aca37de7cf6b69 \
+    --hash=sha256:822360704230d9533d8d9475399613525968aa2f0b5bd2a3ccc9f18c88fd541c
     # via
+    #   --override (workspace)
     #   cisco-ai-mcp-scanner
     #   cisco-ai-skill-scanner
 fastuuid==0.14.0 \
