@@ -47,57 +47,14 @@ _CODEX_PYTEST_SAFE_FLAG_PREFIXES = (
     "--durations=",
 )
 _CODEX_SAFE_SHELL_REDIRECTION_TOKENS = frozenset({"1>&2", "2>&1", ">/dev/null", "1>/dev/null", "2>/dev/null"})
-
-
-def _codex_tool_output_request_summary(
-    *,
-    tool_name: str,
-    command_text: str,
-    local_secret_source: str | None,
-    merged_output_capture: bool = False,
-) -> str:
-    if local_secret_source is not None:
-        return f"Codex tool `{tool_name}` read local secrets from {local_secret_source} while running `{command_text}`."
-    if merged_output_capture:
-        return (
-            f"Codex tool `{tool_name}` merged stderr into stdout while running `{command_text}`, "
-            "and the captured output looked credential-like."
-        )
-    return f"Codex tool `{tool_name}` produced credential-looking output while running `{command_text}`."
-
-
-def _codex_tool_output_runtime_summary(
-    local_secret_source: str | None,
-    *,
-    merged_output_capture: bool = False,
-) -> str:
-    if local_secret_source is not None:
-        return f"Local secrets from {local_secret_source} reached Codex tool output."
-    if merged_output_capture:
-        return "Combined stdout/stderr looked credential-like before it reached Codex."
-    return "Requests a sensitive native tool action: credential-looking output reached Codex."
-
-
-def _codex_tool_output_runtime_reason(
-    local_secret_source: str | None,
-    *,
-    merged_output_capture: bool = False,
-) -> str:
-    if local_secret_source is not None:
-        return (
-            "Guard inspects supported Codex tool output before Codex uses it, so accidental secret reads can be "
-            "stopped even when the filename was not obviously sensitive."
-        )
-    if merged_output_capture:
-        return (
-            "Guard stopped this command shape because merging stderr into stdout can send credential-looking failure "
-            "output to Codex. If you only need the exit status, rerun without `2>&1` or keep stderr out of the "
-            "model-visible output."
-        )
-    return (
-        "Guard inspects supported Codex tool output before Codex uses it, so accidental secret reads can be stopped "
-        "even when the filename was not obviously sensitive."
-    )
+_CODEX_PYTEST_PROGRESS_LINE_PATTERN = re.compile(r"^[.FEsxXrR]+$")
+_CODEX_PYTEST_SUMMARY_LINE_PATTERN = re.compile(
+    r"(?ix)^"
+    r"(?:=+\s.*\s=+"
+    r"|collected\s+\d+\s+items(?:\s*/\s*\d+\s+deselected)?"
+    r"|(?:\d+\s+\w+(?:,\s*\d+\s+\w+)*)\s+in\s+\d+(?:\.\d+)?s"
+    r"|.+::.+\s+(?:PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS))$"
+)
 
 
 def _codex_command_start_indexes(parts: list[str]) -> list[int]:
@@ -325,7 +282,31 @@ def _codex_focused_pytest_can_skip_secret_output(
         return all(match.classifier == "pem-private-key" for match in non_medium_matches) and (
             _codex_output_uses_placeholder_private_key_fixture(response_text)
         )
-    return True
+    return _codex_focused_pytest_output_is_only_benign_fixture(response_text)
+
+
+def _codex_focused_pytest_output_is_only_benign_fixture(response_text: str) -> bool:
+    from .commands_support_codex_commands import _codex_output_is_only_benign_secret_fixture
+
+    saw_fixture = False
+    for raw_line in response_text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if _codex_output_is_only_benign_secret_fixture(line):
+            saw_fixture = True
+            continue
+        if _codex_focused_pytest_status_line_is_benign(line):
+            continue
+        return False
+    return saw_fixture
+
+
+def _codex_focused_pytest_status_line_is_benign(line: str) -> bool:
+    return bool(
+        _CODEX_PYTEST_PROGRESS_LINE_PATTERN.fullmatch(line)
+        or _CODEX_PYTEST_SUMMARY_LINE_PATTERN.fullmatch(line)
+    )
 
 
 def _codex_command_is_focused_pytest_verification(command_text: str) -> bool:
