@@ -182,8 +182,8 @@ export function useQueueBulkApprove(props: {
     setBulkFlowStep("submitting");
     setBulkApproveError(null);
     try {
-      setBulkCompletedActionCount(approvedActionCount);
       await props.onBulkApprove?.(ids, gateCredentials);
+      setBulkCompletedActionCount(approvedActionCount);
       setBulkFlowStep("completed");
       setBulkApprovePassword("");
       setBulkApproveTotpCode("");
@@ -200,22 +200,47 @@ export function useQueueBulkApprove(props: {
     selectedBulkGroups,
   ]);
 
+  const bulkSelectableMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const group of groups) {
+      const isReadOnly = isReadOnlyQueueGroup(group);
+      map.set(group.primary.request_id, isReadOnly);
+      for (const id of group.duplicateIds) {
+        map.set(id, isReadOnly);
+      }
+    }
+    return map;
+  }, [groups]);
+
+  const groupIdMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const group of groups) {
+      map.set(group.primary.request_id, group.primary.request_id);
+      for (const id of group.duplicateIds) {
+        map.set(id, group.primary.request_id);
+      }
+    }
+    return map;
+  }, [groups]);
+
   const isSelectable = useCallback(
-    (item: GuardApprovalRequest) => isBulkSelectableRequest(item, groups),
-    [groups],
+    (item: GuardApprovalRequest) =>
+      bulkSelectableMap.get(item.request_id) ??
+      isReadOnlyQueueGroup({ primary: item, duplicateCount: 0, duplicateIds: [] }),
+    [bulkSelectableMap],
   );
 
   const isSelected = useCallback(
     (item: GuardApprovalRequest) =>
-      selectedBulkIds.has(resolveBulkSelectionGroupId(item, groups)),
-    [groups, selectedBulkIds],
+      selectedBulkIds.has(groupIdMap.get(item.request_id) ?? item.request_id),
+    [groupIdMap, selectedBulkIds],
   );
 
   const onToggle = useCallback(
     (item: GuardApprovalRequest) => {
-      handleBulkToggleSelect(resolveBulkSelectionGroupId(item, groups));
+      handleBulkToggleSelect(groupIdMap.get(item.request_id) ?? item.request_id);
     },
-    [groups, handleBulkToggleSelect],
+    [groupIdMap, handleBulkToggleSelect],
   );
 
   const bulkFlowProps = showBulkApprove

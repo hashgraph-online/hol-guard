@@ -244,7 +244,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   }, [currentPage, pagedRequests, activeRequestId, props.onOpenRequest]);
 
   const bulkApprove = useQueueBulkApprove({
-    items: requests,
+    items: filteredRequests,
     approvalGate: props.approvalGate ?? null,
     onBulkApprove: props.onBulkApprove,
     settingsHref: guardAwareHref("/settings"),
@@ -690,6 +690,7 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
   );
   return (
     <div
+      role="none"
       className={`w-full rounded-lg py-2.5 px-2 transition-all ${
         active
           ? "border border-brand-blue bg-brand-blue/[0.06]"
@@ -722,27 +723,27 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
           tabIndex={active ? 0 : -1}
           className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
         >
-        <div className="flex min-w-0 items-center gap-2">
-          <span
-            className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
-              isBlocked ? "bg-brand-attention" : "bg-emerald-400"
-            }`}
-            aria-hidden="true"
-          />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-brand-dark">{preview}</p>
-            <p className="truncate text-[11px] text-muted-foreground">
-              {harnessDisplayName(item.harness)} · {category.shortLabel} · {formatQueueRequestDate(item)}
-            </p>
+          <div className="flex min-w-0 items-center gap-2">
+            <span
+              className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
+                isBlocked ? "bg-brand-attention" : "bg-emerald-400"
+              }`}
+              aria-hidden="true"
+            />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-brand-dark">{preview}</p>
+              <p className="truncate text-[11px] text-muted-foreground">
+                {harnessDisplayName(item.harness)} · {category.shortLabel} · {formatQueueRequestDate(item)}
+              </p>
+            </div>
           </div>
-        </div>
-        <span
-          className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-            active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"
-          }`}
-        >
-          <CategoryIcon className="h-4 w-4" aria-hidden="true" />
-        </span>
+          <span
+            className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+              active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"
+            }`}
+          >
+            <CategoryIcon className="h-4 w-4" aria-hidden="true" />
+          </span>
         </button>
       </div>
     </div>
