@@ -374,8 +374,16 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         pretool_entries = self._prune_managed_entries(pretool_raw if isinstance(pretool_raw, list) else [])
         prompt_raw = hooks.get("UserPromptSubmit")
         prompt_entries = self._prune_managed_entries(prompt_raw if isinstance(prompt_raw, list) else [])
-        pretool_handler = {"type": "command", "command": managed_command, "timeout": _ZCODE_PRETOOL_TIMEOUT_SECONDS}
-        prompt_handler = {"type": "command", "command": managed_command, "timeout": _ZCODE_PROMPT_TIMEOUT_SECONDS}
+        pretool_handler: dict[str, object] = {
+            "type": "command",
+            "command": managed_command,
+            "timeout": _ZCODE_PRETOOL_TIMEOUT_SECONDS,
+        }
+        prompt_handler: dict[str, object] = {
+            "type": "command",
+            "command": managed_command,
+            "timeout": _ZCODE_PROMPT_TIMEOUT_SECONDS,
+        }
         for matcher in ZCODE_PRETOOL_MATCHERS:
             pretool_entries = _merge_hook_entry(pretool_entries, matcher, pretool_handler)
         prompt_entries = _merge_hook_entry(prompt_entries, None, prompt_handler)
