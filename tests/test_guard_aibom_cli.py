@@ -341,7 +341,11 @@ def test_resolve_trust_attestation_context_includes_workspace_device_for_v2(
 
     assert context["workspaceId"] == "workspace-1"
     assert context["deviceId"] == "device-1"
+    assert context["analyzerId"] == "hol-guard"
+    assert context["analyzerSpecVersion"] == "guard-aibom-trust-spec.v1"
+    assert context["analyzerVersion"] == "2.0.345"
     assert context["installationId"] == "device-1"
+    assert context["policyVersion"] == "guard-aibom-trust-policy.v1"
     assert context["uploadId"] is None
     assert context["challengeId"] is None
     assert context["nonce"] is None
@@ -364,6 +368,10 @@ def test_resolve_trust_attestation_context_includes_upload_session_bindings_for_
         include_upload_session_bindings=True,
     )
 
+    assert context["analyzerId"] == "hol-guard"
+    assert context["analyzerSpecVersion"] == "guard-aibom-trust-spec.v1"
+    assert context["analyzerVersion"] == "2.0.345"
+    assert context["policyVersion"] == "guard-aibom-trust-policy.v1"
     assert isinstance(context["uploadId"], str) and context["uploadId"].startswith("guard-aibom-upload-")
     assert isinstance(context["challengeId"], str) and context["challengeId"].startswith("guard-aibom-challenge-")
     assert isinstance(context["nonce"], str) and context["nonce"]
