@@ -18,8 +18,10 @@ from codex_plugin_scanner.guard.daemon.dashboard_update import (
     build_dashboard_update_runner_command,
     build_dashboard_update_runner_popen_kwargs,
     dashboard_update_runner_script,
+    merge_dashboard_update_outcome,
     merge_dashboard_update_progress,
     schedule_guard_dashboard_update,
+    write_dashboard_update_outcome,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -612,3 +614,61 @@ def test_runner_command_appends_force_pypi_reinstall_flag(tmp_path: Path) -> Non
         daemon_port=1234,
     )
     assert "--force-pypi-reinstall" not in command_without
+
+
+def test_merge_dashboard_update_outcome_suppresses_repeat_update_button(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    write_dashboard_update_outcome(
+        guard_home,
+        {
+            "status": "stale",
+            "current_version": "2.0.741",
+            "resulting_version": "2.0.741",
+            "version_check": {"latest_version": "2.0.743", "update_available": True},
+            "retry_command": "pipx install --force hol-guard",
+            "message": "HOL Guard 2.0.741 is behind PyPI 2.0.743 after the update attempt.",
+        },
+    )
+
+    payload = merge_dashboard_update_outcome(
+        guard_home,
+        {
+            "current_version": "2.0.741",
+            "latest_version": "2.0.743",
+            "update_available": True,
+            "auto_updatable": True,
+        },
+    )
+
+    assert payload["update_suppressed"] is True
+    assert payload["retry_command"] == "pipx install --force hol-guard"
+    assert "behind PyPI 2.0.743" in str(payload["update_attempt_message"])
+
+
+def test_merge_dashboard_update_outcome_clears_when_install_is_current(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    write_dashboard_update_outcome(
+        guard_home,
+        {
+            "status": "stale",
+            "current_version": "2.0.741",
+            "resulting_version": "2.0.741",
+            "version_check": {"latest_version": "2.0.743"},
+            "retry_command": "pipx install --force hol-guard",
+        },
+    )
+
+    payload = merge_dashboard_update_outcome(
+        guard_home,
+        {
+            "current_version": "2.0.743",
+            "latest_version": "2.0.743",
+            "update_available": False,
+            "auto_updatable": True,
+        },
+    )
+
+    assert "update_suppressed" not in payload
+    assert not (guard_home / "dashboard-update-outcome.json").exists()
