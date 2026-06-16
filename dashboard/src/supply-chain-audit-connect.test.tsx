@@ -10,7 +10,7 @@ import {
 } from "./supply-chain-audit-connect";
 import type { PackageFirewallStatusResponse } from "./guard-types";
 
-function assert(condition: boolean, message: string): void {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
   }

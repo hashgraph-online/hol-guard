@@ -1,6 +1,17 @@
-import type { GuardReceipt, GuardApprovalRequest, GuardActionEnvelope } from "../guard-types";
+import type {
+  GuardReceipt,
+  GuardApprovalRequest,
+  GuardActionEnvelope,
+  RiskSignalV2,
+} from "../guard-types";
 import { harnessDisplayName } from "../approval-center-utils";
 import { detectCategory, type ReceiptCategory } from "./categories";
+
+type ReceiptScannerEvidence = NonNullable<GuardReceipt["scanner_evidence"]>[number];
+
+function isRiskSignalEvidence(signal: ReceiptScannerEvidence): signal is RiskSignalV2 {
+  return "signal_id" in signal && typeof signal.signal_id === "string";
+}
 
 function getArtifactType(receipt: GuardReceipt): string {
   return (receipt.artifact_type ?? "").toLowerCase();
@@ -93,7 +104,7 @@ export function resolveActionTitle(receipt: GuardReceipt): string {
   }
 
   // Scanner evidence title is usually more descriptive than raw artifact_name
-  const signals = receipt.scanner_evidence ?? [];
+  const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
   if (signals.length > 0 && signals[0]?.title) {
     return signals[0].title;
   }
@@ -134,7 +145,7 @@ export function resolveActionTitle(receipt: GuardReceipt): string {
 }
 
 export function resolveActionSubtitle(receipt: GuardReceipt): string | null {
-  const signals = receipt.scanner_evidence ?? [];
+  const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
   const firstSignal = signals[0];
 
   // Highest priority: scanner plain_reason explains the actual risk

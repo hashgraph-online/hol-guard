@@ -1,4 +1,8 @@
-import type { GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
+import type {
+  GuardReceipt,
+  GuardRuntimeSnapshot,
+  GuardSupplyChainScannerEvidence,
+} from "./guard-types";
 
 export type SupplyChainEvidenceRailKind = "block" | "audit" | "sync";
 
@@ -24,12 +28,16 @@ export type SupplyChainCloudDegradedState = {
   detail: string;
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+type ReceiptScannerEvidence = NonNullable<GuardReceipt["scanner_evidence"]>[number];
+
+function isSupplyChainEvidence(
+  value: ReceiptScannerEvidence,
+): value is GuardSupplyChainScannerEvidence {
+  return "operation" in value && typeof value.operation === "string";
 }
 
-function readOperation(value: unknown): string | null {
-  if (!isRecord(value) || typeof value.operation !== "string") {
+function readOperation(value: ReceiptScannerEvidence): string | null {
+  if (!isSupplyChainEvidence(value)) {
     return null;
   }
   const trimmed = value.operation.trim();
@@ -113,10 +121,10 @@ function blockRailItem(receipt: GuardReceipt): SupplyChainEvidenceRailItem {
 
 function auditRailItem(receipt: GuardReceipt): SupplyChainEvidenceRailItem {
   const evidence = (receipt.scanner_evidence ?? []).find(
-    (entry) => readOperation(entry) === "audit",
+    (entry): entry is GuardSupplyChainScannerEvidence => readOperation(entry) === "audit",
   );
   const auditStatus =
-    isRecord(evidence) && typeof evidence.audit_status === "string"
+    evidence !== undefined && typeof evidence.audit_status === "string"
       ? evidence.audit_status
       : null;
   if (auditStatus === "incomplete") {
@@ -134,15 +142,15 @@ function auditRailItem(receipt: GuardReceipt): SupplyChainEvidenceRailItem {
     };
   }
   const decision =
-    isRecord(evidence) && typeof evidence.audit_decision === "string"
+    evidence !== undefined && typeof evidence.audit_decision === "string"
       ? evidence.audit_decision
       : receipt.policy_decision;
   const blockedCount =
-    isRecord(evidence) && typeof evidence.blocked_package_count === "number"
+    evidence !== undefined && typeof evidence.blocked_package_count === "number"
       ? evidence.blocked_package_count
       : 0;
   const totalPackages =
-    isRecord(evidence) && typeof evidence.total_packages === "number"
+    evidence !== undefined && typeof evidence.total_packages === "number"
       ? evidence.total_packages
       : blockedCount;
   const detail =

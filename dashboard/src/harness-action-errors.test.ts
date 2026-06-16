@@ -16,14 +16,14 @@ function assert(condition: boolean, message: string): void {
 
 function makeHarnessError(
   status: number,
-  payload: { error: string; message?: string } | null,
+  payload: ConstructorParameters<typeof GuardHarnessActionError>[1],
 ): GuardHarnessActionError {
   return new GuardHarnessActionError(status, payload);
 }
 
 function makeDuckTypedHarnessError(
   status: number,
-  payload: { error: string; message?: string } | null,
+  payload: ConstructorParameters<typeof GuardHarnessActionError>[1],
 ): GuardHarnessActionError {
   const error = makeHarnessError(status, payload);
   return Object.assign(Object.create(GuardHarnessActionError.prototype), error);

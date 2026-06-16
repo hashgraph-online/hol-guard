@@ -134,7 +134,6 @@ export function SupplyChainBundlePanel() {
           <EmptyState
             title="Could not load intel"
             body={error}
-            tone="error"
           />
         </div>
       </div>

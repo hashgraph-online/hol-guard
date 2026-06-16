@@ -1,5 +1,6 @@
 import type {
   GuardReceipt,
+  GuardSupplyChainScannerEvidence,
   PackageWorkbenchFilters,
   PackageWorkbenchSortKey,
   SupplyChainAuditDecision,
@@ -294,8 +295,12 @@ function packageRecordsFromEvaluation(evaluation: Record<string, unknown> | null
   return normalizePackageFindings(evaluation.package_findings);
 }
 
-function isAuditEvidence(value: unknown): value is Record<string, unknown> & { operation: "audit" } {
-  return isRecord(value) && value.operation === "audit";
+type ReceiptScannerEvidence = NonNullable<GuardReceipt["scanner_evidence"]>[number];
+
+function isAuditEvidence(
+  value: ReceiptScannerEvidence,
+): value is GuardSupplyChainScannerEvidence & { operation: "audit" } {
+  return "operation" in value && value.operation === "audit";
 }
 
 export function normalizeSupplyChainAuditSnapshot(
@@ -358,13 +363,11 @@ export function normalizeSupplyChainAuditSnapshot(
 export function derivePackageWorkbenchFromReceipts(receipts: GuardReceipt[]): SupplyChainAuditSnapshot | null {
   const auditReceipts = receipts
     .filter((receipt) => receipt.harness === "package-firewall")
-    .filter((receipt) =>
-      (receipt.scanner_evidence ?? []).some((entry) => isAuditEvidence(entry as unknown)),
-    )
+    .filter((receipt) => (receipt.scanner_evidence ?? []).some((entry) => isAuditEvidence(entry)))
     .sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp));
   for (const receipt of auditReceipts) {
-    const evidenceRaw = (receipt.scanner_evidence ?? []).find((entry) => isAuditEvidence(entry as unknown));
-    if (evidenceRaw === undefined || !isRecord(evidenceRaw)) {
+    const evidenceRaw = (receipt.scanner_evidence ?? []).find((entry) => isAuditEvidence(entry));
+    if (evidenceRaw === undefined) {
       continue;
     }
     const snapshot = normalizeSupplyChainAuditSnapshot(

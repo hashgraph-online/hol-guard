@@ -66,7 +66,7 @@ for (const scope of ["artifact", "publisher", "harness", "global"] as const) {
 
 const fullScopeValues = scopeChoicesForRequest(BASE_REQUEST).map((choice) => choice.value);
 assert(
-  ["artifact", "workspace", "publisher", "harness", "global"].every((scope) => fullScopeValues.includes(scope)),
+  (["artifact", "workspace", "publisher", "harness", "global"] as const).every((scope) => fullScopeValues.includes(scope)),
   "T-AS-03: requests with workspace and publisher expose all approval scope kinds"
 );
 

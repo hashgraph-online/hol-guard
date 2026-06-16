@@ -25,6 +25,12 @@ interface EvidenceActionDetailProps {
   onClose: () => void;
 }
 
+type ReceiptScannerEvidence = NonNullable<GuardReceipt["scanner_evidence"]>[number];
+
+function isRiskSignalEvidence(signal: ReceiptScannerEvidence): signal is RiskSignalV2 {
+  return "signal_id" in signal && typeof signal.signal_id === "string";
+}
+
 function SeverityIcon({ severity }: { severity: string }) {
   if (severity === "critical" || severity === "high") {
     return <HiMiniExclamationTriangle className="h-4 w-4 text-amber-500" aria-hidden="true" />;
@@ -296,7 +302,7 @@ export function EvidenceActionDetail({
   const actionType = resolveActionType(receipt);
   const actionSubtitle = resolveActionSubtitle(receipt);
   const actionDetail = resolveActionDetail(receipt);
-  const signals = receipt.scanner_evidence ?? [];
+  const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
   const primarySignal = signals[0];
   let copyLabel = "Copy receipt ID";
   if (copied) {

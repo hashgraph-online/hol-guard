@@ -1,4 +1,4 @@
-import type { ReactNode, MouseEvent, KeyboardEvent } from "react";
+import type { ReactNode, MouseEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent } from "react";
 import {
   HiMiniChevronDown,
@@ -1052,7 +1052,7 @@ function QueueCard(props: {
   const isBlocked = props.item.policy_action === "block";
   const statusDotClass = queueCardStatusDotClass(props.active, isBlocked);
   const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         props.onClick();
@@ -1522,7 +1522,7 @@ function DecisionWorkspace(props: {
 
   useEffect(() => {
     if (props.detail.kind !== "ready") return;
-    const onKeyDown = (event: KeyboardEvent) => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (submitting !== null || pendingAction !== null) return;
       const target = event.target as HTMLElement;
       if (

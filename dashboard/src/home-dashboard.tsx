@@ -86,8 +86,8 @@ export function buildDaemonErrorCopy(): { title: string; body: string; primaryCt
   };
 }
 
-export function redactHomeArtifactLabel(value: string | null): string {
-  if (value === null || value.trim().length === 0) {
+export function redactHomeArtifactLabel(value: string | null | undefined): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
     return "a local action";
   }
   const trimmed = value.trim();

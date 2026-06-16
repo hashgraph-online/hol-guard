@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { GuardCloudConnectFlow, GuardReceiptAnalytics, GuardRuntimeSnapshot } from "../guard-types";
+import type {
+  GuardCloudConnectFlow,
+  GuardInsightsShareResult,
+  GuardReceiptAnalytics,
+  GuardRuntimeSnapshot,
+} from "../guard-types";
 import { ActionButton } from "../approval-center-primitives";
 import { GuardModalLayer } from "../guard-modal-layer";
 import {
@@ -7,7 +12,6 @@ import {
   fetchRuntimeSnapshot,
   publishInsightsShare,
   startGuardCloudConnect,
-  type GuardInsightsShareResult,
 } from "../guard-api";
 import { ConnectFlowCard } from "../supply-chain-firewall-views";
 import {

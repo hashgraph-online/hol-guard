@@ -328,9 +328,22 @@ export function Badge(props: {
   );
 }
 
+type TagTone =
+  | "blue"
+  | "green"
+  | "purple"
+  | "slate"
+  | "red"
+  | "amber"
+  | "attention"
+  | "default"
+  | "info"
+  | "warning"
+  | "destructive";
+
 export function Tag(props: {
   children: ReactNode;
-  tone?: "blue" | "green" | "purple" | "slate" | "red" | "attention";
+  tone?: TagTone;
 }) {
   const toneClass = tagToneClass(props.tone);
   return (
@@ -381,11 +394,13 @@ type ActionButtonProps = {
   href?: string;
   variant?: "primary" | "secondary" | "danger" | "outline" | "ghost" | "success" | "quiet";
   disabled?: boolean;
+  className?: string;
+  type?: ButtonHTMLAttributes<HTMLButtonElement>["type"];
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "className" | "onClick" | "type">;
 
 export const ActionButton = forwardRef<HTMLButtonElement | HTMLAnchorElement, ActionButtonProps>(
-  ({ children, href, variant, disabled, onClick, ...buttonProps }, ref) => {
-    const className = actionButtonClass(variant);
+  ({ children, href, variant, disabled, onClick, className: customClassName, type, ...buttonProps }, ref) => {
+    const className = `${actionButtonClass(variant)}${customClassName ? ` ${customClassName}` : ""}`;
     if (href) {
       return (
         <a
@@ -393,6 +408,7 @@ export const ActionButton = forwardRef<HTMLButtonElement | HTMLAnchorElement, Ac
           href={guardAwareHref(href)}
           target={href.startsWith("https://") ? "_blank" : undefined}
           rel={href.startsWith("https://") ? "noreferrer" : undefined}
+          onClick={onClick}
           className={className}
         >
           {children}
@@ -400,7 +416,7 @@ export const ActionButton = forwardRef<HTMLButtonElement | HTMLAnchorElement, Ac
       );
     }
     return (
-      <button ref={ref as Ref<HTMLButtonElement>} type="button" className={className} onClick={onClick} disabled={disabled} {...buttonProps}>
+      <button ref={ref as Ref<HTMLButtonElement>} type={type ?? "button"} className={className} onClick={onClick} disabled={disabled} {...buttonProps}>
         {children}
       </button>
     );
@@ -592,10 +608,15 @@ function badgeToneClass(tone: "default" | "success" | "warning" | "info" | "dest
   return "border-transparent bg-gray-100 text-gray-600 border-gray-200";
 }
 
-function tagToneClass(tone: "blue" | "green" | "purple" | "slate" | "red" | "attention" | undefined): string {
+function tagToneClass(tone: TagTone | undefined): string {
   if (tone === "green") return "border-transparent bg-brand-green-bg/60 text-brand-green-text";
   if (tone === "purple") return "border-transparent bg-brand-purple/10 text-brand-purple";
+  if (tone === "destructive") return "border-transparent bg-brand-purple/10 text-brand-purple";
   if (tone === "red") return "border-transparent bg-brand-purple/10 text-brand-purple";
+  if (tone === "amber") return "border-transparent bg-amber-50 text-amber-700";
+  if (tone === "warning") return "border-transparent bg-amber-50 text-amber-700";
+  if (tone === "info") return "border-transparent bg-blue-500/10 text-blue-700";
+  if (tone === "default") return "border-gray-200 bg-gray-100 text-gray-500";
   if (tone === "slate") return "border-gray-200 bg-gray-100 text-gray-500";
   if (tone === "attention") return "border-transparent bg-brand-attention-bg text-brand-attention";
   return "border-transparent bg-blue-500/10 text-blue-700";

@@ -4,7 +4,7 @@ import {
 } from "./supply-chain-audit-result";
 import { normalizeSupplyChainAuditSnapshot } from "./supply-chain-audit-normalize";
 
-function assert(condition: boolean, message: string): void {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
   }

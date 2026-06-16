@@ -29,7 +29,7 @@ import {
 } from "./approval-center-utils";
 import type { GuardActionEnvelope, GuardApprovalRequest, GuardDecisionV2, RiskSignalV2 } from "./guard-types";
 
-function assert(condition: boolean, message: string): void {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
   }
@@ -1423,6 +1423,7 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
 
 const retriedResume = await retryResume("req-retry-resume");
 assert(retryResumeCalls.length === 3, "L080: retryResume refreshes and retries once");
+assert(retriedResume !== null, "L080: retryResume returns a resume payload after refresh");
 assert(retriedResume.status === "sent", "L080: retryResume returns retried resume status");
 assert(
   headerValue(retryResumeCalls[1].init, "X-Guard-Dashboard-Session") === "stale-retry-resume-token",

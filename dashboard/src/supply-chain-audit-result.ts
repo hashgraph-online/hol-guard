@@ -1,3 +1,7 @@
+type SupplyChainAuditIncompletePayload = Record<string, unknown> & {
+  audit_status: "incomplete";
+};
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -10,7 +14,9 @@ export function readString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export function isSupplyChainAuditIncomplete(detail: unknown): boolean {
+export function isSupplyChainAuditIncomplete(
+  detail: unknown,
+): detail is SupplyChainAuditIncompletePayload {
   if (!isRecord(detail)) {
     return false;
   }

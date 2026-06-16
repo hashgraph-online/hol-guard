@@ -58,6 +58,21 @@ export type RiskSignalV2 = {
   advisory_id: string | null;
 };
 
+export type GuardSupplyChainScannerEvidence = {
+  operation: string;
+  status?: string;
+  audit_status?: string;
+  audit_decision?: string;
+  blocked_package_count?: number;
+  total_packages?: number;
+  manifest_paths?: string[];
+  lockfile_paths?: string[];
+  package_inventory?: unknown;
+  package_findings?: unknown;
+};
+
+export type GuardScannerEvidence = RiskSignalV2 | GuardSupplyChainScannerEvidence;
+
 export type GuardDecisionV2 = {
   action: GuardDecisionV2Action;
   reason: string;
@@ -391,12 +406,12 @@ export type GuardReceipt = {
   changed_capabilities: string[];
   provenance_summary: string;
   user_override: string | null;
-  artifact_name: string | null;
+  artifact_name?: string | null;
   artifact_type?: string | null;
   source_scope: string | null;
   timestamp: string;
   diff_summary?: string | null;
-  scanner_evidence?: RiskSignalV2[];
+  scanner_evidence?: GuardScannerEvidence[];
   action_envelope_json?: GuardActionEnvelope | null;
 };
 
@@ -592,6 +607,7 @@ export type GuardHarnessActionErrorPayload = {
   error: string;
   message?: string;
   harness?: string;
+  operation?: string;
   confirmation_phrase?: string;
   confirm_command?: string;
   retryable?: boolean;

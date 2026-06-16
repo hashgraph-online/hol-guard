@@ -20,7 +20,7 @@ assert(
   "footer keeps a compact set of resource links for the workspace shell"
 );
 
-const labels = SHELL_FOOTER_RESOURCE_LINKS.map((link) => link.label);
+const labels: string[] = SHELL_FOOTER_RESOURCE_LINKS.map((link) => link.label);
 
 assert(labels.includes("Docs"), "footer includes Docs");
 assert(labels.includes("Guard Cloud"), "footer includes Guard Cloud");
