@@ -1478,8 +1478,7 @@ def _bulk_read_command(command: str) -> bool:
 def _bulk_has_secret_path_text(text: str) -> bool:
     lowered = text.lower()
     return any(
-        hint in lowered
-        for hint in (".env", "token", "secret", "credential", "password", "private key", "api key")
+        hint in lowered for hint in (".env", "token", "secret", "credential", "password", "private key", "api key")
     )
 
 

@@ -619,6 +619,7 @@ export function App() {
         requestIds: ids,
         approval_password: gateCredentials.approval_password,
         approval_totp_code: gateCredentials.approval_totp_code,
+        approval_gate_use_cooldown: gateCredentials.approval_gate_use_cooldown,
       });
       await refreshStateAfterAction();
       if (result.failed.length > 0) {

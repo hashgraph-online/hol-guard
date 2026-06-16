@@ -3057,11 +3057,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not isinstance(request_ids, list) or len(request_ids) == 0:
             self._write_json({"error": "missing_request_ids", "resolved_count": 0, "failed": []}, status=400)
             return
-        normalized_ids = [
-            str(item).strip()
-            for item in request_ids
-            if isinstance(item, str) and str(item).strip()
-        ]
+        normalized_ids = [str(item).strip() for item in request_ids if isinstance(item, str) and str(item).strip()]
         if len(normalized_ids) == 0:
             self._write_json({"error": "missing_request_ids", "resolved_count": 0, "failed": []}, status=400)
             return

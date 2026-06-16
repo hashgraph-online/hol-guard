@@ -2030,6 +2030,7 @@ export async function bulkAllowReadOnce(input: {
   requestIds: string[];
   approval_password?: string;
   approval_totp_code?: string;
+  approval_gate_use_cooldown?: boolean;
 }): Promise<BulkAllowReadOnceResult> {
   if (isGuardDemoMode()) {
     return {
@@ -2048,7 +2049,7 @@ export async function bulkAllowReadOnce(input: {
       request_ids: input.requestIds,
       ...(input.approval_password !== undefined ? { approval_password: input.approval_password } : {}),
       ...(input.approval_totp_code !== undefined ? { approval_totp_code: input.approval_totp_code } : {}),
-      approval_gate_use_cooldown: false,
+      approval_gate_use_cooldown: input.approval_gate_use_cooldown ?? false,
     }),
   });
   return {
