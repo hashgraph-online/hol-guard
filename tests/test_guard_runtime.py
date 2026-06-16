@@ -14908,6 +14908,30 @@ def test_codex_post_tool_output_allows_focused_pytest_fake_credential_fixture(tm
     assert artifact is None
 
 
+def test_codex_post_tool_output_allows_focused_pytest_fixture_with_status_noise(tmp_path):
+    artifact = _codex_post_tool_output_artifact(
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": (
+                    "python3 -m pytest "
+                    "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+                    "test_release_checklist_references_smoke_evidence -q -s"
+                )
+            },
+            "tool_response": {
+                "stdout": "fake_credential=fixture-only\n.\n1 passed in 0.02s\n",
+            },
+        },
+        config_path="codex.json",
+        source_scope="project",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert artifact is None
+
+
 def test_guard_hook_codex_post_tool_use_blocks_focused_pytest_medium_secret_output(
     tmp_path,
     capsys,

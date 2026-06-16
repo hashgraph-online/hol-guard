@@ -19,6 +19,7 @@ from .commands_support_codex_commands import (
 )
 from .commands_support_codex_reads import _split_codex_safe_read_only_pipeline
 from .commands_support_codex_tool_output import (
+    _codex_command_is_focused_pytest_verification,
     _codex_command_captures_combined_shell_output,
     _codex_command_references_sensitive_local_source,
     _codex_existing_local_path_match,
@@ -28,11 +29,13 @@ from .commands_support_codex_tool_output import (
     _codex_sensitive_path_matches_in_text,
     _codex_token_is_url,
     _codex_token_prefix_is_url_scheme,
+    _codex_url_like_local_path_tokens,
+    _dedupe_codex_secret_path_matches,
+)
+from .commands_support_codex_tool_output_messages import (
     _codex_tool_output_request_summary,
     _codex_tool_output_runtime_reason,
     _codex_tool_output_runtime_summary,
-    _codex_url_like_local_path_tokens,
-    _dedupe_codex_secret_path_matches,
 )
 
 def _optional_string(value: object | None) -> str | None:
@@ -325,6 +328,7 @@ def _codex_post_tool_output_artifact(
     ):
         return None
     merged_output_capture = _codex_command_captures_combined_shell_output(command_text)
+    focused_pytest = _codex_command_is_focused_pytest_verification(command_text)
     fingerprint = hashlib.sha256(
         json.dumps(
             {
@@ -350,11 +354,12 @@ def _codex_post_tool_output_artifact(
         tool_name=tool_name,
         command_text=command_text,
         local_secret_source=local_secret_source,
+        focused_pytest=focused_pytest,
         merged_output_capture=merged_output_capture,
     )
     runtime_request_summary = _codex_tool_output_runtime_summary(
         local_secret_source,
-        command_text=command_text,
+        focused_pytest=focused_pytest,
         merged_output_capture=merged_output_capture,
     )
     metadata: dict[str, object] = {
@@ -371,7 +376,7 @@ def _codex_post_tool_output_artifact(
         "runtime_request_summary": runtime_request_summary,
         "runtime_request_reason": _codex_tool_output_runtime_reason(
             local_secret_source,
-            command_text=command_text,
+            focused_pytest=focused_pytest,
             merged_output_capture=merged_output_capture,
         ),
     }
