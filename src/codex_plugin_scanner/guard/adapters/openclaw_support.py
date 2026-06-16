@@ -98,7 +98,7 @@ def _gateway_artifact(context: HarnessContext, path: Path, payload: dict[str, ob
     workspace_path = _workspace_path(context, payload)
     sandbox = _dict_value(defaults.get("sandbox"))
     hooks = _dict_value(payload.get("hooks"))
-    metadata = {
+    metadata: dict[str, object] = {
         "workspace_path": str(workspace_path),
         "gateway_mode": _string_value(gateway.get("mode")),
         "gateway_bind": _string_value(gateway.get("bind")),

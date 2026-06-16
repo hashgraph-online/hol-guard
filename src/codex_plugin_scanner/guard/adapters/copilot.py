@@ -12,6 +12,7 @@ import subprocess
 import sys
 from hashlib import sha256
 from pathlib import Path
+from typing import TypedDict
 
 from ...ecosystems.opencode import _strip_jsonc
 from ..launcher import merge_guard_launcher_env
@@ -45,6 +46,18 @@ _LEGACY_MANAGED_HOOK_PATTERNS = (
     re.compile(r'--harness(?:["\s=]+)copilot(["\s]|$)'),
 )
 _INLINE_GUARD_ARGS_PATTERN = re.compile(r"json\.loads\((?P<payload>'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")\)")
+
+
+class _ManagedHookPayload(TypedDict):
+    version: int
+    hooks: dict[str, object]
+
+
+def _manifest_notes(payload: dict[str, object]) -> list[str]:
+    notes = payload.get("notes")
+    if not isinstance(notes, list):
+        return []
+    return [str(note) for note in notes]
 
 
 def _parse_copilot_json_text(raw_text: str) -> dict[str, object] | None:
@@ -244,8 +257,8 @@ def _hook_command_variants(entry: dict[str, object]) -> tuple[tuple[str, str], .
     return tuple(variants)
 
 
-def _managed_hook_payload(payload: dict[str, object]) -> dict[str, object]:
-    normalized_payload: dict[str, object] = {"version": 1, "hooks": {}}
+def _managed_hook_payload(payload: dict[str, object]) -> _ManagedHookPayload:
+    normalized_payload: _ManagedHookPayload = {"version": 1, "hooks": {}}
     version = payload.get("version")
     if isinstance(version, int):
         normalized_payload["version"] = version
@@ -278,7 +291,10 @@ def _mcp_servers_payload(target_path: Path, payload: dict[str, object]) -> dict[
 
 def _command_parts(server_config: dict[str, object]) -> tuple[str | None, tuple[str, ...]]:
     command = server_config.get("command")
-    args = tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str))
+    args_payload = server_config.get("args")
+    args = (
+        tuple(str(value) for value in args_payload if isinstance(value, str)) if isinstance(args_payload, list) else ()
+    )
     if isinstance(command, str):
         return command, args
     if isinstance(command, list):
@@ -541,7 +557,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
                 "Guard hook entries added to ~/.copilot/config.json for Copilot CLI.",
                 "Guard workspace hook entries added to .github/hooks/hol-guard-copilot.json for VS Code Copilot.",
                 "Guard MCP proxies added to Copilot CLI and VS Code workspace MCP config files.",
-                *[str(note) for note in shim_manifest.get("notes", [])],
+                *_manifest_notes(shim_manifest),
             ],
         }
 
@@ -628,7 +644,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
                 "Guard hook entries removed from ~/.copilot/config.json for Copilot CLI.",
                 "Guard workspace hook entries removed from .github/hooks/hol-guard-copilot.json for VS Code Copilot.",
                 "Guard restored the prior Copilot MCP config for the active Copilot surfaces.",
-                *[str(note) for note in shim_manifest.get("notes", [])],
+                *_manifest_notes(shim_manifest),
             ],
         }
 

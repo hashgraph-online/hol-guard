@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
 import re
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..models import GuardArtifact
 from .mcp_protection import (
@@ -16,10 +17,14 @@ from .mcp_protection import (
     build_mcp_server_identity,
     build_mcp_tool_identity,
 )
-from .skill_protection import SkillIdentity, build_skill_identity
 
 if TYPE_CHECKING:
     from .actions import GuardActionEnvelope
+
+
+def _skill_protection_module():
+    return importlib.import_module(".skill_protection", __package__)
+
 
 _PACKAGE_MANAGER_PATTERN = re.compile(
     r"\b(npm|pnpm|yarn|bun|pip|uv|cargo|gem|brew)\b",
@@ -132,7 +137,7 @@ def portal_mcp_tool_identity(
 
 
 def skill_identity_metadata(
-    identity: SkillIdentity,
+    identity: Any,
     *,
     publisher: str | None = None,
 ) -> dict[str, object]:
@@ -155,7 +160,7 @@ def skill_identity_metadata(
 
 
 def portal_skill_identity(
-    identity: SkillIdentity,
+    identity: Any,
     *,
     publisher: str | None = None,
 ) -> dict[str, object]:
@@ -234,7 +239,7 @@ def build_runtime_action_record(
         match = _PACKAGE_MANAGER_PATTERN.search(subprocess)
         if match is not None:
             package_managers.append(match.group(1).lower())
-    payload = {
+    payload: dict[str, object] = {
         "claimedCapabilities": claimed,
         "domainsContacted": _unique_strings(domains),
         "filesTouched": _unique_strings(files_touched),
@@ -318,7 +323,7 @@ def _firewall_for_skill(artifact: GuardArtifact) -> dict[str, object] | None:
     content = _read_text_file(artifact.config_path)
     if content is None:
         return None
-    identity = build_skill_identity(content, skill_path=artifact.config_path)
+    identity = _skill_protection_module().build_skill_identity(content, skill_path=artifact.config_path)
     skill = portal_skill_identity(identity, publisher=artifact.publisher)
     return build_mcp_skill_firewall_fingerprints(skill=skill)
 
@@ -347,20 +352,19 @@ def _firewall_for_tool_call(artifact: GuardArtifact) -> dict[str, object] | None
         publisher=artifact.publisher,
     )
     tool_name = artifact.command
+    tool_schema = artifact.metadata.get("tool_schema")
+    tool_description = artifact.metadata.get("tool_description")
+    description = tool_description if isinstance(tool_description, str) else None
     tool_identity = build_mcp_tool_identity(
         server_hash=str(server["identityHash"]),
         tool_name=tool_name,
-        schema=artifact.metadata.get("tool_schema"),
-        description=artifact.metadata.get("tool_description")
-        if isinstance(artifact.metadata.get("tool_description"), str)
-        else None,
+        schema=tool_schema,
+        description=description,
     )
     tool = portal_mcp_tool_identity(
         tool_identity,
-        schema=artifact.metadata.get("tool_schema"),
-        description=artifact.metadata.get("tool_description")
-        if isinstance(artifact.metadata.get("tool_description"), str)
-        else None,
+        schema=tool_schema,
+        description=description,
     )
     return build_mcp_skill_firewall_fingerprints(mcp_server=server, mcp_tools=[tool])
 
@@ -370,13 +374,15 @@ def _portal_server_from_legacy(record: dict[str, object], artifact: GuardArtifac
     command = str(record.get("command") or artifact.command or "unknown")
     args_hash = str(record.get("args_hash") or record.get("argsHash") or identity_hash)
     transport = str(record.get("transport") or artifact.transport or "unknown")
+    raw_env_keys = record.get("env_keys") or record.get("envKeys")
+    env_keys = [item for item in raw_env_keys if isinstance(item, str)] if isinstance(raw_env_keys, list) else []
     return {
         "argsHash": args_hash,
         "command": command,
         "commandHash": str(record.get("command_hash") or record.get("commandHash") or args_hash),
         "configPath": str(record.get("config_path") or record.get("configPath") or artifact.config_path),
         "dependencyHash": record.get("dependency_hash") or record.get("dependencyHash"),
-        "envKeys": list(record.get("env_keys") or record.get("envKeys") or []),
+        "envKeys": env_keys,
         "identityHash": identity_hash,
         "packageName": record.get("package_name") or record.get("packageName"),
         "packageVersion": record.get("package_version") or record.get("packageVersion"),

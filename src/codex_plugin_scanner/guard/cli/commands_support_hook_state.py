@@ -1,12 +1,52 @@
 """Guard CLI helper definitions."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
+import importlib
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import (
+        _CLAUDE_GUARD_APPROVAL_HEADER,
+        _CLAUDE_GUARD_APPROVAL_OPTIONS,
+        _hook_command_text,
+        _now,
+    )
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
+
+def _runtime_artifacts_module():
+    return importlib.import_module(".commands_support_runtime_artifacts", __package__)
+
+
+def _runtime_policy_module():
+    return importlib.import_module(".commands_support_runtime_policy", __package__)
+
+
+def _runtime_resolution_module():
+    return importlib.import_module(".commands_support_runtime_resolution", __package__)
+
+
+def _optional_string(value: object) -> str | None:
+    return _runtime_artifacts_module()._optional_string(value)
+
+
+def _hook_event_name(payload: Mapping[str, object]) -> str:
+    return _runtime_artifacts_module()._hook_event_name(payload)
+
+
+def _claude_notification_tool_name(payload: dict[str, object]) -> str | None:
+    return _runtime_policy_module()._claude_notification_tool_name(payload)
+
+
+def _canonical_harness_name(value: str) -> str:
+    return _runtime_resolution_module()._canonical_harness_name(value)
+
 
 def _update_codex_browser_operation_status(
     response_payload: dict[str, object],
@@ -22,6 +62,7 @@ def _update_codex_browser_operation_status(
     with suppress(Exception):
         update_operation_status(operation_id=operation_id, status=status)
 
+
 def _should_emit_prequeue_native_hook_response(
     args: argparse.Namespace,
     *,
@@ -33,21 +74,26 @@ def _should_emit_prequeue_native_hook_response(
         return True
     return output_stream is not None
 
+
 def _emit_claude_permission_request_passthrough(*, output_stream: TextIO | None = None) -> None:
     if output_stream is not None:
         output_stream.write("")
+
 
 def _claude_permission_notice_state_key(session_id: str, tool_name: str | None = None) -> str:
     if tool_name is not None:
         return f"claude_permission_notice:{session_id}:{tool_name}"
     return f"claude_permission_notice:{session_id}"
 
+
 def _claude_pending_permission_index_key(session_id: str) -> str:
     return f"claude_pending_permissions:{session_id}"
+
 
 def _claude_pending_permission_state_key(session_id: str, artifact_id: str) -> str:
     fingerprint = hashlib.sha256(artifact_id.encode("utf-8")).hexdigest()[:24]
     return f"claude_pending_permission:{session_id}:{fingerprint}"
+
 
 def _sync_payload_list_from_row(row: sqlite3.Row | None) -> list[str]:
     if row is None:
@@ -57,6 +103,7 @@ def _sync_payload_list_from_row(row: sqlite3.Row | None) -> list[str]:
     except json.JSONDecodeError:
         return []
     return [str(item) for item in payload] if isinstance(payload, list) else []
+
 
 def _append_claude_pending_permission_key(
     store: GuardStore,
@@ -87,8 +134,10 @@ def _append_claude_pending_permission_key(
             (index_key, json.dumps(pending_keys), now),
         )
 
+
 def _claude_guard_approval_question_text(approval_code: str) -> str:
     return f"HOL Guard intercepted this sensitive action (approval code: {approval_code}). What should Claude do?"
+
 
 def _record_claude_permission_notice(
     *,
@@ -129,6 +178,7 @@ def _record_claude_permission_notice(
     except (OSError, sqlite3.Error):
         return
 
+
 def _load_claude_permission_notice(store: GuardStore, payload: dict[str, object]) -> dict[str, object] | None:
     session_id = _optional_string(payload.get("session_id"))
     if session_id is None:
@@ -157,6 +207,7 @@ def _load_claude_permission_notice(store: GuardStore, payload: dict[str, object]
         return persisted
     return None
 
+
 def _peek_claude_permission_notice(store: GuardStore, payload: dict[str, object]) -> dict[str, object] | None:
     session_id = _optional_string(payload.get("session_id"))
     if session_id is None:
@@ -169,6 +220,7 @@ def _peek_claude_permission_notice(store: GuardStore, payload: dict[str, object]
     except (OSError, sqlite3.Error):
         return None
     return persisted if isinstance(persisted, dict) else None
+
 
 def _mark_claude_pending_permission_prompt_seen(
     *,
@@ -194,6 +246,7 @@ def _mark_claude_pending_permission_prompt_seen(
         store.set_sync_payload(pending_key, updated, _now())
     except (OSError, sqlite3.Error):
         return
+
 
 def _load_single_claude_pending_permission(
     store: GuardStore,
@@ -230,6 +283,7 @@ def _load_single_claude_pending_permission(
         return None
     return pending_items[0][0], pending
 
+
 def _load_claude_pending_permission(
     store: GuardStore,
     payload: dict[str, object],
@@ -244,6 +298,7 @@ def _load_claude_pending_permission(
     except (OSError, sqlite3.Error):
         return None
     return persisted if isinstance(persisted, dict) else None
+
 
 def _remove_claude_pending_permission(
     store: GuardStore,
@@ -277,6 +332,7 @@ def _remove_claude_pending_permission(
     except (OSError, sqlite3.Error):
         return
 
+
 def _cursor_conversation_id(payload: dict[str, object]) -> str | None:
     for key in ("conversation_id", "conversationId", "session_id", "sessionId"):
         value = _optional_string(payload.get(key))
@@ -287,6 +343,7 @@ def _cursor_conversation_id(payload: dict[str, object]) -> str | None:
         if value is not None:
             return value
     return None
+
 
 def _cursor_shell_command_from_payload(payload: Mapping[str, object]) -> str | None:
     from ..adapters.cursor_native_approval import (
@@ -303,9 +360,7 @@ def _cursor_shell_command_from_payload(payload: Mapping[str, object]) -> str | N
         if top_level is not None:
             return normalize_cursor_shell_command(top_level)
         return None
-    if tool_input_command is not None and (
-        top_level is None or is_shell_wrapper_command(top_level)
-    ):
+    if tool_input_command is not None and (top_level is None or is_shell_wrapper_command(top_level)):
         return normalize_cursor_shell_command(tool_input_command)
     if top_level is not None:
         return normalize_cursor_shell_command(top_level)
@@ -317,11 +372,14 @@ def _cursor_shell_command_fingerprint(command: str) -> str:
 
     return hashlib.sha256(normalize_cursor_shell_command(command).encode("utf-8")).hexdigest()[:24]
 
+
 def _cursor_pending_shell_index_key(conversation_id: str) -> str:
     return f"cursor_pending_shells:{conversation_id}"
 
+
 def _cursor_pending_shell_state_key(conversation_id: str, command: str) -> str:
     return f"cursor_pending_shell:{conversation_id}:{_cursor_shell_command_fingerprint(command)}"
+
 
 def _append_cursor_pending_shell_key(
     store: GuardStore,
@@ -355,10 +413,13 @@ def _append_cursor_pending_shell_key(
     except (OSError, sqlite3.Error):
         return
 
+
 def _cursor_native_shell_allow_state_key(conversation_id: str, command: str) -> str:
     return f"cursor_native_shell_allow:{conversation_id}:{_cursor_shell_command_fingerprint(command)}"
 
+
 _CURSOR_PENDING_SHELL_MAX_AGE_SECONDS = 30 * 60
+
 
 def _cursor_pending_shell_is_fresh(pending: Mapping[str, object], *, now: str) -> bool:
     saved_at = _optional_string(pending.get("saved_at"))
@@ -376,6 +437,7 @@ def _cursor_pending_shell_is_fresh(pending: Mapping[str, object], *, now: str) -
     age_seconds = (current_time - saved_time).total_seconds()
     return 0 <= age_seconds <= _CURSOR_PENDING_SHELL_MAX_AGE_SECONDS
 
+
 def _cursor_after_shell_observed(payload: Mapping[str, object]) -> bool:
     event_name = (_hook_event_name(payload) or "").strip().lower()
     duration = payload.get("duration")
@@ -386,6 +448,7 @@ def _cursor_after_shell_observed(payload: Mapping[str, object]) -> bool:
         return isinstance(result_json, str) and bool(result_json.strip())
     output = payload.get("output")
     return isinstance(output, str)
+
 
 def _record_cursor_native_shell_allow_state(
     *,
@@ -415,10 +478,12 @@ def _record_cursor_native_shell_allow_state(
         return False
     return True
 
+
 def _cursor_native_shell_allowance_is_fresh(approved: Mapping[str, object], *, now: str) -> bool:
     if not isinstance(approved, dict) or approved.get("action") != "allow":
         return False
     return _cursor_pending_shell_is_fresh(approved, now=now)
+
 
 def _cursor_native_shell_is_approved(
     store: GuardStore,
@@ -439,6 +504,7 @@ def _cursor_native_shell_is_approved(
         with suppress(OSError, sqlite3.Error):
             store.delete_sync_payload(_cursor_native_shell_allow_state_key(conversation_id, command))
     return False
+
 
 __all__ = [
     "_CURSOR_PENDING_SHELL_MAX_AGE_SECONDS",

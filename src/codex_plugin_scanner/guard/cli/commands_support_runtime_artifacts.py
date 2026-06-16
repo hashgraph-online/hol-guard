@@ -1,9 +1,36 @@
 """Guard CLI helper definitions."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .commands_support_codex_commands import (
+        _codex_command_parts_may_read_local_content,
+        _codex_command_reads_environment_pipeline,
+        _codex_local_secret_source_label,
+        _codex_pipeline_segment_may_read_local_content,
+        _codex_post_tool_command_is_read_only_source_inspection,
+        _codex_post_tool_command_text,
+        _codex_shell_split,
+        _codex_source_inspection_can_skip_secret_output,
+    )
+    from .commands_support_codex_paths import (
+        _codex_prompt_credential_file_artifact,
+        _collect_codex_tool_response_text,
+        _with_codex_prompt_display_metadata,
+    )
+    from .commands_support_codex_reads import _split_codex_safe_read_only_pipeline
+    from .commands_support_codex_tool_output_messages import (
+        _codex_tool_output_request_summary,
+        _codex_tool_output_runtime_summary,
+    )
+    from .commands_support_hook_payload import _coalesce_string
+    from .commands_support_runtime_policy import _runtime_data_flow_summary
+    from .commands_support_runtime_resolution import _canonical_harness_name, _runtime_policy_path
+
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
@@ -19,8 +46,8 @@ from .commands_support_codex_commands import (
 )
 from .commands_support_codex_reads import _split_codex_safe_read_only_pipeline
 from .commands_support_codex_tool_output import (
-    _codex_command_is_focused_pytest_verification,
     _codex_command_captures_combined_shell_output,
+    _codex_command_is_focused_pytest_verification,
     _codex_command_references_sensitive_local_source,
     _codex_existing_local_path_match,
     _codex_focused_pytest_can_skip_secret_output,
@@ -38,10 +65,12 @@ from .commands_support_codex_tool_output_messages import (
     _codex_tool_output_runtime_summary,
 )
 
+
 def _optional_string(value: object | None) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
+
 
 _HOOK_EVENT_NAME_MAP = {
     "userpromptsubmitted": "UserPromptSubmit",
@@ -50,6 +79,7 @@ _HOOK_EVENT_NAME_MAP = {
     "permissionrequest": "PermissionRequest",
 }
 
+
 def _hook_event_name(payload: dict[str, object]) -> str | None:
     for key in ("event", "hook_event_name", "hookEventName", "hook_name"):
         value = payload.get(key)
@@ -57,6 +87,7 @@ def _hook_event_name(payload: dict[str, object]) -> str | None:
             normalized = value.strip()
             return _HOOK_EVENT_NAME_MAP.get(normalized.lower(), normalized)
     return None
+
 
 def _artifact_id_from_event(harness: str, payload: dict[str, object]) -> str:
     source_scope = _coalesce_string(payload.get("source_scope"), "project")
@@ -73,10 +104,12 @@ def _artifact_id_from_event(harness: str, payload: dict[str, object]) -> str:
         return f"{harness}:{source_scope}:{event_name.strip().lower()}"
     return f"{harness}:{source_scope}:hook"
 
+
 def _string_list(value: object | None) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if isinstance(item, str) and item.strip()]
+
 
 def _merged_prompt_runtime_artifact(harness: str, artifacts: list[GuardArtifact]) -> GuardArtifact:
     if len(artifacts) == 1:
@@ -122,6 +155,7 @@ def _merged_prompt_runtime_artifact(harness: str, artifacts: list[GuardArtifact]
             "runtime_request_summary": request_summary,
         },
     )
+
 
 def _hook_runtime_artifact(
     *,
@@ -241,6 +275,7 @@ def _hook_runtime_artifact(
         source_scope=source_scope,
     )
 
+
 def _runtime_data_flow_artifact(
     *,
     harness: str,
@@ -281,6 +316,7 @@ def _runtime_data_flow_artifact(
         },
     )
 
+
 _CODEX_PROMPT_SECRET_KEY_MARKERS = ("TOKEN", "SECRET", "PASSWORD", "PASS", "API_KEY", "API-KEY", "AUTH", "CREDENTIAL")
 
 _CODEX_TOOL_RESPONSE_MAX_DEPTH = 5
@@ -288,6 +324,7 @@ _CODEX_TOOL_RESPONSE_MAX_DEPTH = 5
 _CODEX_TOOL_RESPONSE_TEXT_LIMIT = 20000
 
 _CODEX_PROMPT_FILE_FINGERPRINT_LENGTH = 24
+
 
 def _codex_post_tool_output_artifact(
     *,
@@ -366,9 +403,7 @@ def _codex_post_tool_output_artifact(
         "tool_name": tool_name,
         "command_text": command_text,
         "action_class": (
-            "credential exfiltration shell command"
-            if references_local_content
-            else "credential-looking tool output"
+            "credential exfiltration shell command" if references_local_content else "credential-looking tool output"
         ),
         "guard_default_action": runtime_default_action,
         "request_summary": request_summary,
@@ -394,6 +429,7 @@ def _codex_post_tool_output_artifact(
         metadata=metadata,
     )
 
+
 def _codex_text_contains_sensitive_path_token(text: str, *, cwd: Path | None) -> bool:
     return bool(_codex_sensitive_path_matches_in_text(text, cwd=cwd))
 
@@ -416,6 +452,7 @@ def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None
     except ValueError:
         return True
     return _codex_command_parts_may_read_local_content(parts, cwd=cwd)
+
 
 __all__ = [
     "_CODEX_PROMPT_FILE_FINGERPRINT_LENGTH",

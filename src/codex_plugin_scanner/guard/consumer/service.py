@@ -4,21 +4,27 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, TypeGuard
 
 from ...models import ScanOptions
-from ..access_graph_events import queue_access_graph_snapshot
-from ..adapters import get_adapter, list_adapters
 from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateGrant
 from ..capabilities import compute_capability_delta, normalize_artifact_capabilities, severity_from_deltas
 from ..config import GuardConfig
 from ..incident import build_incident_context
-from ..models import GuardArtifact, HarnessDetection, PolicyDecision
+from ..models import (
+    DECISION_SCOPE_VALUES,
+    GUARD_ACTION_VALUES,
+    DecisionScope,
+    GuardAction,
+    GuardArtifact,
+    HarnessDetection,
+    PolicyDecision,
+)
 from ..policy import build_decision_v2, decide_action
-from ..policy.engine import VALID_GUARD_ACTIONS
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals_typed, artifact_risk_summary, summarize_signals
 from ..runtime.signals import RiskSignalV2
@@ -26,15 +32,57 @@ from ..schemas import build_consumer_mode_contract
 from ..store import GuardStore
 from ..types import (
     CapabilityDelta,
+    EvidenceSource,
     GuardSignal,
     GuardVerdict,
+    GuardVerdictAction,
     HistoryContext,
     ProvenanceBundle,
+    PublisherTrust,
+    ReviewPriority,
 )
+
+_EVIDENCE_SOURCE_VALUES: tuple[EvidenceSource, ...] = ("artifact", "prompt", "history", "cloud")
+_GUARD_VERDICT_ACTION_VALUES: tuple[GuardVerdictAction, ...] = (
+    "allow",
+    "warn",
+    "block",
+    "require_reapproval",
+    "sandbox_required",
+)
+_REVIEW_PRIORITY_VALUES: tuple[ReviewPriority, ...] = ("low", "medium", "high", "critical")
+
+
+class ArtifactDiff(TypedDict):
+    changed: bool
+    changed_fields: list[str]
+    previous_hash: str | None
+    current_hash: str | None
+    current_snapshot: dict[str, object]
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _is_guard_action(value: object) -> TypeGuard[GuardAction]:
+    return isinstance(value, str) and value in GUARD_ACTION_VALUES
+
+
+def _is_decision_scope(value: object) -> TypeGuard[DecisionScope]:
+    return isinstance(value, str) and value in DECISION_SCOPE_VALUES
+
+
+def _is_evidence_source(value: object) -> TypeGuard[EvidenceSource]:
+    return isinstance(value, str) and value in _EVIDENCE_SOURCE_VALUES
+
+
+def _sorted_evidence_sources(values: Iterable[str]) -> tuple[EvidenceSource, ...]:
+    sources: list[EvidenceSource] = []
+    for value in sorted(set(values)):
+        if _is_evidence_source(value):
+            sources.append(value)
+    return tuple(sources)
 
 
 def _serialize_artifact(artifact: GuardArtifact) -> dict[str, object]:
@@ -59,7 +107,7 @@ def artifact_hash(artifact: GuardArtifact) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
-def diff_artifact(previous: dict[str, object] | None, current: GuardArtifact) -> dict[str, object]:
+def diff_artifact(previous: dict[str, object] | None, current: GuardArtifact) -> ArtifactDiff:
     """Compare a stored snapshot to the current artifact."""
 
     current_payload = _serialize_artifact(current)
@@ -90,7 +138,7 @@ def diff_artifact(previous: dict[str, object] | None, current: GuardArtifact) ->
     }
 
 
-def diff_removed_artifact(previous: dict[str, object]) -> dict[str, object]:
+def diff_removed_artifact(previous: dict[str, object]) -> ArtifactDiff:
     previous_hash = previous.get("artifact_hash")
     return {
         "changed": True,
@@ -101,14 +149,14 @@ def diff_removed_artifact(previous: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _is_blocking_action(policy_action: str) -> bool:
+def _is_blocking_action(policy_action: GuardAction) -> bool:
     return policy_action in {"block", "sandbox-required", "require-reapproval"}
 
 
-def _guard_default_action(artifact: GuardArtifact) -> str | None:
+def _guard_default_action(artifact: GuardArtifact) -> GuardAction | None:
     value = artifact.metadata.get("guard_default_action")
-    if value in VALID_GUARD_ACTIONS:
-        return str(value)
+    if _is_guard_action(value):
+        return value
     return None
 
 
@@ -140,7 +188,7 @@ def _removed_capabilities_summary(previous: dict[str, object]) -> str:
     return " • ".join(parts) if parts else "removed artifact"
 
 
-def _build_diff_summary(diff: dict[str, object]) -> str | None:
+def _build_diff_summary(diff: Mapping[str, object]) -> str | None:
     """Build a prose diff summary from a diff result dict."""
     if not diff.get("changed"):
         return None
@@ -176,7 +224,7 @@ def build_history_context(
             continue
         if event.get("event_name") in {"changed_artifact_caught", "premium_advisory", "install_time_block"}:
             prior_incidents += 1
-    publisher_trust = "unknown"
+    publisher_trust: PublisherTrust = "unknown"
     if publisher:
         advisories = [item for item in store.list_cached_advisories(limit=200) if item.get("publisher") == publisher]
         if advisories:
@@ -196,7 +244,7 @@ def build_history_context(
         prior_approvals=prior_approvals,
         prior_incidents=prior_incidents,
         prior_blocks=prior_blocks,
-        publisher_trust=publisher_trust,  # type: ignore[arg-type]
+        publisher_trust=publisher_trust,
     )
 
 
@@ -215,7 +263,7 @@ def build_provenance_bundle(store: GuardStore, publisher: str | None) -> Provena
             evidence_refs=(f"publisher:{publisher}",),
         )
     severity_labels = {str(item.get("severity", "")).lower() for item in advisories}
-    trust: str = "known-good"
+    trust: PublisherTrust = "known-good"
     if {"critical", "high", "revoked"} & severity_labels:
         trust = "flagged"
     signature_verified = any(bool(item.get("signatureVerified")) for item in advisories)
@@ -231,7 +279,7 @@ def build_provenance_bundle(store: GuardStore, publisher: str | None) -> Provena
     )
     return ProvenanceBundle(
         source_kind="curated",
-        publisher_trust=trust,  # type: ignore[arg-type]
+        publisher_trust=trust,
         signature_verified=signature_verified,
         attestation_verified=attestation_verified,
         evidence_refs=references or (f"publisher:{publisher}",),
@@ -263,11 +311,11 @@ def score_verdict(
     if provenance.publisher_trust in {"flagged", "revoked"}:
         severity = max(severity, 9)
         reasons.append("Publisher trust is flagged by local advisory intelligence.")
-    evidence_sources = tuple(sorted({signal.evidence_source for signal in signals}))
+    evidence_sources = _sorted_evidence_sources(signal.evidence_source for signal in signals)
     if history.prior_approvals > 0 or history.prior_incidents > 0:
-        evidence_sources = tuple(sorted({*evidence_sources, "history"}))
+        evidence_sources = _sorted_evidence_sources((*evidence_sources, "history"))
     if provenance.source_kind in {"curated", "signed", "attested"}:
-        evidence_sources = tuple(sorted({*evidence_sources, "cloud"}))
+        evidence_sources = _sorted_evidence_sources((*evidence_sources, "cloud"))
 
     recommended_actions = _recommended_actions(signals, deltas, severity)
     suppressible = severity <= 6 and provenance.publisher_trust != "flagged"
@@ -293,7 +341,7 @@ def _action_from_scoring(
     confidence: float,
     provenance: ProvenanceBundle,
     deltas: tuple[CapabilityDelta, ...],
-) -> str:
+) -> GuardVerdictAction:
     if provenance.publisher_trust in {"flagged", "revoked"} and confidence >= 0.7:
         return "block"
     if severity >= 9 and confidence >= 0.75:
@@ -310,7 +358,7 @@ def _action_from_scoring(
     return "allow"
 
 
-def _review_priority_from_severity(severity: int) -> str:
+def _review_priority_from_severity(severity: int) -> ReviewPriority:
     if severity >= 9:
         return "critical"
     if severity >= 7:
@@ -346,25 +394,29 @@ def _recommended_actions(
     return ordered
 
 
-def _default_action_from_verdict(verdict: GuardVerdict) -> str:
-    mapping = {
+def _default_action_from_verdict(verdict: GuardVerdict) -> GuardAction:
+    mapping: dict[GuardVerdictAction, GuardAction] = {
         "allow": "allow",
         "warn": "warn",
         "block": "block",
         "require_reapproval": "require-reapproval",
         "sandbox_required": "sandbox-required",
     }
-    return mapping.get(verdict.action, "warn")
+    return mapping[verdict.action]
 
 
 def detect_all(context: HarnessContext) -> list[HarnessDetection]:
     """Run detection across all adapters."""
+
+    from ..adapters import list_adapters
 
     return [adapter.detect(context) for adapter in list_adapters()]
 
 
 def detect_harness(harness: str, context: HarnessContext) -> HarnessDetection:
     """Detect a single harness."""
+
+    from ..adapters import get_adapter
 
     return get_adapter(harness).detect(context)
 
@@ -383,6 +435,7 @@ def evaluate_detection(
     blocked = False
     receipts_recorded = 0
     now = _now()
+    effective_default_action = default_action if _is_guard_action(default_action) else None
     prior_receipts = store.count_receipts(detection.harness) if persist else 0
     previous_snapshots = store.list_snapshots(detection.harness)
     current_artifact_ids: set[str] = set()
@@ -412,7 +465,6 @@ def evaluate_detection(
         history_context = build_history_context(store, detection.harness, artifact.artifact_id, artifact.publisher)
         provenance_bundle = build_provenance_bundle(store, artifact.publisher)
         verdict = score_verdict(structured_signals, capability_delta, provenance_bundle, history_context)
-        effective_default_action = default_action
         if configured_action is None and artifact.artifact_type in {
             "prompt_request",
             "file_read_request",
@@ -559,7 +611,7 @@ def evaluate_detection(
         previous_hash = diff["previous_hash"] if isinstance(diff["previous_hash"], str) else "removed"
         policy_action = decide_action(
             configured_action=store.resolve_policy(detection.harness, artifact_id, previous_hash, workspace),
-            default_action=default_action,
+            default_action=effective_default_action,
             config=config,
             changed=True,
         )
@@ -678,6 +730,8 @@ def evaluate_detection(
             now,
         )
     if persist:
+        from ..access_graph_events import queue_access_graph_snapshot
+
         queue_access_graph_snapshot(
             store=store,
             detection=detection,
@@ -708,10 +762,14 @@ def record_policy(
 ) -> dict[str, object]:
     """Persist an allow or deny action."""
 
+    if not _is_guard_action(action):
+        raise ValueError(f"Invalid Guard action: {action}")
+    if not _is_decision_scope(scope):
+        raise ValueError(f"Invalid decision scope: {scope}")
     decision = PolicyDecision(
         harness=harness,
-        scope=scope,  # type: ignore[arg-type]
-        action=action,  # type: ignore[arg-type]
+        scope=scope,
+        action=action,
         artifact_id=artifact_id,
         artifact_hash=None,
         workspace=workspace,

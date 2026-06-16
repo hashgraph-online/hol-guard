@@ -5,6 +5,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _SERVICE_RUNTIME_CHOICES, _SERVICE_RUNTIME_PROFILE_STATE_KEY, _now
+    from .commands_support_runtime_artifacts import _optional_string
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
 

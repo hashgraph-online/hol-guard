@@ -1,14 +1,58 @@
 """Guard CLI runtime artifact hook evaluation."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _now
+    from .commands_support_hook_payload import _coalesce_string
+    from .commands_support_hook_state import _cursor_native_shell_is_approved
+    from .commands_support_interaction import _emit, _record_harness_usage_for_hook
+    from .commands_support_permission_store import (
+        _persist_claude_native_permission_for_runtime_artifact,
+        _record_cursor_pending_shell_permission,
+    )
+    from .commands_support_prompts import _runtime_artifact_native_reason
+    from .commands_support_runtime_artifacts import _hook_event_name, _optional_string
+    from .commands_support_runtime_policy import (
+        _runtime_artifact_policy_action,
+        _runtime_data_flow_summary,
+        _runtime_stored_policy_action,
+    )
+    from .commands_support_runtime_resolution import (
+        _canonical_harness_name,
+        _legacy_claude_alias_runtime_artifact,
+        _queue_claude_native_approval_gate_fallback,
+        _runtime_capabilities_summary,
+        _runtime_request_summary,
+        _runtime_requested_path,
+    )
+
+
+from ..models import GuardAction
 from ._commands_shared import *
+from .commands_hook_runtime_state import RuntimeArtifactHookState
 from .commands_parser_helpers import *
 
-from .commands_hook_runtime_state import RuntimeArtifactHookState
+
+def _resolved_guard_action(value: object, fallback: GuardAction) -> GuardAction:
+    if value == "allow":
+        return "allow"
+    if value == "warn":
+        return "warn"
+    if value == "review":
+        return "review"
+    if value == "block":
+        return "block"
+    if value == "sandbox-required":
+        return "sandbox-required"
+    if value == "require-reapproval":
+        return "require-reapproval"
+    return fallback
+
 
 def _evaluate_runtime_artifact_hook(
     args: argparse.Namespace,
@@ -23,7 +67,8 @@ def _evaluate_runtime_artifact_hook(
     runtime_workspace: Path | None,
     store: GuardStore,
 ) -> int | RuntimeArtifactHookState:
-    event_name = _hook_event_name(payload) or "PreToolUse"
+    payload_map = dict(payload)
+    event_name = _hook_event_name(payload_map) or "PreToolUse"
     package_evaluation = None
     if runtime_artifact.artifact_type == "package_request":
         package_evaluation = evaluate_package_request_artifact(
@@ -51,7 +96,7 @@ def _evaluate_runtime_artifact_hook(
         and runtime_artifact.artifact_type == "tool_action_request"
         and _cursor_native_shell_is_approved(store, payload)
     ):
-        response_payload = {
+        response_payload: dict[str, object] = {
             "recorded": True,
             "harness": policy_harness,
             "artifact_id": artifact_id,
@@ -63,7 +108,7 @@ def _evaluate_runtime_artifact_hook(
         _record_harness_usage_for_hook(
             store=store,
             action_envelope=action_envelope,
-            payload=payload,
+            payload=payload_map,
             policy_action="allow",
         )
         return 0
@@ -94,18 +139,32 @@ def _evaluate_runtime_artifact_hook(
     requested_policy_action = _coalesce_string(
         getattr(args, "policy_action", None),
         stored_policy_action,
-        payload.get("policy_action"),
+        payload_map.get("policy_action"),
     )
-    policy_action = requested_policy_action
-    if policy_action not in VALID_GUARD_ACTIONS:
-        policy_action = _runtime_artifact_policy_action(config, runtime_artifact, args.harness)
+    if requested_policy_action == "allow":
+        policy_action: GuardAction = "allow"
+    elif requested_policy_action == "warn":
+        policy_action = "warn"
+    elif requested_policy_action == "review":
+        policy_action = "review"
+    elif requested_policy_action == "block":
+        policy_action = "block"
+    elif requested_policy_action == "sandbox-required":
+        policy_action = "sandbox-required"
+    elif requested_policy_action == "require-reapproval":
+        policy_action = "require-reapproval"
+    else:
+        policy_action = _resolved_guard_action(
+            _runtime_artifact_policy_action(config, runtime_artifact, args.harness),
+            "warn",
+        )
     if _canonical_harness_name(args.harness) == "claude-code" and event_name in {
         "PostToolUse",
         "PostToolUseFailure",
     }:
         saved = _persist_claude_native_permission_for_runtime_artifact(
             store=store,
-            payload=payload,
+            payload=payload_map,
             artifact=runtime_artifact,
             artifact_hash=runtime_artifact_hash,
             action="allow",
@@ -138,7 +197,7 @@ def _evaluate_runtime_artifact_hook(
         _record_harness_usage_for_hook(
             store=store,
             action_envelope=action_envelope,
-            payload=payload,
+            payload=payload_map,
             policy_action="allow" if saved else "require-reapproval",
         )
         return 0
@@ -158,24 +217,29 @@ def _evaluate_runtime_artifact_hook(
         else ()
     )
     scanner_evidence_payload = [signal.to_dict() for signal in scanner_evidence]
-    if (
-        package_evaluation is not None
-        and guard_action_severity(package_evaluation.policy_action) > guard_action_severity(policy_action)
+    package_policy_action: GuardAction | None = (
+        _resolved_guard_action(package_evaluation.policy_action, "warn") if package_evaluation is not None else None
+    )
+    if package_policy_action is not None and guard_action_severity(package_policy_action) > guard_action_severity(
+        policy_action
     ):
-        policy_action = package_evaluation.policy_action
+        policy_action = package_policy_action
     if data_flow_signals:
-        data_flow_action = resolve_risk_action(
-            config,
-            "data_flow_exfiltration",
-            harness=policy_harness,
+        data_flow_action = _resolved_guard_action(
+            resolve_risk_action(
+                config,
+                "data_flow_exfiltration",
+                harness=policy_harness,
+            ),
+            policy_action,
         )
         if guard_action_severity(data_flow_action) > guard_action_severity(policy_action):
             policy_action = data_flow_action
     _pre_scanner_policy_action = policy_action
     package_controls_pre_scanner_summary = (
         package_evaluation is not None
-        and guard_action_severity(package_evaluation.policy_action)
-        >= guard_action_severity(_pre_scanner_policy_action)
+        and package_policy_action is not None
+        and guard_action_severity(package_policy_action) >= guard_action_severity(_pre_scanner_policy_action)
     )
     if scanner_evidence and requested_policy_action not in VALID_GUARD_ACTIONS:
         scanner_action = policy_action_for_cisco_signals(
@@ -201,11 +265,8 @@ def _evaluate_runtime_artifact_hook(
     else:
         risk_signals = list(artifact_risk_signals(runtime_artifact))
         risk_summary = artifact_risk_summary(runtime_artifact)
-    if package_controls_pre_scanner_summary:
-        risk_signals = [
-            str(item.get("message") or item.get("code") or "")
-            for item in package_evaluation.reasons
-        ]
+    if package_controls_pre_scanner_summary and package_evaluation is not None:
+        risk_signals = [str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons]
         risk_summary = package_evaluation.risk_summary
         scanner_evidence_payload.extend(
             {
@@ -253,18 +314,18 @@ def _evaluate_runtime_artifact_hook(
         provenance_summary=f"runtime tool request evaluated from {runtime_artifact.config_path}",
         artifact_name=artifact_name,
         source_scope=runtime_artifact.source_scope,
-        user_override=_optional_string(payload.get("user_override")),
+        user_override=_optional_string(payload_map.get("user_override")),
         scanner_evidence=scanner_evidence_payload,
         approval_source=(
             "inline"
-            if _optional_string(payload.get("user_override")) is not None
+            if _optional_string(payload_map.get("user_override")) is not None
             else "approval_center"
             if policy_action == "require-reapproval"
             else "policy"
         ),
     )
     store.add_receipt(receipt, action_envelope=action_envelope)
-    response_payload = {
+    response_payload: dict[str, object] = {
         "recorded": True,
         "harness": _canonical_harness_name(args.harness),
         "artifact_id": artifact_id,
@@ -300,7 +361,7 @@ def _evaluate_runtime_artifact_hook(
             _record_cursor_pending_shell_permission(
                 store=store,
                 guard_home=context.guard_home,
-                payload=payload,
+                payload=payload_map,
                 reason=native_reason,
                 artifact=runtime_artifact,
                 artifact_hash=runtime_artifact_hash,
@@ -323,6 +384,7 @@ def _evaluate_runtime_artifact_hook(
         scanner_evidence_payload=scanner_evidence_payload,
         stored_policy_action=stored_policy_action,
     )
+
 
 __all__ = [
     "_evaluate_runtime_artifact_hook",

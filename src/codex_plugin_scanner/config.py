@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from pathlib import Path
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover
-    import tomli as tomllib
+tomllib = importlib.import_module("tomllib" if __import__("sys").version_info >= (3, 11) else "tomli")
 
 
 @dataclass(frozen=True, slots=True)

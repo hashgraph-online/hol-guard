@@ -61,7 +61,7 @@ def cursor_protected_surfaces(managed_installs: list[dict[str, object]]) -> tupl
     surfaces: list[str] = []
     for managed_install in managed_installs:
         surface = managed_install.get("surface")
-        if surface in {"editor", "cli"} and surface not in surfaces:
+        if isinstance(surface, str) and surface in {"editor", "cli"} and surface not in surfaces:
             surfaces.append(surface)
             continue
         manifest = managed_install.get("manifest")
@@ -70,10 +70,14 @@ def cursor_protected_surfaces(managed_installs: list[dict[str, object]]) -> tupl
         manifest_surfaces = manifest.get("surfaces")
         if isinstance(manifest_surfaces, list):
             for value in manifest_surfaces:
-                if value in {"editor", "cli"} and value not in surfaces:
+                if isinstance(value, str) and value in {"editor", "cli"} and value not in surfaces:
                     surfaces.append(value)
         manifest_surface = manifest.get("surface")
-        if manifest_surface in {"editor", "cli"} and manifest_surface not in surfaces:
+        if (
+            isinstance(manifest_surface, str)
+            and manifest_surface in {"editor", "cli"}
+            and manifest_surface not in surfaces
+        ):
             surfaces.append(manifest_surface)
         elif manifest_surface == "all":
             for value in ("editor", "cli"):

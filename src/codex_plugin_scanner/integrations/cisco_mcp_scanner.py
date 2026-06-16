@@ -9,10 +9,12 @@ import sys
 from collections.abc import Awaitable
 from dataclasses import dataclass
 from importlib import metadata as importlib_metadata
+from importlib.machinery import ModuleSpec
 from importlib.metadata import Distribution
 from pathlib import Path
 from threading import Thread
-from typing import TypeVar
+from types import ModuleType
+from typing import Protocol, TypeGuard, TypeVar
 
 from ..models import Finding, Severity, severity_from_value
 from .cisco_skill_scanner import CiscoIntegrationStatus
@@ -31,6 +33,22 @@ _EXCLUDED_DIRS = {
 _SOURCE_SUFFIXES = {".cjs", ".js", ".json", ".jsx", ".mjs", ".py", ".ts", ".tsx"}
 _MAX_TARGET_SIZE_BYTES = 1_000_000
 T = TypeVar("T")
+
+
+class _CiscoAnalyzer(Protocol):
+    async def analyze(self, content: str, metadata: dict[str, str]) -> list[object] | tuple[object, ...]: ...
+
+
+class _CiscoAnalyzerFactory(Protocol):
+    def __call__(self) -> _CiscoAnalyzer: ...
+
+
+def _is_analyzer_factory(value: object) -> TypeGuard[_CiscoAnalyzerFactory]:
+    return callable(value)
+
+
+async def _await_result(awaitable: Awaitable[T]) -> T:
+    return await awaitable
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,10 +98,10 @@ def _build_summary(
     )
 
 
-def _load_mcp_scanner_components(*, blocked_root: Path | None = None) -> dict[str, object]:
+def _load_mcp_scanner_components(*, blocked_root: Path | None = None) -> dict[str, _CiscoAnalyzerFactory]:
     module = _load_distribution_module("cisco-ai-mcp-scanner", "mcpscanner", blocked_root=blocked_root)
     analyzer = getattr(module, "YaraAnalyzer", None)
-    if analyzer is None:
+    if not _is_analyzer_factory(analyzer):
         raise ImportError("cisco-ai-mcp-scanner does not expose mcpscanner.YaraAnalyzer")
     return {"YaraAnalyzer": analyzer}
 
@@ -93,7 +111,7 @@ def _load_distribution_module(
     module_name: str,
     *,
     blocked_root: Path | None = None,
-) -> object:
+) -> ModuleType:
     try:
         distribution = importlib_metadata.distribution(distribution_name)
     except importlib_metadata.PackageNotFoundError as exc:
@@ -119,7 +137,17 @@ def _load_distribution_module(
     return module
 
 
-def _distribution_module_spec(distribution: Distribution, module_name: str):
+def _coerce_path(value: object) -> Path | None:
+    if isinstance(value, str):
+        return Path(value)
+    if isinstance(value, os.PathLike):
+        path_value = os.fspath(value)
+        if isinstance(path_value, str):
+            return Path(path_value)
+    return None
+
+
+def _distribution_module_spec(distribution: Distribution, module_name: str) -> ModuleSpec | None:
     files = distribution.files or ()
     package_init_relative = f"{module_name}/__init__.py"
     module_relative = f"{module_name}.py"
@@ -142,8 +170,8 @@ def _distribution_module_spec(distribution: Distribution, module_name: str):
     locate_file = getattr(distribution, "locate_file", None)
     if not callable(locate_file):
         return None
-    package_dir = Path(locate_file(module_name))
-    if package_dir.is_dir():
+    package_dir = _coerce_path(locate_file(module_name))
+    if package_dir is not None and package_dir.is_dir():
         package_init = package_dir / "__init__.py"
         if package_init.is_file():
             return importlib.util.spec_from_file_location(
@@ -151,13 +179,13 @@ def _distribution_module_spec(distribution: Distribution, module_name: str):
                 package_init,
                 submodule_search_locations=[str(package_dir)],
             )
-    module_file = Path(locate_file(module_relative))
-    if module_file.is_file():
+    module_file = _coerce_path(locate_file(module_relative))
+    if module_file is not None and module_file.is_file():
         return importlib.util.spec_from_file_location(module_name, module_file)
     return None
 
 
-def _editable_distribution_spec(module_name: str, *, blocked_root: Path | None) -> object | None:
+def _editable_distribution_spec(module_name: str, *, blocked_root: Path | None) -> ModuleSpec | None:
     spec = importlib.util.find_spec(module_name)
     if spec is None or spec.loader is None:
         return None
@@ -166,7 +194,7 @@ def _editable_distribution_spec(module_name: str, *, blocked_root: Path | None) 
     return spec
 
 
-def _spec_outside_blocked_root(spec: object, blocked_root: Path) -> bool:
+def _spec_outside_blocked_root(spec: ModuleSpec, blocked_root: Path) -> bool:
     blocked_root_resolved = blocked_root.resolve()
     candidate_paths: list[Path] = []
     spec_origin = getattr(spec, "origin", None)
@@ -307,14 +335,14 @@ def _run_awaitable(awaitable: Awaitable[T]) -> T:
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(awaitable)
+        return asyncio.run(_await_result(awaitable))
 
     result: list[T] = []
     errors: list[BaseException] = []
 
     def _runner() -> None:
         try:
-            result.append(asyncio.run(awaitable))
+            result.append(asyncio.run(_await_result(awaitable)))
         except BaseException as exc:
             errors.append(exc)
 
@@ -329,7 +357,7 @@ def _run_awaitable(awaitable: Awaitable[T]) -> T:
 
 
 async def _scan_targets(
-    plugin_dir: Path, targets: tuple[_StaticScanTarget, ...], analyzer: object
+    plugin_dir: Path, targets: tuple[_StaticScanTarget, ...], analyzer: _CiscoAnalyzer
 ) -> tuple[tuple[Finding, ...], int]:
     findings: list[Finding] = []
     targets_scanned = 0

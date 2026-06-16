@@ -1,13 +1,38 @@
 """Guard CLI command dispatch helpers."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
+    from .commands_support_connect import (
+        _announce_guard_device_connect_copy,
+        _build_guard_device_connect_payload,
+        _finalize_guard_connect_payload,
+        _guard_ci_safe_connect_options,
+        _manual_guard_login_payload,
+    )
+    from .commands_support_interaction import _emit
+    from .commands_support_service import (
+        _guard_service_login_payload,
+        _guard_service_status_payload,
+        _guard_service_sync_failure_message,
+        _guard_service_sync_payload,
+        _guard_sync_failure_message,
+        _handle_daemon_repair,
+        _handle_daemon_status,
+        _handle_daemon_stop,
+        _validated_supply_chain_sync_payload,
+    )
+
+
+from ..runtime.command_queue import command_queue_status
 from ._commands_shared import *
 from .commands_parser_helpers import *
-from ..runtime.command_queue import command_queue_status
+
 
 def _run_guard_login_command(
     args: argparse.Namespace,
@@ -20,6 +45,7 @@ def _run_guard_login_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
     manual_login = _manual_guard_login_payload(args=args, store=store)
     if manual_login is not None:
         payload, exit_code = manual_login
@@ -32,14 +58,13 @@ def _run_guard_login_command(
         use_browser_oauth=False,
         open_device_browser=True,
         wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
-        announce_copy=None
-        if getattr(args, "json", False)
-        else _announce_guard_device_connect_copy,
+        announce_copy=None if getattr(args, "json", False) else _announce_guard_device_connect_copy,
     )
     if payload is None:
         return exit_code
     _emit("connect", payload, getattr(args, "json", False))
     return exit_code
+
 
 def _run_guard_remote_pair_command(
     args: argparse.Namespace,
@@ -52,6 +77,8 @@ def _run_guard_remote_pair_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
+    context = _require_guard_context(context)
     return dispatch_guard_remote_pair_command(
         args=args,
         store=store,
@@ -60,6 +87,7 @@ def _run_guard_remote_pair_command(
         finalize_connect_payload=_finalize_guard_connect_payload,
         now=_now(),
     )
+
 
 def _run_guard_connect_command(
     args: argparse.Namespace,
@@ -72,6 +100,7 @@ def _run_guard_connect_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
     connect_subcommand = getattr(args, "connect_command", None)
     if connect_subcommand == "repair":
         payload = run_guard_connect_repair_command(
@@ -79,16 +108,15 @@ def _run_guard_connect_command(
             sync_url=args.sync_url,
             connect_url=args.connect_url,
         )
-    elif connect_subcommand in {"status", "re-pair"}:
+        _emit("connect", payload, getattr(args, "json", False))
+        return 0
+    if connect_subcommand in {"status", "re-pair"}:
         payload = build_connect_status_payload(
             store=store,
             sync_url=args.sync_url,
             connect_url=args.connect_url,
             action=str(connect_subcommand),
         )
-    else:
-        payload = None
-    if connect_subcommand in {"status", "repair", "re-pair"}:
         _emit("connect", payload, getattr(args, "json", False))
         return 0
     try:
@@ -103,9 +131,7 @@ def _run_guard_connect_command(
             use_browser_oauth=False,
             open_device_browser=True,
             wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
-            announce_copy=None
-            if getattr(args, "json", False)
-            else _announce_guard_device_connect_copy,
+            announce_copy=None if getattr(args, "json", False) else _announce_guard_device_connect_copy,
         )
         if payload is None:
             return exit_code
@@ -118,9 +144,7 @@ def _run_guard_connect_command(
             use_browser_oauth=False,
             open_device_browser=bool(getattr(args, "open_browser", False)),
             wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
-            announce_copy=None
-            if getattr(args, "json", False)
-            else _announce_guard_device_connect_copy,
+            announce_copy=None if getattr(args, "json", False) else _announce_guard_device_connect_copy,
             ci_safe=ci_safe,
             machine_label=machine_label,
         )
@@ -128,6 +152,8 @@ def _run_guard_connect_command(
             return exit_code
         _emit("connect", payload, getattr(args, "json", False))
         return exit_code
+    return 2
+
 
 def _run_guard_disconnect_command(
     args: argparse.Namespace,
@@ -140,6 +166,7 @@ def _run_guard_disconnect_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
     try:
         payload = run_guard_disconnect_command(
             store=store,
@@ -155,6 +182,7 @@ def _run_guard_disconnect_command(
     _emit("disconnect", payload, getattr(args, "json", False))
     return 0
 
+
 def _run_guard_bridge_command(
     args: argparse.Namespace,
     *,
@@ -166,6 +194,7 @@ def _run_guard_bridge_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
     poll_interval = getattr(args, "poll_interval", 10) or 10
     guard_url = getattr(args, "guard_url", None)
     dry_run = getattr(args, "dry_run", False)
@@ -187,10 +216,11 @@ def _run_guard_bridge_command(
     elif hermes_chat_id:
         backend = HermesBackend(hermes_chat_id)
 
-    config = BridgeConfig(guard_url=guard_url, poll_interval=poll_interval, dry_run=dry_run)
-    bridge = GuardBridge(config=config, store=store, backend=backend)
+    bridge_config = BridgeConfig(guard_url=guard_url, poll_interval=poll_interval, dry_run=dry_run)
+    bridge = GuardBridge(config=bridge_config, store=store, backend=backend)
     bridge.run()
     return 0
+
 
 def _run_guard_sync_command(
     args: argparse.Namespace,
@@ -203,6 +233,8 @@ def _run_guard_sync_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
+    context = _require_guard_context(context)
     try:
         payload = sync_receipts(
             store,
@@ -225,6 +257,7 @@ def _run_guard_sync_command(
     _emit("sync", payload, getattr(args, "json", False))
     return 0
 
+
 def _run_guard_cloud_command(
     args: argparse.Namespace,
     *,
@@ -236,6 +269,8 @@ def _run_guard_cloud_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
     cloud_command = getattr(args, "cloud_command", None)
     if cloud_command == "sync-intel":
         try:
@@ -256,6 +291,9 @@ def _run_guard_cloud_command(
         payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
         _emit("cloud-sync-intel", payload, getattr(args, "json", False))
         return 0
+    print("cloud subcommand is required", file=sys.stderr)
+    return 2
+
 
 def _run_guard_supply_chain_command(
     args: argparse.Namespace,
@@ -268,6 +306,8 @@ def _run_guard_supply_chain_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
     supply_chain_command = getattr(args, "supply_chain_command", None)
     workspace_dir = workspace or Path.cwd()
     if supply_chain_command == "scan":
@@ -294,9 +334,7 @@ def _run_guard_supply_chain_command(
             before_workspace_dir=(
                 Path(str(before_workspace)).expanduser() if isinstance(before_workspace, str) else None
             ),
-            after_workspace_dir=(
-                Path(str(after_workspace)).expanduser() if isinstance(after_workspace, str) else None
-            ),
+            after_workspace_dir=(Path(str(after_workspace)).expanduser() if isinstance(after_workspace, str) else None),
         )
         _emit("supply-chain-audit", payload, getattr(args, "json", False))
         return exit_code
@@ -330,6 +368,9 @@ def _run_guard_supply_chain_command(
         )
         _emit("supply-chain-explain", payload, getattr(args, "json", False))
         return exit_code
+    print("supply-chain subcommand is required", file=sys.stderr)
+    return 2
+
 
 def _run_guard_service_command(
     args: argparse.Namespace,
@@ -342,6 +383,7 @@ def _run_guard_service_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
     service_command = getattr(args, "service_command", None)
     if service_command == "login":
         payload, exit_code = _guard_service_login_payload(args=args, store=store)
@@ -370,6 +412,7 @@ def _run_guard_service_command(
     print("service subcommand is required", file=sys.stderr)
     return 2
 
+
 def _run_guard_device_command(
     args: argparse.Namespace,
     *,
@@ -381,10 +424,11 @@ def _run_guard_device_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
     command = getattr(args, "device_command", None)
     now = _now()
     if command == "show":
-        payload = {"device": store.get_device_metadata()}
+        payload: dict[str, object] = {"device": store.get_device_metadata()}
         _emit("device", payload, getattr(args, "json", False))
         return 0
     if command == "rotate":
@@ -404,6 +448,7 @@ def _run_guard_device_command(
     print("device subcommand is required", file=sys.stderr)
     return 2
 
+
 def _run_guard_daemon_command(
     args: argparse.Namespace,
     *,
@@ -415,6 +460,9 @@ def _run_guard_daemon_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
+    if guard_home is None:
+        raise RuntimeError("Guard home is required")
     daemon_command = getattr(args, "daemon_command", None)
     if daemon_command == "status":
         return _handle_daemon_status(guard_home, getattr(args, "json", False))
@@ -429,6 +477,7 @@ def _run_guard_daemon_command(
     _emit("doctor", {"daemon_url": f"http://127.0.0.1:{daemon.port}"}, getattr(args, "json", False))
     return 0
 
+
 def _run_guard_commands_command(
     args: argparse.Namespace,
     *,
@@ -440,12 +489,14 @@ def _run_guard_commands_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    store = _require_guard_store(store)
     commands_command = getattr(args, "commands_command", None)
     if commands_command == "status":
         _emit("commands", command_queue_status(store), getattr(args, "json", False))
         return 0
     print("commands subcommand is required", file=sys.stderr)
     return 2
+
 
 __all__ = [
     "_run_guard_bridge_command",

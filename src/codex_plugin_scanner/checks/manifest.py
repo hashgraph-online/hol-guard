@@ -24,7 +24,7 @@ SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 
-def load_manifest_text(raw_text: str) -> dict | None:
+def load_manifest_text(raw_text: str) -> dict[str, object] | None:
     try:
         parsed = json.loads(raw_text)
     except (json.JSONDecodeError, TypeError):
@@ -32,7 +32,7 @@ def load_manifest_text(raw_text: str) -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-def load_manifest(plugin_dir: Path) -> dict | None:
+def load_manifest(plugin_dir: Path) -> dict[str, object] | None:
     path = plugin_dir / ".codex-plugin" / "plugin.json"
     if not path.exists():
         return None
@@ -295,7 +295,7 @@ def check_interface_metadata(plugin_dir: Path) -> CheckResult:
     missing = [
         field
         for field in INTERFACE_METADATA_FIELDS
-        if not isinstance(interface.get(field), str) or not interface.get(field, "").strip()
+        if not isinstance((value := interface.get(field)), str) or not value.strip()
     ]
 
     capabilities = interface.get("capabilities")

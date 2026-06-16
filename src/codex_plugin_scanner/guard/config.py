@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import re
 import shutil
 import sqlite3
+import sys
 import tempfile
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-try:  # pragma: no cover - Python 3.11+
-    import tomllib  # type: ignore[attr-defined]
-except ModuleNotFoundError:  # pragma: no cover - Python 3.10
-    import tomli as tomllib  # type: ignore[no-redef]
+if TYPE_CHECKING:
+    import tomllib
+else:  # pragma: no cover - runtime compatibility
+    tomllib = importlib.import_module("tomllib" if sys.version_info >= (3, 11) else "tomli")
 
 from .approval_gate import ApprovalGateGrant, public_config, require_settings_write
 from .models import GuardAction, GuardMode
@@ -208,8 +212,9 @@ def _coerce_action_map(payload: object) -> dict[str, GuardAction]:
             if isinstance(value, dict)
             else None
         )
-        if isinstance(action, str) and action in VALID_GUARD_ACTIONS:
-            action_map[key] = action
+        resolved_action = _coerce_loaded_guard_action(action, None)
+        if resolved_action is not None:
+            action_map[key] = resolved_action
     return action_map
 
 
@@ -227,8 +232,9 @@ def _coerce_risk_action_map(payload: object) -> dict[str, GuardAction]:
             if isinstance(value, dict)
             else None
         )
-        if isinstance(action, str) and action in VALID_GUARD_ACTIONS:
-            action_map[key] = action
+        resolved_action = _coerce_loaded_guard_action(action, None)
+        if resolved_action is not None:
+            action_map[key] = resolved_action
     return action_map
 
 
@@ -335,13 +341,25 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
     return GuardConfig(
         guard_home=guard_home,
         workspace=workspace,
-        mode=str(merged.get("mode", "prompt")),  # type: ignore[arg-type]
-        default_action=str(merged.get("default_action", "warn")),  # type: ignore[arg-type]
-        unknown_publisher_action=str(merged.get("unknown_publisher_action", "review")),  # type: ignore[arg-type]
-        changed_hash_action=str(merged.get("changed_hash_action", "require-reapproval")),  # type: ignore[arg-type]
-        new_network_domain_action=str(merged.get("new_network_domain_action", "warn")),  # type: ignore[arg-type]
-        subprocess_action=str(merged.get("subprocess_action", "warn")),  # type: ignore[arg-type]
-        approval_wait_timeout_seconds=int(merged.get("approval_wait_timeout_seconds", 120)),
+        mode=_coerce_loaded_guard_mode(merged.get("mode"), "prompt"),
+        default_action=_coerce_loaded_guard_action_or_default(merged.get("default_action"), "warn"),
+        unknown_publisher_action=_coerce_loaded_guard_action_or_default(
+            merged.get("unknown_publisher_action"),
+            "review",
+        ),
+        changed_hash_action=_coerce_loaded_guard_action_or_default(
+            merged.get("changed_hash_action"),
+            "require-reapproval",
+        ),
+        new_network_domain_action=_coerce_loaded_guard_action_or_default(
+            merged.get("new_network_domain_action"),
+            "warn",
+        ),
+        subprocess_action=_coerce_loaded_guard_action_or_default(merged.get("subprocess_action"), "warn"),
+        approval_wait_timeout_seconds=_coerce_loaded_non_negative_int(
+            merged.get("approval_wait_timeout_seconds"),
+            120,
+        ),
         approval_surface_policy=str(merged.get("approval_surface_policy", "auto-open-once")),
         desktop_notifications=_coerce_loaded_bool(merged.get("desktop_notifications", True)),
         telemetry=bool(merged.get("telemetry", False)),
@@ -470,8 +488,45 @@ def _coerce_loaded_security_level(value: object) -> str:
     return DEFAULT_SECURITY_LEVEL
 
 
+def _coerce_loaded_guard_mode(value: object, fallback: GuardMode) -> GuardMode:
+    if value == "observe":
+        return "observe"
+    if value == "prompt":
+        return "prompt"
+    if value == "enforce":
+        return "enforce"
+    return fallback
+
+
+def _coerce_loaded_guard_action(value: object, fallback: GuardAction | None) -> GuardAction | None:
+    if value == "allow":
+        return "allow"
+    if value == "warn":
+        return "warn"
+    if value == "review":
+        return "review"
+    if value == "block":
+        return "block"
+    if value == "sandbox-required":
+        return "sandbox-required"
+    if value == "require-reapproval":
+        return "require-reapproval"
+    return fallback
+
+
+def _coerce_loaded_guard_action_or_default(value: object, fallback: GuardAction) -> GuardAction:
+    resolved = _coerce_loaded_guard_action(value, None)
+    return resolved if resolved is not None else fallback
+
+
 def _coerce_loaded_bool(value: object) -> bool:
     return value if isinstance(value, bool) else False
+
+
+def _coerce_loaded_non_negative_int(value: object, fallback: int) -> int:
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return fallback
 
 
 def _coerce_loaded_positive_int(value: object, fallback: int) -> int:
@@ -502,9 +557,10 @@ def _coerce_risk_action_payload(value: object) -> dict[str, GuardAction]:
     for key, action in value.items():
         if not isinstance(key, str) or key not in VALID_RISK_ACTION_KEYS:
             raise ValueError("Invalid Guard risk action.")
-        if not isinstance(action, str) or action not in VALID_GUARD_ACTIONS:
+        resolved_action = _coerce_loaded_guard_action(action, None)
+        if resolved_action is None:
             raise ValueError("Invalid Guard risk action.")
-        action_map[key] = action
+        action_map[key] = resolved_action
     return action_map
 
 
@@ -549,15 +605,14 @@ def _write_guard_config(path: Path, payload: dict[str, object]) -> None:
     path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
 
 
-def _toml_lines_for_table(payload: dict[object, object], path: tuple[str, ...]) -> list[str]:
+def _toml_lines_for_table(payload: Mapping[str, object], path: tuple[str, ...]) -> list[str]:
     lines: list[str] = []
     scalar_items: list[tuple[str, object]] = []
-    table_items: list[tuple[str, dict[object, object]]] = []
-    for key, value in sorted(payload.items(), key=lambda item: str(item[0])):
-        if not isinstance(key, str):
-            continue
-        if isinstance(value, dict):
-            table_items.append((key, value))
+    table_items: list[tuple[str, dict[str, object]]] = []
+    for key, value in sorted(payload.items(), key=lambda item: item[0]):
+        nested_table = _string_object_table(value)
+        if nested_table is not None:
+            table_items.append((key, nested_table))
             continue
         scalar_items.append((key, value))
     if path:
@@ -589,16 +644,16 @@ def _toml_literal(value: object) -> str:
         return json.dumps(value)
     if isinstance(value, list):
         return "[" + ", ".join(_toml_literal(item) for item in value) + "]"
-    if isinstance(value, dict):
-        return _toml_inline_table(value)
+    nested_table = _string_object_table(value)
+    if nested_table is not None:
+        return _toml_inline_table(nested_table)
     return json.dumps(str(value))
 
 
-def _toml_inline_table(value: dict[object, object]) -> str:
+def _toml_inline_table(value: Mapping[str, object]) -> str:
     items: list[str] = []
-    for key, item in sorted(value.items(), key=lambda entry: str(entry[0])):
-        if isinstance(key, str):
-            items.append(f"{_toml_key(key)} = {_toml_literal(item)}")
+    for key, item in sorted(value.items(), key=lambda entry: entry[0]):
+        items.append(f"{_toml_key(key)} = {_toml_literal(item)}")
     return "{ " + ", ".join(items) + " }"
 
 
@@ -643,9 +698,13 @@ def overlay_synced_guard_policy(
 
 
 def _coerce_action_value(value: object, fallback: GuardAction) -> GuardAction:
-    if isinstance(value, str) and value in VALID_GUARD_ACTIONS:
-        return value
-    return fallback
+    return _coerce_loaded_guard_action_or_default(value, fallback)
+
+
+def _string_object_table(value: object) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return None
+    return {key: item for key, item in value.items() if isinstance(key, str)}
 
 
 def _existing_legacy_guard_home() -> Path | None:

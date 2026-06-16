@@ -35,9 +35,9 @@ def _normalize_manifest_json(value: dict[str, Any]) -> dict[str, Any]:
     if isinstance(interface, dict):
         interface = dict(interface)
         for key in ("composerIcon", "logo"):
-            value = interface.get(key)
-            if isinstance(value, str):
-                interface[key] = normalize_codex_relative_path(value)
+            path_value = interface.get(key)
+            if isinstance(path_value, str):
+                interface[key] = normalize_codex_relative_path(path_value)
         screenshots = interface.get("screenshots")
         if isinstance(screenshots, list):
             interface["screenshots"] = [

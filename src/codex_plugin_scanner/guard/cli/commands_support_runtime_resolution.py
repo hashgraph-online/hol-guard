@@ -5,6 +5,14 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _now
+    from .commands_support_hook_payload import _action_envelope_json, _coalesce_string
+    from .commands_support_runtime_artifacts import _CODEX_PROMPT_SECRET_KEY_MARKERS
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
 

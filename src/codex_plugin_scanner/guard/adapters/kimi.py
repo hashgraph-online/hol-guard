@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import importlib
 import os
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..models import GuardArtifact, HarnessDetection
@@ -19,10 +21,11 @@ from .base import (
     _shell_command,
 )
 
+tomllib: Any
 try:
-    import tomllib  # type: ignore[attr-defined]
+    import tomllib as tomllib  # type: ignore[attr-defined]
 except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redef]
+    tomllib = importlib.import_module("tomli")
 
 
 _KIMI_HOME_ENV_VAR = "KIMI_CODE_HOME"
@@ -249,6 +252,10 @@ class KimiHarnessAdapter(HarnessAdapter):
         new_text = f"{cleaned_text.rstrip()}\n\n{managed_block}\n".lstrip()
         config_path.write_text(new_text, encoding="utf-8")
 
+        raw_notes = shim_manifest.get("notes")
+        shim_notes = (
+            [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
+        )
         return {
             "harness": self.harness,
             "active": True,
@@ -256,7 +263,7 @@ class KimiHarnessAdapter(HarnessAdapter):
             **shim_manifest,
             "notes": [
                 "Guard hook entries added to ~/.kimi-code/config.toml",
-                *[str(note) for note in shim_manifest.get("notes", [])],
+                *shim_notes,
             ],
         }
 
@@ -273,6 +280,10 @@ class KimiHarnessAdapter(HarnessAdapter):
             existing_text = config_path.read_text(encoding="utf-8")
             cleaned_text = _remove_managed_block(existing_text)
             config_path.write_text(cleaned_text.rstrip() + "\n", encoding="utf-8")
+        raw_notes = shim_manifest.get("notes")
+        shim_notes = (
+            [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
+        )
         return {
             "harness": self.harness,
             "active": False,
@@ -280,7 +291,7 @@ class KimiHarnessAdapter(HarnessAdapter):
             **shim_manifest,
             "notes": [
                 "Guard hook entries removed from ~/.kimi-code/config.toml",
-                *[str(note) for note in shim_manifest.get("notes", [])],
+                *shim_notes,
             ],
         }
 

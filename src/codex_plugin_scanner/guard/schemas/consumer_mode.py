@@ -102,7 +102,7 @@ def build_consumer_mode_contract(
     """Build the stable consumer-mode payload for a local artifact."""
 
     scan_result = scan_plugin(target, options=options)
-    summary_payload = {
+    summary_payload: dict[str, object] = {
         "path": str(target),
         "score": scan_result.score,
         "grade": scan_result.grade,
@@ -132,7 +132,7 @@ def build_consumer_mode_contract(
         "ecosystems": list(scan_result.ecosystems),
         "packages": [asdict(package) for package in scan_result.packages],
     }
-    payload = {
+    payload: dict[str, object] = {
         "schema_version": "guard-consumer.v2",
         "generated_at": scan_result.timestamp,
         "install_target": {

@@ -24,16 +24,18 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "cisco-ai-mcp-scanner" not in dependencies
     assert "cisco-ai-mcp-scanner~=4.6" in cisco_extra
     assert "python_version >= '3.11'" in cisco_extra
-    assert "cisco-ai-skill-scanner~=2.0.9" in dependency_entries
-    assert "aiohttp==3.13.5" in override_entries
-    assert "click==8.3.3" in override_entries
-    assert "cisco-ai-skill-scanner==2.0.9" in override_entries
+    assert "cisco-ai-skill-scanner~=2.0.11" in dependency_entries
+    assert "aiohttp==3.14.1" in override_entries
+    assert "click==8.4.1" in override_entries
+    assert "cisco-ai-skill-scanner==2.0.11" in override_entries
     assert "importlib-metadata==9.0.0" in override_entries
     assert "jsonschema==4.26.0" in override_entries
-    assert "litellm==1.83.10" in override_entries
-    assert "openai==2.36.0" in override_entries
+    assert "litellm==1.89.0" in override_entries
+    assert "openai==2.41.1" in override_entries
+    assert "pyjwt==2.13.0" in override_entries
     assert "python-dotenv==1.2.2" in override_entries
-    assert "python-multipart==0.0.28" in override_entries
+    assert "python-multipart==0.0.32" in override_entries
+    assert "starlette==1.3.1" in override_entries
     assert "tokenizers==0.23.1" in override_entries
     assert "urllib3==2.7.0" in override_entries
     assert "cisco-ai-a2a-scanner" not in dependencies
@@ -61,7 +63,7 @@ def test_readme_distinguishes_baseline_and_full_cisco_installs() -> None:
     assert 'pip install "hol-guard[cisco]"' in readme
     assert 'pip install "plugin-scanner[cisco]"' in readme
     assert "Python 3.11+" in readme
-    assert "patched `litellm==1.83.10` release" in readme
+    assert "patched `litellm==1.89.0` release" in readme
     assert "deferred" in readme
     assert "cisco-ai-a2a-scanner" in readme
     assert "cisco-aibom" in readme
@@ -84,12 +86,14 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     requirements_copy_index = dockerfile.index("COPY docker-requirements.txt LICENSE README.md /app/")
     source_copy_index = dockerfile.index("COPY src /app/src")
     assert requirements_copy_index < source_copy_index
-    assert "aiohttp==3.13.5" in docker_requirements
+    assert "aiohttp==3.14.1" in docker_requirements
     assert "cisco-ai-mcp-scanner==" in docker_requirements
     assert "importlib-metadata==9.0.0" in docker_requirements
-    assert "litellm==1.83.10" in docker_requirements
+    assert "litellm==1.89.0" in docker_requirements
     assert "python-dotenv==1.2.2" in docker_requirements
-    assert "python-multipart==0.0.28" in docker_requirements
+    assert "python-multipart==0.0.32" in docker_requirements
+    assert "pyjwt==2.13.0" in docker_requirements
+    assert "starlette==1.3.1" in docker_requirements
     assert "tokenizers==0.23.1" in docker_requirements
     assert "--hash=sha256:" in docker_requirements
     assert "uv sync --extra dev" in contributing

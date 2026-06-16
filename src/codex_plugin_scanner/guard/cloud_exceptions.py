@@ -4,16 +4,40 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime, timezone
+from typing import TypeGuard
 
-from .models import CloudException
+from .models import (
+    CloudException,
+    CloudExceptionAckStatus,
+    CloudExceptionEffect,
+    CloudExceptionProvenance,
+    CloudExceptionScope,
+)
 
-_CLOUD_EXCEPTION_SCOPES = frozenset({"artifact", "publisher", "harness", "workspace", "global"})
-_CLOUD_EXCEPTION_EFFECTS = frozenset({"allow"})
-_CLOUD_EXCEPTION_ACK_STATUSES = frozenset({"pending", "synced", "failed", "offline"})
+_CLOUD_EXCEPTION_SCOPES: tuple[CloudExceptionScope, ...] = ("artifact", "publisher", "harness", "workspace", "global")
+_CLOUD_EXCEPTION_EFFECTS: tuple[CloudExceptionEffect, ...] = ("allow",)
+_CLOUD_EXCEPTION_ACK_STATUSES: tuple[CloudExceptionAckStatus, ...] = ("pending", "synced", "failed", "offline")
+_CLOUD_EXCEPTION_PROVENANCE_VALUES: tuple[CloudExceptionProvenance, ...] = ("receipt-sync", "policy-bundle")
 
 
 def _non_empty_string(value: object) -> str | None:
     return value if isinstance(value, str) and value.strip() else None
+
+
+def _is_cloud_exception_scope(value: object) -> TypeGuard[CloudExceptionScope]:
+    return isinstance(value, str) and value in _CLOUD_EXCEPTION_SCOPES
+
+
+def _is_cloud_exception_effect(value: object) -> TypeGuard[CloudExceptionEffect]:
+    return isinstance(value, str) and value in _CLOUD_EXCEPTION_EFFECTS
+
+
+def _is_cloud_exception_ack_status(value: object) -> TypeGuard[CloudExceptionAckStatus]:
+    return isinstance(value, str) and value in _CLOUD_EXCEPTION_ACK_STATUSES
+
+
+def _is_cloud_exception_provenance(value: object) -> TypeGuard[CloudExceptionProvenance]:
+    return isinstance(value, str) and value in _CLOUD_EXCEPTION_PROVENANCE_VALUES
 
 
 def _parse_iso_timestamp(value: object) -> datetime | None:
@@ -89,10 +113,10 @@ def _resolve_cloud_exception_ack_status(
     device_id: str | None,
     policy_bundle: dict[str, object] | None,
     policy_bundle_ack: dict[str, object] | None,
-) -> str | None:
+) -> CloudExceptionAckStatus | None:
     if isinstance(policy_bundle_ack, dict):
         ack_status = policy_bundle_ack.get("status")
-        if isinstance(ack_status, str) and ack_status in _CLOUD_EXCEPTION_ACK_STATUSES:
+        if _is_cloud_exception_ack_status(ack_status):
             return ack_status
     if not isinstance(policy_bundle, dict):
         return None
@@ -105,7 +129,7 @@ def _resolve_cloud_exception_ack_status(
         if str(acknowledgement.get("deviceId")) != device_id:
             continue
         status = acknowledgement.get("status")
-        if isinstance(status, str) and status in _CLOUD_EXCEPTION_ACK_STATUSES:
+        if _is_cloud_exception_ack_status(status):
             return status
     return None
 
@@ -114,19 +138,21 @@ def cloud_exception_from_mapping(
     item: dict[str, object],
     *,
     bundle_hash: str | None = None,
-    ack_status: str | None = None,
+    ack_status: CloudExceptionAckStatus | None = None,
     rejection_reason: str | None = None,
-    provenance: str = "receipt-sync",
+    provenance: CloudExceptionProvenance = "receipt-sync",
 ) -> CloudException | None:
     exception_id = _non_empty_string(item.get("exceptionId") or item.get("id"))
     if exception_id is None:
         return None
-    scope = item.get("scope")
-    if scope not in _CLOUD_EXCEPTION_SCOPES:
+    scope_value = item.get("scope")
+    if not _is_cloud_exception_scope(scope_value):
         return None
-    effect = item.get("effect") or "allow"
-    if effect not in _CLOUD_EXCEPTION_EFFECTS:
+    scope = scope_value
+    effect_value = item.get("effect") or "allow"
+    if not _is_cloud_exception_effect(effect_value):
         return None
+    effect = effect_value
     owner = _non_empty_string(item.get("owner"))
     expiry = _normalized_timestamp_string(item.get("expiresAt") or item.get("expiry"))
     if owner is None or expiry is None:
@@ -139,25 +165,26 @@ def cloud_exception_from_mapping(
     source_receipt_id = _non_empty_string(item.get("sourceReceiptId") or item.get("source_receipt_id"))
     last_used_at = _normalized_timestamp_string(item.get("lastUsedAt") or item.get("last_used_at"))
     resolved_ack = ack_status or _non_empty_string(item.get("ackStatus") or item.get("ack_status"))
-    if resolved_ack is not None and resolved_ack not in _CLOUD_EXCEPTION_ACK_STATUSES:
+    if resolved_ack is not None and not _is_cloud_exception_ack_status(resolved_ack):
         resolved_ack = None
     resolved_bundle_hash = _non_empty_string(item.get("bundleHash") or item.get("bundle_hash")) or bundle_hash
+    resolved_provenance = provenance if _is_cloud_exception_provenance(provenance) else "receipt-sync"
     return CloudException(
         id=exception_id,
-        effect=effect,  # type: ignore[arg-type]
-        scope=scope,  # type: ignore[arg-type]
+        effect=effect,
+        scope=scope,
         harness=harness,
         owner=owner,
         approver=approver,
         expiry=expiry,
         source_receipt_id=source_receipt_id,
         bundle_hash=resolved_bundle_hash,
-        ack_status=resolved_ack,  # type: ignore[arg-type]
+        ack_status=resolved_ack,
         last_used_at=last_used_at,
         rejection_reason=(
             _non_empty_string(item.get("rejectionReason") or item.get("rejection_reason")) or rejection_reason
         ),
-        provenance=(provenance if provenance in {"receipt-sync", "policy-bundle"} else "receipt-sync"),  # type: ignore[arg-type]
+        provenance=resolved_provenance,
     )
 
 
@@ -195,12 +222,14 @@ def cloud_exception_from_stored_dict(item: dict[str, object]) -> CloudException 
     exception_id = _non_empty_string(item.get("id"))
     if exception_id is None:
         return None
-    scope = item.get("scope")
-    if scope not in _CLOUD_EXCEPTION_SCOPES:
+    scope_value = item.get("scope")
+    if not _is_cloud_exception_scope(scope_value):
         return None
-    effect = item.get("effect") or "allow"
-    if effect not in _CLOUD_EXCEPTION_EFFECTS:
+    scope = scope_value
+    effect_value = item.get("effect") or "allow"
+    if not _is_cloud_exception_effect(effect_value):
         return None
+    effect = effect_value
     owner = _non_empty_string(item.get("owner"))
     expiry = _normalized_timestamp_string(item.get("expiry"))
     if owner is None or expiry is None:
@@ -210,32 +239,32 @@ def cloud_exception_from_stored_dict(item: dict[str, object]) -> CloudException 
     if scope == "harness" and harness is None:
         return None
     ack_status = item.get("ack_status")
-    if ack_status is not None and ack_status not in _CLOUD_EXCEPTION_ACK_STATUSES:
+    if ack_status is not None and not _is_cloud_exception_ack_status(ack_status):
         ack_status = None
     resolved_provenance = item.get("provenance")
-    if resolved_provenance not in {"receipt-sync", "policy-bundle"}:
+    if not _is_cloud_exception_provenance(resolved_provenance):
         resolved_provenance = "receipt-sync"
     return CloudException(
         id=exception_id,
-        effect=effect,  # type: ignore[arg-type]
-        scope=scope,  # type: ignore[arg-type]
+        effect=effect,
+        scope=scope,
         harness=harness,
         owner=owner,
         approver=_non_empty_string(item.get("approver")),
         expiry=expiry,
         source_receipt_id=_non_empty_string(item.get("source_receipt_id")),
         bundle_hash=_non_empty_string(item.get("bundle_hash")),
-        ack_status=ack_status,  # type: ignore[arg-type]
+        ack_status=ack_status,
         last_used_at=_normalized_timestamp_string(item.get("last_used_at")),
         rejection_reason=_non_empty_string(item.get("rejection_reason")),
-        provenance=resolved_provenance,  # type: ignore[arg-type]
+        provenance=resolved_provenance,
     )
 
 
-def _stored_cloud_exception_provenance(item: dict[str, object]) -> str:
+def _stored_cloud_exception_provenance(item: dict[str, object]) -> CloudExceptionProvenance:
     provenance = item.get("provenance")
-    if provenance in {"receipt-sync", "policy-bundle"}:
-        return str(provenance)
+    if _is_cloud_exception_provenance(provenance):
+        return provenance
     if _non_empty_string(item.get("bundle_hash")) is not None:
         return "policy-bundle"
     return "receipt-sync"
@@ -264,11 +293,12 @@ def build_cloud_exceptions_from_sync_payload(
     ack_status: str | None = None,
 ) -> list[CloudException]:
     items: list[CloudException] = []
+    resolved_ack_status = ack_status if _is_cloud_exception_ack_status(ack_status) else None
     for raw_item in exceptions:
         parsed = cloud_exception_from_mapping(
             raw_item,
             bundle_hash=bundle_hash,
-            ack_status=ack_status,
+            ack_status=resolved_ack_status,
         )
         if parsed is not None:
             items.append(parsed)

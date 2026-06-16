@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import urllib.error
@@ -9,10 +10,9 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from .adapters.base import HarnessContext
-from .consumer import detect_all
 from .inventory_cisco import run_cisco_inventory_scans
 from .inventory_contract import (
     GuardAgentInventorySnapshot,
@@ -40,6 +40,14 @@ _AIBOM_CLOUD_SYNC_OPTIONS = AibomCliOptions(
     cisco_mcp_scan="auto",
     cisco_timeout_seconds=30.0,
 )
+
+
+def _runner_module():
+    return importlib.import_module(".runtime.runner", __package__)
+
+
+def detect_all(context: HarnessContext):
+    return importlib.import_module(".consumer", __package__).detect_all(context)
 
 
 def collect_aibom_snapshots(
@@ -125,7 +133,7 @@ def _resolve_trust_attestation_context(
 
 
 def build_inventory_json_payload(
-    store: GuardStore,
+    store: Any,
     context: HarnessContext,
     *,
     generated_at: str,
@@ -157,7 +165,7 @@ def build_inventory_json_payload(
 
 
 def build_aibom_status_payload(
-    store: GuardStore,
+    store: Any,
     context: HarnessContext,
     *,
     generated_at: str,
@@ -188,7 +196,7 @@ def build_aibom_status_payload(
 
 
 def build_aibom_export_payload(
-    store: GuardStore,
+    store: Any,
     context: HarnessContext,
     *,
     generated_at: str,
@@ -238,7 +246,7 @@ def _aware_utc_timestamp(value: str) -> datetime:
 
 
 def _aibom_sync_is_due(
-    store: GuardStore,
+    store: Any,
     *,
     generated_at: str,
     min_interval_seconds: int,
@@ -263,7 +271,7 @@ def _aibom_sync_is_due(
     return elapsed >= retry_interval
 
 
-def _aibom_guard_events_endpoint_unavailable_recently(store: GuardStore) -> bool:
+def _aibom_guard_events_endpoint_unavailable_recently(store: Any) -> bool:
     from datetime import timedelta
 
     summary = store.get_sync_payload(_AIBOM_GUARD_EVENTS_BACKOFF_KEY)
@@ -291,7 +299,7 @@ def _resolve_operator_home_dir(home_dir: Path | None = None) -> Path:
 
 
 def sync_aibom_snapshots_if_due(
-    store: GuardStore,
+    store: Any,
     *,
     generated_at: str,
     min_interval_seconds: int = _AIBOM_AUTO_SYNC_INTERVAL_SECONDS,
@@ -300,7 +308,8 @@ def sync_aibom_snapshots_if_due(
     home_dir: Path | None = None,
     workspace_dir: Path | None = None,
 ) -> dict[str, object]:
-    from .runtime.runner import GuardSyncNotConfiguredError
+    runner = _runner_module()
+    guard_sync_not_configured_error = runner.GuardSyncNotConfiguredError
 
     if store.get_cloud_workspace_id() is None:
         return {"synced": False, "skipped": True, "reason": "not_configured"}
@@ -335,7 +344,7 @@ def sync_aibom_snapshots_if_due(
             options=options,
             auth_context=auth_context,
         )
-    except GuardSyncNotConfiguredError:
+    except guard_sync_not_configured_error:
         return {"synced": False, "skipped": True, "reason": "not_configured"}
     except ValueError as error:
         return {"synced": False, "error": str(error)}
@@ -344,24 +353,19 @@ def sync_aibom_snapshots_if_due(
 
 
 def sync_aibom_snapshots(
-    store: GuardStore,
+    store: Any,
     context: HarnessContext,
     *,
     generated_at: str,
     options: AibomCliOptions | None = None,
     auth_context: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    from .runtime.runner import (
-        GuardSyncNotConfiguredError,
-        _guard_events_sync_url,
-        _guard_sync_request,
-        _resolve_guard_sync_auth_context,
-        _urlopen_json_with_timeout_retry,
-    )
+    runner = _runner_module()
+    guard_sync_not_configured_error = runner.GuardSyncNotConfiguredError
 
     workspace_id = store.get_cloud_workspace_id()
     if workspace_id is None:
-        raise GuardSyncNotConfiguredError("Guard Cloud workspace is not configured. Run `hol-guard connect` first.")
+        raise guard_sync_not_configured_error("Guard Cloud workspace is not configured. Run `hol-guard connect` first.")
 
     resolved_options = options or _AIBOM_CLOUD_SYNC_OPTIONS
     trust_attestation_context = _resolve_trust_attestation_context(
@@ -377,7 +381,7 @@ def sync_aibom_snapshots(
     )
     if not snapshots:
         synced_at = generated_at
-        summary = {
+        summary: dict[str, object] = {
             "synced": True,
             "synced_at": synced_at,
             "snapshots": 0,
@@ -387,8 +391,8 @@ def sync_aibom_snapshots(
         store.set_sync_payload("aibom_sync_summary", summary, synced_at)
         return summary
 
-    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    sync_url = _guard_events_sync_url(str(resolved_auth_context["sync_url"]))
+    resolved_auth_context = auth_context if auth_context is not None else runner._resolve_guard_sync_auth_context(store)
+    sync_url = runner._guard_events_sync_url(str(resolved_auth_context["sync_url"]))
     events = [
         _inventory_snapshot_event(
             snapshot=snapshot,
@@ -403,7 +407,7 @@ def sync_aibom_snapshots(
         for snapshot in snapshots
     ]
     body = json.dumps({"events": events}).encode("utf-8")
-    request = _guard_sync_request(
+    request = runner._guard_sync_request(
         resolved_auth_context,
         request_url=sync_url,
         method="POST",
@@ -411,7 +415,7 @@ def sync_aibom_snapshots(
         extra_headers=None,
     )
     try:
-        payload = _urlopen_json_with_timeout_retry(
+        payload = runner._urlopen_json_with_timeout_retry(
             request=request,
             timeout_seconds=30,
             retry_timeout_seconds=60,
@@ -431,7 +435,7 @@ def sync_aibom_snapshots(
                 },
                 synced_at,
             )
-            summary = {
+            summary: dict[str, object] = {
                 "synced": False,
                 "skipped": True,
                 "reason": "guard_events_endpoint_unavailable",
@@ -443,7 +447,7 @@ def sync_aibom_snapshots(
         raise RuntimeError("Guard Cloud AIBOM sync failed due to a network error.") from error
     accepted = payload.get("accepted")
     synced_at = _sync_timestamp_from_payload(payload) or generated_at
-    summary = {
+    summary: dict[str, object] = {
         "synced": True,
         "synced_at": synced_at,
         "snapshots": len(snapshots),
@@ -575,7 +579,7 @@ def _metadata_lookup_from_snapshots(
 
 
 def _artifact_rows_from_store(
-    store: GuardStore,
+    store: Any,
     snapshots: tuple[GuardAgentInventorySnapshot, ...],
 ) -> list[dict[str, object]]:
     metadata_by_artifact = _metadata_lookup_from_snapshots(snapshots)
@@ -584,7 +588,8 @@ def _artifact_rows_from_store(
         trust_verdict = str(item.get("last_policy_action") or "unknown")
         harness = str(item.get("harness") or "")
         artifact_id = str(item.get("artifact_id") or "")
-        row = {**item, "trust_verdict": trust_verdict}
+        row: dict[str, object] = dict(item)
+        row["trust_verdict"] = trust_verdict
         extensions = metadata_by_artifact.get((harness, artifact_id))
         if extensions:
             row.update(extensions)
@@ -630,7 +635,7 @@ def _redact_inventory_store_item(
     return redacted
 
 
-def _aibom_connection_status(store: GuardStore) -> str:
+def _aibom_connection_status(store: Any) -> str:
     if store.get_cloud_sync_profile() is None:
         return "not_connected"
     if store.get_cloud_workspace_id() is None:
@@ -641,7 +646,7 @@ def _aibom_connection_status(store: GuardStore) -> str:
     return "sync_required"
 
 
-def _sync_summary(store: GuardStore) -> dict[str, object]:
+def _sync_summary(store: Any) -> dict[str, object]:
     payload = store.get_sync_payload("aibom_sync_summary")
     return payload if isinstance(payload, dict) else {}
 

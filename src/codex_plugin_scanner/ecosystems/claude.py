@@ -91,14 +91,16 @@ class ClaudeAdapter:
         policies: dict[str, str] = {}
         if isinstance(strict_mode, bool):
             policies["strict"] = "true" if strict_mode else "false"
+        raw_name = manifest.get("name")
+        raw_version = manifest.get("version")
 
         return NormalizedPackage(
             ecosystem=Ecosystem.CLAUDE,
             package_kind=candidate.package_kind,
             root_path=root,
             manifest_path=candidate.manifest_path,
-            name=manifest.get("name") if isinstance(manifest.get("name"), str) else None,
-            version=manifest.get("version") if isinstance(manifest.get("version"), str) else None,
+            name=raw_name if isinstance(raw_name, str) else None,
+            version=raw_version if isinstance(raw_version, str) else None,
             metadata={
                 key: value
                 for key in ("description", "homepage", "repository", "license")

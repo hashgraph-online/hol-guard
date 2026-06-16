@@ -62,7 +62,7 @@ def desktop_notification_setup_payload(
 ) -> dict[str, object]:
     """Return a stable JSON payload for notification setup results."""
 
-    payload = {
+    payload: dict[str, object] = {
         "platform": getattr(result, "platform", "unknown"),
         "supported": bool(getattr(result, "supported", False)),
         "preview_sent": bool(getattr(result, "preview_sent", False)),

@@ -24,7 +24,9 @@ from typing import Literal
 
 _RESOURCE_AVAILABLE = sys.platform != "win32"
 if _RESOURCE_AVAILABLE:
-    import resource
+    import resource as _resource
+else:
+    _resource = None
 
 SandboxLanguage = Literal["shell", "node", "python", "package", "mcp_smoke"]
 EnvPolicy = Literal["clean", "passthrough", "minimal"]
@@ -142,18 +144,19 @@ def _redact_env(env: dict[str, str]) -> dict[str, str]:
 
 
 def _apply_resource_limits(cpu_seconds: float, memory_bytes: int, max_processes: int) -> None:
-    if not _RESOURCE_AVAILABLE:
+    resource_module = _resource
+    if resource_module is None:
         return
     with contextlib.suppress(OSError, ValueError):
         cpu_int = max(1, int(cpu_seconds))
-        resource.setrlimit(resource.RLIMIT_CPU, (cpu_int, cpu_int))
+        resource_module.setrlimit(resource_module.RLIMIT_CPU, (cpu_int, cpu_int))
     with contextlib.suppress(OSError, ValueError):
-        resource.setrlimit(resource.RLIMIT_DATA, (memory_bytes, memory_bytes))
+        resource_module.setrlimit(resource_module.RLIMIT_DATA, (memory_bytes, memory_bytes))
     with contextlib.suppress(OSError, ValueError):
-        soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+        soft, hard = resource_module.getrlimit(resource_module.RLIMIT_NPROC)
         effective = min(max_processes, soft) if soft > 0 else max_processes
         new_hard = hard if hard <= 0 else max(effective, hard)
-        resource.setrlimit(resource.RLIMIT_NPROC, (effective, new_hard))
+        resource_module.setrlimit(resource_module.RLIMIT_NPROC, (effective, new_hard))
 
 
 def _write_sandbox_files(workspace: Path, files: dict[str, str]) -> None:

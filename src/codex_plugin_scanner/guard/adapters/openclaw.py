@@ -108,6 +108,11 @@ class OpenClawHarnessAdapter(HarnessAdapter):
         cloud_identity = cloud_agent_identity_hints(context, runtime=self.harness)
         overlay_path.write_text(json.dumps(overlay_payload(detection), indent=2) + "\n", encoding="utf-8")
         pretool_path.write_text(json.dumps(pretool_payload(context=context), indent=2) + "\n", encoding="utf-8")
+        raw_notes = shim_manifest.get("notes")
+        shim_notes = (
+            [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
+        )
+        notes = ["Guard generated an OpenClaw overlay bundle for gateway posture and pre-tool protection.", *shim_notes]
         manifest = {
             "harness": self.harness,
             "active": True,
@@ -126,10 +131,7 @@ class OpenClawHarnessAdapter(HarnessAdapter):
             },
             "config_paths": list(detection.config_paths),
             "artifact_count": len(detection.artifacts),
-            "notes": [
-                "Guard generated an OpenClaw overlay bundle for gateway posture and pre-tool protection.",
-                *[str(note) for note in shim_manifest.get("notes", [])],
-            ],
+            "notes": notes,
         }
         if cloud_identity is not None:
             manifest["cloud_agent_identity"] = cloud_identity
@@ -150,6 +152,10 @@ class OpenClawHarnessAdapter(HarnessAdapter):
             if path.exists():
                 path.unlink()
                 removed_paths.append(str(path))
+        raw_notes = shim_manifest.get("notes")
+        shim_notes = (
+            [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
+        )
         return {
             "harness": self.harness,
             "active": False,
@@ -158,7 +164,7 @@ class OpenClawHarnessAdapter(HarnessAdapter):
             "removed_paths": removed_paths,
             "notes": [
                 "Guard removed the managed OpenClaw overlay bundle and kept user OpenClaw config untouched.",
-                *[str(note) for note in shim_manifest.get("notes", [])],
+                *shim_notes,
             ],
         }
 

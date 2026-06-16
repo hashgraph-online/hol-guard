@@ -1,14 +1,54 @@
 """Guard CLI runtime artifact hook review and queue flow."""
 
-# fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _hook_command_text, _now
+    from .commands_support_claude_approval import _claude_native_pretooluse_terminal_notice
+    from .commands_support_hook_payload import (
+        _action_envelope_json,
+        _approval_surface_policy_for_flow,
+        _emit_native_hook_notification_stderr,
+        _emit_native_hook_response,
+    )
+    from .commands_support_hook_state import (
+        _record_claude_permission_notice,
+        _should_emit_prequeue_native_hook_response,
+    )
+    from .commands_support_interaction import (
+        _attach_primary_approval_link,
+        _codex_browser_wait_metadata,
+        _preferred_approval_review_url,
+        _record_harness_usage_for_hook,
+        _should_emit_claude_native_pretooluse_notice,
+        _should_emit_copilot_hook_response,
+    )
+    from .commands_support_permission_store import _attach_cursor_pending_approval_request_ids
+    from .commands_support_prompts import (
+        _claude_prompt_additional_context,
+        _claude_prompt_system_message,
+        _copilot_hook_reason,
+        _emit_copilot_hook_response,
+        _prompt_requires_hard_block,
+        _runtime_artifact_native_reason,
+    )
+    from .commands_support_runtime_artifacts import _optional_string
+    from .commands_support_runtime_policy import _approval_delivery_payload, _localize_pending_approval_copy
+    from .commands_support_runtime_resolution import (
+        _canonical_harness_name,
+        _runtime_detection,
+        _runtime_request_summary,
+    )
+
+
 from ._commands_shared import *
+from .commands_hook_runtime_state import RuntimeArtifactHookState
 from .commands_parser_helpers import *
 
-from .commands_hook_runtime_state import RuntimeArtifactHookState
 
 def _review_runtime_artifact_hook(
     state: RuntimeArtifactHookState,
@@ -17,12 +57,13 @@ def _review_runtime_artifact_hook(
     config: GuardConfig,
     context: HarnessContext,
     guard_home: Path,
-    managed_install: object,
+    managed_install: dict[str, object] | None,
     output_stream: TextIO | None = None,
     payload: Mapping[str, object],
     store: GuardStore,
     workspace: Path | None,
 ) -> int | None:
+    payload_map = dict(payload)
     action_envelope = state.action_envelope
     artifact_id = state.artifact_id
     artifact_name = state.artifact_name
@@ -39,12 +80,11 @@ def _review_runtime_artifact_hook(
     stored_policy_action = state.stored_policy_action
     from ..adapters.cursor_hooks import cursor_hook_requires_approval_center_queue
 
-    cursor_native_queue = (
-        _canonical_harness_name(args.harness) == "cursor"
-        and cursor_hook_requires_approval_center_queue(
-            policy_action=policy_action,
-            guard_payload=response_payload,
-        )
+    cursor_native_queue = _canonical_harness_name(
+        args.harness
+    ) == "cursor" and cursor_hook_requires_approval_center_queue(
+        policy_action=policy_action,
+        guard_payload=response_payload,
     )
     if policy_action in {"block", "sandbox-required", "require-reapproval"} or cursor_native_queue:
         native_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
@@ -62,7 +102,7 @@ def _review_runtime_artifact_hook(
         ):
             _record_claude_permission_notice(
                 store=store,
-                payload=payload,
+                payload=payload_map,
                 reason=native_reason,
                 artifact=runtime_artifact,
                 artifact_hash=runtime_artifact_hash,
@@ -91,7 +131,7 @@ def _review_runtime_artifact_hook(
                 policy_action=policy_action,
             ):
                 _emit_native_hook_notification_stderr(
-                    _claude_native_pretooluse_terminal_notice(payload=payload, reason=native_reason)
+                    _claude_native_pretooluse_terminal_notice(payload=payload_map, reason=native_reason)
                 )
             system_message = None
             if _canonical_harness_name(args.harness) == "claude-code":
@@ -117,19 +157,16 @@ def _review_runtime_artifact_hook(
                 policy_action=policy_action,
             )
             return 0
-        should_queue_approval_center = not (
-            policy_action == "block" and stored_policy_action == "block"
-        )
+        should_queue_approval_center = not (policy_action == "block" and stored_policy_action == "block")
         if not _prompt_requires_hard_block(runtime_artifact) and should_queue_approval_center:
             approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
             approval_center_url = ensure_guard_daemon(guard_home)
             runtime_detection = _runtime_detection(args.harness, runtime_artifact)
             queued_policy_action = (
-                "require-reapproval"
-                if cursor_native_queue and policy_action in {"warn", "review"}
-                else policy_action
+                "require-reapproval" if cursor_native_queue and policy_action in {"warn", "review"} else policy_action
             )
-            evaluation_payload = {
+            package_evaluation_to_dict = getattr(package_evaluation, "to_dict", None)
+            evaluation_payload: dict[str, object] = {
                 "artifacts": [
                     {
                         "artifact_id": artifact_id,
@@ -145,9 +182,9 @@ def _review_runtime_artifact_hook(
                         "action_envelope_json": _action_envelope_json(action_envelope),
                         "decision_v2_json": decision_v2_payload,
                         "scanner_evidence": scanner_evidence_payload,
-                        "supply_chain_evaluation": package_evaluation.to_dict()
-                        if package_evaluation is not None
-                        else None,
+                        "supply_chain_evaluation": (
+                            package_evaluation_to_dict() if callable(package_evaluation_to_dict) else None
+                        ),
                     }
                 ]
             }
@@ -186,11 +223,11 @@ def _review_runtime_artifact_hook(
                             event_name=event_name,
                             policy_action=policy_action,
                             config=config,
-                            payload=payload,
+                            payload=payload_map,
                         ),
-                        "command_text": _hook_command_text(payload),
+                        "command_text": _hook_command_text(payload_map),
                         "workspace": str(workspace) if workspace else None,
-                        **codex_resume_metadata_from_hook_payload(payload),
+                        **codex_resume_metadata_from_hook_payload(payload_map),
                     },
                     detection=runtime_detection.to_dict(),
                     evaluation=evaluation_payload,
@@ -237,7 +274,7 @@ def _review_runtime_artifact_hook(
                 ):
                     _attach_cursor_pending_approval_request_ids(
                         store=store,
-                        payload=payload,
+                        payload=payload_map,
                         response_payload=response_payload,
                     )
             response_payload["approval_center_url"] = approval_center_url
@@ -261,6 +298,7 @@ def _review_runtime_artifact_hook(
     state.policy_action = policy_action
     state.response_payload = response_payload
     return None
+
 
 __all__ = [
     "_review_runtime_artifact_hook",

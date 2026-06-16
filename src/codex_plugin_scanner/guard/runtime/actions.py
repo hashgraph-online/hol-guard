@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PureWindowsPath
-from typing import Literal
+from typing import Literal, TypeGuard
 
 from ..redaction import redact_text
 from .secret_sensitivity import redacted_secret_path_context
@@ -26,7 +27,7 @@ GuardActionType = Literal[
     "harness_start",
 ]
 
-_VALID_ACTION_TYPES = frozenset(
+_VALID_ACTION_TYPES: frozenset[GuardActionType] = frozenset(
     {
         "prompt",
         "shell_command",
@@ -118,6 +119,10 @@ _GENERIC_WINDOWS_UNC_PATH_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_./\\:-])(?P<path>\\\\[^\\\s'\"<>|]+\\[^\\\s'\"<>|]+(?:\\[^\\\s'\"<>|]+)+)"
 )
 _PROMPT_EXCERPT_LIMIT = 240
+
+
+def _package_intent_parser_module():
+    return importlib.import_module(".package_intent_parser", __package__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -487,9 +492,11 @@ def _normalize_action_payload(
     workspace_label = redacted_workspace_label(workspace, home_dir=home_dir)
     workspace_hash = _workspace_hash(workspace)
     workspace_path = Path(workspace) if workspace is not None else None
-    from .package_intent_parser import parse_package_intent
-
-    package_intent = parse_package_intent(raw_command, workspace=workspace_path) if raw_command else None
+    package_intent = (
+        _package_intent_parser_module().parse_package_intent(raw_command, workspace=workspace_path)
+        if raw_command
+        else None
+    )
     package_targets = (
         tuple(target.raw_spec for target in package_intent.targets if target.raw_spec)
         if package_intent is not None
@@ -527,6 +534,10 @@ def _normalize_action_payload(
     )
 
 
+def _is_guard_action_type(value: object) -> TypeGuard[GuardActionType]:
+    return isinstance(value, str) and value in _VALID_ACTION_TYPES
+
+
 def _required_int(payload: Mapping[str, object], key: str) -> int:
     value = payload.get(key)
     if not isinstance(value, int):
@@ -542,7 +553,7 @@ def _required_string(payload: Mapping[str, object], key: str) -> str:
 
 
 def _required_action_type(value: object) -> GuardActionType:
-    if not isinstance(value, str) or value not in _VALID_ACTION_TYPES:
+    if not _is_guard_action_type(value):
         raise ValueError("Guard action envelope missing valid action_type.")
     return value
 
@@ -831,6 +842,8 @@ def _redacted_target_path(path: str, *, home_dir: Path | str | None) -> str | No
         return f".../{target_name}"
     if _is_absolute_target_path(stripped):
         redacted_path = redacted_workspace_label(stripped, home_dir=home_dir)
+        if redacted_path is None:
+            return None
         if redacted_path.startswith(".../"):
             secret_context = redacted_secret_path_context(stripped)
             if secret_context is not None:

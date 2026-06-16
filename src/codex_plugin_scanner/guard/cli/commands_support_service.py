@@ -5,6 +5,16 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..daemon.manager import _guard_daemon_pid_is_running, _guard_daemon_pid_matches_command
+    from ._commands_shared import _now
+    from .commands_support_connect import _guard_service_runtime_profile
+    from .commands_support_interaction import _emit, _resolve_cisco_scan_options
+    from .commands_support_runtime_artifacts import _optional_string
+
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
 

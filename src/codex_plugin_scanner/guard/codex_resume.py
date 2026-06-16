@@ -19,6 +19,19 @@ _THREAD_ID_KEYS = (
 )
 
 
+def _int_value(value: object, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
 def seed_request_resume_record(store: GuardStore, *, request_id: str, now: str) -> dict[str, object] | None:
     request = store.get_approval_request(request_id)
     if request is None or str(request.get("harness")) != "codex":
@@ -67,7 +80,7 @@ def retry_request_resume(
     if resume is None:
         raise ValueError("resume_not_supported")
     if action == "block":
-        attempt_count = int(resume.get("attempt_count") or 0) + 1
+        attempt_count = _int_value(resume.get("attempt_count")) + 1
         return _skip_blocked_resume(
             store=store,
             request_id=request_id,
@@ -83,7 +96,7 @@ def retry_request_resume(
         }
     if str(resume.get("status")) == "in_progress":
         return resume
-    attempt_count = int(resume.get("attempt_count") or 0) + 1
+    attempt_count = _int_value(resume.get("attempt_count")) + 1
     store.update_request_resume(
         request_id=request_id,
         resolution_action=action,
@@ -131,7 +144,7 @@ def defer_request_resume_to_live_hook(
     resume = get_request_resume_status(store, request_id=request_id, now=now)
     if resume is None:
         return None
-    attempt_count = int(resume.get("attempt_count") or 0)
+    attempt_count = _int_value(resume.get("attempt_count"))
     if action == "block":
         return _skip_blocked_resume(
             store=store,
@@ -215,7 +228,7 @@ def _finalize_resume_attempt(
     strategy = str(resume["strategy"])
     supported = bool(resume["supported"])
     thread_id = str(resume["thread_id"]) if resume.get("thread_id") is not None else None
-    attempt_count = int(resume["attempt_count"])
+    attempt_count = _int_value(resume.get("attempt_count"))
     if strategy == "manual-only" or not supported:
         message = _manual_resume_message(action)
         store.update_request_resume(

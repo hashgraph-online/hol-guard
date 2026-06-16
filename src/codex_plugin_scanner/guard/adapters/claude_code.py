@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import sys
 from collections.abc import Callable
@@ -10,8 +11,6 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from ...path_support import iter_safe_matching_files, resolves_within_root
-from ..aibom_detection import extend_detection_with_workspace_aibom
-from ..daemon import guard_daemon_url_for_home, load_guard_daemon_url
 from ..models import GuardArtifact, HarnessDetection
 from ..runtime.harness_attribution import cursor_hook_query_extras
 from ..shims import install_guard_shim, remove_guard_shim
@@ -36,6 +35,22 @@ CLAUDE_SETTINGS_FILES = ("settings.json", "settings.local.json")
 CLAUDE_GUARD_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
 
 
+def _aibom_detection_module():
+    return importlib.import_module("..aibom_detection", __package__)
+
+
+def _daemon_module():
+    return importlib.import_module("..daemon", __package__)
+
+
+def guard_daemon_url_for_home(guard_home: Path) -> str:
+    return _daemon_module().guard_daemon_url_for_home(guard_home)
+
+
+def load_guard_daemon_url(guard_home: Path) -> str | None:
+    return _daemon_module().load_guard_daemon_url(guard_home)
+
+
 def _guard_command_handler(
     command: str,
     *,
@@ -46,6 +61,13 @@ def _guard_command_handler(
     if status_message is not None:
         handler["statusMessage"] = status_message
     return handler
+
+
+def _manifest_notes(payload: dict[str, object]) -> list[str]:
+    notes = payload.get("notes")
+    if not isinstance(notes, list):
+        return []
+    return [str(note) for note in notes]
 
 
 def _claude_managed_settings_path(context: HarnessContext) -> Path:
@@ -136,10 +158,15 @@ def _merge_hook_group(
     matcher: str | None,
     handler: dict[str, object],
 ) -> list[object]:
-    normalized = [entry for entry in entries if isinstance(entry, dict)]
+    normalized: list[object] = []
+    for entry in entries:
+        if isinstance(entry, dict):
+            normalized.append(entry)
     matcher_key = matcher.strip() if isinstance(matcher, str) and matcher.strip() else None
     handler_identity = _handler_identity(handler)
     for index, entry in enumerate(normalized):
+        if not isinstance(entry, dict):
+            continue
         entry_matcher = entry.get("matcher")
         entry_matcher_key = entry_matcher.strip() if isinstance(entry_matcher, str) and entry_matcher.strip() else None
         if entry_matcher_key != matcher_key:
@@ -500,7 +527,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             artifacts=tuple(artifacts),
             warnings=(),
         )
-        return extend_detection_with_workspace_aibom(
+        return _aibom_detection_module().extend_detection_with_workspace_aibom(
             detection,
             home_dir=context.home_dir,
             workspace_dir=context.workspace_dir,
@@ -634,12 +661,15 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         payload = _json_payload(settings_path)
         session_start_command = self._session_start_command(context)
         hook_command = self._daemon_hook_command(context)
-        hooks = payload.setdefault("hooks", {})
-        if not isinstance(hooks, dict):
+        hooks_payload = payload.get("hooks")
+        if isinstance(hooks_payload, dict):
+            hooks: dict[str, object] = {str(key): value for key, value in hooks_payload.items()}
+        else:
             hooks = {}
-            payload["hooks"] = hooks
+        payload["hooks"] = hooks
+        session_start_payload = hooks.get("SessionStart")
         session_start_entries = _prune_guard_hook_entries(
-            hooks.get("SessionStart") if isinstance(hooks.get("SessionStart"), list) else []
+            session_start_payload if isinstance(session_start_payload, list) else []
         )
         session_start_handler = _guard_command_handler(
             session_start_command,
@@ -659,7 +689,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             **shim_manifest,
             "notes": [
                 "Guard hook entries added to ~/.claude/settings.json",
-                *[str(note) for note in shim_manifest.get("notes", [])],
+                *_manifest_notes(shim_manifest),
             ],
         }
 
@@ -697,6 +727,6 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             **shim_manifest,
             "notes": [
                 "Guard hook entries removed from ~/.claude/settings.json",
-                *[str(note) for note in shim_manifest.get("notes", [])],
+                *_manifest_notes(shim_manifest),
             ],
         }

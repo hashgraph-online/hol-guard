@@ -398,7 +398,7 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
         raise
     try:
         _LOGGER.info("Guard command leased: job_id=%s operation=%s", _job_id(item), command_job_operation(item))
-        execution = _execute_job(item, context, store)
+        execution: dict[str, object] = _execute_job(item, context, store)
     except Exception as error:
         _LOGGER.warning("Guard command execution failed: job_id=%s error=%s", _job_id(item), _redacted_error(error))
         execution = {

@@ -78,10 +78,15 @@ class GuardDetector(Protocol):
     """Detector interface for runtime Guard actions."""
 
     detector_id: str
-    categories: tuple[RiskSignalCategory, ...]
+
+    @property
+    def categories(self) -> tuple[RiskSignalCategory, ...]:
+        """Return the detector's risk categories."""
+        ...
 
     def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
         """Return typed risk signals for the runtime action."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -520,7 +525,7 @@ class PersistenceDetector:
                 signal_id=f"persistence:{match.mechanism}",
                 category="persistence",
                 severity="high",
-                confidence="moderate",
+                confidence="likely",
                 detector=self.detector_id,
                 title=f"Persistence via {match.mechanism.replace('_', ' ')}",
                 plain_reason=match.plain_reason,
@@ -659,7 +664,7 @@ class McpToolSchemaRiskDetector:
                 signal_id=f"mcp:schema-risk:{tool_name[:40]}",
                 category="mcp",
                 severity="high",
-                confidence="moderate",
+                confidence="likely",
                 detector=self.detector_id,
                 title="MCP tool name suggests dangerous capability",
                 plain_reason=(
@@ -781,13 +786,14 @@ def _prompt_request_signal(request: PromptRequest) -> RiskSignalV2:
 
 
 def _prompt_request_category(request: PromptRequest) -> RiskSignalCategory:
-    return {
+    categories: dict[str, RiskSignalCategory] = {
         "secret_read": "secret",
         "exfil_intent": "network",
         "destructive_intent": "filesystem",
         "subprocess_intent": "execution",
         "guard_bypass_intent": "bypass",
-    }.get(request.request_class, "prompt")
+    }
+    return categories.get(request.request_class, "prompt")
 
 
 def _severity_label(score: int) -> RiskSeverityLabel:
