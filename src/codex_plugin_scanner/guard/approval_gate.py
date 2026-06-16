@@ -446,12 +446,22 @@ def require_approval_decision(
     action: str,
     scope: str,
     approval_gate_input: ApprovalGateInput | None = None,
+    approval_gate_grant: ApprovalGateGrant | None = None,
     now: str | None = None,
 ) -> ApprovalGateGrant | None:
     state = _load_state(guard_home)
     if not _requires_decision_gate(state, action=action, scope=scope):
         return None
     strict = _is_strict_approval_action(action=action, scope=scope)
+    if approval_gate_grant is not None:
+        validate_grant(
+            guard_home,
+            approval_gate_grant,
+            purpose="approval_decision",
+            strict=strict,
+            now=now,
+        )
+        return approval_gate_grant
     return _verify_or_raise(
         guard_home,
         state,
