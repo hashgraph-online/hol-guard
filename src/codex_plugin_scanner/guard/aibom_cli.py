@@ -12,8 +12,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from .adapters.base import HarnessContext
 from codex_plugin_scanner.version import __version__
+
+from .adapters.base import HarnessContext
 from .inventory_cisco import run_cisco_inventory_scans
 from .inventory_contract import (
     GuardAgentInventorySnapshot,
@@ -105,15 +106,15 @@ def _resolve_trust_attestation_context(
     enable_v2 = trust_attestation_v2_enabled()
     installation_id = store.get_or_create_installation_id() if enable_v2 else None
     context: dict[str, object] = {
-        "analyzerId": "hol-guard",
-        "analyzerSpecVersion": "guard-aibom-trust-spec.v1",
-        "analyzerVersion": __version__,
+        "analyzerId": "hol-guard" if enable_v2 else None,
+        "analyzerSpecVersion": "guard-aibom-trust-spec.v1" if enable_v2 else None,
+        "analyzerVersion": __version__ if enable_v2 else None,
         "challengeId": None,
         "deviceId": installation_id,
         "expiresAt": None,
         "installationId": installation_id,
         "nonce": None,
-        "policyVersion": "guard-aibom-trust-policy.v1",
+        "policyVersion": "guard-aibom-trust-policy.v1" if enable_v2 else None,
         "sequence": None,
         "signingConfig": signing_config,
         "uploadId": None,

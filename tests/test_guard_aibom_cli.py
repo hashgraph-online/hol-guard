@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot, inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.version import __version__
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -321,6 +322,10 @@ def test_resolve_trust_attestation_context_defaults_to_v1(monkeypatch: pytest.Mo
         generated_at="2026-06-10T12:00:00+00:00",
     )
 
+    assert context["analyzerId"] is None
+    assert context["analyzerSpecVersion"] is None
+    assert context["analyzerVersion"] is None
+    assert context["policyVersion"] is None
     assert context["workspaceId"] is None
     assert context["deviceId"] is None
 
@@ -343,7 +348,7 @@ def test_resolve_trust_attestation_context_includes_workspace_device_for_v2(
     assert context["deviceId"] == "device-1"
     assert context["analyzerId"] == "hol-guard"
     assert context["analyzerSpecVersion"] == "guard-aibom-trust-spec.v1"
-    assert context["analyzerVersion"] == "2.0.345"
+    assert context["analyzerVersion"] == __version__
     assert context["installationId"] == "device-1"
     assert context["policyVersion"] == "guard-aibom-trust-policy.v1"
     assert context["uploadId"] is None
@@ -370,7 +375,7 @@ def test_resolve_trust_attestation_context_includes_upload_session_bindings_for_
 
     assert context["analyzerId"] == "hol-guard"
     assert context["analyzerSpecVersion"] == "guard-aibom-trust-spec.v1"
-    assert context["analyzerVersion"] == "2.0.345"
+    assert context["analyzerVersion"] == __version__
     assert context["policyVersion"] == "guard-aibom-trust-policy.v1"
     assert isinstance(context["uploadId"], str) and context["uploadId"].startswith("guard-aibom-upload-")
     assert isinstance(context["challengeId"], str) and context["challengeId"].startswith("guard-aibom-challenge-")
