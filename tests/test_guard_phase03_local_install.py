@@ -380,7 +380,7 @@ def test_update_syncs_dashboard_assets_after_partial_stale_upgrade(monkeypatch: 
     assert exit_code == 0
     assert captured_commands == [
         ["pipx", "upgrade", "hol-guard"],
-        ["pipx", "install", "--force", "hol-guard"],
+        ["pipx", "install", "--force", "hol-guard==2.0.489"],
     ]
     assert payload["status"] == "stale"
     assert payload["changed"] is True
@@ -420,13 +420,55 @@ def test_update_marks_plain_pipx_upgrade_as_stale_when_version_does_not_change(
     assert exit_code == 0
     assert captured_commands == [
         ["pipx", "upgrade", "hol-guard"],
-        ["pipx", "install", "--force", "hol-guard"],
+        ["pipx", "install", "--force", "hol-guard==2.0.585"],
     ]
     assert payload["status"] == "stale"
     assert payload["changed"] is False
     assert payload["resulting_version"] == "2.0.584"
-    assert payload["retry_command"] == "pipx install --force hol-guard"
+    assert payload["retry_command"] == "pipx install --force hol-guard==2.0.585"
     assert "behind PyPI 2.0.585 after the update attempt" in str(payload["message"])
+
+
+def test_update_reports_blocked_when_force_install_hits_dependency_conflict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.741")
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: "2.0.741")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.749")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(
+        update_commands.shutil,
+        "which",
+        lambda name: "/mock-home/.local/bin/hol-guard" if name == "hol-guard" else None,
+    )
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if command == ["pipx", "upgrade", "hol-guard"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                "hol-guard is already at latest version 2.0.741",
+                "upgrading hol-guard...\n",
+            )
+        assert command == ["pipx", "install", "--force", "hol-guard==2.0.749"]
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            "",
+            "ERROR: ResolutionImpossible: hol-guard 2.0.749 depends on rich>=15.0.0; "
+            "cisco-ai-skill-scanner 2.0.11 depends on rich<15,>=14.0",
+        )
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False)
+
+    assert exit_code == 1
+    assert payload["status"] == "blocked"
+    assert payload["dependency_conflict"] is True
+    assert "incompatible rich versions" in str(payload["message"]).lower()
+    assert "retry_command" not in payload
 
 
 def test_update_retries_force_pipx_install_when_upgrade_reaches_latest_version(
@@ -455,7 +497,7 @@ def test_update_retries_force_pipx_install_when_upgrade_reaches_latest_version(
                 "hol-guard is already at latest version 2.0.584",
                 "upgrading hol-guard...\n",
             )
-        assert command == ["pipx", "install", "--force", "hol-guard"]
+        assert command == ["pipx", "install", "--force", "hol-guard==2.0.585"]
         return subprocess.CompletedProcess(command, 0, "installed hol-guard 2.0.585", "")
 
     monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
@@ -465,7 +507,7 @@ def test_update_retries_force_pipx_install_when_upgrade_reaches_latest_version(
     assert exit_code == 0
     assert captured_commands == [
         ["pipx", "upgrade", "hol-guard"],
-        ["pipx", "install", "--force", "hol-guard"],
+        ["pipx", "install", "--force", "hol-guard==2.0.585"],
     ]
     assert payload["status"] == "updated"
     assert payload["resulting_version"] == "2.0.585"
