@@ -64,14 +64,14 @@ _PACKAGE_PROFILE_MARKER = "# HOL Guard package manager shims"
 # Path fragments that indicate a shim dir lives in an ephemeral location (a test
 # temp dir, the system temp root, etc.). Such paths must never be written into a
 # long-lived shell profile: they vanish and leave broken PATH entries behind.
+# Kept POSIX-only because the profile writers short-circuit on Windows
+# (os.name == "nt") before the transient check can run.
 _TRANSIENT_PATH_FRAGMENTS = (
     "/var/folders/",
     "/private/var/folders/",
     "/tmp/",
     "/private/tmp/",
     "/temp/",
-    "\\temp\\",
-    "\\tmp\\",
     "pytest-of-",
 )
 _TRUSTED_CLI_LAUNCHER = (
@@ -839,28 +839,43 @@ def _upsert_managed_profile_block(
 def _strip_managed_marker_blocks(content: str, marker: str) -> str:
     """Remove every Guard-managed block tagged with *marker* from *content*.
 
-    A block is the marker line plus the single line that follows it. Trailing
-    blank lines left behind are collapsed.
+    A block is the marker line plus the single line that follows it. To avoid
+    leaving a gap where a block sat, a single blank line immediately preceding
+    or following a removed block is also dropped. Blank-line runs elsewhere in
+    the file (user content) are left untouched.
     """
 
     if not content:
         return ""
     marker_stripped = marker.strip()
     lines = content.splitlines()
+    # First pass: locate index ranges [i, i+1] of each marker block.
+    drop_indices: set[int] = set()
+    for index, line in enumerate(lines):
+        if line.strip() == marker_stripped and index + 1 < len(lines):
+            drop_indices.add(index)
+            drop_indices.add(index + 1)
+    if not drop_indices:
+        return content if content.endswith("\n") else content + "\n"
+    # Second pass: keep lines, swallowing one blank line adjacent to a dropped
+    # block so the removal does not leave a stale blank gap.
     keep: list[str] = []
-    skip_next = False
-    for line in lines:
-        if skip_next:
-            skip_next = False
+    for index, line in enumerate(lines):
+        if index in drop_indices:
             continue
-        if line.strip() == marker_stripped:
-            # Drop the marker line and the export line that follows it.
-            skip_next = True
-            continue
+        is_blank = line.strip() == ""
+        if is_blank:
+            prev_kept_blank_gap = keep and keep[-1].strip() == ""
+            # Drop this blank only if both neighbors were removed (i.e. the blank
+            # was sandwiched between two removed block lines or sits at the edge
+            # of a removal zone).
+            prev_dropped = (index - 1) in drop_indices
+            next_dropped = (index + 1) in drop_indices
+            edge_of_removal = prev_dropped or next_dropped
+            if edge_of_removal and not prev_kept_blank_gap:
+                continue
         keep.append(line)
     cleaned = "\n".join(keep)
-    while "\n\n\n" in cleaned:
-        cleaned = cleaned.replace("\n\n\n", "\n\n")
     if cleaned and not cleaned.endswith("\n"):
         cleaned += "\n"
     return cleaned
@@ -909,10 +924,24 @@ def _is_transient_path(path: Path) -> bool:
 
     Such paths must not be persisted into a user shell profile because they are
     cleaned up, leaving broken PATH entries that shadow the real binaries.
+    Besides the known static temp roots, any path under the process's own
+    ``TMPDIR``/``TEMP``/``TMP`` is treated as transient so non-standard temp
+    roots on Linux or CI cannot bypass the guard.
     """
 
     text = str(path)
-    return any(fragment in text for fragment in _TRANSIENT_PATH_FRAGMENTS)
+    if any(fragment in text for fragment in _TRANSIENT_PATH_FRAGMENTS):
+        return True
+    for env_name in ("TMPDIR", "TEMP", "TMP"):
+        env_value = os.environ.get(env_name, "").strip()
+        if env_value:
+            try:
+                if path.resolve().is_relative_to(Path(env_value).expanduser().resolve()):
+                    return True
+            except (OSError, ValueError):
+                if text.startswith(env_value):
+                    return True
+    return False
 
 
 def _profile_already_references_path(content: str, shim_dir: Path) -> bool:
