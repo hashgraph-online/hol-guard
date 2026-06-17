@@ -374,8 +374,8 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
             isBulkSelectable={bulkApprove.bulkSelection.isSelectable}
             isBulkSelected={bulkApprove.bulkSelection.isSelected}
             onBulkToggleSelect={bulkApprove.bulkSelection.onToggle}
-            onBulkSelectAll={() => bulkApprove.bulkSelection.onToggleMany(filteredRequests, true)}
-            onBulkClearAll={() => bulkApprove.bulkSelection.onToggleMany(filteredRequests, false)}
+            onBulkSelectAll={() => bulkApprove.bulkSelection.onToggleMany(pagedRequests, true)}
+            onBulkClearAll={() => bulkApprove.bulkSelection.onToggleMany(pagedRequests, false)}
             ref={queueRef}
           />
         </div>
@@ -560,13 +560,20 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   const pageSomeSelected = pageSelectedCount > 0 && !pageAllSelected;
 
   const handlePageSelectAll = useCallback(() => {
-    if (!onBulkSelectAll || !onBulkClearAll) return;
     if (pageAllSelected) {
-      onBulkClearAll();
+      onBulkClearAll?.();
     } else {
-      onBulkSelectAll();
+      onBulkSelectAll?.();
     }
   }, [pageAllSelected, onBulkSelectAll, onBulkClearAll]);
+
+  // Stable ref callback so React does not detach/reattach it every render.
+  const setIndeterminate = useCallback(
+    (el: HTMLInputElement | null) => {
+      if (el) el.indeterminate = pageSomeSelected;
+    },
+    [pageSomeSelected],
+  );
 
   return (
     <aside className="space-y-3" ref={ref}>
@@ -674,9 +681,7 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
               <input
                 type="checkbox"
                 checked={pageAllSelected}
-                ref={(el: HTMLInputElement | null) => {
-                  if (el) el.indeterminate = pageSomeSelected;
-                }}
+                ref={setIndeterminate}
                 onChange={handlePageSelectAll}
                 aria-label={
                   pageAllSelected
