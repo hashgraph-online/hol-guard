@@ -220,3 +220,115 @@ class TestNoDashboardApprovalURLWake:
 
         assert url == f"http://127.0.0.1:{port}"
         assert len(retire_calls) >= 1, "_retire_guard_daemon_process must be called to recover stale daemon state"
+
+
+class TestDaemonLifecycle:
+    def test_daemon_shutdown_only_clears_own_state(self, tmp_path) -> None:
+        """A retired duplicate daemon must not erase the active daemon state file."""
+        guard_home = tmp_path / "guard-home"
+        guard_home.mkdir()
+        daemon_manager_module.write_guard_daemon_state(guard_home, 5705, "token-1", pid=111)
+
+        cleared = daemon_manager_module.clear_guard_daemon_state_if_current(guard_home, pid=222, port=5706)
+        state = json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8"))
+
+        assert cleared is False
+        assert state["pid"] == 111
+        assert state["port"] == 5705
+
+        assert daemon_manager_module.clear_guard_daemon_state_if_current(guard_home, pid=111, port=5705) is True
+        assert json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8")) == {}
+
+    def test_retiring_duplicate_daemons_rewrites_kept_state_after_old_exit(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        """Old duplicate daemons may clear daemon-state.json on exit; rewrite the kept daemon state."""
+        guard_home = tmp_path / "guard-home"
+        guard_home.mkdir()
+        daemon_manager_module.write_guard_daemon_state(guard_home, 5707, "token-1", pid=111)
+        killed: list[int] = []
+
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_running_guard_daemon_processes_for_guard_home",
+            lambda _guard_home: [(111, 5707), (222, 5708)] if not (guard_home / "retired").exists() else [(111, 5707)],
+        )
+
+        def fake_retire(pid: int, *, expected_guard_home: Path | None = None) -> bool:
+            del expected_guard_home
+            killed.append(pid)
+            daemon_manager_module.clear_guard_daemon_state(guard_home)
+            (guard_home / "retired").write_text("1", encoding="utf-8")
+            return True
+
+        monkeypatch.setattr(daemon_manager_module, "_retire_guard_daemon_pid", fake_retire)
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_daemon_healthz_details_payload",
+            lambda _url, _auth_token: {"guard_home": str(guard_home), "pid": 111},
+        )
+
+        daemon_manager_module._retire_duplicate_guard_daemons(guard_home, keep_port=5707)
+        state = json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8"))
+
+        assert killed == [222]
+        assert state["pid"] == 111
+        assert state["port"] == 5707
+
+    def test_retiring_duplicate_daemons_does_not_rewrite_when_retire_fails(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        """A duplicate that could not be retired must block kept-state recovery."""
+        guard_home = tmp_path / "guard-home"
+        guard_home.mkdir()
+        daemon_manager_module.write_guard_daemon_state(guard_home, 5709, "token-1", pid=111)
+
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_running_guard_daemon_processes_for_guard_home",
+            lambda _guard_home: [(111, 5709), (222, 5710)],
+        )
+
+        def fake_retire(_pid: int, *, expected_guard_home: Path | None = None) -> bool:
+            del expected_guard_home
+            daemon_manager_module.clear_guard_daemon_state(guard_home)
+            return False
+
+        monkeypatch.setattr(daemon_manager_module, "_retire_guard_daemon_pid", fake_retire)
+
+        daemon_manager_module._retire_duplicate_guard_daemons(guard_home, keep_port=5709)
+
+        assert json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8")) == {}
+
+    def test_retiring_duplicate_daemons_requires_kept_daemon_auth(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        """Do not recover state with a token that cannot authenticate to the kept daemon."""
+        guard_home = tmp_path / "guard-home"
+        guard_home.mkdir()
+        daemon_manager_module.write_guard_daemon_state(guard_home, 5711, "token-1", pid=111)
+
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_running_guard_daemon_processes_for_guard_home",
+            lambda _guard_home: [(111, 5711), (222, 5712)] if not (guard_home / "retired").exists() else [(111, 5711)],
+        )
+
+        def fake_retire(_pid: int, *, expected_guard_home: Path | None = None) -> bool:
+            del expected_guard_home
+            daemon_manager_module.clear_guard_daemon_state(guard_home)
+            (guard_home / "retired").write_text("1", encoding="utf-8")
+            return True
+
+        monkeypatch.setattr(daemon_manager_module, "_retire_guard_daemon_pid", fake_retire)
+        monkeypatch.setattr(daemon_manager_module, "_daemon_healthz_details_payload", lambda _url, _auth_token: None)
+
+        daemon_manager_module._retire_duplicate_guard_daemons(guard_home, keep_port=5711)
+
+        assert json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8")) == {}

@@ -155,7 +155,7 @@ from .command_queue_worker import CommandQueueWorker, start_command_queue_worker
 from .dashboard_update import merge_dashboard_update_progress, schedule_guard_dashboard_update
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
-    clear_guard_daemon_state,
+    clear_guard_daemon_state_if_current,
     load_guard_daemon_auth_token,
     repair_approval_center_locator,
     write_guard_daemon_state,
@@ -4969,11 +4969,11 @@ class GuardDaemonServer:
 
     def _finish_service(self) -> None:
         if self._shutdown_started.is_set():
-            clear_guard_daemon_state(self._server.store.guard_home)
+            clear_guard_daemon_state_if_current(self._server.store.guard_home, pid=os.getpid(), port=self.port)
             self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
             return
         self._shutdown_started.set()
-        clear_guard_daemon_state(self._server.store.guard_home)
+        clear_guard_daemon_state_if_current(self._server.store.guard_home, pid=os.getpid(), port=self.port)
         self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
 
     def _start_watchdog(self) -> None:
