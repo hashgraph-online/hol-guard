@@ -176,6 +176,7 @@ from .types import CapabilitySet, TransportKind
 
 _POLICY_INTEGRITY_KEY_REF = "guard-policy-integrity-key"
 _POLICY_INTEGRITY_CONTROL_REF = "guard-policy-integrity-control"
+_POLICY_INTEGRITY_SERVICE_NAME = "hol-guard.policy-integrity"
 _OAUTH_LOCAL_CREDENTIALS_REF = "guard-oauth-local-credentials"
 _OAUTH_LOCAL_CREDENTIALS_STATE_KEY = "oauth_local_credentials"
 _OAUTH_LOCAL_CREDENTIALS_HASH_KEY = "credentials_sha256"
@@ -565,7 +566,7 @@ class SystemKeyringSecretStore:
 
     def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float = 0.0) -> str | None:
         _ = timeout_seconds
-        if sys.platform == "darwin" and self.service_name == "hol-guard.policy-integrity":
+        if sys.platform == "darwin" and self.service_name == _POLICY_INTEGRITY_SERVICE_NAME:
             # Passive Guard paths must never touch macOS Keychain. Even
             # no-UI Security-framework reads can regress into OS prompts when
             # the user keychain is missing, locked, or owned by another ACL.
@@ -874,7 +875,7 @@ def _build_policy_integrity_secret_store() -> SystemKeyringSecretStore | None:
         # Policy integrity is passive hardening; it must never raise Keychain UI.
         return None
     if SystemKeyringSecretStore._backend_is_available():
-        return SystemKeyringSecretStore(service_name="hol-guard.policy-integrity")
+        return SystemKeyringSecretStore(service_name=_POLICY_INTEGRITY_SERVICE_NAME)
     return None
 
 
