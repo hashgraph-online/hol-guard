@@ -17,6 +17,10 @@ export type BulkSelectionStats = {
   groupCount: number;
   /** Number of underlying actions that are duplicate retries across all selected groups. */
   duplicateActionCount: number;
+  /** Selected actions classified as elevated risk (shell, edits, git, network, etc.). */
+  elevatedActionCount: number;
+  /** Selected actions classified as low risk (file reads, docs edits). */
+  lowActionCount: number;
   /**
    * Sensitive file-read groups currently in the queue. These are never approved
    * by bulk approval — they stay in the queue for individual review — but their
@@ -51,10 +55,17 @@ export function resolveBulkRiskTier(stats: BulkSelectionStats): BulkRiskTier {
   if (stats.actionCount <= 0) {
     return "low";
   }
+  // Sensitive items in the queue, or any large batch, force the highest tier.
   if (stats.sensitiveCount > 0 || stats.actionCount >= BULK_HIGH_TIER_THRESHOLD) {
     return "high";
   }
-  if (stats.duplicateActionCount > 0 || stats.actionCount > BULK_LOW_TIER_THRESHOLD) {
+  // Any elevated-risk actions (shell, edits, git, network) in the selection
+  // escalate above "low" so the disclosure calls out the riskier mix.
+  if (
+    stats.elevatedActionCount > 0 ||
+    stats.duplicateActionCount > 0 ||
+    stats.actionCount > BULK_LOW_TIER_THRESHOLD
+  ) {
     return "elevated";
   }
   return "low";
@@ -68,11 +79,11 @@ export function bulkRiskTone(tier: BulkRiskTier): BulkRiskTone {
 
 /**
  * Build the short phrase the user must retype at the `high` tier.
- * Kept memorable and explicit: `approve 12 reads` / `approve 1 read`.
+ * Uses "actions" since bulk approval now covers mixed action types.
  */
 export function buildBulkConfirmPhrase(actionCount: number): string {
   const safe = Math.max(0, Math.floor(actionCount));
-  return `approve ${safe} ${pluralReads(safe)}`;
+  return `approve ${safe} ${pluralActions(safe)}`;
 }
 
 /**
@@ -88,8 +99,28 @@ function pluralReads(count: number): string {
   return count === 1 ? "read" : "reads";
 }
 
+function pluralActions(count: number): string {
+  return count === 1 ? "action" : "actions";
+}
+
 function pluralItems(count: number): string {
   return count === 1 ? "item" : "items";
+}
+
+/** Describe the action mix in plain language, e.g. "2 file reads and 1 shell command". */
+function describeActionMix(stats: BulkSelectionStats): string {
+  const parts: string[] = [];
+  if (stats.lowActionCount > 0) {
+    parts.push(`${stats.lowActionCount} file ${pluralReads(stats.lowActionCount)}`);
+  }
+  if (stats.elevatedActionCount > 0) {
+    parts.push(`${stats.elevatedActionCount} elevated ${stats.elevatedActionCount === 1 ? "action" : "actions"}`);
+  }
+  if (parts.length === 0) {
+    return `${stats.actionCount} ${pluralActions(stats.actionCount)}`;
+  }
+  if (parts.length === 1) return parts[0];
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 
 /**
@@ -100,14 +131,14 @@ function pluralItems(count: number): string {
 export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisclosure {
   const tier = resolveBulkRiskTier(stats);
   const phrase = buildBulkConfirmPhrase(stats.actionCount);
-  const actionWord = pluralReads(stats.actionCount);
+  const mix = describeActionMix(stats);
 
   if (stats.actionCount <= 0) {
     return {
       tier: "low",
       tone: "green",
-      headline: "Select read-only file reads to approve together",
-      body: "Pick the file reads you have already reviewed. Sensitive paths stay in the queue for individual review.",
+      headline: "Select actions to approve together",
+      body: "Pick the actions you have already reviewed. Destructive, secret, and injection actions stay in the queue for individual review.",
       bullets: [],
       requiresTypedConfirm: false,
       confirmPhrase: phrase,
@@ -115,9 +146,16 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
   }
 
   const bullets: string[] = [
-    `Approving ${stats.actionCount} ${actionWord} from ${stats.groupCount} ${pluralItems(stats.groupCount)} lets each retry read its file once.`,
-    `Bulk approval never remembers the decision — the same path will ask again next time.`,
+    `Approving ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. Each runs once; the decision is not remembered.`,
   ];
+
+  if (stats.elevatedActionCount > 0) {
+    bullets.push(
+      `${stats.elevatedActionCount} of the selected ${pluralActions(stats.actionCount)} ${
+        stats.elevatedActionCount === 1 ? "is an elevated-risk action" : "are elevated-risk actions"
+      } (shell, file edits, network, or similar). Confirm you expected each one.`,
+    );
+  }
 
   if (stats.duplicateActionCount > 0) {
     bullets.push(
@@ -129,7 +167,7 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
     const sampleList = stats.sensitiveSamplePaths.slice(0, 3);
     const sampleText = sampleList.length > 0 ? ` Examples: ${sampleList.join(", ")}.` : "";
     bullets.push(
-      `${stats.sensitiveCount} sensitive ${stats.sensitiveCount === 1 ? "read stays" : "reads stay"} in the queue and will NOT be approved here.${sampleText}`,
+      `${stats.sensitiveCount} sensitive ${stats.sensitiveCount === 1 ? "action stays" : "actions stay"} in the queue and will NOT be approved here.${sampleText}`,
     );
   }
 
@@ -137,11 +175,11 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
     return {
       tier,
       tone: "attention",
-      headline: `High-impact bulk approval: ${stats.actionCount} ${actionWord} at once`,
+      headline: `High-impact bulk approval: ${stats.actionCount} ${pluralActions(stats.actionCount)} at once`,
       body:
         stats.sensitiveCount > 0
-          ? "You are approving a large batch while sensitive reads sit unapproved in the queue. Mass approval skips opening each request, so a wrong path here is hard to catch later. Re-confirm the type and phrase below."
-          : "You are approving a large batch at once. Mass approval skips opening each request, so an unexpected path is hard to catch later. Re-confirm the type and phrase below.",
+          ? "You are approving a large batch while sensitive actions sit unreviewed in the queue. Mass approval skips opening each request, so an unexpected action here is hard to catch later. Re-confirm the phrase below."
+          : "You are approving a large batch at once. Mass approval skips opening each request, so an unexpected action is hard to catch later. Re-confirm the phrase below.",
       bullets,
       requiresTypedConfirm: true,
       confirmPhrase: phrase,
@@ -152,11 +190,11 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
     return {
       tier,
       tone: "amber",
-      headline: `Approving ${stats.actionCount} ${actionWord} at once`,
+      headline: `Approving ${mix}`,
       body:
-        stats.duplicateActionCount > 0
-          ? "Some selected reads include duplicate retries. Each retry will read its file once, and the decision is not remembered. Skim the list before confirming."
-          : "Each selected retry will read its file once, and the decision is not remembered. Skim the list before confirming.",
+        stats.elevatedActionCount > 0
+          ? "This batch includes elevated-risk actions (shell, edits, network). Each runs once and the decision is not remembered. Skim the list before confirming."
+          : "Each selected action runs once and the decision is not remembered. Skim the list before confirming.",
       bullets,
       requiresTypedConfirm: false,
       confirmPhrase: phrase,
@@ -166,8 +204,8 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
   return {
     tier,
     tone: "green",
-    headline: `Approving ${stats.actionCount} ${actionWord} at once`,
-    body: "Each selected retry will read its file once. The decision is not remembered, so these paths will ask again next time.",
+    headline: `Approving ${mix}`,
+    body: "Each selected action runs once. The decision is not remembered, so these will ask again next time.",
     bullets,
     requiresTypedConfirm: false,
     confirmPhrase: phrase,

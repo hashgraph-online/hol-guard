@@ -1,4 +1,4 @@
-import type { ChangeEvent } from "react";
+import { useMemo, type ChangeEvent } from "react";
 import {
   HiMiniCheckCircle,
   HiMiniExclamationTriangle,
@@ -10,7 +10,6 @@ import {
   buildBulkApproveConsequenceCopy,
   summarizeBulkApproveSelection,
 } from "./approval-center-utils";
-import { approvalGateCooldownLabel } from "./approval-gate-utils";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
 import type { QueueGroup } from "./queue-state";
 import type {
@@ -254,22 +253,44 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
   const disclosure = props.riskDisclosure;
   const DisclosureIcon = toneIcon(disclosure.tone);
   const riskLines = summarizeBulkApproveSelection(props.selectedGroups);
-  const previewLines = riskLines.slice(0, 5);
-  const hiddenCount = Math.max(0, riskLines.length - previewLines.length);
   const unit = props.selectedActionCount === 1 ? "action" : "actions";
   const submitLabel =
     props.step === "submitting"
       ? "Approving…"
       : `Approve once (${props.selectedActionCount} ${unit})`;
 
+  // Group preview lines by category label so the operator sees the action mix
+  // at a glance: "File reads (3)", "Shell commands (2)" instead of a flat list.
+  const groupedLines = useMemo(() => {
+    const map = new Map<string, typeof riskLines>();
+    for (const line of riskLines) {
+      const bucket = map.get(line.categoryLabel) ?? [];
+      bucket.push(line);
+      map.set(line.categoryLabel, bucket);
+    }
+    return Array.from(map.entries());
+  }, [riskLines]);
+  const totalPreviewShown = Math.min(8, riskLines.length);
+  const shownGroups = groupedLines.slice(0, totalPreviewShown > 0 ? groupedLines.length : 0);
+  const hiddenCount = Math.max(0, riskLines.length - totalPreviewShown);
+  const gateReady = isBulkApproveGateReady(props.approvalGate);
+
   return (
     <BulkDrawerShell onClose={props.onCancel} labelledBy="guard-bulk-drawer-title">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-blue">
-            Bulk approval
-          </p>
-          <h2 id="guard-bulk-drawer-title" className="mt-1 text-lg font-semibold text-brand-dark">
+      {/* Header zone — generous top space, clear count hierarchy */}
+      <header className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${toneChip(disclosure.tone)}`}
+            >
+              {TIER_LABEL[disclosure.tier]}
+            </span>
+            <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Bulk approval
+            </p>
+          </div>
+          <h2 id="guard-bulk-drawer-title" className="mt-2 text-xl font-semibold tracking-tight text-brand-dark">
             Review {props.selectedActionCount} selected {unit}
           </h2>
         </div>
@@ -277,185 +298,206 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
           type="button"
           onClick={props.onCancel}
           aria-label="Close bulk approval"
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-dark"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-dark"
         >
           <HiMiniXMark className="h-4 w-4" aria-hidden="true" />
         </button>
-      </div>
+      </header>
 
-      {/* Risk disclosure — escalates with selection size and composition */}
+      {/* Risk disclosure zone — the clear disclosure surface, given breathing room */}
       <section
         aria-label="Risk disclosure"
-        className={`mt-4 rounded-xl border p-4 ${toneRing(disclosure.tone)}`}
+        className={`mt-6 rounded-2xl border p-5 ${toneRing(disclosure.tone)}`}
       >
-        <div className="flex items-start gap-2.5">
-          <DisclosureIcon
-            className={`mt-0.5 h-5 w-5 shrink-0 ${
+        <div className="flex items-start gap-3">
+          <span
+            className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
               disclosure.tone === "attention"
-                ? "text-brand-attention"
+                ? "bg-brand-attention/10"
                 : disclosure.tone === "amber"
-                  ? "text-amber-600"
-                  : "text-brand-green"
+                  ? "bg-amber-100"
+                  : "bg-brand-green/10"
             }`}
-            aria-hidden="true"
-          />
+          >
+            <DisclosureIcon
+              className={`h-5 w-5 ${
+                disclosure.tone === "attention"
+                  ? "text-brand-attention"
+                  : disclosure.tone === "amber"
+                    ? "text-amber-600"
+                    : "text-brand-green"
+              }`}
+              aria-hidden="true"
+            />
+          </span>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-semibold text-brand-dark">{disclosure.headline}</h3>
-              <span
-                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${toneChip(disclosure.tone)}`}
-              >
-                {TIER_LABEL[disclosure.tier]}
-              </span>
-            </div>
-            <p className="mt-1.5 text-xs leading-5 text-brand-dark/80">{disclosure.body}</p>
+            <h3 className="text-sm font-semibold text-brand-dark">{disclosure.headline}</h3>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-brand-dark/75">{disclosure.body}</p>
             {disclosure.bullets.length > 0 && (
-              <ul className="mt-2 space-y-1">
+              <ul className="mt-3 space-y-1.5">
                 {disclosure.bullets.map((bullet) => (
                   <li
                     key={bullet}
-                    className="flex items-start gap-1.5 text-xs leading-5 text-brand-dark/85"
+                    className="flex items-start gap-2 text-xs leading-5 text-brand-dark/85"
                   >
-                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-current opacity-60" aria-hidden="true" />
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-current opacity-50" aria-hidden="true" />
                     <span>{bullet}</span>
                   </li>
                 ))}
               </ul>
             )}
-            <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
-              {buildBulkApproveConsequenceCopy(props.selectedActionCount)}
-            </p>
           </div>
         </div>
       </section>
 
-      <div className="mt-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          What you are approving
-        </p>
-        <ul className="mt-2 space-y-2 rounded-lg bg-slate-50 px-3 py-2">
-          {previewLines.map((line) => (
-            <li key={line.requestId} className="text-xs text-brand-dark">
-              <span className="font-medium">{line.harnessLabel}</span>
-              {line.path !== null ? (
-                <span className="mt-0.5 block truncate font-mono text-[11px] text-brand-dark/70">{line.path}</span>
-              ) : (
-                <span className="mt-0.5 block text-brand-dark/70">{line.title}</span>
-              )}
-              {line.duplicateCount > 0 && (
-                <span className="mt-0.5 block text-muted-foreground">
-                  Includes {line.duplicateCount} duplicate {line.duplicateCount === 1 ? "retry" : "retries"}.
+      {/* What you're approving zone — grouped by category for scannability */}
+      <section aria-label="Selected actions" className="mt-6">
+        <div className="flex items-baseline justify-between">
+          <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            What you are approving
+          </h3>
+          <span className="font-mono text-[11px] text-muted-foreground">
+            {props.selectedActionCount} {unit}
+          </span>
+        </div>
+        <div className="mt-2.5 space-y-3 rounded-xl bg-slate-50/80 px-4 py-3">
+          {shownGroups.map(([categoryLabel, lines]) => (
+            <div key={categoryLabel}>
+              <p className="text-[11px] font-semibold text-brand-dark/70">
+                {categoryLabel}{" "}
+                <span className="font-normal text-muted-foreground">
+                  ({lines.length + lines.reduce((sum, l) => sum + l.duplicateCount, 0)})
                 </span>
-              )}
-            </li>
+              </p>
+              <ul className="mt-1.5 space-y-1.5">
+                {lines.slice(0, 3).map((line) => (
+                  <li key={line.requestId} className="text-xs text-brand-dark">
+                    <span className="font-medium">{line.harnessLabel}</span>
+                    {line.path !== null ? (
+                      <span className="mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60">{line.path}</span>
+                    ) : (
+                      <span className="mt-0.5 block text-brand-dark/60">{line.title}</span>
+                    )}
+                  </li>
+                ))}
+                {lines.length > 3 && (
+                  <li className="text-[11px] text-muted-foreground">+ {lines.length - 3} more</li>
+                )}
+              </ul>
+            </div>
           ))}
           {hiddenCount > 0 && (
-            <li className="text-xs text-muted-foreground">and {hiddenCount} more selected reads</li>
+            <p className="text-[11px] text-muted-foreground">and {hiddenCount} more selected {unit}</p>
           )}
-        </ul>
-      </div>
+        </div>
+      </section>
 
       {props.sensitiveFileReadCount > 0 && (
-        <div className="mt-3 flex items-start gap-2 rounded-lg bg-brand-attention/[0.06] px-3 py-2">
-          <HiMiniExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0 text-brand-attention" aria-hidden="true" />
-          <p className="text-xs text-brand-attention">
-            {props.sensitiveFileReadCount} sensitive file{" "}
-            {props.sensitiveFileReadCount === 1 ? "read remains" : "reads remain"} in the queue and will not be
-            approved here.
-          </p>
-        </div>
+        <p className="mt-3 text-[11px] leading-5 text-brand-attention">
+          {props.sensitiveFileReadCount} sensitive{" "}
+          {props.sensitiveFileReadCount === 1 ? "action stays" : "actions stay"} in the queue for individual review.
+        </p>
       )}
 
-      {isBulkApproveGateReady(props.approvalGate) ? (
-        <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-white p-3">
-          <div className="flex items-center gap-2">
-            <HiMiniKey className="h-4 w-4 text-brand-blue" aria-hidden="true" />
-            <p className="text-xs font-semibold text-brand-dark">Confirm with your approval password</p>
-          </div>
-          <label className="block">
-            <span className="sr-only">Approval password</span>
+      {/* Confirmation zone — visually separated commit step */}
+      <section aria-label="Confirm approval" className="mt-6">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Step 2 of 2
+          </span>
+          <span className="h-px flex-1 bg-slate-200" aria-hidden="true" />
+        </div>
+
+        {gateReady ? (
+          <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center gap-2">
+              <HiMiniKey className="h-4 w-4 text-brand-blue" aria-hidden="true" />
+              <label htmlFor="guard-bulk-approval-password" className="text-sm font-semibold text-brand-dark">
+                Approval password
+              </label>
+            </div>
             <input
+              id="guard-bulk-approval-password"
               type="password"
               value={props.bulkApprovePassword}
               onChange={props.onBulkApprovePasswordChange}
-              placeholder="Approval password"
+              placeholder="Enter your approval password"
               autoComplete="current-password"
               disabled={props.step === "submitting"}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+              className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
             />
-          </label>
-          {props.approvalGate?.totp_enabled === true && (
-            <label className="block">
-              <span className="sr-only">Authenticator code</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={props.bulkApproveTotpCode}
-                onChange={props.onBulkApproveTotpCodeChange}
-                placeholder="Authenticator code"
-                disabled={props.step === "submitting"}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
-              />
-            </label>
-          )}
-          {props.approvalGate?.cooldown_seconds && props.approvalGate.cooldown_seconds > 0 ? (
-            <p className="text-[11px] text-muted-foreground">
-              Bulk approval never uses the cooldown shortcut ({approvalGateCooldownLabel(props.approvalGate.cooldown_seconds).toLowerCase()}).
+            {props.approvalGate?.totp_enabled === true && (
+              <>
+                <label htmlFor="guard-bulk-approval-totp" className="block text-sm font-semibold text-brand-dark">
+                  Authenticator code
+                </label>
+                <input
+                  id="guard-bulk-approval-totp"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={props.bulkApproveTotpCode}
+                  onChange={props.onBulkApproveTotpCodeChange}
+                  placeholder="6-digit code"
+                  disabled={props.step === "submitting"}
+                  className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+                />
+              </>
+            )}
+            {disclosure.requiresTypedConfirm && (
+              <div className="rounded-lg bg-brand-attention/[0.05] px-3 py-2.5">
+                <label htmlFor="guard-bulk-typed-confirm" className="block text-xs font-semibold text-brand-dark">
+                  Type{" "}
+                  <span className="font-mono font-bold text-brand-attention">{disclosure.confirmPhrase}</span>{" "}
+                  to confirm
+                </label>
+                <input
+                  id="guard-bulk-typed-confirm"
+                  type="text"
+                  value={props.typedConfirm}
+                  onChange={props.onTypedConfirmChange}
+                  autoComplete="off"
+                  spellCheck={false}
+                  disabled={props.step === "submitting"}
+                  aria-invalid={props.typedConfirm.length > 0 && !props.confirmMatches}
+                  className="mt-2 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+                  placeholder={disclosure.confirmPhrase}
+                />
+              </div>
+            )}
+            <p className="text-[11px] leading-4 text-muted-foreground">
+              {buildBulkApproveConsequenceCopy(props.selectedActionCount)}
             </p>
-          ) : null}
-        </div>
-      ) : (
-        <div className="mt-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-3">
-          <p className="text-sm font-semibold text-brand-dark">Approval password required</p>
-          <p className="mt-1 text-xs leading-5 text-brand-dark/70">
-            Set up your local approval gate before approving multiple reads at once.
+          </div>
+        ) : (
+          <div className="mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-4 py-3">
+            <p className="text-sm font-semibold text-brand-dark">Approval password required</p>
+            <p className="mt-1 text-xs leading-5 text-brand-dark/70">
+              Set up your local approval gate before approving multiple actions at once.
+            </p>
+            <a
+              href={props.settingsHref}
+              className="mt-2.5 inline-flex rounded-full border border-brand-blue/30 bg-white px-3.5 py-1.5 text-xs font-medium text-brand-blue no-underline transition-colors hover:bg-brand-blue/5"
+            >
+              Open Settings
+            </a>
+          </div>
+        )}
+
+        {props.errorMessage !== null && (
+          <p className="mt-3 text-xs text-brand-purple" role="alert">
+            {props.errorMessage}
           </p>
-          <a
-            href={props.settingsHref}
-            className="mt-2 inline-flex rounded-full border border-brand-blue/30 bg-white px-3 py-1.5 text-xs font-medium text-brand-blue no-underline transition-colors hover:bg-brand-blue/5"
-          >
-            Open Settings
-          </a>
-        </div>
-      )}
+        )}
+      </section>
 
-      {disclosure.requiresTypedConfirm && isBulkApproveGateReady(props.approvalGate) && (
-        <div className="mt-3 space-y-1.5 rounded-lg border border-brand-attention/25 bg-brand-attention/[0.05] px-3 py-2.5">
-          <label className="block">
-            <span className="text-xs font-semibold text-brand-dark">
-              Type <span className="font-mono font-bold text-brand-attention">{disclosure.confirmPhrase}</span> to confirm
-            </span>
-            <input
-              type="text"
-              value={props.typedConfirm}
-              onChange={props.onTypedConfirmChange}
-              autoComplete="off"
-              spellCheck={false}
-              disabled={props.step === "submitting"}
-              aria-invalid={props.typedConfirm.length > 0 && !props.confirmMatches}
-              className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-mono text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
-              placeholder={disclosure.confirmPhrase}
-            />
-          </label>
-          <p className="text-[11px] text-muted-foreground">
-            High-impact bulk approval: retype the phrase to enable the confirm button.
-          </p>
-        </div>
-      )}
-
-      {props.errorMessage !== null && (
-        <p className="mt-3 text-xs text-brand-purple" role="alert">
-          {props.errorMessage}
-        </p>
-      )}
-
-      <div className="mt-5 flex flex-wrap justify-end gap-2">
+      {/* Action zone — sticky footer */}
+      <div className="mt-7 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
         <button
           type="button"
           onClick={props.onCancel}
           disabled={props.step === "submitting"}
-          className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50"
+          className="min-h-11 rounded-full border border-slate-300 px-5 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50"
         >
           Cancel
         </button>
@@ -463,7 +505,7 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
           type="button"
           onClick={props.onConfirmApprove}
           disabled={props.step === "submitting" || !props.canConfirm}
-          className="rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-11 rounded-full bg-brand-blue px-5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {submitLabel}
         </button>

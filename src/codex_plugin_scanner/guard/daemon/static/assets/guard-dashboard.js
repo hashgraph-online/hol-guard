@@ -13108,6 +13108,837 @@ function groupByCategory(receipts) {
   }
   return map;
 }
+const REVIEW_SEMANTIC_GROUPS = [
+  { id: "all", label: "All", matches: [] },
+  {
+    id: "files",
+    label: "File read / write",
+    matches: ["file_read", "source_edit", "docs_edit", "generated_inventory_edit"]
+  },
+  {
+    id: "shell",
+    label: "Shell execution",
+    matches: ["shell_command", "destructive_shell", "encoded_shell", "git_operation", "process_control"]
+  },
+  {
+    id: "network",
+    label: "Network / data egress",
+    matches: ["network", "secret_exfiltration", "secret_file_read", "credential_output", "file_upload"]
+  },
+  {
+    id: "tools",
+    label: "MCP, skill & packages",
+    matches: ["mcp_tool", "package_script", "browser_action", "package_install"]
+  },
+  {
+    id: "other",
+    label: "Agent autonomy & other",
+    matches: [
+      "harness_start",
+      "prompt_injection",
+      "system_prompt_access",
+      "guard_bypass",
+      "config_change",
+      "container_or_deploy",
+      "persistence_change",
+      "other"
+    ]
+  }
+];
+const QUEUE_CATEGORIES = [
+  {
+    id: "credential_output",
+    label: "Secret-looking output",
+    shortLabel: "Secret output",
+    description: "Command output contains patterns that resemble tokens, keys, passwords, or other secret-looking values. Review before allowing if this output will leave the local machine."
+  },
+  {
+    id: "secret_file_read",
+    label: "Secret file access",
+    shortLabel: "Secret read",
+    description: "Reads paths known to store secrets: env files, credential stores, token files, SSH keys, or cloud config. Normal source reads are classified as file read instead."
+  },
+  {
+    id: "file_read",
+    label: "File read",
+    shortLabel: "File read",
+    description: "Requests local file contents, paths, or read-only filesystem access."
+  },
+  {
+    id: "secret_exfiltration",
+    label: "Secret exfiltration path",
+    shortLabel: "Secret exfil",
+    description: "Moves local secret material toward a network host, upload, clipboard, or external sink."
+  },
+  {
+    id: "system_prompt_access",
+    label: "System prompt access",
+    shortLabel: "System prompt",
+    description: "Attempts to reveal hidden system, developer, policy, or harness instructions."
+  },
+  {
+    id: "prompt_injection",
+    label: "Prompt injection attempt",
+    shortLabel: "Prompt injection",
+    description: "Prompt content tries to override instructions, ignore policy, or redirect tool behavior."
+  },
+  {
+    id: "guard_bypass",
+    label: "Guard bypass attempt",
+    shortLabel: "Bypass",
+    description: "Attempts to disable, evade, suppress, or work around Guard policy checks."
+  },
+  {
+    id: "generated_inventory_edit",
+    label: "Generated inventory edit",
+    shortLabel: "Inventory edit",
+    description: "Updates generated API, route, or cloud inventory documentation."
+  },
+  {
+    id: "docs_edit",
+    label: "Documentation edit",
+    shortLabel: "Docs edit",
+    description: "Changes markdown, docs, runbooks, guides, or generated prose files."
+  },
+  {
+    id: "source_edit",
+    label: "Source code edit",
+    shortLabel: "Source edit",
+    description: "Changes application, script, test, or source-controlled code files."
+  },
+  {
+    id: "config_change",
+    label: "Configuration change",
+    shortLabel: "Config",
+    description: "Modifies Guard, harness, project, CI, package, or tool configuration."
+  },
+  {
+    id: "file_upload",
+    label: "File upload or copy-out",
+    shortLabel: "Upload",
+    description: "Copies local files to a remote host, bucket, paste service, or external destination."
+  },
+  {
+    id: "file_delete_cleanup",
+    label: "File delete or cleanup",
+    shortLabel: "Delete",
+    description: "Deletes, wipes, truncates, force-cleans, or otherwise risks local data loss."
+  },
+  {
+    id: "git_operation",
+    label: "Git workspace operation",
+    shortLabel: "Git",
+    description: "Mutates repository state through git add, commit, merge, rebase, push, pull, reset, or checkout."
+  },
+  {
+    id: "process_control",
+    label: "Process control",
+    shortLabel: "Process",
+    description: "Starts, stops, kills, reloads, or restarts local services and processes."
+  },
+  {
+    id: "container_or_deploy",
+    label: "Container or deploy command",
+    shortLabel: "Deploy",
+    description: "Runs Docker, Kubernetes, Helm, cloud, deployment, or infrastructure commands."
+  },
+  {
+    id: "persistence_change",
+    label: "Persistence change",
+    shortLabel: "Persistence",
+    description: "Changes cron, launch agents, services, shell profiles, startup items, or scheduled jobs."
+  },
+  {
+    id: "package_install",
+    label: "Package install",
+    shortLabel: "Install",
+    description: "Installs, removes, upgrades, or publishes dependencies and packages."
+  },
+  {
+    id: "package_script",
+    label: "Package script",
+    shortLabel: "Package script",
+    description: "Runs install, postinstall, build, test, or package-manager scripts."
+  },
+  {
+    id: "destructive_shell",
+    label: "Destructive shell command",
+    shortLabel: "Destructive",
+    description: "Deletes, overwrites, wipes, force-cleans, or otherwise risks data loss."
+  },
+  {
+    id: "encoded_shell",
+    label: "Encoded shell execution",
+    shortLabel: "Encoded shell",
+    description: "Runs encoded, encrypted, decoded, or obfuscated shell payloads."
+  },
+  {
+    id: "network",
+    label: "Network request",
+    shortLabel: "Network",
+    description: "Contacts hosts, downloads, calls APIs, or opens network destinations."
+  },
+  {
+    id: "mcp_tool",
+    label: "MCP tool call",
+    shortLabel: "MCP",
+    description: "Invokes an MCP server or tool with sensitive arguments."
+  },
+  {
+    id: "browser_action",
+    label: "Browser action",
+    shortLabel: "Browser",
+    description: "Uses browser automation, navigation, or form interaction."
+  },
+  {
+    id: "harness_start",
+    label: "Agent launch",
+    shortLabel: "Agent launch",
+    description: "Starts or reconnects an AI agent or harness under Guard control. Review when unexpected autonomy or a new session begins."
+  },
+  {
+    id: "shell_command",
+    label: "Shell command",
+    shortLabel: "Shell",
+    description: "Runs a shell command that does not fit a more specific category."
+  },
+  {
+    id: "other",
+    label: "Other review",
+    shortLabel: "Other",
+    description: "Needs review but has no more specific category signal."
+  }
+];
+const QUEUE_CATEGORY_BY_ID = new Map(QUEUE_CATEGORIES.map((category) => [category.id, category]));
+const SIGNAL_SEVERITY_SCORE = {
+  critical: 1,
+  high: 2,
+  medium: 3,
+  low: 4,
+  info: 5
+};
+const CATEGORY_RISK_SCORE = /* @__PURE__ */ new Map([
+  ["secret_exfiltration", 1],
+  ["credential_output", 1],
+  ["guard_bypass", 1],
+  ["prompt_injection", 2],
+  ["system_prompt_access", 2],
+  ["secret_file_read", 2],
+  ["encoded_shell", 2],
+  ["persistence_change", 3],
+  ["destructive_shell", 3],
+  ["file_delete_cleanup", 3],
+  ["network", 3],
+  ["container_or_deploy", 4],
+  ["git_operation", 4],
+  ["process_control", 4],
+  ["file_upload", 4],
+  ["package_install", 4],
+  ["package_script", 4],
+  ["source_edit", 5],
+  ["config_change", 5],
+  ["shell_command", 5],
+  ["mcp_tool", 5],
+  ["browser_action", 5],
+  ["harness_start", 5],
+  ["file_read", 6],
+  ["docs_edit", 6],
+  ["generated_inventory_edit", 6],
+  ["other", 6]
+]);
+function riskScore(item) {
+  if (item.policy_action === "block") {
+    return 0;
+  }
+  const signals = item.decision_v2_json?.signals ?? [];
+  if (signals.length > 0) {
+    const minSeverityScore = Math.min(...signals.map((s) => SIGNAL_SEVERITY_SCORE[s.severity] ?? 6));
+    const dedupeBonus2 = (item.dedupe_count ?? 0) > 0 ? -0.25 : 0;
+    return minSeverityScore + dedupeBonus2;
+  }
+  const categoryScore = CATEGORY_RISK_SCORE.get(resolveQueueCategory(item).id) ?? 6;
+  const dedupeBonus = (item.dedupe_count ?? 0) > 0 ? -0.25 : 0;
+  return categoryScore + dedupeBonus;
+}
+function isSensitiveFileReadItem(item) {
+  return resolveQueueCategory(item).id === "secret_file_read";
+}
+const BULK_BLOCKED_CATEGORY_IDS = /* @__PURE__ */ new Set([
+  "secret_exfiltration",
+  "credential_output",
+  "secret_file_read",
+  "prompt_injection",
+  "system_prompt_access",
+  "guard_bypass",
+  "encoded_shell",
+  "destructive_shell",
+  "file_delete_cleanup"
+]);
+const BULK_LOW_CATEGORY_IDS = /* @__PURE__ */ new Set([
+  "file_read",
+  "docs_edit",
+  "generated_inventory_edit",
+  "other"
+]);
+function bulkApprovalRiskTier(group) {
+  if (group.primary.policy_action === "block") return "blocked";
+  const categoryId = resolveQueueCategory(group.primary).id;
+  if (BULK_BLOCKED_CATEGORY_IDS.has(categoryId)) return "blocked";
+  if (BULK_LOW_CATEGORY_IDS.has(categoryId)) return "low";
+  return "elevated";
+}
+function isBulkApprovableGroup(group) {
+  return bulkApprovalRiskTier(group) !== "blocked";
+}
+function countSensitiveFileReadGroups(groups) {
+  return groups.filter((g) => {
+    if (g.primary.policy_action === "block") return false;
+    const isFileRead = g.primary.action_envelope_json?.action_type === "file_read" || g.primary.artifact_type === "file_read_request";
+    return isFileRead && isSensitiveFileReadItem(g.primary);
+  }).length;
+}
+function countDuplicateActionsInGroups(groups) {
+  return groups.reduce((sum, group) => sum + Math.max(0, group.duplicateCount), 0);
+}
+function summarizeSensitiveFileReadGroups(groups) {
+  const paths = [];
+  let count = 0;
+  for (const group of groups) {
+    if (group.primary.policy_action === "block") continue;
+    const isFileRead = group.primary.action_envelope_json?.action_type === "file_read" || group.primary.artifact_type === "file_read_request";
+    if (!isFileRead || !isSensitiveFileReadItem(group.primary)) continue;
+    count += 1;
+    if (paths.length < 3) {
+      const path = group.primary.action_envelope_json?.target_paths?.[0] ?? group.primary.launch_target ?? group.primary.artifact_name;
+      if (path) paths.push(path);
+    }
+  }
+  return { count, samplePaths: paths };
+}
+function bulkApproveActionCount(groups) {
+  return groups.reduce((sum, g) => sum + 1 + g.duplicateCount, 0);
+}
+function bulkApprovePrimaryIds(groups) {
+  return groups.map((g) => g.primary.request_id);
+}
+function selectNextAfterResolution(result, currentItems) {
+  if (result.next_selectable_request_id !== null) {
+    return result.next_selectable_request_id;
+  }
+  const remaining = result.remaining_pending_summaries;
+  if (remaining.length > 0) {
+    return remaining[0].request_id;
+  }
+  const resolvedIds = new Set(result.resolved_duplicate_ids);
+  if (result.resolved_scope_ids !== void 0) {
+    for (const id of result.resolved_scope_ids) {
+      resolvedIds.add(id);
+    }
+  }
+  if (result.resolved_request !== null) {
+    resolvedIds.add(result.resolved_request.request_id);
+  }
+  if (result.item !== null) {
+    resolvedIds.add(result.item.request_id);
+  }
+  const next = currentItems.find((item) => !resolvedIds.has(item.request_id));
+  return next?.request_id ?? null;
+}
+function groupDuplicates(items) {
+  const seen2 = /* @__PURE__ */ new Set();
+  const groups = [];
+  const groupedItems = /* @__PURE__ */ new Map();
+  for (const item of items) {
+    const groupId = item.queue_group_id ?? null;
+    if (groupId === null) {
+      continue;
+    }
+    const peers = groupedItems.get(groupId) ?? [];
+    peers.push(item);
+    groupedItems.set(groupId, peers);
+  }
+  for (const item of items) {
+    if (seen2.has(item.request_id)) {
+      continue;
+    }
+    seen2.add(item.request_id);
+    const groupId = item.queue_group_id ?? null;
+    if (groupId !== null) {
+      const peers = (groupedItems.get(groupId) ?? []).filter(
+        (peer) => peer.request_id !== item.request_id && !seen2.has(peer.request_id)
+      );
+      for (const peer of peers) {
+        seen2.add(peer.request_id);
+      }
+      groups.push({
+        primary: item,
+        duplicateCount: peers.length,
+        duplicateIds: peers.map((p) => p.request_id)
+      });
+    } else {
+      groups.push({ primary: item, duplicateCount: 0, duplicateIds: [] });
+    }
+  }
+  return groups;
+}
+function queueTimestamp(item) {
+  const timestamp = new Date(item.last_seen_at ?? item.created_at).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+function dateInputToBoundary(value, boundary) {
+  if (value.trim().length === 0) {
+    return null;
+  }
+  const [year, month, day] = value.split("-").map((part) => Number.parseInt(part, 10));
+  if (!year || !month || !day) {
+    return null;
+  }
+  const date = new Date(year, month - 1, day);
+  if (boundary === "start") {
+    date.setHours(0, 0, 0, 0);
+  } else {
+    date.setHours(23, 59, 59, 999);
+  }
+  const timestamp = date.getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+function filterQueueByDateRange(items, range) {
+  const from = dateInputToBoundary(range.from, "start");
+  const to = dateInputToBoundary(range.to, "end");
+  if (from === null && to === null) {
+    return items;
+  }
+  return items.filter((item) => {
+    const timestamp = queueTimestamp(item);
+    if (from !== null && timestamp < from) {
+      return false;
+    }
+    if (to !== null && timestamp > to) {
+      return false;
+    }
+    return true;
+  });
+}
+const queueDateFormatter = new Intl.DateTimeFormat("en", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit"
+});
+function formatQueueRequestDate(item) {
+  const timestamp = queueTimestamp(item);
+  if (timestamp === 0) {
+    return "Date unknown";
+  }
+  return queueDateFormatter.format(new Date(timestamp));
+}
+function queueCategoryById(id) {
+  return QUEUE_CATEGORY_BY_ID.get(id) ?? QUEUE_CATEGORIES[QUEUE_CATEGORIES.length - 1];
+}
+function resolveQueueCategory(item) {
+  return queueCategoryById(resolveQueueCategoryId(item));
+}
+function queueCategoriesForItems(items) {
+  const seen2 = /* @__PURE__ */ new Set();
+  for (const item of items) {
+    seen2.add(resolveQueueCategory(item).id);
+  }
+  return QUEUE_CATEGORIES.filter((category) => seen2.has(category.id));
+}
+function resolveQueueCategoryId(item) {
+  const envelope = item.action_envelope_json;
+  const decisionCategories = item.decision_v2_json?.signals.map((signal) => signal.category) ?? [];
+  const command = envelope?.command ?? item.launch_target ?? "";
+  const text = queueCategoryText(item);
+  const isPromptReview = envelope?.action_type === "prompt" || decisionCategories.includes("prompt");
+  const isWriteReview = envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command);
+  if (hasSecretSignal(decisionCategories, text) && hasExternalSink(text, command, !isWriteReview)) {
+    return "secret_exfiltration";
+  }
+  if (textIncludesAny(text, ["credential-looking output", "contains credential-looking", "exposes token", "exposes key"])) {
+    return "credential_output";
+  }
+  if (isPromptReview && systemPromptAccessText(text)) {
+    return "system_prompt_access";
+  }
+  if (isPromptReview && promptInjectionText(text)) {
+    return "prompt_injection";
+  }
+  if (decisionCategories.includes("bypass") || !isWriteReview && guardBypassText(text)) {
+    return "guard_bypass";
+  }
+  if (decisionCategories.includes("persistence") || persistenceCommand(command, text)) {
+    return "persistence_change";
+  }
+  if (decisionCategories.includes("encoded") || encodedCommand(text)) {
+    return "encoded_shell";
+  }
+  if (generatedInventoryEdit(command, text)) {
+    return "generated_inventory_edit";
+  }
+  if (fileDeleteOrCleanupCommand(command, text)) {
+    return "file_delete_cleanup";
+  }
+  if (gitOperationCommand(command)) {
+    return "git_operation";
+  }
+  if (fileUploadCommand(command)) {
+    return "file_upload";
+  }
+  if (inboundCopyCommand(command)) {
+    return "network";
+  }
+  if (processControlCommand(command)) {
+    return "process_control";
+  }
+  if (containerOrDeployCommand(command)) {
+    return "container_or_deploy";
+  }
+  if (envelope?.action_type === "package_script") {
+    return "package_script";
+  }
+  if (packageInstallCommand(command)) {
+    return "package_install";
+  }
+  if (secretReadAction(item, command, text) && hasSecretSignal(decisionCategories, text)) {
+    return "secret_file_read";
+  }
+  if (envelope?.action_type === "mcp_tool") {
+    return "mcp_tool";
+  }
+  if (envelope?.action_type === "config_change") {
+    return "config_change";
+  }
+  if (envelope?.action_type === "browser_action") {
+    return "browser_action";
+  }
+  if (envelope?.action_type === "harness_start") {
+    return "harness_start";
+  }
+  if (envelope?.action_type === "file_read" || item.artifact_type === "file_read_request") {
+    return "file_read";
+  }
+  if (docsEditCommand(command, text)) {
+    return "docs_edit";
+  }
+  if (sourceEditCommand(command, text) || envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command)) {
+    return "source_edit";
+  }
+  if (textIncludesAny(text, ["destructive shell command", " rm -", "rm -rf", "delete files", "wipe", "force-clean", "git clean -fd", "truncate"])) {
+    return "destructive_shell";
+  }
+  if (networkCommand(command, text) || decisionCategories.includes("network")) {
+    return "network";
+  }
+  if (envelope?.action_type === "shell_command" || item.artifact_type === "command" || text.includes("shell command")) {
+    return "shell_command";
+  }
+  return "other";
+}
+function queueCategoryText(item) {
+  const envelope = item.action_envelope_json;
+  return [
+    item.artifact_name,
+    item.artifact_type,
+    item.risk_headline ?? "",
+    item.risk_summary ?? "",
+    item.trigger_summary ?? "",
+    item.launch_summary ?? "",
+    item.why_now ?? "",
+    item.launch_target ?? "",
+    envelope?.action_type ?? "",
+    envelope?.command ?? "",
+    envelope?.tool_name ?? "",
+    envelope?.prompt_excerpt ?? "",
+    envelope?.mcp_server ?? "",
+    envelope?.mcp_tool ?? "",
+    envelope?.package_manager ?? "",
+    envelope?.package_name ?? "",
+    envelope?.script_name ?? "",
+    ...item.risk_signals ?? [],
+    ...envelope?.target_paths ?? [],
+    ...envelope?.network_hosts ?? [],
+    ...item.decision_v2_json?.signals.map((signal) => `${signal.category} ${signal.title} ${signal.plain_reason}`) ?? []
+  ].join(" ").toLowerCase();
+}
+function textIncludesAny(text, needles) {
+  return needles.some((needle) => text.includes(needle));
+}
+function commandLooksLikeFileEdit(command) {
+  const normalized = command.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return /\bperl\b[\s\S]*\s-[\w-]*i\b/.test(normalized) || /\bsed\b[\s\S]*\s-[\w-]*i\b/.test(normalized) || /\bpython(?:3)?\b[\s\S]*(?:write_text|open\([^)]*,\s*['"]w|path\.write)/.test(normalized) || /\btee\s+-a?\b/.test(normalized) || /\bapply_patch\b/.test(normalized);
+}
+function hasSecretSignal(decisionCategories, text) {
+  return decisionCategories.includes("secret") || textIncludesAny(text, [
+    "credential",
+    "secret",
+    ".env",
+    "token",
+    "api key",
+    "apikey",
+    "password",
+    "private key",
+    "ssh key",
+    "aws_access_key",
+    "github_token"
+  ]);
+}
+function secretReadAction(item, command, text) {
+  const envelope = item.action_envelope_json;
+  return envelope?.action_type === "file_read" || item.artifact_type === "file_read_request" || readCommand(command) && hasSecretPathText(text);
+}
+function readCommand(command) {
+  return /\b(?:cat|grep|rg|sed\s+-n|awk|less|more|head|tail)\b/.test(command.toLowerCase());
+}
+function hasSecretPathText(text) {
+  return textIncludesAny(text, [".env", "token", "secret", "credential", "password", "private key", "api key"]);
+}
+function hasExternalSink(text, command, allowTextHints) {
+  return fileUploadCommand(command) || outboundNetworkCommand(command, text) || allowTextHints && textIncludesAny(text, ["exfiltrat", "clipboard", "pastebin"]);
+}
+function outboundNetworkCommand(command, text) {
+  return networkCommand(command, text) && !inboundCopyCommand(command);
+}
+function networkCommand(command, text) {
+  const normalized = command.toLowerCase();
+  return /(?:^|\s)(?:curl|wget|httpie|nc|netcat|scp|rsync|ftp|sftp)(?:\s|$)/.test(normalized) || /(?:^|\s)ssh\s+/.test(normalized) || /https?:\/\//.test(normalized) || textIncludesAny(text, ["network host", "outbound", "webhook", "https://", "http://"]);
+}
+function fileUploadCommand(command, text) {
+  return outboundCopyCommand(command) || /\bcurl\b[\s\S]*(?:--upload-file(?:=|\s+)\S+|(?:^|\s)-T(?:\S+|\s+\S+)|--form(?:=|\s+)\S*@|-F(?:\S*@|\s+\S*@)|--data(?:-binary|-raw|-urlencode)?(?:=|\s+)@\S+)/.test(command);
+}
+function systemPromptAccessText(text) {
+  return textIncludesAny(text, [
+    "system prompt",
+    "developer instructions",
+    "hidden instruction",
+    "hidden prompt",
+    "reveal the prompt",
+    "show the prompt"
+  ]);
+}
+function promptInjectionText(text) {
+  return textIncludesAny(text, [
+    "prompt injection",
+    "ignore previous",
+    "ignore all previous",
+    "disregard previous",
+    "override instruction",
+    "jailbreak",
+    "act as"
+  ]);
+}
+function guardBypassText(text) {
+  return textIncludesAny(text, [
+    "bypass guard",
+    "disable guard",
+    "skip approval",
+    "ignore approval",
+    "without approval",
+    "guard_bypass",
+    "no guard"
+  ]);
+}
+function persistenceCommand(command, text) {
+  const normalized = command.toLowerCase();
+  const mutatesPersistenceFile = commandLooksLikeFileEdit(command) || text.includes("file_write");
+  return /\|\s*crontab\b/.test(normalized) || /\bcrontab\s+-(?!l\b)/.test(normalized) || /\b(?:schtasks|at)\b/.test(normalized) || /\bsystemctl\s+(?:enable|disable|preset|link)\b/.test(normalized) || /\blaunchctl\s+(?:load|unload|bootstrap|bootout)\b/.test(normalized) || mutatesPersistenceFile && /(?:\.zshrc|\.bashrc|\.bash_profile|\.profile|launchagents|launchdaemons|systemd|login item)/.test(normalized) || textIncludesAny(text, ["persistence", "startup item", "scheduled task", "launch agent"]);
+}
+function encodedCommand(text) {
+  return textIncludesAny(text, [
+    "encoded or encrypted shell command",
+    "base64",
+    "openssl enc",
+    "xxd -r",
+    "decode-and-exec"
+  ]);
+}
+function outboundCopyCommand(command) {
+  const operands = copyOperands(command);
+  return isOutboundCopy(operands?.source, operands?.destination);
+}
+function inboundCopyCommand(command) {
+  const operands = copyOperands(command);
+  return isInboundCopy(operands?.source, operands?.destination);
+}
+function copyOperands(command) {
+  const tokens = stripOptionTokens(shellTokens(command));
+  const awsIndex = findSequence(tokens, ["aws", "s3", "cp"]);
+  if (awsIndex >= 0) {
+    return positionalPair(tokens.slice(awsIndex + 3));
+  }
+  const gsutilIndex = findSequence(tokens, ["gsutil", "cp"]);
+  if (gsutilIndex >= 0) {
+    return positionalPair(tokens.slice(gsutilIndex + 2));
+  }
+  const copyIndex = tokens.findIndex((token) => token === "scp" || token === "rsync");
+  if (copyIndex >= 0) {
+    return positionalPair(tokens.slice(copyIndex + 1));
+  }
+  return null;
+}
+function positionalPair(tokens) {
+  const positional = tokens.filter((token) => token === "-" || !token.startsWith("-"));
+  if (positional.length < 2) {
+    return null;
+  }
+  return { source: positional[0], destination: positional[1] };
+}
+function stripOptionTokens(tokens) {
+  const optionsWithValues = /* @__PURE__ */ new Set([
+    "--profile",
+    "--region",
+    "--endpoint-url",
+    "--source-region",
+    "--exclude",
+    "--include",
+    "--acl",
+    "--storage-class",
+    "--sse",
+    "--rsh",
+    "-P",
+    "-i",
+    "-o",
+    "-F",
+    "-f",
+    "-S",
+    "-s",
+    "-e"
+  ]);
+  const stripped = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token === "-") {
+      stripped.push(token);
+      continue;
+    }
+    if (!token.startsWith("-")) {
+      stripped.push(token);
+      continue;
+    }
+    const optionName = token.includes("=") ? token.slice(0, token.indexOf("=")) : token;
+    if (optionsWithValues.has(optionName) && !token.includes("=")) {
+      index += 1;
+    }
+  }
+  return stripped;
+}
+function shellTokens(command) {
+  return (command.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map((token) => token.replace(/^['"]|['"]$/g, ""));
+}
+function findSequence(tokens, sequence) {
+  return tokens.findIndex((_, index) => sequence.every((part, offset) => tokens[index + offset] === part));
+}
+function isOutboundCopy(source, destination) {
+  return source !== void 0 && destination !== void 0 && !remotePath(source) && remotePath(destination);
+}
+function isInboundCopy(source, destination) {
+  return source !== void 0 && destination !== void 0 && remotePath(source) && !remotePath(destination);
+}
+function remotePath(value) {
+  return /^(?:s3|gs):\/\//.test(value) || /^[\w.-]+@?[\w.-]+:/.test(value);
+}
+function generatedInventoryEdit(command, text) {
+  const haystack = `${command} ${text}`.toLowerCase();
+  return (commandLooksLikeFileEdit(command) || text.includes("file_write")) && /docs\/.*(?:api|route|cloud).*inventory\.generated\.(?:md|json|txt)/.test(haystack);
+}
+function fileDeleteOrCleanupCommand(command, text) {
+  const normalized = command.toLowerCase();
+  return /\b(?:rm|unlink|rmdir|shred)\b/.test(normalized) || /\btruncate\s+-s\s+0\b/.test(normalized) || /\bgit\s+(?:clean|reset\s+--hard|checkout\s+--)\b/.test(normalized) || textIncludesAny(text, ["force-clean", "delete files", "wipe files"]);
+}
+function gitOperationCommand(command) {
+  const normalized = command.toLowerCase();
+  return /\bgit\s+(?:add|commit|push|pull|merge|rebase|reset|checkout|restore|clean|stash|tag)\b/.test(normalized);
+}
+function processControlCommand(command) {
+  const normalized = command.toLowerCase();
+  return /\b(?:kill|pkill|killall|launchctl|systemctl|pm2|supervisorctl)\b/.test(normalized) || /\bservice\s+\S+\s+(?:start|stop|restart|reload|status)\b/.test(normalized);
+}
+function containerOrDeployCommand(command) {
+  const normalized = command.toLowerCase();
+  return /\b(?:docker|docker-compose|kubectl|helm|terraform|pulumi|flyctl|vercel|netlify|gcloud|aws|az)\b/.test(normalized);
+}
+function packageInstallCommand(command) {
+  const normalized = command.toLowerCase();
+  return /\b(?:npm|pnpm|yarn|bun|pip|pipx|uv|poetry|brew|cargo|gem|go)\s+(?:add|i|install|remove|uninstall|update|upgrade|publish)\b/.test(normalized);
+}
+function docsEditCommand(command, text) {
+  const haystack = `${command} ${text}`.toLowerCase();
+  return (commandLooksLikeFileEdit(command) || text.includes("file_write")) && /(?:^|\s)(?:docs\/|readme|changelog|\.md\b|\.mdx\b)/.test(haystack);
+}
+function sourceEditCommand(command, text) {
+  const haystack = `${command} ${text}`.toLowerCase();
+  return (commandLooksLikeFileEdit(command) || text.includes("file_write")) && /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|swift|rb|php|css|scss|html|json|yaml|yml|toml)\b/.test(haystack);
+}
+function sortQueue(items, direction) {
+  if (direction === "highest_risk") {
+    const scores = new Map(items.map((item) => [item.request_id, riskScore(item)]));
+    return [...items].sort((a, b) => {
+      const scoreDelta = (scores.get(a.request_id) ?? 6) - (scores.get(b.request_id) ?? 6);
+      if (scoreDelta !== 0) return scoreDelta;
+      return new Date(b.last_seen_at ?? b.created_at).getTime() - new Date(a.last_seen_at ?? a.created_at).getTime();
+    });
+  }
+  const categoryLabels = direction === "category" ? new Map(items.map((item) => [item.request_id, resolveQueueCategory(item).label])) : null;
+  return [...items].sort((a, b) => {
+    if (categoryLabels !== null) {
+      const categoryDelta = (categoryLabels.get(a.request_id) ?? "").localeCompare(
+        categoryLabels.get(b.request_id) ?? ""
+      );
+      if (categoryDelta !== 0) {
+        return categoryDelta;
+      }
+    }
+    const dateA = queueTimestamp(a);
+    const dateB = queueTimestamp(b);
+    const dateDelta = direction === "oldest" ? dateA - dateB : dateB - dateA;
+    if (dateDelta !== 0) {
+      return dateDelta;
+    }
+    return direction === "oldest" ? a.request_id.localeCompare(b.request_id) : b.request_id.localeCompare(a.request_id);
+  });
+}
+function filterQueueByCategory(items, categoryId) {
+  if (categoryId === "all") {
+    return items;
+  }
+  return items.filter((item) => resolveQueueCategory(item).id === categoryId);
+}
+function searchQueue(items, term) {
+  const normalized = term.trim().toLowerCase();
+  if (normalized.length === 0) {
+    return items;
+  }
+  return items.filter((item) => {
+    const envelope = item.action_envelope_json;
+    const category = resolveQueueCategory(item);
+    const parts = [
+      item.artifact_name,
+      item.artifact_id,
+      item.artifact_type,
+      item.harness,
+      item.policy_action,
+      item.risk_headline ?? "",
+      item.risk_summary ?? "",
+      item.trigger_summary ?? "",
+      item.launch_summary ?? "",
+      item.why_now ?? "",
+      envelope?.command ?? "",
+      envelope?.prompt_excerpt ?? "",
+      envelope?.mcp_server ?? "",
+      envelope?.mcp_tool ?? "",
+      envelope?.package_name ?? "",
+      category.label,
+      category.shortLabel,
+      ...envelope?.network_hosts ?? [],
+      ...envelope?.target_paths ?? []
+    ];
+    return parts.join(" ").toLowerCase().includes(normalized);
+  });
+}
 const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
 const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
 function deriveDataFlowEvidence(item) {
@@ -13527,23 +14358,27 @@ function resolveTerminalLabel(item) {
   return "Stopped command";
 }
 function summarizeBulkApproveSelection(groups) {
-  return groups.map((group) => ({
-    requestId: group.primary.request_id,
-    title: resolveDecisionV2Title(group.primary) ?? displayArtifactName(group.primary),
-    path: resolveFileReadPath(group.primary),
-    harnessLabel: harnessDisplayName(group.primary.harness),
-    duplicateCount: group.duplicateCount,
-    summary: buildQueueSummary(group.primary)
-  }));
+  return groups.map((group) => {
+    const category = resolveQueueCategory(group.primary);
+    return {
+      requestId: group.primary.request_id,
+      title: resolveDecisionV2Title(group.primary) ?? displayArtifactName(group.primary),
+      path: resolveFileReadPath(group.primary),
+      harnessLabel: harnessDisplayName(group.primary.harness),
+      duplicateCount: group.duplicateCount,
+      summary: buildQueueSummary(group.primary),
+      categoryLabel: category.shortLabel
+    };
+  });
 }
 function buildBulkApproveConsequenceCopy(actionCount) {
   if (actionCount <= 0) {
-    return "No read-only file reads are selected.";
+    return "No actions are selected.";
   }
   if (actionCount === 1) {
-    return "Guard will approve once for one read-only file access. This applies to the current retry only and does not remember future reads.";
+    return "Guard will approve this action once. It applies to the current retry only and does not remember future runs.";
   }
-  return `Guard will approve once for ${actionCount} read-only file accesses. Mass approval is risky: you are allowing many paths in one step without reviewing each file individually. Each decision applies to this retry only, not future edits, writes, or different paths.`;
+  return `Guard will approve ${actionCount} actions once. Mass approval skips opening each request, so an unexpected action is harder to catch. Each decision applies to its retry only and is not remembered.`;
 }
 function buildCodexResumeUx(resume) {
   if (resume.status === "pending" || resume.status === "in_progress") {
@@ -22025,816 +22860,6 @@ function buildDecisionPayload(input) {
     reason: input.reason
   };
 }
-const REVIEW_SEMANTIC_GROUPS = [
-  { id: "all", label: "All", matches: [] },
-  {
-    id: "files",
-    label: "File read / write",
-    matches: ["file_read", "source_edit", "docs_edit", "generated_inventory_edit"]
-  },
-  {
-    id: "shell",
-    label: "Shell execution",
-    matches: ["shell_command", "destructive_shell", "encoded_shell", "git_operation", "process_control"]
-  },
-  {
-    id: "network",
-    label: "Network / data egress",
-    matches: ["network", "secret_exfiltration", "secret_file_read", "credential_output", "file_upload"]
-  },
-  {
-    id: "tools",
-    label: "MCP, skill & packages",
-    matches: ["mcp_tool", "package_script", "browser_action", "package_install"]
-  },
-  {
-    id: "other",
-    label: "Agent autonomy & other",
-    matches: [
-      "harness_start",
-      "prompt_injection",
-      "system_prompt_access",
-      "guard_bypass",
-      "config_change",
-      "container_or_deploy",
-      "persistence_change",
-      "other"
-    ]
-  }
-];
-const QUEUE_CATEGORIES = [
-  {
-    id: "credential_output",
-    label: "Secret-looking output",
-    shortLabel: "Secret output",
-    description: "Command output contains patterns that resemble tokens, keys, passwords, or other secret-looking values. Review before allowing if this output will leave the local machine."
-  },
-  {
-    id: "secret_file_read",
-    label: "Secret file access",
-    shortLabel: "Secret read",
-    description: "Reads paths known to store secrets: env files, credential stores, token files, SSH keys, or cloud config. Normal source reads are classified as file read instead."
-  },
-  {
-    id: "file_read",
-    label: "File read",
-    shortLabel: "File read",
-    description: "Requests local file contents, paths, or read-only filesystem access."
-  },
-  {
-    id: "secret_exfiltration",
-    label: "Secret exfiltration path",
-    shortLabel: "Secret exfil",
-    description: "Moves local secret material toward a network host, upload, clipboard, or external sink."
-  },
-  {
-    id: "system_prompt_access",
-    label: "System prompt access",
-    shortLabel: "System prompt",
-    description: "Attempts to reveal hidden system, developer, policy, or harness instructions."
-  },
-  {
-    id: "prompt_injection",
-    label: "Prompt injection attempt",
-    shortLabel: "Prompt injection",
-    description: "Prompt content tries to override instructions, ignore policy, or redirect tool behavior."
-  },
-  {
-    id: "guard_bypass",
-    label: "Guard bypass attempt",
-    shortLabel: "Bypass",
-    description: "Attempts to disable, evade, suppress, or work around Guard policy checks."
-  },
-  {
-    id: "generated_inventory_edit",
-    label: "Generated inventory edit",
-    shortLabel: "Inventory edit",
-    description: "Updates generated API, route, or cloud inventory documentation."
-  },
-  {
-    id: "docs_edit",
-    label: "Documentation edit",
-    shortLabel: "Docs edit",
-    description: "Changes markdown, docs, runbooks, guides, or generated prose files."
-  },
-  {
-    id: "source_edit",
-    label: "Source code edit",
-    shortLabel: "Source edit",
-    description: "Changes application, script, test, or source-controlled code files."
-  },
-  {
-    id: "config_change",
-    label: "Configuration change",
-    shortLabel: "Config",
-    description: "Modifies Guard, harness, project, CI, package, or tool configuration."
-  },
-  {
-    id: "file_upload",
-    label: "File upload or copy-out",
-    shortLabel: "Upload",
-    description: "Copies local files to a remote host, bucket, paste service, or external destination."
-  },
-  {
-    id: "file_delete_cleanup",
-    label: "File delete or cleanup",
-    shortLabel: "Delete",
-    description: "Deletes, wipes, truncates, force-cleans, or otherwise risks local data loss."
-  },
-  {
-    id: "git_operation",
-    label: "Git workspace operation",
-    shortLabel: "Git",
-    description: "Mutates repository state through git add, commit, merge, rebase, push, pull, reset, or checkout."
-  },
-  {
-    id: "process_control",
-    label: "Process control",
-    shortLabel: "Process",
-    description: "Starts, stops, kills, reloads, or restarts local services and processes."
-  },
-  {
-    id: "container_or_deploy",
-    label: "Container or deploy command",
-    shortLabel: "Deploy",
-    description: "Runs Docker, Kubernetes, Helm, cloud, deployment, or infrastructure commands."
-  },
-  {
-    id: "persistence_change",
-    label: "Persistence change",
-    shortLabel: "Persistence",
-    description: "Changes cron, launch agents, services, shell profiles, startup items, or scheduled jobs."
-  },
-  {
-    id: "package_install",
-    label: "Package install",
-    shortLabel: "Install",
-    description: "Installs, removes, upgrades, or publishes dependencies and packages."
-  },
-  {
-    id: "package_script",
-    label: "Package script",
-    shortLabel: "Package script",
-    description: "Runs install, postinstall, build, test, or package-manager scripts."
-  },
-  {
-    id: "destructive_shell",
-    label: "Destructive shell command",
-    shortLabel: "Destructive",
-    description: "Deletes, overwrites, wipes, force-cleans, or otherwise risks data loss."
-  },
-  {
-    id: "encoded_shell",
-    label: "Encoded shell execution",
-    shortLabel: "Encoded shell",
-    description: "Runs encoded, encrypted, decoded, or obfuscated shell payloads."
-  },
-  {
-    id: "network",
-    label: "Network request",
-    shortLabel: "Network",
-    description: "Contacts hosts, downloads, calls APIs, or opens network destinations."
-  },
-  {
-    id: "mcp_tool",
-    label: "MCP tool call",
-    shortLabel: "MCP",
-    description: "Invokes an MCP server or tool with sensitive arguments."
-  },
-  {
-    id: "browser_action",
-    label: "Browser action",
-    shortLabel: "Browser",
-    description: "Uses browser automation, navigation, or form interaction."
-  },
-  {
-    id: "harness_start",
-    label: "Agent launch",
-    shortLabel: "Agent launch",
-    description: "Starts or reconnects an AI agent or harness under Guard control. Review when unexpected autonomy or a new session begins."
-  },
-  {
-    id: "shell_command",
-    label: "Shell command",
-    shortLabel: "Shell",
-    description: "Runs a shell command that does not fit a more specific category."
-  },
-  {
-    id: "other",
-    label: "Other review",
-    shortLabel: "Other",
-    description: "Needs review but has no more specific category signal."
-  }
-];
-const QUEUE_CATEGORY_BY_ID = new Map(QUEUE_CATEGORIES.map((category) => [category.id, category]));
-const SIGNAL_SEVERITY_SCORE = {
-  critical: 1,
-  high: 2,
-  medium: 3,
-  low: 4,
-  info: 5
-};
-const CATEGORY_RISK_SCORE = /* @__PURE__ */ new Map([
-  ["secret_exfiltration", 1],
-  ["credential_output", 1],
-  ["guard_bypass", 1],
-  ["prompt_injection", 2],
-  ["system_prompt_access", 2],
-  ["secret_file_read", 2],
-  ["encoded_shell", 2],
-  ["persistence_change", 3],
-  ["destructive_shell", 3],
-  ["file_delete_cleanup", 3],
-  ["network", 3],
-  ["container_or_deploy", 4],
-  ["git_operation", 4],
-  ["process_control", 4],
-  ["file_upload", 4],
-  ["package_install", 4],
-  ["package_script", 4],
-  ["source_edit", 5],
-  ["config_change", 5],
-  ["shell_command", 5],
-  ["mcp_tool", 5],
-  ["browser_action", 5],
-  ["harness_start", 5],
-  ["file_read", 6],
-  ["docs_edit", 6],
-  ["generated_inventory_edit", 6],
-  ["other", 6]
-]);
-function riskScore(item) {
-  if (item.policy_action === "block") {
-    return 0;
-  }
-  const signals = item.decision_v2_json?.signals ?? [];
-  if (signals.length > 0) {
-    const minSeverityScore = Math.min(...signals.map((s) => SIGNAL_SEVERITY_SCORE[s.severity] ?? 6));
-    const dedupeBonus2 = (item.dedupe_count ?? 0) > 0 ? -0.25 : 0;
-    return minSeverityScore + dedupeBonus2;
-  }
-  const categoryScore = CATEGORY_RISK_SCORE.get(resolveQueueCategory(item).id) ?? 6;
-  const dedupeBonus = (item.dedupe_count ?? 0) > 0 ? -0.25 : 0;
-  return categoryScore + dedupeBonus;
-}
-function isSensitiveFileReadItem(item) {
-  return resolveQueueCategory(item).id === "secret_file_read";
-}
-function isReadOnlyQueueGroup(group) {
-  if (group.primary.policy_action === "block") return false;
-  const isFileRead = group.primary.action_envelope_json?.action_type === "file_read" || group.primary.artifact_type === "file_read_request";
-  if (!isFileRead) return false;
-  return !isSensitiveFileReadItem(group.primary);
-}
-function countSensitiveFileReadGroups(groups) {
-  return groups.filter((g) => {
-    if (g.primary.policy_action === "block") return false;
-    const isFileRead = g.primary.action_envelope_json?.action_type === "file_read" || g.primary.artifact_type === "file_read_request";
-    return isFileRead && isSensitiveFileReadItem(g.primary);
-  }).length;
-}
-function countDuplicateActionsInGroups(groups) {
-  return groups.reduce((sum, group) => sum + Math.max(0, group.duplicateCount), 0);
-}
-function summarizeSensitiveFileReadGroups(groups) {
-  const paths = [];
-  let count = 0;
-  for (const group of groups) {
-    if (group.primary.policy_action === "block") continue;
-    const isFileRead = group.primary.action_envelope_json?.action_type === "file_read" || group.primary.artifact_type === "file_read_request";
-    if (!isFileRead || !isSensitiveFileReadItem(group.primary)) continue;
-    count += 1;
-    if (paths.length < 3) {
-      const path = group.primary.action_envelope_json?.target_paths?.[0] ?? group.primary.launch_target ?? group.primary.artifact_name;
-      if (path) paths.push(path);
-    }
-  }
-  return { count, samplePaths: paths };
-}
-function bulkApproveActionCount(groups) {
-  return groups.reduce((sum, g) => sum + 1 + g.duplicateCount, 0);
-}
-function bulkApprovePrimaryIds(groups) {
-  return groups.map((g) => g.primary.request_id);
-}
-function selectNextAfterResolution(result, currentItems) {
-  if (result.next_selectable_request_id !== null) {
-    return result.next_selectable_request_id;
-  }
-  const remaining = result.remaining_pending_summaries;
-  if (remaining.length > 0) {
-    return remaining[0].request_id;
-  }
-  const resolvedIds = new Set(result.resolved_duplicate_ids);
-  if (result.resolved_scope_ids !== void 0) {
-    for (const id of result.resolved_scope_ids) {
-      resolvedIds.add(id);
-    }
-  }
-  if (result.resolved_request !== null) {
-    resolvedIds.add(result.resolved_request.request_id);
-  }
-  if (result.item !== null) {
-    resolvedIds.add(result.item.request_id);
-  }
-  const next = currentItems.find((item) => !resolvedIds.has(item.request_id));
-  return next?.request_id ?? null;
-}
-function groupDuplicates(items) {
-  const seen2 = /* @__PURE__ */ new Set();
-  const groups = [];
-  const groupedItems = /* @__PURE__ */ new Map();
-  for (const item of items) {
-    const groupId = item.queue_group_id ?? null;
-    if (groupId === null) {
-      continue;
-    }
-    const peers = groupedItems.get(groupId) ?? [];
-    peers.push(item);
-    groupedItems.set(groupId, peers);
-  }
-  for (const item of items) {
-    if (seen2.has(item.request_id)) {
-      continue;
-    }
-    seen2.add(item.request_id);
-    const groupId = item.queue_group_id ?? null;
-    if (groupId !== null) {
-      const peers = (groupedItems.get(groupId) ?? []).filter(
-        (peer) => peer.request_id !== item.request_id && !seen2.has(peer.request_id)
-      );
-      for (const peer of peers) {
-        seen2.add(peer.request_id);
-      }
-      groups.push({
-        primary: item,
-        duplicateCount: peers.length,
-        duplicateIds: peers.map((p) => p.request_id)
-      });
-    } else {
-      groups.push({ primary: item, duplicateCount: 0, duplicateIds: [] });
-    }
-  }
-  return groups;
-}
-function queueTimestamp(item) {
-  const timestamp = new Date(item.last_seen_at ?? item.created_at).getTime();
-  return Number.isFinite(timestamp) ? timestamp : 0;
-}
-function dateInputToBoundary(value, boundary) {
-  if (value.trim().length === 0) {
-    return null;
-  }
-  const [year, month, day] = value.split("-").map((part) => Number.parseInt(part, 10));
-  if (!year || !month || !day) {
-    return null;
-  }
-  const date = new Date(year, month - 1, day);
-  if (boundary === "start") {
-    date.setHours(0, 0, 0, 0);
-  } else {
-    date.setHours(23, 59, 59, 999);
-  }
-  const timestamp = date.getTime();
-  return Number.isFinite(timestamp) ? timestamp : null;
-}
-function filterQueueByDateRange(items, range) {
-  const from = dateInputToBoundary(range.from, "start");
-  const to = dateInputToBoundary(range.to, "end");
-  if (from === null && to === null) {
-    return items;
-  }
-  return items.filter((item) => {
-    const timestamp = queueTimestamp(item);
-    if (from !== null && timestamp < from) {
-      return false;
-    }
-    if (to !== null && timestamp > to) {
-      return false;
-    }
-    return true;
-  });
-}
-const queueDateFormatter = new Intl.DateTimeFormat("en", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit"
-});
-function formatQueueRequestDate(item) {
-  const timestamp = queueTimestamp(item);
-  if (timestamp === 0) {
-    return "Date unknown";
-  }
-  return queueDateFormatter.format(new Date(timestamp));
-}
-function queueCategoryById(id) {
-  return QUEUE_CATEGORY_BY_ID.get(id) ?? QUEUE_CATEGORIES[QUEUE_CATEGORIES.length - 1];
-}
-function resolveQueueCategory(item) {
-  return queueCategoryById(resolveQueueCategoryId(item));
-}
-function queueCategoriesForItems(items) {
-  const seen2 = /* @__PURE__ */ new Set();
-  for (const item of items) {
-    seen2.add(resolveQueueCategory(item).id);
-  }
-  return QUEUE_CATEGORIES.filter((category) => seen2.has(category.id));
-}
-function resolveQueueCategoryId(item) {
-  const envelope = item.action_envelope_json;
-  const decisionCategories = item.decision_v2_json?.signals.map((signal) => signal.category) ?? [];
-  const command = envelope?.command ?? item.launch_target ?? "";
-  const text = queueCategoryText(item);
-  const isPromptReview = envelope?.action_type === "prompt" || decisionCategories.includes("prompt");
-  const isWriteReview = envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command);
-  if (hasSecretSignal(decisionCategories, text) && hasExternalSink(text, command, !isWriteReview)) {
-    return "secret_exfiltration";
-  }
-  if (textIncludesAny(text, ["credential-looking output", "contains credential-looking", "exposes token", "exposes key"])) {
-    return "credential_output";
-  }
-  if (isPromptReview && systemPromptAccessText(text)) {
-    return "system_prompt_access";
-  }
-  if (isPromptReview && promptInjectionText(text)) {
-    return "prompt_injection";
-  }
-  if (decisionCategories.includes("bypass") || !isWriteReview && guardBypassText(text)) {
-    return "guard_bypass";
-  }
-  if (decisionCategories.includes("persistence") || persistenceCommand(command, text)) {
-    return "persistence_change";
-  }
-  if (decisionCategories.includes("encoded") || encodedCommand(text)) {
-    return "encoded_shell";
-  }
-  if (generatedInventoryEdit(command, text)) {
-    return "generated_inventory_edit";
-  }
-  if (fileDeleteOrCleanupCommand(command, text)) {
-    return "file_delete_cleanup";
-  }
-  if (gitOperationCommand(command)) {
-    return "git_operation";
-  }
-  if (fileUploadCommand(command)) {
-    return "file_upload";
-  }
-  if (inboundCopyCommand(command)) {
-    return "network";
-  }
-  if (processControlCommand(command)) {
-    return "process_control";
-  }
-  if (containerOrDeployCommand(command)) {
-    return "container_or_deploy";
-  }
-  if (envelope?.action_type === "package_script") {
-    return "package_script";
-  }
-  if (packageInstallCommand(command)) {
-    return "package_install";
-  }
-  if (secretReadAction(item, command, text) && hasSecretSignal(decisionCategories, text)) {
-    return "secret_file_read";
-  }
-  if (envelope?.action_type === "mcp_tool") {
-    return "mcp_tool";
-  }
-  if (envelope?.action_type === "config_change") {
-    return "config_change";
-  }
-  if (envelope?.action_type === "browser_action") {
-    return "browser_action";
-  }
-  if (envelope?.action_type === "harness_start") {
-    return "harness_start";
-  }
-  if (envelope?.action_type === "file_read" || item.artifact_type === "file_read_request") {
-    return "file_read";
-  }
-  if (docsEditCommand(command, text)) {
-    return "docs_edit";
-  }
-  if (sourceEditCommand(command, text) || envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command)) {
-    return "source_edit";
-  }
-  if (textIncludesAny(text, ["destructive shell command", " rm -", "rm -rf", "delete files", "wipe", "force-clean", "git clean -fd", "truncate"])) {
-    return "destructive_shell";
-  }
-  if (networkCommand(command, text) || decisionCategories.includes("network")) {
-    return "network";
-  }
-  if (envelope?.action_type === "shell_command" || item.artifact_type === "command" || text.includes("shell command")) {
-    return "shell_command";
-  }
-  return "other";
-}
-function queueCategoryText(item) {
-  const envelope = item.action_envelope_json;
-  return [
-    item.artifact_name,
-    item.artifact_type,
-    item.risk_headline ?? "",
-    item.risk_summary ?? "",
-    item.trigger_summary ?? "",
-    item.launch_summary ?? "",
-    item.why_now ?? "",
-    item.launch_target ?? "",
-    envelope?.action_type ?? "",
-    envelope?.command ?? "",
-    envelope?.tool_name ?? "",
-    envelope?.prompt_excerpt ?? "",
-    envelope?.mcp_server ?? "",
-    envelope?.mcp_tool ?? "",
-    envelope?.package_manager ?? "",
-    envelope?.package_name ?? "",
-    envelope?.script_name ?? "",
-    ...item.risk_signals ?? [],
-    ...envelope?.target_paths ?? [],
-    ...envelope?.network_hosts ?? [],
-    ...item.decision_v2_json?.signals.map((signal) => `${signal.category} ${signal.title} ${signal.plain_reason}`) ?? []
-  ].join(" ").toLowerCase();
-}
-function textIncludesAny(text, needles) {
-  return needles.some((needle) => text.includes(needle));
-}
-function commandLooksLikeFileEdit(command) {
-  const normalized = command.trim().toLowerCase();
-  if (!normalized) {
-    return false;
-  }
-  return /\bperl\b[\s\S]*\s-[\w-]*i\b/.test(normalized) || /\bsed\b[\s\S]*\s-[\w-]*i\b/.test(normalized) || /\bpython(?:3)?\b[\s\S]*(?:write_text|open\([^)]*,\s*['"]w|path\.write)/.test(normalized) || /\btee\s+-a?\b/.test(normalized) || /\bapply_patch\b/.test(normalized);
-}
-function hasSecretSignal(decisionCategories, text) {
-  return decisionCategories.includes("secret") || textIncludesAny(text, [
-    "credential",
-    "secret",
-    ".env",
-    "token",
-    "api key",
-    "apikey",
-    "password",
-    "private key",
-    "ssh key",
-    "aws_access_key",
-    "github_token"
-  ]);
-}
-function secretReadAction(item, command, text) {
-  const envelope = item.action_envelope_json;
-  return envelope?.action_type === "file_read" || item.artifact_type === "file_read_request" || readCommand(command) && hasSecretPathText(text);
-}
-function readCommand(command) {
-  return /\b(?:cat|grep|rg|sed\s+-n|awk|less|more|head|tail)\b/.test(command.toLowerCase());
-}
-function hasSecretPathText(text) {
-  return textIncludesAny(text, [".env", "token", "secret", "credential", "password", "private key", "api key"]);
-}
-function hasExternalSink(text, command, allowTextHints) {
-  return fileUploadCommand(command) || outboundNetworkCommand(command, text) || allowTextHints && textIncludesAny(text, ["exfiltrat", "clipboard", "pastebin"]);
-}
-function outboundNetworkCommand(command, text) {
-  return networkCommand(command, text) && !inboundCopyCommand(command);
-}
-function networkCommand(command, text) {
-  const normalized = command.toLowerCase();
-  return /(?:^|\s)(?:curl|wget|httpie|nc|netcat|scp|rsync|ftp|sftp)(?:\s|$)/.test(normalized) || /(?:^|\s)ssh\s+/.test(normalized) || /https?:\/\//.test(normalized) || textIncludesAny(text, ["network host", "outbound", "webhook", "https://", "http://"]);
-}
-function fileUploadCommand(command, text) {
-  return outboundCopyCommand(command) || /\bcurl\b[\s\S]*(?:--upload-file(?:=|\s+)\S+|(?:^|\s)-T(?:\S+|\s+\S+)|--form(?:=|\s+)\S*@|-F(?:\S*@|\s+\S*@)|--data(?:-binary|-raw|-urlencode)?(?:=|\s+)@\S+)/.test(command);
-}
-function systemPromptAccessText(text) {
-  return textIncludesAny(text, [
-    "system prompt",
-    "developer instructions",
-    "hidden instruction",
-    "hidden prompt",
-    "reveal the prompt",
-    "show the prompt"
-  ]);
-}
-function promptInjectionText(text) {
-  return textIncludesAny(text, [
-    "prompt injection",
-    "ignore previous",
-    "ignore all previous",
-    "disregard previous",
-    "override instruction",
-    "jailbreak",
-    "act as"
-  ]);
-}
-function guardBypassText(text) {
-  return textIncludesAny(text, [
-    "bypass guard",
-    "disable guard",
-    "skip approval",
-    "ignore approval",
-    "without approval",
-    "guard_bypass",
-    "no guard"
-  ]);
-}
-function persistenceCommand(command, text) {
-  const normalized = command.toLowerCase();
-  const mutatesPersistenceFile = commandLooksLikeFileEdit(command) || text.includes("file_write");
-  return /\|\s*crontab\b/.test(normalized) || /\bcrontab\s+-(?!l\b)/.test(normalized) || /\b(?:schtasks|at)\b/.test(normalized) || /\bsystemctl\s+(?:enable|disable|preset|link)\b/.test(normalized) || /\blaunchctl\s+(?:load|unload|bootstrap|bootout)\b/.test(normalized) || mutatesPersistenceFile && /(?:\.zshrc|\.bashrc|\.bash_profile|\.profile|launchagents|launchdaemons|systemd|login item)/.test(normalized) || textIncludesAny(text, ["persistence", "startup item", "scheduled task", "launch agent"]);
-}
-function encodedCommand(text) {
-  return textIncludesAny(text, [
-    "encoded or encrypted shell command",
-    "base64",
-    "openssl enc",
-    "xxd -r",
-    "decode-and-exec"
-  ]);
-}
-function outboundCopyCommand(command) {
-  const operands = copyOperands(command);
-  return isOutboundCopy(operands?.source, operands?.destination);
-}
-function inboundCopyCommand(command) {
-  const operands = copyOperands(command);
-  return isInboundCopy(operands?.source, operands?.destination);
-}
-function copyOperands(command) {
-  const tokens = stripOptionTokens(shellTokens(command));
-  const awsIndex = findSequence(tokens, ["aws", "s3", "cp"]);
-  if (awsIndex >= 0) {
-    return positionalPair(tokens.slice(awsIndex + 3));
-  }
-  const gsutilIndex = findSequence(tokens, ["gsutil", "cp"]);
-  if (gsutilIndex >= 0) {
-    return positionalPair(tokens.slice(gsutilIndex + 2));
-  }
-  const copyIndex = tokens.findIndex((token) => token === "scp" || token === "rsync");
-  if (copyIndex >= 0) {
-    return positionalPair(tokens.slice(copyIndex + 1));
-  }
-  return null;
-}
-function positionalPair(tokens) {
-  const positional = tokens.filter((token) => token === "-" || !token.startsWith("-"));
-  if (positional.length < 2) {
-    return null;
-  }
-  return { source: positional[0], destination: positional[1] };
-}
-function stripOptionTokens(tokens) {
-  const optionsWithValues = /* @__PURE__ */ new Set([
-    "--profile",
-    "--region",
-    "--endpoint-url",
-    "--source-region",
-    "--exclude",
-    "--include",
-    "--acl",
-    "--storage-class",
-    "--sse",
-    "--rsh",
-    "-P",
-    "-i",
-    "-o",
-    "-F",
-    "-f",
-    "-S",
-    "-s",
-    "-e"
-  ]);
-  const stripped = [];
-  for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
-    if (token === "-") {
-      stripped.push(token);
-      continue;
-    }
-    if (!token.startsWith("-")) {
-      stripped.push(token);
-      continue;
-    }
-    const optionName = token.includes("=") ? token.slice(0, token.indexOf("=")) : token;
-    if (optionsWithValues.has(optionName) && !token.includes("=")) {
-      index += 1;
-    }
-  }
-  return stripped;
-}
-function shellTokens(command) {
-  return (command.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map((token) => token.replace(/^['"]|['"]$/g, ""));
-}
-function findSequence(tokens, sequence) {
-  return tokens.findIndex((_, index) => sequence.every((part, offset) => tokens[index + offset] === part));
-}
-function isOutboundCopy(source, destination) {
-  return source !== void 0 && destination !== void 0 && !remotePath(source) && remotePath(destination);
-}
-function isInboundCopy(source, destination) {
-  return source !== void 0 && destination !== void 0 && remotePath(source) && !remotePath(destination);
-}
-function remotePath(value) {
-  return /^(?:s3|gs):\/\//.test(value) || /^[\w.-]+@?[\w.-]+:/.test(value);
-}
-function generatedInventoryEdit(command, text) {
-  const haystack = `${command} ${text}`.toLowerCase();
-  return (commandLooksLikeFileEdit(command) || text.includes("file_write")) && /docs\/.*(?:api|route|cloud).*inventory\.generated\.(?:md|json|txt)/.test(haystack);
-}
-function fileDeleteOrCleanupCommand(command, text) {
-  const normalized = command.toLowerCase();
-  return /\b(?:rm|unlink|rmdir|shred)\b/.test(normalized) || /\btruncate\s+-s\s+0\b/.test(normalized) || /\bgit\s+(?:clean|reset\s+--hard|checkout\s+--)\b/.test(normalized) || textIncludesAny(text, ["force-clean", "delete files", "wipe files"]);
-}
-function gitOperationCommand(command) {
-  const normalized = command.toLowerCase();
-  return /\bgit\s+(?:add|commit|push|pull|merge|rebase|reset|checkout|restore|clean|stash|tag)\b/.test(normalized);
-}
-function processControlCommand(command) {
-  const normalized = command.toLowerCase();
-  return /\b(?:kill|pkill|killall|launchctl|systemctl|pm2|supervisorctl)\b/.test(normalized) || /\bservice\s+\S+\s+(?:start|stop|restart|reload|status)\b/.test(normalized);
-}
-function containerOrDeployCommand(command) {
-  const normalized = command.toLowerCase();
-  return /\b(?:docker|docker-compose|kubectl|helm|terraform|pulumi|flyctl|vercel|netlify|gcloud|aws|az)\b/.test(normalized);
-}
-function packageInstallCommand(command) {
-  const normalized = command.toLowerCase();
-  return /\b(?:npm|pnpm|yarn|bun|pip|pipx|uv|poetry|brew|cargo|gem|go)\s+(?:add|i|install|remove|uninstall|update|upgrade|publish)\b/.test(normalized);
-}
-function docsEditCommand(command, text) {
-  const haystack = `${command} ${text}`.toLowerCase();
-  return (commandLooksLikeFileEdit(command) || text.includes("file_write")) && /(?:^|\s)(?:docs\/|readme|changelog|\.md\b|\.mdx\b)/.test(haystack);
-}
-function sourceEditCommand(command, text) {
-  const haystack = `${command} ${text}`.toLowerCase();
-  return (commandLooksLikeFileEdit(command) || text.includes("file_write")) && /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|swift|rb|php|css|scss|html|json|yaml|yml|toml)\b/.test(haystack);
-}
-function sortQueue(items, direction) {
-  if (direction === "highest_risk") {
-    const scores = new Map(items.map((item) => [item.request_id, riskScore(item)]));
-    return [...items].sort((a, b) => {
-      const scoreDelta = (scores.get(a.request_id) ?? 6) - (scores.get(b.request_id) ?? 6);
-      if (scoreDelta !== 0) return scoreDelta;
-      return new Date(b.last_seen_at ?? b.created_at).getTime() - new Date(a.last_seen_at ?? a.created_at).getTime();
-    });
-  }
-  const categoryLabels = direction === "category" ? new Map(items.map((item) => [item.request_id, resolveQueueCategory(item).label])) : null;
-  return [...items].sort((a, b) => {
-    if (categoryLabels !== null) {
-      const categoryDelta = (categoryLabels.get(a.request_id) ?? "").localeCompare(
-        categoryLabels.get(b.request_id) ?? ""
-      );
-      if (categoryDelta !== 0) {
-        return categoryDelta;
-      }
-    }
-    const dateA = queueTimestamp(a);
-    const dateB = queueTimestamp(b);
-    const dateDelta = direction === "oldest" ? dateA - dateB : dateB - dateA;
-    if (dateDelta !== 0) {
-      return dateDelta;
-    }
-    return direction === "oldest" ? a.request_id.localeCompare(b.request_id) : b.request_id.localeCompare(a.request_id);
-  });
-}
-function filterQueueByCategory(items, categoryId) {
-  if (categoryId === "all") {
-    return items;
-  }
-  return items.filter((item) => resolveQueueCategory(item).id === categoryId);
-}
-function searchQueue(items, term) {
-  const normalized = term.trim().toLowerCase();
-  if (normalized.length === 0) {
-    return items;
-  }
-  return items.filter((item) => {
-    const envelope = item.action_envelope_json;
-    const category = resolveQueueCategory(item);
-    const parts = [
-      item.artifact_name,
-      item.artifact_id,
-      item.artifact_type,
-      item.harness,
-      item.policy_action,
-      item.risk_headline ?? "",
-      item.risk_summary ?? "",
-      item.trigger_summary ?? "",
-      item.launch_summary ?? "",
-      item.why_now ?? "",
-      envelope?.command ?? "",
-      envelope?.prompt_excerpt ?? "",
-      envelope?.mcp_server ?? "",
-      envelope?.mcp_tool ?? "",
-      envelope?.package_name ?? "",
-      category.label,
-      category.shortLabel,
-      ...envelope?.network_hosts ?? [],
-      ...envelope?.target_paths ?? []
-    ];
-    return parts.join(" ").toLowerCase().includes(normalized);
-  });
-}
 function approvalGateCooldownLabel(seconds) {
   if (seconds === 0) return "Every approval";
   if (seconds === 900) return "15 minutes";
@@ -23137,15 +23162,35 @@ function QueueBulkDrawer(props) {
   const disclosure = props.riskDisclosure;
   const DisclosureIcon = toneIcon(disclosure.tone);
   const riskLines = summarizeBulkApproveSelection(props.selectedGroups);
-  const previewLines = riskLines.slice(0, 5);
-  const hiddenCount = Math.max(0, riskLines.length - previewLines.length);
   const unit = props.selectedActionCount === 1 ? "action" : "actions";
   const submitLabel = props.step === "submitting" ? "Approving…" : `Approve once (${props.selectedActionCount} ${unit})`;
+  const groupedLines = reactExports.useMemo(() => {
+    const map = /* @__PURE__ */ new Map();
+    for (const line of riskLines) {
+      const bucket = map.get(line.categoryLabel) ?? [];
+      bucket.push(line);
+      map.set(line.categoryLabel, bucket);
+    }
+    return Array.from(map.entries());
+  }, [riskLines]);
+  const totalPreviewShown = Math.min(8, riskLines.length);
+  const shownGroups = groupedLines.slice(0, totalPreviewShown > 0 ? groupedLines.length : 0);
+  const hiddenCount = Math.max(0, riskLines.length - totalPreviewShown);
+  const gateReady = isBulkApproveGateReady(props.approvalGate);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(BulkDrawerShell, { onClose: props.onCancel, labelledBy: "guard-bulk-drawer-title", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-blue", children: "Bulk approval" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "guard-bulk-drawer-title", className: "mt-1 text-lg font-semibold text-brand-dark", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "flex items-start justify-between gap-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "span",
+            {
+              className: `inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${toneChip(disclosure.tone)}`,
+              children: TIER_LABEL[disclosure.tier]
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground", children: "Bulk approval" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "guard-bulk-drawer-title", className: "mt-2 text-xl font-semibold tracking-tight text-brand-dark", children: [
           "Review ",
           props.selectedActionCount,
           " selected ",
@@ -23158,7 +23203,7 @@ function QueueBulkDrawer(props) {
           type: "button",
           onClick: props.onCancel,
           "aria-label": "Close bulk approval",
-          className: "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-dark",
+          className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-dark",
           children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-4 w-4", "aria-hidden": "true" })
         }
       )
@@ -23167,160 +23212,173 @@ function QueueBulkDrawer(props) {
       "section",
       {
         "aria-label": "Risk disclosure",
-        className: `mt-4 rounded-xl border p-4 ${toneRing(disclosure.tone)}`,
-        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5", children: [
+        className: `mt-6 rounded-2xl border p-5 ${toneRing(disclosure.tone)}`,
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
-            DisclosureIcon,
+            "span",
             {
-              className: `mt-0.5 h-5 w-5 shrink-0 ${disclosure.tone === "attention" ? "text-brand-attention" : disclosure.tone === "amber" ? "text-amber-600" : "text-brand-green"}`,
-              "aria-hidden": "true"
+              className: `inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${disclosure.tone === "attention" ? "bg-brand-attention/10" : disclosure.tone === "amber" ? "bg-amber-100" : "bg-brand-green/10"}`,
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                DisclosureIcon,
+                {
+                  className: `h-5 w-5 ${disclosure.tone === "attention" ? "text-brand-attention" : disclosure.tone === "amber" ? "text-amber-600" : "text-brand-green"}`,
+                  "aria-hidden": "true"
+                }
+              )
             }
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: disclosure.headline }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "span",
-                {
-                  className: `inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${toneChip(disclosure.tone)}`,
-                  children: TIER_LABEL[disclosure.tier]
-                }
-              )
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1.5 text-xs leading-5 text-brand-dark/80", children: disclosure.body }),
-            disclosure.bullets.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1", children: disclosure.bullets.map((bullet) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: disclosure.headline }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1.5 text-[13px] leading-relaxed text-brand-dark/75", children: disclosure.body }),
+            disclosure.bullets.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-1.5", children: disclosure.bullets.map((bullet) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
               "li",
               {
-                className: "flex items-start gap-1.5 text-xs leading-5 text-brand-dark/85",
+                className: "flex items-start gap-2 text-xs leading-5 text-brand-dark/85",
                 children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1.5 h-1 w-1 shrink-0 rounded-full bg-current opacity-60", "aria-hidden": "true" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1.5 h-1 w-1 shrink-0 rounded-full bg-current opacity-50", "aria-hidden": "true" }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: bullet })
                 ]
               },
               bullet
-            )) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-[11px] leading-4 text-muted-foreground", children: buildBulkApproveConsequenceCopy(props.selectedActionCount) })
+            )) })
           ] })
         ] })
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wider text-muted-foreground", children: "What you are approving" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "mt-2 space-y-2 rounded-lg bg-slate-50 px-3 py-2", children: [
-        previewLines.map((line) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-xs text-brand-dark", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: line.harnessLabel }),
-          line.path !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block truncate font-mono text-[11px] text-brand-dark/70", children: line.path }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-brand-dark/70", children: line.title }),
-          line.duplicateCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mt-0.5 block text-muted-foreground", children: [
-            "Includes ",
-            line.duplicateCount,
-            " duplicate ",
-            line.duplicateCount === 1 ? "retry" : "retries",
-            "."
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Selected actions", className: "mt-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-baseline justify-between", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: "What you are approving" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-[11px] text-muted-foreground", children: [
+          props.selectedActionCount,
+          " ",
+          unit
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2.5 space-y-3 rounded-xl bg-slate-50/80 px-4 py-3", children: [
+        shownGroups.map(([categoryLabel, lines]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] font-semibold text-brand-dark/70", children: [
+            categoryLabel,
+            " ",
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-normal text-muted-foreground", children: [
+              "(",
+              lines.length + lines.reduce((sum, l) => sum + l.duplicateCount, 0),
+              ")"
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "mt-1.5 space-y-1.5", children: [
+            lines.slice(0, 3).map((line) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-xs text-brand-dark", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: line.harnessLabel }),
+              line.path !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60", children: line.path }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-brand-dark/60", children: line.title })
+            ] }, line.requestId)),
+            lines.length > 3 && /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-[11px] text-muted-foreground", children: [
+              "+ ",
+              lines.length - 3,
+              " more"
+            ] })
           ] })
-        ] }, line.requestId)),
-        hiddenCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-xs text-muted-foreground", children: [
+        ] }, categoryLabel)),
+        hiddenCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] text-muted-foreground", children: [
           "and ",
           hiddenCount,
-          " more selected reads"
+          " more selected ",
+          unit
         ] })
       ] })
     ] }),
-    props.sensitiveFileReadCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex items-start gap-2 rounded-lg bg-brand-attention/[0.06] px-3 py-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-brand-attention", children: [
-        props.sensitiveFileReadCount,
-        " sensitive file",
-        " ",
-        props.sensitiveFileReadCount === 1 ? "read remains" : "reads remain",
-        " in the queue and will not be approved here."
-      ] })
+    props.sensitiveFileReadCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-[11px] leading-5 text-brand-attention", children: [
+      props.sensitiveFileReadCount,
+      " sensitive",
+      " ",
+      props.sensitiveFileReadCount === 1 ? "action stays" : "actions stay",
+      " in the queue for individual review."
     ] }),
-    isBulkApproveGateReady(props.approvalGate) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 space-y-3 rounded-lg border border-slate-200 bg-white p-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Confirm approval", className: "mt-6", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold text-brand-dark", children: "Confirm with your approval password" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground", children: "Step 2 of 2" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-px flex-1 bg-slate-200", "aria-hidden": "true" })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Approval password" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            type: "password",
-            value: props.bulkApprovePassword,
-            onChange: props.onBulkApprovePasswordChange,
-            placeholder: "Approval password",
-            autoComplete: "current-password",
-            disabled: props.step === "submitting",
-            className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
-          }
-        )
-      ] }),
-      props.approvalGate?.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Authenticator code" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            type: "text",
-            inputMode: "numeric",
-            pattern: "[0-9]*",
-            value: props.bulkApproveTotpCode,
-            onChange: props.onBulkApproveTotpCodeChange,
-            placeholder: "Authenticator code",
-            disabled: props.step === "submitting",
-            className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
-          }
-        )
-      ] }),
-      props.approvalGate?.cooldown_seconds && props.approvalGate.cooldown_seconds > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] text-muted-foreground", children: [
-        "Bulk approval never uses the cooldown shortcut (",
-        approvalGateCooldownLabel(props.approvalGate.cooldown_seconds).toLowerCase(),
-        ")."
-      ] }) : null
-    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Approval password required" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: "Set up your local approval gate before approving multiple reads at once." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "a",
-        {
-          href: props.settingsHref,
-          className: "mt-2 inline-flex rounded-full border border-brand-blue/30 bg-white px-3 py-1.5 text-xs font-medium text-brand-blue no-underline transition-colors hover:bg-brand-blue/5",
-          children: "Open Settings"
-        }
-      )
-    ] }),
-    disclosure.requiresTypedConfirm && isBulkApproveGateReady(props.approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-1.5 rounded-lg border border-brand-attention/25 bg-brand-attention/[0.05] px-3 py-2.5", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs font-semibold text-brand-dark", children: [
-          "Type ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono font-bold text-brand-attention", children: disclosure.confirmPhrase }),
-          " to confirm"
+      gateReady ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-password", className: "text-sm font-semibold text-brand-dark", children: "Approval password" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "input",
           {
-            type: "text",
-            value: props.typedConfirm,
-            onChange: props.onTypedConfirmChange,
-            autoComplete: "off",
-            spellCheck: false,
+            id: "guard-bulk-approval-password",
+            type: "password",
+            value: props.bulkApprovePassword,
+            onChange: props.onBulkApprovePasswordChange,
+            placeholder: "Enter your approval password",
+            autoComplete: "current-password",
             disabled: props.step === "submitting",
-            "aria-invalid": props.typedConfirm.length > 0 && !props.confirmMatches,
-            className: "mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-mono text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60",
-            placeholder: disclosure.confirmPhrase
+            className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+          }
+        ),
+        props.approvalGate?.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-totp", className: "block text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              id: "guard-bulk-approval-totp",
+              type: "text",
+              inputMode: "numeric",
+              pattern: "[0-9]*",
+              value: props.bulkApproveTotpCode,
+              onChange: props.onBulkApproveTotpCodeChange,
+              placeholder: "6-digit code",
+              disabled: props.step === "submitting",
+              className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+            }
+          )
+        ] }),
+        disclosure.requiresTypedConfirm && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg bg-brand-attention/[0.05] px-3 py-2.5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: "guard-bulk-typed-confirm", className: "block text-xs font-semibold text-brand-dark", children: [
+            "Type",
+            " ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono font-bold text-brand-attention", children: disclosure.confirmPhrase }),
+            " ",
+            "to confirm"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              id: "guard-bulk-typed-confirm",
+              type: "text",
+              value: props.typedConfirm,
+              onChange: props.onTypedConfirmChange,
+              autoComplete: "off",
+              spellCheck: false,
+              disabled: props.step === "submitting",
+              "aria-invalid": props.typedConfirm.length > 0 && !props.confirmMatches,
+              className: "mt-2 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60",
+              placeholder: disclosure.confirmPhrase
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-4 text-muted-foreground", children: buildBulkApproveConsequenceCopy(props.selectedActionCount) })
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-4 py-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Approval password required" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: "Set up your local approval gate before approving multiple actions at once." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "a",
+          {
+            href: props.settingsHref,
+            className: "mt-2.5 inline-flex rounded-full border border-brand-blue/30 bg-white px-3.5 py-1.5 text-xs font-medium text-brand-blue no-underline transition-colors hover:bg-brand-blue/5",
+            children: "Open Settings"
           }
         )
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] text-muted-foreground", children: "High-impact bulk approval: retype the phrase to enable the confirm button." })
+      props.errorMessage !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-brand-purple", role: "alert", children: props.errorMessage })
     ] }),
-    props.errorMessage !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-brand-purple", role: "alert", children: props.errorMessage }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-wrap justify-end gap-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-7 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
           type: "button",
           onClick: props.onCancel,
           disabled: props.step === "submitting",
-          className: "rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50",
+          className: "min-h-11 rounded-full border border-slate-300 px-5 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50",
           children: "Cancel"
         }
       ),
@@ -23330,7 +23388,7 @@ function QueueBulkDrawer(props) {
           type: "button",
           onClick: props.onConfirmApprove,
           disabled: props.step === "submitting" || !props.canConfirm,
-          className: "rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60",
+          className: "min-h-11 rounded-full bg-brand-blue px-5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50",
           children: submitLabel
         }
       )
@@ -23361,14 +23419,14 @@ function resolveBulkRiskTier(stats) {
   if (stats.sensitiveCount > 0 || stats.actionCount >= BULK_HIGH_TIER_THRESHOLD) {
     return "high";
   }
-  if (stats.duplicateActionCount > 0 || stats.actionCount > BULK_LOW_TIER_THRESHOLD) {
+  if (stats.elevatedActionCount > 0 || stats.duplicateActionCount > 0 || stats.actionCount > BULK_LOW_TIER_THRESHOLD) {
     return "elevated";
   }
   return "low";
 }
 function buildBulkConfirmPhrase(actionCount) {
   const safe = Math.max(0, Math.floor(actionCount));
-  return `approve ${safe} ${pluralReads(safe)}`;
+  return `approve ${safe} ${pluralActions(safe)}`;
 }
 function bulkConfirmMatches(typed, phrase) {
   const normalize = (value) => value.trim().toLowerCase().replace(/\s+/g, " ");
@@ -23377,28 +23435,49 @@ function bulkConfirmMatches(typed, phrase) {
 function pluralReads(count) {
   return count === 1 ? "read" : "reads";
 }
+function pluralActions(count) {
+  return count === 1 ? "action" : "actions";
+}
 function pluralItems(count) {
   return count === 1 ? "item" : "items";
+}
+function describeActionMix(stats) {
+  const parts = [];
+  if (stats.lowActionCount > 0) {
+    parts.push(`${stats.lowActionCount} file ${pluralReads(stats.lowActionCount)}`);
+  }
+  if (stats.elevatedActionCount > 0) {
+    parts.push(`${stats.elevatedActionCount} elevated ${stats.elevatedActionCount === 1 ? "action" : "actions"}`);
+  }
+  if (parts.length === 0) {
+    return `${stats.actionCount} ${pluralActions(stats.actionCount)}`;
+  }
+  if (parts.length === 1) return parts[0];
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 function buildBulkRiskDisclosure(stats) {
   const tier = resolveBulkRiskTier(stats);
   const phrase = buildBulkConfirmPhrase(stats.actionCount);
-  const actionWord = pluralReads(stats.actionCount);
+  const mix = describeActionMix(stats);
   if (stats.actionCount <= 0) {
     return {
       tier: "low",
       tone: "green",
-      headline: "Select read-only file reads to approve together",
-      body: "Pick the file reads you have already reviewed. Sensitive paths stay in the queue for individual review.",
+      headline: "Select actions to approve together",
+      body: "Pick the actions you have already reviewed. Destructive, secret, and injection actions stay in the queue for individual review.",
       bullets: [],
       requiresTypedConfirm: false,
       confirmPhrase: phrase
     };
   }
   const bullets = [
-    `Approving ${stats.actionCount} ${actionWord} from ${stats.groupCount} ${pluralItems(stats.groupCount)} lets each retry read its file once.`,
-    `Bulk approval never remembers the decision — the same path will ask again next time.`
+    `Approving ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. Each runs once; the decision is not remembered.`
   ];
+  if (stats.elevatedActionCount > 0) {
+    bullets.push(
+      `${stats.elevatedActionCount} of the selected ${pluralActions(stats.actionCount)} ${stats.elevatedActionCount === 1 ? "is an elevated-risk action" : "are elevated-risk actions"} (shell, file edits, network, or similar). Confirm you expected each one.`
+    );
+  }
   if (stats.duplicateActionCount > 0) {
     bullets.push(
       `${stats.duplicateActionCount} duplicate ${stats.duplicateActionCount === 1 ? "retry is" : "retries are"} included — make sure the repeats are expected, not a loop.`
@@ -23408,15 +23487,15 @@ function buildBulkRiskDisclosure(stats) {
     const sampleList = stats.sensitiveSamplePaths.slice(0, 3);
     const sampleText = sampleList.length > 0 ? ` Examples: ${sampleList.join(", ")}.` : "";
     bullets.push(
-      `${stats.sensitiveCount} sensitive ${stats.sensitiveCount === 1 ? "read stays" : "reads stay"} in the queue and will NOT be approved here.${sampleText}`
+      `${stats.sensitiveCount} sensitive ${stats.sensitiveCount === 1 ? "action stays" : "actions stay"} in the queue and will NOT be approved here.${sampleText}`
     );
   }
   if (tier === "high") {
     return {
       tier,
       tone: "attention",
-      headline: `High-impact bulk approval: ${stats.actionCount} ${actionWord} at once`,
-      body: stats.sensitiveCount > 0 ? "You are approving a large batch while sensitive reads sit unapproved in the queue. Mass approval skips opening each request, so a wrong path here is hard to catch later. Re-confirm the type and phrase below." : "You are approving a large batch at once. Mass approval skips opening each request, so an unexpected path is hard to catch later. Re-confirm the type and phrase below.",
+      headline: `High-impact bulk approval: ${stats.actionCount} ${pluralActions(stats.actionCount)} at once`,
+      body: stats.sensitiveCount > 0 ? "You are approving a large batch while sensitive actions sit unreviewed in the queue. Mass approval skips opening each request, so an unexpected action here is hard to catch later. Re-confirm the phrase below." : "You are approving a large batch at once. Mass approval skips opening each request, so an unexpected action is hard to catch later. Re-confirm the phrase below.",
       bullets,
       requiresTypedConfirm: true,
       confirmPhrase: phrase
@@ -23426,8 +23505,8 @@ function buildBulkRiskDisclosure(stats) {
     return {
       tier,
       tone: "amber",
-      headline: `Approving ${stats.actionCount} ${actionWord} at once`,
-      body: stats.duplicateActionCount > 0 ? "Some selected reads include duplicate retries. Each retry will read its file once, and the decision is not remembered. Skim the list before confirming." : "Each selected retry will read its file once, and the decision is not remembered. Skim the list before confirming.",
+      headline: `Approving ${mix}`,
+      body: stats.elevatedActionCount > 0 ? "This batch includes elevated-risk actions (shell, edits, network). Each runs once and the decision is not remembered. Skim the list before confirming." : "Each selected action runs once and the decision is not remembered. Skim the list before confirming.",
       bullets,
       requiresTypedConfirm: false,
       confirmPhrase: phrase
@@ -23436,8 +23515,8 @@ function buildBulkRiskDisclosure(stats) {
   return {
     tier,
     tone: "green",
-    headline: `Approving ${stats.actionCount} ${actionWord} at once`,
-    body: "Each selected retry will read its file once. The decision is not remembered, so these paths will ask again next time.",
+    headline: `Approving ${mix}`,
+    body: "Each selected action runs once. The decision is not remembered, so these will ask again next time.",
     bullets,
     requiresTypedConfirm: false,
     confirmPhrase: phrase
@@ -23454,7 +23533,7 @@ function useQueueBulkApprove(props) {
   const [bulkCompletedActionCount, setBulkCompletedActionCount] = reactExports.useState(null);
   const groups = reactExports.useMemo(() => groupDuplicates(props.items), [props.items]);
   const bulkEligibleGroups = reactExports.useMemo(
-    () => groups.filter((group) => isReadOnlyQueueGroup(group)),
+    () => groups.filter((group) => isBulkApprovableGroup(group)),
     [groups]
   );
   const sensitiveFileReadCount = reactExports.useMemo(
@@ -23475,16 +23554,25 @@ function useQueueBulkApprove(props) {
     [selectedBulkGroups]
   );
   const selectedGroupCount = selectedBulkGroups.length;
-  const selectionStats = reactExports.useMemo(
-    () => ({
+  const selectionStats = reactExports.useMemo(() => {
+    let elevatedActionCount = 0;
+    let lowActionCount = 0;
+    for (const group of selectedBulkGroups) {
+      const tier = bulkApprovalRiskTier(group);
+      const count = 1 + group.duplicateCount;
+      if (tier === "elevated") elevatedActionCount += count;
+      else if (tier === "low") lowActionCount += count;
+    }
+    return {
       actionCount: selectedActionCount,
       groupCount: selectedGroupCount,
       duplicateActionCount: countDuplicateActionsInGroups(selectedBulkGroups),
       sensitiveCount: sensitiveSummary.count,
-      sensitiveSamplePaths: sensitiveSummary.samplePaths
-    }),
-    [selectedActionCount, selectedGroupCount, selectedBulkGroups, sensitiveSummary]
-  );
+      sensitiveSamplePaths: sensitiveSummary.samplePaths,
+      elevatedActionCount,
+      lowActionCount
+    };
+  }, [selectedActionCount, selectedGroupCount, selectedBulkGroups, sensitiveSummary]);
   const riskDisclosure = reactExports.useMemo(
     () => buildBulkRiskDisclosure(selectionStats),
     [selectionStats]
@@ -23636,10 +23724,10 @@ function useQueueBulkApprove(props) {
   const bulkSelectableMap = reactExports.useMemo(() => {
     const map = /* @__PURE__ */ new Map();
     for (const group of groups) {
-      const isReadOnly = isReadOnlyQueueGroup(group);
-      map.set(group.primary.request_id, isReadOnly);
+      const isApprovable = isBulkApprovableGroup(group);
+      map.set(group.primary.request_id, isApprovable);
       for (const id of group.duplicateIds) {
-        map.set(id, isReadOnly);
+        map.set(id, isApprovable);
       }
     }
     return map;
@@ -23655,7 +23743,7 @@ function useQueueBulkApprove(props) {
     return map;
   }, [groups]);
   const isSelectable = reactExports.useCallback(
-    (item) => bulkSelectableMap.get(item.request_id) ?? isReadOnlyQueueGroup({ primary: item }),
+    (item) => bulkSelectableMap.get(item.request_id) ?? isBulkApprovableGroup({ primary: item }),
     [bulkSelectableMap]
   );
   const isSelected = reactExports.useCallback(

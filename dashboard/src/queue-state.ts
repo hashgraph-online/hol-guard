@@ -346,6 +346,55 @@ export function isReadOnlyQueueGroup(group: QueueGroup): boolean {
   return !isSensitiveFileReadItem(group.primary);
 }
 
+/**
+ * Categories that must never be bulk-approved: secrets, exfiltration, prompt
+ * injection, guard bypass, encoded payloads, and destructive deletes. These
+ * stay in the queue for individual review. Mirrors the server-side
+ * `_bulk_request_is_bulk_blocked` set.
+ */
+const BULK_BLOCKED_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
+  "secret_exfiltration",
+  "credential_output",
+  "secret_file_read",
+  "prompt_injection",
+  "system_prompt_access",
+  "guard_bypass",
+  "encoded_shell",
+  "destructive_shell",
+  "file_delete_cleanup",
+]);
+
+/**
+ * Low-risk categories: file reads, docs edits, generated inventory. Everything
+ * else that is not blocked is "elevated" (shell, source edits, git, network,
+ * packages, deploys, etc.).
+ */
+const BULK_LOW_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
+  "file_read",
+  "docs_edit",
+  "generated_inventory_edit",
+  "other",
+]);
+
+export type BulkApprovalTier = "blocked" | "elevated" | "low";
+
+/**
+ * Classify a queue group into a bulk-approval risk tier. "blocked" groups are
+ * never bulk-eligible; "low" and "elevated" are both approvable, with the
+ * dashboard's risk disclosure escalating its copy and friction accordingly.
+ */
+export function bulkApprovalRiskTier(group: QueueGroup): BulkApprovalTier {
+  if (group.primary.policy_action === "block") return "blocked";
+  const categoryId = resolveQueueCategory(group.primary).id;
+  if (BULK_BLOCKED_CATEGORY_IDS.has(categoryId)) return "blocked";
+  if (BULK_LOW_CATEGORY_IDS.has(categoryId)) return "low";
+  return "elevated";
+}
+
+export function isBulkApprovableGroup(group: QueueGroup): boolean {
+  return bulkApprovalRiskTier(group) !== "blocked";
+}
+
 export function countSensitiveFileReadGroups(groups: QueueGroup[]): number {
   return groups.filter((g) => {
     if (g.primary.policy_action === "block") return false;
