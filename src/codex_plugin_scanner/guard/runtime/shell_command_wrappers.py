@@ -353,6 +353,8 @@ def _env_clustered_split_string_payload(token: str) -> str | None:
 
 
 def _command_name(token: str) -> str:
+    if "/" in token or "\\" in token:
+        return ""
     return Path(token).name.lower()
 
 
