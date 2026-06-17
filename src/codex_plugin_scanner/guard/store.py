@@ -4765,10 +4765,12 @@ class GuardStore:
             return health
         secret_hash = payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY)
         cached_health = self._get_cached_oauth_health_result(secret_hash)
-        if cached_health is not None:
+        if cached_health is not None and cached_health.get("state") == "healthy":
             health.update(cached_health)
             return health
         secret_payload = self._load_oauth_secret_payload(payload, promote=False, allow_primary=False)
+        if secret_payload is None and self.repair_oauth_local_credential_storage_from_primary():
+            secret_payload = self._load_oauth_secret_payload(payload, promote=False, allow_primary=False)
         if secret_payload is None:
             health["state"] = "degraded"
             self._remember_oauth_health_result(secret_hash, health)
