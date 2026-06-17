@@ -899,6 +899,11 @@ def receipt_index_statements() -> list[str]:
         ("create index if not exists idx_receipts_harness_artifact on runtime_receipts(harness, artifact_id)"),
         ("create index if not exists idx_receipts_timestamp_harness on runtime_receipts(timestamp, harness)"),
         ("create index if not exists idx_receipts_timestamp_desc on runtime_receipts(timestamp desc)"),
+        ("create index if not exists idx_receipts_harness_timestamp_desc on runtime_receipts(harness, timestamp desc)"),
+        (
+            "create index if not exists idx_receipts_harness_artifact_timestamp_desc "
+            "on runtime_receipts(harness, artifact_id, timestamp desc)"
+        ),
     ]
 
 

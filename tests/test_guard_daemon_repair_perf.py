@@ -240,6 +240,31 @@ class TestReceiptAnalyticsIndexes:
         assert "idx_receipts_harness_artifact" in names
         assert "idx_receipts_timestamp_harness" in names
         assert "idx_receipts_timestamp_desc" in names
+        assert "idx_receipts_harness_timestamp_desc" in names
+        assert "idx_receipts_harness_artifact_timestamp_desc" in names
+
+    def test_receipt_listing_queries_use_ordered_indexes(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        with store._connect() as connection:
+            harness_plan = connection.execute(
+                "explain query plan "
+                + store._receipt_base_query("where r.harness = ? order by r.timestamp desc limit ?"),
+                ("codex", 200),
+            ).fetchall()
+            artifact_plan = connection.execute(
+                "explain query plan "
+                + store._receipt_base_query(
+                    "where r.harness = ? and r.artifact_id = ? order by r.timestamp desc limit 1"
+                ),
+                ("codex", "codex:project:tool"),
+            ).fetchall()
+
+        harness_detail = " ".join(str(row["detail"]) for row in harness_plan)
+        artifact_detail = " ".join(str(row["detail"]) for row in artifact_plan)
+        assert "idx_receipts_harness_timestamp_desc" in harness_detail
+        assert "idx_receipts_harness_artifact_timestamp_desc" in artifact_detail
+        assert "USE TEMP B-TREE" not in harness_detail
+        assert "USE TEMP B-TREE" not in artifact_detail
 
     def test_guard_store_creates_receipt_rollup_tables(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
