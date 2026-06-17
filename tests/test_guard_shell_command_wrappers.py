@@ -97,6 +97,20 @@ def test_normalize_transparent_shell_command_rejects_workspace_absolute_wrapper(
     assert normalized.normalized_command == wrapped
 
 
+def test_normalize_transparent_shell_command_rejects_user_local_wrapper(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    wrapper = home_dir / ".local" / "bin" / "bash"
+    wrapper.parent.mkdir(parents=True)
+    wrapper.write_text('#!/bin/sh\nexec /bin/bash "$@"\n', encoding="utf-8")
+    wrapper.chmod(0o755)
+    wrapped = f"{wrapper} -lc 'sed -n \"1,20p\" docs/guard-cloud-api-inventory.generated.md'"
+
+    normalized = normalize_transparent_shell_command(wrapped, home_dir=home_dir)
+
+    assert normalized.wrapper_chain == ()
+    assert normalized.normalized_command == wrapped
+
+
 def test_normalize_transparent_shell_command_unwraps_trusted_absolute_env() -> None:
     wrapped = "/usr/bin/env bash -lc 'sed -n \"1,20p\" docs/guard-cloud-api-inventory.generated.md'"
 

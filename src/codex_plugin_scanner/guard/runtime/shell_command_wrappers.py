@@ -430,10 +430,8 @@ def _root_owned_path_chain(path: Path) -> bool:
 
 
 def _path_is_under_trusted_install_dir(path: Path, *, home_dir: Path | None) -> bool:
-    trusted_dirs = [*_TRUSTED_INSTALL_DIRS]
-    if home_dir is not None:
-        trusted_dirs.append(home_dir / ".local" / "bin")
-    return any(_path_is_under(path, trusted_dir) for trusted_dir in trusted_dirs)
+    del home_dir
+    return any(_path_is_under(path, trusted_dir) for trusted_dir in _TRUSTED_INSTALL_DIRS)
 
 
 def _path_is_under(path: Path, base: Path | None) -> bool:
