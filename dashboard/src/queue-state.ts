@@ -347,10 +347,15 @@ export function isReadOnlyQueueGroup(group: QueueGroup): boolean {
 }
 
 /**
- * Categories that must never be bulk-approved: secrets, exfiltration, prompt
- * injection, guard bypass, encoded payloads, and destructive deletes. These
+ * Categories that must never be bulk-approved: these are trust-breaking or
+ * secret-compromising — secrets, exfiltration, credential output, prompt
+ * injection, system prompt access, guard bypass, and encoded payloads. They
  * stay in the queue for individual review. Mirrors the server-side
  * `_bulk_request_is_bulk_blocked` set.
+ *
+ * Destructive deletes (destructive_shell, file_delete_cleanup) are intentionally
+ * NOT in this set: they are dangerous but not trust-breaking, so they are
+ * bulk-approvable at the highest risk tier with a typed confirmation.
  */
 const BULK_BLOCKED_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
   "secret_exfiltration",
@@ -360,14 +365,12 @@ const BULK_BLOCKED_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
   "system_prompt_access",
   "guard_bypass",
   "encoded_shell",
-  "destructive_shell",
-  "file_delete_cleanup",
 ]);
 
 /**
  * Low-risk categories: file reads, docs edits, generated inventory. Everything
  * else that is not blocked is "elevated" (shell, source edits, git, network,
- * packages, deploys, etc.).
+ * packages, deploys, destructive deletes, etc.).
  */
 const BULK_LOW_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
   "file_read",
@@ -376,7 +379,18 @@ const BULK_LOW_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
   "other",
 ]);
 
-export type BulkApprovalTier = "blocked" | "elevated" | "low";
+/**
+ * High-risk categories: destructive deletes and wipes. These are bulk-eligible
+ * (not trust-breaking) but always escalate the disclosure to the highest tier
+ * and require a typed confirmation, since approving many at once can cause
+ * irreversible data loss.
+ */
+const BULK_HIGH_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
+  "destructive_shell",
+  "file_delete_cleanup",
+]);
+
+export type BulkApprovalTier = "blocked" | "high" | "elevated" | "low";
 
 /**
  * Classify a queue group into a bulk-approval risk tier. "blocked" groups are
@@ -387,6 +401,7 @@ export function bulkApprovalRiskTier(group: QueueGroup): BulkApprovalTier {
   if (group.primary.policy_action === "block") return "blocked";
   const categoryId = resolveQueueCategory(group.primary).id;
   if (BULK_BLOCKED_CATEGORY_IDS.has(categoryId)) return "blocked";
+  if (BULK_HIGH_CATEGORY_IDS.has(categoryId)) return "high";
   if (BULK_LOW_CATEGORY_IDS.has(categoryId)) return "low";
   return "elevated";
 }
