@@ -356,6 +356,46 @@ export function countSensitiveFileReadGroups(groups: QueueGroup[]): number {
   }).length;
 }
 
+/**
+ * Sum of duplicate retry actions across the given groups. Used by the bulk
+ * approval risk disclosure to surface "X duplicate retries are included".
+ */
+export function countDuplicateActionsInGroups(groups: QueueGroup[]): number {
+  return groups.reduce((sum, group) => sum + Math.max(0, group.duplicateCount), 0);
+}
+
+export type SensitiveFileReadSummary = {
+  count: number;
+  samplePaths: string[];
+};
+
+/**
+ * Collect the sensitive file-read groups in the queue along with up to three
+ * sample paths. These groups are never approved by bulk approval — they stay
+ * in the queue for individual review — but the disclosure surfaces them so the
+ * user knows what was deliberately excluded.
+ */
+export function summarizeSensitiveFileReadGroups(groups: QueueGroup[]): SensitiveFileReadSummary {
+  const paths: string[] = [];
+  let count = 0;
+  for (const group of groups) {
+    if (group.primary.policy_action === "block") continue;
+    const isFileRead =
+      group.primary.action_envelope_json?.action_type === "file_read" ||
+      group.primary.artifact_type === "file_read_request";
+    if (!isFileRead || !isSensitiveFileReadItem(group.primary)) continue;
+    count += 1;
+    if (paths.length < 3) {
+      const path =
+        group.primary.action_envelope_json?.target_paths?.[0] ??
+        group.primary.launch_target ??
+        group.primary.artifact_name;
+      if (path) paths.push(path);
+    }
+  }
+  return { count, samplePaths: paths };
+}
+
 export function bulkApproveActionCount(groups: QueueGroup[]): number {
   return groups.reduce((sum, g) => sum + 1 + g.duplicateCount, 0);
 }

@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, r as reactExports, S as SectionLabel, A as ActionButton, aw as HiMiniArrowPath, aJ as HiMiniBugAnt, b as EmptyState, ac as Tag, aK as GuardModalLayer, m as formatRelativeTime, aL as ConnectFlowCard, w as HiMiniExclamationTriangle, ad as HiMiniMagnifyingGlass, bu as HiMiniChevronLeft, y as HiMiniChevronRight, aF as IconActionButton, o as HiMiniXMark, bv as HiMiniArrowDown, bw as HiMiniArrowUp, bx as runAuditRemediation, B as Badge, d as HiMiniCheckCircle, I as HiMiniXCircle, h as harnessDisplayName, b2 as HiMiniDocumentText, b1 as guardAwareHref, l as HiMiniShieldCheck } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, r as reactExports, S as SectionLabel, A as ActionButton, aw as HiMiniArrowPath, aK as HiMiniBugAnt, b as EmptyState, ac as Tag, aL as GuardModalLayer, m as formatRelativeTime, aM as ConnectFlowCard, w as HiMiniExclamationTriangle, ad as HiMiniMagnifyingGlass, bw as HiMiniChevronLeft, y as HiMiniChevronRight, aG as IconActionButton, o as HiMiniXMark, bx as HiMiniArrowDown, by as HiMiniArrowUp, bz as runAuditRemediation, B as Badge, aC as isSupplyChainAuditEvidence, d as HiMiniCheckCircle, I as HiMiniXCircle, h as harnessDisplayName, b3 as HiMiniDocumentText, b2 as guardAwareHref, l as HiMiniShieldCheck } from "../guard-dashboard.js";
 import { p as packageWorkbenchEcosystems, f as filterPackageWorkbenchFindings, s as sortPackageWorkbenchFindings, u as useResolvedApprovalGate, i as isApprovalGateRequiredError, A as ApprovalProofModal } from "./supply-chain-hub-workspace.js";
 import { r as resolveManagerCoverageStatus } from "./supply-chain-protection-stats.js";
 const STEPS = [
@@ -683,9 +683,6 @@ function PackageWorkbenchPanel({
       }
     ) : null
   ] });
-}
-function isSupplyChainAuditEvidence(value) {
-  return typeof value === "object" && value !== null && value.operation === "audit";
 }
 function auditSeverityForDecision(decision, blockedCount) {
   if (decision === "block" || blockedCount > 0) {
