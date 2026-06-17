@@ -261,18 +261,21 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
 
   // Group preview lines by category label so the operator sees the action mix
   // at a glance: "File reads (3)", "Shell commands (2)" instead of a flat list.
-  const groupedLines = useMemo(() => {
+  // Group the first 8 preview lines by category label so the operator sees the
+  // action mix at a glance: "File reads (3)", "Shell commands (2)" instead of a
+  // flat list. Slice before grouping so the preview count and hidden count stay
+  // mathematically consistent.
+  const PREVIEW_LIMIT = 8;
+  const shownGroups = useMemo(() => {
     const map = new Map<string, typeof riskLines>();
-    for (const line of riskLines) {
+    for (const line of riskLines.slice(0, PREVIEW_LIMIT)) {
       const bucket = map.get(line.categoryLabel) ?? [];
       bucket.push(line);
       map.set(line.categoryLabel, bucket);
     }
     return Array.from(map.entries());
   }, [riskLines]);
-  const totalPreviewShown = Math.min(8, riskLines.length);
-  const shownGroups = groupedLines.slice(0, totalPreviewShown > 0 ? groupedLines.length : 0);
-  const hiddenCount = Math.max(0, riskLines.length - totalPreviewShown);
+  const hiddenCount = Math.max(0, riskLines.length - PREVIEW_LIMIT);
   const gateReady = isBulkApproveGateReady(props.approvalGate);
 
   return (

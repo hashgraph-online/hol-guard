@@ -23164,18 +23164,17 @@ function QueueBulkDrawer(props) {
   const riskLines = summarizeBulkApproveSelection(props.selectedGroups);
   const unit = props.selectedActionCount === 1 ? "action" : "actions";
   const submitLabel = props.step === "submitting" ? "Approving…" : `Approve once (${props.selectedActionCount} ${unit})`;
-  const groupedLines = reactExports.useMemo(() => {
+  const PREVIEW_LIMIT = 8;
+  const shownGroups = reactExports.useMemo(() => {
     const map = /* @__PURE__ */ new Map();
-    for (const line of riskLines) {
+    for (const line of riskLines.slice(0, PREVIEW_LIMIT)) {
       const bucket = map.get(line.categoryLabel) ?? [];
       bucket.push(line);
       map.set(line.categoryLabel, bucket);
     }
     return Array.from(map.entries());
   }, [riskLines]);
-  const totalPreviewShown = Math.min(8, riskLines.length);
-  const shownGroups = groupedLines.slice(0, totalPreviewShown > 0 ? groupedLines.length : 0);
-  const hiddenCount = Math.max(0, riskLines.length - totalPreviewShown);
+  const hiddenCount = Math.max(0, riskLines.length - PREVIEW_LIMIT);
   const gateReady = isBulkApproveGateReady(props.approvalGate);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(BulkDrawerShell, { onClose: props.onCancel, labelledBy: "guard-bulk-drawer-title", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "flex items-start justify-between gap-4", children: [
