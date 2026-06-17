@@ -60,7 +60,7 @@ override-dependencies = [
     "fastapi==0.137.1",
     "importlib-metadata==9.0.0",
     "jsonschema==4.26.0",
-    "litellm==1.89.0",
+    "litellm==1.83.7",
     "openai==2.41.1",
     "pyjwt==2.13.0",
     "python-dotenv==1.2.2",

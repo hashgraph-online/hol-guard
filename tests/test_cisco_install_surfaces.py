@@ -30,7 +30,7 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "cisco-ai-skill-scanner==2.0.11" in override_entries
     assert "importlib-metadata==9.0.0" in override_entries
     assert "jsonschema==4.26.0" in override_entries
-    assert "litellm==1.89.0" in override_entries
+    assert "litellm==1.83.7" in override_entries
     assert "openai==2.41.1" in override_entries
     assert "pyjwt==2.13.0" in override_entries
     assert "python-dotenv==1.2.2" in override_entries
@@ -63,7 +63,7 @@ def test_readme_distinguishes_baseline_and_full_cisco_installs() -> None:
     assert 'pip install "hol-guard[cisco]"' in readme
     assert 'pip install "plugin-scanner[cisco]"' in readme
     assert "Python 3.11+" in readme
-    assert "patched `litellm==1.89.0` release" in readme
+    assert "published `litellm==1.83.7` release" in readme
     assert "deferred" in readme
     assert "cisco-ai-a2a-scanner" in readme
     assert "cisco-aibom" in readme
@@ -77,6 +77,7 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     docker_requirements = (ROOT / "docker-requirements.txt").read_text(encoding="utf-8")
 
     assert "cisco-full" in ci_workflow
+    assert "python3.12 -m pip install --dry-run --no-deps --require-hashes -r docker-requirements.txt" in ci_workflow
     assert "uv sync --frozen --extra dev --extra cisco --python 3.12" in ci_workflow
     assert "uv sync --frozen --extra dev --python ${{ matrix.python-version }}" in ci_workflow
     assert "uv sync --frozen --extra dev --extra publish --extra cisco" in publish_workflow
@@ -89,7 +90,7 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert "aiohttp==3.14.1" in docker_requirements
     assert "cisco-ai-mcp-scanner==" in docker_requirements
     assert "importlib-metadata==9.0.0" in docker_requirements
-    assert "litellm==1.89.0" in docker_requirements
+    assert "litellm==1.83.7" in docker_requirements
     assert "python-dotenv==1.2.2" in docker_requirements
     assert "python-multipart==0.0.32" in docker_requirements
     assert "pyjwt==2.13.0" in docker_requirements

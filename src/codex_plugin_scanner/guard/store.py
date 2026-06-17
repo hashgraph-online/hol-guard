@@ -607,9 +607,7 @@ class SystemKeyringSecretStore:
             return None
         return None  # unknown non-zero status
 
-    def get_secret_with_timeout(
-        self, secret_id: str, *, timeout_seconds: float = 0.0
-    ) -> str | None:
+    def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float = 0.0) -> str | None:
         _ = timeout_seconds
         if not self._supports_native_macos_security_reads():
             return self.get_secret(secret_id)
