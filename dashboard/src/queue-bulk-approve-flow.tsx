@@ -158,6 +158,44 @@ export function QueueBulkStatusBanner(props: QueueBulkStatusBannerProps) {
   );
 }
 
+export type QueueBulkGatePromptProps = {
+  visible: boolean;
+  eligibleActionCount: number;
+  settingsHref: string;
+};
+
+/**
+ * Discovery prompt shown when eligible reads exist in the queue but the
+ * approval gate is not configured. Ambient selection (and the bulk drawer)
+ * require the gate, so without this banner users would never learn that bulk
+ * approval is available once they set up an approval password.
+ */
+export function QueueBulkGatePrompt(props: QueueBulkGatePromptProps) {
+  if (!props.visible) return null;
+  const unit = props.eligibleActionCount === 1 ? "read" : "reads";
+  return (
+    <div className="mb-4 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-3">
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-brand-dark">
+            Approve {props.eligibleActionCount} {unit} at once
+          </p>
+          <p className="mt-1 text-xs leading-5 text-brand-dark/70">
+            Set up a local approval password to unlock bulk approval for read-only file reads.
+            Bulk approval always approves once and never remembers future reads.
+          </p>
+        </div>
+        <a
+          href={props.settingsHref}
+          className="inline-flex shrink-0 rounded-full border border-brand-blue/30 bg-white px-4 py-2 text-sm font-medium text-brand-blue no-underline transition-colors hover:bg-brand-blue/5"
+        >
+          Open Settings
+        </a>
+      </div>
+    </div>
+  );
+}
+
 export type QueueBulkDrawerProps = {
   open: boolean;
   step: "review" | "submitting" | "completed";

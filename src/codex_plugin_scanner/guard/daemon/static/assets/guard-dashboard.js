@@ -23081,6 +23081,30 @@ function QueueBulkStatusBanner(props) {
     " in queue — review each path before approving."
   ] }) });
 }
+function QueueBulkGatePrompt(props) {
+  if (!props.visible) return null;
+  const unit = props.eligibleActionCount === 1 ? "read" : "reads";
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start gap-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-semibold text-brand-dark", children: [
+        "Approve ",
+        props.eligibleActionCount,
+        " ",
+        unit,
+        " at once"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: "Set up a local approval password to unlock bulk approval for read-only file reads. Bulk approval always approves once and never remembers future reads." })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "a",
+      {
+        href: props.settingsHref,
+        className: "inline-flex shrink-0 rounded-full border border-brand-blue/30 bg-white px-4 py-2 text-sm font-medium text-brand-blue no-underline transition-colors hover:bg-brand-blue/5",
+        children: "Open Settings"
+      }
+    )
+  ] }) });
+}
 function QueueBulkDrawer(props) {
   if (!props.open) return null;
   if (props.step === "completed") {
@@ -23655,6 +23679,11 @@ function useQueueBulkApprove(props) {
     [groupIdMap, handleBulkToggleMany]
   );
   const stickyBarVisible = showBulkApprove && selectedGroupCount > 0 && drawerStep !== "completed";
+  const gatePromptVisible = hasBulkHandler && hasEligibleGroups && !bulkGateReady;
+  const eligibleActionCount = reactExports.useMemo(
+    () => bulkApproveActionCount(bulkEligibleGroups),
+    [bulkEligibleGroups]
+  );
   return {
     groups,
     showBulkApprove,
@@ -23702,6 +23731,11 @@ function useQueueBulkApprove(props) {
     status: {
       visible: !showBulkApprove && sensitiveFileReadCount > 0,
       sensitiveFileReadCount
+    },
+    gatePrompt: {
+      visible: gatePromptVisible,
+      eligibleActionCount,
+      settingsHref: props.settingsHref
     }
   };
 }
@@ -23868,6 +23902,14 @@ function ReviewWorkspace(props) {
       {
         visible: bulkApprove.status.visible,
         sensitiveFileReadCount: bulkApprove.status.sensitiveFileReadCount
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      QueueBulkGatePrompt,
+      {
+        visible: bulkApprove.gatePrompt.visible,
+        eligibleActionCount: bulkApprove.gatePrompt.eligibleActionCount,
+        settingsHref: bulkApprove.gatePrompt.settingsHref
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(QueueBulkStickyBar, { ...bulkApprove.stickyBar }),
