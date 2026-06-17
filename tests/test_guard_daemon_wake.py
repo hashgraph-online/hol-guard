@@ -221,6 +221,8 @@ class TestNoDashboardApprovalURLWake:
         assert url == f"http://127.0.0.1:{port}"
         assert len(retire_calls) >= 1, "_retire_guard_daemon_process must be called to recover stale daemon state"
 
+
+class TestDaemonLifecycle:
     def test_daemon_shutdown_only_clears_own_state(self, tmp_path) -> None:
         """A retired duplicate daemon must not erase the active daemon state file."""
         guard_home = tmp_path / "guard-home"

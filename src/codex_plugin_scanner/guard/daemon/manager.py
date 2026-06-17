@@ -336,16 +336,15 @@ def _initialize_existing_guard_daemon(guard_home: Path, port: int) -> _ExistingG
 def _retire_duplicate_guard_daemons(guard_home: Path, *, keep_port: int | None) -> None:
     if keep_port is None:
         return
-    retired_any = False
     for pid, port in _running_guard_daemon_processes_for_guard_home(guard_home):
         if port == keep_port:
             continue
-        retired_any = _retire_guard_daemon_pid(pid, expected_guard_home=guard_home) or retired_any
-    if not retired_any:
-        return
+        _retire_guard_daemon_pid(pid, expected_guard_home=guard_home)
     kept_pid = _guard_daemon_pid_for_guard_home_port(guard_home, keep_port)
+    if kept_pid is None or _daemon_state_points_to(guard_home, pid=kept_pid, port=keep_port):
+        return
     auth_token = load_guard_daemon_auth_token(guard_home)
-    if kept_pid is not None and auth_token is not None:
+    if auth_token is not None:
         write_guard_daemon_state(guard_home, keep_port, auth_token, pid=kept_pid)
 
 
@@ -385,6 +384,11 @@ def clear_guard_daemon_state(guard_home: Path) -> None:
 
 
 def clear_guard_daemon_state_if_current(guard_home: Path, *, pid: int, port: int) -> bool:
+    with _guard_daemon_start_lock(guard_home):
+        return _clear_guard_daemon_state_if_current_unlocked(guard_home, pid=pid, port=port)
+
+
+def _clear_guard_daemon_state_if_current_unlocked(guard_home: Path, *, pid: int, port: int) -> bool:
     payload = _load_state(guard_home)
     if not isinstance(payload, dict):
         return False
@@ -392,6 +396,11 @@ def clear_guard_daemon_state_if_current(guard_home: Path, *, pid: int, port: int
         return False
     clear_guard_daemon_state(guard_home)
     return True
+
+
+def _daemon_state_points_to(guard_home: Path, *, pid: int, port: int) -> bool:
+    payload = _load_state(guard_home)
+    return isinstance(payload, dict) and payload.get("pid") == pid and payload.get("port") == port
 
 
 def repair_approval_center_locator(guard_home: Path) -> dict[str, object]:
