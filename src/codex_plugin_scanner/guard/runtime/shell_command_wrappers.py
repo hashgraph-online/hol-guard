@@ -418,7 +418,11 @@ def _trusted_absolute_command_path(command_path: Path, *, cwd: Path | None, home
 
 def _stable_non_writable_path(path: Path) -> bool:
     for candidate in (path, *path.parents):
-        if candidate.is_symlink() or not _path_is_non_writable(candidate):
+        if candidate.is_symlink():
+            if not _trusted_symlink_component(candidate):
+                return False
+            continue
+        if not _path_is_non_writable(candidate):
             return False
         if candidate == candidate.parent:
             break
@@ -446,6 +450,16 @@ def _path_is_under(path: Path, base: Path | None) -> bool:
 
 def _path_is_root_owned(path: Path) -> bool:
     return path.stat().st_uid == 0
+
+
+def _trusted_symlink_component(path: Path) -> bool:
+    try:
+        if path.lstat().st_uid != 0:
+            return False
+        resolved = path.resolve(strict=True)
+    except OSError:
+        return False
+    return _path_is_root_owned(resolved) and _path_is_non_writable(resolved)
 
 
 def _path_is_non_writable(path: Path) -> bool:
