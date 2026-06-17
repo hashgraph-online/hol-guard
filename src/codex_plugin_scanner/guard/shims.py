@@ -59,6 +59,21 @@ _PACKAGE_SHIM_COMMANDS = {
     "yarn": "yarn",
 }
 _PACKAGE_SHIM_MANIFEST = "manifest.json"
+_GUARD_PROFILE_MARKER = "# HOL Guard harness launchers"
+_PACKAGE_PROFILE_MARKER = "# HOL Guard package manager shims"
+# Path fragments that indicate a shim dir lives in an ephemeral location (a test
+# temp dir, the system temp root, etc.). Such paths must never be written into a
+# long-lived shell profile: they vanish and leave broken PATH entries behind.
+_TRANSIENT_PATH_FRAGMENTS = (
+    "/var/folders/",
+    "/private/var/folders/",
+    "/tmp/",
+    "/private/tmp/",
+    "/temp/",
+    "\\temp\\",
+    "\\tmp\\",
+    "pytest-of-",
+)
 _TRUSTED_CLI_LAUNCHER = (
     "import importlib.util, os, sys; "
     "trusted_root = os.path.realpath(sys.argv.pop(1)); "
@@ -745,20 +760,18 @@ def ensure_guard_shim_path_in_shell_profile(context: HarnessContext) -> dict[str
             "restart_shell_required": False,
             "manual_path_required": True,
         }
-    profile_path, export_line = _guard_shim_profile_target(context.home_dir, shim_dir)
-    profile_path.parent.mkdir(parents=True, exist_ok=True)
-    existing = profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
-    if _profile_already_references_path(existing, shim_dir):
+    if _is_transient_path(shim_dir):
         return {
             "changed": False,
-            "profile_path": str(profile_path),
+            "profile_path": None,
             "shim_dir": str(shim_dir),
-            "restart_shell_required": True,
+            "restart_shell_required": False,
+            "manual_path_required": True,
         }
-    prefix = "" if existing == "" or existing.endswith("\n") else "\n"
-    profile_path.write_text(f"{existing}{prefix}{export_line}\n", encoding="utf-8")
+    profile_path, export_line = _guard_shim_profile_target(context.home_dir, shim_dir)
+    result = _upsert_managed_profile_block(profile_path, export_line, _GUARD_PROFILE_MARKER)
     return {
-        "changed": True,
+        "changed": result["changed"],
         "profile_path": str(profile_path),
         "shim_dir": str(shim_dir),
         "restart_shell_required": True,
@@ -769,29 +782,93 @@ def ensure_package_shim_path_in_shell_profile(context: HarnessContext) -> dict[s
     """Prepend the package shim dir in the user's normal shell profile."""
 
     shim_dir = context.guard_home / "package-shims" / "bin"
-    profile_path, export_line = _package_shim_profile_target(context.home_dir, shim_dir)
-    profile_path.parent.mkdir(parents=True, exist_ok=True)
-    existing = profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
-    if _profile_already_references_path(existing, shim_dir):
+    if _is_transient_path(shim_dir):
         return {
             "changed": False,
-            "profile_path": str(profile_path),
+            "profile_path": None,
             "shim_dir": str(shim_dir),
-            "restart_shell_required": True,
+            "restart_shell_required": False,
+            "manual_path_required": True,
         }
-    prefix = "" if existing == "" or existing.endswith("\n") else "\n"
-    profile_path.write_text(f"{existing}{prefix}{export_line}\n", encoding="utf-8")
+    profile_path, export_line = _package_shim_profile_target(context.home_dir, shim_dir)
+    result = _upsert_managed_profile_block(profile_path, export_line, _PACKAGE_PROFILE_MARKER)
     return {
-        "changed": True,
+        "changed": result["changed"],
         "profile_path": str(profile_path),
         "shim_dir": str(shim_dir),
         "restart_shell_required": True,
     }
 
 
+def _upsert_managed_profile_block(
+    profile_path: Path,
+    export_line: str,
+    marker: str,
+) -> dict[str, object]:
+    """Idempotently write a single Guard-managed block to a shell profile.
+
+    Replaces any existing block tagged with *marker* instead of appending a new
+    one each time, so the profile never accumulates stale Guard PATH entries
+    (for example, one per pytest temp shim dir). Keeps all other profile
+    content untouched. A managed block is exactly two lines: the marker comment
+    followed by the export/fish_add_path line.
+    """
+
+    profile_path.parent.mkdir(parents=True, exist_ok=True)
+    existing = profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
+    export_line = export_line.rstrip("\n")
+    marker_line = export_line.split("\n", 1)[0]
+    if marker_line.strip() != marker.strip():
+        # Defensive: caller always passes a block whose first line is the marker.
+        export_line = f"{marker}\n{export_line}"
+    desired = f"{export_line}\n"
+    if existing == desired:
+        return {"changed": False}
+    cleaned = _strip_managed_marker_blocks(existing, marker)
+    if cleaned == "":
+        new_content = desired
+    else:
+        prefix = "" if cleaned.endswith("\n") else "\n"
+        new_content = f"{cleaned}{prefix}{desired}"
+    if new_content == existing:
+        return {"changed": False}
+    profile_path.write_text(new_content, encoding="utf-8")
+    return {"changed": True}
+
+
+def _strip_managed_marker_blocks(content: str, marker: str) -> str:
+    """Remove every Guard-managed block tagged with *marker* from *content*.
+
+    A block is the marker line plus the single line that follows it. Trailing
+    blank lines left behind are collapsed.
+    """
+
+    if not content:
+        return ""
+    marker_stripped = marker.strip()
+    lines = content.splitlines()
+    keep: list[str] = []
+    skip_next = False
+    for line in lines:
+        if skip_next:
+            skip_next = False
+            continue
+        if line.strip() == marker_stripped:
+            # Drop the marker line and the export line that follows it.
+            skip_next = True
+            continue
+        keep.append(line)
+    cleaned = "\n".join(keep)
+    while "\n\n\n" in cleaned:
+        cleaned = cleaned.replace("\n\n\n", "\n\n")
+    if cleaned and not cleaned.endswith("\n"):
+        cleaned += "\n"
+    return cleaned
+
+
 def _guard_shim_profile_target(home_dir: Path, shim_dir: Path) -> tuple[Path, str]:
     shell = Path(os.environ.get("SHELL", "")).name
-    marker = "# HOL Guard harness launchers"
+    marker = _GUARD_PROFILE_MARKER
     if shell == "fish":
         return (
             home_dir / ".config" / "fish" / "config.fish",
@@ -810,7 +887,7 @@ def _guard_shim_profile_target(home_dir: Path, shim_dir: Path) -> tuple[Path, st
 
 def _package_shim_profile_target(home_dir: Path, shim_dir: Path) -> tuple[Path, str]:
     shell = Path(os.environ.get("SHELL", "")).name
-    marker = "# HOL Guard package manager shims"
+    marker = _PACKAGE_PROFILE_MARKER
     if shell == "fish":
         return (
             home_dir / ".config" / "fish" / "config.fish",
@@ -825,6 +902,17 @@ def _package_shim_profile_target(home_dir: Path, shim_dir: Path) -> tuple[Path, 
         home_dir / ".zshrc",
         f'{marker}\nexport PATH="{shim_dir}:$PATH"',
     )
+
+
+def _is_transient_path(path: Path) -> bool:
+    """Return True when *path* lives in an ephemeral temp/test location.
+
+    Such paths must not be persisted into a user shell profile because they are
+    cleaned up, leaving broken PATH entries that shadow the real binaries.
+    """
+
+    text = str(path)
+    return any(fragment in text for fragment in _TRANSIENT_PATH_FRAGMENTS)
 
 
 def _profile_already_references_path(content: str, shim_dir: Path) -> bool:
