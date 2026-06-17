@@ -56,9 +56,6 @@ _PATH_KEYS = (
 )
 _PATH_LIST_KEYS = ("paths", "file_paths", "filePaths")
 _COMMAND_KEYS = (
-    "guard_inner_command",
-    "normalized_command",
-    "normalizedCommand",
     "command",
     "cmd",
     "shell_command",

@@ -64,9 +64,6 @@ _PATH_KEYS = (
     "targetPaths",
 )
 _COMMAND_KEYS = (
-    "guard_inner_command",
-    "normalized_command",
-    "normalizedCommand",
     "command",
     "cmd",
     "shell_command",

@@ -57,7 +57,7 @@ def _normalize_command_text(command_text: str, *, depth: int) -> tuple[str, tupl
     if normalized is None:
         return command_text, wrappers
     if prefix_env:
-        normalized = _join_shell_tokens([*prefix_env, *shlex.split(normalized, posix=True, comments=False)])
+        normalized = _join_command_fragments(_join_shell_tokens(prefix_env), normalized)
     return normalized, wrappers
 
 
@@ -74,7 +74,7 @@ def _normalize_parts(parts: list[str], *, depth: int) -> tuple[str | None, tuple
                 break
         command_name = _command_name(current[0])
         if command_name in _LEAN_CTX_BINARIES:
-            normalized = _unwrap_lean_ctx(current, depth=depth)
+            normalized = _unwrap_lean_ctx(current)
             if normalized is None:
                 break
             inner_command, suffix = normalized
@@ -86,7 +86,7 @@ def _normalize_parts(parts: list[str], *, depth: int) -> tuple[str | None, tuple
                 inner_command_text = _join_command_fragments(_join_shell_tokens(preserved_env), inner_command_text)
             return inner_command_text, tuple((*wrappers, *inner_wrappers))
         if command_name in _SHELL_STRING_WRAPPERS:
-            normalized = _unwrap_shell_string_wrapper(current, depth=depth)
+            normalized = _unwrap_shell_string_wrapper(current)
             if normalized is None:
                 break
             inner_command, suffix = normalized
@@ -163,7 +163,7 @@ def _consume_leading_env_assignments(parts: list[str], *, start: int) -> tuple[l
     return prefix, index
 
 
-def _unwrap_lean_ctx(parts: list[str], *, depth: int) -> tuple[str, list[str]] | None:
+def _unwrap_lean_ctx(parts: list[str]) -> tuple[str, list[str]] | None:
     index = 1
     while index < len(parts):
         token = parts[index]
@@ -178,7 +178,7 @@ def _unwrap_lean_ctx(parts: list[str], *, depth: int) -> tuple[str, list[str]] |
     return None
 
 
-def _unwrap_shell_string_wrapper(parts: list[str], *, depth: int) -> tuple[str, list[str]] | None:
+def _unwrap_shell_string_wrapper(parts: list[str]) -> tuple[str, list[str]] | None:
     index = 1
     while index < len(parts):
         token = parts[index]
