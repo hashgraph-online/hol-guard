@@ -33,6 +33,15 @@ def test_normalize_transparent_shell_command_keeps_repo_local_lean_ctx_visible()
     assert normalized.normalized_command == wrapped
 
 
+def test_normalize_transparent_shell_command_keeps_path_overridden_wrapper_visible() -> None:
+    wrapped = "PATH=./bin:$PATH lean-ctx -c 'python -c \"import time; time.sleep(1)\"'"
+
+    normalized = normalize_transparent_shell_command(wrapped)
+
+    assert normalized.wrapper_chain == ()
+    assert normalized.normalized_command == wrapped
+
+
 def test_normalize_transparent_shell_command_unwraps_shell_c_wrapper() -> None:
     wrapped = "bash -lc 'sed -n \"1,20p\" docs/guard-cloud-api-inventory.generated.md'"
 
@@ -41,6 +50,26 @@ def test_normalize_transparent_shell_command_unwraps_shell_c_wrapper() -> None:
     assert normalized.wrapper_chain == ("bash",)
     assert normalized.normalized_command.startswith("sed -n")
     assert "bash -lc" not in normalized.normalized_command
+
+
+def test_normalize_transparent_shell_command_unwraps_trusted_absolute_shell() -> None:
+    wrapped = "/bin/bash -lc 'sed -n \"1,20p\" docs/guard-cloud-api-inventory.generated.md'"
+
+    normalized = normalize_transparent_shell_command(wrapped)
+
+    assert normalized.wrapper_chain == ("bash",)
+    assert normalized.normalized_command.startswith("sed -n")
+    assert "/bin/bash -lc" not in normalized.normalized_command
+
+
+def test_normalize_transparent_shell_command_unwraps_trusted_absolute_env() -> None:
+    wrapped = "/usr/bin/env bash -lc 'sed -n \"1,20p\" docs/guard-cloud-api-inventory.generated.md'"
+
+    normalized = normalize_transparent_shell_command(wrapped)
+
+    assert normalized.wrapper_chain == ("env", "bash")
+    assert normalized.normalized_command.startswith("sed -n")
+    assert "/usr/bin/env" not in normalized.normalized_command
 
 
 def test_normalize_transparent_shell_command_keeps_repo_local_shell_visible() -> None:
@@ -121,6 +150,13 @@ def test_repo_local_wrapper_does_not_use_inner_command_for_benign_allow() -> Non
     assert not is_explicitly_benign_tool_action_request(
         "bash",
         {"command": "./bin/lean-ctx -c 'python -c \"import time; time.sleep(1)\"'"},
+    )
+
+
+def test_path_overridden_wrapper_does_not_use_inner_command_for_benign_allow() -> None:
+    assert not is_explicitly_benign_tool_action_request(
+        "bash",
+        {"command": "env PATH=./bin:$PATH lean-ctx -c 'python -c \"import time; time.sleep(1)\"'"},
     )
 
 

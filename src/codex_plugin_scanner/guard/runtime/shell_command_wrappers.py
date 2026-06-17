@@ -52,19 +52,22 @@ def _normalize_command_text(command_text: str, *, depth: int) -> tuple[str, tupl
     if not parts:
         return command_text, ()
     prefix_env, index = _consume_leading_env_assignments(parts, start=0)
-    normalized, wrappers = _normalize_parts(parts[index:], depth=depth)
+    normalized, wrappers = _normalize_parts(parts[index:], depth=depth, initial_env=prefix_env)
     if not wrappers:
         return command_text, ()
     if normalized is None:
         return command_text, wrappers
-    if prefix_env:
-        normalized = _join_command_fragments(_join_shell_tokens(prefix_env), normalized)
     return normalized, wrappers
 
 
-def _normalize_parts(parts: list[str], *, depth: int) -> tuple[str | None, tuple[str, ...]]:
+def _normalize_parts(
+    parts: list[str],
+    *,
+    depth: int,
+    initial_env: list[str] | None = None,
+) -> tuple[str | None, tuple[str, ...]]:
     current = list(parts)
-    preserved_env: list[str] = []
+    preserved_env: list[str] = list(initial_env or [])
     wrappers: list[str] = []
     while current:
         current_env, env_index = _consume_leading_env_assignments(current, start=0)
@@ -73,7 +76,7 @@ def _normalize_parts(parts: list[str], *, depth: int) -> tuple[str | None, tuple
             current = current[env_index:]
             if not current:
                 break
-        command_name = _command_name(current[0])
+        command_name = _command_name(current[0], env_assignments=preserved_env)
         if command_name in _LEAN_CTX_BINARIES:
             normalized = _unwrap_lean_ctx(current)
             if normalized is None:
@@ -352,10 +355,27 @@ def _env_clustered_split_string_payload(token: str) -> str | None:
     return token[split_index + 1 :]
 
 
-def _command_name(token: str) -> str:
-    if "/" in token or "\\" in token:
+def _command_name(token: str, *, env_assignments: list[str] | tuple[str, ...] = ()) -> str:
+    if _env_assignments_override_path(env_assignments):
         return ""
-    return Path(token).name.lower()
+    if "/" not in token and "\\" not in token:
+        return token.lower()
+    command_path = Path(token)
+    if not command_path.is_absolute():
+        return ""
+    try:
+        resolved = command_path.resolve(strict=True)
+        mode = resolved.stat().st_mode
+        owner_uid = resolved.stat().st_uid
+    except OSError:
+        return ""
+    if owner_uid != 0 or mode & 0o022:
+        return ""
+    return resolved.name.lower()
+
+
+def _env_assignments_override_path(env_assignments: list[str] | tuple[str, ...]) -> bool:
+    return any(assignment.split("=", 1)[0] == "PATH" for assignment in env_assignments)
 
 
 def _join_command_fragments(*fragments: str) -> str:
