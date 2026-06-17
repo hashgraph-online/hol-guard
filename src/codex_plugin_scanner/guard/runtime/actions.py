@@ -502,7 +502,12 @@ def _normalize_action_payload(
     if not tool_input and tool_call_input is not None:
         tool_input = tool_call_input
     raw_command = _command_from_payload(tool_input)
-    normalized_command, wrapper_chain = _normalized_shell_command(tool_name, raw_command)
+    normalized_command, wrapper_chain = _normalized_shell_command(
+        tool_name,
+        raw_command,
+        cwd=Path(workspace) if workspace is not None else None,
+        home_dir=Path(home_dir) if home_dir is not None else None,
+    )
     if wrapper_chain and isinstance(tool_input, Mapping):
         normalized_payload["tool_input"] = {
             **dict(tool_input),
@@ -710,12 +715,18 @@ def _command_from_payload(tool_input: Mapping[str, object]) -> str | None:
     return None
 
 
-def _normalized_shell_command(tool_name: str | None, command: str | None) -> tuple[str | None, tuple[str, ...]]:
+def _normalized_shell_command(
+    tool_name: str | None,
+    command: str | None,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> tuple[str | None, tuple[str, ...]]:
     if command is None:
         return None, ()
     if not isinstance(tool_name, str) or tool_name.strip().lower() not in _SHELL_TOOL_NAMES:
         return command, ()
-    normalized = normalize_transparent_shell_command(command)
+    normalized = normalize_transparent_shell_command(command, cwd=cwd, home_dir=home_dir)
     return normalized.normalized_command, normalized.wrapper_chain
 
 

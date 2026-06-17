@@ -1224,7 +1224,21 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json(approval)
             return
         if parsed.path == "/v1/receipts":
-            self._write_json({"items": store.list_receipts(limit=200)})
+            query = parse_qs(parsed.query)
+            harness_q = query.get("harness", [None])[-1]
+            limit_q = query.get("limit", ["200"])[-1]
+            try:
+                limit_v = min(max(int(limit_q), 1), 500)
+            except (ValueError, TypeError):
+                limit_v = 200
+            self._write_json(
+                {
+                    "items": store.list_receipts(
+                        limit=limit_v,
+                        harness=harness_q if isinstance(harness_q, str) and harness_q else None,
+                    )
+                }
+            )
             return
         if parsed.path == "/v1/receipts/analytics":
             query = parse_qs(parsed.query)
@@ -1299,7 +1313,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             before_q = query.get("before", [None])[-1]
             limit_q = query.get("limit", ["100"])[-1]
             try:
-                limit_v = min(int(limit_q), 500)
+                limit_v = min(max(int(limit_q), 1), 500)
             except (ValueError, TypeError):
                 limit_v = 100
             with store._connect() as conn:
@@ -1310,6 +1324,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     severity=severity_q if isinstance(severity_q, str) else None,
                     before_cursor=before_q if isinstance(before_q, str) else None,
                     limit=limit_v,
+                    include_details=False,
                 )
                 total = count_evidence(
                     conn,

@@ -346,7 +346,37 @@ class SystemKeyringSecretStore:
 
     @staticmethod
     def _load_keyring_module():
-        return importlib.import_module("keyring")
+        """Load the optional keyring package.
+
+        Returns None when the top-level package is genuinely absent. A keyring
+        install that is present but fails to import (broken transitive import,
+        backend init error, etc.) is allowed to propagate so callers can surface
+        it rather than silently degrading credential storage.
+        """
+        try:
+            return importlib.import_module("keyring")
+        except ModuleNotFoundError as exc:
+            if exc.name == "keyring":
+                return None
+            raise
+
+    @classmethod
+    def _load_keyring_module_or_none(cls):
+        """Return the keyring module, or None when it is absent or unusable.
+
+        Any failure to initialize an installed-but-broken keyring is logged so
+        the fallback to the encrypted-file store is never silent. Used by the
+        availability probe and secret access, which must not let a keyring
+        failure escape and crash the host harness.
+        """
+        try:
+            return cls._load_keyring_module()
+        except Exception:
+            _store_logger.warning(
+                "Guard system keyring backend could not be initialized; using encrypted-file fallback.",
+                exc_info=True,
+            )
+            return None
 
     @staticmethod
     def _load_macos_keyring_api_module():
@@ -442,8 +472,10 @@ class SystemKeyringSecretStore:
 
     @classmethod
     def _backend_is_available(cls) -> bool:
+        keyring_module = cls._load_keyring_module_or_none()
+        if keyring_module is None:
+            return False
         try:
-            keyring_module = cls._load_keyring_module()
             backend = keyring_module.get_keyring()
         except Exception:
             return False
@@ -462,11 +494,18 @@ class SystemKeyringSecretStore:
         return True
 
     def set_secret(self, secret_id: str, value: str) -> None:
-        keyring_module = self._load_keyring_module()
+        keyring_module = self._load_keyring_module_or_none()
+        if keyring_module is None:
+            raise RuntimeError(
+                "Guard system keyring backend is unavailable; the Python 'keyring' "
+                "package could not be imported. Reinstall hol-guard to restore it."
+            )
         keyring_module.set_password(self.service_name, secret_id, value)
 
     def get_secret(self, secret_id: str) -> str | None:
-        keyring_module = self._load_keyring_module()
+        keyring_module = self._load_keyring_module_or_none()
+        if keyring_module is None:
+            return None
         value = keyring_module.get_password(self.service_name, secret_id)
         return value if isinstance(value, str) and value else None
 
@@ -482,6 +521,8 @@ class SystemKeyringSecretStore:
         try:
             keyring_module = loader_ref()
         except Exception:
+            keyring_module = None
+        if keyring_module is None:
             cls._native_macos_security_reads_cache = (loader_id, False)
             return False
         module_name = getattr(keyring_module, "__name__", "")
@@ -581,7 +622,9 @@ class SystemKeyringSecretStore:
         return self.get_secret(secret_id)
 
     def delete_secret(self, secret_id: str) -> None:
-        keyring_module = self._load_keyring_module()
+        keyring_module = self._load_keyring_module_or_none()
+        if keyring_module is None:
+            return
         try:
             keyring_module.delete_password(self.service_name, secret_id)
         except Exception:
@@ -922,6 +965,11 @@ def receipt_index_statements() -> list[str]:
         ("create index if not exists idx_receipts_harness_artifact on runtime_receipts(harness, artifact_id)"),
         ("create index if not exists idx_receipts_timestamp_harness on runtime_receipts(timestamp, harness)"),
         ("create index if not exists idx_receipts_timestamp_desc on runtime_receipts(timestamp desc)"),
+        ("create index if not exists idx_receipts_harness_timestamp_desc on runtime_receipts(harness, timestamp desc)"),
+        (
+            "create index if not exists idx_receipts_harness_artifact_timestamp_desc "
+            "on runtime_receipts(harness, artifact_id, timestamp desc)"
+        ),
     ]
 
 
