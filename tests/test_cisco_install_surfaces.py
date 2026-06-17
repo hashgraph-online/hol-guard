@@ -30,7 +30,7 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "cisco-ai-skill-scanner==2.0.11" in override_entries
     assert "importlib-metadata==9.0.0" in override_entries
     assert "jsonschema==4.26.0" in override_entries
-    assert "litellm==1.83.7" in override_entries
+    assert "litellm==1.84.0" in override_entries
     assert "openai==2.41.1" in override_entries
     assert "pyjwt==2.13.0" in override_entries
     assert "python-dotenv==1.2.2" in override_entries

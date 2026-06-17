@@ -51,6 +51,16 @@ def resolve_trust_attestation_signing_config(
     active_key_id = _sanitize_env(env.get("GUARD_AIBOM_TRUST_ATTESTATION_KEY_ID")) or "guard-aibom-trust-key-default"
     private_key_pem = _normalize_pem(_sanitize_env(env.get("GUARD_AIBOM_TRUST_ATTESTATION_PRIVATE_KEY")))
     if not private_key_pem:
+        if _sanitize_env(env.get("GUARD_AIBOM_TRUST_ATTESTATION_HEADLESS_SHORT_LIVED")).lower() in _TRUTHY_ENV_VALUES:
+            from ..cli.oauth_client import generate_dpop_key_pair
+
+            key_material = generate_dpop_key_pair()
+            return GuardTrustAttestationSigningConfig(
+                active_key_id=active_key_id,
+                private_key_pem=key_material.private_key_pem,
+                public_jwk_thumbprint=key_material.public_jwk_thumbprint,
+                signature_algorithm=GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
+            )
         return None
     return GuardTrustAttestationSigningConfig(
         active_key_id=active_key_id,
