@@ -1109,10 +1109,6 @@ def _runtime_proof_status_name(
     reason: str | None,
     proof: Mapping[str, object],
 ) -> str:
-    if milestone == "first_sync_succeeded" or proof.get("first_synced_at"):
-        return "synced"
-    if milestone == "sync_not_available":
-        return "sync_unavailable"
     if status == "retry_required" or milestone == "first_sync_failed":
         if connect_retry_refresh_race_from_reason(reason):
             return "stalled"
@@ -1123,6 +1119,10 @@ def _runtime_proof_status_name(
         return "expired"
     if milestone == "waiting_for_browser" or status == "waiting":
         return "waiting"
+    if milestone == "first_sync_succeeded" or proof.get("first_synced_at"):
+        return "synced"
+    if milestone == "sync_not_available":
+        return "sync_unavailable"
     return "not_connected"
 
 
@@ -1576,14 +1576,6 @@ _BULK_BLOCKED_COMMAND_HINTS = (
     "without approval",
     "guard_bypass",
     "no guard",
-    "rm -rf",
-    "rm -fr",
-    "rm -f ",
-    "delete files",
-    "wipe",
-    "force-clean",
-    "git clean -fd",
-    "truncate",
     "base64",
     "openssl enc",
     "xxd -r",

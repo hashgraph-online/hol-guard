@@ -5321,6 +5321,15 @@ class GuardStore:
         now: str,
     ) -> dict[str, object] | None:
         if cloud_profile is None:
+            if latest_state is not None and self._guard_connect_state_requires_oauth(latest_state):
+                return self._coerce_guard_connect_state_status(
+                    state=latest_state,
+                    status="retry_required",
+                    milestone="first_sync_failed",
+                    reason="Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again.",
+                    sync_summary=sync_summary,
+                    now=now,
+                )
             return latest_state
         normalized = self._hydrate_guard_connect_state_from_cloud_profile(
             latest_state=latest_state,
@@ -5356,6 +5365,13 @@ class GuardStore:
                 now=now,
             )
         return normalized
+
+    def _guard_connect_state_requires_oauth(self, latest_state: dict[str, object]) -> bool:
+        request_id = latest_state.get("request_id")
+        if not isinstance(request_id, str) or not request_id.strip():
+            return False
+        status = str(latest_state.get("status") or "")
+        return status == "connected"
 
     def _hydrate_guard_connect_state_from_cloud_profile(
         self,
