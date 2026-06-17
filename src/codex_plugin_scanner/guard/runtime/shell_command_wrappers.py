@@ -17,6 +17,7 @@ _ENV_OPTION_FLAGS_WITH_VALUES = frozenset({"-u", "-C", "--unset", "--chdir"})
 _NICE_OPTION_FLAGS_WITH_VALUES = frozenset({"-n", "--adjustment"})
 _STDBUF_VALUE_FLAGS = frozenset({"-i", "-o", "-e"})
 _TIME_OPTION_FLAGS_WITH_VALUES = frozenset({"-f", "-o", "--format", "--output"})
+_TRUSTED_INSTALL_DIRS = (Path("/opt/homebrew/bin"), Path("/usr/local/bin"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,7 +27,12 @@ class ShellCommandNormalization:
     wrapper_chain: tuple[str, ...] = ()
 
 
-def normalize_transparent_shell_command(command_text: str) -> ShellCommandNormalization:
+def normalize_transparent_shell_command(
+    command_text: str,
+    *,
+    cwd: Path | None = None,
+    home_dir: Path | None = None,
+) -> ShellCommandNormalization:
     stripped = command_text.strip()
     if not stripped or len(stripped) > _MAX_NORMALIZE_BYTES:
         return ShellCommandNormalization(
@@ -34,7 +40,7 @@ def normalize_transparent_shell_command(command_text: str) -> ShellCommandNormal
             normalized_command=stripped,
             wrapper_chain=(),
         )
-    normalized_command, wrapper_chain = _normalize_command_text(stripped, depth=0)
+    normalized_command, wrapper_chain = _normalize_command_text(stripped, depth=0, cwd=cwd, home_dir=home_dir)
     return ShellCommandNormalization(
         raw_command=stripped,
         normalized_command=normalized_command or stripped,
@@ -42,7 +48,13 @@ def normalize_transparent_shell_command(command_text: str) -> ShellCommandNormal
     )
 
 
-def _normalize_command_text(command_text: str, *, depth: int) -> tuple[str, tuple[str, ...]]:
+def _normalize_command_text(
+    command_text: str,
+    *,
+    depth: int,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> tuple[str, tuple[str, ...]]:
     if depth > 8:
         return command_text, ()
     try:
@@ -52,7 +64,9 @@ def _normalize_command_text(command_text: str, *, depth: int) -> tuple[str, tupl
     if not parts:
         return command_text, ()
     prefix_env, index = _consume_leading_env_assignments(parts, start=0)
-    normalized, wrappers = _normalize_parts(parts[index:], depth=depth, initial_env=prefix_env)
+    normalized, wrappers = _normalize_parts(
+        parts[index:], depth=depth, initial_env=prefix_env, cwd=cwd, home_dir=home_dir
+    )
     if not wrappers:
         return command_text, ()
     if normalized is None:
@@ -64,6 +78,8 @@ def _normalize_parts(
     parts: list[str],
     *,
     depth: int,
+    cwd: Path | None,
+    home_dir: Path | None,
     initial_env: list[str] | None = None,
 ) -> tuple[str | None, tuple[str, ...]]:
     current = list(parts)
@@ -76,14 +92,19 @@ def _normalize_parts(
             current = current[env_index:]
             if not current:
                 break
-        command_name = _command_name(current[0], env_assignments=preserved_env)
+        command_name = _command_name(current[0], env_assignments=preserved_env, cwd=cwd, home_dir=home_dir)
         if command_name in _LEAN_CTX_BINARIES:
             normalized = _unwrap_lean_ctx(current)
             if normalized is None:
                 break
             inner_command, suffix = normalized
             wrappers.append(command_name)
-            inner_text, inner_wrappers = _normalize_command_text(inner_command, depth=depth + 1)
+            inner_text, inner_wrappers = _normalize_command_text(
+                inner_command,
+                depth=depth + 1,
+                cwd=cwd,
+                home_dir=home_dir,
+            )
             suffix_text = _join_shell_tokens(suffix) if suffix else ""
             inner_command_text = _join_command_fragments(inner_text, suffix_text)
             if preserved_env:
@@ -95,7 +116,12 @@ def _normalize_parts(
                 break
             inner_command, suffix = normalized
             wrappers.append(command_name)
-            inner_text, inner_wrappers = _normalize_command_text(inner_command, depth=depth + 1)
+            inner_text, inner_wrappers = _normalize_command_text(
+                inner_command,
+                depth=depth + 1,
+                cwd=cwd,
+                home_dir=home_dir,
+            )
             suffix_text = _join_shell_tokens(suffix) if suffix else ""
             inner_command_text = _join_command_fragments(inner_text, suffix_text)
             if preserved_env:
@@ -105,7 +131,12 @@ def _normalize_parts(
             next_parts, env_prefix, env_split = _strip_env_wrapper(current)
             if env_split is not None:
                 wrappers.append("env")
-                inner_text, inner_wrappers = _normalize_command_text(env_split, depth=depth + 1)
+                inner_text, inner_wrappers = _normalize_command_text(
+                    env_split,
+                    depth=depth + 1,
+                    cwd=cwd,
+                    home_dir=home_dir,
+                )
                 all_env = [*preserved_env, *env_prefix]
                 if all_env:
                     inner_text = _join_command_fragments(_join_shell_tokens(all_env), inner_text)
@@ -355,7 +386,13 @@ def _env_clustered_split_string_payload(token: str) -> str | None:
     return token[split_index + 1 :]
 
 
-def _command_name(token: str, *, env_assignments: list[str] | tuple[str, ...] = ()) -> str:
+def _command_name(
+    token: str,
+    *,
+    env_assignments: list[str] | tuple[str, ...] = (),
+    cwd: Path | None = None,
+    home_dir: Path | None = None,
+) -> str:
     if "/" not in token and "\\" not in token:
         if _env_assignments_override_path(env_assignments):
             return ""
@@ -363,28 +400,58 @@ def _command_name(token: str, *, env_assignments: list[str] | tuple[str, ...] = 
     command_path = Path(token)
     if not command_path.is_absolute():
         return ""
-    if not _trusted_absolute_command_path(command_path):
+    if not _trusted_absolute_command_path(command_path, cwd=cwd, home_dir=home_dir):
         return ""
     return command_path.name.lower()
 
 
-def _trusted_absolute_command_path(command_path: Path) -> bool:
+def _trusted_absolute_command_path(command_path: Path, *, cwd: Path | None, home_dir: Path | None) -> bool:
     try:
-        if command_path.is_symlink() or not _root_owned_non_writable(command_path):
+        if _path_is_under(command_path, cwd) or not _stable_non_writable_path(command_path):
             return False
-        for parent in command_path.parents:
-            if parent.is_symlink() or not _root_owned_non_writable(parent):
-                return False
-            if parent == parent.parent:
-                break
     except OSError:
+        return False
+    if _root_owned_path_chain(command_path):
+        return True
+    return _path_is_under_trusted_install_dir(command_path, home_dir=home_dir)
+
+
+def _stable_non_writable_path(path: Path) -> bool:
+    for candidate in (path, *path.parents):
+        if candidate.is_symlink() or not _path_is_non_writable(candidate):
+            return False
+        if candidate == candidate.parent:
+            break
+    return True
+
+
+def _root_owned_path_chain(path: Path) -> bool:
+    return all(_path_is_root_owned(candidate) for candidate in (path, *path.parents))
+
+
+def _path_is_under_trusted_install_dir(path: Path, *, home_dir: Path | None) -> bool:
+    trusted_dirs = [*_TRUSTED_INSTALL_DIRS]
+    if home_dir is not None:
+        trusted_dirs.append(home_dir / ".local" / "bin")
+    return any(_path_is_under(path, trusted_dir) for trusted_dir in trusted_dirs)
+
+
+def _path_is_under(path: Path, base: Path | None) -> bool:
+    if base is None:
+        return False
+    try:
+        path.resolve(strict=False).relative_to(base.resolve(strict=False))
+    except ValueError:
         return False
     return True
 
 
-def _root_owned_non_writable(path: Path) -> bool:
-    metadata = path.stat()
-    return metadata.st_uid == 0 and not metadata.st_mode & 0o022
+def _path_is_root_owned(path: Path) -> bool:
+    return path.stat().st_uid == 0
+
+
+def _path_is_non_writable(path: Path) -> bool:
+    return not path.stat().st_mode & 0o022
 
 
 def _env_assignments_override_path(env_assignments: list[str] | tuple[str, ...]) -> bool:
