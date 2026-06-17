@@ -94,13 +94,17 @@ def ensure_guard_daemon(
         if existing_url is not None:
             existing_port = _guard_daemon_url_port(existing_url)
             if preferred_port is None or existing_port == preferred_port:
-                _retire_duplicate_guard_daemons(guard_home, keep_port=existing_port)
+                _retire_duplicate_guard_daemons(guard_home, keep_port=existing_port, start_lock_held=True)
                 return existing_url
             retire_all_guard_daemons_for_home(guard_home)
             clear_guard_daemon_state(guard_home)
         adopted_url = _adopt_existing_guard_daemon(guard_home, preferred_port=preferred_port)
         if adopted_url is not None:
-            _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(adopted_url))
+            _retire_duplicate_guard_daemons(
+                guard_home,
+                keep_port=_guard_daemon_url_port(adopted_url),
+                start_lock_held=True,
+            )
             return adopted_url
         stale_state = _load_state(guard_home)
         if isinstance(stale_state, dict) and not _guard_daemon_state_matches_current_runtime(stale_state):
@@ -108,7 +112,11 @@ def ensure_guard_daemon(
         if _guard_daemon_start_in_progress(guard_home):
             inflight_url = _wait_for_guard_daemon_url(guard_home, timeout=timeout)
             if inflight_url is not None:
-                _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(inflight_url))
+                _retire_duplicate_guard_daemons(
+                    guard_home,
+                    keep_port=_guard_daemon_url_port(inflight_url),
+                    start_lock_held=True,
+                )
                 return inflight_url
         clear_guard_daemon_state(guard_home)
         for candidate_port in _candidate_ports(guard_home, preferred_port=preferred_port):
@@ -333,13 +341,30 @@ def _initialize_existing_guard_daemon(guard_home: Path, port: int) -> _ExistingG
     return {"url": url, "auth_token": auth_token, "pid": pid}
 
 
-def _retire_duplicate_guard_daemons(guard_home: Path, *, keep_port: int | None) -> None:
+def _retire_duplicate_guard_daemons(
+    guard_home: Path,
+    *,
+    keep_port: int | None,
+    start_lock_held: bool = False,
+) -> None:
     if keep_port is None:
         return
+    saw_duplicate = False
     for pid, port in _running_guard_daemon_processes_for_guard_home(guard_home):
         if port == keep_port:
             continue
+        saw_duplicate = True
         _retire_guard_daemon_pid(pid, expected_guard_home=guard_home)
+    if not saw_duplicate:
+        return
+    if start_lock_held:
+        _rewrite_kept_daemon_state_if_missing(guard_home, keep_port=keep_port)
+        return
+    with _guard_daemon_start_lock(guard_home):
+        _rewrite_kept_daemon_state_if_missing(guard_home, keep_port=keep_port)
+
+
+def _rewrite_kept_daemon_state_if_missing(guard_home: Path, *, keep_port: int) -> None:
     kept_pid = _guard_daemon_pid_for_guard_home_port(guard_home, keep_port)
     if kept_pid is None or _daemon_state_points_to(guard_home, pid=kept_pid, port=keep_port):
         return
