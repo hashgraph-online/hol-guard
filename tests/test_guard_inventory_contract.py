@@ -166,9 +166,17 @@ def test_inventory_helpers_emit_safe_endpoint_and_stable_hashes(tmp_path: Path) 
     assert classify_endpoint_host("https://user:pass@example.com/mcp?token=value") == "remote_public"
     assert classify_endpoint_host("http://172.20.4.5:8080/mcp") == "local_private"
     assert classify_endpoint_host("http://[not-an-ip]/mcp") == "remote_public"
-    assert redact_url("https://user:pass@example.com/mcp?token=value&mode=safe") == "https://example.com/mcp?token=redacted&mode=safe"
-    assert redact_url("https://example.com/mcp?auth=value&mode=safe") == "https://example.com/mcp?auth=redacted&mode=safe"
-    assert redact_url("https://example.com/mcp?mode=safe;token=value") == "https://example.com/mcp?mode=safe&token=redacted"
+    assert (
+        redact_url("https://user:pass@example.com/mcp?token=value&mode=safe")
+        == "https://example.com/mcp?token=redacted&mode=safe"
+    )
+    assert (
+        redact_url("https://example.com/mcp?auth=value&mode=safe") == "https://example.com/mcp?auth=redacted&mode=safe"
+    )
+    assert (
+        redact_url("https://example.com/mcp?mode=safe;token=value")
+        == "https://example.com/mcp?mode=safe&token=redacted"
+    )
     assert redact_url("http://localhost:${PORT}/mcp?auth=value") == "http://localhost/mcp?auth=redacted"
     assert redact_url("http://[2001:db8::1]:8080/mcp?token=value") == "http://[2001:db8::1]:8080/mcp?token=redacted"
     assert redact_url("http://[not-an-ip]/mcp?token=value") == "malformed_url_redacted"
@@ -464,6 +472,7 @@ def test_inventory_snapshot_attaches_cisco_mcp_trust_layer_to_server_and_tool(tm
         for layer in tool_layers
     )
     assert str(workspace) not in encoded
+
 
 def test_inventory_snapshot_handles_missing_mcp_tool_schema_and_scale(tmp_path: Path) -> None:
     tools = [{"name": f"tool_{index}", "description": "No schema available."} for index in range(500)]

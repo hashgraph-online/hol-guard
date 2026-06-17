@@ -160,27 +160,31 @@ class TestReceiptOrdering:
     def test_list_receipts_limit_restricts_count(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
         for i in range(5):
-            store.add_receipt(_make_receipt(receipt_id=f"r-{i:03d}", timestamp=f"2025-01-{i+1:02d}T00:00:00Z"))
+            store.add_receipt(_make_receipt(receipt_id=f"r-{i:03d}", timestamp=f"2025-01-{i + 1:02d}T00:00:00Z"))
 
         items = store.list_receipts(limit=3)
         assert len(items) == 3
 
     def test_get_latest_receipt_returns_most_recent(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
-        store.add_receipt(_make_receipt(
-            receipt_id="r-old",
-            artifact_id="codex:project:my_tool",
-            harness="codex",
-            timestamp="2025-01-01T00:00:00Z",
-            policy_decision="require-reapproval",
-        ))
-        store.add_receipt(_make_receipt(
-            receipt_id="r-new",
-            artifact_id="codex:project:my_tool",
-            harness="codex",
-            timestamp="2025-12-01T00:00:00Z",
-            policy_decision="allow",
-        ))
+        store.add_receipt(
+            _make_receipt(
+                receipt_id="r-old",
+                artifact_id="codex:project:my_tool",
+                harness="codex",
+                timestamp="2025-01-01T00:00:00Z",
+                policy_decision="require-reapproval",
+            )
+        )
+        store.add_receipt(
+            _make_receipt(
+                receipt_id="r-new",
+                artifact_id="codex:project:my_tool",
+                harness="codex",
+                timestamp="2025-12-01T00:00:00Z",
+                policy_decision="allow",
+            )
+        )
 
         latest = store.get_latest_receipt("codex", "codex:project:my_tool")
         assert latest is not None
@@ -193,18 +197,22 @@ class TestReceiptOrdering:
 
     def test_get_latest_receipt_scoped_to_harness_artifact_pair(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
-        store.add_receipt(_make_receipt(
-            receipt_id="r-codex",
-            harness="codex",
-            artifact_id="codex:project:tool_a",
-            timestamp="2025-12-01T00:00:00Z",
-        ))
-        store.add_receipt(_make_receipt(
-            receipt_id="r-claude",
-            harness="claude",
-            artifact_id="claude:project:tool_a",
-            timestamp="2025-12-02T00:00:00Z",
-        ))
+        store.add_receipt(
+            _make_receipt(
+                receipt_id="r-codex",
+                harness="codex",
+                artifact_id="codex:project:tool_a",
+                timestamp="2025-12-01T00:00:00Z",
+            )
+        )
+        store.add_receipt(
+            _make_receipt(
+                receipt_id="r-claude",
+                harness="claude",
+                artifact_id="claude:project:tool_a",
+                timestamp="2025-12-02T00:00:00Z",
+            )
+        )
 
         latest_codex = store.get_latest_receipt("codex", "codex:project:tool_a")
         latest_claude = store.get_latest_receipt("claude", "claude:project:tool_a")
@@ -218,18 +226,22 @@ class TestReceiptDecisionCounts:
     def test_counts_aggregate_by_policy_decision(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
         for _ in range(3):
-            store.add_receipt(_make_receipt(
+            store.add_receipt(
+                _make_receipt(
+                    harness="codex",
+                    artifact_id="codex:project:my_tool",
+                    policy_decision="allow",
+                    timestamp="2025-01-01T00:00:00Z",
+                )
+            )
+        store.add_receipt(
+            _make_receipt(
                 harness="codex",
                 artifact_id="codex:project:my_tool",
-                policy_decision="allow",
-                timestamp="2025-01-01T00:00:00Z",
-            ))
-        store.add_receipt(_make_receipt(
-            harness="codex",
-            artifact_id="codex:project:my_tool",
-            policy_decision="block",
-            timestamp="2025-01-02T00:00:00Z",
-        ))
+                policy_decision="block",
+                timestamp="2025-01-02T00:00:00Z",
+            )
+        )
 
         counts = store.receipt_decision_counts("codex", "codex:project:my_tool")
         assert counts.get("allow") == 3
@@ -342,12 +354,14 @@ class TestInventoryForExplain:
             now="2025-01-01T00:00:00Z",
             approved=True,
         )
-        store.add_receipt(_make_receipt(
-            receipt_id="r-001",
-            artifact_id="codex:project:my_tool",
-            harness="codex",
-            timestamp="2025-01-01T00:00:00Z",
-        ))
+        store.add_receipt(
+            _make_receipt(
+                receipt_id="r-001",
+                artifact_id="codex:project:my_tool",
+                harness="codex",
+                timestamp="2025-01-01T00:00:00Z",
+            )
+        )
         store.record_diff(
             harness="codex",
             artifact_id="codex:project:my_tool",
@@ -377,27 +391,33 @@ class TestReceiptAnalytics:
         t2 = (now - timedelta(days=5)).isoformat().replace("+00:00", "Z")
         t3 = now.isoformat().replace("+00:00", "Z")
 
-        store.add_receipt(_make_receipt(
-            receipt_id="r1",
-            harness="codex",
-            policy_decision="allow",
-            timestamp=t1,
-            artifact_name="install npm",
-        ))
-        store.add_receipt(_make_receipt(
-            receipt_id="r2",
-            harness="codex",
-            policy_decision="block",
-            timestamp=t2,
-            artifact_name="curl outbound",
-        ))
-        store.add_receipt(_make_receipt(
-            receipt_id="r3",
-            harness="claude",
-            policy_decision="ask",
-            timestamp=t3,
-            artifact_name="read secrets",
-        ))
+        store.add_receipt(
+            _make_receipt(
+                receipt_id="r1",
+                harness="codex",
+                policy_decision="allow",
+                timestamp=t1,
+                artifact_name="install npm",
+            )
+        )
+        store.add_receipt(
+            _make_receipt(
+                receipt_id="r2",
+                harness="codex",
+                policy_decision="block",
+                timestamp=t2,
+                artifact_name="curl outbound",
+            )
+        )
+        store.add_receipt(
+            _make_receipt(
+                receipt_id="r3",
+                harness="claude",
+                policy_decision="ask",
+                timestamp=t3,
+                artifact_name="read secrets",
+            )
+        )
 
         analytics = store.receipt_analytics(activity_days=7, trend_days=7, top_limit=5)
 
@@ -416,18 +436,22 @@ class TestReceiptAnalytics:
 
     def test_receipt_analytics_merges_artifact_names_case_insensitively(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
-        store.add_receipt(_make_receipt(
-            receipt_id="r1",
-            harness="codex",
-            policy_decision="allow",
-            artifact_name="bash",
-        ))
-        store.add_receipt(_make_receipt(
-            receipt_id="r2",
-            harness="codex",
-            policy_decision="allow",
-            artifact_name="Bash",
-        ))
+        store.add_receipt(
+            _make_receipt(
+                receipt_id="r1",
+                harness="codex",
+                policy_decision="allow",
+                artifact_name="bash",
+            )
+        )
+        store.add_receipt(
+            _make_receipt(
+                receipt_id="r2",
+                harness="codex",
+                policy_decision="allow",
+                artifact_name="Bash",
+            )
+        )
 
         analytics = store.receipt_analytics(top_limit=5)
         bash_entries = [entry for entry in analytics["top_artifacts"] if entry["name"].lower() == "bash"]

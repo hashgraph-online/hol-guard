@@ -11,18 +11,12 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore, SystemKeyringSecretStore
 
 
 @pytest.fixture(autouse=True)
-def _default_store_platform(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(guard_store_module.sys, "platform", "linux", raising=False)
-
-
-@pytest.fixture(autouse=True)
-def _fake_policy_integrity_keyring(_default_store_platform: None, install_fake_system_keyring) -> None:
+def _fake_policy_integrity_keyring(install_fake_system_keyring) -> None:
     install_fake_system_keyring()
 
 
@@ -306,7 +300,6 @@ def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(guard_store_module.sys, "platform", "linux", raising=False)
     store = _store(tmp_path)
     store.upsert_policy(
         _decision(artifact_id="codex:project:keychain-cache", artifact_hash="hash-keychain-cache"),
@@ -376,20 +369,26 @@ def test_policy_integrity_status_skips_passive_macos_keychain_reads(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
-    monkeypatch.setattr(
-        SystemKeyringSecretStore,
-        "_load_keyring_module",
-        staticmethod(lambda: (_ for _ in ()).throw(AssertionError("macOS policy integrity must not load keyring"))),
-    )
     store = _store(tmp_path)
     store.upsert_policy(
         _decision(artifact_id="codex:project:passive-skip", artifact_hash="hash-passive-skip"),
         "2026-06-14T00:00:00Z",
     )
     secret_store = store._policy_integrity_secret_store
-    assert secret_store is None
+    assert isinstance(secret_store, SystemKeyringSecretStore)
     store._clear_policy_integrity_cache()
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_supports_native_macos_security_reads",
+        classmethod(lambda cls: True),
+    )
+    monkeypatch.setattr(
+        secret_store,
+        "get_secret_with_timeout",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("passive policy-integrity status should skip macOS keychain reads")
+        ),
+    )
     monkeypatch.setattr(
         store,
         "_get_secret_from_store",
@@ -403,63 +402,8 @@ def test_policy_integrity_status_skips_passive_macos_keychain_reads(
 
     assert status["mode"] == "degraded"
     assert verify["mode"] == "degraded"
-    assert "system_keyring_unavailable" in status["degraded_reasons"]
+    assert "policy_integrity_key_unavailable" in status["degraded_reasons"]
     assert "policy_integrity_control_unavailable" in status["degraded_reasons"]
-    assert verify["local_rows_scanned"] == 1
-
-
-def test_policy_integrity_create_skips_macos_keychain_when_native_reads_are_unavailable(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
-    monkeypatch.setattr(
-        SystemKeyringSecretStore,
-        "_load_keyring_module",
-        staticmethod(lambda: (_ for _ in ()).throw(AssertionError("macOS policy integrity must not load keyring"))),
-    )
-    store = _store(tmp_path)
-    secret_store = store._policy_integrity_secret_store
-    assert secret_store is None
-
-    store.upsert_policy(
-        _decision(artifact_id="codex:project:no-native-create", artifact_hash="hash-no-native-create"),
-        "2026-06-14T00:00:00Z",
-    )
-    status = store.get_policy_integrity_status()
-
-    assert status["mode"] == "degraded"
-    assert "system_keyring_unavailable" in status["degraded_reasons"]
-    assert "policy_integrity_control_unavailable" in status["degraded_reasons"]
-
-
-def test_policy_integrity_status_disables_native_macos_keyring_reads(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
-    monkeypatch.setattr(
-        SystemKeyringSecretStore,
-        "_supports_native_macos_security_reads",
-        classmethod(
-            lambda cls: (_ for _ in ()).throw(
-                AssertionError("macOS policy integrity should not probe native keychain support")
-            )
-        ),
-    )
-    store = _store(tmp_path)
-    store.upsert_policy(
-        _decision(artifact_id="codex:project:native-disabled", artifact_hash="hash-native-disabled"),
-        "2026-06-14T00:00:00Z",
-    )
-
-    status = store.get_policy_integrity_status()
-    verify = store.verify_policy_integrity()
-
-    assert store._policy_integrity_secret_store is None
-    assert status["mode"] == "degraded"
-    assert "system_keyring_unavailable" in status["degraded_reasons"]
-    assert verify["mode"] == "degraded"
     assert verify["local_rows_scanned"] == 1
 
 

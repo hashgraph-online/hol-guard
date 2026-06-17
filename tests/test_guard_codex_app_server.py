@@ -36,10 +36,7 @@ def test_read_websocket_frame_rejects_oversized_payload_before_reading() -> None
 
 def test_send_websocket_handshake_rejects_oversized_headers_before_marker() -> None:
     oversized_header_bytes = 128_000
-    mock_socket = _OversizedHandshakeSocket(
-        b"HTTP/1.1 101 Switching Protocols\r\n"
-        + (b"A" * oversized_header_bytes)
-    )
+    mock_socket = _OversizedHandshakeSocket(b"HTTP/1.1 101 Switching Protocols\r\n" + (b"A" * oversized_header_bytes))
 
     with pytest.raises(ValueError, match="websocket_headers_too_large"):
         codex_app_server_module._send_websocket_handshake(mock_socket)

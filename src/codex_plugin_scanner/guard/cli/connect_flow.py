@@ -1241,8 +1241,6 @@ def connect_state_requires_oauth(
     if isinstance(request_id, str) and bool(request_id.strip()):
         return True
     auth_mode = cloud_profile.get("auth_mode") if isinstance(cloud_profile, dict) else None
-    if auth_mode == "legacy":
-        return False
     return auth_mode == "oauth"
 
 

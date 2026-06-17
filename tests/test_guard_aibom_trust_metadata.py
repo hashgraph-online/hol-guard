@@ -13,17 +13,18 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
-from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.aibom_trust_metadata import trust_resolution_from_domain
+from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.trust_attestation import (
+    GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
     GuardTrustAttestationSigningConfig,
     GuardTrustAttestationVerificationKey,
-    GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
     build_trust_attestation_payload,
     build_trust_attestation_verification_key,
     resolve_guard_oauth_trust_attestation_signing_config,
+    resolve_trust_attestation_signing_config,
     sign_trust_attestation,
     verify_trust_attestation,
 )
@@ -542,28 +543,28 @@ def test_p384_key_is_rejected_for_p256_attestation() -> None:
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption(),
-    ).decode('ascii')
+    ).decode("ascii")
 
-    with pytest.raises(ValueError, match='P-256'):
+    with pytest.raises(ValueError, match="P-256"):
         sign_trust_attestation(
             payload=build_trust_attestation_payload(
-                agent_id='agent-1',
-                item_id='plugin:trust-demo',
-                item_kind='plugin',
-                content_hash='sha256:plugin-local',
-                captured_at='2026-06-10T12:00:00+00:00',
-                evidence_hash='resolution-hash',
-                scope='trust_resolution',
-                workspace_id='workspace-alpha',
-                device_id='device-alpha',
+                agent_id="agent-1",
+                item_id="plugin:trust-demo",
+                item_kind="plugin",
+                content_hash="sha256:plugin-local",
+                captured_at="2026-06-10T12:00:00+00:00",
+                evidence_hash="resolution-hash",
+                scope="trust_resolution",
+                workspace_id="workspace-alpha",
+                device_id="device-alpha",
             ),
             config=GuardTrustAttestationSigningConfig(
-                active_key_id='p384-key',
+                active_key_id="p384-key",
                 private_key_pem=private_key_pem,
-                public_jwk_thumbprint='p384-key',
+                public_jwk_thumbprint="p384-key",
                 signature_algorithm=GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
             ),
-            signed_at='2026-06-10T12:00:00+00:00',
+            signed_at="2026-06-10T12:00:00+00:00",
         )
 
 
@@ -577,6 +578,24 @@ def test_invalid_oauth_private_key_disables_attestation_signing_config() -> None
         )
         is None
     )
+
+
+def test_headless_short_lived_attestation_generates_ephemeral_ec_key(monkeypatch) -> None:
+    monkeypatch.delenv("GUARD_AIBOM_TRUST_ATTESTATION_PRIVATE_KEY", raising=False)
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_HEADLESS_SHORT_LIVED", "1")
+
+    config = resolve_trust_attestation_signing_config(
+        {
+            "GUARD_AIBOM_TRUST_ATTESTATION_HEADLESS_SHORT_LIVED": "1",
+            "GUARD_AIBOM_TRUST_ATTESTATION_KEY_ID": "ci-short-lived",
+        }
+    )
+
+    assert config is not None
+    assert config.active_key_id == "ci-short-lived"
+    assert config.signature_algorithm == GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256
+    verification_key = build_trust_attestation_verification_key(config)
+    assert verification_key.public_jwk_thumbprint is not None
 
 
 def test_registry_identified_skill_still_gets_local_baseline(tmp_path: Path) -> None:

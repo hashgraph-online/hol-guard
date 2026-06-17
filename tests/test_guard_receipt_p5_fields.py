@@ -219,6 +219,7 @@ class TestReceiptFieldRoundtrip:
     def test_action_envelope_json_roundtrip(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
         from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
+
         envelope = GuardActionEnvelope(
             schema_version=1,
             action_id="action-01",
@@ -257,6 +258,7 @@ class TestReceiptFieldRoundtrip:
         store = _make_store(tmp_path)
         from codex_plugin_scanner.guard.models import GuardApprovalRequest
         from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
+
         envelope = GuardActionEnvelope(
             schema_version=1,
             action_id="action-02",
@@ -307,12 +309,7 @@ class TestV5MigrationPreservesRowids:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
-        conn.execute(
-            "create table schema_migrations ("
-            "  version integer primary key,"
-            "  applied_at text not null"
-            ")"
-        )
+        conn.execute("create table schema_migrations (  version integer primary key,  applied_at text not null)")
         conn.execute(
             """
             create table runtime_receipts (
@@ -335,9 +332,7 @@ class TestV5MigrationPreservesRowids:
             )
             """
         )
-        conn.execute(
-            "insert into schema_migrations (version, applied_at) values (4, '2025-01-01T00:00:00Z')"
-        )
+        conn.execute("insert into schema_migrations (version, applied_at) values (4, '2025-01-01T00:00:00Z')")
         conn.execute(
             """
             insert into runtime_receipts (
@@ -383,25 +378,28 @@ class TestV5MigrationPreservesRowids:
 
 
 class TestMapApprovalSource:
-    @pytest.mark.parametrize("decision_source,expected", [
-        ("inline-approved", "inline"),
-        ("inline-denied", "inline"),
-        ("native-approved", "inline"),
-        ("claude-native-approved", "inline"),
-        ("policy-allow", "policy"),
-        ("policy-block", "policy"),
-        ("policy_allow", "policy"),
-        ("heuristic-allow", "policy"),
-        ("heuristic_block", "policy"),
-        ("auto-allow", "policy"),
-        ("heuristic", "policy"),
-        ("policy", "policy"),
-        ("auto", "policy"),
-        ("pre-tool-hook", "policy"),
-        ("permission-request-hook", "policy"),
-        ("pending-approval", "approval_center"),
-        ("approval-center-allow", "approval_center"),
-        ("unknown-source", "approval_center"),
-    ])
+    @pytest.mark.parametrize(
+        "decision_source,expected",
+        [
+            ("inline-approved", "inline"),
+            ("inline-denied", "inline"),
+            ("native-approved", "inline"),
+            ("claude-native-approved", "inline"),
+            ("policy-allow", "policy"),
+            ("policy-block", "policy"),
+            ("policy_allow", "policy"),
+            ("heuristic-allow", "policy"),
+            ("heuristic_block", "policy"),
+            ("auto-allow", "policy"),
+            ("heuristic", "policy"),
+            ("policy", "policy"),
+            ("auto", "policy"),
+            ("pre-tool-hook", "policy"),
+            ("permission-request-hook", "policy"),
+            ("pending-approval", "approval_center"),
+            ("approval-center-allow", "approval_center"),
+            ("unknown-source", "approval_center"),
+        ],
+    )
     def test_decision_source_mapped_correctly(self, decision_source: str, expected: str) -> None:
         assert _map_approval_source(decision_source) == expected

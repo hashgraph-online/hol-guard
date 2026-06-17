@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, update_settings as update_approval_gate_settings
+from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput
+from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.approvals import (
     bulk_allow_read_only_once,
     is_bulk_allow_once_eligible,

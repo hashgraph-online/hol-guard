@@ -18,6 +18,38 @@ from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
 
+
+def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
+    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
+
+    Also installs a test-only resolver override so sync-path exercises stay hermetic
+    (no OAuth token refresh against the network). Tests that need real sync against a
+    local server pass sync_url=<url>.
+    """
+    from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token=token,
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=workspace_id,
+        now=now,
+    )
+    effective_sync_url = sync_url if sync_url is not None else "https://hol.org/api/guard/receipts/sync"
+    guard_runner_module._test_sync_auth_context_override = {
+        "sync_url": effective_sync_url,
+        "access_token": token,
+        "dpop_key_material": None,
+    }
+
+
 pytest_plugins = ["tests.bundle_first_cloud"]
 pytestmark = pytest.mark.usefixtures("bundle_first_cloud")
 
@@ -205,9 +237,7 @@ def test_guard_hook_blocks_package_request_before_execution_and_queues_cloud_syn
     payload_path = workspace_dir / "hook-event.json"
     _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install minimist@1.2.8")
     store = GuardStore(home_dir)
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
-    )
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="block"), "2026-05-19T00:00:00Z")
     (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
     monkeypatch.setenv("CODEX_MANAGED_BY_BUN", "1")
@@ -264,9 +294,7 @@ def test_guard_hook_ask_queues_package_approval_with_advisory_context(
     payload_path = workspace_dir / "hook-event.json"
     _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install minimist@1.2.8")
     store = GuardStore(home_dir)
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
-    )
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(
@@ -332,9 +360,7 @@ def test_guard_hook_ask_package_live_wait_surfaces_approval_url(
     payload_path = workspace_dir / "hook-event.json"
     _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install minimist@1.2.8")
     store = GuardStore(home_dir)
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
-    )
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(
@@ -409,9 +435,7 @@ def test_guard_hook_ask_package_live_wait_caps_browser_approval_wait(
     payload_path = workspace_dir / "hook-event.json"
     _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install minimist@1.2.8")
     store = GuardStore(home_dir)
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
-    )
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(
@@ -482,12 +506,7 @@ def test_guard_hook_warns_for_package_request_without_blocking(
     payload_path = workspace_dir / "hook-event.json"
     _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install minimist@1.2.8")
     store = GuardStore(home_dir)
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "demo-token",
-        "2026-05-19T00:00:00Z",
-        workspace_id=WORKSPACE_ID,
-    )
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="warn"), "2026-05-19T00:00:00Z")
 
     rc = main(
@@ -526,9 +545,7 @@ def test_guard_hook_keeps_block_copy_when_scanner_escalates_package_warning(
     payload_path = workspace_dir / "hook-event.json"
     _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install minimist@1.2.8")
     store = GuardStore(home_dir)
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
-    )
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="warn"), "2026-05-19T00:00:00Z")
     (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
@@ -591,9 +608,7 @@ def test_guard_hook_keeps_data_flow_summary_when_package_warning_is_weaker(
     payload_path = workspace_dir / "hook-event.json"
     _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install minimist@1.2.8")
     store = GuardStore(home_dir)
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
-    )
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="warn"), "2026-05-19T00:00:00Z")
     (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")

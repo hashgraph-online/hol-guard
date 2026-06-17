@@ -62,9 +62,7 @@ def _post_json(daemon: GuardDaemonServer, path: str) -> tuple[int, dict[str, obj
         return error.code, payload
 
 
-def _post_json_body(
-    daemon: GuardDaemonServer, path: str, body: dict[str, object]
-) -> tuple[int, dict[str, object]]:
+def _post_json_body(daemon: GuardDaemonServer, path: str, body: dict[str, object]) -> tuple[int, dict[str, object]]:
     request = urllib.request.Request(
         f"http://127.0.0.1:{daemon.port}{path}",
         data=json.dumps(body).encode("utf-8"),

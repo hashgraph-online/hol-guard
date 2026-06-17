@@ -9,6 +9,8 @@ from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
 EXPECTED_GOOD_PLUGIN_SCORE = 91
+
+
 def test_good_plugin_expected_score():
     result = scan_plugin(FIXTURES / "good-plugin")
     assert result.score == EXPECTED_GOOD_PLUGIN_SCORE

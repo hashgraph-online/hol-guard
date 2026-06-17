@@ -100,7 +100,7 @@ def test_inventory_snapshot_redacts_hermes_skills_and_mcp_config(tmp_path: Path)
             "mcp_servers:\n"
             "  docs:\n"
             '    command: "/usr/bin/node --token ghp_secretvalue '
-            'HTTPS://user:pass@example.com/mcp?auth=ghp_secretvalue '
+            "HTTPS://user:pass@example.com/mcp?auth=ghp_secretvalue "
             'ws://user:pass@example.com/socket"\n'
             '    url: "https://user:pass@example.com/mcp?token=ghp_secretvalue&mode=safe"\n'
             "    headers:\n"

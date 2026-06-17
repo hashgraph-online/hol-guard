@@ -854,7 +854,6 @@ class TestOpenCodeScopeDetection:
         scope = OpenCodeHarnessAdapter._scope_for(ctx, some_file)
         assert scope == "global"
 
-
     def test_install_and_uninstall_are_inverse_for_new_config(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         target = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
@@ -887,9 +886,7 @@ class TestOpenCodeScopeDetection:
         adapter = get_adapter("opencode")
         assert adapter.harness == "opencode"
 
-    def test_managed_install_ignores_opencode_config_env_var(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_managed_install_ignores_opencode_config_env_var(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path, workspace=False)
         custom_config = tmp_path / "my-opencode.json"
         custom_config.parent.mkdir(parents=True, exist_ok=True)
@@ -897,6 +894,3 @@ class TestOpenCodeScopeDetection:
         monkeypatch.setenv("OPENCODE_CONFIG", str(custom_config))
         target = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
         assert target == ctx.home_dir / ".config" / "opencode" / CONFIG_FILENAMES[0]
-
-
-

@@ -199,18 +199,14 @@ class TestRedTeamMaliciousMCP:
         action = _shell_action(command)
         context = _make_context(tmp_path)
         detectors = _run_detectors(action, context)
-        assert "bypass.shell" in detectors, (
-            f"Expected bypass.shell for 'pip uninstall hol-guard'; got {detectors}"
-        )
+        assert "bypass.shell" in detectors, f"Expected bypass.shell for 'pip uninstall hol-guard'; got {detectors}"
 
     def test_guard_config_deletion_triggers_bypass_shell(self, tmp_path: Path) -> None:
         command = "rm -rf ~/.hol-guard"
         action = _shell_action(command)
         context = _make_context(tmp_path)
         detectors = _run_detectors(action, context)
-        assert "bypass.shell" in detectors, (
-            f"Expected bypass.shell for 'rm -rf ~/.hol-guard'; got {detectors}"
-        )
+        assert "bypass.shell" in detectors, f"Expected bypass.shell for 'rm -rf ~/.hol-guard'; got {detectors}"
 
     def test_malicious_mcp_secret_read_prompt_triggers_safe_decode(self, tmp_path: Path) -> None:
         fixture = _FIXTURES / "malicious-mcp-secret-read.md"
@@ -227,9 +223,7 @@ class TestRedTeamMaliciousMCP:
         action = _file_read_action("~/.ssh/id_rsa")
         context = _make_context(tmp_path)
         detectors = _run_detectors(action, context)
-        assert "secret.path" in detectors, (
-            f"Expected secret.path for ~/.ssh/id_rsa file read; got {detectors}"
-        )
+        assert "secret.path" in detectors, f"Expected secret.path for ~/.ssh/id_rsa file read; got {detectors}"
 
 
 class TestRedTeamEncodedExfil:
@@ -275,9 +269,7 @@ class TestFalsePositiveSourceSearch:
         context = _make_context(tmp_path)
         detectors = _run_detectors(action, context)
         blocking = [d for d in detectors if d in ("data_flow.exfiltration", "bypass.shell")]
-        assert not blocking, (
-            f"Benign source search should not trigger blocking signals; got {blocking}"
-        )
+        assert not blocking, f"Benign source search should not trigger blocking signals; got {blocking}"
 
     def test_benign_source_search_fixture_as_prompt_has_no_safe_decode_signal(self, tmp_path: Path) -> None:
         fixture = _FIXTURES / "benign-source-search.py"
@@ -303,13 +295,9 @@ class TestFalsePositiveFakeToken:
         action = _file_read_action(fixture_path)
         context = _make_context(tmp_path)
         detectors = _run_detectors(action, context)
-        assert "secret.path" not in detectors, (
-            f"Docs file read should not trigger secret.path; got {detectors}"
-        )
+        assert "secret.path" not in detectors, f"Docs file read should not trigger secret.path; got {detectors}"
         outcome = _compose(action, context)
-        assert outcome.action != "block", (
-            f"Docs file read should not be blocked; got action={outcome.action!r}"
-        )
+        assert outcome.action != "block", f"Docs file read should not be blocked; got action={outcome.action!r}"
 
     def test_benign_fake_token_fixture_prompt_not_blocked(self, tmp_path: Path) -> None:
         fixture = _FIXTURES / "benign-docs-fake-token.py"
@@ -322,21 +310,16 @@ class TestFalsePositiveFakeToken:
         assert not blocking, f"Docs with fake token text triggered blocking detectors: {blocking}"
         outcome = _compose(action, context)
         assert outcome.action != "block", (
-            f"Docs with fake token text should not be blocked; got action={outcome.action!r}, "
-            f"detectors={detectors}"
+            f"Docs with fake token text should not be blocked; got action={outcome.action!r}, detectors={detectors}"
         )
 
     def test_benign_nvmrc_fake_creds_file_read_has_no_secret_path_signal(self, tmp_path: Path) -> None:
         action = _file_read_action("~/.nvmrc")
         context = _make_context(tmp_path)
         detectors = _run_detectors(action, context)
-        assert "secret.path" not in detectors, (
-            f"Benign nvmrc file read should not trigger secret.path; got {detectors}"
-        )
+        assert "secret.path" not in detectors, f"Benign nvmrc file read should not trigger secret.path; got {detectors}"
         outcome = _compose(action, context)
-        assert outcome.action != "block", (
-            f"nvmrc file read should not be blocked; got action={outcome.action!r}"
-        )
+        assert outcome.action != "block", f"nvmrc file read should not be blocked; got action={outcome.action!r}"
 
     def test_benign_nvmrc_fixture_prompt_has_no_blocking_signals(self, tmp_path: Path) -> None:
         fixture = _FIXTURES / "benign-nvmrc-fake-creds.py"
@@ -378,6 +361,4 @@ class TestFalsePositiveHealthEndpoint:
         context = _make_context(tmp_path)
         detectors = _run_detectors(action, context)
         blocking = [d for d in detectors if d in ("data_flow.exfiltration", "bypass.shell")]
-        assert not blocking, (
-            f"Loopback health check should not trigger blocking signals; got {blocking}"
-        )
+        assert not blocking, f"Loopback health check should not trigger blocking signals; got {blocking}"

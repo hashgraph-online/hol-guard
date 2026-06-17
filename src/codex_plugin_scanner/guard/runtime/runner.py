@@ -2695,11 +2695,20 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
     }
 
 
+# Test-only override: when set, _resolve_guard_sync_auth_context returns this dict
+# directly instead of resolving OAuth credentials (which would refresh tokens over
+# the network). Tests seed OAuth credentials for status/connect-state checks and set
+# this override to keep sync-path exercises hermetic.
+_test_sync_auth_context_override: dict[str, object] | None = None
+
+
 def _resolve_guard_sync_auth_context(
     store: GuardStore,
     *,
     allow_primary_repair: bool = True,
 ) -> dict[str, object]:
+    if _test_sync_auth_context_override is not None:
+        return dict(_test_sync_auth_context_override)
     with _guard_sync_auth_lock(store):
         oauth_health = store.get_oauth_local_credential_health()
         oauth_credentials = store.get_oauth_local_credentials(allow_primary=allow_primary_repair)
@@ -2714,14 +2723,7 @@ def _resolve_guard_sync_auth_context(
                     persist_recovered_secret=allow_primary_repair,
                 )
             raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
-        credentials = store.get_sync_credentials()
-        if credentials is None:
-            raise GuardSyncNotConfiguredError("Guard is not logged in.")
-        return {
-            "sync_url": _validate_guard_sync_url(str(credentials["sync_url"])),
-            "access_token": str(credentials["token"]),
-            "dpop_key_material": None,
-        }
+        raise GuardSyncNotConfiguredError("Guard is not logged in.")
 
 
 def _guard_sync_headers(

@@ -17,7 +17,10 @@ from codex_plugin_scanner.guard.aibom_detection import (
     instruction_role_for_path,
 )
 from codex_plugin_scanner.guard.consumer.service import artifact_hash, diff_artifact
-from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection, serialize_inventory_snapshot
+from codex_plugin_scanner.guard.inventory_contract import (
+    inventory_snapshot_from_detection,
+    serialize_inventory_snapshot,
+)
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 
 
@@ -60,11 +63,7 @@ def test_discover_agents_md_and_cursor_rules(tmp_path: Path) -> None:
         workspace_dir=workspace,
     )
     kinds = {artifact.artifact_type for artifact in artifacts}
-    roles = {
-        artifact.metadata.get("instructionRole")
-        for artifact in artifacts
-        if isinstance(artifact.metadata, dict)
-    }
+    roles = {artifact.metadata.get("instructionRole") for artifact in artifacts if isinstance(artifact.metadata, dict)}
 
     assert "instruction" in kinds
     assert "agents_md" in roles
@@ -103,11 +102,7 @@ def test_discover_standards_context_files_in_root_and_fallback_dirs(tmp_path: Pa
         for artifact in artifacts
         if artifact.artifact_type == "instruction" and isinstance(artifact.metadata, dict)
     }
-    names = {
-        artifact.name
-        for artifact in artifacts
-        if artifact.artifact_type == "instruction"
-    }
+    names = {artifact.name for artifact in artifacts if artifact.artifact_type == "instruction"}
 
     assert roles == {"product_md", "design_md", "claude_md"}
     assert "PRODUCT.md (.agents/context)" in names
@@ -338,11 +333,7 @@ def test_discover_named_instruction_docs(tmp_path: Path) -> None:
         home_dir=tmp_path,
         workspace_dir=workspace,
     )
-    roles = {
-        artifact.metadata.get("instructionRole")
-        for artifact in artifacts
-        if isinstance(artifact.metadata, dict)
-    }
+    roles = {artifact.metadata.get("instructionRole") for artifact in artifacts if isinstance(artifact.metadata, dict)}
 
     assert "design_md" in roles
     assert "security_md" in roles
@@ -499,7 +490,4 @@ def test_cursor_detect_extends_workspace_aibom(tmp_path: Path) -> None:
         workspace_dir=context.workspace_dir,
     )
 
-    assert any(
-        artifact.artifact_type == "instruction"
-        for artifact in extended.artifacts
-    )
+    assert any(artifact.artifact_type == "instruction" for artifact in extended.artifacts)
