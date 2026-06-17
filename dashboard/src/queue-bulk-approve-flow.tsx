@@ -237,7 +237,7 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
     );
     return (
       <BulkDrawerShell onClose={props.onCancel} labelledBy="guard-bulk-drawer-title" footer={doneFooter}>
-        <div className="flex items-start gap-3 rounded-xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-4">
+        <div className="flex items-start gap-3 rounded-xl border border-brand-green/25 bg-brand-green-bg/30 p-4">
           <HiMiniCheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-brand-green" aria-hidden="true" />
           <div>
             <h2 id="guard-bulk-drawer-title" className="text-base font-semibold text-brand-dark">

@@ -23147,7 +23147,7 @@ function QueueBulkDrawer(props) {
         children: "Done"
       }
     ) });
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(BulkDrawerShell, { onClose: props.onCancel, labelledBy: "guard-bulk-drawer-title", footer: doneFooter, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-4", children: [
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(BulkDrawerShell, { onClose: props.onCancel, labelledBy: "guard-bulk-drawer-title", footer: doneFooter, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-xl border border-brand-green/25 bg-brand-green-bg/30 p-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-green", "aria-hidden": "true" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "guard-bulk-drawer-title", className: "text-base font-semibold text-brand-dark", children: [
@@ -23453,7 +23453,7 @@ function describeActionMix(stats) {
     parts.push(`${stats.elevatedActionCount} elevated ${stats.elevatedActionCount === 1 ? "action" : "actions"}`);
   }
   if (stats.highActionCount > 0) {
-    parts.push(`${stats.highActionCount} destructive ${stats.highActionCount === 1 ? "action" : "actions"}`);
+    parts.push(`${stats.highActionCount} destructive ${pluralActions(stats.highActionCount)}`);
   }
   if (parts.length === 0) {
     return `${stats.actionCount} ${pluralActions(stats.actionCount)}`;
