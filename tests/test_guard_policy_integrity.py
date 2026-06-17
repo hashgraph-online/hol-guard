@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import sqlite3
+import sys
 from pathlib import Path
 from typing import cast
 
@@ -209,6 +210,12 @@ def test_upsert_policy_signs_local_row_and_resolve_honors_it(tmp_path: Path) -> 
 
 def test_direct_sqlite_insert_is_ignored_when_integrity_is_degraded(tmp_path: Path) -> None:
     store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:baseline", artifact_hash="hash-baseline"),
+        "2026-06-14T00:00:00Z",
+    )
+
+    status = store.get_policy_integrity_status()
     with sqlite3.connect(store.guard_home / "guard.db") as connection:
         connection.execute(
             """
@@ -238,10 +245,11 @@ def test_direct_sqlite_insert_is_ignored_when_integrity_is_degraded(tmp_path: Pa
         "codex",
         "codex:project:forged",
         "hash-forged",
-        now="2026-06-14T00:01:00Z",
+        now="2026-06-14T00:02:00Z",  # must be after the baseline upsert at 00:00:00Z
     )
     verify = store.verify_policy_integrity()
 
+    assert status["enforcement"] == "enforce"
     assert resolved is None
     assert verify["enforcement"] == "enforce"
     assert verify["counts"]["missing_integrity"] == 1
@@ -412,6 +420,7 @@ def test_policy_integrity_status_skips_passive_macos_keychain_reads(
     )
     assert store._policy_integrity_secret_store is None
     store._clear_policy_integrity_cache()
+    monkeypatch.setattr(sys, "platform", "darwin", raising=False)
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "_supports_native_macos_security_reads",

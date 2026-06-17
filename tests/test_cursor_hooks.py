@@ -749,11 +749,15 @@ def test_cursor_native_shell_does_not_approve_unrelated_command(tmp_path: Path) 
         now,
     )
 
+    graphql_command = (
+        'gh api graphql -f query=\'query { repository(owner:"org", name:"repo") { pullRequest(number:1) { id } } }\''
+    )
+
     assert not guard_commands_module._cursor_native_shell_is_approved(
         store,
         {
             "conversation_id": conversation_id,
-            "command": 'gh api graphql -f query=\'query { repository(owner:"org", name:"repo") { pullRequest(number:1) { id } } }\'',
+            "command": graphql_command,
         },
     )
 

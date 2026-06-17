@@ -118,7 +118,9 @@ def _package(
 
 
 def _bundle_response(
-    *, packages: list[dict[str, object]], policy_rules: list[dict[str, object]] | None = None
+    *,
+    packages: list[dict[str, object]],
+    policy_rules: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     generated_at = datetime.now(timezone.utc)
     expires_at = generated_at + timedelta(days=7)

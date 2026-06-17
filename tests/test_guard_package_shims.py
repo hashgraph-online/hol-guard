@@ -118,7 +118,7 @@ def _bundle_response(
     policy_hash: str = "policy-hash-shim-proof",
     bundle_version: str = "1747612800000-shim-proof",
 ) -> dict[str, object]:
-    generated_at = datetime(2026, 5, 19, tzinfo=timezone.utc)
+    generated_at = datetime.now(timezone.utc).replace(microsecond=0)
     expires_at = generated_at + timedelta(hours=12)
     advisory_id = f"GHSA-{ecosystem}-{package_name}"
     bundle = {
@@ -212,7 +212,7 @@ def _seed_bundle(
 
 
 def _seed_workspace_sync_credentials(home_dir: Path, sync_url: str, *, now: str = "2026-05-19T00:00:00Z") -> None:
-    _seed_guard_cloud(GuardStore(home_dir), workspace_id=WORKSPACE_ID)
+    _seed_guard_cloud(GuardStore(home_dir), workspace_id=WORKSPACE_ID, sync_url=sync_url, now=now)
 
 
 def _start_cloud_eval_server(
@@ -1098,7 +1098,7 @@ def test_guard_protect_probe_skips_local_approval_queue_on_block(
     store = GuardStore(home_dir)
 
     assert rc == 2
-    assert payload["verdict"]["action"] == "review"
+    assert payload["verdict"]["action"] == "block"
     assert "primary_approval_request_id" not in payload
     assert store.list_approval_requests(limit=None) == []
 
