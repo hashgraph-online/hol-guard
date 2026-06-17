@@ -765,7 +765,7 @@ export type PackageFirewallCliFallback = {
 };
 
 export type PackageFirewallConnectFlow = {
-  state: "idle" | "running" | "failed";
+  state: "idle" | "starting" | "running" | "failed";
   title: string;
   detail: string;
   action_label: string;

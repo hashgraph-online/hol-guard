@@ -679,6 +679,18 @@ def _set_package_firewall_connect_state(server: _GuardDaemonHttpServer, state: d
         server.package_firewall_connect_state = dict(state) if isinstance(state, dict) else None
 
 
+def _begin_package_firewall_connect_state(
+    server: _GuardDaemonHttpServer,
+    starting_state: dict[str, object],
+) -> tuple[bool, dict[str, object]]:
+    with server.package_firewall_connect_state_lock:
+        current = server.package_firewall_connect_state
+        if isinstance(current, dict) and str(current.get("state") or "") in {"starting", "running"}:
+            return False, dict(current)
+        server.package_firewall_connect_state = dict(starting_state)
+        return True, dict(starting_state)
+
+
 def _default_package_firewall_connect_flow(
     *,
     store: GuardStore,
@@ -782,7 +794,7 @@ def _resolve_package_firewall_connect_flow(
         **_default_package_firewall_connect_flow(store=server.store, reason=reason),
         **current,
     }
-    if state == "running":
+    if state in {"starting", "running"}:
         flow["title"] = "Finish Guard Cloud sign-in in your browser"
         browser_opened = flow.get("browser_opened") is True
         flow["detail"] = (
@@ -790,8 +802,12 @@ def _resolve_package_firewall_connect_flow(
             "unlock package-firewall controls automatically."
             if browser_opened
             else (
-                "HOL Guard is waiting for browser approval. Open the sign-in page below if your browser did "
-                "not open automatically."
+                "HOL Guard is opening the secure sign-in flow in your browser."
+                if state == "starting"
+                else (
+                    "HOL Guard is waiting for browser approval. Open the sign-in page below if your browser did "
+                    "not open automatically."
+                )
             )
         )
         flow["poll_after_ms"] = _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS
@@ -812,6 +828,18 @@ def _copy_guard_cloud_connect_state(server: _GuardDaemonHttpServer) -> dict[str,
 def _set_guard_cloud_connect_state(server: _GuardDaemonHttpServer, state: dict[str, object] | None) -> None:
     with server.guard_cloud_connect_state_lock:
         server.guard_cloud_connect_state = dict(state) if isinstance(state, dict) else None
+
+
+def _begin_guard_cloud_connect_state(
+    server: _GuardDaemonHttpServer,
+    starting_state: dict[str, object],
+) -> tuple[bool, dict[str, object]]:
+    with server.guard_cloud_connect_state_lock:
+        current = server.guard_cloud_connect_state
+        if isinstance(current, dict) and str(current.get("state") or "") in {"starting", "running"}:
+            return False, dict(current)
+        server.guard_cloud_connect_state = dict(starting_state)
+        return True, dict(starting_state)
 
 
 def _guard_cloud_connect_repair_mode_from_health(oauth_health: dict[str, object]) -> bool:
@@ -872,7 +900,7 @@ def _resolve_guard_cloud_connect_flow(*, server: _GuardDaemonHttpServer, store: 
         **_default_guard_cloud_connect_flow(store=store, repair_mode=repair_mode),
         **current,
     }
-    if state == "running":
+    if state in {"starting", "running"}:
         flow["title"] = "Finish Guard Cloud sign-in in your browser"
         browser_opened = flow.get("browser_opened") is True
         flow["detail"] = (
@@ -880,8 +908,12 @@ def _resolve_guard_cloud_connect_flow(*, server: _GuardDaemonHttpServer, store: 
             "unlock public sharing automatically."
             if browser_opened
             else (
-                "HOL Guard is waiting for browser approval. Open the sign-in page below if your browser did "
-                "not open automatically."
+                "HOL Guard is opening the secure sign-in flow in your browser."
+                if state == "starting"
+                else (
+                    "HOL Guard is waiting for browser approval. Open the sign-in page below if your browser did "
+                    "not open automatically."
+                )
             )
         )
         flow["poll_after_ms"] = _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS
@@ -2549,16 +2581,31 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 status=409,
             )
             return
-        current = _copy_package_firewall_connect_state(self.server)  # type: ignore[arg-type]
-        if isinstance(current, dict) and str(current.get("state") or "") == "running":
-            self._write_json(current, status=202)
-            return
         store = self.server.store  # type: ignore[attr-defined]
         connect_url = _package_firewall_connect_url(store)
         action_label = _package_firewall_connect_action_label(
             reason,
             repair_copy=_package_firewall_connect_needs_repair(store, reason),
         )
+        request_id = f"guard-connect-{uuid.uuid4().hex}"
+        starting_state = {
+            **_default_package_firewall_connect_flow(store=store, reason=reason),
+            "state": "starting",
+            "title": "Opening Guard Cloud sign-in",
+            "detail": "HOL Guard is opening the secure sign-in flow in your browser.",
+            "action_label": action_label,
+            "authorize_url": None,
+            "browser_opened": None,
+            "request_id": request_id,
+            "poll_after_ms": _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS,
+        }
+        started, current = _begin_package_firewall_connect_state(  # type: ignore[arg-type]
+            self.server,
+            starting_state,
+        )
+        if not started:
+            self._write_json(current, status=202)
+            return
         try:
             prepare_guard_cloud_connect_authorization(store)
             device = store.get_device_metadata()
@@ -2580,7 +2627,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json(failure, status=500)
             return
 
-        request_id = f"guard-connect-{uuid.uuid4().hex}"
         running_state = {
             **_default_package_firewall_connect_flow(store=store, reason=reason),
             "state": "running",
@@ -2719,12 +2765,27 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             return
         repair_mode = _guard_cloud_connect_repair_mode(store)
-        current = _copy_guard_cloud_connect_state(self.server)  # type: ignore[arg-type]
-        if isinstance(current, dict) and str(current.get("state") or "") == "running":
-            self._write_json({"connect_required": True, "connect_flow": current}, status=202)
-            return
         connect_url = _package_firewall_connect_url(store)
         action_label = "Repair Guard Cloud access" if repair_mode else "Connect Guard Cloud"
+        request_id = f"guard-connect-{uuid.uuid4().hex}"
+        starting_state = {
+            **_default_guard_cloud_connect_flow(store=store, repair_mode=repair_mode),
+            "state": "starting",
+            "title": "Opening Guard Cloud sign-in",
+            "detail": "HOL Guard is opening the secure sign-in flow in your browser.",
+            "action_label": action_label,
+            "authorize_url": None,
+            "browser_opened": None,
+            "request_id": request_id,
+            "poll_after_ms": _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS,
+        }
+        started, current = _begin_guard_cloud_connect_state(  # type: ignore[arg-type]
+            self.server,
+            starting_state,
+        )
+        if not started:
+            self._write_json({"connect_required": True, "connect_flow": current}, status=202)
+            return
         try:
             prepare_guard_cloud_connect_authorization(store)
             device = store.get_device_metadata()
@@ -2749,7 +2810,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             return
 
-        request_id = f"guard-connect-{uuid.uuid4().hex}"
         running_state = {
             **_default_guard_cloud_connect_flow(store=store, repair_mode=repair_mode),
             "state": "running",

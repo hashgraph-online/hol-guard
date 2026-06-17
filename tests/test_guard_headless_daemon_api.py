@@ -544,6 +544,136 @@ def test_guard_cloud_connect_starts_local_browser_flow_for_insights_share(
     assert store.get_cloud_sync_profile() is not None
 
 
+def _assert_connect_endpoint_coalesces_concurrent_browser_starts(
+    *,
+    endpoint: str,
+    extract_flow,
+    timeout_message: str,
+    store: GuardStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_started = threading.Event()
+    release_session = threading.Event()
+    opened_urls: list[str] = []
+    start_calls = 0
+
+    class _FakeSession:
+        authorize_url = "https://hol.org/mock-authorize"
+        redirect_uri = "http://127.0.0.1:53111/oauth/callback"
+        pkce_verifier = "pkce-verifier"
+        dpop_key_material = type(
+            "KeyMaterial",
+            (),
+            {
+                "private_key_pem": "private-key-new",
+                "public_jwk": {"kty": "EC", "crv": "P-256", "x": "x-value-new", "y": "y-value-new"},
+                "public_jwk_thumbprint": "thumbprint-new",
+            },
+        )()
+
+        def wait_for_callback(self, _timeout_seconds: float):
+            return None
+
+        def close(self) -> None:
+            return None
+
+    def _start_session_once(**_kwargs):
+        nonlocal start_calls
+        start_calls += 1
+        session_started.set()
+        assert release_session.wait(5), "Timed out waiting to release fake browser session"
+        return _FakeSession()
+
+    monkeypatch.setattr(daemon_server, "start_guard_browser_session", _start_session_once)
+    monkeypatch.setattr(daemon_server.webbrowser, "open", lambda url: opened_urls.append(url) or True)
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        first_response: list[tuple[int, dict[str, object]]] = []
+        first_error: list[BaseException] = []
+
+        def _first_post() -> None:
+            try:
+                first_response.append(
+                    _read_json_response(
+                        _request(
+                            daemon.port,
+                            endpoint,
+                            token=token,
+                            payload={},
+                        ),
+                    )
+                )
+            except BaseException as error:  # pragma: no cover - assertion path
+                first_error.append(error)
+
+        first_thread = threading.Thread(target=_first_post, daemon=True)
+        first_thread.start()
+        assert session_started.wait(5), timeout_message
+
+        second_status, second_payload = _read_json_response(
+            _request(
+                daemon.port,
+                endpoint,
+                token=token,
+                payload={},
+            ),
+        )
+        assert second_status == 202
+        second_flow = extract_flow(second_payload)
+        assert isinstance(second_flow, dict)
+        assert second_flow["state"] == "starting"
+        assert second_flow["authorize_url"] is None
+
+        release_session.set()
+        first_thread.join(5)
+        assert not first_error
+        assert first_response
+        first_status, first_payload = first_response[0]
+        assert first_status == 202
+        first_flow = extract_flow(first_payload)
+        assert isinstance(first_flow, dict)
+        assert first_flow["state"] == "running"
+        assert first_flow["authorize_url"] == "https://hol.org/mock-authorize"
+        assert first_flow["request_id"] == second_flow["request_id"]
+    finally:
+        release_session.set()
+        daemon.stop()
+
+    assert start_calls == 1
+    assert opened_urls == ["https://hol.org/mock-authorize"]
+
+
+def test_guard_cloud_connect_coalesces_concurrent_browser_starts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _assert_connect_endpoint_coalesces_concurrent_browser_starts(
+        endpoint="/v1/cloud/connect",
+        extract_flow=lambda payload: payload["connect_flow"],
+        timeout_message="Timed out waiting for first connect session start",
+        store=store,
+        monkeypatch=monkeypatch,
+    )
+
+
+def test_package_firewall_connect_coalesces_concurrent_browser_starts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _assert_connect_endpoint_coalesces_concurrent_browser_starts(
+        endpoint="/v1/supply-chain/package-shims/connect",
+        extract_flow=lambda payload: payload,
+        timeout_message="Timed out waiting for first package-firewall session start",
+        store=store,
+        monkeypatch=monkeypatch,
+    )
+
+
 def test_supply_chain_package_firewall_status_reports_reconnect_gate_for_expired_cloud_auth(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

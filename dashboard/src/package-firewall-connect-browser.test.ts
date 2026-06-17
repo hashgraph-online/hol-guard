@@ -1,4 +1,5 @@
 import {
+  openPackageFirewallAuthorizeFallback,
   openPackageFirewallAuthorizeWindow,
   PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE,
 } from "./package-firewall-connect-browser";
@@ -29,6 +30,25 @@ assert(
   openedUrls[0] === "https://hol.org/api/guard/oauth/authorize?client_id=test",
   "expected authorize URL to be passed to window.open",
 );
+
+openedUrls.length = 0;
+assert(
+  openPackageFirewallAuthorizeFallback(
+    "https://hol.org/api/guard/oauth/authorize?client_id=test",
+    true,
+  ),
+  "daemon-opened browser flow should be treated as handled",
+);
+assert(openedUrls.length === 0, "daemon-opened browser flow should not call window.open");
+
+assert(
+  openPackageFirewallAuthorizeFallback(
+    "https://hol.org/api/guard/oauth/authorize?client_id=test",
+    false,
+  ),
+  "daemon-blocked browser flow should open dashboard fallback window",
+);
+assert(openedUrls.length === 1, "daemon-blocked browser flow should call window.open once");
 
 openedUrls.length = 0;
 assert(!openPackageFirewallAuthorizeWindow(null), "null authorize URL should not open");

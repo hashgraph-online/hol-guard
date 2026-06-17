@@ -231,7 +231,7 @@ function resolveConnectSteps(
   connectFlow: NonNullable<PackageFirewallStatusResponse["connect_flow"]>,
   purpose: "package_firewall" | "insights_share" | "audit" = "package_firewall",
 ): Array<{ body: string; current: boolean; done: boolean; title: string }> {
-  const running = connectFlow.state === "running";
+  const running = connectFlow.state === "running" || connectFlow.state === "starting";
   const failed = connectFlow.state === "failed";
   const browserOpened = connectFlow.browser_opened === true;
   const unlockCopy = resolveConnectUnlockCopy(purpose);
@@ -329,7 +329,7 @@ export function ConnectFlowCard({
   purpose = "package_firewall",
 }: ConnectFlowCardProps) {
   const manualHref = connectFlow.authorize_url ?? connectFlow.connect_url;
-  const running = connectFlow.state === "running";
+  const running = connectFlow.state === "running" || connectFlow.state === "starting";
   const failed = connectFlow.state === "failed";
   const primaryBusy = connectStarting || running;
   const primaryLabel = resolveConnectPrimaryLabel({
