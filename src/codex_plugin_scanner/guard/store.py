@@ -566,10 +566,15 @@ class SystemKeyringSecretStore:
 
     def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float = 0.0) -> str | None:
         _ = timeout_seconds
-        if sys.platform == "darwin" and self.service_name == _POLICY_INTEGRITY_SERVICE_NAME:
-            # Passive Guard paths must never touch macOS Keychain. Even
-            # no-UI Security-framework reads can regress into OS prompts when
-            # the user keychain is missing, locked, or owned by another ACL.
+        if sys.platform == "darwin":
+            if self.service_name == _POLICY_INTEGRITY_SERVICE_NAME:
+                # Passive Guard paths must never touch macOS Keychain. Even
+                # no-UI Security-framework reads can regress into OS prompts
+                # when the user keychain is missing, locked, or owned by
+                # another ACL.
+                return None
+            if self._supports_native_macos_security_reads():
+                return self._get_secret_without_macos_ui(secret_id)
             return None
         if self._supports_native_macos_security_reads():
             return self._get_secret_without_macos_ui(secret_id)
