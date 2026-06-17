@@ -92,6 +92,25 @@ def test_system_keyring_timeout_uses_noninteractive_macos_lookup(monkeypatch: py
     assert secret_store.get_secret_with_timeout("policy-key", timeout_seconds=1.0) == "secret-value"
 
 
+def test_system_keyring_timeout_fails_closed_on_macos_without_native_reads(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    secret_store = SystemKeyringSecretStore(service_name="hol-guard.policy-integrity")
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_supports_native_macos_security_reads",
+        classmethod(lambda cls: False),
+    )
+    monkeypatch.setattr(
+        secret_store,
+        "get_secret",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("macOS timed reads should not fall back to interactive get_secret")
+        ),
+    )
+
+    assert secret_store.get_secret_with_timeout("policy-key", timeout_seconds=1.0) is None
+
+
 def test_policy_integrity_store_skips_macos_health_probe_when_backend_exists(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
