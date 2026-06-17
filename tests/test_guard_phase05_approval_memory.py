@@ -19,7 +19,7 @@ from codex_plugin_scanner.guard.runtime.detectors import (
     DetectorContext,
     FalsePositiveSuppressorDetector,
 )
-from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store import GuardStore, _warn_only_policy_integrity_status
 from codex_plugin_scanner.guard.store_approvals import approval_queue_identity_for_request
 
 
@@ -723,7 +723,15 @@ def test_artifact_runtime_scope_reuses_approval_for_same_exact_action_retry(tmp_
     assert store.get_approval_request("req-shell")["status"] == "resolved"
     assert store.get_approval_request("req-shell-other")["status"] == "pending"
     assert store.resolve_policy("codex", shell_request.artifact_id, "hash-retry") == "allow"
+    assert store.resolve_policy("codex", shell_request.artifact_id, None) is None
     assert store.resolve_policy("codex", other_shell_request.artifact_id, "hash-retry") is None
+
+
+def test_empty_degraded_reasons_do_not_honor_warn_only_policy() -> None:
+    assert not _warn_only_policy_integrity_status(
+        "degraded_mode",
+        {"enforcement": "warn", "degraded_reasons": []},
+    )
 
 
 def test_backend_degraded_warn_mode_honors_local_approval(tmp_path: Path) -> None:

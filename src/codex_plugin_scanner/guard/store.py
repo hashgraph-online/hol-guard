@@ -2784,6 +2784,7 @@ class GuardStore:
         current_time = now or _now()
         workspace_key = _workspace_policy_key(workspace)
         action_family_key = _artifact_family_key(artifact_id)
+        runtime_exact_match_key = _runtime_scoped_exact_match_key(artifact_id) if artifact_hash is not None else None
         events: list[tuple[str, dict[str, object]]] = []
         selected_payload: dict[str, object] | None = None
         with self._connect() as connection:
@@ -2800,6 +2801,7 @@ class GuardStore:
                   (
                     scope = 'artifact' and artifact_id = ? and (
                       artifact_hash is null or (? is not null and artifact_hash = ?)
+                      or (? is not null and artifact_hash = ?)
                     )
                   )
                   or (
@@ -2839,6 +2841,8 @@ class GuardStore:
                     artifact_id,
                     artifact_hash,
                     artifact_hash,
+                    runtime_exact_match_key,
+                    runtime_exact_match_key,
                     workspace_key,
                     workspace,
                     artifact_id,
@@ -6191,6 +6195,8 @@ def _warn_only_policy_integrity_status(status: str, state: Mapping[str, object])
         return False
     reasons = state.get("degraded_reasons")
     if not isinstance(reasons, list):
+        return False
+    if not reasons:
         return False
     allowed_reasons = {
         "system_keyring_unavailable",
