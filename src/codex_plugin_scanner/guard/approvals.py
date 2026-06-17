@@ -341,6 +341,8 @@ def apply_approval_resolution(
     request_publisher = _string_or_none(request.get("publisher"))
     scoped_artifact_id = request_artifact_id if scope in {"artifact", "harness", "global"} else workspace_artifact_id
     scoped_artifact_hash = request_artifact_hash if scope == "artifact" else workspace_artifact_hash
+    if _artifact_scope_runtime_exact_match(request, scope):
+        scoped_artifact_hash = None
     broad_runtime_exact_match_key = _broad_runtime_exact_match_key(request, scope)
     if broad_runtime_exact_match_key is not None:
         scoped_artifact_hash = broad_runtime_exact_match_key
@@ -446,6 +448,13 @@ def _workspace_policy_artifact_keys(request: Mapping[str, object], scope: str) -
     if not isinstance(artifact_hash, str) or not artifact_hash:
         return artifact_id, None
     return artifact_id, artifact_hash
+
+
+def _artifact_scope_runtime_exact_match(request: Mapping[str, object], scope: str) -> bool:
+    if scope != "artifact" or request.get("artifact_type") not in _WORKSPACE_SCOPED_RUNTIME_ARTIFACT_TYPES:
+        return False
+    artifact_id = request.get("artifact_id")
+    return isinstance(artifact_id, str) and _runtime_scoped_exact_match_key(artifact_id) is not None
 
 
 def _broad_runtime_exact_match_key(request: Mapping[str, object], scope: str) -> str | None:
