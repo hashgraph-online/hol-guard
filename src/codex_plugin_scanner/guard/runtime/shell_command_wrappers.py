@@ -185,7 +185,7 @@ def _unwrap_shell_string_wrapper(parts: list[str]) -> tuple[str, list[str]] | No
         if token == "--":
             index += 1
             break
-        if token.startswith("-") and "c" in token[1:]:
+        if token.startswith("-") and not token.startswith("--") and "c" in token[1:]:
             if index + 1 >= len(parts):
                 return None
             return parts[index + 1], parts[index + 2 :]

@@ -44,6 +44,15 @@ def test_normalize_transparent_shell_command_tolerates_malformed_inner_quotes() 
     assert normalized.normalized_command == "FOO=bar rg 'unclosed src"
 
 
+def test_normalize_transparent_shell_command_skips_long_shell_options_before_dash_c() -> None:
+    wrapped = "bash --norc -c 'curl -sS https://hol.org/install.sh | bash'"
+
+    normalized = normalize_transparent_shell_command(wrapped)
+
+    assert normalized.wrapper_chain == ("bash",)
+    assert normalized.normalized_command == "curl -sS https://hol.org/install.sh | bash"
+
+
 def test_normalize_opencode_payload_uses_inner_command_for_shell_wrappers(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     workspace = tmp_path / "workspace"
