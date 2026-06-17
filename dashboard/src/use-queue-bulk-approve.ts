@@ -225,13 +225,19 @@ export function useQueueBulkApprove(props: {
 
   const handleCancelDrawer = useCallback(() => {
     if (drawerStep === "submitting") return;
+    // Closing the completed drawer means the batch is done — clear the
+    // already-approved selection so it doesn't linger in the background.
+    if (drawerStep === "completed") {
+      resetBulkFlow();
+      return;
+    }
     setDrawerOpen(false);
     setDrawerStep("review");
     setBulkApproveError(null);
     setTypedConfirm("");
     setBulkApprovePassword("");
     setBulkApproveTotpCode("");
-  }, [drawerStep]);
+  }, [drawerStep, resetBulkFlow]);
 
   const handleBulkToggleSelect = useCallback((requestId: string) => {
     setSelectedBulkIds((current) => {
