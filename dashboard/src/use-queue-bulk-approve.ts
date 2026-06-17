@@ -4,10 +4,11 @@ import type { GuardApprovalGatePublicConfig, GuardApprovalRequest } from "./guar
 import {
   bulkApproveActionCount,
   bulkApprovePrimaryIds,
+  bulkApprovalRiskTier,
   countDuplicateActionsInGroups,
   countSensitiveFileReadGroups,
   groupDuplicates,
-  isReadOnlyQueueGroup,
+  isBulkApprovableGroup,
   summarizeSensitiveFileReadGroups,
   type QueueGroup,
 } from "./queue-state";
@@ -48,10 +49,10 @@ export function isBulkSelectableRequest(
       group.primary.request_id === item.request_id ||
       group.duplicateIds.includes(item.request_id)
     ) {
-      return isReadOnlyQueueGroup(group);
+      return isBulkApprovableGroup(group);
     }
   }
-  return isReadOnlyQueueGroup({ primary: item, duplicateCount: 0, duplicateIds: [] });
+  return isBulkApprovableGroup({ primary: item, duplicateCount: 0, duplicateIds: [] });
 }
 
 export type QueueBulkDrawerStep = "review" | "submitting" | "completed";
@@ -141,7 +142,7 @@ export function useQueueBulkApprove(props: {
   const groups = useMemo(() => groupDuplicates(props.items), [props.items]);
 
   const bulkEligibleGroups = useMemo(
-    () => groups.filter((group) => isReadOnlyQueueGroup(group)),
+    () => groups.filter((group) => isBulkApprovableGroup(group)),
     [groups],
   );
 
@@ -168,16 +169,25 @@ export function useQueueBulkApprove(props: {
   );
   const selectedGroupCount = selectedBulkGroups.length;
 
-  const selectionStats: BulkSelectionStats = useMemo(
-    () => ({
+  const selectionStats: BulkSelectionStats = useMemo(() => {
+    let elevatedActionCount = 0;
+    let lowActionCount = 0;
+    for (const group of selectedBulkGroups) {
+      const tier = bulkApprovalRiskTier(group);
+      const count = 1 + group.duplicateCount;
+      if (tier === "elevated") elevatedActionCount += count;
+      else if (tier === "low") lowActionCount += count;
+    }
+    return {
       actionCount: selectedActionCount,
       groupCount: selectedGroupCount,
       duplicateActionCount: countDuplicateActionsInGroups(selectedBulkGroups),
       sensitiveCount: sensitiveSummary.count,
       sensitiveSamplePaths: sensitiveSummary.samplePaths,
-    }),
-    [selectedActionCount, selectedGroupCount, selectedBulkGroups, sensitiveSummary],
-  );
+      elevatedActionCount,
+      lowActionCount,
+    };
+  }, [selectedActionCount, selectedGroupCount, selectedBulkGroups, sensitiveSummary]);
 
   const riskDisclosure = useMemo(
     () => buildBulkRiskDisclosure(selectionStats),
@@ -350,10 +360,10 @@ export function useQueueBulkApprove(props: {
   const bulkSelectableMap = useMemo(() => {
     const map = new Map<string, boolean>();
     for (const group of groups) {
-      const isReadOnly = isReadOnlyQueueGroup(group);
-      map.set(group.primary.request_id, isReadOnly);
+      const isApprovable = isBulkApprovableGroup(group);
+      map.set(group.primary.request_id, isApprovable);
       for (const id of group.duplicateIds) {
-        map.set(id, isReadOnly);
+        map.set(id, isApprovable);
       }
     }
     return map;
@@ -373,7 +383,7 @@ export function useQueueBulkApprove(props: {
   const isSelectable = useCallback(
     (item: GuardApprovalRequest) =>
       bulkSelectableMap.get(item.request_id) ??
-      isReadOnlyQueueGroup({ primary: item, duplicateCount: 0, duplicateIds: [] }),
+      isBulkApprovableGroup({ primary: item, duplicateCount: 0, duplicateIds: [] }),
     [bulkSelectableMap],
   );
 
