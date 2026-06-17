@@ -424,9 +424,7 @@ def test_policy_integrity_status_skips_passive_macos_keychain_reads(
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "_supports_native_macos_security_reads",
-        classmethod(
-            lambda cls: (_ for _ in ()).throw(AssertionError("passive macOS keychain probe should not run"))
-        ),
+        classmethod(lambda cls: (_ for _ in ()).throw(AssertionError("passive macOS keychain probe should not run"))),
     )
 
     status = store.get_policy_integrity_status()

@@ -341,6 +341,9 @@ def apply_approval_resolution(
     request_publisher = _string_or_none(request.get("publisher"))
     scoped_artifact_id = request_artifact_id if scope in {"artifact", "harness", "global"} else workspace_artifact_id
     scoped_artifact_hash = request_artifact_hash if scope == "artifact" else workspace_artifact_hash
+    artifact_runtime_exact_match_key = _artifact_scope_runtime_exact_match_key(request, scope)
+    if artifact_runtime_exact_match_key is not None:
+        scoped_artifact_hash = artifact_runtime_exact_match_key
     broad_runtime_exact_match_key = _broad_runtime_exact_match_key(request, scope)
     if broad_runtime_exact_match_key is not None:
         scoped_artifact_hash = broad_runtime_exact_match_key
@@ -353,6 +356,7 @@ def apply_approval_resolution(
         workspace=workspace if scope == "workspace" else None,
         publisher=request_publisher if scope == "publisher" else None,
         reason=reason,
+        source="approval-gate",
     )
     resolved_at = now or _now()
     resolved_gate_grant = require_approval_decision(
@@ -446,6 +450,13 @@ def _workspace_policy_artifact_keys(request: Mapping[str, object], scope: str) -
     if not isinstance(artifact_hash, str) or not artifact_hash:
         return artifact_id, None
     return artifact_id, artifact_hash
+
+
+def _artifact_scope_runtime_exact_match_key(request: Mapping[str, object], scope: str) -> str | None:
+    if scope != "artifact" or request.get("artifact_type") != "tool_action_request":
+        return None
+    artifact_id = request.get("artifact_id")
+    return _runtime_scoped_exact_match_key(artifact_id) if isinstance(artifact_id, str) else None
 
 
 def _broad_runtime_exact_match_key(request: Mapping[str, object], scope: str) -> str | None:
