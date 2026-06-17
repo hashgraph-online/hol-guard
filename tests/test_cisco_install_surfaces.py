@@ -83,10 +83,19 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert "uv sync --frozen --extra dev --extra publish --extra cisco" in publish_workflow
     assert 'uv tool install "hol-guard[cisco]==' in publish_workflow
     assert "COPY docker-requirements.txt LICENSE README.md /app/" in dockerfile
-    assert "RUN python3 -m pip install --no-deps --require-hashes -r /app/docker-requirements.txt" in dockerfile
+    assert "python3 -m pip install --no-deps --require-hashes -r /app/docker-requirements.txt" in dockerfile
+    assert "apt-get install -y --no-install-recommends gcc libc6-dev" in dockerfile
+    assert "apt-get purge -y --auto-remove gcc libc6-dev" in dockerfile
+    assert "apt-get clean" in dockerfile
     requirements_copy_index = dockerfile.index("COPY docker-requirements.txt LICENSE README.md /app/")
+    build_deps_index = dockerfile.index("apt-get install -y --no-install-recommends gcc libc6-dev")
+    pip_install_index = dockerfile.index("python3 -m pip install --no-deps --require-hashes -r /app/docker-requirements.txt")
+    purge_index = dockerfile.index("apt-get purge -y --auto-remove gcc libc6-dev")
     source_copy_index = dockerfile.index("COPY src /app/src")
+    assert requirements_copy_index < pip_install_index
     assert requirements_copy_index < source_copy_index
+    assert build_deps_index < pip_install_index
+    assert pip_install_index < purge_index
     assert "aiohttp==3.14.1" in docker_requirements
     assert "cisco-ai-mcp-scanner==" in docker_requirements
     assert "importlib-metadata==9.0.0" in docker_requirements
