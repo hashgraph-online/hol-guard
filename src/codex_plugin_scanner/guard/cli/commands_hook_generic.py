@@ -61,7 +61,7 @@ def _run_hook_generic_payload(
     *,
     action_envelope: GuardActionEnvelope | None,
     config: GuardConfig,
-    home_dir: Path | None,
+    home_dir: Path | None = None,
     output_stream: TextIO | None = None,
     payload: Mapping[str, object],
     runtime_workspace: Path | None,
