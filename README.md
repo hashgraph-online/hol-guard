@@ -301,11 +301,11 @@ Scanner package:
 pip install plugin-scanner
 ```
 
-The lean baseline keeps Python 3.10 support intact and always includes the shipped `cisco-ai-skill-scanner` integration.
+The lean baseline keeps Python 3.10 support intact and includes the shipped `cisco-ai-skill-scanner` integration on Python 3.10 through 3.13.
 
-### Full Cisco coverage
+### Resolver-safe Cisco extra
 
-Install the Cisco extra on Python 3.11+ when you want the Cisco-compatible LiteLLM pin in addition to the baseline skill scanner:
+Install the Cisco extra on Python 3.11 through 3.13 when you want the Cisco-compatible LiteLLM pin in addition to the baseline skill scanner:
 
 ```bash
 pip install "hol-guard[cisco]"
@@ -317,7 +317,7 @@ pip install "plugin-scanner[cisco]"
 
 `cisco-ai-mcp-scanner` stays in the repo-controlled `cisco-mcp` uv dependency group because its published wheel metadata still pins an older exact LiteLLM release. Docker and CI install that scanner with the lock-derived requirements and uv overrides, while the published `cisco` extra remains resolver-safe for pip users.
 
-On Guard surfaces, the Cisco extra adds optional offline evidence to `hol-guard scan`, `hol-guard preflight`, and `hol-guard explain <path>`. Use `--cisco-mode {auto,on,off}` to control that consumer-mode evidence path for local artifact scans. `hol-guard run` and Guard runtime prompt/file-read protection remain native Guard behavior in this pass.
+On Guard surfaces, the Cisco extra keeps the LiteLLM-dependent Cisco skill-scanner path on a patched resolver-safe version. Repo-controlled Docker and `uv sync --extra dev --extra cisco --group cisco-mcp --python 3.13` installs add optional Cisco MCP evidence to `hol-guard scan`, `hol-guard preflight`, and `hol-guard explain <path>`. Use `--cisco-mode {auto,on,off}` to control that consumer-mode evidence path for local artifact scans. `hol-guard run` and Guard runtime prompt/file-read protection remain native Guard behavior in this pass.
 
 Guard inventory snapshots can also carry Cisco MCP and skill-scanner status when a Hermes or OpenClaw inventory run explicitly enables those scanners. The Cloud evidence model records scanner source, status, redacted finding text, duration, mapped artifact ID, and risk component metadata without storing raw local paths or secrets.
 
@@ -555,7 +555,7 @@ The scanner currently detects or validates:
 - Publishability issues in `interface` metadata, HTTPS links, and declared asset paths
 - Workflow hardening gaps including unpinned third-party actions, `write-all`, privileged checkout patterns, missing Dependabot, and missing lockfiles
 - Skill-level issues surfaced by Cisco `skill-scanner` when the optional integration is installed
-- Static MCP findings surfaced by Cisco `mcp-scanner` when the optional `cisco` extra is installed
+- Static MCP findings surfaced by Cisco `mcp-scanner` when the repo-controlled Docker image or `cisco-mcp` uv group is installed
 
 ## CI And Automation
 
@@ -606,7 +606,7 @@ repos:
 The Marketplace action lives in the dedicated repository [hashgraph-online/ai-plugin-scanner-action](https://github.com/hashgraph-online/ai-plugin-scanner-action).
 
 The Marketplace action bundle is maintained in [`action/`](./action) and published automatically to [hashgraph-online/ai-plugin-scanner-action](https://github.com/hashgraph-online/ai-plugin-scanner-action) by [`.github/workflows/publish-action-repo.yml`](./.github/workflows/publish-action-repo.yml) after each PyPI release. The legacy alias [hashgraph-online/hol-codex-plugin-scanner-action](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action) remains available for existing workflows.
-When you run the scanner in your own job instead of the packaged action, install `plugin-scanner[cisco]` on Python 3.11+ and set `CISCO_MCP_SCAN=auto` or `CISCO_MCP_SCAN=on` for full Cisco MCP coverage.
+When you run the scanner in your own job instead of the packaged action, install `plugin-scanner[cisco]` on Python 3.11 through 3.13 for the resolver-safe Cisco skill-scanner path. Use the repo-controlled Docker image or `uv sync --extra dev --extra cisco --group cisco-mcp --python 3.13` when you also need Cisco MCP coverage with `CISCO_MCP_SCAN=auto` or `CISCO_MCP_SCAN=on`.
 
 ### Plugin Author Submission Flow
 

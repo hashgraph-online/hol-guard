@@ -1190,18 +1190,18 @@ publish = [
 
 [package.dev-dependencies]
 cisco-mcp = [
-    { name = "cisco-ai-mcp-scanner", marker = "python_full_version >= '3.11'" },
+    { name = "cisco-ai-mcp-scanner", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "basedpyright", marker = "extra == 'dev'", specifier = ">=1.39.8" },
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.5.0" },
-    { name = "cisco-ai-skill-scanner", specifier = "~=2.0.11" },
+    { name = "cisco-ai-skill-scanner", marker = "python_full_version < '3.14'", specifier = "~=2.0.11" },
     { name = "cryptography", specifier = ">=49.0.0" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.26.0" },
     { name = "keyring", specifier = ">=25.0" },
-    { name = "litellm", marker = "python_full_version >= '3.11' and extra == 'cisco'", specifier = "==1.89.1" },
+    { name = "litellm", marker = "python_full_version >= '3.11' and python_full_version < '3.14' and extra == 'cisco'", specifier = "==1.89.1" },
     { name = "packaging", specifier = ">=24.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.3" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },
@@ -1214,7 +1214,7 @@ requires-dist = [
 provides-extras = ["cisco", "dev", "publish"]
 
 [package.metadata.requires-dev]
-cisco-mcp = [{ name = "cisco-ai-mcp-scanner", marker = "python_full_version >= '3.11'", specifier = "==4.7.3" }]
+cisco-mcp = [{ name = "cisco-ai-mcp-scanner", marker = "python_full_version >= '3.11' and python_full_version < '3.14'", specifier = "==4.7.3" }]
 
 [[package]]
 name = "httpcore"
