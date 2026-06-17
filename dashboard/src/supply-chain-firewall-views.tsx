@@ -328,9 +328,9 @@ export function ConnectFlowCard({
   onStartConnect,
   purpose = "package_firewall",
 }: ConnectFlowCardProps) {
-  const manualHref = connectFlow.authorize_url ?? connectFlow.connect_url;
   const running = connectFlow.state === "running" || connectFlow.state === "starting";
   const failed = connectFlow.state === "failed";
+  const manualHref = connectFlow.authorize_url ?? (failed ? connectFlow.connect_url : null);
   const primaryBusy = connectStarting || running;
   const primaryLabel = resolveConnectPrimaryLabel({
     actionLabel: connectFlow.action_label,
@@ -340,7 +340,7 @@ export function ConnectFlowCard({
   const steps = resolveConnectSteps(connectFlow, purpose);
   const statusTone = running ? "blue" : mode === "repair" ? "attention" : "blue";
   const statusLabel = running ? "Waiting for approval" : mode === "repair" ? "Repair required" : "Connection required";
-  const showManualLink = connectFlow.authorize_url !== null || running || failed;
+  const showManualLink = manualHref !== null;
   const titleCopy = headline ?? connectFlow.title;
   const detailCopy = detail ?? connectFlow.detail;
   if (minimal) {

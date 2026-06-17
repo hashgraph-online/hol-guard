@@ -909,7 +909,9 @@ def _resolve_guard_cloud_connect_flow(*, server: _GuardDaemonHttpServer, store: 
     if not _guard_cloud_connect_required_for_insights(store):
         return None
     repair_mode = _guard_cloud_connect_repair_mode(store)
-    current = _copy_guard_cloud_connect_state(server)
+    cloud_current = _copy_guard_cloud_connect_state(server)
+    package_current = _copy_package_firewall_connect_state(server)
+    current = package_current if _guard_cloud_connect_state_is_in_flight(package_current) else cloud_current
     if current is None:
         return _default_guard_cloud_connect_flow(store=store, repair_mode=repair_mode)
     state = str(current.get("state") or "idle")

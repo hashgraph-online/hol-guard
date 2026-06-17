@@ -753,6 +753,28 @@ def test_package_firewall_and_guard_cloud_connect_share_in_flight_browser_start(
     )
 
 
+def test_guard_cloud_connect_status_preserves_package_firewall_in_flight_flow(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    server = daemon._server
+    daemon_server._set_package_firewall_connect_state(
+        server,
+        {
+            "state": "starting",
+            "request_id": "shared-connect-request",
+            "authorize_url": None,
+            "browser_opened": False,
+        },
+    )
+
+    flow = daemon_server._resolve_guard_cloud_connect_flow(server=server, store=store)
+
+    assert flow is not None
+    assert flow["state"] == "starting"
+    assert flow["request_id"] == "shared-connect-request"
+    assert flow["poll_after_ms"] == 1500
+
+
 def test_supply_chain_package_firewall_status_reports_reconnect_gate_for_expired_cloud_auth(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

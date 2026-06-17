@@ -3014,7 +3014,11 @@ class GuardStore:
                     key_id=key_id,
                     trusted_generation=_mapping_int(state, "generation"),
                 )
-                if integrity_result.status == "valid":
+                if integrity_result.status == "valid" or _warn_only_policy_integrity_status(
+                    integrity_result.status,
+                    state,
+                    source=str(candidate["source"]),
+                ):
                     selected_payload = self._policy_row_payload(
                         candidate,
                         integrity_result=integrity_result,
@@ -6303,11 +6307,11 @@ def _scoped_runtime_row_requires_exact_match(
 def _warn_only_policy_integrity_status(status: str, state: Mapping[str, object], *, source: str = "local") -> bool:
     if state.get("enforcement") != "warn":
         return False
+    if source != "approval-gate":
+        return False
     if status == "missing_integrity":
         return True
     if status != "degraded_mode":
-        return False
-    if source != "approval-gate":
         return False
     reasons = state.get("degraded_reasons")
     if not isinstance(reasons, list):

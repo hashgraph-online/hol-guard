@@ -656,6 +656,20 @@ def _evaluate_with_cloud(
             None,
         )
     except GuardSyncNotConfiguredError:
+        if bool(store.get_oauth_local_credential_health().get("configured")):
+            return (
+                _cloud_fail_closed_evaluation(
+                    code="cloud_validation_error",
+                    message="Guard cloud evaluation endpoint was not trusted, so this package request needs review.",
+                    artifact=artifact,
+                    targets=targets,
+                    workspace_dir=workspace_dir,
+                    workspace_fingerprint=workspace_fingerprint,
+                    bundle_meta=bundle_meta,
+                    fail_closed_decision=resolve_fail_closed_decision(),
+                ),
+                None,
+            )
         return None, None
     except RuntimeError:
         if can_defer_auth_failure_to_bundle():
