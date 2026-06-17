@@ -535,6 +535,9 @@ class SystemKeyringSecretStore:
     def _get_secret_without_macos_ui(self, secret_id: str) -> str | None:
         if not self._supports_native_macos_security_reads():
             return None
+        set_interaction_allowed = None
+        interaction_state = None
+        data = None
         try:
             from ctypes import byref, c_ubyte
 
@@ -575,15 +578,19 @@ class SystemKeyringSecretStore:
         except Exception:
             return None
         finally:
-            if "set_interaction_allowed" in locals() and set_interaction_allowed is not None:
+            if set_interaction_allowed is not None:
                 restore_value = interaction_state.value if interaction_state is not None else 1
                 with suppress(Exception):
                     set_interaction_allowed(restore_value)
         if status == 0:
             try:
-                value = macos_keyring_api.cfstr_to_str(data)
+                value = macos_keyring_api.cfdata_to_str(data)
             except Exception:
-                return None
+                value = None
+            finally:
+                if data is not None:
+                    with suppress(Exception):
+                        macos_keyring_api.CFRelease(data)
             return value if isinstance(value, str) and value else None
         interaction_blocked_statuses = {
             macos_keyring_api.error.item_not_found,
