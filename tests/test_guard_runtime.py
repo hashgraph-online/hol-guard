@@ -16412,10 +16412,8 @@ def test_sync_receipts_retries_once_after_timeout(tmp_path, monkeypatch):
 def test_sync_receipts_rejects_untrusted_sync_host_before_network(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store)
-    credentials_payload = store.get_sync_payload("credentials")
-    assert isinstance(credentials_payload, dict)
-    credentials_payload["sync_url"] = "https://evil.example/api/guard/receipts/sync"
-    store.set_sync_payload("credentials", credentials_payload, "2026-04-19T00:00:01+00:00")
+    assert guard_runner_module._test_sync_auth_context_override is not None
+    guard_runner_module._test_sync_auth_context_override["sync_url"] = "https://evil.example/api/guard/receipts/sync"
     attempted_request = False
 
     def _fake_urlopen(request, timeout):
@@ -16427,6 +16425,46 @@ def test_sync_receipts_rejects_untrusted_sync_host_before_network(tmp_path, monk
 
     with pytest.raises(guard_runner_module.GuardSyncNotConfiguredError, match="hol-guard connect"):
         guard_runner_module.sync_receipts(store)
+
+    assert attempted_request is False
+
+
+def test_sync_guard_events_rejects_untrusted_sync_host_before_network(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    attempted_request = False
+
+    def _fake_urlopen(request, timeout):
+        nonlocal attempted_request
+        attempted_request = True
+        raise AssertionError("network call should be blocked before urlopen")
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    with pytest.raises(guard_runner_module.GuardSyncNotConfiguredError, match="not trusted"):
+        guard_runner_module.sync_guard_events(
+            store,
+            auth_context={"sync_url": "https://evil.example/api/guard/receipts/sync"},
+        )
+
+    assert attempted_request is False
+
+
+def test_sync_pain_signals_rejects_untrusted_sync_host_before_network(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    attempted_request = False
+
+    def _fake_urlopen(request, timeout):
+        nonlocal attempted_request
+        attempted_request = True
+        raise AssertionError("network call should be blocked before urlopen")
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    with pytest.raises(guard_runner_module.GuardSyncNotConfiguredError, match="not trusted"):
+        guard_runner_module.sync_pain_signals(
+            store,
+            auth_context={"sync_url": "https://evil.example/api/guard/receipts/sync"},
+        )
 
     assert attempted_request is False
 
@@ -17978,10 +18016,8 @@ def test_sync_runtime_session_rejects_untrusted_oauth_issuer_before_network(tmp_
 def test_sync_runtime_session_rejects_non_https_legacy_sync_url_before_network(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
-    credentials_payload = store.get_sync_payload("credentials")
-    assert isinstance(credentials_payload, dict)
-    credentials_payload["sync_url"] = "http://hol.org/api/guard/receipts/sync"
-    store.set_sync_payload("credentials", credentials_payload, "2026-06-01T00:00:01+00:00")
+    assert guard_runner_module._test_sync_auth_context_override is not None
+    guard_runner_module._test_sync_auth_context_override["sync_url"] = "http://hol.org/api/guard/receipts/sync"
     attempted_request = False
 
     def _fake_urlopen(request, timeout):
@@ -18016,10 +18052,8 @@ def test_sync_runtime_session_rejects_non_https_legacy_sync_url_before_network(t
 def test_sync_runtime_session_rejects_unallowlisted_legacy_sync_url_before_network(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
-    credentials_payload = store.get_sync_payload("credentials")
-    assert isinstance(credentials_payload, dict)
-    credentials_payload["sync_url"] = "https://evil.example/api/guard/receipts/sync"
-    store.set_sync_payload("credentials", credentials_payload, "2026-06-01T00:00:01+00:00")
+    assert guard_runner_module._test_sync_auth_context_override is not None
+    guard_runner_module._test_sync_auth_context_override["sync_url"] = "https://evil.example/api/guard/receipts/sync"
     attempted_request = False
 
     def _fake_urlopen(request, timeout):

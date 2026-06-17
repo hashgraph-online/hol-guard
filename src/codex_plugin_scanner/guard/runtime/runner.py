@@ -1169,7 +1169,7 @@ def sync_receipts(
     """Push local receipts to the configured sync endpoint."""
 
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    sync_url = _normalized_receipts_sync_url(_auth_context_sync_url(resolved_auth_context))
+    sync_url = _normalized_receipts_sync_url(_validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context)))
     prior_receipt_cursor = _receipt_sync_cursor_rowid(store)
     receipts = _receipt_sync_rows_for_upload(store, cursor_rowid=prior_receipt_cursor)
     inventory = store.list_inventory()
@@ -1777,7 +1777,7 @@ def sync_guard_events(
     """Push pending GuardEventV1 envelopes to Guard Cloud."""
 
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    sync_url = _guard_events_sync_url(_auth_context_sync_url(resolved_auth_context))
+    sync_url = _guard_events_sync_url(_validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context)))
     previous_summary = store.get_sync_payload("guard_events_v1_summary")
     total_events = 0
     total_accepted = 0
@@ -1931,7 +1931,9 @@ def sync_runtime_session(
     """Publish the active Guard runtime session so the dashboard can show the machine immediately."""
 
     resolved_auth_context = auth_context or _resolve_guard_sync_auth_context(store)
-    sync_url = _normalized_runtime_sessions_sync_url(_auth_context_sync_url(resolved_auth_context))
+    sync_url = _normalized_runtime_sessions_sync_url(
+        _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
+    )
     session_payload = _cloud_runtime_session_payload(store, session)
     body = json.dumps({"session": session_payload}).encode("utf-8")
     request = _guard_sync_request(
@@ -2067,7 +2069,9 @@ def sync_pain_signals(
         raise
     except GuardSyncNotConfiguredError:
         return 0
-    normalized_sync_url = _normalized_receipts_sync_url(_auth_context_sync_url(resolved_auth_context))
+    normalized_sync_url = _normalized_receipts_sync_url(
+        _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
+    )
     cursor_payload = store.get_sync_payload("pain_signal_cursor")
     last_event_id = _last_uploaded_event_id(cursor_payload)
     uploaded_count = 0

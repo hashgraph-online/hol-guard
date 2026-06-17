@@ -47,6 +47,7 @@ from .runner import (
     _normalized_receipts_sync_url,
     _resolve_guard_sync_auth_context,
     _urlopen_json_with_timeout_retry,
+    _validate_guard_sync_url,
 )
 from .supply_chain import detect_supply_chain_risk
 from .supply_chain_bundle import (
@@ -277,6 +278,7 @@ def evaluate_package_request_artifact(
         workspace_fingerprint=workspace_fingerprint,
         bundle_meta=bundle_meta,
         bundle_defer_eligible=bundle_defer_eligible,
+        bundle_decision=bundle_evaluation.decision if bundle_evaluation is not None else None,
         store=store,
     )
     if cloud_result is not None and _cloud_result_should_defer_to_bundle(
@@ -611,6 +613,7 @@ def _evaluate_with_cloud(
     workspace_fingerprint: str | None,
     bundle_meta: dict[str, str] | None,
     bundle_defer_eligible: bool,
+    bundle_decision: str | None,
     store: GuardStore,
 ) -> tuple[PackageRequestEvaluation | None, dict[str, object] | None]:
     if workspace_id is None or workspace_fingerprint is None:
@@ -624,10 +627,15 @@ def _evaluate_with_cloud(
         result: str = fail_closed_decision
         return result
 
+    def can_defer_auth_failure_to_bundle() -> bool:
+        if bundle_meta is None or not bundle_defer_eligible:
+            return False
+        return bundle_decision == "block" or resolve_fail_closed_decision() != "block"
+
     try:
         auth_context = _resolve_guard_sync_auth_context(store, allow_primary_repair=False)
     except GuardSyncAuthorizationExpiredError:
-        if bundle_meta is not None and bundle_defer_eligible and resolve_fail_closed_decision() != "block":
+        if can_defer_auth_failure_to_bundle():
             return None, _cloud_fallback_reason(
                 code="cloud_auth_error",
                 message=(
@@ -649,9 +657,46 @@ def _evaluate_with_cloud(
         )
     except GuardSyncNotConfiguredError:
         return None, None
+    except RuntimeError:
+        if can_defer_auth_failure_to_bundle():
+            return None, _cloud_fallback_reason(
+                code="cloud_auth_error",
+                message=(
+                    "Guard cloud evaluation was not authorized, so Guard fell back to signed bundle intelligence."
+                ),
+            )
+        return (
+            _cloud_fail_closed_evaluation(
+                code="cloud_auth_error",
+                message="Guard cloud evaluation was not authorized, so this package request needs review.",
+                artifact=artifact,
+                targets=targets,
+                workspace_dir=workspace_dir,
+                workspace_fingerprint=workspace_fingerprint,
+                bundle_meta=bundle_meta,
+                fail_closed_decision=resolve_fail_closed_decision(),
+            ),
+            None,
+        )
     sync_url = _optional_string(auth_context.get("sync_url"))
     if sync_url is None:
         return None, None
+    try:
+        sync_url = _validate_guard_sync_url(sync_url, issuer=_optional_string(auth_context.get("issuer")))
+    except GuardSyncNotConfiguredError:
+        return (
+            _cloud_fail_closed_evaluation(
+                code="cloud_validation_error",
+                message="Guard cloud evaluation endpoint was not trusted, so this package request needs review.",
+                artifact=artifact,
+                targets=targets,
+                workspace_dir=workspace_dir,
+                workspace_fingerprint=workspace_fingerprint,
+                bundle_meta=bundle_meta,
+                fail_closed_decision=resolve_fail_closed_decision(),
+            ),
+            None,
+        )
     evaluate_url = _normalized_supply_chain_evaluate_url(sync_url, workspace_id)
     request_payload = _build_request_payload(
         artifact=artifact,
