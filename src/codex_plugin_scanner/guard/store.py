@@ -921,6 +921,9 @@ def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
 
 
 def _build_policy_integrity_secret_store() -> SystemKeyringSecretStore | None:
+    if sys.platform == "darwin":
+        # Policy integrity is passive hardening; it must never raise Keychain UI.
+        return None
     if SystemKeyringSecretStore._backend_is_available():
         return SystemKeyringSecretStore(service_name="hol-guard.policy-integrity")
     return None

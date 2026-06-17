@@ -111,23 +111,26 @@ def test_system_keyring_timeout_fails_closed_on_macos_without_native_reads(monke
     assert secret_store.get_secret_with_timeout("policy-key", timeout_seconds=1.0) is None
 
 
-def test_policy_integrity_store_skips_macos_health_probe_when_backend_exists(
+def test_policy_integrity_store_is_disabled_on_macos_before_keyring_load(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
-    module = _FakeSystemKeyringModule()
-    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_load_keyring_module",
+        staticmethod(lambda: (_ for _ in ()).throw(AssertionError("macOS policy integrity must not load keyring"))),
+    )
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "_macos_default_keychain_is_usable",
         classmethod(
-            lambda cls: (_ for _ in ()).throw(AssertionError("policy integrity builder should skip health probe"))
+            lambda cls: (_ for _ in ()).throw(AssertionError("macOS policy integrity must not probe keychain"))
         ),
     )
 
     secret_store = guard_store_module._build_policy_integrity_secret_store()
 
-    assert isinstance(secret_store, SystemKeyringSecretStore)
+    assert secret_store is None
 
 
 @pytest.fixture(autouse=True)
