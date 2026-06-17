@@ -23965,8 +23965,8 @@ function ReviewWorkspace(props) {
           isBulkSelectable: bulkApprove.bulkSelection.isSelectable,
           isBulkSelected: bulkApprove.bulkSelection.isSelected,
           onBulkToggleSelect: bulkApprove.bulkSelection.onToggle,
-          onBulkSelectAll: () => bulkApprove.bulkSelection.onToggleMany(filteredRequests, true),
-          onBulkClearAll: () => bulkApprove.bulkSelection.onToggleMany(filteredRequests, false),
+          onBulkSelectAll: () => bulkApprove.bulkSelection.onToggleMany(pagedRequests, true),
+          onBulkClearAll: () => bulkApprove.bulkSelection.onToggleMany(pagedRequests, false),
           ref: queueRef
         }
       ) }),
@@ -24088,6 +24088,29 @@ const ReviewQueueList = reactExports.forwardRef(({
   }, [allFilteredRequests]);
   const isFiltered = searchTerm || semanticFilter !== "all" || categoryFilter !== "all" || sortDirection !== "newest" || dateFrom || dateTo;
   const showPagination = filteredCount > QUEUE_PAGE_SIZE;
+  const pageSelectableItems = reactExports.useMemo(
+    () => requests.filter((item) => isBulkSelectable?.(item) === true),
+    [requests, isBulkSelectable]
+  );
+  const pageSelectedCount = reactExports.useMemo(
+    () => pageSelectableItems.filter((item) => isBulkSelected?.(item) === true).length,
+    [pageSelectableItems, isBulkSelected]
+  );
+  const pageAllSelected = pageSelectableItems.length > 0 && pageSelectedCount === pageSelectableItems.length;
+  const pageSomeSelected = pageSelectedCount > 0 && !pageAllSelected;
+  const handlePageSelectAll = reactExports.useCallback(() => {
+    if (pageAllSelected) {
+      onBulkClearAll?.();
+    } else {
+      onBulkSelectAll?.();
+    }
+  }, [pageAllSelected, onBulkSelectAll, onBulkClearAll]);
+  const setIndeterminate = reactExports.useCallback(
+    (el) => {
+      if (el) el.indeterminate = pageSomeSelected;
+    },
+    [pageSomeSelected]
+  );
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "space-y-3", ref, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Queue" }),
@@ -24095,30 +24118,6 @@ const ReviewQueueList = reactExports.forwardRef(({
         filteredCount,
         "/",
         totalCount
-      ] })
-    ] }),
-    selectionMode && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2 rounded-lg border border-brand-blue/15 bg-brand-blue/[0.03] px-3 py-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5 text-brand-blue", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-medium text-brand-dark/80", children: "Select reads to approve together" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "ml-auto flex items-center gap-2", children: [
-        onBulkSelectAll && /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            onClick: onBulkSelectAll,
-            className: "rounded-full px-2 py-0.5 text-[11px] font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5",
-            children: "Select all eligible"
-          }
-        ),
-        onBulkClearAll && /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            onClick: onBulkClearAll,
-            className: "rounded-full px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-slate-50 hover:text-brand-dark",
-            children: "Clear"
-          }
-        )
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 rounded-xl border border-slate-100 bg-white p-3", children: [
@@ -24216,26 +24215,42 @@ const ReviewQueueList = reactExports.forwardRef(({
         )
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
         role: "listbox",
         "aria-label": "Review queue",
         className: "space-y-2 rounded-lg border border-slate-100 bg-white p-1.5",
-        children: requests.length > 0 ? requests.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          QueueItemRow,
-          {
-            item,
-            active: item.request_id === activeRequestId,
-            index,
-            onOpenRequest,
-            selectionMode,
-            selectable: isBulkSelectable?.(item) === true,
-            selected: isBulkSelected?.(item) === true,
-            onToggleSelect: onBulkToggleSelect
-          },
-          item.request_id
-        )) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-3 py-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: "No matching actions", body: "Try a different search or filter.", tone: "teach" }) })
+        children: [
+          selectionMode && pageSelectableItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-2 border-b border-slate-100 px-2 pb-1.5 pt-1", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex shrink-0 cursor-pointer items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "checkbox",
+                checked: pageAllSelected,
+                ref: setIndeterminate,
+                onChange: handlePageSelectAll,
+                "aria-label": pageAllSelected ? "Clear selection of eligible reads on this page" : "Select all eligible reads on this page",
+                className: "h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-medium text-muted-foreground", children: pageSelectedCount > 0 ? `${pageSelectedCount} of ${pageSelectableItems.length} selected` : `Select all eligible (${pageSelectableItems.length})` })
+          ] }) }),
+          requests.length > 0 ? requests.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            QueueItemRow,
+            {
+              item,
+              active: item.request_id === activeRequestId,
+              index,
+              onOpenRequest,
+              selectionMode,
+              selectable: isBulkSelectable?.(item) === true,
+              selected: isBulkSelected?.(item) === true,
+              onToggleSelect: onBulkToggleSelect
+            },
+            item.request_id
+          )) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-3 py-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: "No matching actions", body: "Try a different search or filter.", tone: "teach" }) })
+        ]
       }
     ),
     showPagination && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2 text-xs text-muted-foreground", children: [
@@ -24297,105 +24312,99 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
   const category = resolveQueueCategory(item);
   const CategoryIcon = iconForQueueCategory(category.id);
   const preview = queueItemPreview(item);
-  const showCheckbox = selectionMode && selectable;
-  const handleClick = reactExports.useCallback(
-    (event) => {
-      if (showCheckbox && (event.altKey || event.metaKey || event.ctrlKey) && onToggleSelect) {
-        event.preventDefault();
-        onToggleSelect(item);
-        return;
-      }
-      onOpenRequest(item.request_id);
-    },
-    [item.request_id, item, onOpenRequest, onToggleSelect, showCheckbox]
-  );
+  const showCheckbox = selectionMode;
+  const canSelect = selectionMode && selectable;
+  const handleClick = reactExports.useCallback(() => {
+    onOpenRequest(item.request_id);
+  }, [item.request_id, onOpenRequest]);
   const handleCheckboxChange = reactExports.useCallback(
     (event) => {
       event.stopPropagation();
+      if (!canSelect) return;
       onToggleSelect?.(item);
     },
-    [item, onToggleSelect]
+    [item, onToggleSelect, canSelect]
   );
   const handleKeyDown = reactExports.useCallback(
     (event) => {
-      if (!showCheckbox) return;
+      if (!canSelect) return;
       if (event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
         onToggleSelect?.(item);
       }
     },
-    [item, onToggleSelect, showCheckbox]
+    [item, onToggleSelect, canSelect]
   );
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+  const checkboxLabel = canSelect ? `Select ${preview} for bulk approval` : `Not eligible for bulk approval: ${category.shortLabel.toLowerCase()}`;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "div",
     {
       role: "none",
       className: `w-full rounded-lg py-2.5 px-2 transition-all ${selected ? "border border-brand-blue/60 bg-brand-blue/[0.08] ring-1 ring-brand-blue/20" : active ? "border border-brand-blue bg-brand-blue/[0.06]" : "border border-transparent bg-white hover:bg-slate-50"}`,
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
-          showCheckbox ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "label",
-            {
-              className: "flex shrink-0 cursor-pointer items-center",
-              onClick: (event) => event.stopPropagation(),
-              onKeyDown: handleKeyDown,
-              children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "input",
-                {
-                  type: "checkbox",
-                  checked: selected,
-                  onChange: handleCheckboxChange,
-                  "aria-label": `Select ${preview} for bulk approval`,
-                  className: "h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30"
-                }
-              )
-            }
-          ) : null,
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              type: "button",
-              onClick: handleClick,
-              role: "option",
-              "aria-selected": active,
-              "aria-posinset": index + 1,
-              "aria-setsize": void 0,
-              tabIndex: active ? 0 : -1,
-              className: "flex min-w-0 flex-1 items-center justify-between gap-2 text-left",
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "span",
-                    {
-                      className: `mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${isBlocked ? "bg-brand-attention" : "bg-emerald-400"}`,
-                      "aria-hidden": "true"
-                    }
-                  ),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-medium text-brand-dark", children: preview }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "truncate text-[11px] text-muted-foreground", children: [
-                      harnessDisplayName(item.harness),
-                      " · ",
-                      category.shortLabel,
-                      " · ",
-                      formatQueueRequestDate(item)
-                    ] })
-                  ] })
-                ] }),
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+        showCheckbox ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "label",
+          {
+            className: `flex shrink-0 items-center ${canSelect ? "cursor-pointer" : "cursor-not-allowed"}`,
+            title: checkboxLabel,
+            onClick: (event) => event.stopPropagation(),
+            onKeyDown: handleKeyDown,
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "checkbox",
+                checked: selected,
+                disabled: !canSelect,
+                onChange: handleCheckboxChange,
+                "aria-label": checkboxLabel,
+                className: "h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30 disabled:opacity-40"
+              }
+            )
+          }
+        ) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: handleClick,
+            role: "option",
+            "aria-selected": active,
+            "aria-posinset": index + 1,
+            "aria-setsize": void 0,
+            tabIndex: active ? 0 : -1,
+            className: "flex min-w-0 flex-1 items-center justify-between gap-2 text-left",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   "span",
                   {
-                    className: `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
-                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" })
+                    className: `mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${isBlocked ? "bg-brand-attention" : "bg-emerald-400"}`,
+                    "aria-hidden": "true"
                   }
-                )
-              ]
-            }
-          )
-        ] }),
-        showCheckbox && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 pl-6 text-[10px] text-muted-foreground/80", children: "Hold ⌥/Alt + click row to toggle · Esc closes the review drawer" })
-      ]
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-medium text-brand-dark", children: preview }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "truncate text-[11px] text-muted-foreground", children: [
+                    harnessDisplayName(item.harness),
+                    " · ",
+                    category.shortLabel,
+                    " · ",
+                    formatQueueRequestDate(item)
+                  ] })
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "span",
+                {
+                  className: `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" })
+                }
+              )
+            ]
+          }
+        )
+      ] })
     }
   );
 }

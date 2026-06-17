@@ -374,8 +374,8 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
             isBulkSelectable={bulkApprove.bulkSelection.isSelectable}
             isBulkSelected={bulkApprove.bulkSelection.isSelected}
             onBulkToggleSelect={bulkApprove.bulkSelection.onToggle}
-            onBulkSelectAll={() => bulkApprove.bulkSelection.onToggleMany(filteredRequests, true)}
-            onBulkClearAll={() => bulkApprove.bulkSelection.onToggleMany(filteredRequests, false)}
+            onBulkSelectAll={() => bulkApprove.bulkSelection.onToggleMany(pagedRequests, true)}
+            onBulkClearAll={() => bulkApprove.bulkSelection.onToggleMany(pagedRequests, false)}
             ref={queueRef}
           />
         </div>
@@ -544,6 +544,37 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
     dateTo;
   const showPagination = filteredCount > QUEUE_PAGE_SIZE;
 
+  // Page-level select-all state for the compact list header. Reflects only the
+  // currently visible rows so the checkbox behaves like a standard list header
+  // (indeterminate when some-but-not-all eligible rows on the page are selected).
+  const pageSelectableItems = useMemo(
+    () => requests.filter((item) => isBulkSelectable?.(item) === true),
+    [requests, isBulkSelectable],
+  );
+  const pageSelectedCount = useMemo(
+    () => pageSelectableItems.filter((item) => isBulkSelected?.(item) === true).length,
+    [pageSelectableItems, isBulkSelected],
+  );
+  const pageAllSelected =
+    pageSelectableItems.length > 0 && pageSelectedCount === pageSelectableItems.length;
+  const pageSomeSelected = pageSelectedCount > 0 && !pageAllSelected;
+
+  const handlePageSelectAll = useCallback(() => {
+    if (pageAllSelected) {
+      onBulkClearAll?.();
+    } else {
+      onBulkSelectAll?.();
+    }
+  }, [pageAllSelected, onBulkSelectAll, onBulkClearAll]);
+
+  // Stable ref callback so React does not detach/reattach it every render.
+  const setIndeterminate = useCallback(
+    (el: HTMLInputElement | null) => {
+      if (el) el.indeterminate = pageSomeSelected;
+    },
+    [pageSomeSelected],
+  );
+
   return (
     <aside className="space-y-3" ref={ref}>
       <div className="flex items-center justify-between gap-3">
@@ -552,34 +583,6 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
           {filteredCount}/{totalCount}
         </span>
       </div>
-      {selectionMode && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-brand-blue/15 bg-brand-blue/[0.03] px-3 py-2">
-          <HiMiniCheckCircle className="h-3.5 w-3.5 text-brand-blue" aria-hidden="true" />
-          <span className="text-[11px] font-medium text-brand-dark/80">
-            Select reads to approve together
-          </span>
-          <div className="ml-auto flex items-center gap-2">
-            {onBulkSelectAll && (
-              <button
-                type="button"
-                onClick={onBulkSelectAll}
-                className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5"
-              >
-                Select all eligible
-              </button>
-            )}
-            {onBulkClearAll && (
-              <button
-                type="button"
-                onClick={onBulkClearAll}
-                className="rounded-full px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-slate-50 hover:text-brand-dark"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        </div>
-      )}
       <div className="space-y-2 rounded-xl border border-slate-100 bg-white p-3">
         <label className="block">
           <span className="sr-only">Search review queue</span>
@@ -672,6 +675,29 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
         aria-label="Review queue"
         className="space-y-2 rounded-lg border border-slate-100 bg-white p-1.5"
       >
+        {selectionMode && pageSelectableItems.length > 0 && (
+          <div className="flex items-center gap-2 border-b border-slate-100 px-2 pb-1.5 pt-1">
+            <label className="flex shrink-0 cursor-pointer items-center gap-2">
+              <input
+                type="checkbox"
+                checked={pageAllSelected}
+                ref={setIndeterminate}
+                onChange={handlePageSelectAll}
+                aria-label={
+                  pageAllSelected
+                    ? "Clear selection of eligible reads on this page"
+                    : "Select all eligible reads on this page"
+                }
+                className="h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30"
+              />
+              <span className="text-[11px] font-medium text-muted-foreground">
+                {pageSelectedCount > 0
+                  ? `${pageSelectedCount} of ${pageSelectableItems.length} selected`
+                  : `Select all eligible (${pageSelectableItems.length})`}
+              </span>
+            </label>
+          </div>
+        )}
         {requests.length > 0 ? (
           requests.map((item, index) => (
             <QueueItemRow
@@ -764,33 +790,28 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
   const category = resolveQueueCategory(item);
   const CategoryIcon = iconForQueueCategory(category.id);
   const preview = queueItemPreview(item);
-  const showCheckbox = selectionMode && selectable;
+  // Checkboxes render whenever bulk selection is active so the affordance is
+  // always discoverable. Non-eligible rows show a disabled checkbox with a
+  // tooltip instead of silently hiding the control.
+  const showCheckbox = selectionMode;
+  const canSelect = selectionMode && selectable;
 
-  const handleClick = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
-      // In ambient selection mode, holding Alt/Option toggles selection without
-      // changing the open request. This mirrors email/finder multi-select UX.
-      if (showCheckbox && (event.altKey || event.metaKey || event.ctrlKey) && onToggleSelect) {
-        event.preventDefault();
-        onToggleSelect(item);
-        return;
-      }
-      onOpenRequest(item.request_id);
-    },
-    [item.request_id, item, onOpenRequest, onToggleSelect, showCheckbox],
-  );
+  const handleClick = useCallback(() => {
+    onOpenRequest(item.request_id);
+  }, [item.request_id, onOpenRequest]);
 
   const handleCheckboxChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       event.stopPropagation();
+      if (!canSelect) return;
       onToggleSelect?.(item);
     },
-    [item, onToggleSelect],
+    [item, onToggleSelect, canSelect],
   );
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLLabelElement>) => {
-      if (!showCheckbox) return;
+      if (!canSelect) return;
       // Space is handled natively by the checkbox itself; only remap Enter
       // here so the wrapping label is also keyboard-activatable.
       if (event.key === "Enter") {
@@ -799,8 +820,12 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
         onToggleSelect?.(item);
       }
     },
-    [item, onToggleSelect, showCheckbox],
+    [item, onToggleSelect, canSelect],
   );
+
+  const checkboxLabel = canSelect
+    ? `Select ${preview} for bulk approval`
+    : `Not eligible for bulk approval: ${category.shortLabel.toLowerCase()}`;
 
   return (
     <div
@@ -816,16 +841,18 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
       <div className="flex items-center justify-between gap-2">
         {showCheckbox ? (
           <label
-            className="flex shrink-0 cursor-pointer items-center"
+            className={`flex shrink-0 items-center ${canSelect ? "cursor-pointer" : "cursor-not-allowed"}`}
+            title={checkboxLabel}
             onClick={(event) => event.stopPropagation()}
             onKeyDown={handleKeyDown}
           >
             <input
               type="checkbox"
               checked={selected}
+              disabled={!canSelect}
               onChange={handleCheckboxChange}
-              aria-label={`Select ${preview} for bulk approval`}
-              className="h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30"
+              aria-label={checkboxLabel}
+              className="h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30 disabled:opacity-40"
             />
           </label>
         ) : null}
@@ -862,11 +889,6 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
           </span>
         </button>
       </div>
-      {showCheckbox && (
-        <p className="mt-1 pl-6 text-[10px] text-muted-foreground/80">
-          Hold ⌥/Alt + click row to toggle · Esc closes the review drawer
-        </p>
-      )}
     </div>
   );
 }
