@@ -59,6 +59,7 @@ from ..approvals import (
 from ..cli.connect_flow import (
     CONNECT_SYNC_AUTH_CONTEXT_KEY,
     _build_sync_auth_context,
+    _persist_oauth_local_credentials,
     exchange_guard_authorization_code,
     resolve_connect_url,
     resolve_guard_oauth_client_config,
@@ -127,6 +128,7 @@ from ..runtime.runner import (
     _persist_cloud_exceptions,
     _policy_bundle_acknowledgement_payload,
     _policy_bundle_is_version_downgrade,
+    prepare_guard_cloud_connect_authorization,
     sync_local_guard_cloud_proof,
     sync_supply_chain_bundle,
 )
@@ -2543,6 +2545,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             repair_copy=_package_firewall_connect_needs_repair(store, reason),
         )
         try:
+            prepare_guard_cloud_connect_authorization(store)
             device = store.get_device_metadata()
             session = start_guard_browser_session(
                 connect_url=connect_url,
@@ -2602,36 +2605,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 if token_result.refresh_token is None:
                     raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
                 timestamp = _now()
-                store.set_oauth_local_credentials(
+                _persist_oauth_local_credentials(
+                    store=store,
                     issuer=oauth_client.issuer,
                     client_id=oauth_client.client_id,
                     refresh_token=token_result.refresh_token,
-                    dpop_private_key_pem=session.dpop_key_material.private_key_pem,
-                    dpop_public_jwk=session.dpop_key_material.public_jwk,
-                    dpop_public_jwk_thumbprint=session.dpop_key_material.public_jwk_thumbprint,
+                    dpop_key_material=session.dpop_key_material,
                     grant_id=token_result.grant_id,
                     machine_id=token_result.machine_id,
-                    supply_chain_entitlement_expires_at=(
-                        str(token_result.supply_chain_entitlement.get("supply_chain_entitlement_expires_at"))
-                        if isinstance(token_result.supply_chain_entitlement, dict)
-                        and isinstance(
-                            token_result.supply_chain_entitlement.get("supply_chain_entitlement_expires_at"),
-                            str,
-                        )
-                        else None
-                    ),
-                    supply_chain_firewall=(
-                        bool(token_result.supply_chain_entitlement.get("supply_chain_firewall"))
-                        if isinstance(token_result.supply_chain_entitlement, dict)
-                        and isinstance(token_result.supply_chain_entitlement.get("supply_chain_firewall"), bool)
-                        else None
-                    ),
-                    supply_chain_plan_id=(
-                        str(token_result.supply_chain_entitlement.get("supply_chain_plan_id"))
-                        if isinstance(token_result.supply_chain_entitlement, dict)
-                        and isinstance(token_result.supply_chain_entitlement.get("supply_chain_plan_id"), str)
-                        else None
-                    ),
+                    supply_chain_entitlement=token_result.supply_chain_entitlement,
                     workspace_id=token_result.workspace_id,
                     runtime_id="hol-guard",
                     runtime_label="HOL Guard CLI",
@@ -2729,6 +2711,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         connect_url = _package_firewall_connect_url(store)
         action_label = "Repair Guard Cloud access" if repair_mode else "Connect Guard Cloud"
         try:
+            prepare_guard_cloud_connect_authorization(store)
             device = store.get_device_metadata()
             session = start_guard_browser_session(
                 connect_url=connect_url,
@@ -2791,36 +2774,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 if token_result.refresh_token is None:
                     raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
                 timestamp = _now()
-                store.set_oauth_local_credentials(
+                _persist_oauth_local_credentials(
+                    store=store,
                     issuer=oauth_client.issuer,
                     client_id=oauth_client.client_id,
                     refresh_token=token_result.refresh_token,
-                    dpop_private_key_pem=session.dpop_key_material.private_key_pem,
-                    dpop_public_jwk=session.dpop_key_material.public_jwk,
-                    dpop_public_jwk_thumbprint=session.dpop_key_material.public_jwk_thumbprint,
+                    dpop_key_material=session.dpop_key_material,
                     grant_id=token_result.grant_id,
                     machine_id=token_result.machine_id,
-                    supply_chain_entitlement_expires_at=(
-                        str(token_result.supply_chain_entitlement.get("supply_chain_entitlement_expires_at"))
-                        if isinstance(token_result.supply_chain_entitlement, dict)
-                        and isinstance(
-                            token_result.supply_chain_entitlement.get("supply_chain_entitlement_expires_at"),
-                            str,
-                        )
-                        else None
-                    ),
-                    supply_chain_firewall=(
-                        bool(token_result.supply_chain_entitlement.get("supply_chain_firewall"))
-                        if isinstance(token_result.supply_chain_entitlement, dict)
-                        and isinstance(token_result.supply_chain_entitlement.get("supply_chain_firewall"), bool)
-                        else None
-                    ),
-                    supply_chain_plan_id=(
-                        str(token_result.supply_chain_entitlement.get("supply_chain_plan_id"))
-                        if isinstance(token_result.supply_chain_entitlement, dict)
-                        and isinstance(token_result.supply_chain_entitlement.get("supply_chain_plan_id"), str)
-                        else None
-                    ),
+                    supply_chain_entitlement=token_result.supply_chain_entitlement,
                     workspace_id=token_result.workspace_id,
                     runtime_id="hol-guard",
                     runtime_label="HOL Guard CLI",
