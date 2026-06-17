@@ -3626,6 +3626,10 @@
     padding-bottom: calc(var(--spacing) * 1);
   }
 
+  .pb-1\.5 {
+    padding-bottom: calc(var(--spacing) * 1.5);
+  }
+
   .pb-2 {
     padding-bottom: calc(var(--spacing) * 2);
   }
@@ -3656,10 +3660,6 @@
 
   .pl-3\.5 {
     padding-left: calc(var(--spacing) * 3.5);
-  }
-
-  .pl-6 {
-    padding-left: calc(var(--spacing) * 6);
   }
 
   .pl-7 {
@@ -4103,14 +4103,8 @@
     color: var(--color-green-700);
   }
 
-  .text-muted-foreground, .text-muted-foreground\/80 {
+  .text-muted-foreground {
     color: hsl(var(--muted-foreground));
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .text-muted-foreground\/80 {
-      color: color-mix(in oklab, hsl(var(--muted-foreground)) 80%, transparent);
-    }
   }
 
   .text-orange-400 {
