@@ -358,8 +358,7 @@ class SystemKeyringSecretStore:
             return cls._load_keyring_module()
         except Exception:
             _store_logger.warning(
-                "Guard system keyring backend could not be initialized; "
-                "using encrypted-file fallback.",
+                "Guard system keyring backend could not be initialized; using encrypted-file fallback.",
                 exc_info=True,
             )
             return None

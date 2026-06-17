@@ -138,9 +138,7 @@ def test_load_keyring_module_propagates_broken_installed_keyring(monkeypatch):
     def _break_keyring_subimport(name, *args, **kwargs):
         if name == "keyring":
             # keyring is installed but one of its own imports is missing.
-            raise ModuleNotFoundError(
-                "No module named 'keyring._broken'", name="keyring._broken"
-            )
+            raise ModuleNotFoundError("No module named 'keyring._broken'", name="keyring._broken")
         return real_import_module(name, *args, **kwargs)
 
     monkeypatch.setattr(importlib, "import_module", _break_keyring_subimport)
@@ -152,6 +150,7 @@ def test_load_keyring_module_propagates_broken_installed_keyring(monkeypatch):
 
 def test_load_keyring_module_or_none_logs_and_degrades_for_broken_keyring(monkeypatch, caplog):
     """A broken installed keyring is logged and degrades to None; never escapes."""
+
     def _raise_broken():
         raise RuntimeError("backend init failed")
 
@@ -163,9 +162,7 @@ def test_load_keyring_module_or_none_logs_and_degrades_for_broken_keyring(monkey
         assert SystemKeyringSecretStore._backend_is_available() is False
         assert SystemKeyringSecretStore(service_name="hol-guard.test").get_secret("x") is None
 
-    assert any(
-        "keyring backend could not be initialized" in record.message for record in caplog.records
-    )
+    assert any("keyring backend could not be initialized" in record.message for record in caplog.records)
 
 
 def test_system_keyring_timeout_uses_noninteractive_macos_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
