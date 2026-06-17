@@ -23965,8 +23965,8 @@ function ReviewWorkspace(props) {
           isBulkSelectable: bulkApprove.bulkSelection.isSelectable,
           isBulkSelected: bulkApprove.bulkSelection.isSelected,
           onBulkToggleSelect: bulkApprove.bulkSelection.onToggle,
-          onBulkSelectAll: () => bulkApprove.bulkSelection.onToggleMany(filteredRequests, true),
-          onBulkClearAll: () => bulkApprove.bulkSelection.onToggleMany(filteredRequests, false),
+          onBulkSelectAll: () => bulkApprove.bulkSelection.onToggleMany(pagedRequests, true),
+          onBulkClearAll: () => bulkApprove.bulkSelection.onToggleMany(pagedRequests, false),
           ref: queueRef
         }
       ) }),
@@ -24099,13 +24099,18 @@ const ReviewQueueList = reactExports.forwardRef(({
   const pageAllSelected = pageSelectableItems.length > 0 && pageSelectedCount === pageSelectableItems.length;
   const pageSomeSelected = pageSelectedCount > 0 && !pageAllSelected;
   const handlePageSelectAll = reactExports.useCallback(() => {
-    if (!onBulkSelectAll || !onBulkClearAll) return;
     if (pageAllSelected) {
-      onBulkClearAll();
+      onBulkClearAll?.();
     } else {
-      onBulkSelectAll();
+      onBulkSelectAll?.();
     }
   }, [pageAllSelected, onBulkSelectAll, onBulkClearAll]);
+  const setIndeterminate = reactExports.useCallback(
+    (el) => {
+      if (el) el.indeterminate = pageSomeSelected;
+    },
+    [pageSomeSelected]
+  );
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "space-y-3", ref, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Queue" }),
@@ -24223,9 +24228,7 @@ const ReviewQueueList = reactExports.forwardRef(({
               {
                 type: "checkbox",
                 checked: pageAllSelected,
-                ref: (el) => {
-                  if (el) el.indeterminate = pageSomeSelected;
-                },
+                ref: setIndeterminate,
                 onChange: handlePageSelectAll,
                 "aria-label": pageAllSelected ? "Clear selection of eligible reads on this page" : "Select all eligible reads on this page",
                 className: "h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30"
