@@ -609,9 +609,11 @@ class SystemKeyringSecretStore:
 
     def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float = 0.0) -> str | None:
         _ = timeout_seconds
-        if not self._supports_native_macos_security_reads():
-            return self.get_secret(secret_id)
-        return self._get_secret_without_macos_ui(secret_id)
+        if self._supports_native_macos_security_reads():
+            return self._get_secret_without_macos_ui(secret_id)
+        if sys.platform == "darwin":
+            return None
+        return self.get_secret(secret_id)
 
     def delete_secret(self, secret_id: str) -> None:
         keyring_module = self._load_keyring_module()
@@ -1062,15 +1064,11 @@ class GuardStore:
         return self._get_secret_from_store(secret_store, secret_id)
 
     @staticmethod
-    def _should_skip_passive_policy_integrity_keychain_read(
-        secret_store: SecretStore,
-        *,
-        create: bool,
-    ) -> bool:
+    def _should_skip_policy_integrity_keychain_access(secret_store: SecretStore) -> bool:
         return (
-            not create
-            and isinstance(secret_store, SystemKeyringSecretStore)
-            and secret_store._supports_native_macos_security_reads()
+            isinstance(secret_store, SystemKeyringSecretStore)
+            and sys.platform == "darwin"
+            and not secret_store._supports_native_macos_security_reads()
         )
 
     def _clear_policy_integrity_cache(self) -> None:
@@ -1137,13 +1135,9 @@ class GuardStore:
         secret_store = self._policy_integrity_secret_store
         if secret_store is None:
             return None, None
-        if self._should_skip_passive_policy_integrity_keychain_read(secret_store, create=create):
+        if self._should_skip_policy_integrity_keychain_access(secret_store):
             return None, None
-        encoded_key = (
-            self._get_secret_from_store(secret_store, self._policy_integrity_key_ref)
-            if create
-            else self._get_policy_integrity_secret_from_store(self._policy_integrity_key_ref)
-        )
+        encoded_key = self._get_policy_integrity_secret_from_store(self._policy_integrity_key_ref)
         if encoded_key is None and create:
             generated_key = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
             try:
@@ -1208,13 +1202,9 @@ class GuardStore:
         secret_store = self._policy_integrity_secret_store
         if secret_store is None:
             return None
-        if self._should_skip_passive_policy_integrity_keychain_read(secret_store, create=create):
+        if self._should_skip_policy_integrity_keychain_access(secret_store):
             return None
-        payload_json = (
-            self._get_secret_from_store(secret_store, self._policy_integrity_control_ref)
-            if create
-            else self._get_policy_integrity_secret_from_store(self._policy_integrity_control_ref)
-        )
+        payload_json = self._get_policy_integrity_secret_from_store(self._policy_integrity_control_ref)
         payload: dict[str, object] | None = None
         if payload_json is not None:
             try:
