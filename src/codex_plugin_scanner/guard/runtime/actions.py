@@ -13,6 +13,7 @@ from typing import Literal, TypeGuard
 
 from ..redaction import redact_text
 from .secret_sensitivity import redacted_secret_path_context
+from .shell_command_wrappers import normalize_transparent_shell_command
 
 GuardActionType = Literal[
     "prompt",
@@ -62,7 +63,15 @@ _PATH_KEYS = (
     "targetPath",
     "targetPaths",
 )
-_COMMAND_KEYS = ("command", "cmd", "shell_command", "shellCommand")
+_COMMAND_KEYS = (
+    "guard_inner_command",
+    "normalized_command",
+    "normalizedCommand",
+    "command",
+    "cmd",
+    "shell_command",
+    "shellCommand",
+)
 _SENSITIVE_RAW_KEYS = frozenset(
     {
         "api_key",
@@ -496,20 +505,27 @@ def _normalize_action_payload(
     if not tool_input and tool_call_input is not None:
         tool_input = tool_call_input
     raw_command = _command_from_payload(tool_input)
-    command = _command_detail(raw_command, home_dir=home_dir)
+    normalized_command, wrapper_chain = _normalized_shell_command(tool_name, raw_command)
+    if wrapper_chain and isinstance(tool_input, Mapping):
+        normalized_payload["tool_input"] = {
+            **dict(tool_input),
+            "guard_inner_command": normalized_command,
+            "guard_shell_wrappers": list(wrapper_chain),
+        }
+    command = _command_detail(normalized_command, home_dir=home_dir)
     prompt_text = _prompt_text(_prompt_value(normalized_payload))
     prompt_excerpt = _prompt_excerpt(prompt_text)
     mcp_server, mcp_tool = _mcp_details(normalized_payload, tool_name)
     action_type = _action_type(
         event_name=event_name,
         tool_name=tool_name,
-        command=raw_command,
+        command=normalized_command,
         prompt_excerpt=prompt_excerpt,
         mcp_server=mcp_server,
     )
     target_paths = _target_paths(
         tool_input=tool_input,
-        command=raw_command,
+        command=normalized_command,
         prompt_text=prompt_text,
         home_dir=home_dir,
     )
@@ -518,8 +534,8 @@ def _normalize_action_payload(
     workspace_hash = _workspace_hash(workspace)
     workspace_path = Path(workspace) if workspace is not None else None
     package_intent = (
-        _package_intent_parser_module().parse_package_intent(raw_command, workspace=workspace_path)
-        if raw_command
+        _package_intent_parser_module().parse_package_intent(normalized_command, workspace=workspace_path)
+        if normalized_command
         else None
     )
     package_targets = (
@@ -695,6 +711,15 @@ def _command_from_payload(tool_input: Mapping[str, object]) -> str | None:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return None
+
+
+def _normalized_shell_command(tool_name: str | None, command: str | None) -> tuple[str | None, tuple[str, ...]]:
+    if command is None:
+        return None, ()
+    if not isinstance(tool_name, str) or tool_name.strip().lower() not in _SHELL_TOOL_NAMES:
+        return command, ()
+    normalized = normalize_transparent_shell_command(command)
+    return normalized.normalized_command, normalized.wrapper_chain
 
 
 def _command_detail(command: str | None, *, home_dir: Path | str | None) -> str | None:
