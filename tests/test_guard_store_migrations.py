@@ -70,25 +70,165 @@ def _install_fake_system_keyring(
     return module
 
 
-def test_system_keyring_timeout_uses_noninteractive_macos_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_keyring_module_returns_none_when_dependency_missing(monkeypatch):
+    """A genuinely missing keyring package must surface as None, not raise."""
+    import importlib
+
+    real_import_module = importlib.import_module
+
+    def _block_keyring(name, *args, **kwargs):
+        if name == "keyring" or name.startswith("keyring."):
+            raise ModuleNotFoundError("No module named 'keyring'", name="keyring")
+        return real_import_module(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib, "import_module", _block_keyring)
+    monkeypatch.delitem(sys.modules, "keyring", raising=False)
+    SystemKeyringSecretStore._native_macos_security_reads_cache = None
+
+    assert SystemKeyringSecretStore._load_keyring_module() is None
+
+
+def test_system_keyring_reads_return_none_when_keyring_missing(monkeypatch):
+    """Missing keyring must degrade reads instead of leaking ModuleNotFoundError."""
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: None))
+    SystemKeyringSecretStore._native_macos_security_reads_cache = None
+
+    store = SystemKeyringSecretStore(service_name="hol-guard.test")
+
+    assert store.get_secret("anything") is None
+    assert store.get_secret_with_timeout("anything", timeout_seconds=1.0) is None
+
+
+def test_system_keyring_set_secret_raises_clear_error_when_keyring_missing(monkeypatch):
+    """Writes must raise an actionable RuntimeError, not a raw ModuleNotFoundError."""
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: None))
+
+    store = SystemKeyringSecretStore(service_name="hol-guard.test")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        store.set_secret("anything", "value")
+
+    message = str(exc_info.value).lower()
+    assert "keyring" in message
+    assert "unavailable" in message or "could not be imported" in message
+
+
+def test_system_keyring_delete_secret_noops_when_keyring_missing(monkeypatch):
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: None))
+
+    store = SystemKeyringSecretStore(service_name="hol-guard.test")
+
+    store.delete_secret("anything")  # must not raise
+
+
+def test_system_keyring_is_available_false_when_keyring_missing(monkeypatch):
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: None))
+    SystemKeyringSecretStore._native_macos_security_reads_cache = None
+
+    assert SystemKeyringSecretStore._backend_is_available() is False
+    assert SystemKeyringSecretStore._is_available() is False
+
+
+def test_load_keyring_module_propagates_broken_installed_keyring(monkeypatch):
+    """A broken-but-installed keyring must surface, not silently degrade to None."""
+    import importlib
+
+    real_import_module = importlib.import_module
+
+    def _break_keyring_subimport(name, *args, **kwargs):
+        if name == "keyring":
+            # keyring is installed but one of its own imports is missing.
+            raise ModuleNotFoundError("No module named 'keyring._broken'", name="keyring._broken")
+        return real_import_module(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib, "import_module", _break_keyring_subimport)
+    monkeypatch.delitem(sys.modules, "keyring", raising=False)
+
+    with pytest.raises(ModuleNotFoundError):
+        SystemKeyringSecretStore._load_keyring_module()
+
+
+def test_load_keyring_module_or_none_logs_and_degrades_for_broken_keyring(monkeypatch, caplog):
+    """A broken installed keyring is logged and degrades to None; never escapes."""
+
+    def _raise_broken():
+        raise RuntimeError("backend init failed")
+
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(_raise_broken))
+    SystemKeyringSecretStore._native_macos_security_reads_cache = None
+
+    with caplog.at_level(logging.WARNING, logger="codex_plugin_scanner.guard.store"):
+        assert SystemKeyringSecretStore._load_keyring_module_or_none() is None
+        assert SystemKeyringSecretStore._backend_is_available() is False
+        assert SystemKeyringSecretStore(service_name="hol-guard.test").get_secret("x") is None
+
+    assert any("keyring backend could not be initialized" in record.message for record in caplog.records)
+
+
+def test_system_keyring_timeout_skips_all_passive_macos_reads(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     secret_store = SystemKeyringSecretStore(service_name="hol-guard.policy-integrity")
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "_supports_native_macos_security_reads",
-        classmethod(lambda cls: True),
+        classmethod(
+            lambda cls: (_ for _ in ()).throw(AssertionError("native macOS Security reads should not be probed"))
+        ),
     )
-    monkeypatch.setattr(secret_store, "_get_secret_without_macos_ui", lambda _secret_id: "secret-value")
+    monkeypatch.setattr(
+        secret_store,
+        "_get_secret_without_macos_ui",
+        lambda _secret_id: (_ for _ in ()).throw(AssertionError("native macOS Security reads should not run")),
+    )
+    monkeypatch.setattr(
+        secret_store,
+        "get_secret",
+        lambda _secret_id: (_ for _ in ()).throw(AssertionError("Python keyring reads should not run")),
+    )
     monkeypatch.setattr(
         guard_store_module.subprocess,
         "run",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("security cli should not run")),
     )
 
-    assert secret_store.get_secret_with_timeout("policy-key", timeout_seconds=1.0) == "secret-value"
+    assert secret_store.get_secret_with_timeout("policy-key", timeout_seconds=1.0) is None
 
 
-def test_policy_integrity_store_skips_macos_health_probe_when_backend_exists(
+def test_system_keyring_timeout_keeps_non_policy_integrity_macos_services(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    secret_store = SystemKeyringSecretStore(service_name="hol-guard.oauth")
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_supports_native_macos_security_reads",
+        classmethod(lambda cls: True),
+    )
+    monkeypatch.setattr(secret_store, "_get_secret_without_macos_ui", lambda _secret_id: "oauth-secret")
+
+    assert secret_store.get_secret_with_timeout("oauth-token", timeout_seconds=1.0) == "oauth-secret"
+
+
+def test_system_keyring_timeout_blocks_non_policy_macos_prompt_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    secret_store = SystemKeyringSecretStore(service_name="hol-guard.oauth")
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_supports_native_macos_security_reads",
+        classmethod(lambda cls: False),
+    )
+    monkeypatch.setattr(
+        secret_store,
+        "get_secret",
+        lambda _secret_id: (_ for _ in ()).throw(AssertionError("Python keyring reads should not run")),
+    )
+
+    assert secret_store.get_secret_with_timeout("oauth-token", timeout_seconds=1.0) is None
+
+
+def test_policy_integrity_store_is_disabled_on_macos_without_health_probe(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)

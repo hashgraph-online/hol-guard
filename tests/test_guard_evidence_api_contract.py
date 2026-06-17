@@ -8,6 +8,7 @@ import urllib.request
 from pathlib import Path
 
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_evidence import EvidenceRecord, store_evidence
 
@@ -35,6 +36,22 @@ def _record(evidence_id: str, **overrides: object) -> EvidenceRecord:
 def _store_record(store: GuardStore, record: EvidenceRecord) -> None:
     with store._connect() as connection:
         store_evidence(connection, record)
+
+
+def _receipt(receipt_id: str, *, harness: str, timestamp: str) -> GuardReceipt:
+    return GuardReceipt(
+        receipt_id=receipt_id,
+        harness=harness,
+        artifact_id=f"{harness}:project:{receipt_id}",
+        artifact_hash=f"sha256:{receipt_id}",
+        policy_decision="allow",
+        capabilities_summary="file-read",
+        changed_capabilities=("file-read",),
+        provenance_summary="test receipt",
+        artifact_name=f"tool-{receipt_id}",
+        source_scope="artifact",
+        timestamp=timestamp,
+    )
 
 
 def _get(port: int, path: str, *, token: str | None = None) -> tuple[int, dict[str, str], bytes]:
@@ -74,6 +91,28 @@ def test_evidence_list_total_respects_filters(tmp_path: Path) -> None:
     payload = json.loads(body.decode("utf-8"))
     assert payload["total"] == 1
     assert [item["evidence_id"] for item in payload["items"]] == ["codex-high"]
+    assert "details" not in payload["items"][0]
+
+
+def test_receipts_list_accepts_harness_and_limit_query(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_receipt(_receipt("codex-old", harness="codex", timestamp="2026-05-12T09:00:00Z"))
+    store.add_receipt(_receipt("claude-new", harness="claude", timestamp="2026-05-12T11:00:00Z"))
+    store.add_receipt(_receipt("codex-new", harness="codex", timestamp="2026-05-12T12:00:00Z"))
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        _status, _headers, body = _get(
+            daemon.port,
+            "/v1/receipts?harness=codex&limit=1",
+            token=daemon._server.auth_token,
+        )
+    finally:
+        daemon.stop()
+
+    payload = json.loads(body.decode("utf-8"))
+    assert [item["receipt_id"] for item in payload["items"]] == ["codex-new"]
 
 
 def test_evidence_export_json_and_csv_include_warning_and_redaction(tmp_path: Path) -> None:

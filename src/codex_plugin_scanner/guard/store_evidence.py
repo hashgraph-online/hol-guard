@@ -32,6 +32,24 @@ _EXPORT_COLUMNS: tuple[str, ...] = (
     "created_at",
 )
 _CSV_FORMULA_TRIGGER_PATTERN = re.compile(r"^[=+\-@\t\r\n]")
+_EVIDENCE_LIST_COLUMNS: tuple[str, ...] = (
+    "evidence_id",
+    "action_id",
+    "request_id",
+    "harness",
+    "workspace",
+    "signal_id",
+    "category",
+    "severity",
+    "confidence",
+    "summary",
+    "details_json",
+    "action_identity",
+    "created_at",
+)
+_EVIDENCE_SUMMARY_COLUMNS: tuple[str, ...] = tuple(
+    column for column in _EVIDENCE_LIST_COLUMNS if column != "details_json"
+)
 
 
 def _now_iso() -> str:
@@ -83,6 +101,17 @@ def evidence_index_statements() -> list[str]:
         "create index if not exists idx_evidence_category_severity on guard_evidence(category, severity)",
         "create index if not exists idx_evidence_harness_workspace on guard_evidence(harness, workspace)",
         "create index if not exists idx_evidence_identity on guard_evidence(action_identity)",
+        "create index if not exists idx_evidence_request_created on guard_evidence(request_id, created_at desc)",
+        "create index if not exists idx_evidence_identity_created on guard_evidence(action_identity, created_at desc)",
+        "create index if not exists idx_evidence_harness_created on guard_evidence(harness, created_at desc)",
+        (
+            "create index if not exists idx_evidence_category_severity_created "
+            "on guard_evidence(category, severity, created_at desc)"
+        ),
+        (
+            "create index if not exists idx_evidence_harness_category_severity_created "
+            "on guard_evidence(harness, category, severity, created_at desc)"
+        ),
     ]
 
 
@@ -121,12 +150,19 @@ def ensure_evidence_schema(connection: sqlite3.Connection) -> None:
     _EVIDENCE_SCHEMA_READY.add(cache_key)
 
 
-def _row_to_record(row: sqlite3.Row) -> EvidenceRecord:
-    try:
-        details: dict[str, object] = json.loads(row["details_json"])
-    except (json.JSONDecodeError, TypeError):
+def _row_to_record(row: sqlite3.Row, *, include_details: bool = True) -> EvidenceRecord:
+    details: dict[str, object]
+    if include_details:
+        try:
+            details = json.loads(row["details_json"])
+        except (json.JSONDecodeError, TypeError):
+            details = {}
+    else:
         details = {}
-    columns = set(row.keys())
+    try:
+        columns = set(row.keys())
+    except AttributeError:
+        columns = set(_EVIDENCE_LIST_COLUMNS)
     return EvidenceRecord(
         evidence_id=row["evidence_id"],
         action_id=row["action_id"],
@@ -183,6 +219,7 @@ def list_evidence(
     action_identity: str | None = None,
     before_cursor: str | None = None,
     limit: int = 100,
+    include_details: bool = True,
 ) -> list[EvidenceRecord]:
     clauses: list[str] = []
     params: list[object] = []
@@ -208,11 +245,12 @@ def list_evidence(
 
     where = f"where {' and '.join(clauses)}" if clauses else ""
     params.append(limit)
+    select_columns = ", ".join(_EVIDENCE_LIST_COLUMNS if include_details else _EVIDENCE_SUMMARY_COLUMNS)
     rows = conn.execute(
-        f"select * from guard_evidence {where} order by created_at desc limit ?",
+        f"select {select_columns} from guard_evidence {where} order by created_at desc limit ?",
         params,
     ).fetchall()
-    return [_row_to_record(r) for r in rows]
+    return [_row_to_record(r, include_details=include_details) for r in rows]
 
 
 def search_evidence(
@@ -293,7 +331,7 @@ def export_evidence_payload(
     redact_fields: tuple[str, ...] | None = None,
 ) -> dict[str, object]:
     redact_set = {"details"} if redact_fields is None else set(redact_fields)
-    records = list_evidence(conn, limit=limit)
+    records = list_evidence(conn, limit=limit, include_details="details" not in redact_set)
     rows = [evidence_record_to_dict(record, redact_fields=redact_set) for record in records]
     return {
         "exported_at": _now_iso(),

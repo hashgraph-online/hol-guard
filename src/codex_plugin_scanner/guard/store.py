@@ -26,6 +26,20 @@ from cryptography.fernet import Fernet, InvalidToken
 from .approval_gate import ApprovalGateGrant, require_policy_clear, require_policy_write, require_request_resolution
 from .cli.oauth_client import resolve_guard_oauth_client_config
 from .edge_events import build_receipt_event
+from .local_trust_contract import (
+    POLICY_INTEGRITY_ENFORCEMENT_ENFORCE,
+    POLICY_INTEGRITY_MODE_DEGRADED,
+    POLICY_INTEGRITY_MODE_PROTECTED,
+    POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE,
+    POLICY_INTEGRITY_REASON_GUARD_DB_INACCESSIBLE,
+    POLICY_INTEGRITY_REASON_GUARD_DB_PERMISSIONS,
+    POLICY_INTEGRITY_REASON_GUARD_DB_SYMLINK,
+    POLICY_INTEGRITY_REASON_GUARD_HOME_INACCESSIBLE,
+    POLICY_INTEGRITY_REASON_GUARD_HOME_PERMISSIONS,
+    POLICY_INTEGRITY_REASON_GUARD_HOME_SYMLINK,
+    POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE,
+    POLICY_INTEGRITY_REASON_SYSTEM_KEYRING_UNAVAILABLE,
+)
 from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
 from .policy_integrity import (
     REMOTE_POLICY_SOURCES,
@@ -162,6 +176,7 @@ from .types import CapabilitySet, TransportKind
 
 _POLICY_INTEGRITY_KEY_REF = "guard-policy-integrity-key"
 _POLICY_INTEGRITY_CONTROL_REF = "guard-policy-integrity-control"
+_POLICY_INTEGRITY_SERVICE_NAME = "hol-guard.policy-integrity"
 _OAUTH_LOCAL_CREDENTIALS_REF = "guard-oauth-local-credentials"
 _OAUTH_LOCAL_CREDENTIALS_STATE_KEY = "oauth_local_credentials"
 _OAUTH_LOCAL_CREDENTIALS_HASH_KEY = "credentials_sha256"
@@ -331,7 +346,37 @@ class SystemKeyringSecretStore:
 
     @staticmethod
     def _load_keyring_module():
-        return importlib.import_module("keyring")
+        """Load the optional keyring package.
+
+        Returns None when the top-level package is genuinely absent. A keyring
+        install that is present but fails to import (broken transitive import,
+        backend init error, etc.) is allowed to propagate so callers can surface
+        it rather than silently degrading credential storage.
+        """
+        try:
+            return importlib.import_module("keyring")
+        except ModuleNotFoundError as exc:
+            if exc.name == "keyring":
+                return None
+            raise
+
+    @classmethod
+    def _load_keyring_module_or_none(cls):
+        """Return the keyring module, or None when it is absent or unusable.
+
+        Any failure to initialize an installed-but-broken keyring is logged so
+        the fallback to the encrypted-file store is never silent. Used by the
+        availability probe and secret access, which must not let a keyring
+        failure escape and crash the host harness.
+        """
+        try:
+            return cls._load_keyring_module()
+        except Exception:
+            _store_logger.warning(
+                "Guard system keyring backend could not be initialized; using encrypted-file fallback.",
+                exc_info=True,
+            )
+            return None
 
     @staticmethod
     def _load_macos_keyring_api_module():
@@ -427,8 +472,10 @@ class SystemKeyringSecretStore:
 
     @classmethod
     def _backend_is_available(cls) -> bool:
+        keyring_module = cls._load_keyring_module_or_none()
+        if keyring_module is None:
+            return False
         try:
-            keyring_module = cls._load_keyring_module()
             backend = keyring_module.get_keyring()
         except Exception:
             return False
@@ -447,11 +494,18 @@ class SystemKeyringSecretStore:
         return True
 
     def set_secret(self, secret_id: str, value: str) -> None:
-        keyring_module = self._load_keyring_module()
+        keyring_module = self._load_keyring_module_or_none()
+        if keyring_module is None:
+            raise RuntimeError(
+                "Guard system keyring backend is unavailable; the Python 'keyring' "
+                "package could not be imported. Reinstall hol-guard to restore it."
+            )
         keyring_module.set_password(self.service_name, secret_id, value)
 
     def get_secret(self, secret_id: str) -> str | None:
-        keyring_module = self._load_keyring_module()
+        keyring_module = self._load_keyring_module_or_none()
+        if keyring_module is None:
+            return None
         value = keyring_module.get_password(self.service_name, secret_id)
         return value if isinstance(value, str) and value else None
 
@@ -467,6 +521,8 @@ class SystemKeyringSecretStore:
         try:
             keyring_module = loader_ref()
         except Exception:
+            keyring_module = None
+        if keyring_module is None:
             cls._native_macos_security_reads_cache = (loader_id, False)
             return False
         module_name = getattr(keyring_module, "__name__", "")
@@ -551,14 +607,24 @@ class SystemKeyringSecretStore:
 
     def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float = 0.0) -> str | None:
         _ = timeout_seconds
+        if sys.platform == "darwin":
+            if self.service_name == _POLICY_INTEGRITY_SERVICE_NAME:
+                # Passive Guard paths must never touch macOS Keychain. Even
+                # no-UI Security-framework reads can regress into OS prompts
+                # when the user keychain is missing, locked, or owned by
+                # another ACL.
+                return None
+            if self._supports_native_macos_security_reads():
+                return self._get_secret_without_macos_ui(secret_id)
+            return None
         if self._supports_native_macos_security_reads():
             return self._get_secret_without_macos_ui(secret_id)
-        if sys.platform == "darwin":
-            return None
         return self.get_secret(secret_id)
 
     def delete_secret(self, secret_id: str) -> None:
-        keyring_module = self._load_keyring_module()
+        keyring_module = self._load_keyring_module_or_none()
+        if keyring_module is None:
+            return
         try:
             keyring_module.delete_password(self.service_name, secret_id)
         except Exception:
@@ -857,7 +923,7 @@ def _build_policy_integrity_secret_store() -> SystemKeyringSecretStore | None:
         # Policy integrity is passive hardening; it must never raise Keychain UI.
         return None
     if SystemKeyringSecretStore._backend_is_available():
-        return SystemKeyringSecretStore(service_name="hol-guard.policy-integrity")
+        return SystemKeyringSecretStore(service_name=_POLICY_INTEGRITY_SERVICE_NAME)
     return None
 
 
@@ -899,6 +965,11 @@ def receipt_index_statements() -> list[str]:
         ("create index if not exists idx_receipts_harness_artifact on runtime_receipts(harness, artifact_id)"),
         ("create index if not exists idx_receipts_timestamp_harness on runtime_receipts(timestamp, harness)"),
         ("create index if not exists idx_receipts_timestamp_desc on runtime_receipts(timestamp desc)"),
+        ("create index if not exists idx_receipts_harness_timestamp_desc on runtime_receipts(harness, timestamp desc)"),
+        (
+            "create index if not exists idx_receipts_harness_artifact_timestamp_desc "
+            "on runtime_receipts(harness, artifact_id, timestamp desc)"
+        ),
     ]
 
 
@@ -1175,23 +1246,23 @@ class GuardStore:
     def _policy_integrity_path_warnings(self) -> list[str]:
         warnings: list[str] = []
         if self.guard_home.is_symlink():
-            warnings.append("guard_home_symlink")
+            warnings.append(POLICY_INTEGRITY_REASON_GUARD_HOME_SYMLINK)
         if self.path.exists() and self.path.is_symlink():
-            warnings.append("guard_db_symlink")
+            warnings.append(POLICY_INTEGRITY_REASON_GUARD_DB_SYMLINK)
         if os.name == "nt":
             return warnings
         try:
             if self.guard_home.stat().st_mode & 0o077:
-                warnings.append("guard_home_permissions")
+                warnings.append(POLICY_INTEGRITY_REASON_GUARD_HOME_PERMISSIONS)
         except OSError:
-            warnings.append("guard_home_inaccessible")
+            warnings.append(POLICY_INTEGRITY_REASON_GUARD_HOME_INACCESSIBLE)
         if not self.path.exists():
             return warnings
         try:
             if self.path.stat().st_mode & 0o077:
-                warnings.append("guard_db_permissions")
+                warnings.append(POLICY_INTEGRITY_REASON_GUARD_DB_PERMISSIONS)
         except OSError:
-            warnings.append("guard_db_inaccessible")
+            warnings.append(POLICY_INTEGRITY_REASON_GUARD_DB_INACCESSIBLE)
         return warnings
 
     @staticmethod
@@ -1433,11 +1504,11 @@ class GuardStore:
             else self._policy_integrity_secret_material(create=create_key)
         )
         if self._policy_integrity_secret_store is None:
-            warnings.append("system_keyring_unavailable")
+            warnings.append(POLICY_INTEGRITY_REASON_SYSTEM_KEYRING_UNAVAILABLE)
         elif raw_key is None or key_id is None:
-            warnings.append("policy_integrity_key_unavailable")
+            warnings.append(POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE)
         if trusted_state is None:
-            warnings.append("policy_integrity_control_unavailable")
+            warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
         if not warnings and trusted_state is not None and raw_key is not None and key_id is not None:
             try:
                 trusted_state = self._reconcile_policy_integrity_pending_generation(
@@ -1447,7 +1518,7 @@ class GuardStore:
                     trusted_state=trusted_state,
                 )
             except RuntimeError:
-                warnings.append("policy_integrity_control_unavailable")
+                warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
         has_only_signed_rows = self._count_legacy_local_policy_rows(connection) == 0
         if (
             not warnings
@@ -1458,12 +1529,12 @@ class GuardStore:
             next_trusted_state = dict(trusted_state)
             next_trusted_state["cutover_complete"] = True
             if not self._store_policy_integrity_control_state(next_trusted_state):
-                warnings.append("policy_integrity_control_unavailable")
+                warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
             else:
                 trusted_state = next_trusted_state
-        mode = "protected" if not warnings else "degraded"
+        mode = POLICY_INTEGRITY_MODE_PROTECTED if not warnings else POLICY_INTEGRITY_MODE_DEGRADED
         cutover_complete = bool(trusted_state.get("cutover_complete")) if trusted_state is not None else False
-        enforcement = "enforce" if mode == "protected" and cutover_complete else "warn"
+        enforcement = POLICY_INTEGRITY_ENFORCEMENT_ENFORCE
         payload: dict[str, object] = {
             "backend": self._policy_integrity_backend_name(),
             "cutover_complete": cutover_complete,
@@ -2878,33 +2949,6 @@ class GuardStore:
                     trusted_generation=_mapping_int(state, "generation"),
                 )
                 if integrity_result.status == "valid":
-                    selected_payload = self._policy_row_payload(
-                        candidate,
-                        integrity_result=integrity_result,
-                        state=state,
-                    )
-                    break
-                if _warn_only_policy_integrity_status(
-                    integrity_result.status,
-                    state,
-                    source=str(candidate["source"]),
-                ):
-                    events.append(
-                        (
-                            "policy_integrity_warning",
-                            {
-                                "decision_id": int(candidate["decision_id"]),
-                                "harness": str(candidate["harness"]),
-                                "artifact_id": candidate["artifact_id"],
-                                "integrity_status": integrity_result.status,
-                            },
-                        )
-                    )
-                    _store_logger.warning(
-                        "Guard honored local policy decision %s while integrity enforcement is warn (%s).",
-                        candidate["decision_id"],
-                        integrity_result.status,
-                    )
                     selected_payload = self._policy_row_payload(
                         candidate,
                         integrity_result=integrity_result,

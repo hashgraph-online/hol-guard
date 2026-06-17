@@ -708,7 +708,7 @@ def extract_sensitive_tool_action_request(
         wrapper_chain: tuple[str, ...] = ()
         normalized_command_text = command_text
         if effective_tool_name in _SHELL_TOOL_NAMES:
-            normalized_command = normalize_transparent_shell_command(command_text)
+            normalized_command = normalize_transparent_shell_command(command_text, cwd=cwd, home_dir=home_dir)
             command_text = normalized_command.normalized_command
             normalized_command_text = command_text
             wrapper_chain = normalized_command.wrapper_chain
@@ -776,14 +776,22 @@ def extract_sensitive_tool_action_request(
     return None
 
 
-def is_explicitly_benign_tool_action_request(tool_name: object, arguments: object) -> bool:
+def is_explicitly_benign_tool_action_request(
+    tool_name: object,
+    arguments: object,
+    *,
+    cwd: Path | None = None,
+    home_dir: Path | None = None,
+) -> bool:
     normalized_tool_name = _normalize_tool_name(tool_name)
     if normalized_tool_name not in _SHELL_TOOL_NAMES:
         return False
     found_benign_candidate = False
     for command_text in _candidate_command_texts(arguments):
         if normalized_tool_name in _SHELL_TOOL_NAMES:
-            command_text = normalize_transparent_shell_command(command_text).normalized_command
+            command_text = normalize_transparent_shell_command(
+                command_text, cwd=cwd, home_dir=home_dir
+            ).normalized_command
         stripped_command = command_text.strip()
         if not stripped_command:
             continue

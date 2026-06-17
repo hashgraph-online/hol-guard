@@ -102,6 +102,7 @@ def _run_hook_generic_payload(
         and is_explicitly_benign_tool_action_request(
             payload_map.get("tool_name"),
             payload_map.get("tool_input", payload_map.get("arguments")),
+            cwd=runtime_workspace,
         )
     ):
         policy_action = "allow"
