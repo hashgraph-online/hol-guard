@@ -210,7 +210,7 @@ def test_direct_sqlite_insert_is_ignored_in_enforce_mode(tmp_path: Path) -> None
         "codex",
         "codex:project:forged",
         "hash-forged",
-        now="2026-06-14T00:02:00Z",
+        now="2026-06-14T00:02:00Z",  # must be after the baseline upsert at 00:00:00Z
     )
     verify = store.verify_policy_integrity()
 

@@ -4068,6 +4068,7 @@ class GuardStore:
         require_policy_clear(self.guard_home, approval_gate_grant=approval_gate_grant, now=now)
         next_control_state: dict[str, object] | None = None
         with self._connect() as connection:
+            backup_path = self._backup_policy_database(connection, now=now)
             state = self._refresh_policy_integrity_state(
                 connection,
                 now=now,
@@ -4082,8 +4083,6 @@ class GuardStore:
             trusted_state = self._load_policy_integrity_control_state(create=True)
             if trusted_state is None:
                 raise RuntimeError("Guard could not access the policy integrity control state.")
-            connection.commit()
-            backup_path = self._backup_policy_database(connection, now=now)
             rows = self._load_local_policy_rows(connection, harness=harness)
             preserved = 0
             cleared = 0
