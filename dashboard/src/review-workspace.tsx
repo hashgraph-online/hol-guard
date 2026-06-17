@@ -90,6 +90,7 @@ import { ApprovalPasswordModal } from "./approval-center-review-cards";
 import { guardAwareHref } from "./guard-api";
 import {
   QueueBulkDrawer,
+  QueueBulkGatePrompt,
   QueueBulkStickyBar,
   QueueBulkStatusBanner,
 } from "./queue-bulk-approve-flow";
@@ -320,6 +321,11 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
       <QueueBulkStatusBanner
         visible={bulkApprove.status.visible}
         sensitiveFileReadCount={bulkApprove.status.sensitiveFileReadCount}
+      />
+      <QueueBulkGatePrompt
+        visible={bulkApprove.gatePrompt.visible}
+        eligibleActionCount={bulkApprove.gatePrompt.eligibleActionCount}
+        settingsHref={bulkApprove.gatePrompt.settingsHref}
       />
       <QueueBulkStickyBar {...bulkApprove.stickyBar} />
       {bulkApprove.bulkSelection.selectionMode && (

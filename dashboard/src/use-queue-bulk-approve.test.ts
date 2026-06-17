@@ -5,12 +5,14 @@ import {
   groupDuplicates,
   isReadOnlyQueueGroup,
   summarizeSensitiveFileReadGroups,
+  bulkApproveActionCount,
   type QueueGroup,
 } from "./queue-state";
 import {
   isBulkSelectableRequest,
   resolveBulkSelectionGroupId,
 } from "./use-queue-bulk-approve";
+import { isBulkApproveGateReady } from "./queue-bulk-approve-flow";
 import {
   buildBulkRiskDisclosure,
   resolveBulkRiskTier,
@@ -174,6 +176,29 @@ assert(
 assert(
   highDisclosure.bullets.some((b) => b.includes("duplicate retr") && b.includes("included")),
   "T-BULK-HOOK-08d: duplicate retries surfaced in high disclosure",
+);
+
+// T-BULK-HOOK-09: discovery path — when the gate is not configured, ambient
+// selection is suppressed, so a discovery prompt must remain reachable.
+// This guards against the regression where eligible reads exist but the user
+// has no approval gate configured (gatePromptVisible requires !bulkGateReady).
+assert(
+  isBulkApproveGateReady(null) === false,
+  "T-BULK-HOOK-09a: gate not ready when no config is supplied",
+);
+assert(
+  isBulkApproveGateReady({ enabled: true, configured: false, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: false, strict_all_decisions: false, totp_enabled: false, totp_pending: false }) === false,
+  "T-BULK-HOOK-09b: gate not ready when configured is false",
+);
+// The discovery banner surfaces the eligible action count, which must be > 0
+// whenever eligible groups exist.
+const eligibleActionCount = bulkApproveActionCount([
+  { primary: plainRead, duplicateCount: 0, duplicateIds: [] },
+  { primary: secondRead, duplicateCount: 1, duplicateIds: ["dup"] },
+]);
+assert(
+  eligibleActionCount === 3,
+  "T-BULK-HOOK-09c: eligible action count drives the discovery banner copy",
 );
 
 console.log("use-queue-bulk-approve.test.ts: all tests passed");

@@ -95,6 +95,13 @@ export type QueueBulkStatusProps = {
   sensitiveFileReadCount: number;
 };
 
+export type QueueBulkGatePromptProps = {
+  /** True when eligible reads exist but the approval gate is not configured. */
+  visible: boolean;
+  eligibleActionCount: number;
+  settingsHref: string;
+};
+
 export type QueueBulkSelectionApi = {
   /** Ambient selection mode — checkboxes render whenever eligible reads exist. */
   selectionMode: boolean;
@@ -113,6 +120,7 @@ export type UseQueueBulkApproveResult = {
   stickyBar: QueueBulkStickyBarProps;
   drawer: QueueBulkDrawerProps;
   status: QueueBulkStatusProps;
+  gatePrompt: QueueBulkGatePromptProps;
 };
 
 export function useQueueBulkApprove(props: {
@@ -395,6 +403,17 @@ export function useQueueBulkApprove(props: {
 
   const stickyBarVisible = showBulkApprove && selectedGroupCount > 0 && drawerStep !== "completed";
 
+  // Discovery path: when eligible reads exist but the approval gate is not
+  // configured, surface a prompt to set one up. Without this, the ambient
+  // selection mode (which requires bulkGateReady) would never appear, hiding
+  // bulk approval entirely from users who haven't configured the gate yet.
+  const gatePromptVisible =
+    hasBulkHandler && hasEligibleGroups && !bulkGateReady;
+  const eligibleActionCount = useMemo(
+    () => bulkApproveActionCount(bulkEligibleGroups),
+    [bulkEligibleGroups],
+  );
+
   return {
     groups,
     showBulkApprove,
@@ -442,6 +461,11 @@ export function useQueueBulkApprove(props: {
     status: {
       visible: !showBulkApprove && sensitiveFileReadCount > 0,
       sensitiveFileReadCount,
+    },
+    gatePrompt: {
+      visible: gatePromptVisible,
+      eligibleActionCount,
+      settingsHref: props.settingsHref,
     },
   };
 }
