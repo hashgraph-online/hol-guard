@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.aibom_trust_metadata import trust_resolution_from_domain
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.runtime.evidence_hash import guard_evidence_hash
 from codex_plugin_scanner.guard.runtime.trust_attestation import (
     GuardTrustAttestationSigningConfig,
     GuardTrustAttestationVerificationKey,
@@ -180,6 +181,10 @@ def test_inventory_snapshot_attaches_local_plugin_trust_resolution(tmp_path: Pat
     components = trust.get("trustComponents")
     assert isinstance(components, list)
     assert components
+
+
+def test_guard_evidence_hash_is_stable_across_key_order() -> None:
+    assert guard_evidence_hash({"b": 2, "a": 1}) == guard_evidence_hash({"a": 1, "b": 2})
 
 
 def test_inventory_skill_trust_enrichment_disables_cisco_scan(
@@ -534,6 +539,36 @@ def test_inventory_snapshot_signs_local_trust_metadata_with_workspace_device_bin
         envelope=layer_attestation,
         trusted_keys=(verification_key,),
     )
+
+
+def test_local_skill_security_emits_shared_evidence_hash(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("---\nname: Deploy Kit\n---\n# Skill\n", encoding="utf-8")
+
+    snapshot = _snapshot_for_artifact(
+        artifact=GuardArtifact(
+            artifact_id="codex:project:skill:deploy-kit",
+            name="deploy-kit",
+            harness="codex",
+            artifact_type="skill",
+            source_scope="project",
+            config_path=str(skill_dir),
+        ),
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=skill_dir,
+        trust_attestation_context=None,
+    )
+
+    skill_item = next(item for item in snapshot.items if item.item_kind == "skill")
+    local_security = skill_item.metadata.get("localSecurity")
+    assert isinstance(local_security, dict)
+    metadata = local_security.get("metadata")
+    assert isinstance(metadata, dict)
+    evidence_hash = metadata.get("evidenceHash")
+    assert isinstance(evidence_hash, str)
+    assert len(evidence_hash) == 64
 
 
 def test_p384_key_is_rejected_for_p256_attestation() -> None:

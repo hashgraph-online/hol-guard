@@ -9,6 +9,7 @@ from typing import Literal
 
 from ..checks.skill_security import resolve_skill_security_context
 from ..models import ScanOptions, Severity
+from .runtime.evidence_hash import guard_evidence_hash
 from ..trust_instruction_scoring import build_instruction_domain
 from ..trust_mcp_scoring import build_mcp_domain, build_mcp_surface_domain
 from ..trust_models import TrustAdapterScore, TrustComponentScore, TrustDomainScore
@@ -198,6 +199,18 @@ def _local_skill_security_for_artifact(
             value = run_metadata.get(key)
             if value is not None:
                 metadata_payload[key] = value
+
+    metadata_payload["evidenceHash"] = guard_evidence_hash(
+        {
+            "capturedAt": normalized_captured_at,
+            "entityType": "skill",
+            "findings": findings,
+            "provider": "cisco-skill-scanner",
+            "safety": safety,
+            "source": "local_indexed",
+            "status": status,
+        }
+    )
 
     return {
         "entityType": "skill",
@@ -646,5 +659,4 @@ def _trust_component_row(
 
 
 def _trust_evidence_hash(payload: dict[str, object]) -> str:
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    return guard_evidence_hash(payload)

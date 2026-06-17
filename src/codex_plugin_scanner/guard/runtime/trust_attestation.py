@@ -6,6 +6,7 @@ import json
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import lru_cache
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
@@ -51,6 +52,8 @@ def resolve_trust_attestation_signing_config(
     active_key_id = _sanitize_env(env.get("GUARD_AIBOM_TRUST_ATTESTATION_KEY_ID")) or "guard-aibom-trust-key-default"
     private_key_pem = _normalize_pem(_sanitize_env(env.get("GUARD_AIBOM_TRUST_ATTESTATION_PRIVATE_KEY")))
     if not private_key_pem:
+        if _headless_short_lived_attestation_enabled(env):
+            return _resolve_headless_short_lived_trust_attestation_signing_config(active_key_id=active_key_id)
         return None
     return GuardTrustAttestationSigningConfig(
         active_key_id=active_key_id,
@@ -103,6 +106,38 @@ def resolve_guard_oauth_trust_attestation_signing_config(
 def trust_attestation_v2_enabled(environ: Mapping[str, str] | None = None) -> bool:
     env = environ or os.environ
     return _sanitize_env(env.get("GUARD_AIBOM_TRUST_ATTESTATION_V2")).lower() in _TRUTHY_ENV_VALUES
+
+
+def _headless_short_lived_attestation_enabled(environ: Mapping[str, str]) -> bool:
+    return _sanitize_env(environ.get("GUARD_AIBOM_TRUST_ATTESTATION_HEADLESS_SHORT_LIVED")).lower() in _TRUTHY_ENV_VALUES
+
+
+@lru_cache(maxsize=4)
+def _resolve_headless_short_lived_trust_attestation_signing_config(
+    *,
+    active_key_id: str,
+) -> GuardTrustAttestationSigningConfig:
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode("utf-8")
+    public_key_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("utf-8")
+        .strip()
+    )
+    return GuardTrustAttestationSigningConfig(
+        active_key_id=active_key_id,
+        private_key_pem=private_key_pem,
+        public_jwk_thumbprint=_public_key_fingerprint(public_key_pem),
+        signature_algorithm=GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
+    )
 
 
 def build_trust_attestation_payload(
