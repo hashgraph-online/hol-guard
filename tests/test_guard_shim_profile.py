@@ -179,3 +179,39 @@ class TestEnsureWritesStablePath:
         text = (home / ".zshrc").read_text(encoding="utf-8")
         assert text.count(_PACKAGE_PROFILE_MARKER) == 1
         assert "package-shims/bin" in text
+
+
+class TestEnsureSkipsOnWindows:
+    """Both profile writers must short-circuit on Windows before touching .zshrc."""
+
+    def _stable_ctx(self, tmp_path: Path) -> MagicMock:
+        home = tmp_path / "home"
+        home.mkdir()
+        guard_home = home / ".hol-guard"
+        (guard_home / "bin").mkdir(parents=True)
+        (guard_home / "package-shims" / "bin").mkdir(parents=True)
+        return _context(home, guard_home)
+
+    def test_package_shim_skipped_on_windows(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        ctx = self._stable_ctx(tmp_path)
+        monkeypatch.setattr("codex_plugin_scanner.guard.shims.os.name", "nt")
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.shims._is_transient_path",
+            lambda path: False,
+        )
+        result = ensure_package_shim_path_in_shell_profile(ctx)
+        assert result["changed"] is False
+        assert result["manual_path_required"] is True
+        assert not (ctx.home_dir / ".zshrc").exists()
+
+    def test_guard_shim_skipped_on_windows(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        ctx = self._stable_ctx(tmp_path)
+        monkeypatch.setattr("codex_plugin_scanner.guard.shims.os.name", "nt")
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.shims._is_transient_path",
+            lambda path: False,
+        )
+        result = ensure_guard_shim_path_in_shell_profile(ctx)
+        assert result["changed"] is False
+        assert result["manual_path_required"] is True
+        assert not (ctx.home_dir / ".zshrc").exists()

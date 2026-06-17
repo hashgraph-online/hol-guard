@@ -782,6 +782,14 @@ def ensure_package_shim_path_in_shell_profile(context: HarnessContext) -> dict[s
     """Prepend the package shim dir in the user's normal shell profile."""
 
     shim_dir = context.guard_home / "package-shims" / "bin"
+    if os.name == "nt":
+        return {
+            "changed": False,
+            "profile_path": None,
+            "shim_dir": str(shim_dir),
+            "restart_shell_required": False,
+            "manual_path_required": True,
+        }
     if _is_transient_path(shim_dir):
         return {
             "changed": False,
