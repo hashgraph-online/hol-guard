@@ -14,7 +14,7 @@ from codex_plugin_scanner.guard.runtime.shell_command_wrappers import (
 
 def test_normalize_transparent_shell_command_unwraps_lean_ctx_chain() -> None:
     wrapped = (
-        "env FOO=bar ./bin/lean-ctx -c 'rg -n \"guard_live_|service_principal\" src app __tests__ docs'"
+        "env FOO=bar ./bin/lean-ctx -c 'rg -n \"service_principal|reauthorization\" src app __tests__ docs'"
     )
 
     normalized = normalize_transparent_shell_command(wrapped)
@@ -61,7 +61,7 @@ def test_normalize_opencode_payload_uses_inner_command_for_shell_wrappers(tmp_pa
         "tool_name": "bash",
         "tool_input": {
             "command": (
-                "./bin/lean-ctx -c 'rg -n \"guard_live_|service_principal\" src app __tests__ docs'"
+                "./bin/lean-ctx -c 'rg -n \"service_principal|reauthorization\" src app __tests__ docs'"
             )
         },
     }
@@ -85,7 +85,7 @@ def test_wrapped_read_only_shell_command_stays_unblocked() -> None:
         {
             "command": (
                 "./bin/lean-ctx -c "
-                "'rg -n \"guard_live_|service_principal|reauthorization\" src app __tests__ docs'"
+                "'rg -n \"service_principal|reauthorization\" src app __tests__ docs'"
             )
         },
         **context_kwargs,

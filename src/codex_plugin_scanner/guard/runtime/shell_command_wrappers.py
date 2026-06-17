@@ -16,6 +16,7 @@ _PLAIN_WRAPPERS = frozenset({"command", "nice", "nohup", "stdbuf", "time"})
 _ENV_OPTION_FLAGS_WITH_VALUES = frozenset({"-u", "-C", "--unset", "--chdir"})
 _NICE_OPTION_FLAGS_WITH_VALUES = frozenset({"-n", "--adjustment"})
 _STDBUF_VALUE_FLAGS = frozenset({"-i", "-o", "-e"})
+_TIME_OPTION_FLAGS_WITH_VALUES = frozenset({"-f", "-o", "--format", "--output"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,6 +212,19 @@ def _strip_env_wrapper(parts: list[str]) -> tuple[list[str] | None, list[str], s
             if index + 1 >= len(parts):
                 return None, env_prefix, None
             return [], env_prefix, parts[index + 1]
+        split_string = _env_clustered_split_string_payload(token)
+        if split_string is not None:
+            if split_string:
+                return [], env_prefix, split_string
+            if index + 1 >= len(parts):
+                return None, env_prefix, None
+            return [], env_prefix, parts[index + 1]
+        short_option_tokens = _env_short_option_tokens_consumed(token)
+        if short_option_tokens is not None:
+            if index + short_option_tokens - 1 >= len(parts):
+                return None, env_prefix, None
+            index += short_option_tokens
+            continue
         if token in _ENV_OPTION_FLAGS_WITH_VALUES:
             if index + 1 >= len(parts):
                 return None, env_prefix, None
@@ -248,6 +262,17 @@ def _strip_time_wrapper(parts: list[str]) -> list[str] | None:
         token = parts[index]
         if token == "--":
             return parts[index + 1 :]
+        if token in _TIME_OPTION_FLAGS_WITH_VALUES:
+            if index + 1 >= len(parts):
+                return None
+            index += 2
+            continue
+        if token.startswith("--format=") or token.startswith("--output="):
+            index += 1
+            continue
+        if (token.startswith("-f") and token != "-f") or (token.startswith("-o") and token != "-o"):
+            index += 1
+            continue
         if token.startswith("-"):
             index += 1
             continue
@@ -302,6 +327,29 @@ def _strip_stdbuf_wrapper(parts: list[str]) -> list[str] | None:
             continue
         return parts[index:]
     return None
+
+
+def _env_short_option_tokens_consumed(token: str) -> int | None:
+    if not token.startswith("-") or token.startswith("--") or len(token) <= 2:
+        return None
+    for index, flag_character in enumerate(token[1:], start=1):
+        if flag_character not in {"C", "S", "u"}:
+            continue
+        if index < len(token) - 1:
+            return 1
+        return 2
+    return 1
+
+
+def _env_clustered_split_string_payload(token: str) -> str | None:
+    if not token.startswith("-") or token.startswith("--") or len(token) <= 2:
+        return None
+    split_index = token.find("S", 1)
+    if split_index == -1:
+        return None
+    if split_index + 1 >= len(token):
+        return ""
+    return token[split_index + 1 :]
 
 
 def _command_name(token: str) -> str:

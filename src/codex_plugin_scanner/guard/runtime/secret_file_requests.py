@@ -12,7 +12,7 @@ import os
 import re
 import shlex
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..models import GuardArtifact
@@ -706,9 +706,11 @@ def extract_sensitive_tool_action_request(
     for command_text in _candidate_command_texts(arguments):
         raw_command_text = command_text
         wrapper_chain: tuple[str, ...] = ()
+        normalized_command_text = command_text
         if effective_tool_name in _SHELL_TOOL_NAMES:
             normalized_command = normalize_transparent_shell_command(command_text)
             command_text = normalized_command.normalized_command
+            normalized_command_text = command_text
             wrapper_chain = normalized_command.wrapper_chain
         docker_sensitive_request = _docker_sensitive_tool_action_request(
             tool_name=requested_tool_name,
@@ -753,6 +755,24 @@ def extract_sensitive_tool_action_request(
                     wrapper_chain=wrapper_chain,
                 )
             return destructive_shell_request
+        if wrapper_chain:
+            destructive_shell_request = _destructive_shell_tool_action_request(
+                tool_name=requested_tool_name,
+                normalized_tool_name=effective_tool_name,
+                command_text=raw_command_text,
+                cwd=cwd,
+                home_dir=home_dir,
+            )
+            if destructive_shell_request is not None:
+                destructive_shell_request = _request_with_wrapper_context(
+                    replace(
+                        destructive_shell_request,
+                        command_text=normalized_command_text,
+                    ),
+                    raw_command_text=raw_command_text,
+                    wrapper_chain=wrapper_chain,
+                )
+                return destructive_shell_request
     return None
 
 
