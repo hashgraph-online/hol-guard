@@ -12,7 +12,7 @@ import os
 import re
 import shlex
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..models import GuardArtifact
@@ -32,6 +32,7 @@ from .false_positive_rules import (
 from .secret_sensitivity import SecretPathMatch as SensitivePathMatch
 from .secret_sensitivity import classify_secret_path
 from .sed_scripts import sed_script_is_bounded_print
+from .shell_command_wrappers import normalize_transparent_shell_command
 
 _FILE_READ_TOOL_NAMES = frozenset(
     {
@@ -54,7 +55,12 @@ _PATH_KEYS = (
     "targetPath",
 )
 _PATH_LIST_KEYS = ("paths", "file_paths", "filePaths")
-_COMMAND_KEYS = ("command", "cmd", "shell_command", "shellCommand")
+_COMMAND_KEYS = (
+    "command",
+    "cmd",
+    "shell_command",
+    "shellCommand",
+)
 _SUDO_OPTION_VALUE_FLAGS = frozenset({"-u", "-g", "-h", "-p", "-C", "-D", "-R", "-r", "-T", "-t"})
 _SUDO_OPTION_VALUE_LONG_FLAGS = frozenset(
     {
@@ -551,6 +557,8 @@ class ToolActionRequestMatch:
     command_text: str
     action_class: str
     reason: str
+    raw_command_text: str | None = None
+    wrapper_chain: tuple[str, ...] = ()
 
 
 def is_file_read_tool_name(tool_name: str | None) -> bool:
@@ -696,12 +704,26 @@ def extract_sensitive_tool_action_request(
     if effective_tool_name is None:
         return None
     for command_text in _candidate_command_texts(arguments):
+        raw_command_text = command_text
+        wrapper_chain: tuple[str, ...] = ()
+        normalized_command_text = command_text
+        if effective_tool_name in _SHELL_TOOL_NAMES:
+            normalized_command = normalize_transparent_shell_command(command_text)
+            command_text = normalized_command.normalized_command
+            normalized_command_text = command_text
+            wrapper_chain = normalized_command.wrapper_chain
         docker_sensitive_request = _docker_sensitive_tool_action_request(
             tool_name=requested_tool_name,
             normalized_tool_name=effective_tool_name,
             command_text=command_text,
         )
         if docker_sensitive_request is not None:
+            if wrapper_chain:
+                docker_sensitive_request = _request_with_wrapper_context(
+                    docker_sensitive_request,
+                    raw_command_text=raw_command_text,
+                    wrapper_chain=wrapper_chain,
+                )
             return docker_sensitive_request
         docker_config_request = _docker_config_tool_action_request(
             tool_name=requested_tool_name,
@@ -711,6 +733,12 @@ def extract_sensitive_tool_action_request(
             home_dir=home_dir,
         )
         if docker_config_request is not None:
+            if wrapper_chain:
+                docker_config_request = _request_with_wrapper_context(
+                    docker_config_request,
+                    raw_command_text=raw_command_text,
+                    wrapper_chain=wrapper_chain,
+                )
             return docker_config_request
         destructive_shell_request = _destructive_shell_tool_action_request(
             tool_name=requested_tool_name,
@@ -720,7 +748,31 @@ def extract_sensitive_tool_action_request(
             home_dir=home_dir,
         )
         if destructive_shell_request is not None:
+            if wrapper_chain:
+                destructive_shell_request = _request_with_wrapper_context(
+                    destructive_shell_request,
+                    raw_command_text=raw_command_text,
+                    wrapper_chain=wrapper_chain,
+                )
             return destructive_shell_request
+        if wrapper_chain:
+            destructive_shell_request = _destructive_shell_tool_action_request(
+                tool_name=requested_tool_name,
+                normalized_tool_name=effective_tool_name,
+                command_text=raw_command_text,
+                cwd=cwd,
+                home_dir=home_dir,
+            )
+            if destructive_shell_request is not None:
+                destructive_shell_request = _request_with_wrapper_context(
+                    replace(
+                        destructive_shell_request,
+                        command_text=normalized_command_text,
+                    ),
+                    raw_command_text=raw_command_text,
+                    wrapper_chain=wrapper_chain,
+                )
+                return destructive_shell_request
     return None
 
 
@@ -730,6 +782,8 @@ def is_explicitly_benign_tool_action_request(tool_name: object, arguments: objec
         return False
     found_benign_candidate = False
     for command_text in _candidate_command_texts(arguments):
+        if normalized_tool_name in _SHELL_TOOL_NAMES:
+            command_text = normalize_transparent_shell_command(command_text).normalized_command
         stripped_command = command_text.strip()
         if not stripped_command:
             continue
@@ -3336,7 +3390,18 @@ def build_tool_action_request_artifact(
         ).encode("utf-8")
     ).hexdigest()
     request_summary = f"Requested `{request.tool_name}` action `{request.command_text}` ({request.action_class})."
+    if request.wrapper_chain:
+        request_summary = (
+            f"Requested `{request.tool_name}` action `{request.command_text}` via transparent wrappers "
+            f"`{' -> '.join(request.wrapper_chain)}` ({request.action_class})."
+        )
     risk_summary = f"Requests a sensitive native tool action: {request.action_class}."
+    runtime_reason = request.reason
+    if request.wrapper_chain:
+        runtime_reason = (
+            f"Guard normalized the transparent wrapper chain {' -> '.join(request.wrapper_chain)} "
+            f"before evaluation. {request.reason}"
+        )
     return GuardArtifact(
         artifact_id=f"{harness}:{source_scope}:tool-action:{fingerprint}",
         name=f"{request.tool_name} {request.action_class}",
@@ -3351,8 +3416,27 @@ def build_tool_action_request_artifact(
             "request_summary": request_summary,
             "runtime_request_signals": [f"invokes a sensitive native tool action: {request.action_class}"],
             "runtime_request_summary": risk_summary,
-            "runtime_request_reason": request.reason,
+            "runtime_request_reason": runtime_reason,
+            "raw_command_text": request.raw_command_text,
+            "wrapper_chain": list(request.wrapper_chain),
         },
+    )
+
+
+def _request_with_wrapper_context(
+    request: ToolActionRequestMatch,
+    *,
+    raw_command_text: str,
+    wrapper_chain: tuple[str, ...],
+) -> ToolActionRequestMatch:
+    return ToolActionRequestMatch(
+        tool_name=request.tool_name,
+        normalized_tool_name=request.normalized_tool_name,
+        command_text=request.command_text,
+        action_class=request.action_class,
+        reason=request.reason,
+        raw_command_text=raw_command_text,
+        wrapper_chain=wrapper_chain,
     )
 
 
