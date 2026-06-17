@@ -444,6 +444,38 @@ def test_paid_metadata_without_usable_local_auth_still_prefers_connect_over_upgr
     }
 
 
+def test_cached_paid_bundle_does_not_hide_retry_required_connect_state(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {
+            "tier": "premium",
+        },
+        "2026-06-05T01:39:51+00:00",
+    )
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-06-05T01:39:51+00:00",
+        request_id="connect-1",
+    )
+    store.record_latest_guard_connect_sync_result(
+        status="retry_required",
+        milestone="first_sync_failed",
+        now="2026-06-05T01:40:10+00:00",
+        reason="Guard authorization expired. Run `hol-guard connect` again.",
+    )
+
+    entitlement = resolve_package_firewall_entitlement(store)
+
+    assert entitlement == {
+        "allowed": False,
+        "reason": "guard_cloud_reconnect_required",
+        "tier": "unknown",
+        "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access.",
+    }
+
+
 def test_sync_local_guard_cloud_proof_repairs_degraded_oauth_from_encrypted_fallback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
