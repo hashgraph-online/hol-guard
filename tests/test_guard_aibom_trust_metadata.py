@@ -26,6 +26,7 @@ from codex_plugin_scanner.guard.runtime.trust_attestation import (
     build_trust_attestation_payload,
     build_trust_attestation_verification_key,
     resolve_guard_oauth_trust_attestation_signing_config,
+    resolve_trust_attestation_signing_config,
     sign_trust_attestation,
     verify_trust_attestation,
 )
@@ -629,6 +630,24 @@ def test_invalid_oauth_private_key_disables_attestation_signing_config() -> None
         )
         is None
     )
+
+
+def test_headless_short_lived_attestation_generates_ephemeral_ec_key(monkeypatch) -> None:
+    monkeypatch.delenv("GUARD_AIBOM_TRUST_ATTESTATION_PRIVATE_KEY", raising=False)
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_HEADLESS_SHORT_LIVED", "1")
+
+    config = resolve_trust_attestation_signing_config(
+        {
+            "GUARD_AIBOM_TRUST_ATTESTATION_HEADLESS_SHORT_LIVED": "1",
+            "GUARD_AIBOM_TRUST_ATTESTATION_KEY_ID": "ci-short-lived",
+        }
+    )
+
+    assert config is not None
+    assert config.active_key_id == "ci-short-lived"
+    assert config.signature_algorithm == GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256
+    verification_key = build_trust_attestation_verification_key(config)
+    assert verification_key.public_jwk_thumbprint is not None
 
 
 def test_registry_identified_skill_still_gets_local_baseline(tmp_path: Path) -> None:

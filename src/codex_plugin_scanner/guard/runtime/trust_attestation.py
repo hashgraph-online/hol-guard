@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -13,6 +12,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey, EllipticCurvePublicKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
+
+from .evidence_hash import canonical_guard_evidence_payload, guard_evidence_hash
 
 GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION = "guard-aibom-trust-attestation.v1"
 GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V2 = "guard-aibom-trust-attestation.v2"
@@ -38,11 +39,11 @@ class GuardTrustAttestationVerificationKey:
 
 
 def canonical_trust_attestation_payload(payload: Mapping[str, object]) -> bytes:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return canonical_guard_evidence_payload(payload).encode("utf-8")
 
 
 def payload_hash_for_trust_attestation(payload: Mapping[str, object]) -> str:
-    return hashlib.sha256(canonical_trust_attestation_payload(payload)).hexdigest()
+    return guard_evidence_hash(payload)
 
 
 def resolve_trust_attestation_signing_config(

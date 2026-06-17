@@ -169,6 +169,10 @@ def _local_skill_security_for_artifact(
     status = str(getattr(run, "status", "unknown"))
     normalized_captured_at = _normalize_inventory_datetime(captured_at)
     findings = _local_skill_security_findings(run, skill_root=trust_root)
+    findings = sorted(
+        findings,
+        key=lambda finding: (finding.get("file", ""), finding.get("ruleId", ""), finding.get("message", "")),
+    )
     severity_counts = _cisco_severity_counts(run)
     score = _cisco_layer_score(severity_counts) if status == "enabled" else None
     safety = None
