@@ -1,5 +1,5 @@
 const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/feed-health-workspace.js","assets/chunks/home-protection-module.js","assets/chunks/supply-chain-protection-stats.js","assets/chunks/audit-workspace.js"])))=>i.map(i=>d[i]);
-import { aB as isSupplyChainAuditIncomplete, j as jsxRuntimeExports, r as reactExports, O as HiMiniKey, A as ActionButton, S as SectionLabel, au as GuardHarnessActionError, aC as readString$1, aD as isRecord$1, d as HiMiniCheckCircle, aw as HiMiniArrowPath, w as HiMiniExclamationTriangle, ac as Tag, m as formatRelativeTime, aE as HiMiniClock, aF as IconActionButton, I as HiMiniXCircle, ax as HiMiniTrash, l as HiMiniShieldCheck, F as HiMiniWrenchScrewdriver, aG as HiMiniBeaker, aH as ActivationSummary, aI as ActionResultPanel, ad as HiMiniMagnifyingGlass, b as EmptyState, aJ as HiMiniBugAnt, Y as fetchSettings, o as HiMiniXMark, aK as GuardModalLayer, aL as ConnectFlowCard, aM as HiMiniArrowTopRightOnSquare, aN as HiMiniCloudArrowDown, aO as fetchPackageFirewallStatus, aP as runPackageAudit, aQ as resolveSupplyChainAuditFailure, aR as runPackageSync, aS as startPackageFirewallConnect, aT as openPackageFirewallAuthorizeWindow, aU as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, aV as runPackageFirewallAction, aW as parseInterceptProofSnapshot, aX as openPackageFirewallShell, aY as EntitlementNotice, aZ as fetchReceipts, a_ as WorkspacePageHeader, a$ as __vitePreload } from "../guard-dashboard.js";
+import { aB as isSupplyChainAuditIncomplete, aC as isSupplyChainAuditEvidence, j as jsxRuntimeExports, r as reactExports, O as HiMiniKey, A as ActionButton, S as SectionLabel, au as GuardHarnessActionError, aD as readString$1, aE as isRecord$1, d as HiMiniCheckCircle, aw as HiMiniArrowPath, w as HiMiniExclamationTriangle, ac as Tag, m as formatRelativeTime, aF as HiMiniClock, aG as IconActionButton, I as HiMiniXCircle, ax as HiMiniTrash, l as HiMiniShieldCheck, F as HiMiniWrenchScrewdriver, aH as HiMiniBeaker, aI as ActivationSummary, aJ as ActionResultPanel, ad as HiMiniMagnifyingGlass, b as EmptyState, aK as HiMiniBugAnt, Y as fetchSettings, o as HiMiniXMark, aL as GuardModalLayer, aM as ConnectFlowCard, aN as HiMiniArrowTopRightOnSquare, aO as HiMiniCloudArrowDown, aP as fetchPackageFirewallStatus, aQ as runPackageAudit, aR as resolveSupplyChainAuditFailure, aS as runPackageSync, aT as startPackageFirewallConnect, aU as openPackageFirewallAuthorizeWindow, aV as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, aW as runPackageFirewallAction, aX as parseInterceptProofSnapshot, aY as openPackageFirewallShell, aZ as EntitlementNotice, a_ as fetchReceipts, a$ as WorkspacePageHeader, b0 as __vitePreload } from "../guard-dashboard.js";
 const SEVERITY_RANK = {
   critical: 4,
   high: 3,
@@ -241,9 +241,6 @@ function packageRecordsFromEvaluation(evaluation) {
   }
   return normalizePackageFindings(evaluation.package_findings);
 }
-function isAuditEvidence(value) {
-  return isRecord(value) && value.operation === "audit";
-}
 function normalizeSupplyChainAuditSnapshot(raw, receiptId = null) {
   if (!isRecord(raw)) {
     return null;
@@ -293,12 +290,10 @@ function normalizeSupplyChainAuditSnapshot(raw, receiptId = null) {
   };
 }
 function derivePackageWorkbenchFromReceipts(receipts) {
-  const auditReceipts = receipts.filter((receipt) => receipt.harness === "package-firewall").filter(
-    (receipt) => (receipt.scanner_evidence ?? []).some((entry) => isAuditEvidence(entry))
-  ).sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp));
+  const auditReceipts = receipts.filter((receipt) => receipt.harness === "package-firewall").filter((receipt) => (receipt.scanner_evidence ?? []).some((entry) => isSupplyChainAuditEvidence(entry))).sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp));
   for (const receipt of auditReceipts) {
-    const evidenceRaw = (receipt.scanner_evidence ?? []).find((entry) => isAuditEvidence(entry));
-    if (evidenceRaw === void 0 || !isRecord(evidenceRaw)) {
+    const evidenceRaw = (receipt.scanner_evidence ?? []).find((entry) => isSupplyChainAuditEvidence(entry));
+    if (evidenceRaw === void 0) {
       continue;
     }
     const snapshot = normalizeSupplyChainAuditSnapshot(

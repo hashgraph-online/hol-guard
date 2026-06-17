@@ -88,7 +88,11 @@ import { plainEnglishRequestTitle, whyPaused } from "./evidence/plain-english";
 import { requiresApprovalPasswordPrompt, type BulkGateCredentials } from "./approval-gate-utils";
 import { ApprovalPasswordModal } from "./approval-center-review-cards";
 import { guardAwareHref } from "./guard-api";
-import { QueueBulkApproveFlow } from "./queue-bulk-approve-flow";
+import {
+  QueueBulkDrawer,
+  QueueBulkStickyBar,
+  QueueBulkStatusBanner,
+} from "./queue-bulk-approve-flow";
 import { useQueueBulkApprove } from "./use-queue-bulk-approve";
 
 export type ReviewViewModel = {
@@ -250,6 +254,39 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
     settingsHref: guardAwareHref("/settings"),
   });
 
+  // Global bulk-selection shortcuts (only active in ambient selection mode).
+  // Cmd/Ctrl+A selects all eligible in the filtered queue; Esc clears.
+  useEffect(() => {
+    if (!bulkApprove.bulkSelection.selectionMode) return;
+    function handleBulkShortcut(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && (event.key === "a" || event.key === "A")) {
+        event.preventDefault();
+        bulkApprove.bulkSelection.onToggleMany(filteredRequests, true);
+        return;
+      }
+      if (event.key === "Escape" && bulkApprove.bulkSelection.selectedGroupCount > 0) {
+        event.preventDefault();
+        bulkApprove.bulkSelection.onToggleMany(filteredRequests, false);
+      }
+    }
+    window.addEventListener("keydown", handleBulkShortcut);
+    return () => window.removeEventListener("keydown", handleBulkShortcut);
+  }, [
+    bulkApprove.bulkSelection,
+    bulkApprove.bulkSelection.selectedGroupCount,
+    filteredRequests,
+  ]);
+
   if (requests.length === 0) {
     return <ReviewEmptyState runtime={props.runtime} resolutionMessage={props.resolutionMessage} codexResume={props.codexResume} onRetryResume={props.onRetryResume} />;
   }
@@ -271,17 +308,17 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
         activeHarness={activeItem.harness}
       />
 
-      {bulkApprove.bulkFlowProps !== null && (
-        <QueueBulkApproveFlow {...bulkApprove.bulkFlowProps} />
+      <QueueBulkStatusBanner
+        visible={bulkApprove.status.visible}
+        sensitiveFileReadCount={bulkApprove.status.sensitiveFileReadCount}
+      />
+      <QueueBulkStickyBar {...bulkApprove.stickyBar} />
+      {bulkApprove.bulkSelection.selectionMode && (
+        <span aria-live="polite" className="sr-only">
+          {bulkApprove.bulkSelection.selectedActionCount} of {filteredRequests.length} reads selected for bulk approval.
+        </span>
       )}
-      {bulkApprove.showSensitiveOnlyWarning && (
-        <div className="rounded-lg border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2">
-          <p className="text-xs text-brand-attention">
-            {bulkApprove.sensitiveFileReadCount} sensitive file{" "}
-            {bulkApprove.sensitiveFileReadCount === 1 ? "read" : "reads"} in queue — review each path before approving.
-          </p>
-        </div>
-      )}
+      <QueueBulkDrawer {...bulkApprove.drawer} />
 
       <div className="md:hidden">
         <button
@@ -322,6 +359,8 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
             isBulkSelectable={bulkApprove.bulkSelection.isSelectable}
             isBulkSelected={bulkApprove.bulkSelection.isSelected}
             onBulkToggleSelect={bulkApprove.bulkSelection.onToggle}
+            onBulkSelectAll={() => bulkApprove.bulkSelection.onToggleMany(filteredRequests, true)}
+            onBulkClearAll={() => bulkApprove.bulkSelection.onToggleMany(filteredRequests, false)}
             ref={queueRef}
           />
         </div>
@@ -397,6 +436,8 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   isBulkSelectable?: (item: GuardApprovalRequest) => boolean;
   isBulkSelected?: (item: GuardApprovalRequest) => boolean;
   onBulkToggleSelect?: (item: GuardApprovalRequest) => void;
+  onBulkSelectAll?: () => void;
+  onBulkClearAll?: () => void;
 }>(({
   requests,
   allFilteredRequests,
@@ -424,6 +465,8 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   isBulkSelectable,
   isBulkSelected,
   onBulkToggleSelect,
+  onBulkSelectAll,
+  onBulkClearAll,
 }, ref) => {
   const [showFilters, setShowFilters] = useState(false);
 
@@ -494,6 +537,34 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
           {filteredCount}/{totalCount}
         </span>
       </div>
+      {selectionMode && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-brand-blue/15 bg-brand-blue/[0.03] px-3 py-2">
+          <HiMiniCheckCircle className="h-3.5 w-3.5 text-brand-blue" aria-hidden="true" />
+          <span className="text-[11px] font-medium text-brand-dark/80">
+            Select reads to approve together
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            {onBulkSelectAll && (
+              <button
+                type="button"
+                onClick={onBulkSelectAll}
+                className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5"
+              >
+                Select all eligible
+              </button>
+            )}
+            {onBulkClearAll && (
+              <button
+                type="button"
+                onClick={onBulkClearAll}
+                className="rounded-full px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-slate-50 hover:text-brand-dark"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       <div className="space-y-2 rounded-xl border border-slate-100 bg-white p-3">
         <label className="block">
           <span className="sr-only">Search review queue</span>
@@ -678,9 +749,22 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
   const category = resolveQueueCategory(item);
   const CategoryIcon = iconForQueueCategory(category.id);
   const preview = queueItemPreview(item);
-  const handleClick = useCallback(() => {
-    onOpenRequest(item.request_id);
-  }, [item.request_id, onOpenRequest]);
+  const showCheckbox = selectionMode && selectable;
+
+  const handleClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      // In ambient selection mode, holding Alt/Option toggles selection without
+      // changing the open request. This mirrors email/finder multi-select UX.
+      if (showCheckbox && (event.altKey || event.metaKey || event.ctrlKey) && onToggleSelect) {
+        event.preventDefault();
+        onToggleSelect(item);
+        return;
+      }
+      onOpenRequest(item.request_id);
+    },
+    [item.request_id, item, onOpenRequest, onToggleSelect, showCheckbox],
+  );
+
   const handleCheckboxChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       event.stopPropagation();
@@ -688,31 +772,46 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
     },
     [item, onToggleSelect],
   );
+
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLLabelElement>) => {
+      if (!showCheckbox) return;
+      if (event.key === " " || event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        onToggleSelect?.(item);
+      }
+    },
+    [item, onToggleSelect, showCheckbox],
+  );
+
   return (
     <div
       role="none"
       className={`w-full rounded-lg py-2.5 px-2 transition-all ${
-        active
-          ? "border border-brand-blue bg-brand-blue/[0.06]"
-          : "border border-transparent bg-white hover:bg-slate-50"
+        selected
+          ? "border border-brand-blue/60 bg-brand-blue/[0.08] ring-1 ring-brand-blue/20"
+          : active
+            ? "border border-brand-blue bg-brand-blue/[0.06]"
+            : "border border-transparent bg-white hover:bg-slate-50"
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        {selectionMode && selectable && (
+        {showCheckbox ? (
           <label
-            className="shrink-0"
+            className="flex shrink-0 cursor-pointer items-center"
             onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
+            onKeyDown={handleKeyDown}
           >
             <input
               type="checkbox"
               checked={selected}
               onChange={handleCheckboxChange}
+              aria-label={`Select ${preview} for bulk approval`}
               className="h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30"
             />
-            <span className="sr-only">Select for bulk approval</span>
           </label>
-        )}
+        ) : null}
         <button
           type="button"
           onClick={handleClick}
@@ -746,6 +845,11 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
           </span>
         </button>
       </div>
+      {showCheckbox && (
+        <p className="mt-1 pl-6 text-[10px] text-muted-foreground/80">
+          Hold ⌥/Alt + click row to toggle · Space toggles checkbox
+        </p>
+      )}
     </div>
   );
 }
