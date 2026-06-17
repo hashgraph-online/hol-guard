@@ -1064,14 +1064,6 @@ class GuardStore:
         return self._get_secret_from_store(secret_store, secret_id)
 
     @staticmethod
-    def _should_skip_passive_policy_integrity_keychain_read(
-        secret_store: SecretStore,
-        *,
-        create: bool,
-    ) -> bool:
-        return not create and GuardStore._should_skip_policy_integrity_keychain_access(secret_store)
-
-    @staticmethod
     def _should_skip_policy_integrity_keychain_access(secret_store: SecretStore) -> bool:
         return (
             isinstance(secret_store, SystemKeyringSecretStore)
@@ -1145,8 +1137,6 @@ class GuardStore:
             return None, None
         if self._should_skip_policy_integrity_keychain_access(secret_store):
             return None, None
-        if self._should_skip_passive_policy_integrity_keychain_read(secret_store, create=create):
-            return None, None
         encoded_key = self._get_policy_integrity_secret_from_store(self._policy_integrity_key_ref)
         if encoded_key is None and create:
             generated_key = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
@@ -1213,8 +1203,6 @@ class GuardStore:
         if secret_store is None:
             return None
         if self._should_skip_policy_integrity_keychain_access(secret_store):
-            return None
-        if self._should_skip_passive_policy_integrity_keychain_read(secret_store, create=create):
             return None
         payload_json = self._get_policy_integrity_secret_from_store(self._policy_integrity_control_ref)
         payload: dict[str, object] | None = None
