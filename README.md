@@ -279,7 +279,7 @@ This keeps the quality grade and the trust score separate. Signals like `SECURIT
 ```bash
 git clone https://github.com/hashgraph-online/hol-guard.git
 cd hol-guard
-uv sync --extra dev --extra cisco
+uv sync --extra dev --extra cisco --group cisco-mcp
 pytest -q
 ```
 
@@ -305,7 +305,7 @@ The lean baseline keeps Python 3.10 support intact and always includes the shipp
 
 ### Full Cisco coverage
 
-Install the Cisco extra on Python 3.11+ when you want static MCP coverage in addition to the baseline skill scanner:
+Install the Cisco extra on Python 3.11+ when you want the Cisco-compatible LiteLLM pin in addition to the baseline skill scanner:
 
 ```bash
 pip install "hol-guard[cisco]"
@@ -315,7 +315,7 @@ pip install "hol-guard[cisco]"
 pip install "plugin-scanner[cisco]"
 ```
 
-`cisco-ai-mcp-scanner` stays in the optional `cisco` extra because it is Python 3.11+ only and adds a heavier YARA-backed install surface than the lean baseline should require. Cisco currently supports the published `litellm==1.89.1` release across the scanner install surface, so the `cisco` extra includes that Cisco-compatible pin for full coverage.
+`cisco-ai-mcp-scanner` stays in the repo-controlled `cisco-mcp` uv dependency group because its published wheel metadata still pins an older exact LiteLLM release. Docker and CI install that scanner with the lock-derived requirements and uv overrides, while the published `cisco` extra remains resolver-safe for pip users.
 
 On Guard surfaces, the Cisco extra adds optional offline evidence to `hol-guard scan`, `hol-guard preflight`, and `hol-guard explain <path>`. Use `--cisco-mode {auto,on,off}` to control that consumer-mode evidence path for local artifact scans. `hol-guard run` and Guard runtime prompt/file-read protection remain native Guard behavior in this pass.
 
@@ -330,7 +330,7 @@ Credit to [Cisco AI Defense](https://github.com/cisco-ai-defense) for open-sourc
 | Package | Status in this repo | Notes |
 | :--- | :--- | :--- |
 | `cisco-ai-skill-scanner` | shipped by default | Included in the lean baseline install. |
-| `cisco-ai-mcp-scanner` | shipped via `[cisco]` | Recommended for full Cisco coverage on Python 3.11+, including repo-controlled CI and Docker. |
+| `cisco-ai-mcp-scanner` | repo-controlled CI/Docker only | Installed through the uv `cisco-mcp` group and Docker requirements until Cisco publishes LiteLLM-compatible metadata. |
 | `cisco-ai-a2a-scanner` | deferred | Requires live A2A endpoints and is not added in this pass. |
 | `cisco-aibom` | deferred | No Guard runtime integration in this pass. Revisit later only for evidence or export workflows. |
 

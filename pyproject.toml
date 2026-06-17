@@ -37,7 +37,6 @@ dependencies = [
 
 [project.optional-dependencies]
 cisco = [
-    "cisco-ai-mcp-scanner~=4.7.0; python_version >= '3.11'",
     "litellm==1.89.1; python_version >= '3.11'",
 ]
 dev = [
@@ -51,6 +50,11 @@ dev = [
 ]
 publish = [
     "twine>=6.2.0",
+]
+
+[dependency-groups]
+cisco-mcp = [
+    "cisco-ai-mcp-scanner==4.7.3; python_version >= '3.11'",
 ]
 
 [tool.uv]

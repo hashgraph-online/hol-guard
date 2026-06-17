@@ -19,10 +19,12 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     dependency_entries = project["dependencies"]
     dependencies = " ".join(dependency_entries)
     cisco_extra = " ".join(project["optional-dependencies"]["cisco"])
+    cisco_mcp_group = " ".join(pyproject["dependency-groups"]["cisco-mcp"])
     override_entries = pyproject["tool"]["uv"]["override-dependencies"]
 
     assert "cisco-ai-mcp-scanner" not in dependencies
-    assert "cisco-ai-mcp-scanner~=4.7.0" in cisco_extra
+    assert "cisco-ai-mcp-scanner" not in cisco_extra
+    assert "cisco-ai-mcp-scanner==4.7.3" in cisco_mcp_group
     assert "litellm==1.89.1" in cisco_extra
     assert "python_version >= '3.11'" in cisco_extra
     assert "cisco-ai-skill-scanner~=2.0.11" in dependency_entries
@@ -64,7 +66,7 @@ def test_readme_distinguishes_baseline_and_full_cisco_installs() -> None:
     assert 'pip install "hol-guard[cisco]"' in readme
     assert 'pip install "plugin-scanner[cisco]"' in readme
     assert "Python 3.11+" in readme
-    assert "the `cisco` extra includes that Cisco-compatible pin" in readme
+    assert "the published `cisco` extra remains resolver-safe" in readme
     assert "deferred" in readme
     assert "cisco-ai-a2a-scanner" in readme
     assert "cisco-aibom" in readme
@@ -79,7 +81,7 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
 
     assert "cisco-full" in ci_workflow
     assert "python3.13 -m pip install --dry-run --no-deps --require-hashes -r docker-requirements.txt" in ci_workflow
-    assert "uv sync --frozen --extra dev --extra cisco --python 3.13" in ci_workflow
+    assert "uv sync --frozen --extra dev --extra cisco --group cisco-mcp --python 3.13" in ci_workflow
     assert "uv sync --frozen --extra dev --python ${{ matrix.python-version }}" in ci_workflow
     assert "uv sync --frozen --extra dev --extra publish --extra cisco" in publish_workflow
     assert 'uv tool install "hol-guard[cisco]==' in publish_workflow
@@ -112,7 +114,7 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert "tokenizers==0.23.1" in docker_requirements
     assert "--hash=sha256:" in docker_requirements
     assert "uv sync --extra dev" in contributing
-    assert "uv sync --extra dev --extra cisco" in contributing
+    assert "uv sync --extra dev --extra cisco --group cisco-mcp" in contributing
 
 
 def test_publish_workflow_builds_only_guard_and_scanner_packages() -> None:

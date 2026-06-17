@@ -69,7 +69,7 @@ jobs:
         with:
           enable-cache: true
       - run: python3.13 -m pip install --dry-run --no-deps --require-hashes -r docker-requirements.txt
-      - run: uv sync --frozen --extra dev --extra cisco --python 3.13
+      - run: uv sync --frozen --extra dev --extra cisco --group cisco-mcp --python 3.13
       - run: uv run --no-sync pytest tests/test_cisco_install_surfaces.py tests/test_mcp_security.py tests/test_cli.py tests/test_action_runner.py tests/test_live_cisco_smoke.py --tb=short
 
   cross-platform:

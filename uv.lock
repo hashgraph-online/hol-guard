@@ -1173,7 +1173,6 @@ dependencies = [
 
 [package.optional-dependencies]
 cisco = [
-    { name = "cisco-ai-mcp-scanner", marker = "python_full_version >= '3.11'" },
     { name = "litellm" },
 ]
 dev = [
@@ -1189,11 +1188,15 @@ publish = [
     { name = "twine" },
 ]
 
+[package.dev-dependencies]
+cisco-mcp = [
+    { name = "cisco-ai-mcp-scanner", marker = "python_full_version >= '3.11'" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "basedpyright", marker = "extra == 'dev'", specifier = ">=1.39.8" },
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.5.0" },
-    { name = "cisco-ai-mcp-scanner", marker = "python_full_version >= '3.11' and extra == 'cisco'", specifier = "~=4.7.0" },
     { name = "cisco-ai-skill-scanner", specifier = "~=2.0.11" },
     { name = "cryptography", specifier = ">=49.0.0" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.26.0" },
@@ -1209,6 +1212,9 @@ requires-dist = [
     { name = "twine", marker = "extra == 'publish'", specifier = ">=6.2.0" },
 ]
 provides-extras = ["cisco", "dev", "publish"]
+
+[package.metadata.requires-dev]
+cisco-mcp = [{ name = "cisco-ai-mcp-scanner", marker = "python_full_version >= '3.11'", specifier = "==4.7.3" }]
 
 [[package]]
 name = "httpcore"
