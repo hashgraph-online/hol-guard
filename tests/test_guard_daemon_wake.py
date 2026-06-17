@@ -220,3 +220,51 @@ class TestNoDashboardApprovalURLWake:
 
         assert url == f"http://127.0.0.1:{port}"
         assert len(retire_calls) >= 1, "_retire_guard_daemon_process must be called to recover stale daemon state"
+
+    def test_daemon_shutdown_only_clears_own_state(self, tmp_path) -> None:
+        """A retired duplicate daemon must not erase the active daemon state file."""
+        guard_home = tmp_path / "guard-home"
+        guard_home.mkdir()
+        daemon_manager_module.write_guard_daemon_state(guard_home, 5705, "token-1", pid=111)
+
+        cleared = daemon_manager_module.clear_guard_daemon_state_if_current(guard_home, pid=222, port=5706)
+        state = json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8"))
+
+        assert cleared is False
+        assert state["pid"] == 111
+        assert state["port"] == 5705
+
+        assert daemon_manager_module.clear_guard_daemon_state_if_current(guard_home, pid=111, port=5705) is True
+        assert json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8")) == {}
+
+    def test_retiring_duplicate_daemons_rewrites_kept_state_after_old_exit(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        """Old duplicate daemons may clear daemon-state.json on exit; rewrite the kept daemon state."""
+        guard_home = tmp_path / "guard-home"
+        guard_home.mkdir()
+        daemon_manager_module.write_guard_daemon_state(guard_home, 5707, "token-1", pid=111)
+        killed: list[int] = []
+
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_running_guard_daemon_processes_for_guard_home",
+            lambda _guard_home: [(111, 5707), (222, 5708)],
+        )
+
+        def fake_retire(pid: int, *, expected_guard_home: Path | None = None) -> bool:
+            del expected_guard_home
+            killed.append(pid)
+            daemon_manager_module.clear_guard_daemon_state(guard_home)
+            return True
+
+        monkeypatch.setattr(daemon_manager_module, "_retire_guard_daemon_pid", fake_retire)
+
+        daemon_manager_module._retire_duplicate_guard_daemons(guard_home, keep_port=5707)
+        state = json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8"))
+
+        assert killed == [222]
+        assert state["pid"] == 111
+        assert state["port"] == 5707
