@@ -389,7 +389,13 @@ class SystemKeyringSecretStore:
 
     @staticmethod
     def _load_keyring_module():
-        return importlib.import_module("keyring")
+        try:
+            return importlib.import_module("keyring")
+        except ImportError:
+            # The keyring package is an optional runtime dependency. A missing
+            # module must degrade to "unavailable" (None) so callers fall back to
+            # the encrypted-file store instead of crashing the host process.
+            return None
 
     @staticmethod
     def _load_macos_keyring_api_module():
@@ -485,8 +491,10 @@ class SystemKeyringSecretStore:
 
     @classmethod
     def _backend_is_available(cls) -> bool:
+        keyring_module = cls._load_keyring_module()
+        if keyring_module is None:
+            return False
         try:
-            keyring_module = cls._load_keyring_module()
             backend = keyring_module.get_keyring()
         except Exception:
             return False
@@ -506,10 +514,17 @@ class SystemKeyringSecretStore:
 
     def set_secret(self, secret_id: str, value: str) -> None:
         keyring_module = self._load_keyring_module()
+        if keyring_module is None:
+            raise RuntimeError(
+                "Guard system keyring backend is unavailable; the Python 'keyring' "
+                "package could not be imported. Reinstall hol-guard to restore it."
+            )
         keyring_module.set_password(self.service_name, secret_id, value)
 
     def get_secret(self, secret_id: str) -> str | None:
         keyring_module = self._load_keyring_module()
+        if keyring_module is None:
+            return None
         value = keyring_module.get_password(self.service_name, secret_id)
         return value if isinstance(value, str) and value else None
 
@@ -525,6 +540,8 @@ class SystemKeyringSecretStore:
         try:
             keyring_module = loader_ref()
         except Exception:
+            keyring_module = None
+        if keyring_module is None:
             cls._native_macos_security_reads_cache = (loader_id, False)
             return False
         module_name = getattr(keyring_module, "__name__", "")
@@ -617,6 +634,8 @@ class SystemKeyringSecretStore:
 
     def delete_secret(self, secret_id: str) -> None:
         keyring_module = self._load_keyring_module()
+        if keyring_module is None:
+            return
         try:
             keyring_module.delete_password(self.service_name, secret_id)
         except Exception:
