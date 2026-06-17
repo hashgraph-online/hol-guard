@@ -124,7 +124,7 @@ function describeActionMix(stats: BulkSelectionStats): string {
     parts.push(`${stats.elevatedActionCount} elevated ${stats.elevatedActionCount === 1 ? "action" : "actions"}`);
   }
   if (stats.highActionCount > 0) {
-    parts.push(`${stats.highActionCount} destructive ${stats.highActionCount === 1 ? "action" : "actions"}`);
+    parts.push(`${stats.highActionCount} destructive ${pluralActions(stats.highActionCount)}`);
   }
   if (parts.length === 0) {
     return `${stats.actionCount} ${pluralActions(stats.actionCount)}`;
