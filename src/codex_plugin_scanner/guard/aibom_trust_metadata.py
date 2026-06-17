@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from pathlib import Path
 from typing import Literal
 
@@ -14,6 +12,7 @@ from ..trust_mcp_scoring import build_mcp_domain, build_mcp_surface_domain
 from ..trust_models import TrustAdapterScore, TrustComponentScore, TrustDomainScore
 from ..trust_plugin_scoring import build_plugin_domain
 from ..trust_skill_scoring import build_skill_domain
+from .runtime.evidence_hash import guard_evidence_hash
 
 _INVENTORY_TRUST_SCAN_OPTIONS = ScanOptions(cisco_skill_scan="off")
 
@@ -170,6 +169,10 @@ def _local_skill_security_for_artifact(
     status = str(getattr(run, "status", "unknown"))
     normalized_captured_at = _normalize_inventory_datetime(captured_at)
     findings = _local_skill_security_findings(run, skill_root=trust_root)
+    findings = sorted(
+        findings,
+        key=lambda finding: (finding.get("file", ""), finding.get("ruleId", ""), finding.get("message", "")),
+    )
     severity_counts = _cisco_severity_counts(run)
     score = _cisco_layer_score(severity_counts) if status == "enabled" else None
     safety = None
@@ -198,6 +201,18 @@ def _local_skill_security_for_artifact(
             value = run_metadata.get(key)
             if value is not None:
                 metadata_payload[key] = value
+
+    metadata_payload["evidenceHash"] = guard_evidence_hash(
+        {
+            "capturedAt": normalized_captured_at,
+            "entityType": "skill",
+            "findings": findings,
+            "provider": "cisco-skill-scanner",
+            "safety": safety,
+            "source": "local_indexed",
+            "status": status,
+        }
+    )
 
     return {
         "entityType": "skill",
@@ -646,5 +661,4 @@ def _trust_component_row(
 
 
 def _trust_evidence_hash(payload: dict[str, object]) -> str:
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    return guard_evidence_hash(payload)
