@@ -24,7 +24,7 @@ def _disable_duplicate_retire(monkeypatch) -> None:
     monkeypatch.setattr(
         daemon_manager_module,
         "_retire_duplicate_guard_daemons",
-        lambda _guard_home, *, keep_port: None,
+        lambda _guard_home, *, keep_port, start_lock_held=False: None,
     )
 
 

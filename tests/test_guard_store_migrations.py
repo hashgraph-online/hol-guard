@@ -165,25 +165,70 @@ def test_load_keyring_module_or_none_logs_and_degrades_for_broken_keyring(monkey
     assert any("keyring backend could not be initialized" in record.message for record in caplog.records)
 
 
-def test_system_keyring_timeout_uses_noninteractive_macos_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_system_keyring_timeout_skips_all_passive_macos_reads(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     secret_store = SystemKeyringSecretStore(service_name="hol-guard.policy-integrity")
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "_supports_native_macos_security_reads",
-        classmethod(lambda cls: True),
+        classmethod(
+            lambda cls: (_ for _ in ()).throw(AssertionError("native macOS Security reads should not be probed"))
+        ),
     )
-    monkeypatch.setattr(secret_store, "_get_secret_without_macos_ui", lambda _secret_id: "secret-value")
+    monkeypatch.setattr(
+        secret_store,
+        "_get_secret_without_macos_ui",
+        lambda _secret_id: (_ for _ in ()).throw(AssertionError("native macOS Security reads should not run")),
+    )
+    monkeypatch.setattr(
+        secret_store,
+        "get_secret",
+        lambda _secret_id: (_ for _ in ()).throw(AssertionError("Python keyring reads should not run")),
+    )
     monkeypatch.setattr(
         guard_store_module.subprocess,
         "run",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("security cli should not run")),
     )
 
-    assert secret_store.get_secret_with_timeout("policy-key", timeout_seconds=1.0) == "secret-value"
+    assert secret_store.get_secret_with_timeout("policy-key", timeout_seconds=1.0) is None
 
 
-def test_policy_integrity_store_skips_macos_health_probe_when_backend_exists(
+def test_system_keyring_timeout_keeps_non_policy_integrity_macos_services(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    secret_store = SystemKeyringSecretStore(service_name="hol-guard.oauth")
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_supports_native_macos_security_reads",
+        classmethod(lambda cls: True),
+    )
+    monkeypatch.setattr(secret_store, "_get_secret_without_macos_ui", lambda _secret_id: "oauth-secret")
+
+    assert secret_store.get_secret_with_timeout("oauth-token", timeout_seconds=1.0) == "oauth-secret"
+
+
+def test_system_keyring_timeout_blocks_non_policy_macos_prompt_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    secret_store = SystemKeyringSecretStore(service_name="hol-guard.oauth")
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_supports_native_macos_security_reads",
+        classmethod(lambda cls: False),
+    )
+    monkeypatch.setattr(
+        secret_store,
+        "get_secret",
+        lambda _secret_id: (_ for _ in ()).throw(AssertionError("Python keyring reads should not run")),
+    )
+
+    assert secret_store.get_secret_with_timeout("oauth-token", timeout_seconds=1.0) is None
+
+
+def test_policy_integrity_store_is_disabled_on_macos_without_health_probe(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
