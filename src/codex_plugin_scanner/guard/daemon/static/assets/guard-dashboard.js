@@ -13370,9 +13370,7 @@ const BULK_BLOCKED_CATEGORY_IDS = /* @__PURE__ */ new Set([
   "prompt_injection",
   "system_prompt_access",
   "guard_bypass",
-  "encoded_shell",
-  "destructive_shell",
-  "file_delete_cleanup"
+  "encoded_shell"
 ]);
 const BULK_LOW_CATEGORY_IDS = /* @__PURE__ */ new Set([
   "file_read",
@@ -13380,10 +13378,15 @@ const BULK_LOW_CATEGORY_IDS = /* @__PURE__ */ new Set([
   "generated_inventory_edit",
   "other"
 ]);
+const BULK_HIGH_CATEGORY_IDS = /* @__PURE__ */ new Set([
+  "destructive_shell",
+  "file_delete_cleanup"
+]);
 function bulkApprovalRiskTier(group) {
   if (group.primary.policy_action === "block") return "blocked";
   const categoryId = resolveQueueCategory(group.primary).id;
   if (BULK_BLOCKED_CATEGORY_IDS.has(categoryId)) return "blocked";
+  if (BULK_HIGH_CATEGORY_IDS.has(categoryId)) return "high";
   if (BULK_LOW_CATEGORY_IDS.has(categoryId)) return "low";
   return "elevated";
 }
@@ -23135,29 +23138,27 @@ function QueueBulkDrawer(props) {
   if (props.step === "completed") {
     const approved = props.completedActionCount ?? 0;
     const unit2 = approved === 1 ? "action was" : "actions were";
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs(BulkDrawerShell, { onClose: props.onCancel, labelledBy: "guard-bulk-drawer-title", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-green", "aria-hidden": "true" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "guard-bulk-drawer-title", className: "text-base font-semibold text-brand-dark", children: [
-            approved,
-            " read-only ",
-            unit2,
-            " approved"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-muted-foreground", children: "This bulk approval cannot be repeated. Reload the queue to see the latest state." })
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 flex justify-end", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: props.onCancel,
-          className: "rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90",
-          children: "Done"
-        }
-      ) })
-    ] });
+    const doneFooter = /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-end", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: props.onCancel,
+        className: "min-h-11 rounded-full bg-brand-blue px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90",
+        children: "Done"
+      }
+    ) });
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(BulkDrawerShell, { onClose: props.onCancel, labelledBy: "guard-bulk-drawer-title", footer: doneFooter, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-xl border border-brand-green/25 bg-brand-green-bg/30 p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-green", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "guard-bulk-drawer-title", className: "text-base font-semibold text-brand-dark", children: [
+          approved,
+          " ",
+          unit2,
+          " approved"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-muted-foreground", children: "Each approved once. This bulk approval cannot be repeated. Reload the queue to see the latest state." })
+      ] })
+    ] }) });
   }
   const disclosure = props.riskDisclosure;
   const DisclosureIcon = toneIcon(disclosure.tone);
@@ -23176,7 +23177,29 @@ function QueueBulkDrawer(props) {
   }, [riskLines]);
   const hiddenCount = Math.max(0, riskLines.length - PREVIEW_LIMIT);
   const gateReady = isBulkApproveGateReady(props.approvalGate);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(BulkDrawerShell, { onClose: props.onCancel, labelledBy: "guard-bulk-drawer-title", children: [
+  const actionFooter = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-end gap-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: props.onCancel,
+        disabled: props.step === "submitting",
+        className: "min-h-11 rounded-full border border-slate-300 px-5 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50",
+        children: "Cancel"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: props.onConfirmApprove,
+        disabled: props.step === "submitting" || !props.canConfirm,
+        className: "min-h-11 rounded-full bg-brand-blue px-6 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50",
+        children: submitLabel
+      }
+    )
+  ] });
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(BulkDrawerShell, { onClose: props.onCancel, labelledBy: "guard-bulk-drawer-title", footer: actionFooter, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "flex items-start justify-between gap-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
@@ -23369,28 +23392,6 @@ function QueueBulkDrawer(props) {
         )
       ] }),
       props.errorMessage !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-brand-purple", role: "alert", children: props.errorMessage })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-7 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: props.onCancel,
-          disabled: props.step === "submitting",
-          className: "min-h-11 rounded-full border border-slate-300 px-5 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50",
-          children: "Cancel"
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: props.onConfirmApprove,
-          disabled: props.step === "submitting" || !props.canConfirm,
-          className: "min-h-11 rounded-full bg-brand-blue px-5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50",
-          children: submitLabel
-        }
-      )
     ] })
   ] });
 }
@@ -23405,7 +23406,10 @@ function BulkDrawerShell(props) {
       onClick: (event) => {
         if (event.target === event.currentTarget) props.onClose();
       },
-      children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:rounded-2xl sm:p-6", children: props.children })
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-fade-in flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 overflow-y-auto px-5 py-6 sm:px-7", children: props.children }),
+        props.footer ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 bg-white/95 px-5 py-3.5 backdrop-blur sm:px-7", children: props.footer }) : null
+      ] })
     }
   );
 }
@@ -23415,7 +23419,7 @@ function resolveBulkRiskTier(stats) {
   if (stats.actionCount <= 0) {
     return "low";
   }
-  if (stats.sensitiveCount > 0 || stats.actionCount >= BULK_HIGH_TIER_THRESHOLD) {
+  if (stats.highActionCount > 0 || stats.sensitiveCount > 0 || stats.actionCount >= BULK_HIGH_TIER_THRESHOLD) {
     return "high";
   }
   if (stats.elevatedActionCount > 0 || stats.duplicateActionCount > 0 || stats.actionCount > BULK_LOW_TIER_THRESHOLD) {
@@ -23448,6 +23452,9 @@ function describeActionMix(stats) {
   if (stats.elevatedActionCount > 0) {
     parts.push(`${stats.elevatedActionCount} elevated ${stats.elevatedActionCount === 1 ? "action" : "actions"}`);
   }
+  if (stats.highActionCount > 0) {
+    parts.push(`${stats.highActionCount} destructive ${pluralActions(stats.highActionCount)}`);
+  }
   if (parts.length === 0) {
     return `${stats.actionCount} ${pluralActions(stats.actionCount)}`;
   }
@@ -23472,6 +23479,11 @@ function buildBulkRiskDisclosure(stats) {
   const bullets = [
     `Approving ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. Each runs once; the decision is not remembered.`
   ];
+  if (stats.highActionCount > 0) {
+    bullets.push(
+      `${stats.highActionCount} destructive ${stats.highActionCount === 1 ? "action is" : "actions are"} selected (deletes, wipes, or truncates). These can cause irreversible data loss — confirm each one is expected before approving.`
+    );
+  }
   if (stats.elevatedActionCount > 0) {
     bullets.push(
       `${stats.elevatedActionCount} of the selected ${pluralActions(stats.actionCount)} ${stats.elevatedActionCount === 1 ? "is an elevated-risk action" : "are elevated-risk actions"} (shell, file edits, network, or similar). Confirm you expected each one.`
@@ -23554,12 +23566,14 @@ function useQueueBulkApprove(props) {
   );
   const selectedGroupCount = selectedBulkGroups.length;
   const selectionStats = reactExports.useMemo(() => {
+    let highActionCount = 0;
     let elevatedActionCount = 0;
     let lowActionCount = 0;
     for (const group of selectedBulkGroups) {
       const tier = bulkApprovalRiskTier(group);
       const count = 1 + group.duplicateCount;
-      if (tier === "elevated") elevatedActionCount += count;
+      if (tier === "high") highActionCount += count;
+      else if (tier === "elevated") elevatedActionCount += count;
       else if (tier === "low") lowActionCount += count;
     }
     return {
@@ -23568,6 +23582,7 @@ function useQueueBulkApprove(props) {
       duplicateActionCount: countDuplicateActionsInGroups(selectedBulkGroups),
       sensitiveCount: sensitiveSummary.count,
       sensitiveSamplePaths: sensitiveSummary.samplePaths,
+      highActionCount,
       elevatedActionCount,
       lowActionCount
     };

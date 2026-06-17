@@ -224,27 +224,29 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
   if (props.step === "completed") {
     const approved = props.completedActionCount ?? 0;
     const unit = approved === 1 ? "action was" : "actions were";
+    const doneFooter = (
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={props.onCancel}
+          className="min-h-11 rounded-full bg-brand-blue px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90"
+        >
+          Done
+        </button>
+      </div>
+    );
     return (
-      <BulkDrawerShell onClose={props.onCancel} labelledBy="guard-bulk-drawer-title">
-        <div className="flex items-start gap-3 rounded-xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3">
+      <BulkDrawerShell onClose={props.onCancel} labelledBy="guard-bulk-drawer-title" footer={doneFooter}>
+        <div className="flex items-start gap-3 rounded-xl border border-brand-green/25 bg-brand-green-bg/30 p-4">
           <HiMiniCheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-brand-green" aria-hidden="true" />
           <div>
             <h2 id="guard-bulk-drawer-title" className="text-base font-semibold text-brand-dark">
-              {approved} read-only {unit} approved
+              {approved} {unit} approved
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              This bulk approval cannot be repeated. Reload the queue to see the latest state.
+              Each approved once. This bulk approval cannot be repeated. Reload the queue to see the latest state.
             </p>
           </div>
-        </div>
-        <div className="mt-5 flex justify-end">
-          <button
-            type="button"
-            onClick={props.onCancel}
-            className="rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90"
-          >
-            Done
-          </button>
         </div>
       </BulkDrawerShell>
     );
@@ -278,8 +280,29 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
   const hiddenCount = Math.max(0, riskLines.length - PREVIEW_LIMIT);
   const gateReady = isBulkApproveGateReady(props.approvalGate);
 
+  const actionFooter = (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <button
+        type="button"
+        onClick={props.onCancel}
+        disabled={props.step === "submitting"}
+        className="min-h-11 rounded-full border border-slate-300 px-5 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        onClick={props.onConfirmApprove}
+        disabled={props.step === "submitting" || !props.canConfirm}
+        className="min-h-11 rounded-full bg-brand-blue px-6 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {submitLabel}
+      </button>
+    </div>
+  );
+
   return (
-    <BulkDrawerShell onClose={props.onCancel} labelledBy="guard-bulk-drawer-title">
+    <BulkDrawerShell onClose={props.onCancel} labelledBy="guard-bulk-drawer-title" footer={actionFooter}>
       {/* Header zone — generous top space, clear count hierarchy */}
       <header className="flex items-start justify-between gap-4">
         <div className="min-w-0">
@@ -493,26 +516,6 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
           </p>
         )}
       </section>
-
-      {/* Action zone — sticky footer */}
-      <div className="mt-7 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
-        <button
-          type="button"
-          onClick={props.onCancel}
-          disabled={props.step === "submitting"}
-          className="min-h-11 rounded-full border border-slate-300 px-5 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={props.onConfirmApprove}
-          disabled={props.step === "submitting" || !props.canConfirm}
-          className="min-h-11 rounded-full bg-brand-blue px-5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {submitLabel}
-        </button>
-      </div>
     </BulkDrawerShell>
   );
 }
@@ -521,6 +524,7 @@ function BulkDrawerShell(props: {
   onClose: () => void;
   labelledBy: string;
   children: React.ReactNode;
+  footer?: React.ReactNode;
 }) {
   return (
     <div
@@ -532,8 +536,13 @@ function BulkDrawerShell(props: {
         if (event.target === event.currentTarget) props.onClose();
       }}
     >
-      <div className="guard-fade-in max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:rounded-2xl sm:p-6">
-        {props.children}
+      <div className="guard-fade-in flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl">
+        <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-7">{props.children}</div>
+        {props.footer ? (
+          <div className="border-t border-slate-100 bg-white/95 px-5 py-3.5 backdrop-blur sm:px-7">
+            {props.footer}
+          </div>
+        ) : null}
       </div>
     </div>
   );
