@@ -341,7 +341,7 @@ pipx install hol-guard
 pipx install plugin-scanner
 ```
 
-Container-first environments can use the published image instead. The repo-controlled image installs a lock-derived Cisco dependency set on Python 3.12 so the container has full static Cisco coverage by default.
+Container-first environments can use the published image instead. The repo-controlled image installs a lock-derived Cisco dependency set on Python 3.13 so the container has full static Cisco coverage by default.
 
 ```bash
 docker run --rm \

@@ -78,8 +78,8 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     docker_requirements = (ROOT / "docker-requirements.txt").read_text(encoding="utf-8")
 
     assert "cisco-full" in ci_workflow
-    assert "python3.12 -m pip install --dry-run --no-deps --require-hashes -r docker-requirements.txt" in ci_workflow
-    assert "uv sync --frozen --extra dev --extra cisco --python 3.12" in ci_workflow
+    assert "python3.13 -m pip install --dry-run --no-deps --require-hashes -r docker-requirements.txt" in ci_workflow
+    assert "uv sync --frozen --extra dev --extra cisco --python 3.13" in ci_workflow
     assert "uv sync --frozen --extra dev --python ${{ matrix.python-version }}" in ci_workflow
     assert "uv sync --frozen --extra dev --extra publish --extra cisco" in publish_workflow
     assert 'uv tool install "hol-guard[cisco]==' in publish_workflow
