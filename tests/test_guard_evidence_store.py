@@ -72,6 +72,11 @@ class TestSchema:
         assert "idx_evidence_category_severity" in names
         assert "idx_evidence_harness_workspace" in names
         assert "idx_evidence_identity" in names
+        assert "idx_evidence_request_created" in names
+        assert "idx_evidence_identity_created" in names
+        assert "idx_evidence_harness_created" in names
+        assert "idx_evidence_category_severity_created" in names
+        assert "idx_evidence_harness_category_severity_created" in names
 
     def test_indexes_idempotent(self, tmp_path: Path) -> None:
         conn = _db(tmp_path)
@@ -167,6 +172,15 @@ class TestListEvidence:
         records = list_evidence(conn, request_id="req-A")
         assert len(records) == 1
 
+    def test_list_can_skip_details_json_for_redacted_api_rows(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        store_evidence(conn, _rec(evidence_id="e1", details={"secret": "not loaded"}))
+
+        records = list_evidence(conn, include_details=False)
+
+        assert len(records) == 1
+        assert records[0].details == {}
+
     def test_list_order_desc(self, tmp_path: Path) -> None:
         conn = _db(tmp_path)
         for i in range(5):
@@ -228,6 +242,14 @@ class TestCountEvidence:
         store_evidence(conn, _rec(evidence_id="e1", category="exfiltration"))
         store_evidence(conn, _rec(evidence_id="e2", category="injection"))
         assert count_evidence(conn, category="exfiltration") == 1
+
+    def test_count_filter_harness_category_severity(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        store_evidence(conn, _rec(evidence_id="e1", harness="codex", category="secret", severity="high"))
+        store_evidence(conn, _rec(evidence_id="e2", harness="codex", category="secret", severity="low"))
+        store_evidence(conn, _rec(evidence_id="e3", harness="claude", category="secret", severity="high"))
+
+        assert count_evidence(conn, harness="codex", category="secret", severity="high") == 1
 
 
 class TestExportEvidence:
@@ -355,6 +377,51 @@ class TestActionIdentityField:
 
 
 class TestLargeScalePagination:
+    def test_filtered_evidence_pages_use_ordered_indexes(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        query_prefix = (
+            "select evidence_id, action_id, request_id, harness, workspace, signal_id, category, severity, "
+            "confidence, summary, action_identity, created_at from guard_evidence "
+        )
+        cases = [
+            (
+                "harness",
+                query_prefix + "where harness = ? order by created_at desc limit ?",
+                ("codex", 100),
+                "idx_evidence_harness_created",
+            ),
+            (
+                "category/severity",
+                query_prefix + "where category = ? and severity = ? order by created_at desc limit ?",
+                ("secret", "high", 100),
+                "idx_evidence_category_severity_created",
+            ),
+            (
+                "harness/category/severity",
+                query_prefix
+                + "where harness = ? and category = ? and severity = ? order by created_at desc limit ?",
+                ("codex", "secret", "high", 100),
+                "idx_evidence_harness_category_severity_created",
+            ),
+            (
+                "request",
+                query_prefix + "where request_id = ? order by created_at desc limit ?",
+                ("req-1", 100),
+                "idx_evidence_request_created",
+            ),
+            (
+                "identity",
+                query_prefix + "where action_identity = ? order by created_at desc limit ?",
+                ("codex:tool:bash", 100),
+                "idx_evidence_identity_created",
+            ),
+        ]
+        for label, query, params, index_name in cases:
+            plan = conn.execute(f"explain query plan {query}", params).fetchall()
+            detail = " ".join(str(row["detail"]) for row in plan)
+            assert index_name in detail, f"{label} plan did not use {index_name}: {detail}"
+            assert "USE TEMP B-TREE" not in detail, f"{label} plan sorted in a temp b-tree: {detail}"
+
     def test_first_page_reads_bounded_slice_from_100k_records(self, tmp_path: Path) -> None:
         conn = _db(tmp_path)
         total = 100_000
