@@ -24,6 +24,15 @@ def _store(tmp_path: Path) -> GuardStore:
     return GuardStore(tmp_path / "guard-home")
 
 
+def test_guard_store_init_does_not_create_policy_integrity_keyring_material(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    secret_store = store._policy_integrity_secret_store
+    assert isinstance(secret_store, SystemKeyringSecretStore)
+
+    assert secret_store.get_secret(store._policy_integrity_key_ref) is None
+    assert secret_store.get_secret(store._policy_integrity_control_ref) is None
+
+
 def _decision(
     *,
     artifact_id: str = "codex:project:workspace-skill",
@@ -72,6 +81,13 @@ def _delete_policy_integrity_control_state(store: GuardStore) -> None:
     secret_store = store._policy_integrity_secret_store
     assert secret_store is not None
     secret_store.delete_secret(store._policy_integrity_control_ref)
+    store._clear_policy_integrity_cache()
+
+
+def _delete_policy_integrity_key(store: GuardStore) -> None:
+    secret_store = store._policy_integrity_secret_store
+    assert secret_store is not None
+    secret_store.delete_secret(store._policy_integrity_key_ref)
     store._clear_policy_integrity_cache()
 
 
@@ -326,6 +342,91 @@ def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
         store._policy_integrity_control_ref,
         store._policy_integrity_key_ref,
     ]
+
+
+def test_policy_integrity_status_and_verify_do_not_create_keyring_material_on_fresh_store(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    secret_store = store._policy_integrity_secret_store
+    assert isinstance(secret_store, SystemKeyringSecretStore)
+    _delete_policy_integrity_key(store)
+    _delete_policy_integrity_control_state(store)
+    assert secret_store.get_secret(store._policy_integrity_key_ref) is None
+    assert secret_store.get_secret(store._policy_integrity_control_ref) is None
+
+    status = store.get_policy_integrity_status()
+    verify = store.verify_policy_integrity()
+
+    assert status["mode"] == "degraded"
+    assert status["enforcement"] == "warn"
+    assert verify["mode"] == "degraded"
+    assert verify["enforcement"] == "warn"
+    assert verify["local_rows_scanned"] == 0
+    assert secret_store.get_secret(store._policy_integrity_key_ref) is None
+    assert secret_store.get_secret(store._policy_integrity_control_ref) is None
+
+
+def test_policy_integrity_status_skips_passive_macos_keychain_reads(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:passive-skip", artifact_hash="hash-passive-skip"),
+        "2026-06-14T00:00:00Z",
+    )
+    secret_store = store._policy_integrity_secret_store
+    assert isinstance(secret_store, SystemKeyringSecretStore)
+    store._clear_policy_integrity_cache()
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_supports_native_macos_security_reads",
+        classmethod(lambda cls: True),
+    )
+    monkeypatch.setattr(
+        secret_store,
+        "get_secret_with_timeout",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("passive policy-integrity status should skip macOS keychain reads")
+        ),
+    )
+    monkeypatch.setattr(
+        store,
+        "_get_secret_from_store",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("passive policy-integrity status should not use interactive keychain reads")
+        ),
+    )
+
+    status = store.get_policy_integrity_status()
+    verify = store.verify_policy_integrity()
+
+    assert status["mode"] == "degraded"
+    assert verify["mode"] == "degraded"
+    assert "policy_integrity_key_unavailable" in status["degraded_reasons"]
+    assert "policy_integrity_control_unavailable" in status["degraded_reasons"]
+    assert verify["local_rows_scanned"] == 1
+
+
+def test_policy_integrity_status_skips_item_context_expansion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:status-fast", artifact_hash="hash-status-fast"),
+        "2026-06-14T00:00:00Z",
+    )
+    monkeypatch.setattr(
+        store,
+        "_policy_decision_dict_from_row",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("integrity-status should not build per-row item payloads")
+        ),
+    )
+
+    status = store.get_policy_integrity_status()
+
+    assert status["local_rows_scanned"] == 1
 
 
 def test_tampered_signed_row_is_ignored_and_event_emitted(tmp_path: Path) -> None:
@@ -597,17 +698,27 @@ def test_migrate_local_policy_integrity_reports_rollback_rows(
     assert payload["counts"]["rollback_detected"] == 1
 
 
-def test_policies_cli_verify_status_migrate_and_repair(tmp_path: Path, capsys) -> None:
+def test_policies_cli_verify_status_migrate_and_repair(
+    tmp_path: Path,
+    capsys,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)
     store.upsert_policy(_decision(artifact_id="codex:project:cli", artifact_hash="hash-cli"), "2026-06-14T00:00:00Z")
     _strip_policy_integrity(home_dir, artifact_id="codex:project:cli")
     _delete_policy_integrity_control_state(store)
+    monkeypatch.setattr(
+        GuardStore,
+        "_backup_policy_database",
+        lambda self, connection, *, now: str(home_dir / "guard.db.pre-integrity-test"),
+    )
 
     verify_rc = main(["guard", "policies", "verify", "--home", str(home_dir), "--json"])
     verify_payload = json.loads(capsys.readouterr().out)
     assert verify_rc == 0
-    assert verify_payload["counts"]["missing_integrity"] == 1
+    assert verify_payload["mode"] == "degraded"
+    assert verify_payload["counts"]["degraded_mode"] == 1
 
     status_rc = main(["guard", "policies", "integrity-status", "--home", str(home_dir), "--json"])
     status_payload = json.loads(capsys.readouterr().out)
@@ -627,7 +738,8 @@ def test_policies_cli_verify_status_migrate_and_repair(tmp_path: Path, capsys) -
     )
     migrate_payload = json.loads(capsys.readouterr().out)
     assert migrate_rc == 0
-    assert migrate_payload["preserved"] == 1
+    assert migrate_payload["preserved"] == 0
+    assert migrate_payload["counts"]["missing_integrity"] == 1
     assert migrate_payload["enforcement"] == "enforce"
 
     _strip_policy_integrity(home_dir, artifact_id="codex:project:cli")

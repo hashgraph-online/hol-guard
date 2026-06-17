@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import ctypes
 import importlib
 import json
 import logging
@@ -391,6 +392,12 @@ class SystemKeyringSecretStore:
         return importlib.import_module("keyring")
 
     @staticmethod
+    def _load_macos_keyring_api_module():
+        from keyring.backends.macOS import api as macos_keyring_api
+
+        return macos_keyring_api
+
+    @staticmethod
     def _macos_default_keychain_path() -> Path | None:
         result = SystemKeyringSecretStore._run_macos_security_command("default-keychain", "-d", "user")
         if result is None:
@@ -477,7 +484,7 @@ class SystemKeyringSecretStore:
         return result
 
     @classmethod
-    def _is_available(cls) -> bool:
+    def _backend_is_available(cls) -> bool:
         try:
             keyring_module = cls._load_keyring_module()
             backend = keyring_module.get_keyring()
@@ -487,7 +494,11 @@ class SystemKeyringSecretStore:
         if backend_name == "failkeyring":
             return False
         priority = getattr(backend, "priority", None)
-        if isinstance(priority, (int, float)) and priority <= 0:
+        return not (isinstance(priority, (int, float)) and priority <= 0)
+
+    @classmethod
+    def _is_available(cls) -> bool:
+        if not cls._backend_is_available():
             return False
         if sys.platform == "darwin" and not cls._macos_default_keychain_is_usable():
             return False
@@ -521,34 +532,88 @@ class SystemKeyringSecretStore:
         cls._native_macos_security_reads_cache = (loader_id, supported)
         return supported
 
-    def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float) -> str | None:
+    def _get_secret_without_macos_ui(self, secret_id: str) -> str | None:
         if not self._supports_native_macos_security_reads():
-            return self.get_secret(secret_id)
-        security_path = Path("/usr/bin/security")
-        if not security_path.exists():
             return None
+        set_interaction_allowed = None
+        interaction_state = None
+        data = None
         try:
-            result = subprocess.run(
-                [
-                    str(security_path),
-                    "find-generic-password",
-                    "-a",
-                    secret_id,
-                    "-s",
-                    self.service_name,
-                    "-w",
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
+            from ctypes import byref, c_ubyte
+
+            macos_keyring_api = self._load_macos_keyring_api_module()
+            cfdata_to_str = getattr(macos_keyring_api, "cfdata_to_str", None)
+            cf_release = getattr(macos_keyring_api, "CFRelease", None)
+            security_library = getattr(macos_keyring_api, "_sec", None)
+            get_interaction_allowed = (
+                getattr(security_library, "SecKeychainGetUserInteractionAllowed", None)
+                if security_library is not None
+                else None
             )
+            set_interaction_allowed = (
+                getattr(security_library, "SecKeychainSetUserInteractionAllowed", None)
+                if security_library is not None
+                else None
+            )
+            interaction_state: c_ubyte | None = None
+            if get_interaction_allowed is not None:
+                get_interaction_allowed.restype = macos_keyring_api.OS_status
+                get_interaction_allowed.argtypes = [ctypes.POINTER(c_ubyte)]
+                interaction_state = c_ubyte(1)
+                status = get_interaction_allowed(byref(interaction_state))
+                if status != 0:
+                    interaction_state = None
+            if set_interaction_allowed is not None:
+                set_interaction_allowed.restype = macos_keyring_api.OS_status
+                set_interaction_allowed.argtypes = [c_ubyte]
+                set_interaction_allowed(0)
+            query = macos_keyring_api.create_query(
+                kSecClass=macos_keyring_api.k_("kSecClassGenericPassword"),
+                kSecMatchLimit=macos_keyring_api.k_("kSecMatchLimitOne"),
+                kSecAttrService=self.service_name,
+                kSecAttrAccount=secret_id,
+                kSecReturnData=True,
+                kSecUseAuthenticationUI=macos_keyring_api.k_("kSecUseAuthenticationUIFail"),
+            )
+            data = macos_keyring_api.c_void_p()
+            status = macos_keyring_api.SecItemCopyMatching(query, byref(data))
         except Exception:
             return None
-        if result.returncode != 0:
+        finally:
+            if set_interaction_allowed is not None:
+                restore_value = interaction_state.value if interaction_state is not None else 1
+                with suppress(Exception):
+                    set_interaction_allowed(restore_value)
+        if status == 0:
+            if not callable(cfdata_to_str):
+                return None
+            try:
+                value = cfdata_to_str(data)
+            except Exception:
+                value = None
+            finally:
+                if data is not None and callable(cf_release):
+                    with suppress(Exception):
+                        cf_release(data)
+            return value if isinstance(value, str) and value else None
+        interaction_blocked_statuses = {
+            macos_keyring_api.error.item_not_found,
+            macos_keyring_api.error.keychain_denied,
+            macos_keyring_api.error.sec_auth_failed,
+            macos_keyring_api.error.plist_missing,
+            macos_keyring_api.error.sec_interaction_not_allowed,
+        }
+        if status in interaction_blocked_statuses:
             return None
-        value = result.stdout.rstrip("\r\n")
-        return value if value else None
+        return None  # unknown non-zero status
+
+    def get_secret_with_timeout(
+        self, secret_id: str, *, timeout_seconds: float = 0.0
+    ) -> str | None:
+        _ = timeout_seconds
+        if not self._supports_native_macos_security_reads():
+            return self.get_secret(secret_id)
+        return self._get_secret_without_macos_ui(secret_id)
 
     def delete_secret(self, secret_id: str) -> None:
         keyring_module = self._load_keyring_module()
@@ -855,8 +920,8 @@ def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
     return fallback_store
 
 
-def _build_policy_integrity_secret_store(guard_home: Path) -> SystemKeyringSecretStore | None:
-    if _system_keyring_is_available(guard_home):
+def _build_policy_integrity_secret_store() -> SystemKeyringSecretStore | None:
+    if SystemKeyringSecretStore._backend_is_available():
         return SystemKeyringSecretStore(service_name="hol-guard.policy-integrity")
     return None
 
@@ -913,7 +978,7 @@ class GuardStore:
         _set_private_mode(self.guard_home, _GUARD_STORE_PRIVATE_DIR_MODE)
         self._secret_store = _build_secret_store(self.guard_home)
         self._oauth_secret_store = _build_oauth_secret_store(self.guard_home)
-        self._policy_integrity_secret_store = _build_policy_integrity_secret_store(self.guard_home)
+        self._policy_integrity_secret_store = _build_policy_integrity_secret_store()
         self._cached_oauth_secret_payload: tuple[str, str, str] | None = None
         self._cached_policy_integrity_secret_material: tuple[str | None, float, tuple[bytes, str]] | None = None
         self._cached_policy_integrity_control_state: tuple[str | None, float, dict[str, object]] | None = None
@@ -998,6 +1063,18 @@ class GuardStore:
             )
         return self._get_secret_from_store(secret_store, secret_id)
 
+    @staticmethod
+    def _should_skip_passive_policy_integrity_keychain_read(
+        secret_store: SecretStore,
+        *,
+        create: bool,
+    ) -> bool:
+        return (
+            not create
+            and isinstance(secret_store, SystemKeyringSecretStore)
+            and secret_store._supports_native_macos_security_reads()
+        )
+
     def _clear_policy_integrity_cache(self) -> None:
         self._cached_policy_integrity_secret_material = None
         self._cached_policy_integrity_control_state = None
@@ -1062,7 +1139,13 @@ class GuardStore:
         secret_store = self._policy_integrity_secret_store
         if secret_store is None:
             return None, None
-        encoded_key = self._get_policy_integrity_secret_from_store(self._policy_integrity_key_ref)
+        if self._should_skip_passive_policy_integrity_keychain_read(secret_store, create=create):
+            return None, None
+        encoded_key = (
+            self._get_secret_from_store(secret_store, self._policy_integrity_key_ref)
+            if create
+            else self._get_policy_integrity_secret_from_store(self._policy_integrity_key_ref)
+        )
         if encoded_key is None and create:
             generated_key = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
             try:
@@ -1127,7 +1210,13 @@ class GuardStore:
         secret_store = self._policy_integrity_secret_store
         if secret_store is None:
             return None
-        payload_json = self._get_policy_integrity_secret_from_store(self._policy_integrity_control_ref)
+        if self._should_skip_passive_policy_integrity_keychain_read(secret_store, create=create):
+            return None
+        payload_json = (
+            self._get_secret_from_store(secret_store, self._policy_integrity_control_ref)
+            if create
+            else self._get_policy_integrity_secret_from_store(self._policy_integrity_control_ref)
+        )
         payload: dict[str, object] | None = None
         if payload_json is not None:
             try:
@@ -1985,7 +2074,7 @@ class GuardStore:
                 self._record_schema_version(connection, version=2)
             connection.execute("pragma journal_mode=WAL")
             self._repair_store_permissions()
-            self._refresh_policy_integrity_state(connection, now=_now(), create_key=True)
+            self._refresh_policy_integrity_state(connection, now=_now(), create_key=False)
 
     @staticmethod
     def _ensure_policy_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
@@ -3890,9 +3979,11 @@ class GuardStore:
         *,
         now: str,
         harness: str | None = None,
+        create_key: bool,
+        include_items: bool,
     ) -> tuple[dict[str, object], dict[str, int], list[dict[str, object]]]:
-        state = self._refresh_policy_integrity_state(connection, now=now, create_key=True)
-        key, key_id = self._policy_integrity_secret_material(create=True)
+        state = self._refresh_policy_integrity_state(connection, now=now, create_key=create_key)
+        key, key_id = self._policy_integrity_secret_material(create=create_key)
         counts = {status: 0 for status in _POLICY_INTEGRITY_STATUSES}
         items: list[dict[str, object]] = []
         for row in self._load_local_policy_rows(connection, harness=harness):
@@ -3905,6 +3996,8 @@ class GuardStore:
                 trusted_generation=trusted_generation,
             )
             counts[integrity_result.status] += 1
+            if not include_items:
+                continue
             item = self._policy_decision_dict_from_row(connection, row)
             item["integrity_status"] = integrity_result.status
             item["integrity_message"] = integrity_result.message
@@ -3928,7 +4021,13 @@ class GuardStore:
     def get_policy_integrity_status(self, harness: str | None = None) -> dict[str, object]:
         now = _now()
         with self._connect() as connection:
-            state, counts, _items = self._policy_integrity_scan(connection, now=now, harness=harness)
+            state, counts, _items = self._policy_integrity_scan(
+                connection,
+                now=now,
+                harness=harness,
+                create_key=False,
+                include_items=False,
+            )
         return {
             "generated_at": now,
             "harness": harness,
@@ -3946,7 +4045,13 @@ class GuardStore:
     def verify_policy_integrity(self, harness: str | None = None) -> dict[str, object]:
         now = _now()
         with self._connect() as connection:
-            state, counts, items = self._policy_integrity_scan(connection, now=now, harness=harness)
+            state, counts, items = self._policy_integrity_scan(
+                connection,
+                now=now,
+                harness=harness,
+                create_key=False,
+                include_items=True,
+            )
         invalid_items = [item for item in items if item.get("integrity_status") != "valid"]
         return {
             "generated_at": now,
@@ -3976,7 +4081,13 @@ class GuardStore:
             require_policy_clear(self.guard_home, approval_gate_grant=approval_gate_grant, now=current_time)
         next_control_state: dict[str, object] | None = None
         with self._connect() as connection:
-            state, _counts, items = self._policy_integrity_scan(connection, now=current_time, harness=harness)
+            state, _counts, items = self._policy_integrity_scan(
+                connection,
+                now=current_time,
+                harness=harness,
+                create_key=True,
+                include_items=True,
+            )
             invalid_ids = [
                 decision_id
                 for item in items
@@ -4006,7 +4117,13 @@ class GuardStore:
                         connection.commit()
             if next_control_state is not None:
                 self._finalize_policy_integrity_control_state(next_control_state)
-            state, counts, remaining_items = self._policy_integrity_scan(connection, now=current_time, harness=harness)
+            state, counts, remaining_items = self._policy_integrity_scan(
+                connection,
+                now=current_time,
+                harness=harness,
+                create_key=True,
+                include_items=True,
+            )
         return {
             "generated_at": current_time,
             "harness": harness,
@@ -4104,7 +4221,13 @@ class GuardStore:
             connection.commit()
             if next_control_state is not None:
                 self._finalize_policy_integrity_control_state(next_control_state)
-            final_state, counts, items = self._policy_integrity_scan(connection, now=now, harness=harness)
+            final_state, counts, items = self._policy_integrity_scan(
+                connection,
+                now=now,
+                harness=harness,
+                create_key=True,
+                include_items=True,
+            )
         return {
             "generated_at": now,
             "harness": harness,
