@@ -17,6 +17,8 @@ export type BulkSelectionStats = {
   groupCount: number;
   /** Number of underlying actions that are duplicate retries across all selected groups. */
   duplicateActionCount: number;
+  /** Selected actions classified as high risk (destructive deletes, wipes). */
+  highActionCount: number;
   /** Selected actions classified as elevated risk (shell, edits, git, network, etc.). */
   elevatedActionCount: number;
   /** Selected actions classified as low risk (file reads, docs edits). */
@@ -55,8 +57,13 @@ export function resolveBulkRiskTier(stats: BulkSelectionStats): BulkRiskTier {
   if (stats.actionCount <= 0) {
     return "low";
   }
-  // Sensitive items in the queue, or any large batch, force the highest tier.
-  if (stats.sensitiveCount > 0 || stats.actionCount >= BULK_HIGH_TIER_THRESHOLD) {
+  // Destructive deletes in the selection, sensitive items in the queue, or any
+  // large batch force the highest tier (typed confirmation required).
+  if (
+    stats.highActionCount > 0 ||
+    stats.sensitiveCount > 0 ||
+    stats.actionCount >= BULK_HIGH_TIER_THRESHOLD
+  ) {
     return "high";
   }
   // Any elevated-risk actions (shell, edits, git, network) in the selection
@@ -107,7 +114,7 @@ function pluralItems(count: number): string {
   return count === 1 ? "item" : "items";
 }
 
-/** Describe the action mix in plain language, e.g. "2 file reads and 1 shell command". */
+/** Describe the action mix in plain language, e.g. "2 file reads and 1 destructive action". */
 function describeActionMix(stats: BulkSelectionStats): string {
   const parts: string[] = [];
   if (stats.lowActionCount > 0) {
@@ -115,6 +122,9 @@ function describeActionMix(stats: BulkSelectionStats): string {
   }
   if (stats.elevatedActionCount > 0) {
     parts.push(`${stats.elevatedActionCount} elevated ${stats.elevatedActionCount === 1 ? "action" : "actions"}`);
+  }
+  if (stats.highActionCount > 0) {
+    parts.push(`${stats.highActionCount} destructive ${stats.highActionCount === 1 ? "action" : "actions"}`);
   }
   if (parts.length === 0) {
     return `${stats.actionCount} ${pluralActions(stats.actionCount)}`;
@@ -148,6 +158,12 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
   const bullets: string[] = [
     `Approving ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. Each runs once; the decision is not remembered.`,
   ];
+
+  if (stats.highActionCount > 0) {
+    bullets.push(
+      `${stats.highActionCount} destructive ${stats.highActionCount === 1 ? "action is" : "actions are"} selected (deletes, wipes, or truncates). These can cause irreversible data loss — confirm each one is expected before approving.`,
+    );
+  }
 
   if (stats.elevatedActionCount > 0) {
     bullets.push(

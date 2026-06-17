@@ -209,13 +209,16 @@ def test_is_bulk_allow_once_eligible_allows_shell_command(tmp_path: Path) -> Non
     assert is_bulk_allow_once_eligible(stored) is True
 
 
-def test_is_bulk_allow_once_eligible_rejects_destructive_shell(tmp_path: Path) -> None:
+def test_is_bulk_allow_once_eligible_allows_destructive_shell(tmp_path: Path) -> None:
+    """Destructive shells are bulk-eligible (high-tier) — dangerous but not
+    trust-breaking. The dashboard escalates disclosure and requires a typed
+    confirmation for these."""
     store = _store(tmp_path)
     destructive = _shell_request("req-rmrf", command="rm -rf node_modules")
     store.add_approval_request(destructive, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-rmrf")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored) is True
 
 
 def test_is_bulk_allow_once_eligible_rejects_encoded_shell(tmp_path: Path) -> None:
@@ -361,8 +364,10 @@ def test_bulk_allow_resolves_mixed_file_read_and_shell(tmp_path: Path) -> None:
     assert store.get_approval_request("req-shell")["status"] == "resolved"
 
 
-def test_bulk_allow_skips_destructive_shell_in_mixed_batch(tmp_path: Path) -> None:
-    """A destructive shell stays ineligible even when mixed with eligible items."""
+def test_bulk_allow_resolves_destructive_shell_in_mixed_batch(tmp_path: Path) -> None:
+    """A destructive shell resolves alongside a file read now that destructive
+    commands are bulk-eligible (high-tier). Trust-breaking actions (secrets,
+    injection, bypass) remain the only ineligible set."""
     store = _store(tmp_path)
     _enable_gate(store)
     plain = _file_read_request("req-plain")
@@ -377,11 +382,10 @@ def test_bulk_allow_skips_destructive_shell_in_mixed_batch(tmp_path: Path) -> No
         now="2026-06-16T00:01:00+00:00",
     )
 
-    assert result["resolved_count"] == 1
-    assert len(result["failed"]) == 1
-    assert result["failed"][0]["request_id"] == "req-rmrf"
+    assert result["resolved_count"] == 2
+    assert result["failed"] == []
     assert store.get_approval_request("req-plain")["status"] == "resolved"
-    assert store.get_approval_request("req-rmrf")["status"] == "pending"
+    assert store.get_approval_request("req-rmrf")["status"] == "resolved"
 
 
 def test_bulk_allow_read_once_daemon_route(tmp_path: Path) -> None:

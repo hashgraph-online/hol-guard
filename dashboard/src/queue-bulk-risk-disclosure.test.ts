@@ -20,6 +20,7 @@ function baseStats(overrides: Partial<BulkSelectionStats> = {}): BulkSelectionSt
     actionCount: 0,
     groupCount: 0,
     duplicateActionCount: 0,
+    highActionCount: 0,
     elevatedActionCount: 0,
     lowActionCount: 0,
     sensitiveCount: 0,
