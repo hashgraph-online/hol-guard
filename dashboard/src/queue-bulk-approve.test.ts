@@ -78,13 +78,13 @@ assert(summary[0].path === "src/index.ts", "T-BULK-02: summarizeBulkApproveSelec
 assert(summary[1].duplicateCount === 1, "T-BULK-03: summarizeBulkApproveSelection preserves duplicate count");
 
 assert(
-  buildBulkApproveConsequenceCopy(2).includes("Mass approval is risky"),
+  buildBulkApproveConsequenceCopy(2).toLowerCase().includes("mass approval"),
   "T-BULK-04: buildBulkApproveConsequenceCopy warns about mass approval"
 );
 
 assert(
-  buildBulkApproveConsequenceCopy(1).includes("approve once"),
-  "T-BULK-05: buildBulkApproveConsequenceCopy handles single selection with approve once copy"
+  buildBulkApproveConsequenceCopy(1).includes("approve this action once"),
+  "T-BULK-05: buildBulkApproveConsequenceCopy handles single selection with approve-once copy"
 );
 
 const readyGate: GuardApprovalGatePublicConfig = {

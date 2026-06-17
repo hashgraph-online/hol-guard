@@ -91,17 +91,28 @@ const shellItem: GuardApprovalRequest = {
   action_envelope_json: { ...fileReadEnvelope, action_type: "shell_command", command: "npm test" },
 };
 
-const groups = groupDuplicates([plainRead, secondRead, shellItem]);
+const destructiveShellItem: GuardApprovalRequest = {
+  ...plainRead,
+  request_id: "req-destructive",
+  action_envelope_json: { ...fileReadEnvelope, action_type: "shell_command", command: "rm -rf node_modules" },
+};
+
+const groups = groupDuplicates([plainRead, secondRead, shellItem, destructiveShellItem]);
 
 // T-BULK-HOOK-01: plain file read is bulk selectable
 assert(
   isBulkSelectableRequest(plainRead, groups) === true,
   "T-BULK-HOOK-01: plain file read is bulk selectable",
 );
-// T-BULK-HOOK-02: shell command is not bulk selectable
+// T-BULK-HOOK-02: ordinary shell command is now bulk selectable (elevated tier)
 assert(
-  isBulkSelectableRequest(shellItem, groups) === false,
-  "T-BULK-HOOK-02: shell command is not bulk selectable",
+  isBulkSelectableRequest(shellItem, groups) === true,
+  "T-BULK-HOOK-02: ordinary shell command is bulk selectable",
+);
+// T-BULK-HOOK-02b: destructive shell command stays gated
+assert(
+  isBulkSelectableRequest(destructiveShellItem, groups) === false,
+  "T-BULK-HOOK-02b: destructive shell command is not bulk selectable",
 );
 // T-BULK-HOOK-03: resolveBulkSelectionGroupId returns primary id
 assert(
@@ -141,6 +152,8 @@ const statsWithSensitive: BulkSelectionStats = {
   actionCount: 2,
   groupCount: 2,
   duplicateActionCount: 0,
+  elevatedActionCount: 0,
+  lowActionCount: 2,
   sensitiveCount: 1,
   sensitiveSamplePaths: [".env"],
 };
@@ -158,11 +171,13 @@ assert(
   "T-BULK-HOOK-07c: sensitive sample path included in disclosure bullets",
 );
 
-// T-BULK-HOOK-08: a high-tier selection (>=10 reads) requires typed confirm
+// T-BULK-HOOK-08: a high-tier selection (>=10 actions) requires typed confirm
 const highStats: BulkSelectionStats = {
   actionCount: 12,
   groupCount: 10,
   duplicateActionCount: 2,
+  elevatedActionCount: 0,
+  lowActionCount: 12,
   sensitiveCount: 0,
   sensitiveSamplePaths: [],
 };
@@ -170,7 +185,7 @@ const highDisclosure = buildBulkRiskDisclosure(highStats);
 assert(highDisclosure.tier === "high", "T-BULK-HOOK-08a: 12 reads is high tier");
 assert(highDisclosure.requiresTypedConfirm === true, "T-BULK-HOOK-08b: high tier requires typed confirm");
 assert(
-  highDisclosure.confirmPhrase === "approve 12 reads",
+  highDisclosure.confirmPhrase === "approve 12 actions",
   "T-BULK-HOOK-08c: high confirm phrase matches selection count",
 );
 assert(
