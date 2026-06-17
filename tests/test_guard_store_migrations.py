@@ -104,7 +104,7 @@ def test_policy_integrity_store_skips_macos_health_probe_when_backend_exists(
 
     secret_store = guard_store_module._build_policy_integrity_secret_store()
 
-    assert isinstance(secret_store, SystemKeyringSecretStore)
+    assert secret_store is None
 
 
 @pytest.fixture(autouse=True)

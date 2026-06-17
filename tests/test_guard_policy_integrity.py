@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import sqlite3
+import sys
 from pathlib import Path
 from typing import cast
 
@@ -384,10 +385,11 @@ def test_policy_integrity_status_skips_passive_macos_keychain_reads(
     secret_store = store._policy_integrity_secret_store
     assert isinstance(secret_store, SystemKeyringSecretStore)
     store._clear_policy_integrity_cache()
+    monkeypatch.setattr(sys, "platform", "darwin", raising=False)
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "_supports_native_macos_security_reads",
-        classmethod(lambda cls: True),
+        classmethod(lambda cls: False),
     )
     monkeypatch.setattr(
         secret_store,

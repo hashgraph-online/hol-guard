@@ -210,7 +210,8 @@ class TestGuardSurfaceServer:
             daemon_server_module._STATIC_DIR / "assets" / "chunks" / "feed-health-workspace.js"
         ).read_text(encoding="utf-8")
 
-        assert "Open pairing flow" in dashboard_bundle
+        assert "Open Guard Cloud" in dashboard_bundle
+        assert "Open pairing flow" not in dashboard_bundle
         assert "Open Guard connect" not in dashboard_bundle
         assert (
             "Browser pairing finished. Local Guard will retry the first proof sync automatically "
