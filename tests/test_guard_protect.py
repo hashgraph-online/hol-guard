@@ -18,12 +18,43 @@ from codex_plugin_scanner.guard.redaction import redact_text
 from codex_plugin_scanner.guard.store import GuardStore
 
 
+def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
+    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
+
+    Also installs a test-only resolver override so sync-path exercises stay hermetic
+    (no OAuth token refresh against the network). Tests that need real sync against a
+    local server pass sync_url=<url>.
+    """
+    from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token=token,
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=workspace_id,
+        now=now,
+    )
+    effective_sync_url = sync_url if sync_url is not None else "https://hol.org/api/guard/receipts/sync"
+    guard_runner_module._test_sync_auth_context_override = {
+        "sync_url": effective_sync_url,
+        "access_token": token,
+        "dpop_key_material": None,
+    }
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
 def _seed_sync_credentials(home_dir, sync_url: str, token: str = "demo-token") -> None:
-    GuardStore(home_dir).set_sync_credentials(sync_url, token, "2026-04-09T00:00:00Z")
+    _seed_guard_cloud(GuardStore(home_dir), sync_url=sync_url, token=token)
 
 
 class _SyncRequestHandler(BaseHTTPRequestHandler):
@@ -74,16 +105,16 @@ def _seed_bundle_cache_only(
     from tests.test_guard_package_shims import WORKSPACE_ID, _bundle_response
 
     store = GuardStore(home_dir)
-    now = "2026-05-19T00:00:00Z"
     response = _bundle_response(
         action=action,
         ecosystem=ecosystem,
         package_name=package_name,
         package_version=package_version,
     )
-    store.cache_supply_chain_bundle(WORKSPACE_ID, response, now)
     bundle = response["bundle"]
     assert isinstance(bundle, dict)
+    now = str(bundle["generatedAt"])
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, now)
     store.set_sync_payload(
         "supply_chain_bundle_entitlement",
         {
@@ -1103,12 +1134,11 @@ class TestGuardProtect:
         thread.start()
         try:
             store = GuardStore(home_dir)
-            sync_now = "2026-04-09T00:00:00Z"
-            store.set_sync_credentials(
-                f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
-                "demo-token",
-                sync_now,
+            _seed_guard_cloud(
+                store,
                 workspace_id=WORKSPACE_ID,
+                sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+                token="demo-token",
             )
             _seed_bundle_cache_only(
                 home_dir=home_dir,

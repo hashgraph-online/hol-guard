@@ -20,7 +20,7 @@ overrides = [
     { name = "fastapi", specifier = "==0.137.1" },
     { name = "importlib-metadata", specifier = "==9.0.0" },
     { name = "jsonschema", specifier = "==4.26.0" },
-    { name = "litellm", specifier = "==1.89.0" },
+    { name = "litellm", specifier = "==1.83.7" },
     { name = "openai", specifier = "==2.41.1" },
     { name = "pyjwt", specifier = "==2.13.0" },
     { name = "python-dotenv", specifier = "==1.2.2" },
@@ -1106,7 +1106,7 @@ wheels = [
 
 [[package]]
 name = "hol-guard"
-version = "2.0.345"
+version = "2.0.764"
 source = { editable = "." }
 dependencies = [
     { name = "cisco-ai-skill-scanner" },
@@ -1521,7 +1521,7 @@ wheels = [
 
 [[package]]
 name = "litellm"
-version = "1.89.0"
+version = "1.83.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -1537,9 +1537,9 @@ dependencies = [
     { name = "tiktoken" },
     { name = "tokenizers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/86/4b/15d4cb75f054933c1f19bcfd5683e139cdf792099b995ae55916b26094dc/litellm-1.89.0.tar.gz", hash = "sha256:eb1910a23497044b4375a0500c65f4c60d291a575d7b679c7566a5df9b9a5fcb", size = 14062606, upload-time = "2026-06-13T23:45:53.723Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/77/2b/b58bf6bbcbc3d0e55d0a84fdf9128e5b1436517f46fce89b1cd8948ebb81/litellm-1.83.7.tar.gz", hash = "sha256:e2f2cb99df2e2b2eab63f1354faa45c88dd7c8d40c18eb648afb1b349c689633", size = 17791694, upload-time = "2026-04-13T17:35:01.606Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/eb/86/49cf94af8c51cacc15fd9bff1e6f9de1fb07ab10b8bb09961675ab389af4/litellm-1.89.0-py3-none-any.whl", hash = "sha256:63b33e2de386ab2a83fed7ed852c755e59d461a21b16c79fc17993f1b8c3d154", size = 15475805, upload-time = "2026-06-13T23:45:46.037Z" },
+    { url = "https://files.pythonhosted.org/packages/75/80/caeb4cdcad96451ba83ad3ba2a9da08b1e1a915fa845c489f56ea044488b/litellm-1.83.7-py3-none-any.whl", hash = "sha256:5784a1d9a9a4a8acd6ca1e347003a5e2e1b3c749b4d41e7da4904577adade111", size = 16069807, upload-time = "2026-04-13T17:34:58.36Z" },
 ]
 
 [[package]]

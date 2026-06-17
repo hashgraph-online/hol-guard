@@ -904,7 +904,7 @@ def test_login_token_alias_rejects_raw_token_without_persisting_credentials(tmp_
     assert exit_code == 2
     assert "hol-guard connect" in captured.err
     assert "guard_live_secret" not in captured.err
-    assert store.get_sync_credentials() is None
+    assert store.get_cloud_sync_profile() is None
 
 
 def test_service_login_rejects_raw_token_without_persisting_credentials(tmp_path: Path, capsys) -> None:
@@ -919,7 +919,7 @@ def test_service_login_rejects_raw_token_without_persisting_credentials(tmp_path
     assert exit_code == 2
     assert "hol-guard connect --headless" in captured.out
     assert "guard_live_secret" not in captured.out
-    assert store.get_sync_credentials() is None
+    assert store.get_cloud_sync_profile() is None
 
 
 def test_service_login_without_token_points_to_ci_safe_connect(tmp_path: Path, capsys) -> None:
@@ -1699,7 +1699,7 @@ def test_connect_browser_reports_loopback_timeout_without_traceback(
     assert "Guard authorization failed" in captured.err
     assert "timed out" in captured.err
     assert "Traceback" not in captured.err
-    assert store.get_sync_credentials() is None
+    assert store.get_cloud_sync_profile() is None
     assert store.get_oauth_local_credentials() is None
 
 

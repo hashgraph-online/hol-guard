@@ -10,8 +10,8 @@ import pytest
 
 from codex_plugin_scanner.guard.local_supply_chain import audit_receipt_metadata
 from codex_plugin_scanner.guard.package_firewall_receipts import package_firewall_receipt_metadata
-from codex_plugin_scanner.guard.shims import install_package_shims, probe_package_shim_intercepts
 from codex_plugin_scanner.guard.shim_probe import protect_evaluator_evidence
+from codex_plugin_scanner.guard.shims import install_package_shims, probe_package_shim_intercepts
 from codex_plugin_scanner.guard.stable_digest import stable_digest_hex
 from tests.shim_execution_helpers import write_fake_manager_script
 

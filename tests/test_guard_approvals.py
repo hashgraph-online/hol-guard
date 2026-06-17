@@ -14,7 +14,11 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import bridge as guard_bridge_module
-from codex_plugin_scanner.guard.approvals import build_runtime_snapshot, apply_approval_resolution, queue_blocked_approvals
+from codex_plugin_scanner.guard.approvals import (
+    apply_approval_resolution,
+    build_runtime_snapshot,
+    queue_blocked_approvals,
+)
 from codex_plugin_scanner.guard.bridge import BridgeConfig, GuardBridge
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
@@ -1100,6 +1104,11 @@ class TestGuardApprovals:
             daemon_manager_module,
             "_running_guard_daemon_processes_for_guard_home",
             lambda _guard_home: [],
+        )
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_reap_stale_ephemeral_guard_daemons",
+            lambda *_args, **_kwargs: None,
         )
         monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
         monkeypatch.setattr(

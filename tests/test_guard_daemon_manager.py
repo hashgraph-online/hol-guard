@@ -176,10 +176,7 @@ def test_guard_daemon_url_port_rejects_invalid_port_text() -> None:
 
 
 def test_guard_daemon_port_from_command_supports_equals_syntax() -> None:
-    command = (
-        "python -m codex_plugin_scanner.cli guard daemon --serve "
-        "--guard-home /tmp/guard-home --port=5474"
-    )
+    command = "python -m codex_plugin_scanner.cli guard daemon --serve --guard-home /tmp/guard-home --port=5474"
     assert daemon_manager_module._guard_daemon_port_from_command(command) == 5474
 
 
@@ -245,7 +242,11 @@ def test_ensure_guard_daemon_adopts_running_guard_daemon_before_respawning(tmp_p
         "Popen",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not spawn a new daemon")),
     )
-    monkeypatch.setattr(daemon_manager_module, "_running_guard_daemon_processes_for_guard_home", lambda _guard_home, **kwargs: [])
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_running_guard_daemon_processes_for_guard_home",
+        lambda _guard_home, **kwargs: [],
+    )
 
     url = daemon_manager_module.ensure_guard_daemon(guard_home)
 
@@ -276,7 +277,9 @@ def test_ensure_guard_daemon_retires_duplicate_ports_for_same_guard_home(tmp_pat
     killed: list[int] = []
 
     monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
-    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _guard_home, **kwargs: "http://127.0.0.1:5474")
+    monkeypatch.setattr(
+        daemon_manager_module, "load_guard_daemon_url", lambda _guard_home, **kwargs: "http://127.0.0.1:5474"
+    )
     monkeypatch.setattr(
         daemon_manager_module,
         "_running_guard_daemon_processes_for_guard_home",
@@ -394,6 +397,7 @@ def test_ensure_guard_daemon_retires_stale_daemon_from_different_source_root(tmp
 
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
+
     def fake_load_guard_daemon_url(_guard_home):
         if launched_commands:
             return "http://127.0.0.1:5412"
@@ -440,6 +444,7 @@ def test_ensure_guard_daemon_spawns_with_current_package_import_path(tmp_path, m
 
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
+
     def fake_load_guard_daemon_url(_guard_home):
         return next(responses, "http://127.0.0.1:5412")
 

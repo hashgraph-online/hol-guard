@@ -152,11 +152,19 @@ def _connect_state_entitlement(store: GuardStore, *, now: datetime) -> dict[str,
         return None
     status = _optional_string(latest_state.get("status"))
     milestone = _optional_string(latest_state.get("milestone"))
-    if status not in {"retry_required", "expired"} and milestone not in {
-        "first_sync_failed",
-        "expired",
-        "sync_not_available",
-    }:
+    missing_oauth_after_success = (
+        status == "connected" and milestone == "first_sync_succeeded" and not isinstance(oauth_payload, dict)
+    )
+    if (
+        not missing_oauth_after_success
+        and status not in {"retry_required", "expired"}
+        and milestone
+        not in {
+            "first_sync_failed",
+            "expired",
+            "sync_not_available",
+        }
+    ):
         return None
     tier = "unknown"
     if isinstance(oauth_fields, dict):
@@ -165,6 +173,27 @@ def _connect_state_entitlement(store: GuardStore, *, now: datetime) -> dict[str,
         "allowed": False,
         "reason": "guard_cloud_reconnect_required",
         "tier": tier,
+        "upgrade_cta": PACKAGE_FIREWALL_RECONNECT_CTA,
+    }
+
+
+def _reconnect_required_entitlement(
+    *,
+    bundle: dict[str, object] | None,
+    oauth: dict[str, object] | None,
+    oauth_payload: object,
+) -> dict[str, object]:
+    tier = "unknown"
+    if isinstance(oauth, dict):
+        tier = _optional_string(oauth.get("tier")) or tier
+    if tier == "unknown" and isinstance(bundle, dict):
+        tier = _optional_string(bundle.get("tier")) or tier
+    if tier == "unknown" and isinstance(oauth_payload, dict):
+        tier = _optional_string(oauth_payload.get("supply_chain_plan_id")) or tier
+    return {
+        "allowed": False,
+        "reason": "guard_cloud_reconnect_required",
+        "tier": tier.lower(),
         "upgrade_cta": PACKAGE_FIREWALL_RECONNECT_CTA,
     }
 
@@ -244,16 +273,20 @@ def resolve_package_firewall_entitlement(
         oauth_fields = _oauth_entitlement_fields_from_sync_payload(oauth_payload)
     oauth = _oauth_entitlement(oauth_fields, now=resolved_now)
     connect_state = _connect_state_entitlement(store, now=resolved_now)
+    is_healthy_profile = isinstance(oauth_health, dict) and oauth_health.get("state") == "healthy"
+    has_profile_backed_bundle = bundle is not None and bool(bundle.get("allowed")) and is_healthy_profile
+    if connect_state is not None and not has_profile_backed_bundle:
+        return connect_state
+    if _requires_guard_cloud_connect(store, bundle=bundle, oauth=oauth):
+        if bundle is not None and bool(bundle.get("allowed")):
+            return _reconnect_required_entitlement(bundle=bundle, oauth=oauth, oauth_payload=oauth_payload)
+        return _connect_required_entitlement(store)
     if bundle is not None and bool(bundle.get("allowed")):
         return bundle
     if oauth is not None and bool(oauth.get("allowed")):
         return oauth
     if oauth is not None and oauth.get("reason") == "guard_cloud_reconnect_required":
         return oauth
-    if connect_state is not None:
-        return connect_state
-    if _requires_guard_cloud_connect(store, bundle=bundle, oauth=oauth):
-        return _connect_required_entitlement(store)
     if bundle is not None:
         return bundle
     if oauth is not None:

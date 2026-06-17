@@ -236,10 +236,7 @@ def test_update_treats_nonzero_pipx_repair_as_updated_when_version_changed(
     assert "dashboard_sync" in payload
     notes = payload.get("notes")
     assert isinstance(notes, list)
-    assert any(
-        "Installer exited with code 1 after version changed." in str(note)
-        for note in notes
-    )
+    assert any("Installer exited with code 1 after version changed." in str(note) for note in notes)
 
 
 def test_update_repairs_missing_pip_local_source_install(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

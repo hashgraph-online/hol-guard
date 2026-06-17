@@ -56,6 +56,37 @@ from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
 
 
+def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
+    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
+
+    Also installs a test-only resolver override so sync-path exercises stay hermetic
+    (no OAuth token refresh against the network). Tests that need real sync against a
+    local server pass sync_url=<url>.
+    """
+    from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token=token,
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=workspace_id,
+        now=now,
+    )
+    effective_sync_url = sync_url if sync_url is not None else "https://hol.org/api/guard/receipts/sync"
+    guard_runner_module._test_sync_auth_context_override = {
+        "sync_url": effective_sync_url,
+        "access_token": token,
+        "dpop_key_material": None,
+    }
+
+
 @pytest.fixture(autouse=True)
 def _isolate_codex_runtime_marker(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CODEX_MANAGED_BY_BUN", raising=False)
@@ -3422,11 +3453,7 @@ clearer UX and an implementation plan with technical references.
         tmp_path,
     ) -> None:
         store = GuardStore(tmp_path / "guard-home")
-        store.set_sync_credentials(
-            "https://hol.org/api/guard/receipts/sync",
-            "guard-token",
-            "2026-04-16T00:00:00.000Z",
-        )
+        _seed_guard_cloud(store)
 
         def _raise_not_found(*args, **kwargs):
             raise urllib.error.HTTPError(
@@ -14414,9 +14441,7 @@ def test_guard_runtime_rejects_saved_allows_for_different_risky_tool_action(
         is None
     )
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, later_artifact, "opencode"
-        )
+        guard_commands_module._runtime_artifact_policy_action(config, later_artifact, "opencode")
         == "require-reapproval"
     )
 
@@ -16357,11 +16382,7 @@ def test_guard_daemon_serves_health_and_receipt_state(tmp_path):
 
 def test_sync_receipts_retries_once_after_timeout(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "guard-live-token",
-        "2026-04-19T00:00:00+00:00",
-    )
+    _seed_guard_cloud(store)
     timeouts: list[int] = []
 
     class _Response:
@@ -16390,11 +16411,7 @@ def test_sync_receipts_retries_once_after_timeout(tmp_path, monkeypatch):
 
 def test_sync_receipts_rejects_untrusted_sync_host_before_network(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "guard-live-token",
-        "2026-04-19T00:00:00+00:00",
-    )
+    _seed_guard_cloud(store)
     credentials_payload = store.get_sync_payload("credentials")
     assert isinstance(credentials_payload, dict)
     credentials_payload["sync_url"] = "https://evil.example/api/guard/receipts/sync"
@@ -16416,11 +16433,7 @@ def test_sync_receipts_rejects_untrusted_sync_host_before_network(tmp_path, monk
 
 def test_sync_receipts_batches_large_local_history(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "guard-live-token",
-        "2026-04-19T00:00:00+00:00",
-    )
+    _seed_guard_cloud(store)
     for index in range(65):
         store.add_receipt(
             GuardReceipt(
@@ -16480,11 +16493,7 @@ def test_sync_receipts_batches_large_local_history(tmp_path, monkeypatch):
 
 def test_sync_receipts_uses_rowid_cursor_and_sync_context(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "guard-live-token",
-        "2026-04-19T00:00:00+00:00",
-    )
+    _seed_guard_cloud(store)
     for index in range(3):
         store.add_receipt(
             GuardReceipt(
@@ -16574,11 +16583,7 @@ def test_sync_receipts_uses_rowid_cursor_and_sync_context(tmp_path, monkeypatch)
 
 def test_sync_receipts_backfills_when_cursor_is_ahead_of_local_rows(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "guard-live-token",
-        "2026-04-19T00:00:00+00:00",
-    )
+    _seed_guard_cloud(store)
     for index in range(2):
         store.add_receipt(
             GuardReceipt(
@@ -16646,11 +16651,7 @@ def test_sync_receipts_backfills_when_cursor_is_ahead_of_local_rows(tmp_path, mo
 
 def test_sync_receipts_marks_latest_connect_first_sync_succeeded(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "migration-compat-token",
-        "2026-05-23T19:20:00+00:00",
-    )
+    _seed_guard_cloud(store)
     request_id = "connect-imported-state"
     with store._connect() as connection:
         connection.execute(
@@ -16780,11 +16781,7 @@ def test_sync_receipts_marks_latest_connect_first_sync_succeeded(tmp_path, monke
 
 def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "guard-live-token",
-        "2026-04-19T00:00:00+00:00",
-    )
+    _seed_guard_cloud(store)
     for index in range(65):
         store.add_receipt(
             GuardReceipt(
@@ -17141,11 +17138,7 @@ def test_policy_bundle_validation_rejects_missing_rules_field():
 
 def test_sync_receipts_preserves_last_known_good_policy_bundle_on_invalid_update(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "guard-live-token",
-        "2026-04-19T00:00:00+00:00",
-    )
+    _seed_guard_cloud(store)
 
     valid_bundle = {
         "contractVersion": "guard-policy-bundle.v1",
@@ -17529,11 +17522,7 @@ def test_policy_bundle_downgrade_check_ignores_mixed_timezone_formats():
 
 def test_sync_receipts_uploads_policy_bundle_acknowledgement(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "guard-live-token",
-        "2026-06-05T13:30:00+00:00",
-    )
+    _seed_guard_cloud(store)
     requests: list[dict[str, object]] = []
     bundle = {
         "contractVersion": "guard-policy-bundle.v1",
@@ -17660,10 +17649,10 @@ def test_sync_receipts_uploads_policy_bundle_acknowledgement_to_sync_route(tmp_p
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        store.set_sync_credentials(
-            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
-            "guard-live-token",
-            "2026-06-05T13:30:00+00:00",
+        _seed_guard_cloud(
+            store,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="guard-live-token",
         )
         monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
@@ -17685,12 +17674,7 @@ def test_sync_receipts_uploads_policy_bundle_acknowledgement_to_sync_route(tmp_p
 
 def test_sync_receipts_rejects_policy_bundle_for_the_wrong_workspace(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "guard-live-token",
-        "2026-06-05T13:30:00+00:00",
-        workspace_id="workspace-a",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-a")
     bundle = {
         "contractVersion": "guard-policy-bundle.v1",
         "bundleVersion": "policy-2026-06-05.5",
@@ -17829,11 +17813,7 @@ def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, mo
 def test_sync_runtime_session_retries_once_after_timeout(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     dpop_key_material = generate_dpop_key_pair()
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "guard-live-token",
-        "2026-04-19T00:00:00+00:00",
-    )
+    _seed_guard_cloud(store)
     timeouts: list[int] = []
 
     class _Response:
@@ -17889,11 +17869,7 @@ def test_sync_runtime_session_retries_once_after_timeout(tmp_path, monkeypatch):
 def test_sync_runtime_session_retries_once_after_read_timeout(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     dpop_key_material = generate_dpop_key_pair()
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "guard-live-token",
-        "2026-04-19T00:00:00+00:00",
-    )
+    _seed_guard_cloud(store)
     timeouts: list[int] = []
 
     class _Response:
@@ -18001,12 +17977,7 @@ def test_sync_runtime_session_rejects_untrusted_oauth_issuer_before_network(tmp_
 
 def test_sync_runtime_session_rejects_non_https_legacy_sync_url_before_network(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "legacy-runtime-token",
-        "2026-06-01T00:00:00+00:00",
-        workspace_id="workspace-1",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-1")
     credentials_payload = store.get_sync_payload("credentials")
     assert isinstance(credentials_payload, dict)
     credentials_payload["sync_url"] = "http://hol.org/api/guard/receipts/sync"
@@ -18044,12 +18015,7 @@ def test_sync_runtime_session_rejects_non_https_legacy_sync_url_before_network(t
 
 def test_sync_runtime_session_rejects_unallowlisted_legacy_sync_url_before_network(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "legacy-runtime-token",
-        "2026-06-01T00:00:00+00:00",
-        workspace_id="workspace-1",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-1")
     credentials_payload = store.get_sync_payload("credentials")
     assert isinstance(credentials_payload, dict)
     credentials_payload["sync_url"] = "https://evil.example/api/guard/receipts/sync"

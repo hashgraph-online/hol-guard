@@ -94,13 +94,17 @@ def ensure_guard_daemon(
         if existing_url is not None:
             existing_port = _guard_daemon_url_port(existing_url)
             if preferred_port is None or existing_port == preferred_port:
-                _retire_duplicate_guard_daemons(guard_home, keep_port=existing_port)
+                _retire_duplicate_guard_daemons(guard_home, keep_port=existing_port, start_lock_held=True)
                 return existing_url
             retire_all_guard_daemons_for_home(guard_home)
             clear_guard_daemon_state(guard_home)
         adopted_url = _adopt_existing_guard_daemon(guard_home, preferred_port=preferred_port)
         if adopted_url is not None:
-            _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(adopted_url))
+            _retire_duplicate_guard_daemons(
+                guard_home,
+                keep_port=_guard_daemon_url_port(adopted_url),
+                start_lock_held=True,
+            )
             return adopted_url
         stale_state = _load_state(guard_home)
         if isinstance(stale_state, dict) and not _guard_daemon_state_matches_current_runtime(stale_state):
@@ -108,7 +112,11 @@ def ensure_guard_daemon(
         if _guard_daemon_start_in_progress(guard_home):
             inflight_url = _wait_for_guard_daemon_url(guard_home, timeout=timeout)
             if inflight_url is not None:
-                _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(inflight_url))
+                _retire_duplicate_guard_daemons(
+                    guard_home,
+                    keep_port=_guard_daemon_url_port(inflight_url),
+                    start_lock_held=True,
+                )
                 return inflight_url
         clear_guard_daemon_state(guard_home)
         for candidate_port in _candidate_ports(guard_home, preferred_port=preferred_port):
@@ -148,7 +156,11 @@ def ensure_guard_daemon(
                 process=process,
             )
             if url is not None:
-                _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(url))
+                _retire_duplicate_guard_daemons(
+                    guard_home,
+                    keep_port=_guard_daemon_url_port(url),
+                    start_lock_held=True,
+                )
                 return url
     raise RuntimeError(f"Guard approval center did not start. Expected state file at {state_path}.")
 
@@ -333,13 +345,50 @@ def _initialize_existing_guard_daemon(guard_home: Path, port: int) -> _ExistingG
     return {"url": url, "auth_token": auth_token, "pid": pid}
 
 
-def _retire_duplicate_guard_daemons(guard_home: Path, *, keep_port: int | None) -> None:
+def _retire_duplicate_guard_daemons(
+    guard_home: Path,
+    *,
+    keep_port: int | None,
+    start_lock_held: bool = False,
+) -> None:
     if keep_port is None:
         return
+    if start_lock_held:
+        _retire_duplicate_guard_daemons_unlocked(guard_home, keep_port=keep_port)
+        return
+    with _guard_daemon_start_lock(guard_home):
+        _retire_duplicate_guard_daemons_unlocked(guard_home, keep_port=keep_port)
+
+
+def _retire_duplicate_guard_daemons_unlocked(guard_home: Path, *, keep_port: int) -> None:
+    saw_duplicate = False
     for pid, port in _running_guard_daemon_processes_for_guard_home(guard_home):
         if port == keep_port:
             continue
-        _retire_guard_daemon_pid(pid, expected_guard_home=guard_home)
+        saw_duplicate = True
+        if not _retire_guard_daemon_pid(pid, expected_guard_home=guard_home):
+            return
+    if not saw_duplicate:
+        return
+    if any(port != keep_port for _pid, port in _running_guard_daemon_processes_for_guard_home(guard_home)):
+        return
+    _rewrite_kept_daemon_state_if_missing(guard_home, keep_port=keep_port)
+
+
+def _rewrite_kept_daemon_state_if_missing(guard_home: Path, *, keep_port: int) -> None:
+    kept_pid = _guard_daemon_pid_for_guard_home_port(guard_home, keep_port)
+    if kept_pid is None or _daemon_state_points_to(guard_home, pid=kept_pid, port=keep_port):
+        return
+    auth_token = load_guard_daemon_auth_token(guard_home)
+    if auth_token is None:
+        return
+    daemon_url = f"http://127.0.0.1:{keep_port}"
+    details = _daemon_healthz_details_payload(daemon_url, auth_token)
+    if details is None or not _healthz_payload_matches_guard_home(json.dumps(details), guard_home):
+        return
+    if details.get("pid") != kept_pid:
+        return
+    write_guard_daemon_state(guard_home, keep_port, auth_token, pid=kept_pid, write_auth_token=False)
 
 
 def _guard_daemon_pid_for_guard_home_port(guard_home: Path, port: int) -> int | None:
@@ -349,7 +398,14 @@ def _guard_daemon_pid_for_guard_home_port(guard_home: Path, port: int) -> int | 
     return None
 
 
-def write_guard_daemon_state(guard_home: Path, port: int, auth_token: str, *, pid: int | None = None) -> None:
+def write_guard_daemon_state(
+    guard_home: Path,
+    port: int,
+    auth_token: str,
+    *,
+    pid: int | None = None,
+    write_auth_token: bool = True,
+) -> None:
     state_path = _state_path(guard_home)
     _ensure_private_directory(state_path.parent)
     _write_private_text(
@@ -368,13 +424,34 @@ def write_guard_daemon_state(guard_home: Path, port: int, auth_token: str, *, pi
             indent=2,
         ),
     )
-    _write_private_text(_auth_token_path(guard_home), auth_token)
+    if write_auth_token:
+        _write_private_text(_auth_token_path(guard_home), auth_token)
 
 
 def clear_guard_daemon_state(guard_home: Path) -> None:
     state_path = _state_path(guard_home)
     _ensure_private_directory(state_path.parent)
     _write_private_text(state_path, "{}")
+
+
+def clear_guard_daemon_state_if_current(guard_home: Path, *, pid: int, port: int) -> bool:
+    with _guard_daemon_start_lock(guard_home):
+        return _clear_guard_daemon_state_if_current_unlocked(guard_home, pid=pid, port=port)
+
+
+def _clear_guard_daemon_state_if_current_unlocked(guard_home: Path, *, pid: int, port: int) -> bool:
+    payload = _load_state(guard_home)
+    if not isinstance(payload, dict):
+        return False
+    if payload.get("pid") != pid or payload.get("port") != port:
+        return False
+    clear_guard_daemon_state(guard_home)
+    return True
+
+
+def _daemon_state_points_to(guard_home: Path, *, pid: int, port: int) -> bool:
+    payload = _load_state(guard_home)
+    return isinstance(payload, dict) and payload.get("pid") == pid and payload.get("port") == port
 
 
 def repair_approval_center_locator(guard_home: Path) -> dict[str, object]:

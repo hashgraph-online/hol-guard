@@ -76,9 +76,7 @@ def test_resolve_codex_skill_enabled_matches_path_and_name(tmp_path: Path) -> No
 
     from codex_plugin_scanner.guard.codex_skill_config import CodexSkillConfigRule
 
-    disabled_by_name = (
-        CodexSkillConfigRule(enabled=False, name="lint"),
-    )
+    disabled_by_name = (CodexSkillConfigRule(enabled=False, name="lint"),)
     assert not resolve_codex_skill_enabled(
         config_path=str(skill_md),
         display_name="lint",

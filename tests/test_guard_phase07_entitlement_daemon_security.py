@@ -40,6 +40,7 @@ def _seed_free_connect_state(store: GuardStore) -> None:
         "2026-06-09T12:00:00.000Z",
     )
 
+
 def _seed_premium_entitlement(store: GuardStore) -> None:
     store.set_sync_payload(
         "supply_chain_bundle_entitlement",

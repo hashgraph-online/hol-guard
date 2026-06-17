@@ -381,9 +381,7 @@ def test_supply_chain_bundle_verifies_portal_signed_payload_with_emergency_denyl
             "recommendedFixVersion": "1.2.9",
         }
     ]
-    response = load_supply_chain_bundle_response(
-        json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key))
-    )
+    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
 
     verify_supply_chain_bundle_response(response, now=response.bundle.generated_at_timestamp + 5)
     assert len(response.bundle.emergency_denylist) == 1
@@ -410,9 +408,7 @@ def test_supply_chain_bundle_offline_evaluation_enforces_emergency_deny_without_
             "recommendedFixVersion": "1.2.9",
         }
     ]
-    response = load_supply_chain_bundle_response(
-        json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key))
-    )
+    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
 
     decision = evaluate_cached_supply_chain_bundle(
         response,
@@ -450,9 +446,7 @@ def test_supply_chain_bundle_offline_evaluation_enforces_emergency_deny_when_bun
             "recommendedFixVersion": None,
         }
     ]
-    response = load_supply_chain_bundle_response(
-        json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key))
-    )
+    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
 
     decision = evaluate_cached_supply_chain_bundle(
         response,
@@ -471,9 +465,7 @@ def test_supply_chain_bundle_verifies_portal_signed_payload_with_sparse_policy_r
     private_key, _public_key = _generate_key_pair()
     bundle = _bundle_dict()
     bundle["policyRules"] = [{"action": "block", "ruleId": "rule-1"}]
-    response = load_supply_chain_bundle_response(
-        json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key))
-    )
+    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
 
     verify_supply_chain_bundle_response(response, now=response.bundle.generated_at_timestamp + 5)
 

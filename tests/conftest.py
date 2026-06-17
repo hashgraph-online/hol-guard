@@ -24,10 +24,16 @@ if pythonpath_prefix:
 
 
 @pytest.fixture(autouse=True)
-def _disable_real_macos_keychain(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.store import KeychainSecretStore
+def _reset_guard_sync_resolver_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Undo any _resolve_guard_sync_auth_context override leaked by _seed_guard_cloud."""
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: False))
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_resolve_guard_sync_auth_context",
+        guard_runner_module._resolve_guard_sync_auth_context,
+    )
+    guard_runner_module._test_sync_auth_context_override = None
 
 
 class _FakeSystemKeyringModule:

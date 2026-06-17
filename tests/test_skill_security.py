@@ -260,9 +260,7 @@ def test_scan_plugin_handles_skills_outside_plugin_root_without_crashing(tmp_pat
     result = scan_plugin(plugin_dir, ScanOptions(cisco_skill_scan="off"))
 
     skill_security = next(category for category in result.categories if category.name == "Skill Security")
-    analyzable_check = next(
-        check for check in skill_security.checks if check.name == "Skills analyzable"
-    )
+    analyzable_check = next(check for check in skill_security.checks if check.name == "Skills analyzable")
 
     assert analyzable_check.applicable is False
     assert "unsafe" in analyzable_check.message.lower()
@@ -339,9 +337,7 @@ def test_scan_plugin_ignores_symlinked_skill_files_outside_plugin_root(tmp_path)
     result = scan_plugin(plugin_dir, ScanOptions(cisco_skill_scan="off"))
 
     skill_security = next(category for category in result.categories if category.name == "Skill Security")
-    analyzable_check = next(
-        check for check in skill_security.checks if check.name == "Skills analyzable"
-    )
+    analyzable_check = next(check for check in skill_security.checks if check.name == "Skills analyzable")
 
     assert analyzable_check.applicable is False
     assert "outside the plugin root" in analyzable_check.message

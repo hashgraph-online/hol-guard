@@ -1109,10 +1109,6 @@ def _runtime_proof_status_name(
     reason: str | None,
     proof: Mapping[str, object],
 ) -> str:
-    if milestone == "first_sync_succeeded" or proof.get("first_synced_at"):
-        return "synced"
-    if milestone == "sync_not_available":
-        return "sync_unavailable"
     if status == "retry_required" or milestone == "first_sync_failed":
         if connect_retry_refresh_race_from_reason(reason):
             return "stalled"
@@ -1123,6 +1119,10 @@ def _runtime_proof_status_name(
         return "expired"
     if milestone == "waiting_for_browser" or status == "waiting":
         return "waiting"
+    if milestone == "first_sync_succeeded" or proof.get("first_synced_at"):
+        return "synced"
+    if milestone == "sync_not_available":
+        return "sync_unavailable"
     return "not_connected"
 
 
@@ -1549,19 +1549,68 @@ def _is_sensitive_file_read_request(request: Mapping[str, object]) -> bool:
     return _bulk_has_secret_signal(request)
 
 
-def is_bulk_allow_once_eligible(request: Mapping[str, object]) -> bool:
-    if str(request.get("status") or "") != "pending":
-        return False
+# Decision signal categories that must never be bulk-approved. These are the
+# genuinely catastrophic or trust-breaking cases: secret exfiltration, credential
+# output, prompt injection, system prompt access, guard bypass, and encoded
+# payloads. Everything else is bulk-eligible with a tiered risk disclosure.
+_BULK_BLOCKED_DECISION_CATEGORIES = frozenset(
+    {
+        "secret",
+        "credential",
+        "bypass",
+        "prompt_injection",
+        "system_prompt",
+        "encoded",
+    }
+)
+
+_BULK_BLOCKED_COMMAND_HINTS = (
+    "prompt injection",
+    "ignore previous",
+    "disregard previous",
+    "override instruction",
+    "bypass guard",
+    "disable guard",
+    "skip approval",
+    "ignore approval",
+    "without approval",
+    "guard_bypass",
+    "no guard",
+    "base64",
+    "openssl enc",
+    "xxd -r",
+    "decode-and-exec",
+    "exfiltrat",
+    "clipboard",
+    "pastebin",
+)
+
+
+def _bulk_request_is_bulk_blocked(request: Mapping[str, object]) -> bool:
+    """True for actions that must be reviewed individually, never bulk-approved."""
     if str(request.get("policy_action") or "") == "block":
-        return False
-    envelope = request.get("action_envelope_json")
-    artifact_type = str(request.get("artifact_type") or "")
-    is_file_read = (
-        isinstance(envelope, dict) and envelope.get("action_type") == "file_read"
-    ) or artifact_type == "file_read_request"
-    if not is_file_read:
-        return False
-    return not _is_sensitive_file_read_request(request)
+        return True
+    if str(request.get("status") or "") != "pending":
+        return True
+    # Secret file reads and credential-bearing file reads stay gated.
+    if _bulk_is_file_read_request(request) and _is_sensitive_file_read_request(request):
+        return True
+    categories = _bulk_decision_v2_categories(request)
+    if any(category in _BULK_BLOCKED_DECISION_CATEGORIES for category in categories):
+        return True
+    text = _bulk_queue_category_text(request).lower()
+    return any(hint in text for hint in _BULK_BLOCKED_COMMAND_HINTS)
+
+
+def is_bulk_allow_once_eligible(request: Mapping[str, object]) -> bool:
+    """Whether a request can be approved once via the bulk approval flow.
+
+    Broadened beyond read-only file reads: any pending, non-blocked action that
+    is not in the bulk-blocked set (secrets, exfiltration, prompt injection,
+    guard bypass, destructive deletes, encoded payloads) is eligible. The
+    dashboard layers a tiered risk disclosure on top of this.
+    """
+    return not _bulk_request_is_bulk_blocked(request)
 
 
 def bulk_allow_read_only_once(
@@ -1582,7 +1631,7 @@ def bulk_allow_read_only_once(
         return {
             "resolved_count": 0,
             "failed": [],
-            "resolution_summary": "0 read-only file reads approved once.",
+            "resolution_summary": "0 actions approved once.",
         }
 
     bulk_resolution_action = "allow"
@@ -1627,7 +1676,7 @@ def bulk_allow_read_only_once(
     return {
         "resolved_count": resolved_count,
         "failed": failed,
-        "resolution_summary": f"{resolved_count} read-only file reads approved once.",
+        "resolution_summary": f"{resolved_count} action{'s' if resolved_count != 1 else ''} approved once.",
     }
 
 

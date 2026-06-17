@@ -144,9 +144,7 @@ def test_export_committed_static_files_rejects_traversal_paths(
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.dashboard_sync._read_committed_file",
-        lambda _checkout, path: (
-            b"<html>safe</html>" if path == safe_path else b"malicious"
-        ),
+        lambda _checkout, path: b"<html>safe</html>" if path == safe_path else b"malicious",
     )
 
     installed_static = tmp_path / "installed-static"

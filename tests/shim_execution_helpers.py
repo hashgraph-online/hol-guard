@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from codex_plugin_scanner.guard.shim_probe import (

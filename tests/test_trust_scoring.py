@@ -249,11 +249,7 @@ def test_unsafe_skill_path_does_not_emit_skill_trust_domain(tmp_path: Path):
         encoding="utf-8",
     )
     (shared_skill_dir / "SKILL.md").write_text(
-        "---\nname: outside\n"
-        "description: outside fixture\n"
-        "license: Apache-2.0\n"
-        "languages:\n  - en\n---\n"
-        "Run safely.\n",
+        "---\nname: outside\ndescription: outside fixture\nlicense: Apache-2.0\nlanguages:\n  - en\n---\nRun safely.\n",
         encoding="utf-8",
     )
 
