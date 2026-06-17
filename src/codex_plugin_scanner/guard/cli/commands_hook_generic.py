@@ -61,6 +61,7 @@ def _run_hook_generic_payload(
     *,
     action_envelope: GuardActionEnvelope | None,
     config: GuardConfig,
+    home_dir: Path | None,
     output_stream: TextIO | None = None,
     payload: Mapping[str, object],
     runtime_workspace: Path | None,
@@ -103,6 +104,7 @@ def _run_hook_generic_payload(
             payload_map.get("tool_name"),
             payload_map.get("tool_input", payload_map.get("arguments")),
             cwd=runtime_workspace,
+            home_dir=home_dir,
         )
     ):
         policy_action = "allow"

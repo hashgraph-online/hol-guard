@@ -258,6 +258,7 @@ def _run_guard_hook_command(
         args,
         action_envelope=action_envelope,
         config=config,
+        home_dir=context.home_dir,
         output_stream=output_stream,
         payload=payload,
         runtime_workspace=runtime_workspace,

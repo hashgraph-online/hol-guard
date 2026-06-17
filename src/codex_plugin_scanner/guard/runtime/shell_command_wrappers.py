@@ -463,7 +463,7 @@ def _trusted_symlink_component(path: Path) -> bool:
 
 
 def _path_is_non_writable(path: Path) -> bool:
-    return not path.stat().st_mode & 0o022
+    return not (path.stat().st_mode & 0o022)
 
 
 def _env_assignments_override_path(env_assignments: list[str] | tuple[str, ...]) -> bool:
