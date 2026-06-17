@@ -363,15 +363,28 @@ def _command_name(token: str, *, env_assignments: list[str] | tuple[str, ...] = 
     command_path = Path(token)
     if not command_path.is_absolute():
         return ""
+    if not _trusted_absolute_command_path(command_path):
+        return ""
+    return command_path.name.lower()
+
+
+def _trusted_absolute_command_path(command_path: Path) -> bool:
     try:
-        resolved = command_path.resolve(strict=True)
-        mode = resolved.stat().st_mode
-        owner_uid = resolved.stat().st_uid
+        if command_path.is_symlink() or not _root_owned_non_writable(command_path):
+            return False
+        for parent in command_path.parents:
+            if parent.is_symlink() or not _root_owned_non_writable(parent):
+                return False
+            if parent == parent.parent:
+                break
     except OSError:
-        return ""
-    if owner_uid != 0 or mode & 0o022:
-        return ""
-    return resolved.name.lower()
+        return False
+    return True
+
+
+def _root_owned_non_writable(path: Path) -> bool:
+    metadata = path.stat()
+    return metadata.st_uid == 0 and not metadata.st_mode & 0o022
 
 
 def _env_assignments_override_path(env_assignments: list[str] | tuple[str, ...]) -> bool:
