@@ -389,12 +389,37 @@ class SystemKeyringSecretStore:
 
     @staticmethod
     def _load_keyring_module():
+        """Load the optional keyring package.
+
+        Returns None when the top-level package is genuinely absent. A keyring
+        install that is present but fails to import (broken transitive import,
+        backend init error, etc.) is allowed to propagate so callers can surface
+        it rather than silently degrading credential storage.
+        """
         try:
             return importlib.import_module("keyring")
-        except ImportError:
-            # The keyring package is an optional runtime dependency. A missing
-            # module must degrade to "unavailable" (None) so callers fall back to
-            # the encrypted-file store instead of crashing the host process.
+        except ModuleNotFoundError as exc:
+            if exc.name == "keyring":
+                return None
+            raise
+
+    @classmethod
+    def _load_keyring_module_or_none(cls):
+        """Return the keyring module, or None when it is absent or unusable.
+
+        Any failure to initialize an installed-but-broken keyring is logged so
+        the fallback to the encrypted-file store is never silent. Used by the
+        availability probe and secret access, which must not let a keyring
+        failure escape and crash the host harness.
+        """
+        try:
+            return cls._load_keyring_module()
+        except Exception:
+            _store_logger.warning(
+                "Guard system keyring backend could not be initialized; "
+                "using encrypted-file fallback.",
+                exc_info=True,
+            )
             return None
 
     @staticmethod
@@ -491,7 +516,7 @@ class SystemKeyringSecretStore:
 
     @classmethod
     def _backend_is_available(cls) -> bool:
-        keyring_module = cls._load_keyring_module()
+        keyring_module = cls._load_keyring_module_or_none()
         if keyring_module is None:
             return False
         try:
@@ -513,7 +538,7 @@ class SystemKeyringSecretStore:
         return True
 
     def set_secret(self, secret_id: str, value: str) -> None:
-        keyring_module = self._load_keyring_module()
+        keyring_module = self._load_keyring_module_or_none()
         if keyring_module is None:
             raise RuntimeError(
                 "Guard system keyring backend is unavailable; the Python 'keyring' "
@@ -522,7 +547,7 @@ class SystemKeyringSecretStore:
         keyring_module.set_password(self.service_name, secret_id, value)
 
     def get_secret(self, secret_id: str) -> str | None:
-        keyring_module = self._load_keyring_module()
+        keyring_module = self._load_keyring_module_or_none()
         if keyring_module is None:
             return None
         value = keyring_module.get_password(self.service_name, secret_id)
@@ -633,7 +658,7 @@ class SystemKeyringSecretStore:
         return self._get_secret_without_macos_ui(secret_id)
 
     def delete_secret(self, secret_id: str) -> None:
-        keyring_module = self._load_keyring_module()
+        keyring_module = self._load_keyring_module_or_none()
         if keyring_module is None:
             return
         try:

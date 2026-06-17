@@ -82,7 +82,7 @@ def test_load_keyring_module_returns_none_when_dependency_missing(monkeypatch):
 
     def _block_keyring(name, *args, **kwargs):
         if name == "keyring" or name.startswith("keyring."):
-            raise ModuleNotFoundError("No module named 'keyring'")
+            raise ModuleNotFoundError("No module named 'keyring'", name="keyring")
         return real_import_module(name, *args, **kwargs)
 
     monkeypatch.setattr(importlib, "import_module", _block_keyring)
@@ -131,6 +131,45 @@ def test_system_keyring_is_available_false_when_keyring_missing(monkeypatch):
 
     assert SystemKeyringSecretStore._backend_is_available() is False
     assert SystemKeyringSecretStore._is_available() is False
+
+
+def test_load_keyring_module_propagates_broken_installed_keyring(monkeypatch):
+    """A broken-but-installed keyring must surface, not silently degrade to None."""
+    import importlib
+
+    real_import_module = importlib.import_module
+
+    def _break_keyring_subimport(name, *args, **kwargs):
+        if name == "keyring":
+            # keyring is installed but one of its own imports is missing.
+            raise ModuleNotFoundError(
+                "No module named 'keyring._broken'", name="keyring._broken"
+            )
+        return real_import_module(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib, "import_module", _break_keyring_subimport)
+    monkeypatch.delitem(sys.modules, "keyring", raising=False)
+
+    with pytest.raises(ModuleNotFoundError):
+        SystemKeyringSecretStore._load_keyring_module()
+
+
+def test_load_keyring_module_or_none_logs_and_degrades_for_broken_keyring(monkeypatch, caplog):
+    """A broken installed keyring is logged and degrades to None; never escapes."""
+    def _raise_broken():
+        raise RuntimeError("backend init failed")
+
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(_raise_broken))
+    SystemKeyringSecretStore._native_macos_security_reads_cache = None
+
+    with caplog.at_level(logging.WARNING, logger="codex_plugin_scanner.guard.store"):
+        assert SystemKeyringSecretStore._load_keyring_module_or_none() is None
+        assert SystemKeyringSecretStore._backend_is_available() is False
+        assert SystemKeyringSecretStore(service_name="hol-guard.test").get_secret("x") is None
+
+    assert any(
+        "keyring backend could not be initialized" in record.message for record in caplog.records
+    )
 
 
 def test_system_keyring_timeout_uses_noninteractive_macos_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
