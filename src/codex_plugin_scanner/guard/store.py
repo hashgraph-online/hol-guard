@@ -232,6 +232,8 @@ _CLOUD_SYNC_LOCK_TIMEOUT_SECONDS = 30.0
 _CLOUD_SYNC_LOCK_POLL_SECONDS = 0.05
 _GUARD_STORE_PRIVATE_DIR_MODE = 0o700
 _GUARD_STORE_PRIVATE_FILE_MODE = 0o600
+_SYSTEM_KEYRING_AVAILABILITY_CACHE_FILE = "system-keyring-availability.json"
+_SYSTEM_KEYRING_AVAILABILITY_CACHE_TTL_SECONDS = 86_400.0
 _POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES = frozenset({"missing_integrity", "unknown_key"})
 
 
@@ -775,6 +777,66 @@ def _set_private_mode(path: Path, mode: int) -> None:
         return
 
 
+def _system_keyring_availability_cache_path(guard_home: Path) -> Path:
+    return guard_home / _SYSTEM_KEYRING_AVAILABILITY_CACHE_FILE
+
+
+def _read_system_keyring_availability_cache(guard_home: Path) -> bool | None:
+    if sys.platform != "darwin":
+        return None
+    path = _system_keyring_availability_cache_path(guard_home)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    checked_at = payload.get("checked_at")
+    available = payload.get("available")
+    if isinstance(checked_at, bool) or not isinstance(checked_at, (int, float)):
+        return None
+    if not isinstance(available, bool):
+        return None
+    if (time.time() - float(checked_at)) >= _SYSTEM_KEYRING_AVAILABILITY_CACHE_TTL_SECONDS:
+        return None
+    return available
+
+
+def _write_system_keyring_availability_cache(guard_home: Path, *, available: bool) -> None:
+    if sys.platform != "darwin":
+        return
+    path = _system_keyring_availability_cache_path(guard_home)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    payload = {
+        "available": available,
+        "checked_at": time.time(),
+    }
+    try:
+        tmp_path.write_text(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        _set_private_mode(tmp_path, _GUARD_STORE_PRIVATE_FILE_MODE)
+        tmp_path.replace(path)
+        _set_private_mode(path, _GUARD_STORE_PRIVATE_FILE_MODE)
+    except OSError:
+        return
+    finally:
+        if tmp_path.exists():
+            with suppress(OSError):
+                tmp_path.unlink()
+
+
+def _system_keyring_is_available(guard_home: Path) -> bool:
+    cached = _read_system_keyring_availability_cache(guard_home)
+    if cached is not None:
+        return cached
+    available = SystemKeyringSecretStore._is_available()
+    _write_system_keyring_availability_cache(guard_home, available=available)
+    return available
+
+
 def _build_secret_store(guard_home: Path) -> SecretStore:
     fallback_store = EncryptedFileSecretStore(guard_home)
     if KeychainSecretStore._is_available():
@@ -787,7 +849,7 @@ def _build_secret_store(guard_home: Path) -> SecretStore:
 
 def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
     fallback_store = EncryptedFileSecretStore(guard_home)
-    if SystemKeyringSecretStore._is_available():
+    if _system_keyring_is_available(guard_home):
         return FallbackSecretStore(
             SystemKeyringSecretStore(service_name="hol-guard.oauth"),
             fallback_store,
@@ -795,8 +857,8 @@ def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
     return fallback_store
 
 
-def _build_policy_integrity_secret_store() -> SystemKeyringSecretStore | None:
-    if SystemKeyringSecretStore._is_available():
+def _build_policy_integrity_secret_store(guard_home: Path) -> SystemKeyringSecretStore | None:
+    if _system_keyring_is_available(guard_home):
         return SystemKeyringSecretStore(service_name="hol-guard.policy-integrity")
     return None
 
@@ -853,7 +915,7 @@ class GuardStore:
         _set_private_mode(self.guard_home, _GUARD_STORE_PRIVATE_DIR_MODE)
         self._secret_store = _build_secret_store(self.guard_home)
         self._oauth_secret_store = _build_oauth_secret_store(self.guard_home)
-        self._policy_integrity_secret_store = _build_policy_integrity_secret_store()
+        self._policy_integrity_secret_store = _build_policy_integrity_secret_store(self.guard_home)
         self._cached_oauth_secret_payload: tuple[str, str, str] | None = None
         self._cached_policy_integrity_secret_material: tuple[str | None, float, tuple[bytes, str]] | None = None
         self._cached_policy_integrity_control_state: tuple[str | None, float, dict[str, object]] | None = None
