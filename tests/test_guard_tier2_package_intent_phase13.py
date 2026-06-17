@@ -121,11 +121,8 @@ GEM
 
 def test_parse_manifest_dependency_changes_truncates_large_cargo_workspace_safely() -> None:
     workspace_dependencies = "\n".join(f'crate{index} = "1.0.{index}"' for index in range(500))
-    before_text = "[workspace]\nmembers = [\"cli\"]\n[workspace.dependencies]\nclap = \"4.4\"\n"
-    after_text = (
-        "[workspace]\nmembers = [\"cli\", \"worker\"]\n[workspace.dependencies]\n"
-        f"{workspace_dependencies}\n"
-    )
+    before_text = '[workspace]\nmembers = ["cli"]\n[workspace.dependencies]\nclap = "4.4"\n'
+    after_text = f'[workspace]\nmembers = ["cli", "worker"]\n[workspace.dependencies]\n{workspace_dependencies}\n'
 
     result = parse_manifest_dependency_changes(
         path="Cargo.toml",

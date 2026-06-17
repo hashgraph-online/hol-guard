@@ -204,7 +204,7 @@ args = ["workspace-skill.js", "--changed"]
         assert output["cloud_state"] == "local_only"
         assert output["approval_center_url"] == "http://127.0.0.1:5474"
         assert output["bootstrap_install"]["reason"] == "skipped_by_flag"
-        assert GuardStore(guard_home).get_sync_credentials() is None
+        assert GuardStore(guard_home).get_cloud_sync_profile() is None
 
     def test_guard_start_recommends_copilot_when_it_is_the_only_detected_harness(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"

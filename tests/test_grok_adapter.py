@@ -62,7 +62,7 @@ class TestGrokDetect:
         grok_root = ctx.home_dir / ".grok"
         hooks_dir = grok_root / "hooks"
         hooks_dir.mkdir(parents=True)
-        (grok_root / "managed_config.toml").write_text("[permission]\nallow = [\"Read\"]\n", encoding="utf-8")
+        (grok_root / "managed_config.toml").write_text('[permission]\nallow = ["Read"]\n', encoding="utf-8")
         (hooks_dir / "custom.json").write_text(
             json.dumps(
                 {
@@ -210,7 +210,11 @@ class TestGrokHookResponses:
             artifact_id=None,
             artifact_name=None,
         )
-        payload = {"hookEventName": "pre_tool_use", "toolName": "run_terminal_command", "toolInput": {"command": "rm -rf /"}}
+        payload = {
+            "hookEventName": "pre_tool_use",
+            "toolName": "run_terminal_command",
+            "toolInput": {"command": "rm -rf /"},
+        }
         stderr_capture = io.StringIO()
         stdout_capture = io.StringIO()
         with redirect_stderr(stderr_capture):
@@ -439,7 +443,9 @@ GITHUB_TOKEN = "redacted"
             + "\n",
             encoding="utf-8",
         )
-        artifact = next(artifact for artifact in GrokHarnessAdapter().detect(ctx).artifacts if artifact.name == "github")
+        artifact = next(
+            artifact for artifact in GrokHarnessAdapter().detect(ctx).artifacts if artifact.name == "github"
+        )
         signal_ids = {signal.signal_id for signal in artifact_risk_signals_typed(artifact)}
         assert "secret:env-keys" in signal_ids
         assert "secret:env-semantic" in signal_ids

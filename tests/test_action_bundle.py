@@ -104,9 +104,7 @@ def test_python_safe_path_blocks_workspace_module_shadowing(tmp_path: Path) -> N
         encoding="utf-8",
     )
     hijacked_env = {
-        key: value
-        for key, value in os.environ.items()
-        if key not in {"PYTHONSAFEPATH", "PYTHONNOUSERSITE"}
+        key: value for key, value in os.environ.items() if key not in {"PYTHONSAFEPATH", "PYTHONNOUSERSITE"}
     }
     hijacked_env["PYTHONPATH"] = str(trusted_root)
 
@@ -135,9 +133,7 @@ def test_python_safe_path_blocks_workspace_module_shadowing(tmp_path: Path) -> N
 
 
 def test_publish_action_repo_workflow_syncs_action_repository() -> None:
-    workflow_text = (
-        ROOT / ".github" / "workflows" / "publish-action-repo.yml"
-    ).read_text(encoding="utf-8")
+    workflow_text = (ROOT / ".github" / "workflows" / "publish-action-repo.yml").read_text(encoding="utf-8")
 
     assert "Publish GitHub Action Repository" in workflow_text
     assert "ACTION_REPO_TOKEN" in workflow_text

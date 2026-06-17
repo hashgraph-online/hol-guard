@@ -36,6 +36,37 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_supply_chain_evaluator import WORKSPACE_ID, _bundle_response, _package
 
 
+def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
+    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
+
+    Also installs a test-only resolver override so sync-path exercises stay hermetic
+    (no OAuth token refresh against the network). Tests that need real sync against a
+    local server pass sync_url=<url>.
+    """
+    from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token=token,
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=workspace_id,
+        now=now,
+    )
+    effective_sync_url = sync_url if sync_url is not None else "https://hol.org/api/guard/receipts/sync"
+    guard_runner_module._test_sync_auth_context_override = {
+        "sync_url": effective_sync_url,
+        "access_token": token,
+        "dpop_key_material": None,
+    }
+
+
 def _read_json_response_details(
     request: urllib.request.Request,
 ) -> tuple[int, dict[str, object], dict[str, str]]:
@@ -1016,12 +1047,7 @@ def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(
     monkeypatch.setenv("HOME", str(home_dir))
     monkeypatch.setenv("SHELL", "/bin/zsh")
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "cloud-token",
-        "2026-05-27T16:00:00.000Z",
-        workspace_id="workspace-1",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-1")
     store.set_sync_payload(
         "supply_chain_bundle_entitlement",
         {"tier": "premium", "workspace_id": "workspace-1"},
@@ -1118,12 +1144,7 @@ def test_supply_chain_audit_scans_workspace_manifests(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "cloud-token",
-        audit_now,
-        workspace_id=WORKSPACE_ID,
-    )
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     bundle_response = _bundle_response(
         packages=[
             _package(
@@ -1385,12 +1406,7 @@ def test_supply_chain_package_firewall_rejects_duplicate_managers(tmp_path: Path
 
 def test_supply_chain_dashboard_session_claims_scope_action_and_managers(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "cloud-token",
-        "2026-05-27T16:00:00.000Z",
-        workspace_id="workspace-1",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-1")
     store.set_sync_payload(
         "supply_chain_bundle_entitlement",
         {"tier": "premium", "workspace_id": "workspace-1"},
@@ -1602,7 +1618,7 @@ def test_cloud_app_handoff_start_does_not_save_raw_sync_credentials(tmp_path: Pa
     assert status == 410
     assert payload["error"] == "legacy_cloud_handoff_disabled"
     assert "guard-runtime-token" not in json.dumps(payload)
-    assert store.get_sync_credentials() is None
+    assert store.get_cloud_sync_profile() is None
 
 
 def test_cloud_app_handoff_navigation_requires_auth_before_legacy_sync_query_handling(tmp_path: Path) -> None:
@@ -1634,7 +1650,7 @@ def test_cloud_app_handoff_navigation_requires_auth_before_legacy_sync_query_han
     assert status == 401
     assert payload["error"] == "unauthorized"
     assert "guard-runtime-token" not in json.dumps(payload)
-    assert store.get_sync_credentials() is None
+    assert store.get_cloud_sync_profile() is None
 
 
 def test_cloud_app_handoff_complete_rejects_legacy_handoff_token(tmp_path: Path) -> None:
@@ -1726,12 +1742,7 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "cloud-token",
-        "2026-05-23T17:18:00.000Z",
-        workspace_id="workspace-1",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-1")
     sync_calls: list[str] = []
     sync_finished = threading.Event()
     store.record_guard_connect_pairing_completed(
@@ -1799,12 +1810,7 @@ def test_headless_app_scan_does_not_spawn_unbounded_cloud_sync_threads(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "cloud-token",
-        "2026-05-23T17:18:00.000Z",
-        workspace_id="workspace-1",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-1")
     sync_calls: list[int] = []
     sync_started = threading.Event()
     sync_release = threading.Event()

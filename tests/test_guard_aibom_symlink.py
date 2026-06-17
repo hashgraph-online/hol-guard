@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -15,6 +14,8 @@ from codex_plugin_scanner.guard.aibom_symlink import (
 )
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+
+
 def test_fingerprint_redacted_path_never_emits_raw_home(tmp_path: Path) -> None:
     workspace = tmp_path / "repo"
     workspace.mkdir()
@@ -112,10 +113,7 @@ def test_classify_workspace_relative_path(tmp_path: Path) -> None:
     agents_md = workspace / "AGENTS.md"
     agents_md.write_text("policy\n", encoding="utf-8")
 
-    assert (
-        classify_path_class(agents_md, home_dir=tmp_path / "home", workspace_dir=workspace)
-        == "workspace_relative"
-    )
+    assert classify_path_class(agents_md, home_dir=tmp_path / "home", workspace_dir=workspace) == "workspace_relative"
 
 
 def test_inspection_serializes_without_raw_paths(tmp_path: Path) -> None:

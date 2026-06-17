@@ -282,7 +282,7 @@ def test_prepare_cursor_hook_payload_maps_after_mcp_execution() -> None:
             "hook_event_name": "afterMCPExecution",
             "tool_name": "ctx_shell",
             "tool_input": {"command": "pnpm test"},
-            "result_json": "{\"ok\": true}",
+            "result_json": '{"ok": true}',
             "duration": 42,
         }
     )
@@ -913,7 +913,7 @@ def test_cursor_native_mcp_session_allow_generic_tool_name(tmp_path: Path) -> No
                 "hook_event_name": "afterMCPExecution",
                 "tool_name": "run_terminal_cmd",
                 "tool_input": {"command": inner_command},
-                "result_json": "{\"ok\": true}",
+                "result_json": '{"ok": true}',
                 "duration": 12,
             }
         ),
@@ -988,7 +988,7 @@ def test_cursor_native_mcp_session_allow_after_trusted_after_mcp(tmp_path: Path)
                 "hook_event_name": "afterMCPExecution",
                 "tool_name": "ctx_shell",
                 "tool_input": {"command": inner_command},
-                "result_json": "{\"ok\": true}",
+                "result_json": '{"ok": true}',
                 "duration": 12,
             }
         ),

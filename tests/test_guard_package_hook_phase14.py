@@ -22,6 +22,38 @@ from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.store import GuardStore
 
+
+def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
+    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
+
+    Also installs a test-only resolver override so sync-path exercises stay hermetic
+    (no OAuth token refresh against the network). Tests that need real sync against a
+    local server pass sync_url=<url>.
+    """
+    from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token=token,
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=workspace_id,
+        now=now,
+    )
+    effective_sync_url = sync_url if sync_url is not None else "https://hol.org/api/guard/receipts/sync"
+    guard_runner_module._test_sync_auth_context_override = {
+        "sync_url": effective_sync_url,
+        "access_token": token,
+        "dpop_key_material": None,
+    }
+
+
 pytest_plugins = ["tests.bundle_first_cloud"]
 pytestmark = pytest.mark.usefixtures("bundle_first_cloud")
 
@@ -183,14 +215,11 @@ def _run_guard_hook(
         ]
     )
     return rc, json.loads(capsys.readouterr().out)
+
+
 def _seed_review_bundle(home_dir: Path, *, harness_selector: str = "*") -> GuardStore:
     store = GuardStore(home_dir)
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "demo-token",
-        "2026-05-19T00:00:00Z",
-        workspace_id=WORKSPACE_ID,
-    )
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(
@@ -217,12 +246,7 @@ def _seed_review_bundle(home_dir: Path, *, harness_selector: str = "*") -> Guard
 
 def _seed_block_bundle(home_dir: Path) -> GuardStore:
     store = GuardStore(home_dir)
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "demo-token",
-        "2026-05-19T00:00:00Z",
-        workspace_id=WORKSPACE_ID,
-    )
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(action="block"),
@@ -402,9 +426,9 @@ def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
     assert decision["harness_message"].startswith("HOL Guard blocked")
     assert "Reason:" in decision["harness_message"]
     assert "Fix: install `npm install minimist@1.2.9` or choose a team exception." in decision["harness_message"]
-    assert "Open HOL Guard to approve or keep this blocked: http://127.0.0.1:5474/requests/" in decision[
-        "harness_message"
-    ]
+    assert (
+        "Open HOL Guard to approve or keep this blocked: http://127.0.0.1:5474/requests/" in decision["harness_message"]
+    )
     assert "guard/inbox" not in decision["harness_message"]
 
 

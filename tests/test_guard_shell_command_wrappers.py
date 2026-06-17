@@ -13,9 +13,7 @@ from codex_plugin_scanner.guard.runtime.shell_command_wrappers import (
 
 
 def test_normalize_transparent_shell_command_unwraps_lean_ctx_chain() -> None:
-    wrapped = (
-        "env FOO=bar ./bin/lean-ctx -c 'rg -n \"service_principal|reauthorization\" src app __tests__ docs'"
-    )
+    wrapped = "env FOO=bar ./bin/lean-ctx -c 'rg -n \"service_principal|reauthorization\" src app __tests__ docs'"
 
     normalized = normalize_transparent_shell_command(wrapped)
 
@@ -36,7 +34,7 @@ def test_normalize_transparent_shell_command_unwraps_shell_c_wrapper() -> None:
 
 
 def test_normalize_transparent_shell_command_tolerates_malformed_inner_quotes() -> None:
-    wrapped = "FOO=bar ./bin/lean-ctx -c \"rg 'unclosed src\""
+    wrapped = 'FOO=bar ./bin/lean-ctx -c "rg \'unclosed src"'
 
     normalized = normalize_transparent_shell_command(wrapped)
 
@@ -60,9 +58,7 @@ def test_normalize_opencode_payload_uses_inner_command_for_shell_wrappers(tmp_pa
         "hook_event_name": "PreToolUse",
         "tool_name": "bash",
         "tool_input": {
-            "command": (
-                "./bin/lean-ctx -c 'rg -n \"service_principal|reauthorization\" src app __tests__ docs'"
-            )
+            "command": ("./bin/lean-ctx -c 'rg -n \"service_principal|reauthorization\" src app __tests__ docs'")
         },
     }
 
@@ -82,12 +78,7 @@ def test_wrapped_read_only_shell_command_stays_unblocked() -> None:
 
     request = extract_sensitive_tool_action_request(
         "bash",
-        {
-            "command": (
-                "./bin/lean-ctx -c "
-                "'rg -n \"service_principal|reauthorization\" src app __tests__ docs'"
-            )
-        },
+        {"command": ("./bin/lean-ctx -c 'rg -n \"service_principal|reauthorization\" src app __tests__ docs'")},
         **context_kwargs,
     )
 

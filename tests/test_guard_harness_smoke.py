@@ -46,9 +46,7 @@ class TestCodexCliSmoke:
         npmrc_prompt = _fixture_text(PROMPT_NPMRC_READ)
         requests = extract_prompt_requests(npmrc_prompt)
         classes = {r.request_class for r in requests}
-        assert "secret_read" in classes, (
-            "Guard did not classify .npmrc read as a secret_read request"
-        )
+        assert "secret_read" in classes, "Guard did not classify .npmrc read as a secret_read request"
 
     def test_canary_exfil_script_contains_fake_key_only(self) -> None:
         source = _fixture_text(CANARY_SCRIPT)
@@ -58,27 +56,19 @@ class TestCodexCliSmoke:
         real_gh_fine_grained_re = re.compile(r"github_pat_[A-Za-z0-9_]{82}")
         real_aws_key_re = re.compile(r"AKIA[0-9A-Z]{16}")
         real_npm_token_re = re.compile(r"npm_[A-Za-z0-9]{36}")
-        assert real_gh_token_re.search(source) is None, (
-            "Canary fixture must not contain real-looking GitHub tokens"
-        )
+        assert real_gh_token_re.search(source) is None, "Canary fixture must not contain real-looking GitHub tokens"
         assert real_gh_fine_grained_re.search(source) is None, (
             "Canary fixture must not contain real-looking GitHub fine-grained PATs"
         )
-        assert real_aws_key_re.search(source) is None, (
-            "Canary fixture must not contain real-looking AWS access keys"
-        )
-        assert real_npm_token_re.search(source) is None, (
-            "Canary fixture must not contain real-looking npm tokens"
-        )
+        assert real_aws_key_re.search(source) is None, "Canary fixture must not contain real-looking AWS access keys"
+        assert real_npm_token_re.search(source) is None, "Canary fixture must not contain real-looking npm tokens"
 
     def test_canary_exfil_script_triggers_exfil_detection(self) -> None:
         """Verify canary exfil patterns trigger data-flow detection via a simulated shell action."""
         source = _fixture_text(CANARY_SCRIPT)
         fake_key_re = re.compile(r"hol-fake-key-[0-9a-f]+")
         canary_url_re = re.compile(r"https://evil\.hol\.org/")
-        assert fake_key_re.search(source) is not None, (
-            "Canary exfil script must contain fake key material"
-        )
+        assert fake_key_re.search(source) is not None, "Canary exfil script must contain fake key material"
         canary_url_match = canary_url_re.search(source)
         assert canary_url_match is not None, (
             "Canary exfil script must reference canary endpoint with a complete URL path"
@@ -121,8 +111,20 @@ class TestCodexCliSmoke:
         env_file.write_text("//registry.npmjs.org/:_authToken=hol-fake-npm-token\n")
 
         result = subprocess.run(
-            [sys.executable, "-m", "codex_plugin_scanner.cli", "guard", "run", "codex",
-             "--dry-run", "--json", "--workspace", str(tmp_path), "--home", str(tmp_path / "home")],
+            [
+                sys.executable,
+                "-m",
+                "codex_plugin_scanner.cli",
+                "guard",
+                "run",
+                "codex",
+                "--dry-run",
+                "--json",
+                "--workspace",
+                str(tmp_path),
+                "--home",
+                str(tmp_path / "home"),
+            ],
             capture_output=True,
             text=True,
             check=False,
@@ -130,9 +132,7 @@ class TestCodexCliSmoke:
         )
         if not result.stdout:
             pytest.fail(f"Guard produced no output. Stderr: {result.stderr}")
-        assert result.returncode == 0, (
-            f"Guard run exited with code {result.returncode}. Stderr: {result.stderr}"
-        )
+        assert result.returncode == 0, f"Guard run exited with code {result.returncode}. Stderr: {result.stderr}"
         try:
             payload = json.loads(result.stdout)
             assert payload.get("dry_run") is True or payload.get("harness") == "codex", (
@@ -162,9 +162,7 @@ class TestClaudeCodeSmoke:
         env_prompt = _fixture_text(PROMPT_ENV_READ)
         requests = extract_prompt_requests(env_prompt)
         classes = {r.request_class for r in requests}
-        assert "secret_read" in classes, (
-            "Guard must classify .env read prompt as secret_read"
-        )
+        assert "secret_read" in classes, "Guard must classify .env read prompt as secret_read"
 
     def test_guard_bypass_prompt_classified_as_high_risk(self) -> None:
         bypass_prompt = _fixture_text(PROMPT_GUARD_BYPASS)
@@ -225,9 +223,7 @@ class TestOpenCodeSmoke:
             redaction_settings={},
         )
         signals = SecretPathDetector().detect(action, ctx)
-        assert len(signals) > 0, (
-            "SecretPathDetector must flag ~/.aws/credentials as a high-risk file read"
-        )
+        assert len(signals) > 0, "SecretPathDetector must flag ~/.aws/credentials as a high-risk file read"
 
     @pytest.mark.skipif(not _has_harness("opencode"), reason="opencode CLI not installed")
     def test_live_opencode_mcp_dangerous_tool_shows_guard_attribution(self) -> None:
@@ -242,9 +238,7 @@ class TestCopilotSmoke:
         source = _fixture_text(CANARY_ENCODED_SCRIPT)
         requests = extract_prompt_requests(source)
         classes = {r.request_class for r in requests}
-        assert "subprocess_intent" in classes, (
-            "Encoded canary script must trigger subprocess_intent detection"
-        )
+        assert "subprocess_intent" in classes, "Encoded canary script must trigger subprocess_intent detection"
         action = GuardActionEnvelope(
             schema_version=1,
             action_id="",

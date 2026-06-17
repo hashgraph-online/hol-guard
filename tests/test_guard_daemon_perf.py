@@ -245,6 +245,7 @@ class TestMemoryBenchmark:
         )
         assert result.returncode == 0, f"Subprocess failed: {result.stderr}"
         import ast
+
         leaked = ast.literal_eval(result.stdout.strip())
         assert not leaked, f"Guard import leaked heavy dependencies: {leaked}"
 
