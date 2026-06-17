@@ -1015,6 +1015,7 @@ litellm==1.89.1 \
     --hash=sha256:eb9292f90afe46dcce4bfef6bbeaa54494945813763e1c0917f4e9a1c584c1a4
     # via
     #   --override (workspace)
+    #   hol-guard (pyproject.toml)
     #   cisco-ai-mcp-scanner
     #   cisco-ai-skill-scanner
 magika==1.0.3 \

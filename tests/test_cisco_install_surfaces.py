@@ -22,7 +22,8 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     override_entries = pyproject["tool"]["uv"]["override-dependencies"]
 
     assert "cisco-ai-mcp-scanner" not in dependencies
-    assert "cisco-ai-mcp-scanner~=4.7" in cisco_extra
+    assert "cisco-ai-mcp-scanner~=4.7.0" in cisco_extra
+    assert "litellm==1.89.1" in cisco_extra
     assert "python_version >= '3.11'" in cisco_extra
     assert "cisco-ai-skill-scanner~=2.0.11" in dependency_entries
     assert "aiohttp==3.14.1" in override_entries
@@ -63,7 +64,7 @@ def test_readme_distinguishes_baseline_and_full_cisco_installs() -> None:
     assert 'pip install "hol-guard[cisco]"' in readme
     assert 'pip install "plugin-scanner[cisco]"' in readme
     assert "Python 3.11+" in readme
-    assert "published `litellm==1.89.1` release" in readme
+    assert "the `cisco` extra includes that Cisco-compatible pin" in readme
     assert "deferred" in readme
     assert "cisco-ai-a2a-scanner" in readme
     assert "cisco-aibom" in readme
@@ -83,6 +84,8 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert "uv sync --frozen --extra dev --extra publish --extra cisco" in publish_workflow
     assert 'uv tool install "hol-guard[cisco]==' in publish_workflow
     assert "COPY docker-requirements.txt LICENSE README.md /app/" in dockerfile
+    assert "FROM python:3.13-slim@" in dockerfile
+    assert "FROM python:3.14-slim" not in dockerfile
     assert "python3 -m pip install --no-deps --require-hashes -r /app/docker-requirements.txt" in dockerfile
     assert "apt-get install -y --no-install-recommends gcc libc6-dev" in dockerfile
     assert "apt-get purge -y --auto-remove gcc libc6-dev" in dockerfile
