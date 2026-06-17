@@ -41,11 +41,7 @@ def _all_string_literals(source: str, fixture_name: str) -> list[str]:
         raise AssertionError(
             f"{fixture_name}: Python syntax error — cannot safely scan for real key material: {exc}"
         ) from exc
-    return [
-        node.value
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Constant) and isinstance(node.value, str)
-    ]
+    return [node.value for node in ast.walk(tree) if isinstance(node, ast.Constant) and isinstance(node.value, str)]
 
 
 def _all_text_tokens(text: str) -> list[str]:
@@ -68,11 +64,7 @@ class TestRedTeamManifest:
     def test_all_disk_fixtures_covered_by_manifest(self) -> None:
         decisions = _load_decisions()
         manifest_names: set[str] = set(decisions["fixtures"].keys())
-        disk_names = {
-            p.name
-            for p in FIXTURES_DIR.iterdir()
-            if p.is_file() and p.name not in _NON_FIXTURE_NAMES
-        }
+        disk_names = {p.name for p in FIXTURES_DIR.iterdir() if p.is_file() and p.name not in _NON_FIXTURE_NAMES}
         uncovered = sorted(disk_names - manifest_names)
         assert not uncovered, (
             f"Fixture files on disk not covered by manifest: {uncovered}. "
@@ -88,11 +80,7 @@ class TestRedTeamManifest:
 class TestMaliciousFixtures:
     def _malicious_fixtures(self) -> list[tuple[str, Path]]:
         decisions = _load_decisions()
-        return [
-            (name, FIXTURES_DIR / name)
-            for name, meta in decisions["fixtures"].items()
-            if not meta["benign"]
-        ]
+        return [(name, FIXTURES_DIR / name) for name, meta in decisions["fixtures"].items() if not meta["benign"]]
 
     def test_malicious_fixtures_use_only_fake_keys(self) -> None:
         for fixture_name, fixture_path in self._malicious_fixtures():
@@ -117,9 +105,7 @@ class TestMaliciousFixtures:
         for fixture_name, fixture_path in self._malicious_fixtures():
             source = fixture_path.read_text(encoding="utf-8")
             for pattern in _REAL_ENDPOINT_PATTERNS:
-                assert pattern not in source, (
-                    f"{fixture_name}: contains real endpoint pattern '{pattern}'"
-                )
+                assert pattern not in source, f"{fixture_name}: contains real endpoint pattern '{pattern}'"
 
     def test_no_local_user_paths_in_malicious_fixtures(self) -> None:
         for fixture_name, fixture_path in self._malicious_fixtures():
@@ -142,25 +128,19 @@ class TestBenignFixtures:
     def test_benign_fixtures_do_not_target_exfil_endpoint(self) -> None:
         for fixture_name, fixture_path in self._benign_fixtures():
             source = fixture_path.read_text(encoding="utf-8")
-            assert _CANARY_COLLECT_URL not in source, (
-                f"{fixture_name}: benign fixture contains canary exfil URL"
-            )
+            assert _CANARY_COLLECT_URL not in source, f"{fixture_name}: benign fixture contains canary exfil URL"
 
     def test_benign_fixtures_do_not_use_real_key_prefixes(self) -> None:
         for fixture_name, fixture_path in self._benign_fixtures():
             source = fixture_path.read_text(encoding="utf-8")
             for prefix in _REAL_KEY_PREFIXES:
-                assert prefix not in source, (
-                    f"{fixture_name}: benign fixture contains real key prefix '{prefix}'"
-                )
+                assert prefix not in source, f"{fixture_name}: benign fixture contains real key prefix '{prefix}'"
 
     def test_no_local_user_paths_in_benign_fixtures(self) -> None:
         for fixture_name, fixture_path in self._benign_fixtures():
             source = fixture_path.read_text(encoding="utf-8")
             match = _HOME_PATH_RE.search(source)
-            assert match is None, (
-                f"{fixture_name}: contains local path '{match.group()}'"
-            )
+            assert match is None, f"{fixture_name}: contains local path '{match.group()}'"
 
 
 class TestAllFixturesNoLocalSecrets:
@@ -179,6 +159,4 @@ class TestAllFixturesNoLocalSecrets:
                 for m in env_var_pattern.finditer(source)
                 if "hol-fake" not in m.group().lower() and "placeholder" not in m.group().lower()
             ]
-            assert not real_env_matches, (
-                f"{name}: looks like real env var contents: {real_env_matches[:2]}"
-            )
+            assert not real_env_matches, f"{name}: looks like real env var contents: {real_env_matches[:2]}"

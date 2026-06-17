@@ -183,9 +183,7 @@ def test_default_codex_app_server_socket_probe_uses_codex_home(
         codex_app_server_module.default_codex_app_server_socket_path(environ={"CODEX_HOME": str(codex_home)})
         == socket_path
     )
-    assert codex_app_server_module.default_codex_app_server_socket_available(
-        environ={"CODEX_HOME": str(codex_home)}
-    )
+    assert codex_app_server_module.default_codex_app_server_socket_available(environ={"CODEX_HOME": str(codex_home)})
     assert connect_paths == [str(socket_path)]
 
 

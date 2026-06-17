@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.runtime.harness_attribution import (
     cursor_hook_query_extras,

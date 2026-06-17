@@ -89,7 +89,9 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert "apt-get clean" in dockerfile
     requirements_copy_index = dockerfile.index("COPY docker-requirements.txt LICENSE README.md /app/")
     build_deps_index = dockerfile.index("apt-get install -y --no-install-recommends gcc libc6-dev")
-    pip_install_index = dockerfile.index("python3 -m pip install --no-deps --require-hashes -r /app/docker-requirements.txt")
+    pip_install_index = dockerfile.index(
+        "python3 -m pip install --no-deps --require-hashes -r /app/docker-requirements.txt"
+    )
     purge_index = dockerfile.index("apt-get purge -y --auto-remove gcc libc6-dev")
     source_copy_index = dockerfile.index("COPY src /app/src")
     assert requirements_copy_index < pip_install_index

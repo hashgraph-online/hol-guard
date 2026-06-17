@@ -20,6 +20,37 @@ from codex_plugin_scanner.guard.schemas.guard_event_v1 import GuardEventV1
 from codex_plugin_scanner.guard.store import GuardStore
 
 
+def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
+    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
+
+    Also installs a test-only resolver override so sync-path exercises stay hermetic
+    (no OAuth token refresh against the network). Tests that need real sync against a
+    local server pass sync_url=<url>.
+    """
+    from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token=token,
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=workspace_id,
+        now=now,
+    )
+    effective_sync_url = sync_url if sync_url is not None else "https://hol.org/api/guard/receipts/sync"
+    guard_runner_module._test_sync_auth_context_override = {
+        "sync_url": effective_sync_url,
+        "access_token": token,
+        "dpop_key_material": None,
+    }
+
+
 def _receipt() -> GuardReceipt:
     return GuardReceipt(
         receipt_id="receipt-1",
@@ -207,10 +238,10 @@ def test_sync_guard_events_posts_to_v1_ingest(tmp_path) -> None:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        store.set_sync_credentials(
-            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
-            "token-1",
-            "2026-04-24T00:00:00+00:00",
+        _seed_guard_cloud(
+            store,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="token-1",
         )
 
         result = sync_guard_events(store)
@@ -233,11 +264,7 @@ def test_sync_guard_events_normalizes_registry_base_url(tmp_path) -> None:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        store.set_sync_credentials(
-            f"http://127.0.0.1:{server.server_port}/registry/api/v1",
-            "token-1",
-            "2026-04-24T00:00:00+00:00",
-        )
+        _seed_guard_cloud(store, sync_url=f"http://127.0.0.1:{server.server_port}/registry/api/v1", token="token-1")
 
         result = sync_guard_events(store)
     finally:
@@ -256,10 +283,10 @@ def test_sync_receipts_uploads_pending_guard_events(tmp_path) -> None:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        store.set_sync_credentials(
-            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
-            "token-1",
-            "2026-04-24T00:00:00+00:00",
+        _seed_guard_cloud(
+            store,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="token-1",
         )
 
         result = sync_receipts(store)
@@ -284,10 +311,10 @@ def test_sync_receipts_keeps_receipt_success_when_v1_events_endpoint_is_missing(
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        store.set_sync_credentials(
-            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
-            "token-1",
-            "2026-04-24T00:00:00+00:00",
+        _seed_guard_cloud(
+            store,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="token-1",
         )
 
         result = sync_receipts(store)
@@ -309,10 +336,10 @@ def test_sync_guard_events_marks_rejected_events_processed(tmp_path) -> None:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        store.set_sync_credentials(
-            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
-            "token-1",
-            "2026-04-24T00:00:00+00:00",
+        _seed_guard_cloud(
+            store,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="token-1",
         )
 
         result = sync_guard_events(store)

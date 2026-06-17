@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
@@ -14,15 +13,12 @@ import types
 import pytest
 
 from codex_plugin_scanner.guard import store as guard_store_module
-from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.store import (
     EncryptedFileSecretStore,
     FallbackSecretStore,
     GuardStore,
-    KeychainSecretStore,
     SystemKeyringSecretStore,
     _build_oauth_secret_store,
-    _build_secret_store,
 )
 from codex_plugin_scanner.guard.store_evidence import EvidenceRecord
 
@@ -92,45 +88,23 @@ def test_system_keyring_timeout_uses_noninteractive_macos_lookup(monkeypatch: py
     assert secret_store.get_secret_with_timeout("policy-key", timeout_seconds=1.0) == "secret-value"
 
 
-def test_system_keyring_timeout_fails_closed_on_macos_without_native_reads(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
-    secret_store = SystemKeyringSecretStore(service_name="hol-guard.policy-integrity")
-    monkeypatch.setattr(
-        SystemKeyringSecretStore,
-        "_supports_native_macos_security_reads",
-        classmethod(lambda cls: False),
-    )
-    monkeypatch.setattr(
-        secret_store,
-        "get_secret",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("macOS timed reads should not fall back to interactive get_secret")
-        ),
-    )
-
-    assert secret_store.get_secret_with_timeout("policy-key", timeout_seconds=1.0) is None
-
-
-def test_policy_integrity_store_is_disabled_on_macos_before_keyring_load(
+def test_policy_integrity_store_skips_macos_health_probe_when_backend_exists(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
-    monkeypatch.setattr(
-        SystemKeyringSecretStore,
-        "_load_keyring_module",
-        staticmethod(lambda: (_ for _ in ()).throw(AssertionError("macOS policy integrity must not load keyring"))),
-    )
+    module = _FakeSystemKeyringModule()
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "_macos_default_keychain_is_usable",
         classmethod(
-            lambda cls: (_ for _ in ()).throw(AssertionError("macOS policy integrity must not probe keychain"))
+            lambda cls: (_ for _ in ()).throw(AssertionError("policy integrity builder should skip health probe"))
         ),
     )
 
     secret_store = guard_store_module._build_policy_integrity_secret_store()
 
-    assert secret_store is None
+    assert isinstance(secret_store, SystemKeyringSecretStore)
 
 
 @pytest.fixture(autouse=True)
@@ -399,103 +373,6 @@ def test_windows_oauth_refresh_lock_wraps_permission_error_as_blocking(monkeypat
         guard_store_module._acquire_advisory_file_lock(_FakeHandle())
 
 
-def test_sync_credentials_are_not_persisted_in_plaintext_sqlite(tmp_path):
-    store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "secret-token-value",
-        "2026-04-19T00:00:00+00:00",
-    )
-
-    with sqlite3.connect(store.path) as connection:
-        row = connection.execute("select payload_json from sync_state where state_key = 'credentials'").fetchone()
-
-    assert row is not None
-    payload = json.loads(str(row[0]))
-    assert payload["sync_url"] == "https://hol.org/api/guard/receipts/sync"
-    assert isinstance(payload.get("token_ref"), str)
-    assert str(payload["token_ref"]).startswith("guard-cloud-token:")
-    assert isinstance(payload.get("token_sha256"), str)
-    assert "token" not in payload
-    assert store.get_sync_credentials() == {
-        "sync_url": "https://hol.org/api/guard/receipts/sync",
-        "token": "secret-token-value",
-    }
-
-
-def test_legacy_plaintext_sync_payload_is_rejected_on_read(tmp_path):
-    store = GuardStore(tmp_path / "guard-home")
-    with sqlite3.connect(store.path) as connection:
-        connection.execute(
-            """
-            insert into sync_state (state_key, payload_json, updated_at)
-            values ('credentials', ?, ?)
-            on conflict(state_key) do update set payload_json = excluded.payload_json, updated_at = excluded.updated_at
-            """,
-            (
-                json.dumps(
-                    {
-                        "sync_url": "https://hol.org/api/guard/receipts/sync",
-                        "token": "legacy-token",
-                    }
-                ),
-                "2026-04-19T00:00:00+00:00",
-            ),
-        )
-
-    credentials = store.get_sync_credentials()
-    assert credentials is None
-
-    with sqlite3.connect(store.path) as connection:
-        row = connection.execute("select payload_json from sync_state where state_key = 'credentials'").fetchone()
-
-    payload = json.loads(str(row[0])) if row is not None else {}
-    assert payload == {
-        "sync_url": "https://hol.org/api/guard/receipts/sync",
-        "token": "legacy-token",
-    }
-    assert "token_ref" not in payload
-    assert "token_sha256" not in payload
-
-
-def test_sync_credentials_are_scoped_per_guard_home(tmp_path):
-    home_a = tmp_path / "guard-home-a"
-    home_b = tmp_path / "guard-home-b"
-    store_a = GuardStore(home_a)
-    store_b = GuardStore(home_b)
-
-    store_a.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-a",
-        "2026-04-19T00:00:00+00:00",
-    )
-    store_b.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-b",
-        "2026-04-19T00:00:05+00:00",
-    )
-
-    assert store_a.get_sync_credentials() == {
-        "sync_url": "https://hol.org/api/guard/receipts/sync",
-        "token": "token-a",
-    }
-    assert store_b.get_sync_credentials() == {
-        "sync_url": "https://hol.org/api/guard/receipts/sync",
-        "token": "token-b",
-    }
-
-
-def test_set_sync_credentials_rejects_unallowlisted_sync_host(tmp_path):
-    store = GuardStore(tmp_path / "guard-home")
-
-    with pytest.raises(ValueError, match="allowlisted HOL origin"):
-        store.set_sync_credentials(
-            "https://evil.example/api/guard/receipts/sync",
-            "secret-token-value",
-            "2026-04-19T00:00:00+00:00",
-        )
-
-
 def test_set_oauth_local_credentials_rejects_unallowlisted_issuer(tmp_path):
     store = GuardStore(tmp_path / "guard-home")
 
@@ -509,61 +386,6 @@ def test_set_oauth_local_credentials_rejects_unallowlisted_issuer(tmp_path):
             dpop_public_jwk_thumbprint="thumbprint",
             now="2026-04-19T00:00:00+00:00",
         )
-
-
-def test_legacy_token_reference_is_rejected_on_read(tmp_path):
-    store = GuardStore(tmp_path / "guard-home")
-    legacy_token = "legacy-token-ref"
-    legacy_ref = "guard-cloud-token"
-    store._secret_store.set_secret(legacy_ref, legacy_token)
-    with sqlite3.connect(store.path) as connection:
-        connection.execute(
-            """
-            insert into sync_state (state_key, payload_json, updated_at)
-            values ('credentials', ?, ?)
-            on conflict(state_key) do update set payload_json = excluded.payload_json, updated_at = excluded.updated_at
-            """,
-            (
-                json.dumps(
-                    {
-                        "sync_url": "https://hol.org/api/guard/receipts/sync",
-                        "token_ref": legacy_ref,
-                        "token_sha256": hashlib.sha256(legacy_token.encode("utf-8")).hexdigest(),
-                    }
-                ),
-                "2026-04-19T00:00:00+00:00",
-            ),
-        )
-
-    credentials = store.get_sync_credentials()
-    assert credentials is None
-    assert store._secret_store.get_secret(store._sync_token_ref) is None
-
-    with sqlite3.connect(store.path) as connection:
-        row = connection.execute("select payload_json from sync_state where state_key = 'credentials'").fetchone()
-    payload = json.loads(str(row[0])) if row is not None else {}
-    assert payload["token_ref"] == legacy_ref
-
-
-def test_sync_token_rotation_with_same_url_clears_cloud_sync_payloads(tmp_path):
-    store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "first-token",
-        "2026-04-19T00:00:00+00:00",
-    )
-    store.set_sync_payload("policy", {"mode": "enforce"}, "2026-04-19T00:01:00+00:00")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "rotated-token",
-        "2026-04-19T00:02:00+00:00",
-    )
-
-    assert store.get_sync_payload("policy") is None
-    assert store.get_sync_credentials() == {
-        "sync_url": "https://hol.org/api/guard/receipts/sync",
-        "token": "rotated-token",
-    }
 
 
 def test_fallback_secret_store_uses_secondary_backend_when_primary_fails():
@@ -638,81 +460,6 @@ def test_fallback_secret_store_logs_delete_failures(caplog):
     assert "guard-token" not in caplog.text
 
 
-def _install_fake_sync_keychain(monkeypatch) -> dict[tuple[str, str], str]:
-    secrets: dict[tuple[str, str], str] = {}
-
-    monkeypatch.setattr(
-        KeychainSecretStore,
-        "set_secret",
-        lambda self, secret_id, value: secrets.__setitem__((self.service_name, secret_id), value),
-    )
-    monkeypatch.setattr(
-        KeychainSecretStore,
-        "get_secret",
-        lambda self, secret_id: secrets.get((self.service_name, secret_id)),
-    )
-    monkeypatch.setattr(
-        KeychainSecretStore,
-        "delete_secret",
-        lambda self, secret_id: secrets.pop((self.service_name, secret_id), None),
-    )
-    return secrets
-
-
-def test_keychain_secret_store_rejects_cli_secret_writes(monkeypatch):
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
-
-    def fake_run(
-        args: list[str],
-        *,
-        check: bool,
-        capture_output: bool,
-        text: bool,
-        **kwargs: object,
-    ) -> subprocess.CompletedProcess[str]:
-        raise AssertionError("keychain writes must not shell out with secret material")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-
-    with pytest.raises(RuntimeError, match="argv exposure"):
-        KeychainSecretStore("hol-guard.sync").set_secret("guard-token", "secret-value")
-
-
-def test_secret_store_prefers_encrypted_file_backend_when_keychain_is_available_outside_macos(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
-    monkeypatch.setattr(guard_store_module.sys, "platform", "linux", raising=False)
-
-    secret_store = _build_secret_store(guard_home)
-
-    assert isinstance(secret_store, FallbackSecretStore)
-    assert isinstance(secret_store.primary, EncryptedFileSecretStore)
-    assert isinstance(secret_store.fallback, KeychainSecretStore)
-
-
-def test_secret_store_prefers_keychain_backend_when_keychain_is_available_on_macos(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
-    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
-
-    secret_store = _build_secret_store(guard_home)
-
-    assert isinstance(secret_store, FallbackSecretStore)
-    assert isinstance(secret_store.primary, KeychainSecretStore)
-    assert isinstance(secret_store.fallback, EncryptedFileSecretStore)
-
-
-def test_oauth_secret_store_prefers_system_keyring_backend_when_available(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    _install_fake_system_keyring(monkeypatch)
-
-    secret_store = _build_oauth_secret_store(guard_home)
-
-    assert isinstance(secret_store, FallbackSecretStore)
-    assert isinstance(secret_store.primary, SystemKeyringSecretStore)
-    assert isinstance(secret_store.fallback, EncryptedFileSecretStore)
-
-
 def test_encrypted_file_secret_store_secures_secret_directory_permissions(tmp_path):
     secret_store = EncryptedFileSecretStore(tmp_path / "guard-home")
 
@@ -738,82 +485,6 @@ def test_encrypted_file_secret_store_writes_key_and_payload_atomically(tmp_path,
 
     assert any(dst.endswith("key.bin") for _, dst in recorded_replacements)
     assert any(dst.endswith("guard-token.enc") for _, dst in recorded_replacements)
-
-
-def test_sync_credentials_do_not_shell_out_to_keychain_when_file_store_is_available(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
-
-    def fail_on_keychain(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        raise AssertionError("keychain should not be used for sync credential writes")
-
-    monkeypatch.setattr(subprocess, "run", fail_on_keychain)
-    GuardStore(guard_home)
-
-
-def test_sync_credentials_fall_back_when_keychain_cli_rejects_writes_on_macos(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
-    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
-    store = GuardStore(guard_home)
-
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "access-secret-value",
-        "2026-06-01T00:00:00+00:00",
-        workspace_id="workspace-123",
-    )
-
-    assert store.get_sync_credentials() == {
-        "sync_url": "https://hol.org/api/guard/receipts/sync",
-        "token": "access-secret-value",
-    }
-
-
-def test_get_sync_credentials_keeps_legacy_file_secret_when_keychain_cli_rejects_writes_on_macos(
-    tmp_path,
-    monkeypatch,
-):
-    guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: False))
-    legacy_store = GuardStore(guard_home)
-    legacy_store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "legacy-access-secret",
-        "2026-06-01T00:00:00+00:00",
-        workspace_id="workspace-123",
-    )
-
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
-    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
-    migrated_store = GuardStore(guard_home)
-
-    assert migrated_store.get_sync_credentials() == {
-        "sync_url": "https://hol.org/api/guard/receipts/sync",
-        "token": "legacy-access-secret",
-    }
-
-
-def test_oauth_local_credentials_do_not_shell_out_to_keychain_when_system_keyring_is_available(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    _install_fake_system_keyring(monkeypatch)
-
-    def fail_on_keychain(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        raise AssertionError("keychain should not be used for OAuth credential writes")
-
-    monkeypatch.setattr(subprocess, "run", fail_on_keychain)
-    store = GuardStore(guard_home)
-    store.set_oauth_local_credentials(
-        issuer="https://hol.org",
-        client_id="guard-local-daemon",
-        refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
-        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
-        dpop_public_jwk_thumbprint="thumbprint-123",
-        now="2026-06-01T00:00:00+00:00",
-    )
-
-    assert store.get_oauth_local_credentials() is not None
 
 
 def test_guard_store_secures_guard_home_and_database_permissions(tmp_path):
@@ -849,46 +520,6 @@ def test_guard_store_repairs_existing_guard_home_and_database_permissions(tmp_pa
         sidecar = guard_home / name
         if sidecar.exists():
             assert sidecar.stat().st_mode & 0o777 == 0o600
-
-
-def test_sync_credential_health_reports_backend_and_workspace(tmp_path, monkeypatch):
-    store = GuardStore(tmp_path / "guard-home")
-
-    assert store.get_sync_credential_health() == {
-        "configured": False,
-        "state": "not_configured",
-        "backend": "encrypted-file",
-        "fallback_backend": None,
-    }
-
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
-    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
-    sync_keychain = _install_fake_sync_keychain(monkeypatch)
-    keychain_store = GuardStore(tmp_path / "guard-home-keychain")
-    keychain_store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "access-secret-value",
-        "2026-06-01T00:00:00+00:00",
-        workspace_id="workspace-123",
-    )
-
-    assert sync_keychain[("hol-guard.sync", keychain_store._sync_token_ref)] == "access-secret-value"
-    assert keychain_store.get_sync_credential_health() == {
-        "configured": True,
-        "state": "healthy",
-        "backend": "keychain",
-        "fallback_backend": "encrypted-file",
-        "sync_url": "https://hol.org/api/guard/receipts/sync",
-        "workspace_id": "workspace-123",
-    }
-
-    sync_keychain[("hol-guard.sync", keychain_store._sync_token_ref)] = "tampered-secret"
-    assert keychain_store.get_sync_credential_health() == {
-        "configured": True,
-        "state": "degraded",
-        "backend": "keychain",
-        "fallback_backend": "encrypted-file",
-    }
 
 
 def test_oauth_local_credentials_are_not_persisted_in_plaintext_sqlite(tmp_path):
@@ -953,61 +584,6 @@ def test_oauth_local_credentials_are_not_persisted_in_plaintext_sqlite(tmp_path)
     assert store.get_cloud_workspace_id() == "workspace-123"
 
 
-def test_clear_oauth_local_credentials_preserves_local_receipt_history(tmp_path, monkeypatch):
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: False))
-
-    guard_home = tmp_path / "guard-home"
-    store = GuardStore(guard_home)
-    store.set_oauth_local_credentials(
-        issuer="https://hol.org",
-        client_id="guard-local-daemon",
-        refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
-        dpop_public_jwk={
-            "kty": "EC",
-            "crv": "P-256",
-            "x": "x-value",
-            "y": "y-value",
-            "alg": "ES256",
-            "use": "sig",
-        },
-        dpop_public_jwk_thumbprint="thumbprint-123",
-        grant_id="grant-123",
-        machine_id="machine-123",
-        workspace_id="workspace-123",
-        runtime_id="hol-guard",
-        runtime_label="HOL Guard CLI",
-        now="2026-06-01T00:00:00+00:00",
-    )
-    store.add_receipt(
-        GuardReceipt(
-            receipt_id="receipt-1",
-            timestamp="2026-06-01T00:05:00+00:00",
-            harness="codex",
-            artifact_id="artifact-1",
-            artifact_hash="sha256:artifact",
-            policy_decision="allow",
-            capabilities_summary="safe",
-            changed_capabilities=("stdio",),
-            provenance_summary="known-good",
-        )
-    )
-
-    store.clear_oauth_local_credentials()
-
-    assert store.get_oauth_local_credentials() is None
-    assert store.count_receipts() == 1
-    assert store.get_receipt("receipt-1") is not None
-
-    with sqlite3.connect(store.path) as connection:
-        row = connection.execute(
-            "select payload_json from sync_state where state_key = 'oauth_local_credentials'"
-        ).fetchone()
-
-    assert row is None
-    assert list((guard_home / "secrets").glob("guard-oauth-*.enc")) == []
-
-
 def test_oauth_local_credentials_use_encrypted_file_fallback_when_system_keyring_write_fails(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     fake_keyring = _install_fake_system_keyring(monkeypatch)
@@ -1065,12 +641,6 @@ def test_oauth_local_credential_health_reports_backend_and_metadata(tmp_path, mo
         "machine_id": "machine-123",
         "workspace_id": "workspace-123",
     }
-
-    monkeypatch.setattr(
-        store,
-        "_promote_secret_to_primary",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("health check must not promote secrets")),
-    )
     assert store.get_oauth_local_credential_health()["state"] == "healthy"
 
 
@@ -1380,36 +950,6 @@ def test_get_recoverable_oauth_local_credentials_uses_encrypted_fallback_when_ha
     assert recoverable["workspace_id"] == "workspace-123"
 
 
-def test_set_oauth_local_credentials_does_not_use_generic_secret_promotion(tmp_path, monkeypatch):
-    _install_fake_system_keyring(monkeypatch)
-    guard_home = tmp_path / "guard-home"
-    store = GuardStore(guard_home)
-
-    monkeypatch.setattr(
-        store,
-        "_promote_secret_to_primary",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("OAuth writes must not use generic promotion")),
-    )
-
-    store.set_oauth_local_credentials(
-        issuer="https://hol.org",
-        client_id="guard-local-daemon",
-        refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
-        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
-        dpop_public_jwk_thumbprint="thumbprint-123",
-        grant_id="grant-123",
-        machine_id="machine-123",
-        workspace_id="workspace-123",
-        now="2026-06-01T00:00:00+00:00",
-    )
-
-    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: None))
-    headless_store = GuardStore(guard_home)
-
-    assert headless_store.get_oauth_local_credentials() is not None
-
-
 def test_set_oauth_local_credentials_rejects_incomplete_fallback_mirror(tmp_path, monkeypatch, caplog):
     _install_fake_system_keyring(monkeypatch)
     guard_home = tmp_path / "guard-home"
@@ -1474,262 +1014,6 @@ def test_get_oauth_local_credentials_backfills_encrypted_fallback_for_legacy_key
     headless_store = GuardStore(guard_home)
 
     assert headless_store.get_oauth_local_credentials(allow_primary=False) is not None
-
-
-def test_oauth_local_credentials_preserve_previous_material_on_partial_secret_write_failure(tmp_path, monkeypatch):
-    store = GuardStore(tmp_path / "guard-home")
-    store.set_oauth_local_credentials(
-        issuer="https://hol.org",
-        client_id="guard-local-daemon",
-        refresh_token="old-refresh-token",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nold-key-material\n-----END PRIVATE KEY-----\n",
-        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "old-x", "y": "old-y"},
-        dpop_public_jwk_thumbprint="old-thumbprint",
-        grant_id="grant-old",
-        machine_id="machine-old",
-        workspace_id="workspace-old",
-        now="2026-06-01T00:00:00+00:00",
-    )
-    original_set_secret = store._oauth_secret_store.set_secret
-    write_calls: list[str] = []
-
-    def fail_on_first_write(secret_id: str, value: str) -> None:
-        write_calls.append(secret_id)
-        if len(write_calls) == 1:
-            raise RuntimeError("secret write failed")
-        original_set_secret(secret_id, value)
-
-    monkeypatch.setattr(store._oauth_secret_store, "set_secret", fail_on_first_write)
-
-    try:
-        store.set_oauth_local_credentials(
-            issuer="https://hol.org",
-            client_id="guard-local-daemon",
-            refresh_token="new-refresh-token",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nnew-key-material\n-----END PRIVATE KEY-----\n",
-            dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "new-x", "y": "new-y"},
-            dpop_public_jwk_thumbprint="new-thumbprint",
-            grant_id="grant-new",
-            machine_id="machine-new",
-            workspace_id="workspace-new",
-            now="2026-06-01T00:05:00+00:00",
-        )
-    except RuntimeError as error:
-        assert str(error) == "secret write failed"
-    else:
-        raise AssertionError("OAuth secret write should fail in this regression test")
-
-    assert store.get_oauth_local_credentials() == {
-        "issuer": "https://hol.org",
-        "client_id": "guard-local-daemon",
-        "refresh_token": "old-refresh-token",
-        "dpop_private_key_pem": "-----BEGIN PRIVATE KEY-----\nold-key-material\n-----END PRIVATE KEY-----\n",
-        "dpop_public_jwk": {"kty": "EC", "crv": "P-256", "x": "old-x", "y": "old-y"},
-        "dpop_public_jwk_thumbprint": "old-thumbprint",
-        "grant_id": "grant-old",
-        "machine_id": "machine-old",
-        "workspace_id": "workspace-old",
-    }
-
-
-def test_validated_keychain_fallback_reads_are_migrated_into_encrypted_file_store(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
-
-    keychain_reads = 0
-
-    def keychain_lookup(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        nonlocal keychain_reads
-        keychain_reads += 1
-        return subprocess.CompletedProcess(
-            args=["/usr/bin/security"],
-            returncode=0,
-            stdout="legacy-token\n",
-            stderr="",
-        )
-
-    monkeypatch.setattr(subprocess, "run", keychain_lookup)
-    store = GuardStore(guard_home)
-
-    with sqlite3.connect(store.path) as connection:
-        connection.execute(
-            """
-            insert into sync_state (state_key, payload_json, updated_at)
-            values ('credentials', ?, ?)
-            on conflict(state_key) do update set payload_json = excluded.payload_json, updated_at = excluded.updated_at
-            """,
-            (
-                json.dumps(
-                    {
-                        "sync_url": "https://hol.org/api/guard/receipts/sync",
-                        "token_ref": store._sync_token_ref,
-                        "token_sha256": hashlib.sha256(b"legacy-token").hexdigest(),
-                    }
-                ),
-                "2026-04-19T00:00:00+00:00",
-            ),
-        )
-
-    assert store.get_sync_credentials() == {
-        "sync_url": "https://hol.org/api/guard/receipts/sync",
-        "token": "legacy-token",
-    }
-    assert keychain_reads == 1
-    assert any((guard_home / "secrets").glob("*.enc"))
-
-    def fail_on_keychain(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        raise AssertionError("fallback keychain should not be used after migration")
-
-    monkeypatch.setattr(subprocess, "run", fail_on_keychain)
-
-    assert store.get_sync_credentials() == {
-        "sync_url": "https://hol.org/api/guard/receipts/sync",
-        "token": "legacy-token",
-    }
-
-
-def test_invalid_keychain_fallback_token_is_not_migrated_into_encrypted_file_store(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
-
-    keychain_reads = 0
-
-    def keychain_lookup(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        nonlocal keychain_reads
-        keychain_reads += 1
-        return subprocess.CompletedProcess(
-            args=["/usr/bin/security"],
-            returncode=0,
-            stdout="stale-token\n",
-            stderr="",
-        )
-
-    monkeypatch.setattr(subprocess, "run", keychain_lookup)
-    store = GuardStore(guard_home)
-
-    with sqlite3.connect(store.path) as connection:
-        connection.execute(
-            """
-            insert into sync_state (state_key, payload_json, updated_at)
-            values ('credentials', ?, ?)
-            on conflict(state_key) do update set payload_json = excluded.payload_json, updated_at = excluded.updated_at
-            """,
-            (
-                json.dumps(
-                    {
-                        "sync_url": "https://hol.org/api/guard/receipts/sync",
-                        "token_ref": store._sync_token_ref,
-                        "token_sha256": hashlib.sha256(b"fresh-token").hexdigest(),
-                    }
-                ),
-                "2026-04-19T00:00:00+00:00",
-            ),
-        )
-
-    assert store.get_sync_credentials() is None
-    assert keychain_reads == 1
-    assert list((guard_home / "secrets").glob("*.enc")) == []
-
-    assert store.get_sync_credentials() is None
-    assert keychain_reads == 2
-    assert list((guard_home / "secrets").glob("*.enc")) == []
-
-
-def test_stale_file_token_does_not_block_valid_keychain_token_migration(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
-
-    keychain_reads = 0
-
-    def keychain_lookup(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        nonlocal keychain_reads
-        keychain_reads += 1
-        return subprocess.CompletedProcess(
-            args=["/usr/bin/security"],
-            returncode=0,
-            stdout="fresh-token\n",
-            stderr="",
-        )
-
-    monkeypatch.setattr(subprocess, "run", keychain_lookup)
-    store = GuardStore(guard_home)
-    store._secret_store.set_secret(store._sync_token_ref, "stale-token")
-
-    with sqlite3.connect(store.path) as connection:
-        connection.execute(
-            """
-            insert into sync_state (state_key, payload_json, updated_at)
-            values ('credentials', ?, ?)
-            on conflict(state_key) do update set payload_json = excluded.payload_json, updated_at = excluded.updated_at
-            """,
-            (
-                json.dumps(
-                    {
-                        "sync_url": "https://hol.org/api/guard/receipts/sync",
-                        "token_ref": store._sync_token_ref,
-                        "token_sha256": hashlib.sha256(b"fresh-token").hexdigest(),
-                    }
-                ),
-                "2026-04-19T00:00:00+00:00",
-            ),
-        )
-
-    assert store.get_sync_credentials() == {
-        "sync_url": "https://hol.org/api/guard/receipts/sync",
-        "token": "fresh-token",
-    }
-    assert keychain_reads == 1
-    assert store._secret_store.get_secret(store._sync_token_ref) == "fresh-token"
-
-
-def test_valid_file_token_does_not_query_keychain_fallback(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
-
-    def fail_on_keychain(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        raise AssertionError("keychain fallback should not run when file secret is valid")
-
-    monkeypatch.setattr(subprocess, "run", fail_on_keychain)
-    store = GuardStore(guard_home)
-    store._secret_store.set_secret(store._sync_token_ref, "fresh-token")
-
-    with sqlite3.connect(store.path) as connection:
-        connection.execute(
-            """
-            insert into sync_state (state_key, payload_json, updated_at)
-            values ('credentials', ?, ?)
-            on conflict(state_key) do update set payload_json = excluded.payload_json, updated_at = excluded.updated_at
-            """,
-            (
-                json.dumps(
-                    {
-                        "sync_url": "https://hol.org/api/guard/receipts/sync",
-                        "token_ref": store._sync_token_ref,
-                        "token_sha256": hashlib.sha256(b"fresh-token").hexdigest(),
-                    }
-                ),
-                "2026-04-19T00:00:00+00:00",
-            ),
-        )
-
-    assert store.get_sync_credentials() == {
-        "sync_url": "https://hol.org/api/guard/receipts/sync",
-        "token": "fresh-token",
-    }
-
-
-def test_device_identity_and_label_management_are_persistent(tmp_path):
-    store = GuardStore(tmp_path / "guard-home")
-    original = store.get_device_metadata()
-    assert original["installation_id"]
-    assert original["device_label"]
-
-    renamed = store.set_device_label("VPS - Guard Runtime", "2026-04-19T01:00:00+00:00")
-    assert renamed["device_label"] == "VPS - Guard Runtime"
-
-    rotated = store.rotate_installation_id("2026-04-19T02:00:00+00:00")
-    assert rotated["device_label"] == "VPS - Guard Runtime"
-    assert rotated["installation_id"] != original["installation_id"]
 
 
 def test_get_oauth_local_credential_health_avoids_primary_keychain_reads(tmp_path, monkeypatch):

@@ -93,9 +93,7 @@ def test_verify_plugin_reports_stdio_servers_without_spawning_them(tmp_path: Pat
     result = verify_plugin(tmp_path)
 
     assert result.verify_pass is False
-    expected_message = (
-        "Skipped stdio command execution for safety; manual review is required before trusting it."
-    )
+    expected_message = "Skipped stdio command execution for safety; manual review is required before trusting it."
     assert any(case.message == expected_message for case in result.cases)
 
 

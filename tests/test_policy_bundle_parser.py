@@ -78,32 +78,36 @@ def _signed_policy_bundle(
     key_id: str = "guard-policy-bundle-test-key",
 ) -> tuple[dict[str, object], tuple[object, ...]]:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    public_key_pem = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode('utf-8')
+    public_key_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("utf-8")
+    )
     trusted_key = policy_bundle_verification_key_from_public_key(
         key_id=key_id,
         public_key_pem=public_key_pem,
     )
     bundle = _sample_policy_bundle()
-    bundle['workspaceId'] = 'workspace-1'
-    verifier = dict(bundle['verifier']) if isinstance(bundle['verifier'], dict) else {}
-    verifier['algorithm'] = 'rsa-pss-sha256'
-    verifier['keyId'] = key_id
-    verifier['publicKeyPem'] = public_key_pem
-    verifier['signature'] = None
-    bundle['verifier'] = verifier
-    bundle['bundleHash'] = computed_policy_bundle_hash(bundle)
-    bundle['payloadHash'] = payload_hash_for_policy_bundle(bundle)
-    verifier['signature'] = base64.b64encode(
+    bundle["workspaceId"] = "workspace-1"
+    verifier = dict(bundle["verifier"]) if isinstance(bundle["verifier"], dict) else {}
+    verifier["algorithm"] = "rsa-pss-sha256"
+    verifier["keyId"] = key_id
+    verifier["publicKeyPem"] = public_key_pem
+    verifier["signature"] = None
+    bundle["verifier"] = verifier
+    bundle["bundleHash"] = computed_policy_bundle_hash(bundle)
+    bundle["payloadHash"] = payload_hash_for_policy_bundle(bundle)
+    verifier["signature"] = base64.b64encode(
         private_key.sign(
             canonical_policy_bundle_payload(bundle),
             padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
             hashes.SHA256(),
         )
-    ).decode('utf-8')
-    bundle['verifier'] = verifier
+    ).decode("utf-8")
+    bundle["verifier"] = verifier
     return bundle, (trusted_key,)
 
 
@@ -140,7 +144,7 @@ def test_hgc071_signed_policy_bundle_parses() -> None:
 def test_hgc073_signed_policy_bundle_rejects_invalid_signature() -> None:
     bundle, trusted_keys = _signed_policy_bundle()
     verifier = dict(bundle["verifier"]) if isinstance(bundle["verifier"], dict) else {}
-    verifier["signature"] = base64.b64encode(b"tampered-signature").decode('utf-8')
+    verifier["signature"] = base64.b64encode(b"tampered-signature").decode("utf-8")
     bundle["verifier"] = verifier
 
     validated_bundle, reason = validated_policy_bundle_payload(
@@ -272,10 +276,14 @@ def test_hgc075_preserves_last_known_good_policy_on_invalid_update(tmp_path: Pat
 
 def test_signed_policy_bundle_rejects_attacker_self_signed_key() -> None:
     attacker_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    attacker_public_key_pem = attacker_private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode("utf-8")
+    attacker_public_key_pem = (
+        attacker_private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("utf-8")
+    )
     bundle = _sample_policy_bundle()
     bundle["workspaceId"] = "workspace-1"
     verifier = dict(bundle["verifier"]) if isinstance(bundle["verifier"], dict) else {}
@@ -333,10 +341,14 @@ def test_signed_policy_bundle_rejects_sync_only_keys_without_anchor() -> None:
 def test_validate_synced_policy_bundle_does_not_persist_unanchored_sync_keys() -> None:
     bundle, anchored_keys = _signed_policy_bundle(key_id="legitimate-anchor-key")
     attacker_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    attacker_public_key_pem = attacker_private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode("utf-8")
+    attacker_public_key_pem = (
+        attacker_private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("utf-8")
+    )
     attacker_key = policy_bundle_verification_key_from_public_key(
         key_id="attacker-sync-key",
         public_key_pem=attacker_public_key_pem,
@@ -363,9 +375,7 @@ def test_validate_synced_policy_bundle_does_not_persist_unanchored_sync_keys() -
 
     attacker_bundle = _sample_policy_bundle()
     attacker_bundle["workspaceId"] = "workspace-1"
-    attacker_verifier = (
-        dict(attacker_bundle["verifier"]) if isinstance(attacker_bundle["verifier"], dict) else {}
-    )
+    attacker_verifier = dict(attacker_bundle["verifier"]) if isinstance(attacker_bundle["verifier"], dict) else {}
     attacker_verifier["algorithm"] = "rsa-pss-sha256"
     attacker_verifier["keyId"] = attacker_key.key_id
     attacker_verifier["publicKeyPem"] = attacker_public_key_pem

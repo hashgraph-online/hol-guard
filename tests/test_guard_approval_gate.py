@@ -47,6 +47,38 @@ from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.totp import TotpSecretStore, _temporary_atomic_path, totp_code_at_counter
 
+
+def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
+    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
+
+    Also installs a test-only resolver override so sync-path exercises stay hermetic
+    (no OAuth token refresh against the network). Tests that need real sync against a
+    local server pass sync_url=<url>.
+    """
+    from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token=token,
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=workspace_id,
+        now=now,
+    )
+    effective_sync_url = sync_url if sync_url is not None else "https://hol.org/api/guard/receipts/sync"
+    guard_runner_module._test_sync_auth_context_override = {
+        "sync_url": effective_sync_url,
+        "access_token": token,
+        "dpop_key_material": None,
+    }
+
+
 PASSWORD = "correct-password"
 WRONG_PASSWORD = "wrong-password"
 
@@ -1251,11 +1283,7 @@ def test_approval_gate_background_remote_policy_sync_fails_closed_without_crashi
 ) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "guard-live-token",
-        "2026-04-19T00:00:00+00:00",
-    )
+    _seed_guard_cloud(store, workspace_id=None)
     monkeypatch.setattr(
         guard_runner_module,
         "_guard_device_metadata",
@@ -1291,7 +1319,12 @@ def test_approval_gate_background_remote_policy_sync_fails_closed_without_crashi
 
     monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _urlopen)
 
-    payload = guard_runner_module.sync_receipts(store)
+    auth_context = {
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "access_token": "demo-token",
+        "dpop_key_material": None,
+    }
+    payload = guard_runner_module.sync_receipts(store, auth_context=auth_context)
 
     assert payload["remote_policies_stored"] == 0
     assert payload["remote_policy_sync_blocked"] is True

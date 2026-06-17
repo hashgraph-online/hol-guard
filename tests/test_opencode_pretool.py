@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.hook_python import package_root_from_python, resolve_guard_hook_python
+from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode_pretool import (
     _HOOK_ARGV_ENV,
     _pretool_hook_env,
@@ -80,7 +80,7 @@ def test_pretool_plugin_source_embeds_guard_paths(tmp_path: Path) -> None:
     assert "nodeSpawn" in spawn_block
     assert "globalThis" not in spawn_block
     assert "Bun" not in spawn_block
-    assert '.stream()' not in spawn_block
+    assert ".stream()" not in spawn_block
     assert "try {" in source
     assert 'source_scope: directory?.trim() ? "project" : "global"' in source
     assert "GUARD_HOOK_LAUNCHER" in source
@@ -144,7 +144,9 @@ def test_pretool_hook_launcher_ignores_workspace_package_hijack(
     fake_pkg = workspace / "codex_plugin_scanner"
     fake_pkg.mkdir()
     (fake_pkg / "__init__.py").write_text("", encoding="utf-8")
-    (fake_pkg / "cli.py").write_text("import sys\nsys.stderr.write('hijacked')\nraise SystemExit(99)\n", encoding="utf-8")
+    (fake_pkg / "cli.py").write_text(
+        "import sys\nsys.stderr.write('hijacked')\nraise SystemExit(99)\n", encoding="utf-8"
+    )
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -186,10 +188,14 @@ def test_pretool_plugin_source_does_not_spawn_python_m_module(tmp_path: Path) ->
 
 
 def test_pretool_plugin_source_includes_node_spawn_fallback(tmp_path: Path) -> None:
-    spawn_block = pretool_plugin_source(_ctx(tmp_path)).split("async function spawnGuardProcess", 1)[1].split(
-        "async function runGuardHook",
-        1,
-    )[0]
+    spawn_block = (
+        pretool_plugin_source(_ctx(tmp_path))
+        .split("async function spawnGuardProcess", 1)[1]
+        .split(
+            "async function runGuardHook",
+            1,
+        )[0]
+    )
     assert "nodeSpawn" in spawn_block
     assert "await import(" not in spawn_block
     assert "Bun" not in spawn_block
@@ -208,9 +214,7 @@ def test_install_pretool_plugin_writes_managed_and_global_copies(tmp_path: Path)
     manifest = install_pretool_plugin(ctx)
     assert Path(manifest["managed_plugin_path"]).is_file()
     assert Path(manifest["global_plugin_path"]).is_file()
-    assert managed_plugin_path(ctx).read_text(encoding="utf-8") == global_plugin_path(ctx).read_text(
-        encoding="utf-8"
-    )
+    assert managed_plugin_path(ctx).read_text(encoding="utf-8") == global_plugin_path(ctx).read_text(encoding="utf-8")
 
 
 def test_remove_pretool_plugin_deletes_installed_files(tmp_path: Path) -> None:
