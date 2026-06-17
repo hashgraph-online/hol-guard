@@ -274,9 +274,16 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
         bulkApprove.bulkSelection.onToggleMany(filteredRequests, true);
         return;
       }
-      if (event.key === "Escape" && bulkApprove.bulkSelection.selectedGroupCount > 0) {
-        event.preventDefault();
-        bulkApprove.bulkSelection.onToggleMany(filteredRequests, false);
+      if (event.key === "Escape") {
+        // Escape closes the review drawer first (standard modal behavior);
+        // only when the drawer is shut does it clear the background selection.
+        if (bulkApprove.drawer.open) {
+          event.preventDefault();
+          bulkApprove.drawer.onCancel();
+        } else if (bulkApprove.bulkSelection.selectedGroupCount > 0) {
+          event.preventDefault();
+          bulkApprove.bulkSelection.onToggleMany(filteredRequests, false);
+        }
       }
     }
     window.addEventListener("keydown", handleBulkShortcut);
@@ -284,6 +291,8 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   }, [
     bulkApprove.bulkSelection,
     bulkApprove.bulkSelection.selectedGroupCount,
+    bulkApprove.drawer.open,
+    bulkApprove.drawer.onCancel,
     filteredRequests,
   ]);
 
@@ -776,7 +785,9 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLLabelElement>) => {
       if (!showCheckbox) return;
-      if (event.key === " " || event.key === "Enter") {
+      // Space is handled natively by the checkbox itself; only remap Enter
+      // here so the wrapping label is also keyboard-activatable.
+      if (event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
         onToggleSelect?.(item);
@@ -847,7 +858,7 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
       </div>
       {showCheckbox && (
         <p className="mt-1 pl-6 text-[10px] text-muted-foreground/80">
-          Hold ⌥/Alt + click row to toggle · Space toggles checkbox
+          Hold ⌥/Alt + click row to toggle · Esc closes the review drawer
         </p>
       )}
     </div>

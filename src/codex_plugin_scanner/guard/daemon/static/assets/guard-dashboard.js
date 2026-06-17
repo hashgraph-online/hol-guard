@@ -23280,7 +23280,7 @@ function QueueBulkDrawer(props) {
             autoComplete: "off",
             spellCheck: false,
             disabled: props.step === "submitting",
-            "aria-invalid": !props.confirmMatches,
+            "aria-invalid": props.typedConfirm.length > 0 && !props.confirmMatches,
             className: "mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-mono text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60",
             placeholder: disclosure.confirmPhrase
           }
@@ -23480,7 +23480,7 @@ function useQueueBulkApprove(props) {
     () => credentialError === null && confirmMatches && selectedGroupCount > 0,
     [credentialError, confirmMatches, selectedGroupCount]
   );
-  reactExports.useCallback(() => {
+  const resetBulkFlow = reactExports.useCallback(() => {
     setDrawerOpen(false);
     setDrawerStep("review");
     setSelectedBulkIds(/* @__PURE__ */ new Set());
@@ -23505,13 +23505,17 @@ function useQueueBulkApprove(props) {
   }, [selectedBulkGroups.length]);
   const handleCancelDrawer = reactExports.useCallback(() => {
     if (drawerStep === "submitting") return;
+    if (drawerStep === "completed") {
+      resetBulkFlow();
+      return;
+    }
     setDrawerOpen(false);
     setDrawerStep("review");
     setBulkApproveError(null);
     setTypedConfirm("");
     setBulkApprovePassword("");
     setBulkApproveTotpCode("");
-  }, [drawerStep]);
+  }, [drawerStep, resetBulkFlow]);
   const handleBulkToggleSelect = reactExports.useCallback((requestId) => {
     setSelectedBulkIds((current) => {
       const next = new Set(current);
@@ -23824,9 +23828,14 @@ function ReviewWorkspace(props) {
         bulkApprove.bulkSelection.onToggleMany(filteredRequests, true);
         return;
       }
-      if (event.key === "Escape" && bulkApprove.bulkSelection.selectedGroupCount > 0) {
-        event.preventDefault();
-        bulkApprove.bulkSelection.onToggleMany(filteredRequests, false);
+      if (event.key === "Escape") {
+        if (bulkApprove.drawer.open) {
+          event.preventDefault();
+          bulkApprove.drawer.onCancel();
+        } else if (bulkApprove.bulkSelection.selectedGroupCount > 0) {
+          event.preventDefault();
+          bulkApprove.bulkSelection.onToggleMany(filteredRequests, false);
+        }
       }
     }
     window.addEventListener("keydown", handleBulkShortcut);
@@ -23834,6 +23843,8 @@ function ReviewWorkspace(props) {
   }, [
     bulkApprove.bulkSelection,
     bulkApprove.bulkSelection.selectedGroupCount,
+    bulkApprove.drawer.open,
+    bulkApprove.drawer.onCancel,
     filteredRequests
   ]);
   if (requests.length === 0) {
@@ -24266,7 +24277,7 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
   const handleKeyDown = reactExports.useCallback(
     (event) => {
       if (!showCheckbox) return;
-      if (event.key === " " || event.key === "Enter") {
+      if (event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
         onToggleSelect?.(item);
@@ -24341,7 +24352,7 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
             }
           )
         ] }),
-        showCheckbox && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 pl-6 text-[10px] text-muted-foreground/80", children: "Hold ⌥/Alt + click row to toggle · Space toggles checkbox" })
+        showCheckbox && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 pl-6 text-[10px] text-muted-foreground/80", children: "Hold ⌥/Alt + click row to toggle · Esc closes the review drawer" })
       ]
     }
   );

@@ -395,7 +395,7 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
               autoComplete="off"
               spellCheck={false}
               disabled={props.step === "submitting"}
-              aria-invalid={!props.confirmMatches}
+              aria-invalid={props.typedConfirm.length > 0 && !props.confirmMatches}
               className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-mono text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
               placeholder={disclosure.confirmPhrase}
             />
