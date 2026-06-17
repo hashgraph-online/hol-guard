@@ -53,9 +53,7 @@ def _make_detection(artifact: GuardArtifact) -> HarnessDetection:
 
 
 class TestWaitForApprovalRequests:
-    def _add_request(
-        self, store: GuardStore, req_id: str, status: str = "pending"
-    ) -> str:
+    def _add_request(self, store: GuardStore, req_id: str, status: str = "pending") -> str:
         from codex_plugin_scanner.guard.models import GuardApprovalRequest
 
         request = GuardApprovalRequest(

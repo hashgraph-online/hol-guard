@@ -65,9 +65,7 @@ def _write_simple_index(
         match = re.search(r"^labdemo-(.+)-py\d+-none-any\.whl$", wheel_path.name)
         version = match.group(1) if match is not None else ""
         yanked_attr = ' data-yanked="fixture-yanked"' if version in yanked_versions else ""
-        package_link_rows.append(
-            f'<a href="../../packages/{wheel_path.name}"{yanked_attr}>{wheel_path.name}</a><br/>'
-        )
+        package_link_rows.append(f'<a href="../../packages/{wheel_path.name}"{yanked_attr}>{wheel_path.name}</a><br/>')
     package_links = "\n".join(package_link_rows)
     write_text(index_root / "simple" / "index.html", '<a href="labdemo/">labdemo</a>\n')
     write_text(index_root / "simple" / "labdemo" / "index.html", package_links + "\n")

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "2.0.345"
+version = "2.0.764"
 description = "Protect local AI harnesses with HOL Guard and run scanner checks for Codex, Claude, Cursor, Gemini, and OpenCode."
 readme = "README.md"
 license = "Apache-2.0"
@@ -60,7 +60,7 @@ override-dependencies = [
     "fastapi==0.137.1",
     "importlib-metadata==9.0.0",
     "jsonschema==4.26.0",
-    "litellm==1.89.0",
+    "litellm==1.83.7",
     "openai==2.41.1",
     "pyjwt==2.13.0",
     "python-dotenv==1.2.2",
@@ -84,7 +84,6 @@ Issues = "https://github.com/hashgraph-online/hol-guard/issues"
 [tool.ruff]
 target-version = "py310"
 line-length = 120
-extend-exclude = ["tests/test-trust-scoring.py", "tests/test-trust-specs.py"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/codex_plugin_scanner"]

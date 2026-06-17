@@ -24,7 +24,7 @@ from uuid import uuid4
 from cryptography.fernet import Fernet, InvalidToken
 
 from .approval_gate import ApprovalGateGrant, require_policy_clear, require_policy_write, require_request_resolution
-from .cli.oauth_client import resolve_guard_oauth_client_config, validate_guard_sync_endpoint
+from .cli.oauth_client import resolve_guard_oauth_client_config
 from .edge_events import build_receipt_event
 from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
 from .policy_integrity import (
@@ -160,17 +160,14 @@ from .store_threat_intel import (
 )
 from .types import CapabilitySet, TransportKind
 
-_SYNC_TOKEN_REF = "guard-cloud-token"
 _POLICY_INTEGRITY_KEY_REF = "guard-policy-integrity-key"
 _POLICY_INTEGRITY_CONTROL_REF = "guard-policy-integrity-control"
 _OAUTH_LOCAL_CREDENTIALS_REF = "guard-oauth-local-credentials"
-_SYNC_TOKEN_HASH_KEY = "token_sha256"
 _OAUTH_LOCAL_CREDENTIALS_STATE_KEY = "oauth_local_credentials"
 _OAUTH_LOCAL_CREDENTIALS_HASH_KEY = "credentials_sha256"
 _OAUTH_LOCAL_CREDENTIALS_REF_KEY = "credentials_ref"
 _OAUTH_PRIMARY_SECRET_TIMEOUT_SECONDS = 2.0
 _GUARD_CLOUD_RESET_STATE_KEYS = (
-    "credentials",
     "sync_summary",
     "receipt_sync_cursor",
     "policy",
@@ -320,61 +317,6 @@ class SecretStore(Protocol):
 
     def delete_secret(self, secret_id: str) -> None:
         """Delete a secret value if it exists."""
-
-
-class KeychainSecretStore:
-    """macOS keychain-backed secret store."""
-
-    def __init__(self, service_name: str) -> None:
-        self.service_name = service_name
-
-    @staticmethod
-    def _is_available() -> bool:
-        return os.name == "posix" and Path("/usr/bin/security").exists()
-
-    def set_secret(self, secret_id: str, value: str) -> None:
-        if not self._is_available():
-            raise RuntimeError("macOS keychain command is not available")
-        raise RuntimeError("macOS security CLI does not support noninteractive secret writes without argv exposure")
-
-    def get_secret(self, secret_id: str) -> str | None:
-        if not self._is_available():
-            return None
-        result = subprocess.run(
-            [
-                "/usr/bin/security",
-                "find-generic-password",
-                "-a",
-                secret_id,
-                "-s",
-                self.service_name,
-                "-w",
-            ],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            return None
-        value = result.stdout.rstrip("\r\n")
-        return value if value else None
-
-    def delete_secret(self, secret_id: str) -> None:
-        if not self._is_available():
-            return
-        subprocess.run(
-            [
-                "/usr/bin/security",
-                "delete-generic-password",
-                "-a",
-                secret_id,
-                "-s",
-                self.service_name,
-            ],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
 
 
 class SystemKeyringSecretStore:
@@ -649,13 +591,13 @@ class SystemKeyringSecretStore:
             return None
         return None  # unknown non-zero status
 
-    def get_secret_with_timeout(
-        self, secret_id: str, *, timeout_seconds: float = 0.0
-    ) -> str | None:
+    def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float = 0.0) -> str | None:
         _ = timeout_seconds
-        if not self._supports_native_macos_security_reads():
-            return self.get_secret(secret_id)
-        return self._get_secret_without_macos_ui(secret_id)
+        if self._supports_native_macos_security_reads():
+            return self._get_secret_without_macos_ui(secret_id)
+        if sys.platform == "darwin":
+            return None
+        return self.get_secret(secret_id)
 
     def delete_secret(self, secret_id: str) -> None:
         keyring_module = self._load_keyring_module_or_none()
@@ -944,16 +886,6 @@ def _system_keyring_is_available(guard_home: Path) -> bool:
     return available
 
 
-def _build_secret_store(guard_home: Path) -> SecretStore:
-    fallback_store = EncryptedFileSecretStore(guard_home)
-    if KeychainSecretStore._is_available():
-        keychain_store = KeychainSecretStore(service_name="hol-guard.sync")
-        if sys.platform == "darwin":
-            return FallbackSecretStore(keychain_store, fallback_store)
-        return FallbackSecretStore(fallback_store, keychain_store)
-    return fallback_store
-
-
 def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
     fallback_store = EncryptedFileSecretStore(guard_home)
     if _system_keyring_is_available(guard_home):
@@ -965,6 +897,9 @@ def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
 
 
 def _build_policy_integrity_secret_store() -> SystemKeyringSecretStore | None:
+    if sys.platform == "darwin":
+        # Policy integrity is passive hardening; it must never raise Keychain UI.
+        return None
     if SystemKeyringSecretStore._backend_is_available():
         return SystemKeyringSecretStore(service_name="hol-guard.policy-integrity")
     return None
@@ -973,8 +908,6 @@ def _build_policy_integrity_secret_store() -> SystemKeyringSecretStore | None:
 def _secret_store_backend_name(secret_store: SecretStore) -> str:
     if isinstance(secret_store, SystemKeyringSecretStore):
         return "system-keyring"
-    if isinstance(secret_store, KeychainSecretStore):
-        return "keychain"
     if isinstance(secret_store, EncryptedFileSecretStore):
         return "encrypted-file"
     if isinstance(secret_store, FallbackSecretStore):
@@ -1020,13 +953,11 @@ class GuardStore:
         self.guard_home = guard_home
         self.guard_home.mkdir(parents=True, exist_ok=True)
         _set_private_mode(self.guard_home, _GUARD_STORE_PRIVATE_DIR_MODE)
-        self._secret_store = _build_secret_store(self.guard_home)
         self._oauth_secret_store = _build_oauth_secret_store(self.guard_home)
         self._policy_integrity_secret_store = _build_policy_integrity_secret_store()
         self._cached_oauth_secret_payload: tuple[str, str, str] | None = None
         self._cached_policy_integrity_secret_material: tuple[str | None, float, tuple[bytes, str]] | None = None
         self._cached_policy_integrity_control_state: tuple[str | None, float, dict[str, object]] | None = None
-        self._sync_token_ref = self._build_scoped_secret_ref(_SYNC_TOKEN_REF)
         self._policy_integrity_key_ref = self._build_scoped_secret_ref(_POLICY_INTEGRITY_KEY_REF)
         self._policy_integrity_control_ref = self._build_scoped_secret_ref(_POLICY_INTEGRITY_CONTROL_REF)
         self._oauth_local_credentials_ref = self._build_scoped_secret_ref(_OAUTH_LOCAL_CREDENTIALS_REF)
@@ -1042,10 +973,6 @@ class GuardStore:
     @staticmethod
     def _versioned_secret_ref(base_ref: str, value_hash: str) -> str:
         return f"{base_ref}:{value_hash[:16]}"
-
-    def _promote_secret_to_primary(self, secret_store: SecretStore, secret_id: str, value: str) -> None:
-        if isinstance(secret_store, FallbackSecretStore):
-            secret_store.promote_secret(secret_id, value)
 
     def _mirror_oauth_secret_to_fallback(self, secret_id: str, value: str) -> None:
         secret_store = self._oauth_secret_store
@@ -1108,15 +1035,11 @@ class GuardStore:
         return self._get_secret_from_store(secret_store, secret_id)
 
     @staticmethod
-    def _should_skip_passive_policy_integrity_keychain_read(
-        secret_store: SecretStore,
-        *,
-        create: bool,
-    ) -> bool:
+    def _should_skip_policy_integrity_keychain_access(secret_store: SecretStore) -> bool:
         return (
-            not create
-            and isinstance(secret_store, SystemKeyringSecretStore)
-            and secret_store._supports_native_macos_security_reads()
+            isinstance(secret_store, SystemKeyringSecretStore)
+            and sys.platform == "darwin"
+            and not secret_store._supports_native_macos_security_reads()
         )
 
     def _clear_policy_integrity_cache(self) -> None:
@@ -1183,13 +1106,9 @@ class GuardStore:
         secret_store = self._policy_integrity_secret_store
         if secret_store is None:
             return None, None
-        if self._should_skip_passive_policy_integrity_keychain_read(secret_store, create=create):
+        if self._should_skip_policy_integrity_keychain_access(secret_store):
             return None, None
-        encoded_key = (
-            self._get_secret_from_store(secret_store, self._policy_integrity_key_ref)
-            if create
-            else self._get_policy_integrity_secret_from_store(self._policy_integrity_key_ref)
-        )
+        encoded_key = self._get_policy_integrity_secret_from_store(self._policy_integrity_key_ref)
         if encoded_key is None and create:
             generated_key = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
             try:
@@ -1254,13 +1173,9 @@ class GuardStore:
         secret_store = self._policy_integrity_secret_store
         if secret_store is None:
             return None
-        if self._should_skip_passive_policy_integrity_keychain_read(secret_store, create=create):
+        if self._should_skip_policy_integrity_keychain_access(secret_store):
             return None
-        payload_json = (
-            self._get_secret_from_store(secret_store, self._policy_integrity_control_ref)
-            if create
-            else self._get_policy_integrity_secret_from_store(self._policy_integrity_control_ref)
-        )
+        payload_json = self._get_policy_integrity_secret_from_store(self._policy_integrity_control_ref)
         payload: dict[str, object] | None = None
         if payload_json is not None:
             try:
@@ -4197,6 +4112,7 @@ class GuardStore:
         require_policy_clear(self.guard_home, approval_gate_grant=approval_gate_grant, now=now)
         next_control_state: dict[str, object] | None = None
         with self._connect() as connection:
+            backup_path = self._backup_policy_database(connection, now=now)
             state = self._refresh_policy_integrity_state(
                 connection,
                 now=now,
@@ -4211,7 +4127,6 @@ class GuardStore:
             trusted_state = self._load_policy_integrity_control_state(create=True)
             if trusted_state is None:
                 raise RuntimeError("Guard could not access the policy integrity control state.")
-            backup_path = self._backup_policy_database(connection, now=now)
             rows = self._load_local_policy_rows(connection, harness=harness)
             preserved = 0
             cleared = 0
@@ -4576,10 +4491,6 @@ class GuardStore:
                 bundle_version=bundle_version,
             )
 
-    def set_sync_credentials(self, sync_url: str, token: str, now: str, workspace_id: str | None = None) -> None:
-        with self._connect() as connection:
-            self._set_sync_credentials_in_connection(connection, sync_url, token, now, workspace_id=workspace_id)
-
     def set_sync_payload(self, state_key: str, payload: Mapping[str, object] | Sequence[object], now: str) -> None:
         with self._connect() as connection:
             connection.execute(
@@ -4875,32 +4786,6 @@ class GuardStore:
             )
         return items
 
-    def get_sync_credentials(self) -> dict[str, str] | None:
-        with self._connect() as connection:
-            row = connection.execute("select payload_json from sync_state where state_key = 'credentials'").fetchone()
-        if row is None:
-            return None
-        payload = json.loads(str(row["payload_json"]))
-        if not isinstance(payload, dict):
-            return None
-        sync_url = payload.get("sync_url")
-        if not isinstance(sync_url, str):
-            return None
-        token_reference = payload.get("token_ref")
-        if isinstance(token_reference, str) and token_reference:
-            if token_reference != self._sync_token_ref:
-                return None
-            expected_hash = payload.get(_SYNC_TOKEN_HASH_KEY)
-            expected_hash_value = expected_hash if isinstance(expected_hash, str) and expected_hash else None
-
-            for token in self._get_secret_candidates(self._secret_store, self._sync_token_ref, expected_hash_value):
-                if expected_hash_value is not None and not _secret_matches_hash(token, expected_hash_value):
-                    continue
-                self._promote_secret_to_primary(self._secret_store, self._sync_token_ref, token)
-                return {"sync_url": sync_url, "token": token}
-            return None
-        return None
-
     def get_cloud_sync_profile(self) -> dict[str, str] | None:
         oauth_payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
         if isinstance(oauth_payload, dict):
@@ -4920,24 +4805,9 @@ class GuardStore:
                 if isinstance(workspace_id, str) and workspace_id.strip():
                     profile["workspace_id"] = workspace_id.strip()
                 return profile
-        credentials = self.get_sync_credentials()
-        if credentials is None:
-            return None
-        profile = {
-            "auth_mode": "legacy",
-            "sync_url": str(credentials["sync_url"]),
-        }
-        workspace_id = self.get_cloud_workspace_id()
-        if isinstance(workspace_id, str) and workspace_id.strip():
-            profile["workspace_id"] = workspace_id.strip()
-        return profile
-
-    def clear_sync_credentials(self) -> None:
-        self._secret_store.delete_secret(self._sync_token_ref)
-        self.delete_sync_payload("credentials")
+        return None
 
     def clear_cloud_sync_state_for_reconnect(self) -> None:
-        self.clear_sync_credentials()
         self.delete_sync_payloads(list(_GUARD_CLOUD_RESET_STATE_KEYS))
 
     def set_oauth_local_credentials(
@@ -5085,44 +4955,6 @@ class GuardStore:
             if isinstance(value, str) and value:
                 health[key] = value
         self._remember_oauth_health_result(secret_hash, health)
-        return health
-
-    def get_sync_credential_health(self) -> dict[str, object]:
-        payload = self.get_sync_payload("credentials")
-        health: dict[str, object] = {
-            "configured": isinstance(payload, dict),
-            "state": "not_configured",
-            "backend": _secret_store_backend_name(self._secret_store),
-            "fallback_backend": _secret_store_fallback_backend_name(self._secret_store),
-        }
-        if not isinstance(payload, dict):
-            return health
-        sync_url = payload.get("sync_url")
-        token_reference = payload.get("token_ref")
-        if not isinstance(sync_url, str) or not sync_url:
-            health["state"] = "degraded"
-            return health
-        if not isinstance(token_reference, str) or not token_reference or token_reference != self._sync_token_ref:
-            health["state"] = "degraded"
-            return health
-        expected_hash = payload.get(_SYNC_TOKEN_HASH_KEY)
-        expected_hash_value = expected_hash if isinstance(expected_hash, str) and expected_hash else None
-        secret_candidates = self._get_secret_candidates(
-            self._secret_store,
-            self._sync_token_ref,
-            expected_hash_value,
-        )
-        if not any(
-            expected_hash_value is None or _secret_matches_hash(candidate, expected_hash_value)
-            for candidate in secret_candidates
-        ):
-            health["state"] = "degraded"
-            return health
-        health["state"] = "healthy"
-        health["sync_url"] = sync_url
-        workspace_id = payload.get("workspace_id")
-        if isinstance(workspace_id, str) and workspace_id:
-            health["workspace_id"] = workspace_id
         return health
 
     @staticmethod
@@ -5532,6 +5364,15 @@ class GuardStore:
         now: str,
     ) -> dict[str, object] | None:
         if cloud_profile is None:
+            if latest_state is not None and self._guard_connect_state_requires_oauth(latest_state):
+                return self._coerce_guard_connect_state_status(
+                    state=latest_state,
+                    status="retry_required",
+                    milestone="first_sync_failed",
+                    reason="Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again.",
+                    sync_summary=sync_summary,
+                    now=now,
+                )
             return latest_state
         normalized = self._hydrate_guard_connect_state_from_cloud_profile(
             latest_state=latest_state,
@@ -5567,6 +5408,13 @@ class GuardStore:
                 now=now,
             )
         return normalized
+
+    def _guard_connect_state_requires_oauth(self, latest_state: dict[str, object]) -> bool:
+        request_id = latest_state.get("request_id")
+        if not isinstance(request_id, str) or not request_id.strip():
+            return False
+        status = str(latest_state.get("status") or "")
+        return status == "connected"
 
     def _hydrate_guard_connect_state_from_cloud_profile(
         self,
@@ -5682,101 +5530,6 @@ class GuardStore:
         }
         return build_connect_state_response(payload, poll_after_ms=0)
 
-    def _credential_payload_token_hash(self, payload: dict[str, object]) -> str | None:
-        token_hash = payload.get(_SYNC_TOKEN_HASH_KEY)
-        if isinstance(token_hash, str) and token_hash:
-            return token_hash
-        legacy_token = payload.get("token")
-        if isinstance(legacy_token, str) and legacy_token:
-            return _secret_fingerprint(legacy_token)
-        token_reference = payload.get("token_ref")
-        if isinstance(token_reference, str) and token_reference:
-            token = self._secret_store.get_secret(token_reference)
-            if isinstance(token, str) and token:
-                return _secret_fingerprint(token)
-        return None
-
-    def _set_sync_credentials_in_connection(
-        self,
-        connection: sqlite3.Connection,
-        sync_url: str,
-        token: str,
-        now: str,
-        *,
-        workspace_id: str | None = None,
-    ) -> None:
-        validated_sync_url = validate_guard_sync_endpoint(sync_url)
-        token_hash = _secret_fingerprint(token)
-        normalized_workspace_id = (
-            workspace_id.strip() if isinstance(workspace_id, str) and workspace_id.strip() else None
-        )
-        previous_payload: dict[str, object] | None = None
-        previous_row = connection.execute(
-            "select payload_json from sync_state where state_key = 'credentials'"
-        ).fetchone()
-        if previous_row is not None:
-            previous_payload_candidate = json.loads(str(previous_row["payload_json"]))
-            if isinstance(previous_payload_candidate, dict):
-                previous_payload = previous_payload_candidate
-        previous_sync_url = previous_payload.get("sync_url") if previous_payload is not None else None
-        previous_token_hash = (
-            self._credential_payload_token_hash(previous_payload) if previous_payload is not None else None
-        )
-        previous_workspace_id = (
-            _string_value(previous_payload.get("workspace_id")) if previous_payload is not None else None
-        )
-        previous_workspace = previous_workspace_id.strip() if previous_workspace_id is not None else None
-        effective_workspace_id = normalized_workspace_id
-        can_preserve_workspace = (
-            previous_sync_url == validated_sync_url
-            and previous_token_hash is not None
-            and previous_token_hash == token_hash
-            and previous_workspace_id is not None
-            and previous_workspace_id.strip()
-        )
-        if effective_workspace_id is None and can_preserve_workspace:
-            effective_workspace_id = previous_workspace
-        workspace_changed = (
-            previous_workspace is not None
-            and effective_workspace_id is not None
-            and previous_workspace != effective_workspace_id
-        )
-        payload = {
-            "sync_url": validated_sync_url,
-            "token_ref": self._sync_token_ref,
-            _SYNC_TOKEN_HASH_KEY: token_hash,
-        }
-        if effective_workspace_id is not None:
-            payload["workspace_id"] = effective_workspace_id
-        if previous_row is None or previous_payload is None:
-            credentials_changed = True
-        else:
-            credentials_changed = (
-                previous_sync_url != validated_sync_url
-                or previous_token_hash is None
-                or previous_token_hash != token_hash
-                or workspace_changed
-            )
-        self._secret_store.set_secret(self._sync_token_ref, token)
-        connection.execute(
-            """
-            insert into sync_state (state_key, payload_json, updated_at)
-            values ('credentials', ?, ?)
-            on conflict(state_key) do update set
-              payload_json = excluded.payload_json,
-              updated_at = excluded.updated_at
-            """,
-            (json.dumps(payload), now),
-        )
-        if credentials_changed:
-            connection.execute("delete from sync_state where state_key != 'credentials'")
-            connection.execute("delete from guard_supply_chain_bundle_cache")
-            connection.execute("delete from guard_supply_chain_eval_cache")
-            connection.execute("delete from publisher_cache")
-            connection.execute(
-                "delete from policy_decisions where source in ('cloud-sync', 'team-policy', 'policy-bundle')"
-            )
-
     @staticmethod
     def _cloud_workspace_id_from_connection(connection: sqlite3.Connection) -> str | None:
         oauth_row = connection.execute(
@@ -5788,15 +5541,6 @@ class GuardStore:
                 workspace_id = oauth_payload.get("workspace_id")
                 if isinstance(workspace_id, str) and workspace_id.strip():
                     return workspace_id
-        row = connection.execute("select payload_json from sync_state where state_key = 'credentials'").fetchone()
-        if row is None:
-            return None
-        payload = json.loads(str(row["payload_json"]))
-        if not isinstance(payload, dict):
-            return None
-        workspace_id = payload.get("workspace_id")
-        if isinstance(workspace_id, str) and workspace_id.strip():
-            return workspace_id
         return None
 
     def upsert_guard_session(

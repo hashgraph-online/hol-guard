@@ -15,6 +15,8 @@ from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluat
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_python_phase12_support import (
     WORKSPACE_ID as PYTHON_WORKSPACE_ID,
+)
+from tests.guard_python_phase12_support import (
     artifact_from_command_fixture,
     bundle_response_fixture,
     package_fixture,

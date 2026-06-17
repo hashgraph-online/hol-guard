@@ -15,8 +15,10 @@ from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.aibom_trust_metadata import trust_resolution_from_domain
+from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.runtime.evidence_hash import guard_evidence_hash
 from codex_plugin_scanner.guard.runtime.trust_attestation import (
     GuardTrustAttestationSigningConfig,
     GuardTrustAttestationVerificationKey,
@@ -24,6 +26,7 @@ from codex_plugin_scanner.guard.runtime.trust_attestation import (
     build_trust_attestation_payload,
     build_trust_attestation_verification_key,
     resolve_guard_oauth_trust_attestation_signing_config,
+    resolve_trust_attestation_signing_config,
     sign_trust_attestation,
     verify_trust_attestation,
 )
@@ -70,6 +73,7 @@ def _snapshot_for_artifact(
     home_dir: Path,
     workspace_dir: Path,
     trust_attestation_context: Mapping[str, object] | None = None,
+    cisco_runs: tuple[object, ...] = (),
 ) -> Any:
     detection = HarnessDetection(
         harness="codex",
@@ -84,6 +88,7 @@ def _snapshot_for_artifact(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
         trust_attestation_context=trust_attestation_context,
+        cisco_runs=cisco_runs,
     )
 
 
@@ -180,6 +185,10 @@ def test_inventory_snapshot_attaches_local_plugin_trust_resolution(tmp_path: Pat
     components = trust.get("trustComponents")
     assert isinstance(components, list)
     assert components
+
+
+def test_guard_evidence_hash_is_stable_across_key_order() -> None:
+    assert guard_evidence_hash({"b": 2, "a": 1}) == guard_evidence_hash({"a": 1, "b": 2})
 
 
 def test_inventory_skill_trust_enrichment_disables_cisco_scan(
@@ -536,6 +545,50 @@ def test_inventory_snapshot_signs_local_trust_metadata_with_workspace_device_bin
     )
 
 
+def test_local_skill_security_emits_shared_evidence_hash(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("---\nname: Deploy Kit\n---\n# Skill\n", encoding="utf-8")
+
+    cisco_run = CiscoInventoryRun(
+        source="cisco-skill-scanner",
+        status="enabled",
+        message="cisco skill scan",
+        findings=(),
+        duration_ms=0,
+        metadata={
+            "target": str(skill_dir),
+            "findingsBySeverity": {"critical": 0, "high": 0, "medium": 0, "low": 0},
+            "skillsScanned": 1,
+        },
+    )
+
+    snapshot = _snapshot_for_artifact(
+        artifact=GuardArtifact(
+            artifact_id="codex:project:skill:deploy-kit",
+            name="deploy-kit",
+            harness="codex",
+            artifact_type="skill",
+            source_scope="project",
+            config_path=str(skill_dir),
+        ),
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=skill_dir,
+        trust_attestation_context=None,
+        cisco_runs=(cisco_run,),
+    )
+
+    skill_item = next(item for item in snapshot.items if item.item_kind == "skill")
+    local_security = skill_item.metadata.get("localSecurity")
+    assert isinstance(local_security, dict)
+    metadata = local_security.get("metadata")
+    assert isinstance(metadata, dict)
+    evidence_hash = metadata.get("evidenceHash")
+    assert isinstance(evidence_hash, str)
+    assert len(evidence_hash) == 64
+
+
 def test_p384_key_is_rejected_for_p256_attestation() -> None:
     private_key = ec.generate_private_key(ec.SECP384R1())
     private_key_pem = private_key.private_bytes(
@@ -577,6 +630,24 @@ def test_invalid_oauth_private_key_disables_attestation_signing_config() -> None
         )
         is None
     )
+
+
+def test_headless_short_lived_attestation_generates_ephemeral_ec_key(monkeypatch) -> None:
+    monkeypatch.delenv("GUARD_AIBOM_TRUST_ATTESTATION_PRIVATE_KEY", raising=False)
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_HEADLESS_SHORT_LIVED", "1")
+
+    config = resolve_trust_attestation_signing_config(
+        {
+            "GUARD_AIBOM_TRUST_ATTESTATION_HEADLESS_SHORT_LIVED": "1",
+            "GUARD_AIBOM_TRUST_ATTESTATION_KEY_ID": "ci-short-lived",
+        }
+    )
+
+    assert config is not None
+    assert config.active_key_id == "ci-short-lived"
+    assert config.signature_algorithm == GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256
+    verification_key = build_trust_attestation_verification_key(config)
+    assert verification_key.public_jwk_thumbprint is not None
 
 
 def test_registry_identified_skill_still_gets_local_baseline(tmp_path: Path) -> None:

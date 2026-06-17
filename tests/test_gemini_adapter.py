@@ -134,13 +134,7 @@ class TestGeminiHookDetection:
         ctx = _ctx(tmp_path)
         _write_json(
             ctx.home_dir / ".gemini" / "settings.json",
-            {
-                "hooks": {
-                    "PreToolUse": [
-                        {"hooks": [{"type": "command", "command": "python hook.py"}]}
-                    ]
-                }
-            },
+            {"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "python hook.py"}]}]}},
         )
         result = GeminiHarnessAdapter().detect(ctx)
         hook_artifacts = [a for a in result.artifacts if a.artifact_type == "hook"]
@@ -151,13 +145,7 @@ class TestGeminiHookDetection:
         ctx = _ctx(tmp_path)
         _write_json(
             ctx.home_dir / ".gemini" / "settings.json",
-            {
-                "hooks": {
-                    "PreToolUse": [
-                        {"hooks": [{"type": "command", "command": "guard-hook.sh"}]}
-                    ]
-                }
-            },
+            {"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "guard-hook.sh"}]}]}},
         )
         result = GeminiHarnessAdapter().detect(ctx)
         hook = next(a for a in result.artifacts if a.artifact_type == "hook")
@@ -236,9 +224,7 @@ class TestGeminiExtensionDetection:
             manifest,
             {
                 "name": "ext-with-mcp",
-                "mcpServers": {
-                    "embedded-server": {"command": "node", "args": ["server.js"]}
-                },
+                "mcpServers": {"embedded-server": {"command": "node", "args": ["server.js"]}},
             },
         )
         result = GeminiHarnessAdapter().detect(ctx)

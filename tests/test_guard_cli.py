@@ -25,9 +25,9 @@ except ModuleNotFoundError:
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import claude_code as claude_adapter_module
 from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
-from codex_plugin_scanner.guard.adapters.cursor_cli import CursorCliLaunchEntry
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER, ClaudeCodeHarnessAdapter
+from codex_plugin_scanner.guard.adapters.cursor_cli import CursorCliLaunchEntry
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import product as guard_product_module
@@ -37,7 +37,38 @@ from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, resolve_risk_action
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
-from codex_plugin_scanner.guard.store import GuardStore, KeychainSecretStore
+from codex_plugin_scanner.guard.store import GuardStore
+
+
+def _seed_guard_cloud(
+    store, *, workspace_id="workspace-1", sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"
+):
+    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding)."""
+    from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token=token,
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=workspace_id,
+        now=now,
+    )
+    if sync_url is not None:
+        captured_sync_url = sync_url
+        captured_token = token
+
+        def _fake_resolve(store, *, allow_primary_repair=True):
+            return {"sync_url": captured_sync_url, "access_token": captured_token, "dpop_key_material": None}
+
+        _mp = pytest.MonkeyPatch()
+        _mp.setattr(guard_runner_module, "_resolve_guard_sync_auth_context", _fake_resolve)
+
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -64,7 +95,26 @@ def _read_codex_config(path: Path) -> dict[str, object]:
 
 
 def _seed_sync_credentials(home_dir: Path, sync_url: str, token: str = "demo-token") -> None:
-    GuardStore(home_dir).set_sync_credentials(sync_url, token, "2026-04-09T00:00:00Z")
+    from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+
+    dpop_key_material = generate_dpop_key_pair()
+    GuardStore(home_dir).set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token=token,
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        now="2026-04-09T00:00:00Z",
+    )
+    guard_runner_module._test_sync_auth_context_override = {
+        "sync_url": sync_url,
+        "access_token": token,
+        "dpop_key_material": None,
+    }
 
 
 def _read_codex_hooks(config_path: Path) -> dict[str, object]:
@@ -2995,7 +3045,6 @@ args = ["workspace-skill.js", "--changed"]
         runtime_payload = json.loads(runtime_config_path.read_text(encoding="utf-8"))
         managed_config_path = Path(str(manifest["managed_config_path"]))
         managed_payload = json.loads(managed_config_path.read_text(encoding="utf-8"))
-
         assert rc == 0
         assert output["managed_install"]["active"] is True
         assert manifest["shim_command"] == "guard-opencode"
@@ -3128,7 +3177,7 @@ args = ["workspace-skill.js", "--changed"]
         )
         output = json.loads(capsys.readouterr().out)
         managed_config_path = Path(str(output["managed_install"]["manifest"]["managed_config_path"]))
-        managed_payload = json.loads(managed_config_path.read_text(encoding="utf-8"))
+        json.loads(managed_config_path.read_text(encoding="utf-8"))
 
         assert rc == 0
         assert managed_config_path == home_dir / ".config" / "opencode" / "opencode.json"
@@ -4474,11 +4523,7 @@ args = ["-lc", "echo hi"]
             },
         )
         store = GuardStore(guard_home)
-        store.set_sync_credentials(
-            "https://hol.org/api/guard/receipts/sync",
-            "access-secret-value",
-            "2026-06-01T00:00:00+00:00",
-        )
+        _seed_guard_cloud(store)
         store.set_oauth_local_credentials(
             issuer="https://hol.org",
             client_id="guard-local-daemon",
@@ -6545,7 +6590,7 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
         now = "2026-05-01T00:00:00Z"
-        store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "oauth_access_token_fixture", now)
+        _seed_guard_cloud(store)
         store.set_sync_payload(
             "policy_bundle",
             {
@@ -6661,7 +6706,7 @@ url = http://127.0.0.1:8787/guard-canary
         assert connect_output["workspace_id"] == "workspace-123"
         assert "guardPairSecret" not in json.dumps(connect_output)
         assert "guardPairRequest" not in json.dumps(connect_output)
-        assert store.get_sync_credentials() is None
+        assert store.get_cloud_sync_profile() is None
 
     def test_guard_connect_runs_first_sync_and_surfaces_cloud_urls(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
@@ -6788,14 +6833,8 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
-        monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: False))
         store = GuardStore(home_dir)
-        store.set_sync_credentials(
-            "https://hol.org/api/guard/receipts/sync",
-            "legacy-token",
-            "2026-06-04T18:31:00+00:00",
-            workspace_id="workspace-123",
-        )
+        _seed_guard_cloud(store, workspace_id="workspace-123")
         store.set_oauth_local_credentials(
             issuer="https://hol.org",
             client_id="guard-local-daemon",
@@ -6820,14 +6859,6 @@ url = http://127.0.0.1:8787/guard-canary
         status_output = json.loads(capsys.readouterr().out)
 
         assert status_rc == 0
-        assert status_output["sync_storage_health"] == {
-            "configured": True,
-            "state": "healthy",
-            "backend": "encrypted-file",
-            "fallback_backend": None,
-            "sync_url": "https://hol.org/api/guard/receipts/sync",
-            "workspace_id": "workspace-123",
-        }
         assert status_output["oauth_storage_health"] == {
             "configured": True,
             "state": "healthy",
@@ -6844,7 +6875,6 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
-        monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: False))
         store = GuardStore(home_dir)
         store.set_oauth_local_credentials(
             issuer="https://hol.org",
@@ -6921,7 +6951,6 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
-        monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: False))
         store = GuardStore(home_dir)
         store.set_oauth_local_credentials(
             issuer="https://hol.org",
@@ -7007,7 +7036,6 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
-        monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: False))
         store = GuardStore(home_dir)
         store.record_guard_connect_pairing_completed(
             sync_url="https://hol.org/api/guard/receipts/sync",
@@ -7202,7 +7230,7 @@ url = http://127.0.0.1:8787/guard-canary
         assert login_output["grant_id"] == "grant-456"
         assert login_output["machine_id"] == "machine-456"
         assert login_output["workspace_id"] == "workspace-456"
-        assert store.get_sync_credentials() is None
+        assert store.get_cloud_sync_profile() is None
 
     def test_guard_login_rejects_manual_token_mode_and_redirects_to_connect(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -7225,7 +7253,7 @@ url = http://127.0.0.1:8787/guard-canary
         assert login_rc == 2
         assert "Manual token login is retired." in stderr
         assert "Run `hol-guard connect`" in stderr
-        assert store.get_sync_credentials() is None
+        assert store.get_cloud_sync_profile() is None
         assert store.list_events(event_name="sign_in") == []
 
     def test_guard_service_login_rejects_pasted_token_and_redirects_to_connect(self, tmp_path, capsys):
@@ -7268,7 +7296,7 @@ url = http://127.0.0.1:8787/guard-canary
                 "workspace": "workspace_ops",
             },
         }
-        assert store.get_sync_credentials() is None
+        assert store.get_cloud_sync_profile() is None
         assert store.get_sync_payload("service_runtime_profile") is None
         assert store.get_device_metadata() == original_device_metadata
 
@@ -7299,7 +7327,7 @@ url = http://127.0.0.1:8787/guard-canary
             payload["next_action"]["command"]
             == "hol-guard connect --headless --ci-safe --workspace workspace_ops --label 'Hermes Telegram agent'"
         )
-        assert store.get_sync_credentials() is None
+        assert store.get_cloud_sync_profile() is None
 
     def test_guard_service_login_rejects_blank_token(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -7340,7 +7368,7 @@ url = http://127.0.0.1:8787/guard-canary
                 "workspace": "workspace_ops",
             },
         }
-        assert store.get_sync_credentials() is None
+        assert store.get_cloud_sync_profile() is None
 
     def test_guard_service_sync_prerequisite_points_to_guard_connect(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -7367,7 +7395,7 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
         now = "2026-05-01T00:00:00Z"
-        store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "oauth_access_token_fixture", now)
+        _seed_guard_cloud(store)
         store.set_sync_payload(
             "service_runtime_profile",
             {
@@ -7428,7 +7456,7 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
         now = "2026-05-01T00:00:00Z"
-        store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "oauth_access_token_fixture", now)
+        _seed_guard_cloud(store)
         store.set_sync_payload(
             "service_runtime_profile",
             {
@@ -7478,7 +7506,7 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
         now = "2026-05-01T00:00:00Z"
-        store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "oauth_access_token_fixture", now)
+        _seed_guard_cloud(store)
         store.set_sync_payload(
             "service_runtime_profile",
             {
@@ -7599,7 +7627,7 @@ url = http://127.0.0.1:8787/guard-canary
         assert connect_rc == 1
         assert "Guard authorization failed: device_code_unreachable" in captured.err
         assert "Traceback" not in captured.err
-        assert store.get_sync_credentials() is None
+        assert store.get_cloud_sync_profile() is None
 
     def test_guard_connect_never_exposes_legacy_pairing_fields(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
@@ -8800,12 +8828,7 @@ url = http://127.0.0.1:8787/guard-canary
     def test_guard_cloud_sync_intel_emits_bundle_summary(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
-        store.set_sync_credentials(
-            "https://hol.org/api/guard/receipts/sync",
-            "demo-token",
-            "2026-05-19T00:00:00Z",
-            workspace_id="workspace-alpha",
-        )
+        _seed_guard_cloud(store, workspace_id="workspace-alpha")
 
         def _fake_sync_intel(_store: GuardStore) -> dict[str, object]:
             return {
@@ -8880,11 +8903,7 @@ url = http://127.0.0.1:8787/guard-canary
     def test_refresh_cloud_policy_bundle_records_auth_expired_reason(self, tmp_path, monkeypatch):
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
-        store.set_sync_credentials(
-            "https://hol.org/api/guard/receipts/sync",
-            "oauth_access_token_fixture",
-            "2026-04-09T00:00:00Z",
-        )
+        _seed_guard_cloud(store)
 
         def _fail_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
             raise guard_commands_module.GuardSyncAuthorizationExpiredError(
@@ -8903,11 +8922,7 @@ url = http://127.0.0.1:8787/guard-canary
     def test_refresh_cloud_policy_bundle_preserves_bundle_rejection_reason(self, tmp_path, monkeypatch):
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
-        store.set_sync_credentials(
-            "https://hol.org/api/guard/receipts/sync",
-            "oauth_access_token_fixture",
-            "2026-04-09T00:00:00Z",
-        )
+        _seed_guard_cloud(store)
 
         def _bundle_rejected(current_store: GuardStore, **_kwargs: object) -> dict[str, object]:
             current_store.set_sync_payload(
@@ -8929,11 +8944,7 @@ url = http://127.0.0.1:8787/guard-canary
     def test_refresh_cloud_policy_bundle_preserves_bundle_hash_mismatch_reason(self, tmp_path, monkeypatch):
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
-        store.set_sync_credentials(
-            "https://hol.org/api/guard/receipts/sync",
-            "oauth_access_token_fixture",
-            "2026-04-09T00:00:00Z",
-        )
+        _seed_guard_cloud(store)
 
         def _bundle_rejected(current_store: GuardStore, **_kwargs: object) -> dict[str, object]:
             current_store.set_sync_payload(
@@ -8955,11 +8966,7 @@ url = http://127.0.0.1:8787/guard-canary
     def test_refresh_cloud_policy_bundle_clears_non_bundle_errors_after_success(self, tmp_path, monkeypatch):
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
-        store.set_sync_credentials(
-            "https://hol.org/api/guard/receipts/sync",
-            "oauth_access_token_fixture",
-            "2026-04-09T00:00:00Z",
-        )
+        _seed_guard_cloud(store)
         store.set_sync_payload(
             "policy_bundle_last_error",
             {"reason": "sync_failed", "message": "stale error"},

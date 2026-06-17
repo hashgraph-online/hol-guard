@@ -1,4 +1,4 @@
-import { r as reactExports, bq as fetchSupplyChainBundle, j as jsxRuntimeExports, S as SectionLabel, b as EmptyState, aM as HiMiniArrowTopRightOnSquare, ac as Tag, m as formatRelativeTime, B as Badge, w as HiMiniExclamationTriangle, aJ as HiMiniBugAnt, aw as HiMiniArrowPath, br as HiMiniDocumentMagnifyingGlass, bs as HiMiniShieldExclamation, bt as HiMiniComputerDesktop, t as HiMiniCloud, d as HiMiniCheckCircle, ah as HiMiniArrowLeft, bm as HiMiniArrowRight, A as ActionButton, b3 as HiMiniCloudArrowUp, b9 as HiMiniInformationCircle, F as HiMiniWrenchScrewdriver, aZ as fetchReceipts, I as HiMiniXCircle, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
+import { r as reactExports, br as fetchSupplyChainBundle, j as jsxRuntimeExports, S as SectionLabel, b as EmptyState, aN as HiMiniArrowTopRightOnSquare, ac as Tag, m as formatRelativeTime, B as Badge, w as HiMiniExclamationTriangle, aK as HiMiniBugAnt, bs as isSupplyChainScannerEvidence, aw as HiMiniArrowPath, bt as HiMiniDocumentMagnifyingGlass, bu as HiMiniShieldExclamation, bv as HiMiniComputerDesktop, t as HiMiniCloud, d as HiMiniCheckCircle, ah as HiMiniArrowLeft, bn as HiMiniArrowRight, A as ActionButton, b4 as HiMiniCloudArrowUp, ba as HiMiniInformationCircle, F as HiMiniWrenchScrewdriver, a_ as fetchReceipts, I as HiMiniXCircle, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
 import { resolveFeedStaleness } from "./feed-health-workspace.js";
 import { r as resolveHomeProtectionStatus } from "./home-protection-module.js";
 import { b as buildSupplyChainStats } from "./supply-chain-protection-stats.js";
@@ -90,8 +90,7 @@ function SupplyChainBundlePanel() {
         EmptyState,
         {
           title: "Could not load intel",
-          body: error,
-          tone: "error"
+          body: error
         }
       ) })
     ] });
@@ -183,11 +182,8 @@ function SupplyChainBundlePanel() {
     ] })
   ] });
 }
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 function readOperation(value) {
-  if (!isRecord(value) || typeof value.operation !== "string") {
+  if (!isSupplyChainScannerEvidence(value)) {
     return null;
   }
   const trimmed = value.operation.trim();
@@ -260,7 +256,7 @@ function auditRailItem(receipt) {
   const evidence = (receipt.scanner_evidence ?? []).find(
     (entry) => readOperation(entry) === "audit"
   );
-  const auditStatus = isRecord(evidence) && typeof evidence.audit_status === "string" ? evidence.audit_status : null;
+  const auditStatus = evidence !== void 0 && typeof evidence.audit_status === "string" ? evidence.audit_status : null;
   if (auditStatus === "incomplete") {
     return {
       kind: "audit",
@@ -272,9 +268,9 @@ function auditRailItem(receipt) {
       tone: "attention"
     };
   }
-  const decision = isRecord(evidence) && typeof evidence.audit_decision === "string" ? evidence.audit_decision : receipt.policy_decision;
-  const blockedCount = isRecord(evidence) && typeof evidence.blocked_package_count === "number" ? evidence.blocked_package_count : 0;
-  const totalPackages = isRecord(evidence) && typeof evidence.total_packages === "number" ? evidence.total_packages : blockedCount;
+  const decision = evidence !== void 0 && typeof evidence.audit_decision === "string" ? evidence.audit_decision : receipt.policy_decision;
+  const blockedCount = evidence !== void 0 && typeof evidence.blocked_package_count === "number" ? evidence.blocked_package_count : 0;
+  const totalPackages = evidence !== void 0 && typeof evidence.total_packages === "number" ? evidence.total_packages : blockedCount;
   const detail = receipt.capabilities_summary.trim().length > 0 ? receipt.capabilities_summary : `Workspace audit returned ${decision} across ${totalPackages} package(s).`;
   return {
     kind: "audit",

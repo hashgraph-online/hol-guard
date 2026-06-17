@@ -15,10 +15,41 @@ from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import evaluate_detection
 from codex_plugin_scanner.guard.edge_events import build_runtime_session_event
-from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.shims import install_package_shims
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
+    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
+
+    Also installs a test-only resolver override so sync-path exercises stay hermetic
+    (no OAuth token refresh against the network). Tests that need real sync against a
+    local server pass sync_url=<url>.
+    """
+    from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token=token,
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=workspace_id,
+        now=now,
+    )
+    effective_sync_url = sync_url if sync_url is not None else "https://hol.org/api/guard/receipts/sync"
+    guard_runner_module._test_sync_auth_context_override = {
+        "sync_url": effective_sync_url,
+        "access_token": token,
+        "dpop_key_material": None,
+    }
 
 
 def _artifact(tmp_path: Path) -> GuardArtifact:
@@ -49,123 +80,23 @@ def test_sync_credentials_preserve_installation_id_when_cloud_workspace_changes(
     store = GuardStore(tmp_path / "guard-home")
     installation_id = store.get_or_create_installation_id()
 
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:00:00+00:00",
-        workspace_id="workspace-alpha",
-    )
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-two",
-        "2026-04-24T00:01:00+00:00",
-        workspace_id="workspace-beta",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
+    _seed_guard_cloud(store, workspace_id="workspace-beta")
 
     assert store.get_or_create_installation_id() == installation_id
     assert store.get_cloud_workspace_id() == "workspace-beta"
-
-
-def test_sync_credentials_refresh_preserves_existing_cloud_workspace_id(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:00:00+00:00",
-        workspace_id="workspace-alpha",
-    )
+    _seed_guard_cloud(store)
     store.set_sync_payload("policy", {"policy": "team"}, "2026-04-24T00:00:00+00:00")
 
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:01:00+00:00",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
 
     assert store.get_cloud_workspace_id() == "workspace-alpha"
     assert store.get_sync_payload("policy") == {"policy": "team"}
-
-
-def test_sync_credentials_token_rotation_clears_stale_cloud_workspace_id(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:00:00+00:00",
-        workspace_id="workspace-alpha",
-    )
-    store.set_sync_payload("policy", {"policy": "team"}, "2026-04-24T00:00:00+00:00")
-
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-two",
-        "2026-04-24T00:01:00+00:00",
-    )
-
-    assert store.get_cloud_workspace_id() is None
-    assert store.get_sync_payload("policy") is None
-
-
-def test_sync_credentials_workspace_metadata_update_preserves_cached_policy(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:00:00+00:00",
-    )
-    store.set_sync_payload("policy", {"policy": "team"}, "2026-04-24T00:00:00+00:00")
-
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:01:00+00:00",
-        workspace_id="workspace-alpha",
-    )
-
-    assert store.get_cloud_workspace_id() == "workspace-alpha"
-    assert store.get_sync_payload("policy") == {"policy": "team"}
-
-
-def test_sync_credentials_workspace_switch_clears_stale_cloud_policy_allows(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:00:00+00:00",
-        workspace_id="workspace-alpha",
-    )
-    store.set_sync_payload("policy", {"policy": "workspace-alpha"}, "2026-04-24T00:00:00+00:00")
-    store.upsert_policy(
-        PolicyDecision(
-            harness="codex",
-            scope="harness",
-            action="allow",
-            source="cloud-sync",
-            reason="workspace alpha cloud allow",
-        ),
-        "2026-04-24T00:00:00+00:00",
-    )
-
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:01:00+00:00",
-        workspace_id="workspace-beta",
-    )
-
-    assert store.get_cloud_workspace_id() == "workspace-beta"
-    assert store.get_sync_payload("policy") is None
-    assert not any(item["source"] in {"cloud-sync", "team-policy"} for item in store.list_policy_decisions())
 
 
 def test_evaluate_detection_queues_access_graph_snapshot_without_syncing(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:00:00+00:00",
-        workspace_id="workspace-alpha",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
     artifact = _artifact(tmp_path)
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
 
@@ -184,11 +115,7 @@ def test_evaluate_detection_queues_access_graph_snapshot_without_syncing(tmp_pat
 
 def test_evaluate_detection_queues_access_graph_snapshot_without_cloud_workspace(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:00:00+00:00",
-    )
+    _seed_guard_cloud(store)
     artifact = _artifact(tmp_path)
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
 
@@ -213,12 +140,7 @@ class _FailingAccessGraphEventStore(GuardStore):
 
 def test_access_graph_queue_failure_does_not_block_local_approval_decision(tmp_path: Path) -> None:
     store = _FailingAccessGraphEventStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:00:00+00:00",
-        workspace_id="workspace-alpha",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
     artifact = _artifact(tmp_path)
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
 
@@ -257,12 +179,7 @@ def test_sync_guard_events_records_failed_backoff_without_dropping_pending_event
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:00:00+00:00",
-        workspace_id="workspace-alpha",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
     store.add_guard_event_v1(
         build_runtime_session_event(
             session_id="session-1",
@@ -328,12 +245,7 @@ def test_sync_guard_events_drains_all_pending_events_when_v1_endpoint_is_unavail
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home", guard_event_queue_limit=400)
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:00:00+00:00",
-        workspace_id="workspace-alpha",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
     for index in range(250):
         store.add_guard_event_v1(
             build_runtime_session_event(
@@ -370,12 +282,7 @@ def test_sync_guard_events_drains_all_pending_events_when_v1_endpoint_is_unavail
 
 def test_sync_guard_events_preserves_unavailable_summary_when_no_events_pending(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:00:00+00:00",
-        workspace_id="workspace-alpha",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
     store.set_sync_payload(
         "guard_events_v1_summary",
         {
@@ -413,12 +320,7 @@ def test_build_runtime_snapshot_calls_oauth_health_once(tmp_path: Path, monkeypa
 
 def test_runtime_snapshot_treats_naive_sync_timestamps_as_utc(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:00:00+00:00",
-        workspace_id="workspace-alpha",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
     store.set_sync_payload(
         "guard_events_v1_summary",
         {"synced_at": "2000-01-01T00:00:00"},
@@ -433,12 +335,7 @@ def test_runtime_snapshot_treats_naive_sync_timestamps_as_utc(tmp_path: Path) ->
 
 def test_runtime_snapshot_reports_endpoint_unavailable_sync_as_degraded(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:00:00+00:00",
-        workspace_id="workspace-alpha",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
     store.set_sync_payload(
         "sync_summary",
         {"synced_at": datetime.now(timezone.utc).isoformat()},
@@ -493,12 +390,7 @@ def test_runtime_snapshot_exposes_local_device_without_cloud_pairing(tmp_path: P
 def test_runtime_snapshot_exposes_cloud_policy_bundle_fields(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     now = "2026-06-01T00:00:00+00:00"
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "oauth_access_token_fixture",
-        now,
-        workspace_id="workspace-alpha",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
     store.set_sync_payload(
         "policy_bundle",
         {
@@ -530,6 +422,7 @@ def test_runtime_snapshot_exposes_cloud_policy_bundle_fields(tmp_path: Path) -> 
 
 def test_runtime_snapshot_exposes_latest_connect_proof_without_pairing_secrets(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
     request_id = "connect-imported-state"
     with store._connect() as connection:
         connection.execute(
@@ -610,6 +503,68 @@ def test_runtime_snapshot_exposes_latest_connect_proof_without_pairing_secrets(t
     }
 
 
+def test_runtime_snapshot_marks_connected_state_retry_required_when_oauth_missing(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    request_id = "connect-missing-oauth"
+    with store._connect() as connection:
+        connection.execute(
+            """
+            insert into guard_connect_states (
+              request_id,
+              sync_url,
+              allowed_origin,
+              status,
+              milestone,
+              reason,
+              created_at,
+              updated_at,
+              expires_at,
+              completed_at,
+              proof_json
+            )
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                request_id,
+                "https://hol.org/api/guard/receipts/sync",
+                "https://hol.org",
+                "connected",
+                "first_sync_succeeded",
+                None,
+                "2026-04-24T00:00:00+00:00",
+                "2026-04-24T00:02:00+00:00",
+                "2026-04-24T00:05:00+00:00",
+                "2026-04-24T00:01:00+00:00",
+                json.dumps(
+                    {
+                        "pairing_completed_at": "2026-04-24T00:01:00+00:00",
+                        "first_synced_at": "2026-04-24T00:02:00+00:00",
+                        "receipts_stored": 3,
+                        "inventory_items": 5,
+                    }
+                ),
+            ),
+        )
+
+    snapshot = build_runtime_snapshot(
+        store=store,
+        approval_center_url=None,
+        now="2026-04-24T00:03:00+00:00",
+    )
+    latest_connect_state = snapshot["latest_connect_state"]
+
+    assert isinstance(latest_connect_state, dict)
+    assert latest_connect_state["request_id"] == request_id
+    assert latest_connect_state["status"] == "retry_required"
+    assert latest_connect_state["milestone"] == "first_sync_failed"
+    assert latest_connect_state["reason"] == (
+        "Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again."
+    )
+    assert snapshot["cloud_state"] == "local_only"
+    assert snapshot["sync_configured"] is False
+    assert snapshot["proof_status"]["state"] == "failed"
+
+
 @pytest.mark.parametrize(
     ("status", "milestone", "expected_state", "expected_label", "expected_detail"),
     [
@@ -655,6 +610,8 @@ def test_runtime_snapshot_uses_oauth_connect_copy_for_proof_statuses(
     expected_detail: str,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    if status == "connected":
+        _seed_guard_cloud(store, workspace_id="workspace-alpha")
     request_id = f"connect-{expected_state}"
     with store._connect() as connection:
         connection.execute(
@@ -747,12 +704,7 @@ def test_runtime_session_sync_skips_v1_event_when_ingest_was_recently_unavailabl
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:00:00+00:00",
-        workspace_id="workspace-alpha",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
     store.set_sync_payload(
         "guard_events_v1_summary",
         {
@@ -790,12 +742,7 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-04-24T00:00:00+00:00",
-        workspace_id="workspace-alpha",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
     context = HarnessContext(
@@ -868,12 +815,7 @@ def test_sync_runtime_session_prefers_ipv6_private_identity_when_ipv4_unavailabl
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-ipv6",
-        "2026-04-24T00:00:00+00:00",
-        workspace_id="workspace-alpha",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
     monkeypatch.setattr(guard_runner_module, "_safe_private_ip", lambda: None)
     monkeypatch.setattr(guard_runner_module, "_safe_private_ipv6", lambda: "fd00::42")
     captured_body: dict[str, object] = {}
@@ -912,12 +854,7 @@ def test_sync_runtime_session_keeps_local_identity_when_package_coverage_missing
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-no-coverage",
-        "2026-04-24T00:00:00+00:00",
-        workspace_id="workspace-alpha",
-    )
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
     monkeypatch.setattr(
         guard_runner_module,
         "package_shim_cloud_coverage",

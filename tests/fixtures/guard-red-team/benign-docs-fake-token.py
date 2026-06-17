@@ -7,7 +7,6 @@ that only mention tokens in explanatory context.
 The tokens below are clearly fake and used only for illustrative purposes.
 """
 
-
 DOCS = """
 # API Authentication Guide
 

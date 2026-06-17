@@ -46,10 +46,7 @@ def test_sync_http_error_message_prefers_guard_error_msg_over_top_level_error() 
             },
         }
     )
-    assert (
-        _sync_http_error_message(_http_error(body))
-        == "Guard insights sharing is not live on Guard Cloud yet."
-    )
+    assert _sync_http_error_message(_http_error(body)) == "Guard insights sharing is not live on Guard Cloud yet."
 
 
 def test_sync_http_error_message_reads_guard_error_msg_field() -> None:

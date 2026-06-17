@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 import json
 import urllib.error
+from contextlib import contextmanager
 
 import pytest
 

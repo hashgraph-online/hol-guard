@@ -514,7 +514,7 @@ def test_action_runner_verify_mode_ignores_invalid_repo_pr_comment_config(
     event_path = tmp_path / "event.json"
     plugin_dir = tmp_path / "repo"
     shutil.copytree(FIXTURES / "good-plugin", plugin_dir)
-    (plugin_dir / ".plugin-scanner.toml").write_text("[github\npr_comment = \"off\"\n", encoding="utf-8")
+    (plugin_dir / ".plugin-scanner.toml").write_text('[github\npr_comment = "off"\n', encoding="utf-8")
     event_path.write_text(json.dumps({"pull_request": {"number": 12}}), encoding="utf-8")
 
     monkeypatch.setenv("MODE", "verify")

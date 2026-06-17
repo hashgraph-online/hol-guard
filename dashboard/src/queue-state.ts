@@ -346,6 +346,70 @@ export function isReadOnlyQueueGroup(group: QueueGroup): boolean {
   return !isSensitiveFileReadItem(group.primary);
 }
 
+/**
+ * Categories that must never be bulk-approved: these are trust-breaking or
+ * secret-compromising — secrets, exfiltration, credential output, prompt
+ * injection, system prompt access, guard bypass, and encoded payloads. They
+ * stay in the queue for individual review. Mirrors the server-side
+ * `_bulk_request_is_bulk_blocked` set.
+ *
+ * Destructive deletes (destructive_shell, file_delete_cleanup) are intentionally
+ * NOT in this set: they are dangerous but not trust-breaking, so they are
+ * bulk-approvable at the highest risk tier with a typed confirmation.
+ */
+const BULK_BLOCKED_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
+  "secret_exfiltration",
+  "credential_output",
+  "secret_file_read",
+  "prompt_injection",
+  "system_prompt_access",
+  "guard_bypass",
+  "encoded_shell",
+]);
+
+/**
+ * Low-risk categories: file reads, docs edits, generated inventory. Everything
+ * else that is not blocked is "elevated" (shell, source edits, git, network,
+ * packages, deploys, destructive deletes, etc.).
+ */
+const BULK_LOW_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
+  "file_read",
+  "docs_edit",
+  "generated_inventory_edit",
+  "other",
+]);
+
+/**
+ * High-risk categories: destructive deletes and wipes. These are bulk-eligible
+ * (not trust-breaking) but always escalate the disclosure to the highest tier
+ * and require a typed confirmation, since approving many at once can cause
+ * irreversible data loss.
+ */
+const BULK_HIGH_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
+  "destructive_shell",
+  "file_delete_cleanup",
+]);
+
+export type BulkApprovalTier = "blocked" | "high" | "elevated" | "low";
+
+/**
+ * Classify a queue group into a bulk-approval risk tier. "blocked" groups are
+ * never bulk-eligible; "low" and "elevated" are both approvable, with the
+ * dashboard's risk disclosure escalating its copy and friction accordingly.
+ */
+export function bulkApprovalRiskTier(group: QueueGroup): BulkApprovalTier {
+  if (group.primary.policy_action === "block") return "blocked";
+  const categoryId = resolveQueueCategory(group.primary).id;
+  if (BULK_BLOCKED_CATEGORY_IDS.has(categoryId)) return "blocked";
+  if (BULK_HIGH_CATEGORY_IDS.has(categoryId)) return "high";
+  if (BULK_LOW_CATEGORY_IDS.has(categoryId)) return "low";
+  return "elevated";
+}
+
+export function isBulkApprovableGroup(group: QueueGroup): boolean {
+  return bulkApprovalRiskTier(group) !== "blocked";
+}
+
 export function countSensitiveFileReadGroups(groups: QueueGroup[]): number {
   return groups.filter((g) => {
     if (g.primary.policy_action === "block") return false;
@@ -354,6 +418,46 @@ export function countSensitiveFileReadGroups(groups: QueueGroup[]): number {
       g.primary.artifact_type === "file_read_request";
     return isFileRead && isSensitiveFileReadItem(g.primary);
   }).length;
+}
+
+/**
+ * Sum of duplicate retry actions across the given groups. Used by the bulk
+ * approval risk disclosure to surface "X duplicate retries are included".
+ */
+export function countDuplicateActionsInGroups(groups: QueueGroup[]): number {
+  return groups.reduce((sum, group) => sum + Math.max(0, group.duplicateCount), 0);
+}
+
+export type SensitiveFileReadSummary = {
+  count: number;
+  samplePaths: string[];
+};
+
+/**
+ * Collect the sensitive file-read groups in the queue along with up to three
+ * sample paths. These groups are never approved by bulk approval — they stay
+ * in the queue for individual review — but the disclosure surfaces them so the
+ * user knows what was deliberately excluded.
+ */
+export function summarizeSensitiveFileReadGroups(groups: QueueGroup[]): SensitiveFileReadSummary {
+  const paths: string[] = [];
+  let count = 0;
+  for (const group of groups) {
+    if (group.primary.policy_action === "block") continue;
+    const isFileRead =
+      group.primary.action_envelope_json?.action_type === "file_read" ||
+      group.primary.artifact_type === "file_read_request";
+    if (!isFileRead || !isSensitiveFileReadItem(group.primary)) continue;
+    count += 1;
+    if (paths.length < 3) {
+      const path =
+        group.primary.action_envelope_json?.target_paths?.[0] ??
+        group.primary.launch_target ??
+        group.primary.artifact_name;
+      if (path) paths.push(path);
+    }
+  }
+  return { count, samplePaths: paths };
 }
 
 export function bulkApproveActionCount(groups: QueueGroup[]): number {

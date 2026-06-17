@@ -156,7 +156,7 @@ function buildDaemonErrorCopy() {
   };
 }
 function redactHomeArtifactLabel(value) {
-  if (value === null || value.trim().length === 0) {
+  if (typeof value !== "string" || value.trim().length === 0) {
     return "a local action";
   }
   const trimmed = value.trim();

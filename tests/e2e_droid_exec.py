@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """Headless droid exec e2e test script for hol-guard."""
+
 from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+
 def _scan_cmd(fixture_path: Path, fmt: str) -> list[str]:
     """Build scanner invocation, bypassing guard preflight by using direct python module."""
     return ["python3", "-m", "codex_plugin_scanner.cli", "scan", str(fixture_path), "--format", fmt]
+
 
 def run(cmd: list[str], cwd: Path | None = None) -> tuple[int, str, str]:
     env = dict(os.environ)
@@ -22,13 +24,14 @@ def run(cmd: list[str], cwd: Path | None = None) -> tuple[int, str, str]:
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, env=env, cwd=cwd)
     return result.returncode, result.stdout, result.stderr
 
+
 def test_scanner():
     fixtures_dir = Path(__file__).resolve().parent.parent / "tests" / "fixtures"
     test_cases = [
         (fixtures_dir / "good-plugin", 0, "json", False),
         (fixtures_dir / "good-plugin", 0, "text", False),
         (fixtures_dir / "good-plugin", 0, "sarif", False),
-        (fixtures_dir / "bad-plugin", 0, "json", True),   # expect low score
+        (fixtures_dir / "bad-plugin", 0, "json", True),  # expect low score
         (fixtures_dir / "malicious-skill-plugin", 0, "json", False),  # can score high w/few findings
         (fixtures_dir / "multi-plugin-repo" / "plugins" / "alpha-plugin", 0, "json", False),
     ]
@@ -64,9 +67,7 @@ def test_scanner():
             passed = False  # Bad plugin should score poorly
 
         if not passed:
-            failures.append(
-                f"{fixture_path.name} fmt={fmt} code={code} expected={expected_code} score={score}"
-            )
+            failures.append(f"{fixture_path.name} fmt={fmt} code={code} expected={expected_code} score={score}")
 
         status = "PASS" if passed else "FAIL"
         label = fixture_path.name.split("/")[-1]
@@ -78,6 +79,7 @@ def test_scanner():
             print(f"  DEBUG stderr: {stderr[:300]}")
 
     return failures
+
 
 def test_guard():
     guard_cases = [
@@ -97,15 +99,16 @@ def test_guard():
             failures.append(f"guard: {' '.join(cmd[3:])} exit={code}")
     return failures
 
+
 def test_droid_exec():
-    prompt = (
-        "Run hol-guard scan against tests/fixtures/good-plugin with --json"
-        " and report only the score."
-    )
+    prompt = "Run hol-guard scan against tests/fixtures/good-plugin with --json and report only the score."
     cmd = [
-        "droid", "exec",
-        "--cwd", str(PROJECT_ROOT),
-        "--auto", "medium",
+        "droid",
+        "exec",
+        "--cwd",
+        str(PROJECT_ROOT),
+        "--auto",
+        "medium",
         prompt,
     ]
     code, stdout, stderr = run(cmd)
@@ -117,6 +120,7 @@ def test_droid_exec():
         print(f"  DEBUG stdout: {stdout[:500]}")
         print(f"  DEBUG stderr: {stderr[:500]}")
     return [] if passed else ["droid exec headless run failed"]
+
 
 if __name__ == "__main__":
     all_failures: list[str] = []

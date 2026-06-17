@@ -282,7 +282,7 @@ def test_prepare_cursor_hook_payload_maps_after_mcp_execution() -> None:
             "hook_event_name": "afterMCPExecution",
             "tool_name": "ctx_shell",
             "tool_input": {"command": "pnpm test"},
-            "result_json": "{\"ok\": true}",
+            "result_json": '{"ok": true}',
             "duration": 42,
         }
     )
@@ -749,11 +749,15 @@ def test_cursor_native_shell_does_not_approve_unrelated_command(tmp_path: Path) 
         now,
     )
 
+    graphql_command = (
+        'gh api graphql -f query=\'query { repository(owner:"org", name:"repo") { pullRequest(number:1) { id } } }\''
+    )
+
     assert not guard_commands_module._cursor_native_shell_is_approved(
         store,
         {
             "conversation_id": conversation_id,
-            "command": 'gh api graphql -f query=\'query { repository(owner:"org", name:"repo") { pullRequest(number:1) { id } } }\'',
+            "command": graphql_command,
         },
     )
 
@@ -913,7 +917,7 @@ def test_cursor_native_mcp_session_allow_generic_tool_name(tmp_path: Path) -> No
                 "hook_event_name": "afterMCPExecution",
                 "tool_name": "run_terminal_cmd",
                 "tool_input": {"command": inner_command},
-                "result_json": "{\"ok\": true}",
+                "result_json": '{"ok": true}',
                 "duration": 12,
             }
         ),
@@ -988,7 +992,7 @@ def test_cursor_native_mcp_session_allow_after_trusted_after_mcp(tmp_path: Path)
                 "hook_event_name": "afterMCPExecution",
                 "tool_name": "ctx_shell",
                 "tool_input": {"command": inner_command},
-                "result_json": "{\"ok\": true}",
+                "result_json": '{"ok": true}',
                 "duration": 12,
             }
         ),

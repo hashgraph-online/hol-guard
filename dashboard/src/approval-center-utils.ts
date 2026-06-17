@@ -7,6 +7,7 @@ import type {
   RiskSignalV2
 } from "./guard-types";
 import { guardAwareHref } from "./guard-api";
+import { resolveQueueCategory } from "./queue-state";
 
 export const EMPTY_QUEUE_TITLE = "No blocked actions";
 export const STALE_REQUEST_COPY = "This request was already decided.";
@@ -699,29 +700,34 @@ export type BulkApproveRiskLine = {
   harnessLabel: string;
   duplicateCount: number;
   summary: string;
+  categoryLabel: string;
 };
 
 export function summarizeBulkApproveSelection(
   groups: Array<{ primary: GuardApprovalRequest; duplicateCount: number }>
 ): BulkApproveRiskLine[] {
-  return groups.map((group) => ({
-    requestId: group.primary.request_id,
-    title: resolveDecisionV2Title(group.primary) ?? displayArtifactName(group.primary),
-    path: resolveFileReadPath(group.primary),
-    harnessLabel: harnessDisplayName(group.primary.harness),
-    duplicateCount: group.duplicateCount,
-    summary: buildQueueSummary(group.primary),
-  }));
+  return groups.map((group) => {
+    const category = resolveQueueCategory(group.primary);
+    return {
+      requestId: group.primary.request_id,
+      title: resolveDecisionV2Title(group.primary) ?? displayArtifactName(group.primary),
+      path: resolveFileReadPath(group.primary),
+      harnessLabel: harnessDisplayName(group.primary.harness),
+      duplicateCount: group.duplicateCount,
+      summary: buildQueueSummary(group.primary),
+      categoryLabel: category.shortLabel,
+    };
+  });
 }
 
 export function buildBulkApproveConsequenceCopy(actionCount: number): string {
   if (actionCount <= 0) {
-    return "No read-only file reads are selected.";
+    return "No actions are selected.";
   }
   if (actionCount === 1) {
-    return "Guard will approve once for one read-only file access. This applies to the current retry only and does not remember future reads.";
+    return "Guard will approve this action once. It applies to the current retry only and does not remember future runs.";
   }
-  return `Guard will approve once for ${actionCount} read-only file accesses. Mass approval is risky: you are allowing many paths in one step without reviewing each file individually. Each decision applies to this retry only, not future edits, writes, or different paths.`;
+  return `Guard will approve ${actionCount} actions once. Mass approval skips opening each request, so an unexpected action is harder to catch. Each decision applies to its retry only and is not remembered.`;
 }
 
 export function buildCodexResumeUx(resume: GuardCodexResumeResult): CodexResumeUx {

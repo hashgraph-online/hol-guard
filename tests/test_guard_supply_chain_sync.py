@@ -22,6 +22,38 @@ from codex_plugin_scanner.guard.runtime.runner import sync_supply_chain_bundle
 from codex_plugin_scanner.guard.runtime.supply_chain_bundle import canonical_supply_chain_bundle_payload
 from codex_plugin_scanner.guard.store import GuardStore
 
+
+def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
+    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
+
+    Also installs a test-only resolver override so sync-path exercises stay hermetic
+    (no OAuth token refresh against the network). Tests that need real sync against a
+    local server pass sync_url=<url>.
+    """
+    from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token=token,
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=workspace_id,
+        now=now,
+    )
+    effective_sync_url = sync_url if sync_url is not None else "https://hol.org/api/guard/receipts/sync"
+    guard_runner_module._test_sync_auth_context_override = {
+        "sync_url": effective_sync_url,
+        "access_token": token,
+        "dpop_key_material": None,
+    }
+
+
 WORKSPACE_ID = "workspace-alpha"
 
 
@@ -294,11 +326,11 @@ def test_sync_supply_chain_bundle_fetches_and_caches_bundle(tmp_path: Path) -> N
     thread.start()
     try:
         store = GuardStore(tmp_path / "guard-home")
-        store.set_sync_credentials(
-            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
-            "demo-token",
-            "2026-05-19T00:00:00Z",
+        _seed_guard_cloud(
+            store,
             workspace_id=WORKSPACE_ID,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="demo-token",
         )
 
         summary = sync_supply_chain_bundle(store)
@@ -353,11 +385,11 @@ def test_supply_chain_bundle_refresh_keeps_approval_queue_quiet(tmp_path: Path) 
     thread.start()
     try:
         store = GuardStore(tmp_path / "guard-home")
-        store.set_sync_credentials(
-            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
-            "demo-token",
-            "2026-05-19T00:00:00Z",
+        _seed_guard_cloud(
+            store,
             workspace_id=WORKSPACE_ID,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="demo-token",
         )
         store.cache_supply_chain_bundle(
             WORKSPACE_ID,
@@ -441,11 +473,11 @@ def test_sync_supply_chain_bundle_refresh_downloads_only_changed_partitions(tmp_
     thread.start()
     try:
         store = GuardStore(tmp_path / "guard-home")
-        store.set_sync_credentials(
-            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
-            "demo-token",
-            "2026-05-19T00:00:00Z",
+        _seed_guard_cloud(
+            store,
             workspace_id=WORKSPACE_ID,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="demo-token",
         )
         store.cache_supply_chain_bundle(WORKSPACE_ID, unchanged_partition, "2026-05-19T00:00:00Z")
         store.set_sync_payload(
@@ -540,11 +572,11 @@ def test_sync_supply_chain_bundle_reuses_cached_partitions_without_full_refresh(
     thread.start()
     try:
         store = GuardStore(tmp_path / "guard-home")
-        store.set_sync_credentials(
-            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
-            "demo-token",
-            "2026-05-19T00:00:00Z",
+        _seed_guard_cloud(
+            store,
             workspace_id=WORKSPACE_ID,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="demo-token",
         )
         store.cache_supply_chain_bundle(WORKSPACE_ID, npm_partition, "2026-05-19T00:00:00Z")
         store.set_sync_payload(
@@ -628,11 +660,11 @@ def test_sync_supply_chain_bundle_refetches_tampered_cached_partition(tmp_path: 
     thread.start()
     try:
         store = GuardStore(tmp_path / "guard-home")
-        store.set_sync_credentials(
-            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
-            "demo-token",
-            "2026-05-19T00:00:00Z",
+        _seed_guard_cloud(
+            store,
             workspace_id=WORKSPACE_ID,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="demo-token",
         )
         store.cache_supply_chain_bundle(
             WORKSPACE_ID,
@@ -731,11 +763,11 @@ def test_sync_supply_chain_bundle_refetches_full_bundle_for_tampered_cached_sign
     thread.start()
     try:
         store = GuardStore(tmp_path / "guard-home")
-        store.set_sync_credentials(
-            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
-            "demo-token",
-            "2026-05-19T00:00:00Z",
+        _seed_guard_cloud(
+            store,
             workspace_id=WORKSPACE_ID,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="demo-token",
         )
         store.cache_supply_chain_bundle(
             WORKSPACE_ID,
@@ -815,12 +847,7 @@ def test_sync_supply_chain_bundle_wraps_runtime_error_when_cached_bundle_refetch
         "workspaceId": WORKSPACE_ID,
     }
     store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "demo-token",
-        "2026-05-19T00:00:00Z",
-        workspace_id=WORKSPACE_ID,
-    )
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _tamper_signature(
@@ -857,60 +884,3 @@ def test_sync_supply_chain_bundle_wraps_runtime_error_when_cached_bundle_refetch
 
     with pytest.raises(RuntimeError, match="Guard supply-chain bundle sync failed: simulated network failure"):
         sync_supply_chain_bundle(store)
-
-
-def test_supply_chain_cache_and_eval_cache_clear_on_sync_token_rotation(tmp_path: Path) -> None:
-    private_key_pem, public_key_pem = _generate_key_pair()
-    response_payload = _bundle_response(private_key_pem, public_key_pem)
-    store = GuardStore(tmp_path / "guard-home")
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-one",
-        "2026-05-19T00:00:00Z",
-        workspace_id=WORKSPACE_ID,
-    )
-    store.cache_supply_chain_bundle(WORKSPACE_ID, response_payload, "2026-05-19T00:00:00Z")
-    store.cache_supply_chain_evaluation(
-        workspace_id=WORKSPACE_ID,
-        package_intent_hash="intent-1",
-        feed_snapshot_hash="feed-snapshot-1",
-        policy_hash="policy-hash-1",
-        scoring_version="scf-v1",
-        bundle_version="1747612800000-deadbeef",
-        decision={"action": "block", "reason": "known_malware_or_kev"},
-        now="2026-05-19T00:00:00Z",
-    )
-    store.set_sync_payload("supply_chain_bundle_keyring", {"workspace_id": WORKSPACE_ID}, "2026-05-19T00:00:00Z")
-
-    assert store.get_cached_supply_chain_bundle(WORKSPACE_ID) is not None
-    assert (
-        store.get_cached_supply_chain_evaluation(
-            workspace_id=WORKSPACE_ID,
-            package_intent_hash="intent-1",
-            feed_snapshot_hash="feed-snapshot-1",
-            policy_hash="policy-hash-1",
-            scoring_version="scf-v1",
-            bundle_version="1747612800000-deadbeef",
-        )
-        is not None
-    )
-
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "token-two",
-        "2026-05-19T00:01:00Z",
-    )
-
-    assert store.get_cached_supply_chain_bundle(WORKSPACE_ID) is None
-    assert (
-        store.get_cached_supply_chain_evaluation(
-            workspace_id=WORKSPACE_ID,
-            package_intent_hash="intent-1",
-            feed_snapshot_hash="feed-snapshot-1",
-            policy_hash="policy-hash-1",
-            scoring_version="scf-v1",
-            bundle_version="1747612800000-deadbeef",
-        )
-        is None
-    )
-    assert store.get_sync_payload("supply_chain_bundle_keyring") is None

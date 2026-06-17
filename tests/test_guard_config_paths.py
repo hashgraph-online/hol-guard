@@ -21,6 +21,37 @@ from codex_plugin_scanner.guard.config import (
 from codex_plugin_scanner.guard.store import GuardStore
 
 
+def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
+    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
+
+    Also installs a test-only resolver override so sync-path exercises stay hermetic
+    (no OAuth token refresh against the network). Tests that need real sync against a
+    local server pass sync_url=<url>.
+    """
+    from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token=token,
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=workspace_id,
+        now=now,
+    )
+    effective_sync_url = sync_url if sync_url is not None else "https://hol.org/api/guard/receipts/sync"
+    guard_runner_module._test_sync_auth_context_override = {
+        "sync_url": effective_sync_url,
+        "access_token": token,
+        "dpop_key_material": None,
+    }
+
+
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
@@ -369,14 +400,14 @@ def test_resolve_guard_home_does_not_migrate_retired_legacy_credentials(tmp_path
     legacy_home = home_dir / ".ai-plugin-scanner-guard"
     GuardStore(canonical_home)
     legacy_store = GuardStore(legacy_home)
-    legacy_store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "legacy-token", "2026-04-15T00:00:00Z")
+    _seed_guard_cloud(legacy_store)
     monkeypatch.setattr(Path, "home", lambda: home_dir)
 
     resolved_home = resolve_guard_home()
 
     assert resolved_home == canonical_home
     canonical_store = GuardStore(canonical_home)
-    assert canonical_store.get_sync_credentials() is None
+    assert canonical_store.get_cloud_sync_profile() is None
 
 
 def test_migrate_guard_home_state_merges_nested_legacy_directories(tmp_path):
@@ -531,7 +562,7 @@ def test_resolve_guard_home_keeps_canonical_state_when_legacy_only_has_credentia
     legacy_home = home_dir / ".ai-plugin-scanner-guard"
     _write_text(canonical_home / "guard.db", "sqlite placeholder")
     legacy_store = GuardStore(legacy_home)
-    legacy_store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "legacy-token", "2026-04-15T00:00:00Z")
+    _seed_guard_cloud(legacy_store)
     monkeypatch.setattr(Path, "home", lambda: home_dir)
 
     assert resolve_guard_home() == canonical_home
