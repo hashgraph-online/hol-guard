@@ -793,9 +793,14 @@ def _resolve_package_firewall_connect_flow(
     reason = str(entitlement.get("reason") or "").strip().lower()
     if reason not in {"guard_cloud_connect_required", "guard_cloud_reconnect_required"}:
         return None
-    current = _copy_package_firewall_connect_state(server)
-    if current is None:
-        current = _copy_guard_cloud_connect_state(server)
+    package_current = _copy_package_firewall_connect_state(server)
+    cloud_current = _copy_guard_cloud_connect_state(server)
+    if _guard_cloud_connect_state_is_in_flight(cloud_current):
+        current = cloud_current
+    elif package_current is not None:
+        current = package_current
+    else:
+        current = cloud_current
     if current is None:
         return _default_package_firewall_connect_flow(store=server.store, reason=reason)
     state = str(current.get("state") or "idle")

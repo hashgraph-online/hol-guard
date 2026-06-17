@@ -308,6 +308,51 @@ def test_supply_chain_package_firewall_status_reports_connect_gate_when_cloud_is
     }
 
 
+def test_supply_chain_package_firewall_status_prefers_active_cloud_connect_flow(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        daemon_server._set_package_firewall_connect_state(
+            daemon._server,
+            {
+                "state": "failed",
+                "request_id": "package-failed-1",
+                "authorize_url": None,
+                "browser_opened": False,
+                "message": "Previous package-firewall connect failed.",
+            },
+        )
+        daemon_server._set_guard_cloud_connect_state(
+            daemon._server,
+            {
+                "state": "running",
+                "request_id": "cloud-running-1",
+                "authorize_url": "https://hol.org/mock-authorize",
+                "browser_opened": True,
+            },
+        )
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims",
+                method="GET",
+                token=token,
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["entitlement"]["reason"] == "guard_cloud_connect_required"
+    assert payload["connect_flow"]["state"] == "running"
+    assert payload["connect_flow"]["request_id"] == "cloud-running-1"
+    assert payload["connect_flow"]["authorize_url"] == "https://hol.org/mock-authorize"
+
+
 def test_supply_chain_package_firewall_install_requires_cloud_connect_first(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
