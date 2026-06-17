@@ -216,6 +216,7 @@ def test_daemon_guard_cloud_connect_persists_oauth_state_for_dashboard(
             if store.get_cloud_sync_profile() is not None:
                 break
             time.sleep(0.05)
+        assert store.get_cloud_sync_profile() is not None, "Timed out waiting for dashboard connect to persist OAuth"
 
         status_code, connect_status = _daemon_json_request(
             daemon=daemon,
