@@ -2784,6 +2784,7 @@ class GuardStore:
         current_time = now or _now()
         workspace_key = _workspace_policy_key(workspace)
         action_family_key = _artifact_family_key(artifact_id)
+        runtime_exact_match_key = _runtime_scoped_exact_match_key(artifact_id) if artifact_hash is not None else None
         events: list[tuple[str, dict[str, object]]] = []
         selected_payload: dict[str, object] | None = None
         with self._connect() as connection:
@@ -2800,6 +2801,7 @@ class GuardStore:
                   (
                     scope = 'artifact' and artifact_id = ? and (
                       artifact_hash is null or (? is not null and artifact_hash = ?)
+                      or (? is not null and artifact_hash = ?)
                     )
                   )
                   or (
@@ -2839,6 +2841,8 @@ class GuardStore:
                     artifact_id,
                     artifact_hash,
                     artifact_hash,
+                    runtime_exact_match_key,
+                    runtime_exact_match_key,
                     workspace_key,
                     workspace,
                     artifact_id,
@@ -2880,7 +2884,11 @@ class GuardStore:
                         state=state,
                     )
                     break
-                if integrity_result.status == "missing_integrity" and state.get("enforcement") == "warn":
+                if _warn_only_policy_integrity_status(
+                    integrity_result.status,
+                    state,
+                    source=str(candidate["source"]),
+                ):
                     events.append(
                         (
                             "policy_integrity_warning",
@@ -2893,8 +2901,9 @@ class GuardStore:
                         )
                     )
                     _store_logger.warning(
-                        "Guard honored legacy unsigned local policy decision %s while integrity enforcement is warn.",
+                        "Guard honored local policy decision %s while integrity enforcement is warn (%s).",
                         candidate["decision_id"],
+                        integrity_result.status,
                     )
                     selected_payload = self._policy_row_payload(
                         candidate,
@@ -6179,6 +6188,28 @@ def _scoped_runtime_row_requires_exact_match(
     if expected_exact_key is None:
         return True
     return stored_artifact_hash != expected_exact_key
+
+
+def _warn_only_policy_integrity_status(status: str, state: Mapping[str, object], *, source: str = "local") -> bool:
+    if state.get("enforcement") != "warn":
+        return False
+    if status == "missing_integrity":
+        return True
+    if status != "degraded_mode":
+        return False
+    if source != "approval-gate":
+        return False
+    reasons = state.get("degraded_reasons")
+    if not isinstance(reasons, list):
+        return False
+    if not reasons:
+        return False
+    allowed_reasons = {
+        "system_keyring_unavailable",
+        "policy_integrity_key_unavailable",
+        "policy_integrity_control_unavailable",
+    }
+    return all(isinstance(reason, str) and reason in allowed_reasons for reason in reasons)
 
 
 def _family_key_value(family_key: str) -> str:
