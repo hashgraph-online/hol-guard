@@ -731,6 +731,7 @@ def test_empty_degraded_reasons_do_not_honor_warn_only_policy() -> None:
     assert not _warn_only_policy_integrity_status(
         "degraded_mode",
         {"enforcement": "warn", "degraded_reasons": []},
+        source="approval-gate",
     )
 
 

@@ -356,6 +356,7 @@ def apply_approval_resolution(
         workspace=workspace if scope == "workspace" else None,
         publisher=request_publisher if scope == "publisher" else None,
         reason=reason,
+        source="approval-gate",
     )
     resolved_at = now or _now()
     resolved_gate_grant = require_approval_decision(
@@ -452,7 +453,7 @@ def _workspace_policy_artifact_keys(request: Mapping[str, object], scope: str) -
 
 
 def _artifact_scope_runtime_exact_match_key(request: Mapping[str, object], scope: str) -> str | None:
-    if scope != "artifact" or request.get("artifact_type") not in _WORKSPACE_SCOPED_RUNTIME_ARTIFACT_TYPES:
+    if scope != "artifact" or request.get("artifact_type") != "tool_action_request":
         return None
     artifact_id = request.get("artifact_id")
     return _runtime_scoped_exact_match_key(artifact_id) if isinstance(artifact_id, str) else None

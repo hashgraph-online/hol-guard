@@ -2884,7 +2884,11 @@ class GuardStore:
                         state=state,
                     )
                     break
-                if _warn_only_policy_integrity_status(integrity_result.status, state):
+                if _warn_only_policy_integrity_status(
+                    integrity_result.status,
+                    state,
+                    source=str(candidate["source"]),
+                ):
                     events.append(
                         (
                             "policy_integrity_warning",
@@ -6186,12 +6190,14 @@ def _scoped_runtime_row_requires_exact_match(
     return stored_artifact_hash != expected_exact_key
 
 
-def _warn_only_policy_integrity_status(status: str, state: Mapping[str, object]) -> bool:
+def _warn_only_policy_integrity_status(status: str, state: Mapping[str, object], *, source: str = "local") -> bool:
     if state.get("enforcement") != "warn":
         return False
     if status == "missing_integrity":
         return True
     if status != "degraded_mode":
+        return False
+    if source != "approval-gate":
         return False
     reasons = state.get("degraded_reasons")
     if not isinstance(reasons, list):
