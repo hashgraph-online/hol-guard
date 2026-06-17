@@ -806,26 +806,24 @@ def _write_system_keyring_availability_cache(guard_home: Path, *, available: boo
     if sys.platform != "darwin":
         return
     path = _system_keyring_availability_cache_path(guard_home)
-    path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     payload = {
         "available": available,
         "checked_at": time.time(),
     }
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path.write_text(
             json.dumps(payload, sort_keys=True, separators=(",", ":")),
             encoding="utf-8",
         )
         _set_private_mode(tmp_path, _GUARD_STORE_PRIVATE_FILE_MODE)
         tmp_path.replace(path)
-        _set_private_mode(path, _GUARD_STORE_PRIVATE_FILE_MODE)
     except OSError:
         return
     finally:
-        if tmp_path.exists():
-            with suppress(OSError):
-                tmp_path.unlink()
+        with suppress(OSError):
+            tmp_path.unlink()
 
 
 def _system_keyring_is_available(guard_home: Path) -> bool:
