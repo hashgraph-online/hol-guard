@@ -4765,7 +4765,7 @@ class GuardStore:
             return health
         secret_hash = payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY)
         cached_health = self._get_cached_oauth_health_result(secret_hash)
-        if cached_health is not None and cached_health.get("state") == "healthy":
+        if cached_health is not None:
             health.update(cached_health)
             return health
         secret_payload = self._load_oauth_secret_payload(payload, promote=False, allow_primary=False)
@@ -4910,7 +4910,6 @@ class GuardStore:
         cache_key = self._oauth_health_process_cache_key(_string_value(payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY)))
         if cache_key is not None:
             _OAUTH_HEALTH_RESULT_PROCESS_CACHE.pop(cache_key, None)
-        self._clear_oauth_secret_payload_cache()
         return True
 
     def _load_oauth_secret_payload(
