@@ -11,6 +11,7 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore, SystemKeyringSecretStore
 
@@ -300,6 +301,7 @@ def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "linux", raising=False)
     store = _store(tmp_path)
     store.upsert_policy(
         _decision(artifact_id="codex:project:keychain-cache", artifact_hash="hash-keychain-cache"),
@@ -369,6 +371,7 @@ def test_policy_integrity_status_skips_passive_macos_keychain_reads(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     store = _store(tmp_path)
     store.upsert_policy(
         _decision(artifact_id="codex:project:passive-skip", artifact_hash="hash-passive-skip"),
@@ -380,13 +383,20 @@ def test_policy_integrity_status_skips_passive_macos_keychain_reads(
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "_supports_native_macos_security_reads",
-        classmethod(lambda cls: True),
+        classmethod(lambda cls: False),
     )
     monkeypatch.setattr(
         secret_store,
         "get_secret_with_timeout",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssertionError("passive policy-integrity status should skip macOS keychain reads")
+        ),
+    )
+    monkeypatch.setattr(
+        secret_store,
+        "get_secret",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("passive policy-integrity status should never prompt through get_secret")
         ),
     )
     monkeypatch.setattr(
@@ -404,6 +414,95 @@ def test_policy_integrity_status_skips_passive_macos_keychain_reads(
     assert verify["mode"] == "degraded"
     assert "policy_integrity_key_unavailable" in status["degraded_reasons"]
     assert "policy_integrity_control_unavailable" in status["degraded_reasons"]
+    assert verify["local_rows_scanned"] == 1
+
+
+def test_policy_integrity_create_skips_macos_keychain_when_native_reads_are_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    store = _store(tmp_path)
+    secret_store = store._policy_integrity_secret_store
+    assert isinstance(secret_store, SystemKeyringSecretStore)
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_supports_native_macos_security_reads",
+        classmethod(lambda cls: False),
+    )
+    monkeypatch.setattr(
+        secret_store,
+        "get_secret",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("policy-integrity create should not prompt through get_secret")
+        ),
+    )
+    monkeypatch.setattr(
+        secret_store,
+        "set_secret",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("policy-integrity create should not write unusable keychain material")
+        ),
+    )
+
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:no-native-create", artifact_hash="hash-no-native-create"),
+        "2026-06-14T00:00:00Z",
+    )
+    status = store.get_policy_integrity_status()
+
+    assert status["mode"] == "degraded"
+    assert "policy_integrity_key_unavailable" in status["degraded_reasons"]
+    assert "policy_integrity_control_unavailable" in status["degraded_reasons"]
+
+
+def test_policy_integrity_status_uses_native_macos_reads_without_degrading(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "linux", raising=False)
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:native-passive", artifact_hash="hash-native-passive"),
+        "2026-06-14T00:00:00Z",
+    )
+    secret_store = store._policy_integrity_secret_store
+    assert isinstance(secret_store, SystemKeyringSecretStore)
+    key_value = secret_store.get_secret(store._policy_integrity_key_ref)
+    control_value = secret_store.get_secret(store._policy_integrity_control_ref)
+    assert isinstance(key_value, str) and key_value
+    assert isinstance(control_value, str) and control_value
+    store._clear_policy_integrity_cache()
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_supports_native_macos_security_reads",
+        classmethod(lambda cls: True),
+    )
+    monkeypatch.setattr(
+        store,
+        "_get_secret_from_store",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("passive policy-integrity status should not use interactive keychain reads")
+        ),
+    )
+
+    def _native_read(secret_id: str, *, timeout_seconds: float) -> str | None:
+        assert timeout_seconds > 0
+        if secret_id == store._policy_integrity_key_ref:
+            return key_value
+        if secret_id == store._policy_integrity_control_ref:
+            return control_value
+        raise AssertionError(f"unexpected policy-integrity secret lookup: {secret_id}")
+
+    monkeypatch.setattr(secret_store, "get_secret_with_timeout", _native_read)
+
+    status = store.get_policy_integrity_status()
+    verify = store.verify_policy_integrity()
+
+    assert status["mode"] == "protected"
+    assert status["degraded_reasons"] == []
+    assert verify["mode"] == "protected"
     assert verify["local_rows_scanned"] == 1
 
 
