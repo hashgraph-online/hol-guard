@@ -1009,6 +1009,7 @@ def test_supply_chain_package_firewall_open_shell_endpoint_returns_activation_la
 def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    allow_transient_shell_profile_writes,
 ) -> None:
     home_dir = tmp_path / "home"
     home_dir.mkdir()
@@ -1212,6 +1213,7 @@ def test_supply_chain_package_firewall_status_exposes_local_recovery_when_connec
 def test_supply_chain_package_firewall_repair_runs_without_guard_cloud_connect(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    allow_transient_shell_profile_writes,
 ) -> None:
     home_dir = tmp_path / "home"
     home_dir.mkdir()
@@ -1307,6 +1309,7 @@ def test_audit_package_shim_path_remediation_requires_approval_gate_proof(tmp_pa
 def test_audit_package_shim_path_remediation_updates_profile_with_gate_proof(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    allow_transient_shell_profile_writes,
 ) -> None:
     home_dir = tmp_path / "home"
     home_dir.mkdir()

@@ -379,6 +379,7 @@ class SystemKeyringSecretStore:
 
     _MACOS_KEYCHAIN_HEALTH_CACHE_TTL_SECONDS = 5.0
     _macos_keychain_health_cache: tuple[float, bool] | None = None
+    _native_macos_security_reads_cache: tuple[int, bool] | None = None
 
     def __init__(self, service_name: str) -> None:
         self.service_name = service_name
@@ -499,8 +500,27 @@ class SystemKeyringSecretStore:
         value = keyring_module.get_password(self.service_name, secret_id)
         return value if isinstance(value, str) and value else None
 
-    def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float) -> str | None:
+    @classmethod
+    def _supports_native_macos_security_reads(cls) -> bool:
         if sys.platform != "darwin":
+            return False
+        loader_ref = cls._load_keyring_module
+        loader_id = id(loader_ref)
+        cached = cls._native_macos_security_reads_cache
+        if cached is not None and cached[0] == loader_id:
+            return cached[1]
+        try:
+            keyring_module = loader_ref()
+        except Exception:
+            cls._native_macos_security_reads_cache = (loader_id, False)
+            return False
+        module_name = getattr(keyring_module, "__name__", "")
+        supported = module_name == "keyring"
+        cls._native_macos_security_reads_cache = (loader_id, supported)
+        return supported
+
+    def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float) -> str | None:
+        if not self._supports_native_macos_security_reads():
             return self.get_secret(secret_id)
         security_path = Path("/usr/bin/security")
         if not security_path.exists():
@@ -809,6 +829,8 @@ _OAUTH_HEALTH_CACHE_TTL_SECONDS = 60.0
 _OAUTH_HEALTH_DEGRADED_CACHE_TTL_SECONDS = 15.0
 _OAUTH_STORAGE_REPAIR_MIN_INTERVAL_SECONDS = 3600.0
 _OAUTH_KEYCHAIN_ACCESS_STATE_FILE = "oauth-keychain-access.json"
+_POLICY_INTEGRITY_PRIMARY_SECRET_TIMEOUT_SECONDS = 1.0
+_POLICY_INTEGRITY_CACHE_TTL_SECONDS = 60.0
 _store_logger = logging.getLogger(__name__)
 _OAUTH_SECRET_PAYLOAD_PROCESS_CACHE: dict[tuple[str, str, str], str] = {}
 _OAUTH_HEALTH_RESULT_PROCESS_CACHE: dict[tuple[str, str], tuple[float, dict[str, object]]] = {}
@@ -833,6 +855,8 @@ class GuardStore:
         self._oauth_secret_store = _build_oauth_secret_store(self.guard_home)
         self._policy_integrity_secret_store = _build_policy_integrity_secret_store()
         self._cached_oauth_secret_payload: tuple[str, str, str] | None = None
+        self._cached_policy_integrity_secret_material: tuple[str | None, float, tuple[bytes, str]] | None = None
+        self._cached_policy_integrity_control_state: tuple[str | None, float, dict[str, object]] | None = None
         self._sync_token_ref = self._build_scoped_secret_ref(_SYNC_TOKEN_REF)
         self._policy_integrity_key_ref = self._build_scoped_secret_ref(_POLICY_INTEGRITY_KEY_REF)
         self._policy_integrity_control_ref = self._build_scoped_secret_ref(_POLICY_INTEGRITY_CONTROL_REF)
@@ -903,6 +927,21 @@ class GuardStore:
             )
         return self._get_secret_from_store(store, secret_id)
 
+    def _get_policy_integrity_secret_from_store(self, secret_id: str) -> str | None:
+        secret_store = self._policy_integrity_secret_store
+        if secret_store is None:
+            return None
+        if isinstance(secret_store, SystemKeyringSecretStore):
+            return secret_store.get_secret_with_timeout(
+                secret_id,
+                timeout_seconds=_POLICY_INTEGRITY_PRIMARY_SECRET_TIMEOUT_SECONDS,
+            )
+        return self._get_secret_from_store(secret_store, secret_id)
+
+    def _clear_policy_integrity_cache(self) -> None:
+        self._cached_policy_integrity_secret_material = None
+        self._cached_policy_integrity_control_state = None
+
     def _get_secret_candidates(
         self,
         secret_store: SecretStore,
@@ -955,17 +994,22 @@ class GuardStore:
         return _secret_store_backend_name(self._policy_integrity_secret_store)
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
+        cached = self._cached_policy_integrity_secret_material
+        marker = self._policy_integrity_cache_marker()
+        now = time.monotonic()
+        if cached is not None and cached[0] == marker and (now - cached[1]) < _POLICY_INTEGRITY_CACHE_TTL_SECONDS:
+            return cached[2]
         secret_store = self._policy_integrity_secret_store
         if secret_store is None:
             return None, None
-        encoded_key = self._get_secret_from_store(secret_store, self._policy_integrity_key_ref)
+        encoded_key = self._get_policy_integrity_secret_from_store(self._policy_integrity_key_ref)
         if encoded_key is None and create:
             generated_key = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii")
             try:
                 secret_store.set_secret(self._policy_integrity_key_ref, generated_key)
             except Exception:
                 return None, None
-            encoded_key = self._get_secret_from_store(secret_store, self._policy_integrity_key_ref)
+            encoded_key = self._get_policy_integrity_secret_from_store(self._policy_integrity_key_ref)
         if encoded_key is None:
             return None, None
         try:
@@ -975,6 +1019,7 @@ class GuardStore:
         if len(raw_key) != 32:
             return None, None
         key_id = self._versioned_secret_ref(self._policy_integrity_key_ref, sha256(raw_key).hexdigest())
+        self._cached_policy_integrity_secret_material = (marker, now, (raw_key, key_id))
         return raw_key, key_id
 
     @staticmethod
@@ -1014,16 +1059,23 @@ class GuardStore:
         }
 
     def _load_policy_integrity_control_state(self, *, create: bool) -> dict[str, object] | None:
+        cached = self._cached_policy_integrity_control_state
+        marker = self._policy_integrity_cache_marker()
+        now = time.monotonic()
+        if cached is not None and cached[0] == marker and (now - cached[1]) < _POLICY_INTEGRITY_CACHE_TTL_SECONDS:
+            return dict(cached[2])
         secret_store = self._policy_integrity_secret_store
         if secret_store is None:
             return None
-        payload_json = self._get_secret_from_store(secret_store, self._policy_integrity_control_ref)
+        payload_json = self._get_policy_integrity_secret_from_store(self._policy_integrity_control_ref)
         payload: dict[str, object] | None = None
         if payload_json is not None:
             try:
                 payload = self._normalize_policy_integrity_control_state(json.loads(payload_json))
             except json.JSONDecodeError:
                 payload = None
+        if payload is not None:
+            self._cached_policy_integrity_control_state = (marker, now, dict(payload))
         if payload is not None or not create:
             return payload
         payload = self._default_policy_integrity_control_state()
@@ -1038,6 +1090,7 @@ class GuardStore:
         normalized = self._normalize_policy_integrity_control_state(payload)
         if normalized is None:
             return False
+        self._cached_policy_integrity_control_state = None
         try:
             secret_store.set_secret(
                 self._policy_integrity_control_ref,
@@ -1045,6 +1098,11 @@ class GuardStore:
             )
         except Exception:
             return False
+        self._cached_policy_integrity_control_state = (
+            self._policy_integrity_cache_marker(),
+            time.monotonic(),
+            dict(normalized),
+        )
         return True
 
     def _finalize_policy_integrity_control_state(self, payload: Mapping[str, object]) -> None:
@@ -1085,6 +1143,21 @@ class GuardStore:
         except json.JSONDecodeError:
             return None
         return payload if isinstance(payload, dict) else None
+
+    @staticmethod
+    def _load_policy_integrity_state_cache_marker(connection: sqlite3.Connection) -> str | None:
+        row = connection.execute(
+            "select payload_json from sync_state where state_key = ?",
+            (_POLICY_INTEGRITY_STATE_KEY,),
+        ).fetchone()
+        if row is None:
+            return None
+        payload_json = row["payload_json"]
+        return str(payload_json) if isinstance(payload_json, str) and payload_json else None
+
+    def _policy_integrity_cache_marker(self) -> str | None:
+        with self._connect() as connection:
+            return self._load_policy_integrity_state_cache_marker(connection)
 
     @staticmethod
     def _store_policy_integrity_state(
