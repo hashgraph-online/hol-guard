@@ -548,6 +548,8 @@ def _assert_connect_endpoint_coalesces_concurrent_browser_starts(
     *,
     endpoint: str,
     extract_flow,
+    second_endpoint: str | None = None,
+    second_extract_flow=None,
     timeout_message: str,
     store: GuardStore,
     monkeypatch: pytest.MonkeyPatch,
@@ -616,13 +618,13 @@ def _assert_connect_endpoint_coalesces_concurrent_browser_starts(
         second_status, second_payload = _read_json_response(
             _request(
                 daemon.port,
-                endpoint,
+                second_endpoint or endpoint,
                 token=token,
                 payload={},
             ),
         )
         assert second_status == 202
-        second_flow = extract_flow(second_payload)
+        second_flow = (second_extract_flow or extract_flow)(second_payload)
         assert isinstance(second_flow, dict)
         assert second_flow["state"] == "starting"
         assert second_flow["authorize_url"] is None
@@ -668,6 +670,38 @@ def test_package_firewall_connect_coalesces_concurrent_browser_starts(
     _assert_connect_endpoint_coalesces_concurrent_browser_starts(
         endpoint="/v1/supply-chain/package-shims/connect",
         extract_flow=lambda payload: payload,
+        timeout_message="Timed out waiting for first package-firewall session start",
+        store=store,
+        monkeypatch=monkeypatch,
+    )
+
+
+def test_guard_cloud_and_package_firewall_connect_share_in_flight_browser_start(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _assert_connect_endpoint_coalesces_concurrent_browser_starts(
+        endpoint="/v1/cloud/connect",
+        extract_flow=lambda payload: payload["connect_flow"],
+        second_endpoint="/v1/supply-chain/package-shims/connect",
+        second_extract_flow=lambda payload: payload,
+        timeout_message="Timed out waiting for first connect session start",
+        store=store,
+        monkeypatch=monkeypatch,
+    )
+
+
+def test_package_firewall_and_guard_cloud_connect_share_in_flight_browser_start(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _assert_connect_endpoint_coalesces_concurrent_browser_starts(
+        endpoint="/v1/supply-chain/package-shims/connect",
+        extract_flow=lambda payload: payload,
+        second_endpoint="/v1/cloud/connect",
+        second_extract_flow=lambda payload: payload["connect_flow"],
         timeout_message="Timed out waiting for first package-firewall session start",
         store=store,
         monkeypatch=monkeypatch,

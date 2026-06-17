@@ -245,6 +245,7 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     package_firewall_connect_state_lock: threading.Lock
     guard_cloud_connect_state: dict[str, object] | None
     guard_cloud_connect_state_lock: threading.Lock
+    guard_cloud_browser_session_lock: threading.Lock
     package_firewall_action_rate_limiter: PackageFirewallActionRateLimiter
     package_firewall_session_nonces: dict[str, float]
     package_firewall_session_nonces_lock: threading.Lock
@@ -277,6 +278,7 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         self.package_firewall_connect_state_lock = threading.Lock()
         self.guard_cloud_connect_state = None
         self.guard_cloud_connect_state_lock = threading.Lock()
+        self.guard_cloud_browser_session_lock = threading.Lock()
         self.package_firewall_action_rate_limiter = PackageFirewallActionRateLimiter()
         self.package_firewall_session_nonces = {}
         self.package_firewall_session_nonces_lock = threading.Lock()
@@ -679,15 +681,22 @@ def _set_package_firewall_connect_state(server: _GuardDaemonHttpServer, state: d
         server.package_firewall_connect_state = dict(state) if isinstance(state, dict) else None
 
 
+def _guard_cloud_connect_state_is_in_flight(state: dict[str, object] | None) -> bool:
+    return isinstance(state, dict) and str(state.get("state") or "") in {"starting", "running"}
+
+
 def _begin_package_firewall_connect_state(
     server: _GuardDaemonHttpServer,
     starting_state: dict[str, object],
 ) -> tuple[bool, dict[str, object]]:
-    with server.package_firewall_connect_state_lock:
-        current = server.package_firewall_connect_state
-        if isinstance(current, dict) and str(current.get("state") or "") in {"starting", "running"}:
+    with server.guard_cloud_browser_session_lock:
+        current = _copy_package_firewall_connect_state(server)
+        if _guard_cloud_connect_state_is_in_flight(current):
             return False, dict(current)
-        server.package_firewall_connect_state = dict(starting_state)
+        current = _copy_guard_cloud_connect_state(server)
+        if _guard_cloud_connect_state_is_in_flight(current):
+            return False, dict(current)
+        _set_package_firewall_connect_state(server, starting_state)
         return True, dict(starting_state)
 
 
@@ -834,11 +843,14 @@ def _begin_guard_cloud_connect_state(
     server: _GuardDaemonHttpServer,
     starting_state: dict[str, object],
 ) -> tuple[bool, dict[str, object]]:
-    with server.guard_cloud_connect_state_lock:
-        current = server.guard_cloud_connect_state
-        if isinstance(current, dict) and str(current.get("state") or "") in {"starting", "running"}:
+    with server.guard_cloud_browser_session_lock:
+        current = _copy_guard_cloud_connect_state(server)
+        if _guard_cloud_connect_state_is_in_flight(current):
             return False, dict(current)
-        server.guard_cloud_connect_state = dict(starting_state)
+        current = _copy_package_firewall_connect_state(server)
+        if _guard_cloud_connect_state_is_in_flight(current):
+            return False, dict(current)
+        _set_guard_cloud_connect_state(server, starting_state)
         return True, dict(starting_state)
 
 
