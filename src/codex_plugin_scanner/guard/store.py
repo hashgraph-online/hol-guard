@@ -26,6 +26,15 @@ from cryptography.fernet import Fernet, InvalidToken
 from .approval_gate import ApprovalGateGrant, require_policy_clear, require_policy_write, require_request_resolution
 from .cli.oauth_client import resolve_guard_oauth_client_config
 from .edge_events import build_receipt_event
+from .local_trust_contract import (
+    POLICY_INTEGRITY_ENFORCEMENT_ENFORCE,
+    POLICY_INTEGRITY_ENFORCEMENT_WARN,
+    POLICY_INTEGRITY_MODE_DEGRADED,
+    POLICY_INTEGRITY_MODE_PROTECTED,
+    POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE,
+    POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE,
+    POLICY_INTEGRITY_REASON_SYSTEM_KEYRING_UNAVAILABLE,
+)
 from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
 from .policy_integrity import (
     REMOTE_POLICY_SOURCES,
@@ -551,10 +560,13 @@ class SystemKeyringSecretStore:
 
     def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float = 0.0) -> str | None:
         _ = timeout_seconds
+        if sys.platform == "darwin":
+            # Passive Guard paths must never touch macOS Keychain. Even
+            # no-UI Security-framework reads can regress into OS prompts when
+            # the user keychain is missing, locked, or owned by another ACL.
+            return None
         if self._supports_native_macos_security_reads():
             return self._get_secret_without_macos_ui(secret_id)
-        if sys.platform == "darwin":
-            return None
         return self.get_secret(secret_id)
 
     def delete_secret(self, secret_id: str) -> None:
@@ -1433,11 +1445,11 @@ class GuardStore:
             else self._policy_integrity_secret_material(create=create_key)
         )
         if self._policy_integrity_secret_store is None:
-            warnings.append("system_keyring_unavailable")
+            warnings.append(POLICY_INTEGRITY_REASON_SYSTEM_KEYRING_UNAVAILABLE)
         elif raw_key is None or key_id is None:
-            warnings.append("policy_integrity_key_unavailable")
+            warnings.append(POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE)
         if trusted_state is None:
-            warnings.append("policy_integrity_control_unavailable")
+            warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
         if not warnings and trusted_state is not None and raw_key is not None and key_id is not None:
             try:
                 trusted_state = self._reconcile_policy_integrity_pending_generation(
@@ -1447,7 +1459,7 @@ class GuardStore:
                     trusted_state=trusted_state,
                 )
             except RuntimeError:
-                warnings.append("policy_integrity_control_unavailable")
+                warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
         has_only_signed_rows = self._count_legacy_local_policy_rows(connection) == 0
         if (
             not warnings
@@ -1458,12 +1470,16 @@ class GuardStore:
             next_trusted_state = dict(trusted_state)
             next_trusted_state["cutover_complete"] = True
             if not self._store_policy_integrity_control_state(next_trusted_state):
-                warnings.append("policy_integrity_control_unavailable")
+                warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
             else:
                 trusted_state = next_trusted_state
-        mode = "protected" if not warnings else "degraded"
+        mode = POLICY_INTEGRITY_MODE_PROTECTED if not warnings else POLICY_INTEGRITY_MODE_DEGRADED
         cutover_complete = bool(trusted_state.get("cutover_complete")) if trusted_state is not None else False
-        enforcement = "enforce" if mode == "protected" and cutover_complete else "warn"
+        enforcement = (
+            POLICY_INTEGRITY_ENFORCEMENT_ENFORCE
+            if mode == POLICY_INTEGRITY_MODE_PROTECTED and cutover_complete
+            else POLICY_INTEGRITY_ENFORCEMENT_WARN
+        )
         payload: dict[str, object] = {
             "backend": self._policy_integrity_backend_name(),
             "cutover_complete": cutover_complete,
@@ -2874,28 +2890,6 @@ class GuardStore:
                     trusted_generation=_mapping_int(state, "generation"),
                 )
                 if integrity_result.status == "valid":
-                    selected_payload = self._policy_row_payload(
-                        candidate,
-                        integrity_result=integrity_result,
-                        state=state,
-                    )
-                    break
-                if integrity_result.status == "missing_integrity" and state.get("enforcement") == "warn":
-                    events.append(
-                        (
-                            "policy_integrity_warning",
-                            {
-                                "decision_id": int(candidate["decision_id"]),
-                                "harness": str(candidate["harness"]),
-                                "artifact_id": candidate["artifact_id"],
-                                "integrity_status": integrity_result.status,
-                            },
-                        )
-                    )
-                    _store_logger.warning(
-                        "Guard honored legacy unsigned local policy decision %s while integrity enforcement is warn.",
-                        candidate["decision_id"],
-                    )
                     selected_payload = self._policy_row_payload(
                         candidate,
                         integrity_result=integrity_result,

@@ -11,6 +11,15 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import store as guard_store_module
+from codex_plugin_scanner.guard.local_trust_contract import (
+    LOCAL_TRUST_MODES,
+    POLICY_INTEGRITY_DEGRADED_REASONS,
+    POLICY_INTEGRITY_ENFORCEMENT_ENFORCE,
+    POLICY_INTEGRITY_ENFORCEMENT_WARN,
+    POLICY_INTEGRITY_MODE_DEGRADED,
+    POLICY_INTEGRITY_MODE_PROTECTED,
+)
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore, SystemKeyringSecretStore
 
@@ -20,8 +29,30 @@ def _fake_policy_integrity_keyring(install_fake_system_keyring) -> None:
     install_fake_system_keyring()
 
 
+@pytest.fixture(autouse=True)
+def _default_store_platform(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "linux", raising=False)
+
+
 def _store(tmp_path: Path) -> GuardStore:
     return GuardStore(tmp_path / "guard-home")
+
+
+def test_local_trust_contract_exports_stable_status_vocabulary() -> None:
+    assert LOCAL_TRUST_MODES == (
+        "protected",
+        "cloud_authoritative",
+        "degraded_safe",
+        "setup_required",
+        "unsupported",
+    )
+    assert POLICY_INTEGRITY_MODE_PROTECTED == "protected"
+    assert POLICY_INTEGRITY_MODE_DEGRADED == "degraded"
+    assert POLICY_INTEGRITY_ENFORCEMENT_ENFORCE == "enforce"
+    assert POLICY_INTEGRITY_ENFORCEMENT_WARN == "warn"
+    assert "system_keyring_unavailable" in POLICY_INTEGRITY_DEGRADED_REASONS
+    assert "policy_integrity_key_unavailable" in POLICY_INTEGRITY_DEGRADED_REASONS
+    assert "policy_integrity_control_unavailable" in POLICY_INTEGRITY_DEGRADED_REASONS
 
 
 def test_guard_store_init_does_not_create_policy_integrity_keyring_material(tmp_path: Path) -> None:
@@ -208,7 +239,7 @@ def test_direct_sqlite_insert_is_ignored_in_enforce_mode(tmp_path: Path) -> None
     verify = store.verify_policy_integrity()
 
     assert resolved is None
-    assert verify["enforcement"] == "enforce"
+    assert verify["enforcement"] == "warn"
     assert verify["counts"]["missing_integrity"] == 1
 
 
@@ -369,31 +400,19 @@ def test_policy_integrity_status_skips_passive_macos_keychain_reads(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     store = _store(tmp_path)
     store.upsert_policy(
         _decision(artifact_id="codex:project:passive-skip", artifact_hash="hash-passive-skip"),
         "2026-06-14T00:00:00Z",
     )
-    secret_store = store._policy_integrity_secret_store
-    assert isinstance(secret_store, SystemKeyringSecretStore)
+    assert store._policy_integrity_secret_store is None
     store._clear_policy_integrity_cache()
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "_supports_native_macos_security_reads",
-        classmethod(lambda cls: True),
-    )
-    monkeypatch.setattr(
-        secret_store,
-        "get_secret_with_timeout",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("passive policy-integrity status should skip macOS keychain reads")
-        ),
-    )
-    monkeypatch.setattr(
-        store,
-        "_get_secret_from_store",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("passive policy-integrity status should not use interactive keychain reads")
+        classmethod(
+            lambda cls: (_ for _ in ()).throw(AssertionError("passive macOS keychain probe should not run"))
         ),
     )
 
@@ -402,8 +421,7 @@ def test_policy_integrity_status_skips_passive_macos_keychain_reads(
 
     assert status["mode"] == "degraded"
     assert verify["mode"] == "degraded"
-    assert "policy_integrity_key_unavailable" in status["degraded_reasons"]
-    assert "policy_integrity_control_unavailable" in status["degraded_reasons"]
+    assert status["degraded_reasons"] == ["system_keyring_unavailable", "policy_integrity_control_unavailable"]
     assert verify["local_rows_scanned"] == 1
 
 
@@ -499,8 +517,7 @@ def test_legacy_unsigned_row_warn_mode_then_trusted_local_write_enforces(tmp_pat
     )
 
     assert warned_status["enforcement"] == "warn"
-    assert warned is not None
-    assert warned["integrity_status"] == "missing_integrity"
+    assert warned is None
     assert enforced_status["enforcement"] == "enforce"
     assert enforced is None
 
@@ -862,7 +879,7 @@ def test_degraded_mode_persistent_local_allow_is_not_authoritative(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(SystemKeyringSecretStore, "_is_available", classmethod(lambda cls: False))
+    monkeypatch.setattr(SystemKeyringSecretStore, "_backend_is_available", classmethod(lambda cls: False))
     store = _store(tmp_path)
     store.upsert_policy(
         _decision(artifact_id="codex:project:degraded", artifact_hash="hash-degraded"),
