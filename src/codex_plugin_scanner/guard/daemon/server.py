@@ -681,7 +681,7 @@ def _set_package_firewall_connect_state(server: _GuardDaemonHttpServer, state: d
         server.package_firewall_connect_state = dict(state) if isinstance(state, dict) else None
 
 
-def _guard_cloud_connect_state_is_in_flight(state: dict[str, object] | None) -> bool:
+def _guard_cloud_connect_state_is_in_flight(state: dict[str, object] | None) -> TypeGuard[dict[str, object]]:
     return isinstance(state, dict) and str(state.get("state") or "") in {"starting", "running"}
 
 
