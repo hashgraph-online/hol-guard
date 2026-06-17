@@ -292,6 +292,7 @@ def test_package_shims_install_self_heals_retry_required_cloud_auth(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    allow_transient_shell_profile_writes,
 ) -> None:
     home_dir = tmp_path / "home"
     home_dir.mkdir()
@@ -391,6 +392,7 @@ def test_package_shims_repair_runs_without_guard_cloud_connect(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    allow_transient_shell_profile_writes,
 ) -> None:
     home_dir = tmp_path / "home"
     home_dir.mkdir()
