@@ -540,6 +540,8 @@ class SystemKeyringSecretStore:
             from ctypes import byref, c_ubyte
 
             macos_keyring_api = self._load_macos_keyring_api_module()
+            cfdata_to_str = getattr(macos_keyring_api, "cfdata_to_str", None)
+            cf_release = getattr(macos_keyring_api, "CFRelease", None)
             security_library = getattr(macos_keyring_api, "_sec", None)
             get_interaction_allowed = (
                 getattr(security_library, "SecKeychainGetUserInteractionAllowed", None)
@@ -581,14 +583,16 @@ class SystemKeyringSecretStore:
                 with suppress(Exception):
                     set_interaction_allowed(restore_value)
         if status == 0:
+            if not callable(cfdata_to_str):
+                return None
             try:
-                value = macos_keyring_api.cfdata_to_str(data)
+                value = cfdata_to_str(data)
             except Exception:
                 value = None
             finally:
-                if data is not None:
+                if data is not None and callable(cf_release):
                     with suppress(Exception):
-                        macos_keyring_api.CFRelease(data)
+                        cf_release(data)
             return value if isinstance(value, str) and value else None
         interaction_blocked_statuses = {
             macos_keyring_api.error.item_not_found,
@@ -599,9 +603,12 @@ class SystemKeyringSecretStore:
         }
         if status in interaction_blocked_statuses:
             return None
-        return None
+        return None  # unknown non-zero status
 
-    def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float) -> str | None:
+    def get_secret_with_timeout(
+        self, secret_id: str, *, timeout_seconds: float = 0.0
+    ) -> str | None:
+        _ = timeout_seconds
         if not self._supports_native_macos_security_reads():
             return self.get_secret(secret_id)
         return self._get_secret_without_macos_ui(secret_id)
