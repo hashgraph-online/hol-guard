@@ -781,11 +781,20 @@ def _copy_guard_database(*, source: Path, destination: Path) -> None:
                 progress=lambda *_: _raise_when_backup_deadline_elapsed(deadline),
                 sleep=GUARD_DB_BACKUP_SLEEP_SECONDS,
             )
+        _prune_retired_guard_db_sync_state(temporary_destination)
         temporary_destination.replace(destination)
     except (TimeoutError, sqlite3.Error):
         if temporary_destination.exists():
             temporary_destination.unlink()
         raise GuardHomeMigrationError("guard.db migration failed") from None
+
+
+def _prune_retired_guard_db_sync_state(database_path: Path) -> None:
+    try:
+        with sqlite3.connect(database_path) as connection:
+            connection.execute("delete from sync_state where state_key in ('credentials', 'oauth_local_credentials')")
+    except sqlite3.Error:
+        return
 
 
 def _raise_when_backup_deadline_elapsed(deadline: float) -> None:

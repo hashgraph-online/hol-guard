@@ -269,6 +269,14 @@ def evaluate_package_request_artifact(
     bundle_defer_eligible = bundle_evaluation is not None and (
         bundle_evaluation.decision == "block" or not bundle_evaluation.refresh_required
     )
+    if bundle_evaluation is not None and bundle_evaluation.decision == "block":
+        blocked_result = _finalize_evaluation(
+            bundle_evaluation,
+            package_intent_hash=package_intent_hash,
+            workspace_fingerprint=workspace_fingerprint,
+        )
+        _persist_evidence(store=store, artifact=artifact, evaluation=blocked_result, now=now_value)
+        return blocked_result
     cloud_result, cloud_fallback_reason = _evaluate_with_cloud(
         artifact=artifact,
         targets=targets,
