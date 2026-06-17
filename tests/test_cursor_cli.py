@@ -107,6 +107,7 @@ def test_resolve_cursor_cli_entry_uses_cursor_agent_subcommand(tmp_path: Path, m
 def test_cursor_cli_install_creates_dual_shims_and_shell_profile(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    allow_transient_shell_profile_writes,
 ) -> None:
     bin_dir = tmp_path / "bin"
     _write_fake_cursor_with_agent_subcommand(bin_dir)

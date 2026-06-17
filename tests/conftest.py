@@ -101,6 +101,13 @@ def install_fake_system_keyring(monkeypatch: pytest.MonkeyPatch) -> Callable[[],
     return _install
 
 
+@pytest.fixture
+def allow_transient_shell_profile_writes(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import shims as guard_shims_module
+
+    monkeypatch.setattr(guard_shims_module, "_is_transient_path", lambda _path: False)
+
+
 _FAKE_SYSTEM_KEYRING_DISABLED_FILES = {
     "test_guard_store_migrations.py",
 }

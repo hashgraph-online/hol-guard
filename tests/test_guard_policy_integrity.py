@@ -72,6 +72,7 @@ def _delete_policy_integrity_control_state(store: GuardStore) -> None:
     secret_store = store._policy_integrity_secret_store
     assert secret_store is not None
     secret_store.delete_secret(store._policy_integrity_control_ref)
+    store._clear_policy_integrity_cache()
 
 
 def _strip_policy_integrity(home_dir: Path, *, artifact_id: str) -> None:
@@ -127,6 +128,7 @@ def _rotate_policy_integrity_key(store: GuardStore, *, raw_key: bytes) -> None:
         store._policy_integrity_key_ref,
         base64.urlsafe_b64encode(raw_key).decode("ascii"),
     )
+    store._clear_policy_integrity_cache()
 
 
 def test_upsert_policy_signs_local_row_and_resolve_honors_it(tmp_path: Path) -> None:
@@ -276,6 +278,54 @@ def test_upsert_policy_uses_single_integrity_key_lookup_per_write(
     assert row["integrity_version"] is None
     assert state["mode"] == "degraded"
     assert state["key_id"] is None
+
+
+def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:keychain-cache", artifact_hash="hash-keychain-cache"),
+        "2026-06-14T00:00:00Z",
+    )
+    secret_store = store._policy_integrity_secret_store
+    assert isinstance(secret_store, SystemKeyringSecretStore)
+    key_value = secret_store.get_secret(store._policy_integrity_key_ref)
+    control_value = secret_store.get_secret(store._policy_integrity_control_ref)
+    assert isinstance(key_value, str) and key_value
+    assert isinstance(control_value, str) and control_value
+    assert store.get_policy_integrity_status()["mode"] == "protected"
+    timed_reads: list[str] = []
+
+    def _count_timed_reads(secret_id: str, *, timeout_seconds: float) -> str | None:
+        assert timeout_seconds > 0
+        timed_reads.append(secret_id)
+        if secret_id == store._policy_integrity_key_ref:
+            return key_value
+        if secret_id == store._policy_integrity_control_ref:
+            return control_value
+        raise AssertionError(f"unexpected policy-integrity secret lookup: {secret_id}")
+
+    monkeypatch.setattr(
+        store,
+        "_get_secret_from_store",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("plain keyring reads should not run for policy integrity")
+        ),
+    )
+    monkeypatch.setattr(secret_store, "get_secret_with_timeout", _count_timed_reads)
+    store._clear_policy_integrity_cache()
+
+    first_status = store.get_policy_integrity_status()
+    second_status = store.get_policy_integrity_status()
+
+    assert first_status["mode"] == "protected"
+    assert second_status["mode"] == "protected"
+    assert timed_reads == [
+        store._policy_integrity_control_ref,
+        store._policy_integrity_key_ref,
+    ]
 
 
 def test_tampered_signed_row_is_ignored_and_event_emitted(tmp_path: Path) -> None:
@@ -482,9 +532,7 @@ def test_signed_rollback_snapshot_is_detected_and_repair_advances_generation(tmp
         )
 
     verify = store.verify_policy_integrity()
-    rollback_item = next(
-        item for item in verify["items"] if item.get("artifact_id") == "codex:project:rollback"
-    )
+    rollback_item = next(item for item in verify["items"] if item.get("artifact_id") == "codex:project:rollback")
     repair = store.repair_policy_integrity(clear_invalid=True, now="2026-06-14T00:02:00Z")
     control = _policy_integrity_control_payload(store)
     resolved = store.resolve_policy("codex", "codex:project:current", "hash-current", now="2026-06-14T00:03:00Z")
