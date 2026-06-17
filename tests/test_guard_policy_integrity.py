@@ -746,7 +746,7 @@ def test_policies_cli_verify_status_migrate_and_repair(
 
     verify_rc = main(["guard", "policies", "verify", "--home", str(home_dir), "--json"])
     verify_payload = json.loads(capsys.readouterr().out)
-    assert verify_rc == 0
+    assert verify_rc == 1
     assert verify_payload["mode"] == "degraded"
     assert verify_payload["counts"]["degraded_mode"] == 1
 

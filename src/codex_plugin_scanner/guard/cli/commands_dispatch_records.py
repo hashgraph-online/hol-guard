@@ -325,10 +325,7 @@ def _run_guard_policies_command(
         counts = payload.get("counts")
         if not isinstance(counts, dict) or payload.get("enforcement") != "enforce":
             return 0
-        if payload.get("mode") == "degraded":
-            blocking_statuses = ("rollback_detected",)
-        else:
-            blocking_statuses = ("tampered", "unknown_key", "missing_integrity", "rollback_detected")
+        blocking_statuses = ("tampered", "unknown_key", "missing_integrity", "rollback_detected", "degraded_mode")
         if any(int(counts.get(status, 0) or 0) > 0 for status in blocking_statuses):
             return 1
         return 0
