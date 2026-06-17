@@ -28,7 +28,6 @@ from .cli.oauth_client import resolve_guard_oauth_client_config
 from .edge_events import build_receipt_event
 from .local_trust_contract import (
     POLICY_INTEGRITY_ENFORCEMENT_ENFORCE,
-    POLICY_INTEGRITY_ENFORCEMENT_WARN,
     POLICY_INTEGRITY_MODE_DEGRADED,
     POLICY_INTEGRITY_MODE_PROTECTED,
     POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE,
@@ -1481,11 +1480,7 @@ class GuardStore:
                 trusted_state = next_trusted_state
         mode = POLICY_INTEGRITY_MODE_PROTECTED if not warnings else POLICY_INTEGRITY_MODE_DEGRADED
         cutover_complete = bool(trusted_state.get("cutover_complete")) if trusted_state is not None else False
-        enforcement = (
-            POLICY_INTEGRITY_ENFORCEMENT_ENFORCE
-            if mode == POLICY_INTEGRITY_MODE_PROTECTED and cutover_complete
-            else POLICY_INTEGRITY_ENFORCEMENT_WARN
-        )
+        enforcement = POLICY_INTEGRITY_ENFORCEMENT_ENFORCE
         payload: dict[str, object] = {
             "backend": self._policy_integrity_backend_name(),
             "cutover_complete": cutover_complete,

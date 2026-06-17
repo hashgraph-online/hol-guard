@@ -207,7 +207,7 @@ def test_upsert_policy_signs_local_row_and_resolve_honors_it(tmp_path: Path) -> 
     assert resolved["integrity_status"] == "valid"
 
 
-def test_direct_sqlite_insert_is_ignored_in_enforce_mode(tmp_path: Path) -> None:
+def test_direct_sqlite_insert_is_ignored_when_integrity_is_degraded(tmp_path: Path) -> None:
     store = _store(tmp_path)
     with sqlite3.connect(store.guard_home / "guard.db") as connection:
         connection.execute(
@@ -243,7 +243,7 @@ def test_direct_sqlite_insert_is_ignored_in_enforce_mode(tmp_path: Path) -> None
     verify = store.verify_policy_integrity()
 
     assert resolved is None
-    assert verify["enforcement"] == "warn"
+    assert verify["enforcement"] == "enforce"
     assert verify["counts"]["missing_integrity"] == 1
 
 
@@ -392,9 +392,9 @@ def test_policy_integrity_status_and_verify_do_not_create_keyring_material_on_fr
     verify = store.verify_policy_integrity()
 
     assert status["mode"] == "degraded"
-    assert status["enforcement"] == "warn"
+    assert status["enforcement"] == "enforce"
     assert verify["mode"] == "degraded"
-    assert verify["enforcement"] == "warn"
+    assert verify["enforcement"] == "enforce"
     assert verify["local_rows_scanned"] == 0
     assert secret_store.get_secret(store._policy_integrity_key_ref) is None
     assert secret_store.get_secret(store._policy_integrity_control_ref) is None
@@ -492,7 +492,7 @@ def test_remote_policy_row_is_honored_without_local_mac(tmp_path: Path) -> None:
     assert resolved == "allow"
 
 
-def test_legacy_unsigned_row_warn_mode_then_trusted_local_write_enforces(tmp_path: Path) -> None:
+def test_legacy_unsigned_row_stays_ignored_before_and_after_trusted_write(tmp_path: Path) -> None:
     store = _store(tmp_path)
     store.upsert_policy(
         _decision(artifact_id="codex:project:legacy", artifact_hash="hash-legacy"),
@@ -520,7 +520,7 @@ def test_legacy_unsigned_row_warn_mode_then_trusted_local_write_enforces(tmp_pat
         now="2026-06-14T00:03:00Z",
     )
 
-    assert warned_status["enforcement"] == "warn"
+    assert warned_status["enforcement"] == "enforce"
     assert warned is None
     assert enforced_status["enforcement"] == "enforce"
     assert enforced is None
@@ -744,7 +744,7 @@ def test_policies_cli_verify_status_migrate_and_repair(
     status_rc = main(["guard", "policies", "integrity-status", "--home", str(home_dir), "--json"])
     status_payload = json.loads(capsys.readouterr().out)
     assert status_rc == 0
-    assert status_payload["enforcement"] == "warn"
+    assert status_payload["enforcement"] == "enforce"
 
     migrate_rc = main(
         [
