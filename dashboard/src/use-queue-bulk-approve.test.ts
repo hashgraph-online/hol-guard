@@ -109,10 +109,10 @@ assert(
   isBulkSelectableRequest(shellItem, groups) === true,
   "T-BULK-HOOK-02: ordinary shell command is bulk selectable",
 );
-// T-BULK-HOOK-02b: destructive shell command stays gated
+// T-BULK-HOOK-02b: destructive shell command is now bulk selectable (high-tier)
 assert(
-  isBulkSelectableRequest(destructiveShellItem, groups) === false,
-  "T-BULK-HOOK-02b: destructive shell command is not bulk selectable",
+  isBulkSelectableRequest(destructiveShellItem, groups) === true,
+  "T-BULK-HOOK-02b: destructive shell command is bulk selectable at high tier",
 );
 // T-BULK-HOOK-03: resolveBulkSelectionGroupId returns primary id
 assert(
@@ -152,6 +152,7 @@ const statsWithSensitive: BulkSelectionStats = {
   actionCount: 2,
   groupCount: 2,
   duplicateActionCount: 0,
+  highActionCount: 0,
   elevatedActionCount: 0,
   lowActionCount: 2,
   sensitiveCount: 1,
@@ -176,6 +177,7 @@ const highStats: BulkSelectionStats = {
   actionCount: 12,
   groupCount: 10,
   duplicateActionCount: 2,
+  highActionCount: 0,
   elevatedActionCount: 0,
   lowActionCount: 12,
   sensitiveCount: 0,

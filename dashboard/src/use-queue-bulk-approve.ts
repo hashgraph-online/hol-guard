@@ -170,12 +170,14 @@ export function useQueueBulkApprove(props: {
   const selectedGroupCount = selectedBulkGroups.length;
 
   const selectionStats: BulkSelectionStats = useMemo(() => {
+    let highActionCount = 0;
     let elevatedActionCount = 0;
     let lowActionCount = 0;
     for (const group of selectedBulkGroups) {
       const tier = bulkApprovalRiskTier(group);
       const count = 1 + group.duplicateCount;
-      if (tier === "elevated") elevatedActionCount += count;
+      if (tier === "high") highActionCount += count;
+      else if (tier === "elevated") elevatedActionCount += count;
       else if (tier === "low") lowActionCount += count;
     }
     return {
@@ -184,6 +186,7 @@ export function useQueueBulkApprove(props: {
       duplicateActionCount: countDuplicateActionsInGroups(selectedBulkGroups),
       sensitiveCount: sensitiveSummary.count,
       sensitiveSamplePaths: sensitiveSummary.samplePaths,
+      highActionCount,
       elevatedActionCount,
       lowActionCount,
     };
