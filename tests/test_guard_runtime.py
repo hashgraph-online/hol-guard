@@ -16429,6 +16429,46 @@ def test_sync_receipts_rejects_untrusted_sync_host_before_network(tmp_path, monk
     assert attempted_request is False
 
 
+def test_sync_guard_events_rejects_untrusted_sync_host_before_network(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    attempted_request = False
+
+    def _fake_urlopen(request, timeout):
+        nonlocal attempted_request
+        attempted_request = True
+        raise AssertionError("network call should be blocked before urlopen")
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    with pytest.raises(guard_runner_module.GuardSyncNotConfiguredError, match="not trusted"):
+        guard_runner_module.sync_guard_events(
+            store,
+            auth_context={"sync_url": "https://evil.example/api/guard/receipts/sync"},
+        )
+
+    assert attempted_request is False
+
+
+def test_sync_pain_signals_rejects_untrusted_sync_host_before_network(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    attempted_request = False
+
+    def _fake_urlopen(request, timeout):
+        nonlocal attempted_request
+        attempted_request = True
+        raise AssertionError("network call should be blocked before urlopen")
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    with pytest.raises(guard_runner_module.GuardSyncNotConfiguredError, match="not trusted"):
+        guard_runner_module.sync_pain_signals(
+            store,
+            auth_context={"sync_url": "https://evil.example/api/guard/receipts/sync"},
+        )
+
+    assert attempted_request is False
+
+
 def test_sync_receipts_batches_large_local_history(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store)
