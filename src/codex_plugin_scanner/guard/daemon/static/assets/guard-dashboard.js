@@ -23344,7 +23344,7 @@ function resolveBulkRiskTier(stats) {
 }
 function buildBulkConfirmPhrase(actionCount) {
   const safe = Math.max(0, Math.floor(actionCount));
-  return `approve ${safe} reads`;
+  return `approve ${safe} ${pluralReads(safe)}`;
 }
 function bulkConfirmMatches(typed, phrase) {
   const normalize = (value) => value.trim().toLowerCase().replace(/\s+/g, " ");
