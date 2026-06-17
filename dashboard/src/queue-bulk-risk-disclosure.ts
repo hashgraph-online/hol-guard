@@ -68,11 +68,11 @@ export function bulkRiskTone(tier: BulkRiskTier): BulkRiskTone {
 
 /**
  * Build the short phrase the user must retype at the `high` tier.
- * Kept memorable and explicit: `approve 12 reads`.
+ * Kept memorable and explicit: `approve 12 reads` / `approve 1 read`.
  */
 export function buildBulkConfirmPhrase(actionCount: number): string {
   const safe = Math.max(0, Math.floor(actionCount));
-  return `approve ${safe} reads`;
+  return `approve ${safe} ${pluralReads(safe)}`;
 }
 
 /**

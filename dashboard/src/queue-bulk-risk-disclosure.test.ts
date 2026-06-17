@@ -101,7 +101,7 @@ assert(
 );
 
 // T-RISK-05: confirm phrase formatting + pluralization
-assert(buildBulkConfirmPhrase(1) === "approve 1 reads", "T-RISK-05a: single-count phrase still uses reads");
+assert(buildBulkConfirmPhrase(1) === "approve 1 read", "T-RISK-05a: single-count phrase is grammatical");
 assert(buildBulkConfirmPhrase(12) === "approve 12 reads", "T-RISK-05b: multi-count phrase");
 assert(buildBulkConfirmPhrase(0) === "approve 0 reads", "T-RISK-05c: zero-count phrase");
 
