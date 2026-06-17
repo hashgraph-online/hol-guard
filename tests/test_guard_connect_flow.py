@@ -385,7 +385,10 @@ def test_browser_connect_caches_paid_package_firewall_entitlement(tmp_path: Path
             access_token="access-token-1",
             refresh_token="refresh-token-1",
             expires_in=300,
-            scope="guard:runtime.sync guard:receipt.write guard:runtime.session.write guard:insights.share guard:offline_access",
+            scope=(
+                "guard:runtime.sync guard:receipt.write guard:runtime.session.write "
+                "guard:insights.share guard:offline_access"
+            ),
             token_type="Bearer",
             grant_id="grant-1",
             machine_id="machine-1",

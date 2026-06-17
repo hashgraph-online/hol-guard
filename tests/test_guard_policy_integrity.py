@@ -174,6 +174,12 @@ def test_upsert_policy_signs_local_row_and_resolve_honors_it(tmp_path: Path) -> 
 
 def test_direct_sqlite_insert_is_ignored_in_enforce_mode(tmp_path: Path) -> None:
     store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:baseline", artifact_hash="hash-baseline"),
+        "2026-06-14T00:00:00Z",
+    )
+
+    status = store.get_policy_integrity_status()
     with sqlite3.connect(store.guard_home / "guard.db") as connection:
         connection.execute(
             """
@@ -203,10 +209,11 @@ def test_direct_sqlite_insert_is_ignored_in_enforce_mode(tmp_path: Path) -> None
         "codex",
         "codex:project:forged",
         "hash-forged",
-        now="2026-06-14T00:01:00Z",
+        now="2026-06-14T00:02:00Z",
     )
     verify = store.verify_policy_integrity()
 
+    assert status["enforcement"] == "enforce"
     assert resolved is None
     assert verify["enforcement"] == "enforce"
     assert verify["counts"]["missing_integrity"] == 1
@@ -862,7 +869,7 @@ def test_degraded_mode_persistent_local_allow_is_not_authoritative(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(SystemKeyringSecretStore, "_is_available", classmethod(lambda cls: False))
+    monkeypatch.setattr(SystemKeyringSecretStore, "_backend_is_available", classmethod(lambda cls: False))
     store = _store(tmp_path)
     store.upsert_policy(
         _decision(artifact_id="codex:project:degraded", artifact_hash="hash-degraded"),

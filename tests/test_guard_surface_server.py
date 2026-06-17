@@ -1262,7 +1262,10 @@ class TestGuardSurfaceServer:
             status="retry_required",
             milestone="first_sync_failed",
             now="2026-06-04T19:00:00+00:00",
-            reason="Guard Cloud sign-in on this device is no longer valid. Run `hol-guard disconnect` then `hol-guard connect` to sign in again.",
+            reason=(
+                "Guard Cloud sign-in on this device is no longer valid. "
+                "Run `hol-guard disconnect` then `hol-guard connect` to sign in again."
+            ),
         )
         store.set_sync_payload(
             "sync_summary",

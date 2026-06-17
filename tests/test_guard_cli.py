@@ -3179,7 +3179,7 @@ args = ["workspace-skill.js", "--changed"]
         )
         output = json.loads(capsys.readouterr().out)
         managed_config_path = Path(str(output["managed_install"]["manifest"]["managed_config_path"]))
-        managed_payload = json.loads(managed_config_path.read_text(encoding="utf-8"))
+        json.loads(managed_config_path.read_text(encoding="utf-8"))
 
         assert rc == 0
         assert managed_config_path == home_dir / ".config" / "opencode" / "opencode.json"
