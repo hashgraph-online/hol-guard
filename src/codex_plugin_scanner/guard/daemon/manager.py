@@ -156,7 +156,11 @@ def ensure_guard_daemon(
                 process=process,
             )
             if url is not None:
-                _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(url))
+                _retire_duplicate_guard_daemons(
+                    guard_home,
+                    keep_port=_guard_daemon_url_port(url),
+                    start_lock_held=True,
+                )
                 return url
     raise RuntimeError(f"Guard approval center did not start. Expected state file at {state_path}.")
 
@@ -349,19 +353,26 @@ def _retire_duplicate_guard_daemons(
 ) -> None:
     if keep_port is None:
         return
+    if start_lock_held:
+        _retire_duplicate_guard_daemons_unlocked(guard_home, keep_port=keep_port)
+        return
+    with _guard_daemon_start_lock(guard_home):
+        _retire_duplicate_guard_daemons_unlocked(guard_home, keep_port=keep_port)
+
+
+def _retire_duplicate_guard_daemons_unlocked(guard_home: Path, *, keep_port: int) -> None:
     saw_duplicate = False
     for pid, port in _running_guard_daemon_processes_for_guard_home(guard_home):
         if port == keep_port:
             continue
         saw_duplicate = True
-        _retire_guard_daemon_pid(pid, expected_guard_home=guard_home)
+        if not _retire_guard_daemon_pid(pid, expected_guard_home=guard_home):
+            return
     if not saw_duplicate:
         return
-    if start_lock_held:
-        _rewrite_kept_daemon_state_if_missing(guard_home, keep_port=keep_port)
+    if any(port != keep_port for _pid, port in _running_guard_daemon_processes_for_guard_home(guard_home)):
         return
-    with _guard_daemon_start_lock(guard_home):
-        _rewrite_kept_daemon_state_if_missing(guard_home, keep_port=keep_port)
+    _rewrite_kept_daemon_state_if_missing(guard_home, keep_port=keep_port)
 
 
 def _rewrite_kept_daemon_state_if_missing(guard_home: Path, *, keep_port: int) -> None:
@@ -369,8 +380,15 @@ def _rewrite_kept_daemon_state_if_missing(guard_home: Path, *, keep_port: int) -
     if kept_pid is None or _daemon_state_points_to(guard_home, pid=kept_pid, port=keep_port):
         return
     auth_token = load_guard_daemon_auth_token(guard_home)
-    if auth_token is not None:
-        write_guard_daemon_state(guard_home, keep_port, auth_token, pid=kept_pid)
+    if auth_token is None:
+        return
+    daemon_url = f"http://127.0.0.1:{keep_port}"
+    details = _daemon_healthz_details_payload(daemon_url, auth_token)
+    if details is None or not _healthz_payload_matches_guard_home(json.dumps(details), guard_home):
+        return
+    if details.get("pid") != kept_pid:
+        return
+    write_guard_daemon_state(guard_home, keep_port, auth_token, pid=kept_pid, write_auth_token=False)
 
 
 def _guard_daemon_pid_for_guard_home_port(guard_home: Path, port: int) -> int | None:
@@ -380,7 +398,14 @@ def _guard_daemon_pid_for_guard_home_port(guard_home: Path, port: int) -> int | 
     return None
 
 
-def write_guard_daemon_state(guard_home: Path, port: int, auth_token: str, *, pid: int | None = None) -> None:
+def write_guard_daemon_state(
+    guard_home: Path,
+    port: int,
+    auth_token: str,
+    *,
+    pid: int | None = None,
+    write_auth_token: bool = True,
+) -> None:
     state_path = _state_path(guard_home)
     _ensure_private_directory(state_path.parent)
     _write_private_text(
@@ -399,7 +424,8 @@ def write_guard_daemon_state(guard_home: Path, port: int, auth_token: str, *, pi
             indent=2,
         ),
     )
-    _write_private_text(_auth_token_path(guard_home), auth_token)
+    if write_auth_token:
+        _write_private_text(_auth_token_path(guard_home), auth_token)
 
 
 def clear_guard_daemon_state(guard_home: Path) -> None:
