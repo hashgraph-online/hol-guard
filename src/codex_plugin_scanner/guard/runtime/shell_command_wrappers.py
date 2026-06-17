@@ -356,9 +356,9 @@ def _env_clustered_split_string_payload(token: str) -> str | None:
 
 
 def _command_name(token: str, *, env_assignments: list[str] | tuple[str, ...] = ()) -> str:
-    if _env_assignments_override_path(env_assignments):
-        return ""
     if "/" not in token and "\\" not in token:
+        if _env_assignments_override_path(env_assignments):
+            return ""
         return token.lower()
     command_path = Path(token)
     if not command_path.is_absolute():

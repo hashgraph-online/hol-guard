@@ -62,6 +62,16 @@ def test_normalize_transparent_shell_command_unwraps_trusted_absolute_shell() ->
     assert "/bin/bash -lc" not in normalized.normalized_command
 
 
+def test_normalize_transparent_shell_command_unwraps_trusted_absolute_shell_with_path_env() -> None:
+    wrapped = "PATH=./bin:$PATH /bin/bash -lc 'sed -n \"1,20p\" docs/guard-cloud-api-inventory.generated.md'"
+
+    normalized = normalize_transparent_shell_command(wrapped)
+
+    assert normalized.wrapper_chain == ("bash",)
+    assert normalized.normalized_command.startswith("'PATH=./bin:$PATH' sed -n")
+    assert "/bin/bash -lc" not in normalized.normalized_command
+
+
 def test_normalize_transparent_shell_command_unwraps_trusted_absolute_env() -> None:
     wrapped = "/usr/bin/env bash -lc 'sed -n \"1,20p\" docs/guard-cloud-api-inventory.generated.md'"
 
