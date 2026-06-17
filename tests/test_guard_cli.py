@@ -60,16 +60,13 @@ def _seed_guard_cloud(
         now=now,
     )
     if sync_url is not None:
-        from _pytest.monkeypatch import MonkeyPatch
-        from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
-
         captured_sync_url = sync_url
         captured_token = token
 
         def _fake_resolve(store, *, allow_primary_repair=True):
             return {"sync_url": captured_sync_url, "access_token": captured_token, "dpop_key_material": None}
 
-        _mp = MonkeyPatch()
+        _mp = pytest.MonkeyPatch()
         _mp.setattr(guard_runner_module, "_resolve_guard_sync_auth_context", _fake_resolve)
 
 
@@ -3047,6 +3044,7 @@ args = ["workspace-skill.js", "--changed"]
         runtime_config_path = Path(str(manifest["runtime_config_path"]))
         runtime_payload = json.loads(runtime_config_path.read_text(encoding="utf-8"))
         managed_config_path = Path(str(manifest["managed_config_path"]))
+        managed_payload = json.loads(managed_config_path.read_text(encoding="utf-8"))
         assert rc == 0
         assert output["managed_install"]["active"] is True
         assert manifest["shim_command"] == "guard-opencode"
@@ -3179,7 +3177,7 @@ args = ["workspace-skill.js", "--changed"]
         )
         output = json.loads(capsys.readouterr().out)
         managed_config_path = Path(str(output["managed_install"]["manifest"]["managed_config_path"]))
-        managed_payload = json.loads(managed_config_path.read_text(encoding="utf-8"))
+        json.loads(managed_config_path.read_text(encoding="utf-8"))
 
         assert rc == 0
         assert managed_config_path == home_dir / ".config" / "opencode" / "opencode.json"

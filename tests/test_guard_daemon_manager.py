@@ -243,7 +243,9 @@ def test_ensure_guard_daemon_adopts_running_guard_daemon_before_respawning(tmp_p
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not spawn a new daemon")),
     )
     monkeypatch.setattr(
-        daemon_manager_module, "_running_guard_daemon_processes_for_guard_home", lambda _guard_home, **kwargs: []
+        daemon_manager_module,
+        "_running_guard_daemon_processes_for_guard_home",
+        lambda _guard_home, **kwargs: [],
     )
 
     url = daemon_manager_module.ensure_guard_daemon(guard_home)

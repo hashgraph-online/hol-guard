@@ -105,16 +105,16 @@ def _seed_bundle_cache_only(
     from tests.test_guard_package_shims import WORKSPACE_ID, _bundle_response
 
     store = GuardStore(home_dir)
-    now = "2026-05-19T00:00:00Z"
     response = _bundle_response(
         action=action,
         ecosystem=ecosystem,
         package_name=package_name,
         package_version=package_version,
     )
-    store.cache_supply_chain_bundle(WORKSPACE_ID, response, now)
     bundle = response["bundle"]
     assert isinstance(bundle, dict)
+    now = str(bundle["generatedAt"])
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, now)
     store.set_sync_payload(
         "supply_chain_bundle_entitlement",
         {

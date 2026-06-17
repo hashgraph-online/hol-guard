@@ -145,7 +145,8 @@ def test_pretool_hook_launcher_ignores_workspace_package_hijack(
     fake_pkg.mkdir()
     (fake_pkg / "__init__.py").write_text("", encoding="utf-8")
     (fake_pkg / "cli.py").write_text(
-        "import sys\nsys.stderr.write('hijacked')\nraise SystemExit(99)\n", encoding="utf-8"
+        "import sys\nsys.stderr.write('hijacked')\nraise SystemExit(99)\n",
+        encoding="utf-8",
     )
 
     guard_home = tmp_path / "guard-home"
