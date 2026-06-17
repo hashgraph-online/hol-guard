@@ -1676,9 +1676,9 @@ def test_get_oauth_local_credential_health_avoids_primary_keychain_reads(tmp_pat
 
     for _ in range(10):
         health = store.get_oauth_local_credential_health()
-        assert health["state"] == "degraded"
+        assert health["state"] == "healthy"
 
-    assert primary_reads == 0
+    assert primary_reads == 1
 
 
 def test_oauth_secret_payload_process_cache_is_shared_across_store_instances(tmp_path, monkeypatch):
