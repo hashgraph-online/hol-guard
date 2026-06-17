@@ -15,6 +15,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.aibom_trust_metadata import trust_resolution_from_domain
+from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.evidence_hash import guard_evidence_hash
@@ -71,6 +72,7 @@ def _snapshot_for_artifact(
     home_dir: Path,
     workspace_dir: Path,
     trust_attestation_context: Mapping[str, object] | None = None,
+    cisco_runs: tuple[object, ...] = (),
 ) -> Any:
     detection = HarnessDetection(
         harness="codex",
@@ -85,6 +87,7 @@ def _snapshot_for_artifact(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
         trust_attestation_context=trust_attestation_context,
+        cisco_runs=cisco_runs,
     )
 
 
@@ -546,6 +549,19 @@ def test_local_skill_security_emits_shared_evidence_hash(tmp_path: Path) -> None
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text("---\nname: Deploy Kit\n---\n# Skill\n", encoding="utf-8")
 
+    cisco_run = CiscoInventoryRun(
+        source="cisco-skill-scanner",
+        status="enabled",
+        message="cisco skill scan",
+        findings=(),
+        duration_ms=0,
+        metadata={
+            "target": str(skill_dir),
+            "findingsBySeverity": {"critical": 0, "high": 0, "medium": 0, "low": 0},
+            "skillsScanned": 1,
+        },
+    )
+
     snapshot = _snapshot_for_artifact(
         artifact=GuardArtifact(
             artifact_id="codex:project:skill:deploy-kit",
@@ -559,6 +575,7 @@ def test_local_skill_security_emits_shared_evidence_hash(tmp_path: Path) -> None
         home_dir=tmp_path,
         workspace_dir=skill_dir,
         trust_attestation_context=None,
+        cisco_runs=(cisco_run,),
     )
 
     skill_item = next(item for item in snapshot.items if item.item_kind == "skill")

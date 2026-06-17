@@ -109,7 +109,8 @@ def trust_attestation_v2_enabled(environ: Mapping[str, str] | None = None) -> bo
 
 
 def _headless_short_lived_attestation_enabled(environ: Mapping[str, str]) -> bool:
-    return _sanitize_env(environ.get("GUARD_AIBOM_TRUST_ATTESTATION_HEADLESS_SHORT_LIVED")).lower() in _TRUTHY_ENV_VALUES
+    raw = environ.get("GUARD_AIBOM_TRUST_ATTESTATION_HEADLESS_SHORT_LIVED")
+    return _sanitize_env(raw).lower() in _TRUTHY_ENV_VALUES
 
 
 @lru_cache(maxsize=4)
