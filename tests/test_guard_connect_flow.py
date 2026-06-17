@@ -476,6 +476,40 @@ def test_cached_paid_bundle_does_not_hide_retry_required_connect_state(tmp_path:
     }
 
 
+def test_cached_paid_bundle_does_not_hide_missing_oauth_after_success(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {
+            "tier": "premium",
+        },
+        "2026-06-15T18:38:57+00:00",
+    )
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-06-15T00:52:39+00:00",
+        request_id="connect-1",
+    )
+    store.record_latest_guard_connect_sync_success(
+        sync_payload={
+            "synced_at": "2026-06-15T18:38:57+00:00",
+            "receipts_stored": 11,
+            "inventory_items": 261,
+        },
+        now="2026-06-15T18:38:57+00:00",
+    )
+
+    entitlement = resolve_package_firewall_entitlement(store)
+
+    assert entitlement == {
+        "allowed": False,
+        "reason": "guard_cloud_reconnect_required",
+        "tier": "unknown",
+        "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access.",
+    }
+
+
 def test_sync_local_guard_cloud_proof_repairs_degraded_oauth_from_encrypted_fallback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
