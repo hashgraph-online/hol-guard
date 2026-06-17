@@ -99,6 +99,21 @@ def test_system_keyring_timeout_skips_all_passive_macos_reads(monkeypatch: pytes
     assert secret_store.get_secret_with_timeout("policy-key", timeout_seconds=1.0) is None
 
 
+def test_system_keyring_timeout_keeps_non_policy_integrity_macos_services(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    secret_store = SystemKeyringSecretStore(service_name="hol-guard.oauth")
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_supports_native_macos_security_reads",
+        classmethod(lambda cls: True),
+    )
+    monkeypatch.setattr(secret_store, "_get_secret_without_macos_ui", lambda _secret_id: "oauth-secret")
+
+    assert secret_store.get_secret_with_timeout("oauth-token", timeout_seconds=1.0) == "oauth-secret"
+
+
 def test_policy_integrity_store_is_disabled_on_macos_without_health_probe(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

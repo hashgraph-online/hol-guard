@@ -33,8 +33,19 @@ POLICY_INTEGRITY_DEGRADED_REASONS: tuple[str, ...] = (
     "policy_integrity_key_unavailable",
     "policy_integrity_control_unavailable",
     "guard_home_symlink",
+    "guard_db_symlink",
+    "guard_home_permissions",
+    "guard_db_permissions",
+    "guard_home_inaccessible",
+    "guard_db_inaccessible",
 )
 
 POLICY_INTEGRITY_REASON_SYSTEM_KEYRING_UNAVAILABLE = "system_keyring_unavailable"
 POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE = "policy_integrity_key_unavailable"
 POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE = "policy_integrity_control_unavailable"
+POLICY_INTEGRITY_REASON_GUARD_HOME_SYMLINK = "guard_home_symlink"
+POLICY_INTEGRITY_REASON_GUARD_DB_SYMLINK = "guard_db_symlink"
+POLICY_INTEGRITY_REASON_GUARD_HOME_PERMISSIONS = "guard_home_permissions"
+POLICY_INTEGRITY_REASON_GUARD_DB_PERMISSIONS = "guard_db_permissions"
+POLICY_INTEGRITY_REASON_GUARD_HOME_INACCESSIBLE = "guard_home_inaccessible"
+POLICY_INTEGRITY_REASON_GUARD_DB_INACCESSIBLE = "guard_db_inaccessible"

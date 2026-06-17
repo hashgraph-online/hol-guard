@@ -53,6 +53,10 @@ def test_local_trust_contract_exports_stable_status_vocabulary() -> None:
     assert "system_keyring_unavailable" in POLICY_INTEGRITY_DEGRADED_REASONS
     assert "policy_integrity_key_unavailable" in POLICY_INTEGRITY_DEGRADED_REASONS
     assert "policy_integrity_control_unavailable" in POLICY_INTEGRITY_DEGRADED_REASONS
+    assert "guard_home_symlink" in POLICY_INTEGRITY_DEGRADED_REASONS
+    assert "guard_db_symlink" in POLICY_INTEGRITY_DEGRADED_REASONS
+    assert "guard_home_permissions" in POLICY_INTEGRITY_DEGRADED_REASONS
+    assert "guard_db_permissions" in POLICY_INTEGRITY_DEGRADED_REASONS
 
 
 def test_guard_store_init_does_not_create_policy_integrity_keyring_material(tmp_path: Path) -> None:

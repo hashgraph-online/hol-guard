@@ -32,6 +32,12 @@ from .local_trust_contract import (
     POLICY_INTEGRITY_MODE_DEGRADED,
     POLICY_INTEGRITY_MODE_PROTECTED,
     POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE,
+    POLICY_INTEGRITY_REASON_GUARD_DB_INACCESSIBLE,
+    POLICY_INTEGRITY_REASON_GUARD_DB_PERMISSIONS,
+    POLICY_INTEGRITY_REASON_GUARD_DB_SYMLINK,
+    POLICY_INTEGRITY_REASON_GUARD_HOME_INACCESSIBLE,
+    POLICY_INTEGRITY_REASON_GUARD_HOME_PERMISSIONS,
+    POLICY_INTEGRITY_REASON_GUARD_HOME_SYMLINK,
     POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE,
     POLICY_INTEGRITY_REASON_SYSTEM_KEYRING_UNAVAILABLE,
 )
@@ -560,7 +566,7 @@ class SystemKeyringSecretStore:
 
     def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float = 0.0) -> str | None:
         _ = timeout_seconds
-        if sys.platform == "darwin":
+        if sys.platform == "darwin" and self.service_name == "hol-guard.policy-integrity":
             # Passive Guard paths must never touch macOS Keychain. Even
             # no-UI Security-framework reads can regress into OS prompts when
             # the user keychain is missing, locked, or owned by another ACL.
@@ -1187,23 +1193,23 @@ class GuardStore:
     def _policy_integrity_path_warnings(self) -> list[str]:
         warnings: list[str] = []
         if self.guard_home.is_symlink():
-            warnings.append("guard_home_symlink")
+            warnings.append(POLICY_INTEGRITY_REASON_GUARD_HOME_SYMLINK)
         if self.path.exists() and self.path.is_symlink():
-            warnings.append("guard_db_symlink")
+            warnings.append(POLICY_INTEGRITY_REASON_GUARD_DB_SYMLINK)
         if os.name == "nt":
             return warnings
         try:
             if self.guard_home.stat().st_mode & 0o077:
-                warnings.append("guard_home_permissions")
+                warnings.append(POLICY_INTEGRITY_REASON_GUARD_HOME_PERMISSIONS)
         except OSError:
-            warnings.append("guard_home_inaccessible")
+            warnings.append(POLICY_INTEGRITY_REASON_GUARD_HOME_INACCESSIBLE)
         if not self.path.exists():
             return warnings
         try:
             if self.path.stat().st_mode & 0o077:
-                warnings.append("guard_db_permissions")
+                warnings.append(POLICY_INTEGRITY_REASON_GUARD_DB_PERMISSIONS)
         except OSError:
-            warnings.append("guard_db_inaccessible")
+            warnings.append(POLICY_INTEGRITY_REASON_GUARD_DB_INACCESSIBLE)
         return warnings
 
     @staticmethod
