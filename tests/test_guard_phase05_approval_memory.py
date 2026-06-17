@@ -735,7 +735,7 @@ def test_empty_degraded_reasons_do_not_honor_warn_only_policy() -> None:
     )
 
 
-def test_backend_degraded_warn_mode_honors_local_approval(tmp_path: Path) -> None:
+def test_backend_degraded_warn_mode_ignores_local_approval(tmp_path: Path) -> None:
     store = _store(tmp_path)
     store._policy_integrity_secret_store = None
     shell_request = _request("req-shell", artifact_id="codex:project:tool-action:shell", command="cat ~/.npmrc")
@@ -758,9 +758,7 @@ def test_backend_degraded_warn_mode_honors_local_approval(tmp_path: Path) -> Non
         now="2026-05-13T00:02:00+00:00",
     )
 
-    assert decision is not None
-    assert decision["action"] == "allow"
-    assert decision["integrity_status"] == "degraded_mode"
+    assert decision is None
 
 
 def test_path_degraded_warn_mode_ignores_local_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

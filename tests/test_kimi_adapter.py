@@ -294,6 +294,7 @@ class TestKimiHookChatUx:
                 config=config,
                 output_stream=stdout_capture,
                 payload=payload,
+                home_dir=tmp_path,
                 runtime_workspace=tmp_path,
                 store=store,
             )
