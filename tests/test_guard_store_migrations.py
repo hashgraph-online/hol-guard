@@ -285,6 +285,36 @@ def test_oauth_secret_store_skips_system_keyring_when_macos_user_keychain_search
     assert isinstance(secret_store, EncryptedFileSecretStore)
 
 
+def test_guard_store_reuses_persisted_system_keyring_unavailable_result_across_process_starts(
+    tmp_path,
+    monkeypatch,
+):
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    SystemKeyringSecretStore._clear_macos_keychain_health_cache()
+    availability_checks = 0
+
+    def fake_is_available(cls) -> bool:
+        nonlocal availability_checks
+        availability_checks += 1
+        return False
+
+    monkeypatch.setattr(SystemKeyringSecretStore, "_is_available", classmethod(fake_is_available))
+
+    first_store = GuardStore(guard_home)
+
+    assert isinstance(first_store._oauth_secret_store, EncryptedFileSecretStore)
+    assert first_store._policy_integrity_secret_store is None
+
+    SystemKeyringSecretStore._clear_macos_keychain_health_cache()
+
+    second_store = GuardStore(guard_home)
+
+    assert isinstance(second_store._oauth_secret_store, EncryptedFileSecretStore)
+    assert second_store._policy_integrity_secret_store is None
+    assert availability_checks == 1
+
+
 def test_windows_oauth_refresh_lock_wraps_permission_error_as_blocking(monkeypatch):
     class _FakeHandle:
         def seek(self, _offset: int) -> None:
