@@ -16,13 +16,14 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     project = pyproject["project"]
+    requires_python = project["requires-python"]
     dependency_entries = project["dependencies"]
     dependencies = " ".join(dependency_entries)
     cisco_extra = " ".join(project["optional-dependencies"]["cisco"])
     cisco_mcp_group = " ".join(pyproject["dependency-groups"]["cisco-mcp"])
     override_entries = pyproject["tool"]["uv"]["override-dependencies"]
-    skill_scanner_entry = next(entry for entry in dependency_entries if entry.startswith("cisco-ai-skill-scanner"))
 
+    assert requires_python == ">=3.10,<3.14"
     assert "cisco-ai-mcp-scanner" not in dependencies
     assert "cisco-ai-mcp-scanner" not in cisco_extra
     assert "cisco-ai-mcp-scanner==4.7.3" in cisco_mcp_group
@@ -30,8 +31,7 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "python_version >= '3.11'" in cisco_extra
     assert "python_version < '3.14'" in cisco_extra
     assert "python_version < '3.14'" in cisco_mcp_group
-    assert "cisco-ai-skill-scanner~=2.0.11" in skill_scanner_entry
-    assert "python_version < '3.14'" in skill_scanner_entry
+    assert "cisco-ai-skill-scanner~=2.0.11" in dependency_entries
     assert "aiohttp==3.14.1" in override_entries
     assert "click==8.4.1" in override_entries
     assert "cisco-ai-skill-scanner==2.0.11" in override_entries
