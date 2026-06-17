@@ -1,6 +1,21 @@
 import type { GuardActionEnvelope, GuardApprovalRequest } from "./guard-types";
-import { groupDuplicates } from "./queue-state";
-import { isBulkSelectableRequest, resolveBulkSelectionGroupId } from "./use-queue-bulk-approve";
+import {
+  countDuplicateActionsInGroups,
+  countSensitiveFileReadGroups,
+  groupDuplicates,
+  isReadOnlyQueueGroup,
+  summarizeSensitiveFileReadGroups,
+  type QueueGroup,
+} from "./queue-state";
+import {
+  isBulkSelectableRequest,
+  resolveBulkSelectionGroupId,
+} from "./use-queue-bulk-approve";
+import {
+  buildBulkRiskDisclosure,
+  resolveBulkRiskTier,
+  type BulkSelectionStats,
+} from "./queue-bulk-risk-disclosure";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -60,25 +75,105 @@ const secondRead: GuardApprovalRequest = {
   action_envelope_json: { ...fileReadEnvelope, target_paths: ["README.md"] },
 };
 
+const sensitiveRead: GuardApprovalRequest = {
+  ...plainRead,
+  request_id: "req-secret",
+  artifact_name: "secret file read",
+  risk_summary: "Reads a credential file containing secrets",
+  action_envelope_json: { ...fileReadEnvelope, target_paths: [".env"] },
+};
+
 const shellItem: GuardApprovalRequest = {
   ...plainRead,
   request_id: "req-shell",
-  action_envelope_json: { ...fileReadEnvelope, action_type: "shell", command: "npm test" },
+  action_envelope_json: { ...fileReadEnvelope, action_type: "shell_command", command: "npm test" },
 };
 
 const groups = groupDuplicates([plainRead, secondRead, shellItem]);
 
+// T-BULK-HOOK-01: plain file read is bulk selectable
 assert(
   isBulkSelectableRequest(plainRead, groups) === true,
   "T-BULK-HOOK-01: plain file read is bulk selectable",
 );
+// T-BULK-HOOK-02: shell command is not bulk selectable
 assert(
   isBulkSelectableRequest(shellItem, groups) === false,
   "T-BULK-HOOK-02: shell command is not bulk selectable",
 );
+// T-BULK-HOOK-03: resolveBulkSelectionGroupId returns primary id
 assert(
   resolveBulkSelectionGroupId(plainRead, groups) === "req-plain",
   "T-BULK-HOOK-03: resolveBulkSelectionGroupId returns primary id",
+);
+
+// T-BULK-HOOK-04: ambient selection eligibility — isReadOnlyQueueGroup covers single eligible group
+assert(
+  isReadOnlyQueueGroup({ primary: plainRead, duplicateCount: 0, duplicateIds: [] }) === true,
+  "T-BULK-HOOK-04: isReadOnlyQueueGroup true for a single plain read",
+);
+
+// T-BULK-HOOK-05: duplicate actions counted across groups
+const dupGroups: QueueGroup[] = [
+  { primary: plainRead, duplicateCount: 2, duplicateIds: ["a", "b"] },
+  { primary: secondRead, duplicateCount: 0, duplicateIds: [] },
+];
+assert(
+  countDuplicateActionsInGroups(dupGroups) === 2,
+  "T-BULK-HOOK-05: countDuplicateActionsInGroups sums duplicate counts",
+);
+
+// T-BULK-HOOK-06: sensitive groups detected + summarized
+const mixedGroups = groupDuplicates([plainRead, sensitiveRead, shellItem]);
+const sensitiveCount = countSensitiveFileReadGroups(mixedGroups);
+assert(sensitiveCount >= 1, "T-BULK-HOOK-06a: sensitive reads counted in groups");
+const sensitiveSummary = summarizeSensitiveFileReadGroups(mixedGroups);
+assert(sensitiveSummary.count >= 1, "T-BULK-HOOK-06b: summarizeSensitiveFileReadGroups counts sensitive");
+assert(
+  sensitiveSummary.samplePaths.length <= 3,
+  "T-BULK-HOOK-06c: sample paths capped at 3",
+);
+
+// T-BULK-HOOK-07: a selection with sensitive items in queue escalates risk to high
+const statsWithSensitive: BulkSelectionStats = {
+  actionCount: 2,
+  groupCount: 2,
+  duplicateActionCount: 0,
+  sensitiveCount: 1,
+  sensitiveSamplePaths: [".env"],
+};
+assert(
+  resolveBulkRiskTier(statsWithSensitive) === "high",
+  "T-BULK-HOOK-07a: sensitive-in-queue forces high tier even at low selection",
+);
+const disclosureWithSensitive = buildBulkRiskDisclosure(statsWithSensitive);
+assert(
+  disclosureWithSensitive.requiresTypedConfirm === true,
+  "T-BULK-HOOK-07b: sensitive selection requires typed confirm",
+);
+assert(
+  disclosureWithSensitive.bullets.some((b) => b.includes(".env")),
+  "T-BULK-HOOK-07c: sensitive sample path included in disclosure bullets",
+);
+
+// T-BULK-HOOK-08: a high-tier selection (>=10 reads) requires typed confirm
+const highStats: BulkSelectionStats = {
+  actionCount: 12,
+  groupCount: 10,
+  duplicateActionCount: 2,
+  sensitiveCount: 0,
+  sensitiveSamplePaths: [],
+};
+const highDisclosure = buildBulkRiskDisclosure(highStats);
+assert(highDisclosure.tier === "high", "T-BULK-HOOK-08a: 12 reads is high tier");
+assert(highDisclosure.requiresTypedConfirm === true, "T-BULK-HOOK-08b: high tier requires typed confirm");
+assert(
+  highDisclosure.confirmPhrase === "approve 12 reads",
+  "T-BULK-HOOK-08c: high confirm phrase matches selection count",
+);
+assert(
+  highDisclosure.bullets.some((b) => b.includes("duplicate retr") && b.includes("included")),
+  "T-BULK-HOOK-08d: duplicate retries surfaced in high disclosure",
 );
 
 console.log("use-queue-bulk-approve.test.ts: all tests passed");
