@@ -47,6 +47,7 @@ from .runner import (
     _normalized_receipts_sync_url,
     _resolve_guard_sync_auth_context,
     _urlopen_json_with_timeout_retry,
+    _validate_guard_sync_url,
 )
 from .supply_chain import detect_supply_chain_risk
 from .supply_chain_bundle import (
@@ -680,6 +681,22 @@ def _evaluate_with_cloud(
     sync_url = _optional_string(auth_context.get("sync_url"))
     if sync_url is None:
         return None, None
+    try:
+        sync_url = _validate_guard_sync_url(sync_url, issuer=_optional_string(auth_context.get("issuer")))
+    except GuardSyncNotConfiguredError:
+        return (
+            _cloud_fail_closed_evaluation(
+                code="cloud_validation_error",
+                message="Guard cloud evaluation endpoint was not trusted, so this package request needs review.",
+                artifact=artifact,
+                targets=targets,
+                workspace_dir=workspace_dir,
+                workspace_fingerprint=workspace_fingerprint,
+                bundle_meta=bundle_meta,
+                fail_closed_decision=resolve_fail_closed_decision(),
+            ),
+            None,
+        )
     evaluate_url = _normalized_supply_chain_evaluate_url(sync_url, workspace_id)
     request_payload = _build_request_payload(
         artifact=artifact,

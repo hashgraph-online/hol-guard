@@ -738,6 +738,51 @@ def test_evaluate_package_request_artifact_strict_mode_blocks_on_cloud_unreachab
     assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
 
 
+def test_evaluate_package_request_artifact_rejects_untrusted_cloud_endpoint_before_network(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(
+        store,
+        workspace_id=WORKSPACE_ID,
+        sync_url="https://evil.example/api/guard/receipts/sync",
+        token="demo-token",
+    )
+    response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="left-pad",
+                version="1.0.0",
+                default_action="monitor",
+                normalized_severity="low",
+                exploit_level="none",
+                known_exploited=False,
+                malware_state="none",
+                risk_score=220,
+            )
+        ]
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
+
+    def fail_network(*args: object, **kwargs: object) -> object:
+        raise AssertionError("untrusted supply-chain endpoint reached network")
+
+    monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", fail_network)
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("left-pad@1.0.0"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert result.enforcement == "premium_cloud"
+    assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
+
+
 def test_evaluate_package_request_artifact_blocks_external_tarball_zip_slip(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
