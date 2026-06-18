@@ -1,5 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { PackageWorkbenchPanel } from "./package-workbench-panel";
+import { ActiveFilterChip, FilterChip, buildFilterSummary } from "./package-workbench-filter-modal";
+import type { PackageWorkbenchFilters, PackageWorkbenchSortKey } from "./guard-types";
 import type { SupplyChainAuditSnapshot } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
@@ -96,5 +98,32 @@ assert(!panelMarkup.includes("All decisions"), "PWP5: inline decision filter pil
 assert(!panelMarkup.includes("All severities"), "PWP6: inline severity filter pills should be removed");
 assert(!panelMarkup.includes(">Sort</span>"), "PWP7: inline sort button row should be removed");
 assert(!panelMarkup.includes("Search packages…"), "PWP8: inline search input should be removed");
+assert(panelMarkup.includes('aria-pressed="true"'), "PWP9: view-mode chips use aria-pressed");
+assert(!panelMarkup.includes('role="switch"'), "PWP10: view-mode chips do not use role switch");
+assert(!panelMarkup.includes("aria-checked"), "PWP11: view-mode chips do not use aria-checked");
+
+const singleFilter: PackageWorkbenchFilters = {
+  ecosystem: "npm",
+  decision: "all",
+  severity: "all",
+  search: "",
+};
+assert(
+  buildFilterSummary(singleFilter, "severity" as PackageWorkbenchSortKey, "desc").length === 1,
+  "PWP12: a single active filter produces a chip",
+);
+assert(
+  buildFilterSummary(
+    { ecosystem: "all", decision: "all", severity: "all", search: "" },
+    "severity" as PackageWorkbenchSortKey,
+    "desc",
+  ).length === 0,
+  "PWP13: default filters produce no chips",
+);
+
+const chipMarkup = renderToStaticMarkup(
+  <ActiveFilterChip label="Ecosystem: npm" onRemove={() => undefined} />,
+);
+assert(chipMarkup.includes("Ecosystem: npm"), "PWP14: active filter chip renders its label");
 
 console.log("package-workbench-panel.test.tsx: all assertions passed");

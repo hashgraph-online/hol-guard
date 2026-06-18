@@ -555,8 +555,7 @@ function FilterChip({ label, active, count, onSelect }) {
     "button",
     {
       type: "button",
-      role: "switch",
-      "aria-checked": active,
+      "aria-pressed": active,
       onClick: onSelect,
       className: `inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${active ? "bg-brand-dark text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`,
       children: [
@@ -727,6 +726,7 @@ function PackageWorkbenchPanel({
   const closeFilterModal = reactExports.useCallback(() => setFilterModalOpen(false), []);
   const handleClearFilters = reactExports.useCallback(() => {
     setFilters({ ecosystem: "all", decision: "all", severity: "all", search: "" });
+    setSortState({ sortKey: "severity", sortDirection: "desc" });
     setPage(0);
     setSelectedId("");
   }, []);
@@ -817,7 +817,7 @@ function PackageWorkbenchPanel({
             activeFilterCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1.5 rounded-full bg-brand-blue px-1.5 py-0.5 text-[10px] font-semibold text-white", children: activeFilterCount }) : null
           ] }) })
         ] }),
-        filterSummary.length > 1 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap items-center gap-2", children: filterSummary.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        filterSummary.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap items-center gap-2", children: filterSummary.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           ActiveFilterChip,
           {
             label: item.label,

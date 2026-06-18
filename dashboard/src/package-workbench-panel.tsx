@@ -47,8 +47,7 @@ function FilterChip({ label, active, count, onSelect }: FilterChipProps) {
   return (
     <button
       type="button"
-      role="switch"
-      aria-checked={active}
+      aria-pressed={active}
       onClick={onSelect}
       className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${
         active ? "bg-brand-dark text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
@@ -243,6 +242,7 @@ export function PackageWorkbenchPanel({
   const closeFilterModal = useCallback(() => setFilterModalOpen(false), []);
   const handleClearFilters = useCallback(() => {
     setFilters({ ecosystem: "all", decision: "all", severity: "all", search: "" });
+    setSortState({ sortKey: "severity", sortDirection: "desc" });
     setPage(0);
     setSelectedId("");
   }, []);
@@ -366,7 +366,7 @@ export function PackageWorkbenchPanel({
                     </ActionButton>
                   </div>
                 </div>
-                {filterSummary.length > 1 ? (
+                {filterSummary.length > 0 ? (
                   <div className="flex flex-wrap items-center gap-2">
                     {filterSummary.map((item) => (
                       <ActiveFilterChip
