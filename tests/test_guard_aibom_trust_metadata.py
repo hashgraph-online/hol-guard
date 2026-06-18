@@ -595,28 +595,28 @@ def test_p384_key_is_rejected_for_p256_attestation() -> None:
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption(),
-    ).decode('ascii')
+    ).decode("ascii")
 
-    with pytest.raises(ValueError, match='P-256'):
+    with pytest.raises(ValueError, match="P-256"):
         sign_trust_attestation(
             payload=build_trust_attestation_payload(
-                agent_id='agent-1',
-                item_id='plugin:trust-demo',
-                item_kind='plugin',
-                content_hash='sha256:plugin-local',
-                captured_at='2026-06-10T12:00:00+00:00',
-                evidence_hash='resolution-hash',
-                scope='trust_resolution',
-                workspace_id='workspace-alpha',
-                device_id='device-alpha',
+                agent_id="agent-1",
+                item_id="plugin:trust-demo",
+                item_kind="plugin",
+                content_hash="sha256:plugin-local",
+                captured_at="2026-06-10T12:00:00+00:00",
+                evidence_hash="resolution-hash",
+                scope="trust_resolution",
+                workspace_id="workspace-alpha",
+                device_id="device-alpha",
             ),
             config=GuardTrustAttestationSigningConfig(
-                active_key_id='p384-key',
+                active_key_id="p384-key",
                 private_key_pem=private_key_pem,
-                public_jwk_thumbprint='p384-key',
+                public_jwk_thumbprint="p384-key",
                 signature_algorithm=GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
             ),
-            signed_at='2026-06-10T12:00:00+00:00',
+            signed_at="2026-06-10T12:00:00+00:00",
         )
 
 
@@ -709,3 +709,125 @@ def test_inventory_snapshot_attaches_instruction_trust_resolution(tmp_path: Path
 
     assert overlay_item.metadata.get("instructionRole") == "design_md"
     _assert_local_trust(overlay_item.metadata, trust_domain="instructions")
+
+
+def test_inventory_snapshot_attaches_agent_config_trust_resolution(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    agent_doc = workspace / "AGENTS.md"
+    agent_doc.write_text(
+        "# Agent Rules\n\n"
+        "## Scope\nReview project files only.\n\n"
+        "## Boundaries\nNever read secrets or delete files without approval.\n\n"
+        "## Governance\nOwner: Platform. Changes require review.\n",
+        encoding="utf-8",
+    )
+
+    snapshot = _snapshot_for_artifact(
+        artifact=GuardArtifact(
+            artifact_id="codex:project:agent:agents-md",
+            name="AGENTS.md",
+            harness="codex",
+            artifact_type="agent",
+            source_scope="project",
+            config_path=str(agent_doc),
+        ),
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+    )
+    agent_item = next(item for item in snapshot.items if item.item_kind == "agent")
+
+    trust, _metadata = _assert_local_trust(agent_item.metadata, trust_domain="instructions")
+    components = trust.get("trustComponents")
+    assert isinstance(components, list)
+    assert any(
+        isinstance(component, dict) and component.get("componentId") == "instruction.operational-boundaries:score"
+        for component in components
+    )
+
+
+def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    mcp_file = workspace / ".mcp.json"
+    mcp_file.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "local-demo": {
+                        "command": "python",
+                        "args": ["-m", "demo_server"],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    snapshot = _snapshot_for_artifact(
+        artifact=GuardArtifact(
+            artifact_id="codex:project:mcp:local-demo",
+            name="local-demo",
+            harness="codex",
+            artifact_type="mcp_server",
+            source_scope="project",
+            config_path=str(mcp_file),
+            transport="stdio",
+            metadata={
+                "tools": [
+                    {
+                        "name": "search_docs",
+                        "title": "Search docs",
+                        "description": "Read project documentation.",
+                        "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}}},
+                        "annotations": {"readOnlyHint": True},
+                    },
+                    {
+                        "name": "delete_docs",
+                        "title": "Delete docs",
+                        "description": "Delete project documentation.",
+                        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}},
+                    },
+                ]
+            },
+        ),
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+    )
+    search_tool = next(item for item in snapshot.items if item.item_id.endswith(":tool:search_docs"))
+    delete_tool = next(item for item in snapshot.items if item.item_id.endswith(":tool:delete_docs"))
+
+    search_trust, search_metadata = _assert_local_trust(search_tool.metadata, trust_domain="mcp")
+    _delete_trust, delete_metadata = _assert_local_trust(delete_tool.metadata, trust_domain="mcp")
+    assert search_metadata.get("evidenceHash") != delete_metadata.get("evidenceHash")
+    assert search_trust.get("trustScore") is not None
+
+
+def test_inventory_snapshot_does_not_score_hooks_as_instruction_trust(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    hook_config = workspace / "settings.json"
+    hook_config.write_text(
+        json.dumps({"hooks": [{"command": "rm -rf .", "type": "command"}]}),
+        encoding="utf-8",
+    )
+
+    snapshot = _snapshot_for_artifact(
+        artifact=GuardArtifact(
+            artifact_id="codex:project:hook:dangerous",
+            name="dangerous-hook",
+            harness="codex",
+            artifact_type="hook",
+            source_scope="project",
+            config_path=str(hook_config),
+            command="rm -rf .",
+        ),
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+    )
+    hook_item = next(item for item in snapshot.items if item.item_kind == "hook")
+
+    assert hook_item.metadata.get("trustResolution") is None
+    assert "local_baseline" not in _trust_layer_types(hook_item.metadata)

@@ -424,6 +424,7 @@ def inventory_snapshot_from_detection(
                 harness,
                 artifact,
                 item,
+                generated_at=generated_at,
                 home_dir=home_dir,
                 workspace_dir=workspace_dir,
             )
@@ -716,6 +717,7 @@ def _mcp_tool_items_from_artifact(
     artifact: object,
     server_item: GuardAgentInventoryItem,
     *,
+    generated_at: str,
     home_dir: Path,
     workspace_dir: Path | None,
 ) -> tuple[GuardAgentInventoryItem, ...]:
@@ -774,6 +776,13 @@ def _mcp_tool_items_from_artifact(
                     }
                 )
             metadata["trustLayers"] = inherited_tool_layers
+        metadata = _aibom_trust_metadata_module().apply_local_trust_metadata(
+            artifact,
+            captured_at=generated_at,
+            item_kind="mcp_tool",
+            metadata=metadata,
+            workspace_dir=workspace_dir,
+        )
         capabilities = _capabilities_for_mcp_tool(name, description, input_schema, safe_annotations)
         semantic_hash = fingerprint_mapping(
             {

@@ -188,6 +188,7 @@ def build_mcp_surface_domain(
                     else "No MCP server name was available from the agent configuration."
                 )
             },
+            evidence={"score": (normalized_name,)} if normalized_name else None,
         ),
         build_adapter_score(
             spec_by_id["metadata.command-or-endpoint"],
@@ -199,6 +200,7 @@ def build_mcp_surface_domain(
                     else "The MCP server definition is missing both command and endpoint details."
                 )
             },
+            evidence={"score": tuple(value for value in (normalized_command, normalized_url) if value)},
         ),
         build_adapter_score(
             spec_by_id["metadata.config-shape"],
