@@ -484,8 +484,8 @@ def test_status_payload_blocks_python_incompatible_latest_release(
         lambda: "2.0.807",
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.update_commands._latest_version_python_requirement",
-        lambda latest: ">=3.10,<3.14",
+        "codex_plugin_scanner.guard.cli.update_commands._latest_version_python_requirements",
+        lambda latest: (">=3.10,<3.14",),
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_commands._runtime_python_version",

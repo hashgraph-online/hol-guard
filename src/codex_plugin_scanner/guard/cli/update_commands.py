@@ -7,6 +7,7 @@ import importlib
 import importlib.metadata
 import json
 import os
+import platform
 import shlex
 import shutil
 import sqlite3
@@ -469,16 +470,16 @@ def _version_check_payload(current_version: str) -> dict[str, object]:
             "latest_version": latest_version,
             "update_available": None,
         }
-    required_python = _latest_version_python_requirement(latest_version)
+    required_python_requirements = _latest_version_python_requirements(latest_version)
     runtime_python = _runtime_python_version()
-    if update_available and not _python_requirement_satisfied(required_python, runtime_python):
+    if update_available and not _python_requirements_satisfied(required_python_requirements, runtime_python):
         return {
             "source": "pypi",
             "status": "python_incompatible",
             "current_version": current_version,
             "latest_version": latest_version,
             "update_available": True,
-            "required_python": required_python,
+            "required_python": _format_python_requirements(required_python_requirements),
             "runtime_python": runtime_python,
         }
     return {
@@ -516,41 +517,53 @@ def _latest_version_from_pypi() -> str | None:
 
 
 def _runtime_python_version() -> str:
-    return f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    return platform.python_version()
 
 
-def _latest_version_python_requirement(latest_version: str) -> str | None:
+def _latest_version_python_requirements(latest_version: str) -> tuple[str, ...] | None:
     payload = _last_pypi_payload
     if not isinstance(payload, dict):
         return None
+    releases = payload.get("releases")
+    if isinstance(releases, dict):
+        files = releases.get(latest_version)
+        if isinstance(files, list):
+            requirements: list[str] = []
+            for file_payload in files:
+                if not isinstance(file_payload, dict) or file_payload.get("yanked"):
+                    continue
+                requires_python = file_payload.get("requires_python")
+                if not isinstance(requires_python, str) or not requires_python.strip():
+                    return None
+                requirement = requires_python.strip()
+                if requirement not in requirements:
+                    requirements.append(requirement)
+            if requirements:
+                return tuple(requirements)
     info = payload.get("info")
     if isinstance(info, dict) and info.get("version") == latest_version:
         requires_python = info.get("requires_python")
         if isinstance(requires_python, str) and requires_python.strip():
-            return requires_python.strip()
-    releases = payload.get("releases")
-    if not isinstance(releases, dict):
-        return None
-    files = releases.get(latest_version)
-    if not isinstance(files, list):
-        return None
-    requirements: list[str] = []
-    for file_payload in files:
-        if not isinstance(file_payload, dict) or file_payload.get("yanked") is True:
-            continue
-        requires_python = file_payload.get("requires_python")
-        if isinstance(requires_python, str) and requires_python.strip():
-            requirements.append(requires_python.strip())
-    return requirements[0] if requirements else None
+            return (requires_python.strip(),)
+    return None
 
 
-def _python_requirement_satisfied(required_python: str | None, runtime_python: str) -> bool:
-    if not isinstance(required_python, str) or not required_python.strip():
+def _python_requirements_satisfied(requirements: tuple[str, ...] | None, runtime_python: str) -> bool:
+    if not requirements:
         return True
-    try:
-        return SpecifierSet(required_python).contains(runtime_python, prereleases=True)
-    except InvalidSpecifier:
-        return True
+    for requires_python in requirements:
+        try:
+            if SpecifierSet(requires_python).contains(runtime_python, prereleases=True):
+                return True
+        except InvalidSpecifier:
+            return True
+    return False
+
+
+def _format_python_requirements(requirements: tuple[str, ...] | None) -> str | None:
+    if not requirements:
+        return None
+    return " or ".join(requirements)
 
 
 def _python_runtime_blocks_update(version_check: object) -> bool:

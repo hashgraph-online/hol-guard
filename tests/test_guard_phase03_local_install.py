@@ -135,7 +135,7 @@ def test_update_binary_diagnostics_treats_pipx_shim_as_healthy(monkeypatch: pyte
 
 def test_version_check_reports_python_incompatible_latest_release(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.807")
-    monkeypatch.setattr(update_commands, "_latest_version_python_requirement", lambda latest: ">=3.10,<3.14")
+    monkeypatch.setattr(update_commands, "_latest_version_python_requirements", lambda latest: (">=3.10,<3.14",))
     monkeypatch.setattr(update_commands, "_runtime_python_version", lambda: "3.14.0")
 
     payload = update_commands._version_check_payload("2.0.789")
@@ -147,10 +147,33 @@ def test_version_check_reports_python_incompatible_latest_release(monkeypatch: p
     assert payload["runtime_python"] == "3.14.0"
 
 
+def test_latest_version_python_requirements_uses_all_non_yanked_files(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        update_commands,
+        "_last_pypi_payload",
+        {
+            "info": {"version": "2.0.807", "requires_python": ">=3.10"},
+            "releases": {
+                "2.0.807": [
+                    {"requires_python": ">=3.10,<3.14", "yanked": "bad wheel"},
+                    {"requires_python": ">=3.10,<3.14", "yanked": False},
+                    {"requires_python": ">=3.11,<3.15", "yanked": False},
+                ],
+            },
+        },
+    )
+
+    assert update_commands._latest_version_python_requirements("2.0.807") == (
+        ">=3.10,<3.14",
+        ">=3.11,<3.15",
+    )
+    assert update_commands._python_requirements_satisfied((">=3.10,<3.14", ">=3.11,<3.15"), "3.14.0")
+
+
 def test_update_blocks_python_incompatible_latest_release(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.789")
     monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.807")
-    monkeypatch.setattr(update_commands, "_latest_version_python_requirement", lambda latest: ">=3.10,<3.14")
+    monkeypatch.setattr(update_commands, "_latest_version_python_requirements", lambda latest: (">=3.10,<3.14",))
     monkeypatch.setattr(update_commands, "_runtime_python_version", lambda: "3.14.0")
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
     monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
