@@ -6,12 +6,15 @@ import base64
 import json
 import sqlite3
 import sys
+import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import local_trust_contract as local_trust_contract_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.local_trust_contract import (
     LOCAL_TRUST_DEGRADED_REASON_LABELS,
@@ -21,7 +24,15 @@ from codex_plugin_scanner.guard.local_trust_contract import (
     POLICY_INTEGRITY_ENFORCEMENT_WARN,
     POLICY_INTEGRITY_MODE_DEGRADED,
     POLICY_INTEGRITY_MODE_PROTECTED,
+    POLICY_INTEGRITY_REASON_BACKEND_CORRUPT,
+    POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED,
+    POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,
+    POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE,
+    TrustBackendUnavailableError,
     TrustStatus,
+    degraded_reason_for_backend_error,
+    run_trust_backend_check,
+    select_trust_backend,
 )
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore, SystemKeyringSecretStore
@@ -39,6 +50,49 @@ def _default_store_platform(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _store(tmp_path: Path) -> GuardStore:
     return GuardStore(tmp_path / "guard-home")
+
+
+@dataclass
+class _FakeTrustBackend:
+    name: str
+    priority: int
+    supported: bool = True
+    passive_no_ui_safe: bool = True
+
+    def status(self) -> TrustStatus:
+        return TrustStatus(
+            runtime_protection="protected",
+            remembered_rules="enforced",
+            cloud_policies="available",
+            backend=self.name,
+        )
+
+    def sign(self, payload: bytes) -> str:
+        return base64.urlsafe_b64encode(payload).decode("ascii")
+
+    def verify(self, payload: bytes, signature: str) -> bool:
+        return self.sign(payload) == signature
+
+    def setup(self) -> TrustStatus:
+        return self.status()
+
+    def revoke(self) -> TrustStatus:
+        return TrustStatus(
+            runtime_protection="degraded",
+            remembered_rules="disabled_degraded",
+            cloud_policies="setup_unavailable",
+            backend=self.name,
+            setup_available=True,
+        )
+
+
+def _write_nested_trust_marker(marker_path: str) -> None:
+    Path(marker_path).write_text("ok", encoding="utf-8")
+
+
+def _write_delayed_nested_trust_marker(marker_path: str) -> None:
+    time.sleep(0.4)
+    Path(marker_path).write_text("late", encoding="utf-8")
 
 
 def test_local_trust_contract_exports_stable_status_vocabulary() -> None:
@@ -61,6 +115,225 @@ def test_local_trust_contract_exports_stable_status_vocabulary() -> None:
     assert "guard_home_permissions" in POLICY_INTEGRITY_DEGRADED_REASONS
     assert "guard_db_permissions" in POLICY_INTEGRITY_DEGRADED_REASONS
     assert set(LOCAL_TRUST_DEGRADED_REASON_LABELS) == set(POLICY_INTEGRITY_DEGRADED_REASONS)
+
+
+def test_trust_backend_registry_requires_no_ui_safe_passive_backend() -> None:
+    unsafe_high_priority = _FakeTrustBackend(
+        name="unsafe-high",
+        priority=100,
+        passive_no_ui_safe=False,
+    )
+    safe_low_priority = _FakeTrustBackend(name="safe-low", priority=10)
+    unsupported = _FakeTrustBackend(name="unsupported", priority=200, supported=False)
+
+    passive_backend = select_trust_backend(
+        (unsupported, unsafe_high_priority, safe_low_priority),
+        passive=True,
+    )
+    explicit_backend = select_trust_backend(
+        (unsupported, unsafe_high_priority, safe_low_priority),
+        passive=False,
+    )
+
+    assert passive_backend is safe_low_priority
+    assert explicit_backend is unsafe_high_priority
+
+
+def test_trust_backend_timeout_returns_degraded_result_without_waiting() -> None:
+    timeout_result = TrustStatus(
+        runtime_protection="degraded",
+        remembered_rules="disabled_degraded",
+        cloud_policies="setup_unavailable",
+        backend="timeout",
+        degraded_reasons=(POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,),
+        setup_available=True,
+    )
+
+    started = time.monotonic()
+    result = run_trust_backend_check(
+        lambda: (time.sleep(1.0), _FakeTrustBackend("slow", 1).status())[1],
+        timeout_seconds=0.01,
+        timeout_result=timeout_result,
+        on_error=lambda error: TrustStatus(
+            runtime_protection="degraded",
+            remembered_rules="disabled_degraded",
+            cloud_policies="setup_unavailable",
+            backend="error",
+            degraded_reasons=(degraded_reason_for_backend_error(error),),
+        ),
+    )
+
+    assert result == timeout_result
+    assert time.monotonic() - started < 0.5
+
+
+def test_trust_backend_timeout_contains_late_side_effects(tmp_path: Path) -> None:
+    marker_path = tmp_path / "late-side-effect"
+
+    def slow_mutation() -> TrustStatus:
+        time.sleep(0.5)
+        marker_path.write_text("mutated", encoding="utf-8")
+        return _FakeTrustBackend("slow", 1).status()
+
+    timeout_result = TrustStatus(
+        runtime_protection="degraded",
+        remembered_rules="disabled_degraded",
+        cloud_policies="setup_unavailable",
+        backend="timeout",
+        degraded_reasons=(POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,),
+    )
+
+    result = run_trust_backend_check(
+        slow_mutation,
+        timeout_seconds=0.01,
+        timeout_result=timeout_result,
+    )
+    time.sleep(0.1)
+
+    assert result == timeout_result
+    assert not marker_path.exists()
+
+
+def test_trust_backend_timeout_kills_nested_helper_process(tmp_path: Path) -> None:
+    marker_path = tmp_path / "nested-late-side-effect"
+
+    def slow_nested_mutation() -> TrustStatus:
+        context = local_trust_contract_module.multiprocessing.get_context("fork")
+        process = context.Process(target=_write_delayed_nested_trust_marker, args=(str(marker_path),))
+        process.start()
+        time.sleep(2.0)
+        return _FakeTrustBackend("slow", 1).status()
+
+    timeout_result = TrustStatus(
+        runtime_protection="degraded",
+        remembered_rules="disabled_degraded",
+        cloud_policies="setup_unavailable",
+        backend="timeout",
+        degraded_reasons=(POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,),
+    )
+
+    result = run_trust_backend_check(
+        slow_nested_mutation,
+        timeout_seconds=0.05,
+        timeout_result=timeout_result,
+    )
+    time.sleep(0.6)
+
+    assert result == timeout_result
+    assert not marker_path.exists()
+
+
+def test_trust_backend_timeout_falls_back_when_process_group_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    class FakeProcess:
+        pid = 12345
+
+        def is_alive(self) -> bool:
+            return False
+
+        def join(self, timeout: float | None = None) -> None:
+            calls.append(f"join:{timeout}")
+
+        def terminate(self) -> None:
+            calls.append("terminate")
+
+        def kill(self) -> None:
+            calls.append("kill")
+
+    def fake_killpg(pid: int, sig: int) -> None:
+        calls.append(f"killpg:{pid}:{sig}")
+        raise ProcessLookupError("process group not ready")
+
+    monkeypatch.setattr(local_trust_contract_module.os, "killpg", fake_killpg)
+
+    local_trust_contract_module._terminate_trust_backend_process_tree(FakeProcess())
+
+    assert calls == ["killpg:12345:15", "terminate", "join:0.2"]
+
+
+def test_trust_backend_timeout_helper_allows_minimal_fallback_contract() -> None:
+    timeout_result = {"mode": "degraded"}
+
+    result = run_trust_backend_check(
+        lambda: (time.sleep(1.0), {"mode": "protected"})[1],
+        timeout_seconds=0.01,
+        timeout_result=timeout_result,
+    )
+
+    assert result == timeout_result
+
+
+def test_trust_backend_check_drains_large_completed_result_before_timeout() -> None:
+    timeout_result = {"mode": "degraded"}
+    large_status = {"mode": "protected", "payload": "x" * 1_000_000}
+
+    result = run_trust_backend_check(
+        lambda: large_status,
+        timeout_seconds=1.0,
+        timeout_result=timeout_result,
+    )
+
+    assert result == large_status
+
+
+def test_trust_backend_check_allows_native_helper_child_process(tmp_path: Path) -> None:
+    marker_path = tmp_path / "nested-helper"
+
+    def operation() -> dict[str, str]:
+        context = local_trust_contract_module.multiprocessing.get_context("fork")
+        process = context.Process(target=_write_nested_trust_marker, args=(str(marker_path),))
+        process.start()
+        process.join(timeout=1.0)
+        return {"mode": "protected", "nested": str(marker_path.exists())}
+
+    result = run_trust_backend_check(
+        operation,
+        timeout_seconds=1.0,
+        timeout_result={"mode": "degraded", "nested": "False"},
+    )
+
+    assert result == {"mode": "protected", "nested": "True"}
+
+
+def test_trust_backend_check_degrades_without_spawn_when_fork_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str | None] = []
+
+    def fake_get_context(method: str | None = None):
+        calls.append(method)
+        if method == "fork":
+            raise ValueError("fork unavailable")
+        raise AssertionError("spawn fallback must not be used for passive trust checks")
+
+    monkeypatch.setattr(local_trust_contract_module.multiprocessing, "get_context", fake_get_context)
+
+    result = run_trust_backend_check(
+        lambda: {"mode": "protected"},
+        timeout_seconds=1.0,
+        timeout_result={"mode": "degraded"},
+        on_error=lambda error: {"mode": "degraded", "reason": degraded_reason_for_backend_error(error)},
+    )
+
+    assert result == {"mode": "degraded", "reason": POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE}
+    assert calls == ["fork"]
+
+
+def test_trust_backend_errors_normalize_to_safe_degraded_reasons() -> None:
+    assert degraded_reason_for_backend_error(TimeoutError("slow")) == POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT
+    assert (
+        degraded_reason_for_backend_error(TrustBackendUnavailableError("fork unavailable"))
+        == POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE
+    )
+    assert (
+        degraded_reason_for_backend_error(PermissionError("denied"))
+        == POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED
+    )
+    assert degraded_reason_for_backend_error(ValueError("bad payload")) == POLICY_INTEGRITY_REASON_BACKEND_CORRUPT
+    assert degraded_reason_for_backend_error(RuntimeError("broken")) == POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE
 
 
 def test_trust_status_serializes_policy_integrity_authority_without_paths() -> None:
