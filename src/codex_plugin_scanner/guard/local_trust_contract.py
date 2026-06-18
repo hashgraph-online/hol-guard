@@ -150,8 +150,10 @@ def run_trust_backend_check(
         return timeout_result
     try:
         context = multiprocessing.get_context("fork")
-    except ValueError:
-        context = multiprocessing.get_context()
+    except ValueError as error:
+        if on_error is None:
+            return timeout_result
+        return on_error(error)
     results = context.Queue(maxsize=1)
 
     process = context.Process(target=_trust_backend_check_worker, args=(operation, results), daemon=True)

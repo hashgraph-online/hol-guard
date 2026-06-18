@@ -85,10 +85,6 @@ class _FakeTrustBackend:
         )
 
 
-def _fast_spawn_compatible_trust_probe() -> dict[str, str]:
-    return {"mode": "protected"}
-
-
 def test_local_trust_contract_exports_stable_status_vocabulary() -> None:
     assert LOCAL_TRUST_MODES == (
         "protected",
@@ -200,28 +196,27 @@ def test_trust_backend_timeout_helper_allows_minimal_fallback_contract() -> None
     assert result == timeout_result
 
 
-def test_trust_backend_check_uses_default_context_when_fork_unavailable(
+def test_trust_backend_check_degrades_without_spawn_when_fork_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    real_get_context = local_trust_contract_module.multiprocessing.get_context
     calls: list[str | None] = []
 
     def fake_get_context(method: str | None = None):
         calls.append(method)
         if method == "fork":
             raise ValueError("fork unavailable")
-        return real_get_context("fork")
+        raise AssertionError("spawn fallback must not be used for passive trust checks")
 
     monkeypatch.setattr(local_trust_contract_module.multiprocessing, "get_context", fake_get_context)
 
     result = run_trust_backend_check(
-        _fast_spawn_compatible_trust_probe,
+        lambda: {"mode": "protected"},
         timeout_seconds=1.0,
         timeout_result={"mode": "degraded"},
     )
 
-    assert result == {"mode": "protected"}
-    assert calls == ["fork", None]
+    assert result == {"mode": "degraded"}
+    assert calls == ["fork"]
 
 
 def test_trust_backend_errors_normalize_to_safe_degraded_reasons() -> None:
