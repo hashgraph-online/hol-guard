@@ -196,6 +196,19 @@ def test_trust_backend_timeout_helper_allows_minimal_fallback_contract() -> None
     assert result == timeout_result
 
 
+def test_trust_backend_check_drains_large_completed_result_before_timeout() -> None:
+    timeout_result = {"mode": "degraded"}
+    large_status = {"mode": "protected", "payload": "x" * 1_000_000}
+
+    result = run_trust_backend_check(
+        lambda: large_status,
+        timeout_seconds=1.0,
+        timeout_result=timeout_result,
+    )
+
+    assert result == large_status
+
+
 def test_trust_backend_check_degrades_without_spawn_when_fork_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

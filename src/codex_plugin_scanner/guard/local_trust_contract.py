@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import json
 import multiprocessing
+import os
+import pickle
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal, Protocol, TypeVar, cast
 
 LocalTrustMode = Literal[
@@ -116,12 +120,16 @@ _TrustResult = TypeVar("_TrustResult")
 
 def _trust_backend_check_worker(
     operation: Callable[[], object],
-    result_queue,
+    result_path: str,
 ) -> None:
     try:
-        result_queue.put((True, operation()))
+        payload = (True, operation())
     except Exception as error:
-        result_queue.put((False, error))
+        payload = (False, error)
+    temp_result_path = f"{result_path}.{os.getpid()}.tmp"
+    with Path(temp_result_path).open("wb") as handle:
+        pickle.dump(payload, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    os.replace(temp_result_path, result_path)
 
 
 def select_trust_backend(
@@ -154,33 +162,35 @@ def run_trust_backend_check(
         if on_error is None:
             return timeout_result
         return on_error(error)
-    results = context.Queue(maxsize=1)
-
-    process = context.Process(target=_trust_backend_check_worker, args=(operation, results), daemon=True)
-    try:
-        process.start()
-    except Exception as error:
-        if on_error is None:
-            return timeout_result
-        return on_error(error)
-    process.join(timeout=timeout_seconds)
-    if process.is_alive():
-        process.terminate()
-        process.join(timeout=0.2)
+    with tempfile.TemporaryDirectory(prefix="hol-guard-trust-") as temp_dir:
+        result_path = str(Path(temp_dir) / "result.pickle")
+        process = context.Process(target=_trust_backend_check_worker, args=(operation, result_path), daemon=True)
+        try:
+            process.start()
+        except Exception as error:
+            if on_error is None:
+                return timeout_result
+            return on_error(error)
+        process.join(timeout=timeout_seconds)
         if process.is_alive():
-            process.kill()
+            process.terminate()
             process.join(timeout=0.2)
-        return timeout_result
-    if results.empty():
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=0.2)
+            return timeout_result
+        result_file = Path(result_path)
+        if not result_file.exists():
+            if on_error is None:
+                return timeout_result
+            return on_error(RuntimeError("trust_backend_process_failed"))
+        with result_file.open("rb") as handle:
+            ok, value = pickle.load(handle)
+        if ok:
+            return cast("_TrustResult", value)
         if on_error is None:
             return timeout_result
-        return on_error(RuntimeError("trust_backend_process_failed"))
-    ok, value = results.get()
-    if ok:
-        return cast("_TrustResult", value)
-    if on_error is None:
-        return timeout_result
-    return on_error(cast("BaseException", value))
+        return on_error(cast("BaseException", value))
 
 
 def degraded_reason_for_backend_error(error: BaseException) -> str:
