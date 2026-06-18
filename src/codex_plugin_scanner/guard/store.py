@@ -5366,9 +5366,7 @@ class GuardStore:
             "client_id": client_id,
             "refresh_token": refresh_token,
             "dpop_private_key_pem": dpop_private_key_pem,
-            "dpop_public_jwk": {
-                str(key): str(value) for key, value in dpop_public_jwk.items()
-            },
+            "dpop_public_jwk": {str(key): str(value) for key, value in dpop_public_jwk.items()},
             "dpop_public_jwk_thumbprint": dpop_public_jwk_thumbprint,
             "grant_id": _string_value(credentials.get("grant_id")),
             "machine_id": _string_value(credentials.get("machine_id")),
