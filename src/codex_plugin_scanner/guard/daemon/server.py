@@ -196,6 +196,7 @@ def _headless_cloud_sync_store_key(store: GuardStore) -> str:
 def _build_snapshot_payload(context: HarnessContext) -> dict[str, object]:
     """Return a lightweight snapshot dict including package manager shim coverage."""
     status = package_shim_status(context)
+    trust_status = GuardStore(context.guard_home).get_policy_integrity_status().get("trust_status", {})
     return {
         "package_manager_coverage": {
             "detected_managers": status.get("detected_managers", []),
@@ -203,7 +204,8 @@ def _build_snapshot_payload(context: HarnessContext) -> dict[str, object]:
             "shims_installed": status.get("active_managers", []),
             "undetected_managers": status.get("undetected_managers", []),
             "unsupported_managers": [],
-        }
+        },
+        "trust_status": trust_status,
     }
 
 

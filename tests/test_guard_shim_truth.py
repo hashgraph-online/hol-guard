@@ -369,3 +369,16 @@ class TestScrg270DaemonShimCoverage:
         assert "shims_installed" in coverage
         assert "npm" in coverage["shims_installed"]
         assert "pip" in coverage["shims_installed"]
+
+    def test_daemon_snapshot_route_includes_safe_trust_status(self, tmp_path: Path) -> None:
+        from codex_plugin_scanner.guard.daemon.server import _build_snapshot_payload
+
+        ctx = _make_context(tmp_path)
+        snapshot = _build_snapshot_payload(ctx)
+        trust_status = snapshot["trust_status"]
+        assert trust_status["runtime_protection"] in {"protected", "degraded", "unknown"}
+        assert trust_status["remembered_rules"] in {"enforced", "disabled_degraded", "unknown"}
+        assert trust_status["cloud_policies"] in {"available", "setup_unavailable", "unknown"}
+        assert trust_status["last_proof"] is None
+        serialized = json.dumps(snapshot, sort_keys=True)
+        assert "key_id" not in serialized
