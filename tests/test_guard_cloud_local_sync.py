@@ -332,6 +332,23 @@ def test_runtime_snapshot_exposes_safe_trust_status(tmp_path: Path) -> None:
     assert "key_id" not in serialized
 
 
+def test_runtime_snapshot_trust_status_does_not_refresh_integrity_state(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    cached_state = {
+        "backend": "cached-backend",
+        "mode": "degraded",
+        "enforcement": "disabled",
+        "degraded_reasons": ["policy_integrity_key_unavailable"],
+    }
+    store.set_sync_payload("policy_integrity", cached_state, "2026-06-18T00:00:00+00:00")
+
+    snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
+
+    assert snapshot["trust_status"]["runtime_protection"] == "degraded"
+    assert snapshot["trust_status"]["remembered_rules"] == "disabled_degraded"
+    assert store.get_sync_payload("policy_integrity") == cached_state
+
+
 def test_runtime_snapshot_treats_naive_sync_timestamps_as_utc(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")

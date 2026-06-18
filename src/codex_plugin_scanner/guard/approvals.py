@@ -757,7 +757,7 @@ def build_runtime_snapshot(
         latest_connect_state=latest_connect_state,
         oauth_storage_health=oauth_storage_health,
     )
-    policy_integrity_status = store.get_policy_integrity_status()
+    trust_status = store.get_cached_policy_trust_status()
     headline_state = _resolve_runtime_headline_state(
         pending_count=pending_count,
         runtime_state=store.get_runtime_state(),
@@ -789,7 +789,7 @@ def build_runtime_snapshot(
         "managed_installs": store.list_managed_installs(),
         "supply_chain": build_local_supply_chain_posture(store, config, now=snapshot_now),
         **cloud_context,
-        "trust_status": policy_integrity_status.get("trust_status", {}),
+        "trust_status": trust_status,
     }
 
 
