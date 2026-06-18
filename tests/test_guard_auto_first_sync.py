@@ -267,8 +267,9 @@ def test_daemon_finalize_guard_connect_payload_uses_fresh_oauth_access_token_onc
     monkeypatch.setattr(daemon_server_module, "sync_local_guard_cloud_proof", _fake_sync)
     monkeypatch.setattr(
         daemon_server_module,
-        "sync_supply_chain_bundle",
-        lambda _store, *, auth_context=None: bundle_calls.append(auth_context) or {"packages": []},
+        "sync_supply_chain_cloud_state",
+        lambda _store, *, auth_context=None, workspace_dir=None: bundle_calls.append(auth_context)
+        or {"packages": []},
     )
 
     payload = daemon_server_module._finalize_daemon_guard_connect_payload(

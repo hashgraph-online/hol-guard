@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib
-import inspect
 import json
 import os
 import shlex
@@ -136,7 +135,8 @@ _CLOUD_AUDIT_PAGE_SIZE = 500
 _CLOUD_AUDIT_MAX_PAGES = 100
 _CLOUD_AUDIT_JOB_PAGE_SIZE = 1
 _CLOUD_AUDIT_JOB_POLL_INTERVAL_SECONDS = 0.5
-_CLOUD_AUDIT_JOB_POLL_TIMEOUT_SECONDS = 20
+_CLOUD_AUDIT_JOB_REQUEST_TIMEOUT_SECONDS = 5
+_CLOUD_AUDIT_JOB_POLL_TIMEOUT_SECONDS = 45
 _CLOUD_AUDIT_SYNC_PAGE_SIZE = 25
 _MAX_SBOM_BYTES = 10 * 1024 * 1024
 _ECOSYSTEM_BY_LOCKFILE = {
@@ -422,21 +422,6 @@ def build_supply_chain_status_payload(
     }
 
 
-def _call_sync_with_optional_auth_context(
-    refresh: Any,
-    *,
-    store: Any,
-    auth_context: dict[str, object],
-) -> dict[str, object]:
-    try:
-        parameters = inspect.signature(refresh).parameters
-    except (TypeError, ValueError):
-        parameters = {}
-    if "auth_context" in parameters:
-        return refresh(store, auth_context=auth_context)
-    return refresh(store)
-
-
 def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, object]:
     """Resolve package-firewall access and opportunistically heal stale cloud state."""
 
@@ -480,11 +465,7 @@ def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, o
         return entitlement_module.resolve_package_firewall_entitlement(store)
     for refresh in (sync_local_guard_cloud_proof, sync_supply_chain_bundle):
         try:
-            _call_sync_with_optional_auth_context(
-                refresh,
-                store=store,
-                auth_context=shared_auth_context,
-            )
+            refresh(store, auth_context=shared_auth_context)
         except runner.GuardSyncAuthorizationExpiredError as error:
             if str(entitlement.get("reason") or "") == "guard_cloud_connect_required":
                 store.record_latest_guard_connect_sync_result(
@@ -2321,6 +2302,7 @@ def _execute_cloud_workspace_audit_request(
     request_url: str,
     method: str,
     payload: dict[str, object] | None = None,
+    timeout_seconds: int = _CLOUD_AUDIT_TIMEOUT_SECONDS,
 ) -> dict[str, object]:
     runner = _runtime_runner_module()
     request_headers = runner._guard_sync_headers(auth_context, request_url=request_url, method=method)
@@ -2333,7 +2315,7 @@ def _execute_cloud_workspace_audit_request(
         method=method,
     )
     try:
-        with urllib.request.urlopen(request, timeout=_CLOUD_AUDIT_TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             response_payload = json.load(response)
     except urllib.error.HTTPError as error:
         if error.code == 403:
@@ -2421,13 +2403,23 @@ def _poll_cloud_workspace_audit_job(
             auth_context=auth_context,
             request_url=request_url,
             method="GET",
+            timeout_seconds=_CLOUD_AUDIT_JOB_REQUEST_TIMEOUT_SECONDS,
         )
         status = str(response_payload.get("status") or "").strip().lower()
         last_response = response_payload
         if status in {"completed", "failed"}:
             return response_payload
         time.sleep(_CLOUD_AUDIT_JOB_POLL_INTERVAL_SECONDS)
-    return last_response
+    pending_response = dict(last_response)
+    pending_response.setdefault("jobId", job_id)
+    pending_response.setdefault("workspaceId", workspace_id)
+    pending_response["status"] = "pending"
+    pending_response["timed_out"] = True
+    pending_response.setdefault(
+        "error",
+        "Guard cloud workspace audit is still processing. Retry sync later.",
+    )
+    return pending_response
 
 
 def _workspace_audit_lockfile_context(
@@ -2601,6 +2593,7 @@ def sync_managed_workspace_audits(
     completed_jobs = 0
     failed_jobs = 0
     queued_jobs = 0
+    pending_jobs = 0
     skipped_workspaces = 0
     for candidate in _managed_workspace_audit_candidates(store, workspace_dir=workspace_dir):
         workspace_label = candidate.name or str(candidate)
@@ -2641,13 +2634,18 @@ def sync_managed_workspace_audits(
                 job_id=job_id,
                 workspace_id=workspace_id,
             )
-            final_status = str(final_response.get("status") or enqueue_response.get("status") or "queued").strip().lower()
+            final_status = str(
+                final_response.get("status")
+                or enqueue_response.get("status")
+                or "queued"
+            ).strip().lower()
             if final_status == "completed":
                 completed_jobs += 1
             elif final_status == "failed":
                 failed_jobs += 1
             else:
                 queued_jobs += 1
+                pending_jobs += 1
             workspaces_payload.append(
                 {
                     "workspace": workspace_label,
@@ -2676,11 +2674,13 @@ def sync_managed_workspace_audits(
                     "package_count": 0,
                 }
             )
-    if failed_jobs > 0 and completed_jobs == 0 and queued_jobs == 0:
+    if failed_jobs > 0 and completed_jobs == 0 and pending_jobs == 0:
         status = "failed"
-    elif failed_jobs > 0:
+    elif pending_jobs > 0 and completed_jobs == 0 and failed_jobs == 0:
+        status = "pending"
+    elif failed_jobs > 0 or pending_jobs > 0:
         status = "partial"
-    elif completed_jobs > 0 or queued_jobs > 0:
+    elif completed_jobs > 0:
         status = "synced"
     else:
         status = "idle"
@@ -2689,6 +2689,7 @@ def sync_managed_workspace_audits(
         "status": status,
         "workspace_count": len(workspaces_payload),
         "completed_jobs": completed_jobs,
+        "pending_jobs": pending_jobs,
         "queued_jobs": queued_jobs,
         "failed_jobs": failed_jobs,
         "skipped_workspaces": skipped_workspaces,
@@ -2705,9 +2706,8 @@ def sync_supply_chain_cloud_state(
     workspace_dir: Path | None = None,
 ) -> dict[str, object]:
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    bundle_summary = _call_sync_with_optional_auth_context(
-        sync_supply_chain_bundle,
-        store=store,
+    bundle_summary = sync_supply_chain_bundle(
+        store,
         auth_context=resolved_auth_context,
     )
     payload = dict(bundle_summary) if isinstance(bundle_summary, dict) else {}

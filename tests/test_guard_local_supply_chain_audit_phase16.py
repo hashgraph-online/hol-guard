@@ -237,6 +237,67 @@ def test_sync_managed_workspace_audits_enqueues_persisted_job_mode_for_managed_w
     assert summary["workspaces"][0]["package_count"] == 1
 
 
+def test_sync_managed_workspace_audits_marks_pending_jobs_as_partial_sync(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(
+        workspace_dir / "package.json",
+        '{"name":"demo","dependencies":{"react":"18.2.0"}}\n',
+    )
+    _write_text(
+        workspace_dir / "package-lock.json",
+        json.dumps(
+            {
+                "name": "demo",
+                "lockfileVersion": 3,
+                "packages": {
+                    "": {"dependencies": {"react": "18.2.0"}},
+                    "node_modules/react": {"version": "18.2.0"},
+                },
+            }
+        )
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+    _seed_premium_pairing(store, now="2026-05-25T10:00:00+00:00")
+    store.set_managed_install("codex", True, str(workspace_dir), {}, "2026-05-25T10:00:00+00:00")
+
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "_enqueue_cloud_workspace_audit_job",
+        lambda **_kwargs: {"jobId": "job-1", "status": "queued"},
+    )
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "_poll_cloud_workspace_audit_job",
+        lambda **_kwargs: {
+            "jobId": "job-1",
+            "status": "pending",
+            "timed_out": True,
+            "error": "Guard cloud workspace audit is still processing. Retry sync later.",
+        },
+    )
+
+    summary = local_supply_chain_module.sync_managed_workspace_audits(
+        store,
+        auth_context={
+            "access_token": "token",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        },
+    )
+
+    assert summary["status"] == "pending"
+    assert summary["completed_jobs"] == 0
+    assert summary["pending_jobs"] == 1
+    assert summary["queued_jobs"] == 1
+    assert summary["failed_jobs"] == 0
+    assert summary["workspaces"][0]["status"] == "pending"
+
+
 def test_guard_supply_chain_audit_alias_accepts_sbom_input(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.cli.connect_flow import (
     GuardOAuthLoopbackCallback,
     GuardOAuthTokenExchangeResult,
@@ -21,7 +22,6 @@ from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.package_firewall_entitlement import resolve_package_firewall_entitlement
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
-from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_store_migrations import _install_fake_system_keyring
 
@@ -229,7 +229,11 @@ def test_daemon_guard_cloud_connect_persists_oauth_state_for_dashboard(
             "runtime_sessions_visible": 1,
         },
     )
-    monkeypatch.setattr(daemon_server_module, "sync_supply_chain_bundle", lambda _store: {"packages": []})
+    monkeypatch.setattr(
+        daemon_server_module,
+        "sync_supply_chain_cloud_state",
+        lambda _store, *, auth_context=None, workspace_dir=None: {"packages": []},
+    )
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()

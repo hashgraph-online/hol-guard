@@ -133,12 +133,16 @@ def test_package_shims_status_reports_reconnect_required_when_cloud_auth_expired
     monkeypatch.setattr(
         local_supply_chain_module,
         "sync_local_guard_cloud_proof",
-        lambda _store: (_ for _ in ()).throw(RuntimeError("cloud auth still expired")),
+        lambda _store, *, auth_context=None: (_ for _ in ()).throw(
+            RuntimeError("cloud auth still expired")
+        ),
     )
     monkeypatch.setattr(
         local_supply_chain_module,
         "sync_supply_chain_bundle",
-        lambda _store: (_ for _ in ()).throw(RuntimeError("bundle refresh blocked")),
+        lambda _store, *, auth_context=None: (_ for _ in ()).throw(
+            RuntimeError("bundle refresh blocked")
+        ),
     )
 
     rc = main(["guard", "package-shims", "status", "--home", str(guard_home), "--json"])
@@ -177,7 +181,11 @@ def test_package_shims_status_self_heals_connected_cloud_auth_without_cached_ent
         },
     )
 
-    def _fake_sync_local_guard_cloud_proof(store: GuardStore) -> dict[str, object]:
+    def _fake_sync_local_guard_cloud_proof(
+        store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+    ) -> dict[str, object]:
         calls.append("proof")
         store.record_latest_guard_connect_sync_success(
             sync_payload={"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1},
@@ -185,7 +193,11 @@ def test_package_shims_status_self_heals_connected_cloud_auth_without_cached_ent
         )
         return {"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1}
 
-    def _fake_sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
+    def _fake_sync_supply_chain_bundle(
+        store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+    ) -> dict[str, object]:
         calls.append("bundle")
         store.set_sync_payload(
             "supply_chain_bundle_entitlement",
@@ -299,7 +311,7 @@ def test_package_shims_status_preserves_reconnect_gate_when_connected_auth_refre
     monkeypatch.setattr(
         local_supply_chain_module,
         "sync_local_guard_cloud_proof",
-        lambda _store: (_ for _ in ()).throw(
+        lambda _store, *, auth_context=None: (_ for _ in ()).throw(
             local_supply_chain_module.GuardSyncAuthorizationExpiredError(
                 "Guard authorization expired. Run `hol-guard connect` again."
             )
@@ -308,7 +320,9 @@ def test_package_shims_status_preserves_reconnect_gate_when_connected_auth_refre
     monkeypatch.setattr(
         local_supply_chain_module,
         "sync_supply_chain_bundle",
-        lambda _store: (_ for _ in ()).throw(RuntimeError("bundle refresh blocked")),
+        lambda _store, *, auth_context=None: (_ for _ in ()).throw(
+            RuntimeError("bundle refresh blocked")
+        ),
     )
 
     rc = main(["guard", "package-shims", "status", "--home", str(guard_home), "--json"])
@@ -334,12 +348,16 @@ def test_package_shims_install_requires_reconnect_when_cloud_auth_expired(
     monkeypatch.setattr(
         local_supply_chain_module,
         "sync_local_guard_cloud_proof",
-        lambda _store: (_ for _ in ()).throw(RuntimeError("cloud auth still expired")),
+        lambda _store, *, auth_context=None: (_ for _ in ()).throw(
+            RuntimeError("cloud auth still expired")
+        ),
     )
     monkeypatch.setattr(
         local_supply_chain_module,
         "sync_supply_chain_bundle",
-        lambda _store: (_ for _ in ()).throw(RuntimeError("bundle refresh blocked")),
+        lambda _store, *, auth_context=None: (_ for _ in ()).throw(
+            RuntimeError("bundle refresh blocked")
+        ),
     )
 
     rc = main(["guard", "package-shims", "install", "--manager", "npm", "--home", str(guard_home), "--json"])
@@ -376,21 +394,44 @@ def test_package_shims_install_self_heals_retry_required_cloud_auth(
     capsys: pytest.CaptureFixture[str],
     allow_transient_shell_profile_writes,
 ) -> None:
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+
     home_dir = tmp_path / "home"
     home_dir.mkdir()
     monkeypatch.setenv("HOME", str(home_dir))
     monkeypatch.setenv("SHELL", "/bin/zsh")
     guard_home = tmp_path / "guard-home"
     _seed_retry_required_oauth_connect(guard_home)
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_test_sync_auth_context_override",
+        {
+            "access_token": "demo-token",
+            "dpop_key_material": None,
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        },
+    )
 
-    def fake_sync_local_guard_cloud_proof(store: GuardStore) -> dict[str, object]:
-        store.record_latest_guard_connect_sync_success(
-            sync_payload={"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1},
+    def fake_sync_local_guard_cloud_proof(
+        store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        sync_payload = {"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1}
+        store.record_latest_guard_connect_sync_result(
+            status="connected",
+            milestone="first_sync_succeeded",
             now="2026-06-05T01:41:00+00:00",
+            request_id="connect-1",
+            sync_payload=sync_payload,
         )
-        return {"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1}
+        return sync_payload
 
-    def fake_sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
+    def fake_sync_supply_chain_bundle(
+        store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+    ) -> dict[str, object]:
         store.set_sync_payload(
             "supply_chain_bundle_entitlement",
             {
