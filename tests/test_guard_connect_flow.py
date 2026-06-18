@@ -392,6 +392,7 @@ def test_record_latest_guard_connect_sync_success_clears_retry_required_state_wh
             "inventory_items": 261,
         },
         now="2026-06-11T22:13:11+00:00",
+        request_id="connect-403",
     )
 
     payload = build_connect_status_payload(
@@ -407,6 +408,45 @@ def test_record_latest_guard_connect_sync_success_clears_retry_required_state_wh
     assert isinstance(latest_state, dict)
     assert latest_state["status"] == "connected"
     assert latest_state["milestone"] == "first_sync_succeeded"
+
+
+def test_background_sync_success_does_not_clear_newer_retry_required_connect_request(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-06-11T22:10:11+00:00",
+        request_id="connect-older",
+    )
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-06-11T22:11:11+00:00",
+        request_id="connect-newer",
+    )
+    store.record_latest_guard_connect_sync_result(
+        status="retry_required",
+        milestone="first_sync_failed",
+        now="2026-06-11T22:12:11+00:00",
+        reason="Guard authorization expired. Run `hol-guard connect` again.",
+        request_id="connect-newer",
+    )
+
+    latest_state = store.record_latest_guard_connect_sync_success(
+        sync_payload={
+            "synced_at": "2026-06-11T22:13:11+00:00",
+            "receipts_stored": 11,
+            "inventory_items": 261,
+        },
+        now="2026-06-11T22:13:11+00:00",
+    )
+
+    assert latest_state is not None
+    assert latest_state["request_id"] == "connect-newer"
+    assert latest_state["status"] == "retry_required"
+    assert latest_state["milestone"] == "first_sync_failed"
 
 
 def test_browser_connect_caches_paid_package_firewall_entitlement(tmp_path: Path) -> None:

@@ -4,6 +4,7 @@ import argparse
 import json
 from email.message import Message
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -594,6 +595,55 @@ def test_sync_aibom_snapshots_uses_cloud_sync_cisco_defaults(tmp_path: Path, mon
     assert isinstance(trust_attestation_context, dict)
     assert trust_attestation_context["deviceId"] is None
     assert trust_attestation_context["workspaceId"] is None
+
+
+def test_collect_aibom_snapshots_shares_cisco_timeout_budget_across_detections(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import aibom_cli
+    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=tmp_path / "workspace",
+        guard_home=tmp_path / "guard",
+    )
+    context.home_dir.mkdir(parents=True)
+    assert context.workspace_dir is not None
+    context.workspace_dir.mkdir(parents=True)
+    context.guard_home.mkdir(parents=True)
+
+    detections = [
+        SimpleNamespace(installed=True, artifacts=(), harness="codex"),
+        SimpleNamespace(installed=True, artifacts=(), harness="openclaw"),
+    ]
+    observed_timeouts: list[float | None] = []
+    monotonic_values = iter([0.0, 4.0, 4.0, 9.0])
+
+    def fake_monotonic() -> float:
+        return next(monotonic_values)
+
+    monkeypatch.setattr(aibom_cli, "detect_all", lambda _context: detections)
+    monkeypatch.setattr(aibom_cli.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(
+        aibom_cli,
+        "run_cisco_inventory_scans",
+        lambda **kwargs: observed_timeouts.append(kwargs.get("timeout_seconds")) or (),
+    )
+    monkeypatch.setattr(
+        aibom_cli,
+        "inventory_snapshot_from_detection",
+        lambda *args, **kwargs: {"harness": getattr(args[0], "harness", "unknown"), "kwargs": kwargs},
+    )
+
+    snapshots = aibom_cli.collect_aibom_snapshots(
+        context,
+        generated_at="2026-06-10T12:00:00+00:00",
+        options=aibom_cli.AibomCliOptions(cisco_skill_scan="auto", cisco_timeout_seconds=10.0),
+    )
+
+    assert len(snapshots) == 2
+    assert observed_timeouts == [10.0, 6.0]
 
 
 def test_guard_aibom_sync_command_uses_cloud_sync_cisco_defaults(
