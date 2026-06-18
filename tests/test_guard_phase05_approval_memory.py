@@ -761,7 +761,6 @@ def test_backend_degraded_warn_mode_ignores_local_approval(tmp_path: Path) -> No
         is None
     )
 
-
 def test_path_degraded_warn_mode_ignores_local_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _store(tmp_path)
     store._policy_integrity_secret_store = None

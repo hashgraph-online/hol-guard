@@ -40,6 +40,8 @@ def test_live_cisco_mcp_scan_on_bad_plugin() -> None:
     except importlib_metadata.PackageNotFoundError:
         pytest.skip("cisco-ai-mcp-scanner is not installed in this environment")
 
+    assert importlib_metadata.version("litellm") == "1.89.1"
+
     result = scan_plugin(FIXTURES / "bad-plugin", ScanOptions(cisco_mcp_scan="on"))
 
     integration = next(item for item in result.integrations if item.name == "cisco-mcp-scanner")
