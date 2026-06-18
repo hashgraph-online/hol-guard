@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.approvals import (
     primary_approval_url,
 )
 from codex_plugin_scanner.guard.cli import approval_commands as approval_commands_module
+from codex_plugin_scanner.guard.cli.commands_support_interaction import _preferred_approval_review_url
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -198,6 +199,137 @@ def test_first_approval_url_does_not_rewrite_external_url() -> None:
         )
         == "https://guard.example/requests/req-cloud"
     )
+
+
+def test_preferred_approval_review_url_repairs_stale_primary_url() -> None:
+    payload = {
+        "approval_center_url": "http://127.0.0.1:5481",
+        "primary_approval_url": "http://127.0.0.1:4833/requests/req-stale-primary",
+        "approval_requests": [
+            {
+                "request_id": "req-stale-primary",
+                "harness": "codex",
+                "approval_url": "http://127.0.0.1:4833/requests/req-stale-primary",
+            }
+        ],
+    }
+
+    assert (
+        _preferred_approval_review_url(payload, harness="codex") == "http://127.0.0.1:5481/requests/req-stale-primary"
+    )
+
+
+def test_preferred_approval_review_url_keeps_external_primary_url() -> None:
+    payload = {
+        "approval_center_url": "http://127.0.0.1:5481",
+        "primary_approval_url": "https://guard.example/approvals/req-cloud",
+    }
+
+    assert _preferred_approval_review_url(payload, harness="codex") == "https://guard.example/approvals/req-cloud"
+
+
+def test_preferred_approval_review_url_does_not_normalize_approval_path() -> None:
+    payload = {
+        "approval_center_url": "http://127.0.0.1:5481",
+        "primary_approval_url": "http://127.0.0.1:4833/approvals/req-local",
+    }
+
+    assert _preferred_approval_review_url(payload, harness="codex") == "http://127.0.0.1:5481/approvals/req-local"
+
+
+def test_preferred_approval_review_url_uses_current_queue_over_stale_primary() -> None:
+    payload = {
+        "approval_center_url": "http://127.0.0.1:5481",
+        "primary_approval_url": "http://127.0.0.1:4833/requests/req-old",
+        "approval_requests": [
+            {
+                "request_id": "req-new",
+                "harness": "codex",
+                "approval_url": "http://127.0.0.1:4833/requests/req-new",
+            }
+        ],
+    }
+
+    assert _preferred_approval_review_url(payload, harness="codex") == "http://127.0.0.1:5481/requests/req-new"
+
+
+def test_preferred_approval_review_url_recovers_from_stale_request_id() -> None:
+    payload = {
+        "approval_center_url": "http://127.0.0.1:5481",
+        "primary_approval_request_id": "req-old",
+        "primary_approval_url": "http://127.0.0.1:4833/requests/req-old",
+        "approval_requests": [
+            {
+                "request_id": "req-new",
+                "harness": "codex",
+                "approval_url": "http://127.0.0.1:4833/requests/req-new",
+            }
+        ],
+    }
+
+    assert _preferred_approval_review_url(payload, harness="codex") == "http://127.0.0.1:5481/requests/req-new"
+
+
+def test_preferred_approval_review_url_keeps_artifact_binding_after_stale_request_id() -> None:
+    payload = {
+        "artifact_id": "artifact-a",
+        "approval_center_url": "http://127.0.0.1:5481",
+        "primary_approval_request_id": "req-old",
+        "primary_approval_url": "http://127.0.0.1:4833/requests/req-old",
+        "approval_requests": [
+            {
+                "artifact_id": "artifact-a",
+                "request_id": "req-a",
+                "harness": "codex",
+                "approval_url": "http://127.0.0.1:4833/requests/req-a",
+            },
+            {
+                "artifact_id": "artifact-b",
+                "request_id": "req-b",
+                "harness": "codex",
+                "approval_url": "http://127.0.0.1:4833/requests/req-b",
+            },
+        ],
+    }
+
+    assert _preferred_approval_review_url(payload, harness="codex") == "http://127.0.0.1:5481/requests/req-a"
+
+
+def test_preferred_approval_review_url_uses_primary_when_artifact_missing() -> None:
+    payload = {
+        "artifact_id": "artifact-a",
+        "approval_center_url": "http://127.0.0.1:5481",
+        "primary_approval_request_id": "req-old",
+        "primary_approval_url": "http://127.0.0.1:4833/requests/req-old",
+        "approval_requests": [
+            {
+                "artifact_id": "artifact-b",
+                "request_id": "req-b",
+                "harness": "codex",
+                "approval_url": "http://127.0.0.1:4833/requests/req-b",
+            }
+        ],
+    }
+
+    assert _preferred_approval_review_url(payload, harness="codex") == "http://127.0.0.1:5481/requests/req-old"
+
+
+def test_preferred_approval_review_url_uses_single_active_request_without_artifact_metadata() -> None:
+    payload = {
+        "artifact_id": "artifact-a",
+        "approval_center_url": "http://127.0.0.1:5481",
+        "primary_approval_request_id": "req-old",
+        "primary_approval_url": "http://127.0.0.1:4833/requests/req-old",
+        "approval_requests": [
+            {
+                "request_id": "req-new",
+                "harness": "codex",
+                "approval_url": "http://127.0.0.1:4833/requests/req-new",
+            }
+        ],
+    }
+
+    assert _preferred_approval_review_url(payload, harness="codex") == "http://127.0.0.1:5481/requests/req-new"
 
 
 def test_primary_approval_request_prefers_matching_harness() -> None:
