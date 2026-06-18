@@ -1013,11 +1013,14 @@ def _system_keyring_is_available(guard_home: Path, *, use_cache: bool = True) ->
 
 
 def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
+    fallback_store = EncryptedFileSecretStore(guard_home)
     if sys.platform == "darwin":
         if _system_keyring_is_available(guard_home, use_cache=False):
-            return SystemKeyringSecretStore(service_name="hol-guard.oauth")
+            return FallbackSecretStore(
+                SystemKeyringSecretStore(service_name="hol-guard.oauth"),
+                fallback_store,
+            )
         return UnavailableSecretStore(guard_home)
-    fallback_store = EncryptedFileSecretStore(guard_home)
     if _system_keyring_is_available(guard_home):
         return FallbackSecretStore(
             SystemKeyringSecretStore(service_name="hol-guard.oauth"),
@@ -1194,7 +1197,10 @@ class GuardStore:
         self._cached_policy_integrity_control_state = None
 
     def _oauth_primary_reads_are_no_ui_safe(self) -> bool:
-        return sys.platform == "darwin" and isinstance(self._oauth_secret_store, SystemKeyringSecretStore)
+        secret_store = self._oauth_secret_store
+        if isinstance(secret_store, FallbackSecretStore):
+            secret_store = secret_store.primary
+        return sys.platform == "darwin" and isinstance(secret_store, SystemKeyringSecretStore)
 
     def _get_secret_candidates(
         self,
@@ -5500,7 +5506,7 @@ class GuardStore:
                 """
                 select request_id
                 from guard_connect_states
-                where status = 'connected'
+                where status in ('connected', 'retry_required')
                   and milestone != 'first_sync_succeeded'
                 order by updated_at desc
                 limit 1
