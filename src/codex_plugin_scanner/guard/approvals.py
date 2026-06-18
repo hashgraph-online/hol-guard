@@ -46,6 +46,7 @@ GUARD_DASHBOARD_URL = "https://hol.org/guard"
 GUARD_INBOX_URL = f"{GUARD_DASHBOARD_URL}/inbox"
 GUARD_FLEET_URL = f"{GUARD_DASHBOARD_URL}/protect"
 GUARD_CONNECT_URL = f"{GUARD_DASHBOARD_URL}/connect"
+_APPROVAL_ONCE_POLICY_TTL = timedelta(minutes=15)
 _WORKSPACE_SCOPED_RUNTIME_ARTIFACT_TYPES = frozenset(
     {
         "file_read_request",
@@ -329,7 +330,7 @@ def apply_approval_resolution(
     resolve_scope_matches: bool = True,
     approval_gate_input: ApprovalGateInput | None = None,
     approval_gate_grant: ApprovalGateGrant | None = None,
-    persist_policy: bool = True,
+    persist_policy: bool | None = None,
 ) -> dict[str, object]:
     request = store.get_approval_request(request_id)
     if request is None:
@@ -374,8 +375,17 @@ def apply_approval_resolution(
         approval_gate_grant=approval_gate_grant,
         now=resolved_at,
     )
-    if persist_policy:
+    if persist_policy is True or (persist_policy is None and scope != "artifact"):
         store.upsert_policy(decision, resolved_at, approval_gate_grant=resolved_gate_grant)
+    elif persist_policy is None and scope == "artifact":
+        store.upsert_policy(
+            replace(
+                decision,
+                expires_at=_approval_once_policy_expires_at(resolved_at),
+            ),
+            resolved_at,
+            approval_gate_grant=resolved_gate_grant,
+        )
     resolution_harness = None if scope == "global" else str(request["harness"])
     if return_queue_result:
         result = store.resolve_request_with_queue_result(
@@ -967,6 +977,11 @@ def _string_list(value: object) -> list[str]:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _approval_once_policy_expires_at(resolved_at: str) -> str:
+    parsed = datetime.fromisoformat(resolved_at.replace("Z", "+00:00"))
+    return (parsed + _APPROVAL_ONCE_POLICY_TTL).isoformat()
 
 
 def _build_runtime_cloud_context(

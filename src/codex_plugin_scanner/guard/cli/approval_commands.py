@@ -28,7 +28,7 @@ _DEFAULT_RETRY_COPY = "Return to your AI assistant and retry"
 
 
 def _build_retry_hint(action: str, harness: str) -> dict[str, str]:
-    title = "Approved. Retry in chat." if action == "allow" else "Blocked. Guard will remember this decision."
+    title = "Approved. Retry in chat." if action == "allow" else "Blocked. Decision saved."
     return {"title": title, "body": _HARNESS_RETRY_COPY.get(harness, _DEFAULT_RETRY_COPY)}
 
 
@@ -54,6 +54,11 @@ def add_approval_parser(
             default="artifact",
         )
         decision_parser.add_argument("--reason")
+        decision_parser.add_argument(
+            "--remember",
+            action="store_true",
+            help="Save an exact-action remembered rule for artifact scope instead of resolving only this request.",
+        )
         add_common_args(decision_parser)
         decision_parser.add_argument("--json", action="store_true")
         decision_parser.set_defaults(approval_action=action)
@@ -235,6 +240,7 @@ def run_approval_command(
             reason=args.reason,
             now=_now(),
             approval_gate_input=gate_input,
+            persist_policy=True if bool(getattr(args, "remember", False)) else None,
         )
     except ApprovalGateError as error:
         return approval_gate_cli_payload(error)
