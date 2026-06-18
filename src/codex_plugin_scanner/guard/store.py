@@ -2932,8 +2932,13 @@ class GuardStore:
         now: str,
         *,
         approval_gate_grant: ApprovalGateGrant | None = None,
+        remote_write_authorized: bool = False,
     ) -> None:
         for decision in decisions:
+            validate_policy_write_authority(
+                decision,
+                remote_write_authorized=remote_write_authorized,
+            )
             require_policy_write(
                 self.guard_home,
                 decision=decision,
