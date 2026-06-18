@@ -2642,9 +2642,7 @@ def sync_managed_workspace_audits(
                 workspace_id=workspace_id,
             )
             final_status = (
-                str(final_response.get("status") or enqueue_response.get("status") or "queued")
-                .strip()
-                .lower()
+                str(final_response.get("status") or enqueue_response.get("status") or "queued").strip().lower()
             )
             if final_status == "completed":
                 completed_jobs += 1
