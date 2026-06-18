@@ -11,6 +11,7 @@ from ..models import GuardArtifact
 from ..runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
 from .base import HarnessContext
 from .mcp_servers import is_guard_proxy_command, is_verified_guard_mcp_companion
+from .opencode_pretool import PLUGIN_FILENAME as GUARD_PRETOOL_PLUGIN_FILENAME
 
 CONFIG_FILENAMES = ("opencode.json", "opencode.jsonc")
 PLUGIN_SUFFIXES = {".js", ".ts", ".mjs", ".cjs"}
@@ -149,7 +150,7 @@ def append_directory_artifacts(
                 artifact_id=f"opencode:{scope}:{artifact_kind}:{artifact_name}",
                 name=artifact_name,
                 harness="opencode",
-                artifact_type="plugin" if artifact_kind == "plugin-file" else "command",
+                artifact_type=_directory_artifact_type(path, artifact_kind),
                 source_scope=scope,
                 config_path=str(path),
                 metadata=_file_metadata(path),
@@ -176,6 +177,14 @@ def append_directory_artifacts(
                 metadata={"skill_source": source_kind, **_file_metadata(skill_path)},
             )
             append_artifact(artifacts, seen_artifact_ids, artifact)
+
+
+def _directory_artifact_type(path: Path, artifact_kind: str) -> str:
+    if artifact_kind == "command":
+        return "command"
+    if path.name == GUARD_PRETOOL_PLUGIN_FILENAME:
+        return "daemon_plugin"
+    return "plugin"
 
 
 def runtime_config_path(context: HarnessContext) -> Path:

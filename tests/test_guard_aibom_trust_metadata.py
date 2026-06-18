@@ -747,6 +747,46 @@ def test_inventory_snapshot_attaches_agent_config_trust_resolution(tmp_path: Pat
     )
 
 
+def test_inventory_snapshot_attaches_daemon_plugin_trust_resolution(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    plugin_config = workspace / "daemon-plugin.json"
+    plugin_config.write_text(
+        json.dumps(
+            {
+                "name": "guard-daemon-helper",
+                "description": "Reviewed local daemon helper plugin.",
+                "governance": "Owned by Platform; changes require review.",
+                "boundaries": "Does not read secrets or execute unapproved commands.",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    snapshot = _snapshot_for_artifact(
+        artifact=GuardArtifact(
+            artifact_id="codex:project:daemon-plugin:guard-daemon-helper",
+            name="guard-daemon-helper",
+            harness="codex",
+            artifact_type="daemon_plugin",
+            source_scope="project",
+            config_path=str(plugin_config),
+        ),
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+    )
+    daemon_item = next(item for item in snapshot.items if item.item_kind == "daemon_plugin")
+
+    trust, _metadata = _assert_local_trust(daemon_item.metadata, trust_domain="instructions")
+    components = trust.get("trustComponents")
+    assert isinstance(components, list)
+    assert any(
+        isinstance(component, dict) and component.get("componentId") == "instruction.operational-boundaries:score"
+        for component in components
+    )
+
+
 def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(monkeypatch, tmp_path: Path) -> None:
     verification_key = _install_test_attestation_key(monkeypatch)
     workspace = tmp_path / "repo"
