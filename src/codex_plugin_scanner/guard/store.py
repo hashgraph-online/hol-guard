@@ -42,6 +42,7 @@ from .local_trust_contract import (
     TrustStatus,
 )
 from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
+from .policy_authority import validate_policy_write_authority
 from .policy_integrity import (
     REMOTE_POLICY_SOURCES,
     PolicyIntegrityVerificationResult,
@@ -1145,6 +1146,13 @@ class GuardStore:
             if persisted_value == value:
                 return
             raise RuntimeError("Guard could not persist local Guard Cloud authorization securely.")
+        if sys.platform == "darwin" and isinstance(secret_store, FallbackSecretStore):
+            primary = secret_store.primary
+            if isinstance(primary, SystemKeyringSecretStore):
+                persisted_value = self._get_secret_from_primary_store(primary, secret_id)
+                if persisted_value == value:
+                    return
+                raise RuntimeError("Guard could not persist local Guard Cloud authorization securely.")
         if isinstance(secret_store, UnavailableSecretStore):
             raise RuntimeError(
                 "Guard local credentials require an available OS credential store. "
@@ -2832,7 +2840,12 @@ class GuardStore:
         now: str,
         *,
         approval_gate_grant: ApprovalGateGrant | None = None,
+        remote_write_authorized: bool = False,
     ) -> None:
+        validate_policy_write_authority(
+            decision,
+            remote_write_authorized=remote_write_authorized,
+        )
         require_policy_write(
             self.guard_home,
             decision=decision,
@@ -2919,8 +2932,13 @@ class GuardStore:
         now: str,
         *,
         approval_gate_grant: ApprovalGateGrant | None = None,
+        remote_write_authorized: bool = False,
     ) -> None:
         for decision in decisions:
+            validate_policy_write_authority(
+                decision,
+                remote_write_authorized=remote_write_authorized,
+            )
             require_policy_write(
                 self.guard_home,
                 decision=decision,

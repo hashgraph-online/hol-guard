@@ -1089,10 +1089,16 @@ def test_executor_syncs_policy_without_local_request_id(tmp_path: Path) -> None:
     class PolicyStore(FakeStore):
         def __init__(self, guard_home: Path) -> None:
             super().__init__(guard_home)
-            self.upserts: list[tuple[dict[str, object], str]] = []
+            self.upserts: list[tuple[dict[str, object], str, bool]] = []
 
-        def upsert_policy(self, decision: object, generated_at: str) -> None:
-            self.upserts.append((decision.to_dict(), generated_at))
+        def upsert_policy(
+            self,
+            decision: object,
+            generated_at: str,
+            *,
+            remote_write_authorized: bool = False,
+        ) -> None:
+            self.upserts.append((decision.to_dict(), generated_at, remote_write_authorized))
 
     store = PolicyStore(tmp_path / "guard-home")
     result = command_executors.execute_guard_command_job(
@@ -1134,6 +1140,7 @@ def test_executor_syncs_policy_without_local_request_id(tmp_path: Path) -> None:
                 "expires_at": None,
             },
             "2026-06-13T00:00:00+00:00",
+            True,
         )
     ]
 
@@ -1144,8 +1151,15 @@ def test_executor_maps_unknown_cloud_policy_scope_to_artifact(tmp_path: Path) ->
             super().__init__(guard_home)
             self.upserts: list[dict[str, object]] = []
 
-        def upsert_policy(self, decision: object, generated_at: str) -> None:
+        def upsert_policy(
+            self,
+            decision: object,
+            generated_at: str,
+            *,
+            remote_write_authorized: bool = False,
+        ) -> None:
             del generated_at
+            assert remote_write_authorized is True
             self.upserts.append(decision.to_dict())
 
     store = PolicyStore(tmp_path / "guard-home")

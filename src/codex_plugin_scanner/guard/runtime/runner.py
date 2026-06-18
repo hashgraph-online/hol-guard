@@ -1397,7 +1397,7 @@ def sync_receipts(
     remote_policies_stored = len(remote_decisions)
     remote_policy_sync_blocked = False
     try:
-        store.replace_remote_policies(list(remote_decisions), now)
+        store.replace_remote_policies(list(remote_decisions), now, remote_write_authorized=True)
     except ApprovalGateError as error:
         remote_policies_stored = 0
         remote_policy_sync_blocked = True
