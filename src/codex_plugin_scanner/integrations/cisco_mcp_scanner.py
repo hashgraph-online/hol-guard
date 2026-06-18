@@ -17,7 +17,7 @@ from types import ModuleType
 from typing import Protocol, TypeGuard, TypeVar
 
 from ..models import Finding, Severity, severity_from_value
-from .cisco_skill_scanner import CiscoIntegrationStatus
+from .cisco_skill_scanner import CiscoIntegrationStatus, cisco_runtime_unavailable_message
 
 _EXCLUDED_DIRS = {
     ".codex-plugin",
@@ -399,6 +399,12 @@ def run_cisco_mcp_scan(
         return _build_summary(
             status=CiscoIntegrationStatus.SKIPPED,
             message="No .mcp.json found; Cisco MCP scan skipped.",
+        )
+    runtime_message = cisco_runtime_unavailable_message()
+    if runtime_message is not None:
+        return _build_summary(
+            status=CiscoIntegrationStatus.UNAVAILABLE,
+            message=runtime_message,
         )
 
     try:
