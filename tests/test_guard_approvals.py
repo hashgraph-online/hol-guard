@@ -2602,7 +2602,48 @@ class TestGuardApprovals:
         assert list_output["items"][0]["request_id"] == "req-789"
         assert approve_rc == 0
         assert approve_output["resolved"] is True
-        assert store.resolve_policy("codex", "codex:project:workspace_skill", "hash-789") == "allow"
+        assert store.list_policy_decisions("codex") == []
+
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-remember",
+                harness="codex",
+                artifact_id="codex:project:workspace_skill",
+                artifact_name="workspace_skill",
+                artifact_hash="hash-remember",
+                policy_action="require-reapproval",
+                recommended_scope="artifact",
+                changed_fields=("args",),
+                source_scope="project",
+                config_path=str(tmp_path / "workspace" / "config.toml"),
+                review_command="hol-guard approvals approve req-remember",
+                approval_url="http://127.0.0.1/pending",
+            ),
+            "2026-04-11T00:01:00+00:00",
+        )
+        remember_rc = main(
+            [
+                "guard",
+                "approvals",
+                "approve",
+                "req-remember",
+                "--home",
+                str(home_dir),
+                "--scope",
+                "artifact",
+                "--remember",
+                "--reason",
+                "approved",
+                "--json",
+            ]
+        )
+        remember_output = json.loads(capsys.readouterr().out)
+
+        assert remember_rc == 0
+        assert remember_output["resolved"] is True
+        policy = store.list_policy_decisions("codex")[0]
+        assert policy["action"] == "allow"
+        assert policy["artifact_hash"] == "hash-remember"
 
     def test_guard_policies_cli_clears_local_decisions_for_harness(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

@@ -108,7 +108,7 @@ class TestApprovalResolutionCopyTitle:
         assert payload["copy"]["title"] == "Approved. Retry in chat."
 
     def test_block_response_copy_title(self, tmp_path) -> None:
-        """T727: block response has copy.title == 'Blocked. Guard will remember this decision.'"""
+        """T727: block response has copy.title == 'Blocked. Decision saved.'"""
         store = GuardStore(tmp_path / "guard-home")
         store.add_approval_request(
             _make_approval_request(
@@ -126,7 +126,7 @@ class TestApprovalResolutionCopyTitle:
             daemon.stop()
 
         assert "copy" in payload, "Resolution response must include a 'copy' field"
-        assert payload["copy"]["title"] == "Blocked. Guard will remember this decision."
+        assert payload["copy"]["title"] == "Blocked. Decision saved."
 
 
 class TestApprovalResolutionCopyPerHarness:

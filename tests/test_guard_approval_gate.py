@@ -228,17 +228,38 @@ def test_approval_gate_wrong_password_fails_closed(tmp_path: Path) -> None:
     assert store.list_policy_decisions("codex") == []
 
 
-def test_approval_gate_correct_password_succeeds(tmp_path: Path) -> None:
+def test_approval_gate_approve_once_does_not_persist_policy(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
-    _add_request(store, "req-correct")
+    _add_request(store, "req-once")
 
-    resolved = _approve(store, "req-correct", gate_input=ApprovalGateInput(password=PASSWORD))
+    resolved = _approve(store, "req-once", gate_input=ApprovalGateInput(password=PASSWORD))
+
+    assert resolved["status"] == "resolved"
+    assert store.list_policy_decisions("codex") == []
+
+
+def test_approval_gate_artifact_remember_persists_policy(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    _add_request(store, "req-remember")
+
+    resolved = apply_approval_resolution(
+        store=store,
+        request_id="req-remember",
+        action="allow",
+        scope="artifact",
+        workspace=None,
+        reason="reviewed",
+        now="2026-04-11T00:01:00+00:00",
+        approval_gate_input=ApprovalGateInput(password=PASSWORD),
+        persist_policy=True,
+    )
 
     assert resolved["status"] == "resolved"
     policy = store.list_policy_decisions("codex")[0]
     assert policy["action"] == "allow"
-    assert policy["artifact_id"] == "codex:project:req-correct"
+    assert policy["artifact_id"] == "codex:project:req-remember"
 
 
 def test_approval_gate_cooldown_works_expires_and_revokes(tmp_path: Path) -> None:
@@ -1177,6 +1198,40 @@ def test_approval_gate_daemon_api_cannot_bypass_password(tmp_path: Path) -> None
     assert revoke_body["error"] == "unauthorized"
     assert store.get_approval_request("req-daemon")["status"] == "pending"
     assert store.list_policy_decisions("codex") == []
+
+
+def test_daemon_approval_defaults_artifact_scope_to_one_time(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _add_request(store, "req-daemon-once")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        body = _post_daemon_json(daemon, "/v1/requests/req-daemon-once/approve", {"scope": "artifact"})
+    finally:
+        daemon.stop()
+
+    assert body["resolved"] is True
+    assert store.get_approval_request("req-daemon-once")["status"] == "resolved"
+    assert store.list_policy_decisions("codex") == []
+
+
+def test_daemon_approval_can_remember_exact_artifact_scope(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _add_request(store, "req-daemon-remember")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        body = _post_daemon_json(
+            daemon,
+            "/v1/requests/req-daemon-remember/approve",
+            {"scope": "artifact", "remember": True},
+        )
+    finally:
+        daemon.stop()
+
+    assert body["resolved"] is True
+    policy = store.list_policy_decisions("codex")[0]
+    assert policy["artifact_id"] == "codex:project:req-daemon-remember"
 
 
 def test_approval_gate_direct_lower_layers_cannot_bypass(tmp_path: Path) -> None:

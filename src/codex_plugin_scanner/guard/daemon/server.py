@@ -1665,6 +1665,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"resolved": False, "error": "missing_required_fields"}, status=400)
             return
         try:
+            persist_policy = self._approval_persist_policy(payload)
             updated = apply_approval_resolution(
                 store=self.server.store,  # type: ignore[attr-defined]
                 request_id=request_id,
@@ -1675,6 +1676,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return_queue_result=True,
                 resolve_scope_matches=False,
                 approval_gate_input=approval_gate_input_from_mapping(payload),
+                persist_policy=persist_policy,
             )
         except ApprovalRequestNotFoundError:
             self._write_json(
@@ -3355,6 +3357,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if normalized in {"false", "0", "no", "off", ""}:
                 return False
         raise ValueError("invalid boolean value")
+
+    def _approval_persist_policy(self, payload: dict[str, object]) -> bool | None:
+        if "persist_policy" in payload:
+            return self._optional_bool(payload.get("persist_policy"), default=False)
+        if "remember" in payload:
+            return self._optional_bool(payload.get("remember"), default=False)
+        return None
 
     def _write_approval_gate_error(self, error: ApprovalGateError, *, resolved: bool | None = None) -> None:
         payload = error.to_payload()
@@ -5185,7 +5194,7 @@ _DEFAULT_RETRY_COPY = "Return to your AI assistant and retry"
 
 
 def _build_resolution_copy(action: str, harness: str) -> dict[str, str]:
-    title = "Approved. Retry in chat." if action == "allow" else "Blocked. Guard will remember this decision."
+    title = "Approved. Retry in chat." if action == "allow" else "Blocked. Decision saved."
     return {"title": title, "body": _HARNESS_RETRY_COPY.get(harness, _DEFAULT_RETRY_COPY)}
 
 

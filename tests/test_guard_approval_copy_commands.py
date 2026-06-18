@@ -686,7 +686,7 @@ class TestApprovalsRetryHintCommand:
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert output["title"] == "Blocked. Guard will remember this decision."
+        assert output["title"] == "Blocked. Decision saved."
 
     def test_retry_hint_missing_request(self, tmp_path: Path, capsys) -> None:
         """T737: retry-hint with unknown request_id returns error."""

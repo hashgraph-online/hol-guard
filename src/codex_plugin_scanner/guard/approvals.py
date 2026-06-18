@@ -329,7 +329,7 @@ def apply_approval_resolution(
     resolve_scope_matches: bool = True,
     approval_gate_input: ApprovalGateInput | None = None,
     approval_gate_grant: ApprovalGateGrant | None = None,
-    persist_policy: bool = True,
+    persist_policy: bool | None = None,
 ) -> dict[str, object]:
     request = store.get_approval_request(request_id)
     if request is None:
@@ -374,7 +374,8 @@ def apply_approval_resolution(
         approval_gate_grant=approval_gate_grant,
         now=resolved_at,
     )
-    if persist_policy:
+    should_persist_policy = persist_policy if persist_policy is not None else scope != "artifact"
+    if should_persist_policy:
         store.upsert_policy(decision, resolved_at, approval_gate_grant=resolved_gate_grant)
     resolution_harness = None if scope == "global" else str(request["harness"])
     if return_queue_result:
