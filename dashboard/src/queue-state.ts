@@ -595,6 +595,7 @@ const queueDateFormatter = new Intl.DateTimeFormat("en-US", {
   year: "2-digit",
   hour: "numeric",
   minute: "2-digit",
+  timeZoneName: "short",
 });
 
 export function formatQueueRequestDate(item: GuardApprovalRequest): string {
@@ -602,7 +603,7 @@ export function formatQueueRequestDate(item: GuardApprovalRequest): string {
   if (timestamp === 0) {
     return "Date unknown";
   }
-  return `${queueDateFormatter.format(new Date(timestamp))} ET`;
+  return queueDateFormatter.format(new Date(timestamp));
 }
 
 export function queueCategoryById(id: QueueCategoryId): QueueCategory {

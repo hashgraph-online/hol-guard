@@ -191,7 +191,7 @@ assert(
 
 const requestDateLabel = formatQueueRequestDate(midItem);
 assert(
-  requestDateLabel.includes("02/01/26") && requestDateLabel.includes("ET"),
+  requestDateLabel === "02/01/26, 5:00 AM EST",
   "T-QS-17D: formatQueueRequestDate exposes an abbreviated ET date with time"
 );
 
