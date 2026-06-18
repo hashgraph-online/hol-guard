@@ -24,7 +24,7 @@ import {
   resolveApprovalGateSyncFailure,
 } from "./harness-action-errors";
 import {
-  openPackageFirewallAuthorizeWindow,
+  openPackageFirewallAuthorizeFallback,
   PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE,
 } from "./package-firewall-connect-browser";
 import { EntitlementNotice, ConnectFlowCard } from "./supply-chain-firewall-views";
@@ -258,7 +258,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       return;
     }
     const flow = panelLoad.data.connect_flow;
-    if (flow === null || flow.state !== "running") {
+    if (flow === null || (flow.state !== "running" && flow.state !== "starting")) {
       return;
     }
     const handle = window.setTimeout(() => {
@@ -444,7 +444,10 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       const connectFlow = await startPackageFirewallConnect();
       if (
         connectFlow?.authorize_url &&
-        !openPackageFirewallAuthorizeWindow(connectFlow.authorize_url)
+        !openPackageFirewallAuthorizeFallback(
+          connectFlow.authorize_url,
+          connectFlow.browser_opened,
+        )
       ) {
         setConnectError(PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE);
       }

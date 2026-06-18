@@ -2706,13 +2706,42 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
 _test_sync_auth_context_override: dict[str, object] | None = None
 
 
+def _test_sync_auth_context_from_env() -> dict[str, object] | None:
+    if not os.environ.get("PYTEST_CURRENT_TEST"):
+        return None
+    raw = os.environ.get("HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON")
+    if raw is None:
+        return None
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    sync_url = payload.get("sync_url")
+    access_token = payload.get("access_token")
+    if not isinstance(sync_url, str) or not isinstance(access_token, str):
+        return None
+    sync_url = _validate_guard_sync_url(sync_url)
+    return {
+        "sync_url": sync_url,
+        "access_token": access_token,
+        "dpop_key_material": None,
+    }
+
+
 def _resolve_guard_sync_auth_context(
     store: GuardStore,
     *,
     allow_primary_repair: bool = True,
 ) -> dict[str, object]:
     if _test_sync_auth_context_override is not None:
-        return dict(_test_sync_auth_context_override)
+        override = dict(_test_sync_auth_context_override)
+        override["sync_url"] = _validate_guard_sync_url(_auth_context_sync_url(override))
+        return override
+    env_override = _test_sync_auth_context_from_env()
+    if env_override is not None:
+        return env_override
     with _guard_sync_auth_lock(store):
         oauth_health = store.get_oauth_local_credential_health()
         oauth_credentials = store.get_oauth_local_credentials(allow_primary=allow_primary_repair)

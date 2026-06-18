@@ -400,7 +400,14 @@ def test_resolve_guard_home_does_not_migrate_retired_legacy_credentials(tmp_path
     legacy_home = home_dir / ".ai-plugin-scanner-guard"
     GuardStore(canonical_home)
     legacy_store = GuardStore(legacy_home)
-    _seed_guard_cloud(legacy_store)
+    legacy_store.set_sync_payload(
+        "credentials",
+        {
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "access_token": "demo-token",
+        },
+        "2026-05-19T00:00:00Z",
+    )
     monkeypatch.setattr(Path, "home", lambda: home_dir)
 
     resolved_home = resolve_guard_home()

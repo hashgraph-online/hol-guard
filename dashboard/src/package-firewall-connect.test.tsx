@@ -67,6 +67,32 @@ assert(
   "PF1: compact connect state should not render the nested security card",
 );
 
+const startingMarkup = renderToStaticMarkup(
+  <ConnectFlowCard
+    compact
+    connectError={null}
+    connectStarting={false}
+    connectFlow={{
+      state: "starting",
+      title: "Finish Guard Cloud sign-in in your browser",
+      detail: "HOL Guard is opening the secure sign-in flow in your browser.",
+      action_label: "Repair Guard Cloud access",
+      connect_url: "https://hol.org/guard/connect",
+      authorize_url: null,
+      browser_opened: false,
+      request_id: "guard-connect-2",
+      poll_after_ms: 1500,
+    }}
+    mode="repair"
+    onStartConnect={() => undefined}
+  />,
+);
+
+assert(
+  !startingMarkup.includes("Open sign-in page"),
+  "PF2: starting connect card should not link to generic connect before authorize URL exists",
+);
+
 const connectRequiredStatus: PackageFirewallStatusResponse = {
   operation: "status",
   status: "completed",

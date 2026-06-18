@@ -15,7 +15,7 @@ import {
 } from "../guard-api";
 import { ConnectFlowCard } from "../supply-chain-firewall-views";
 import {
-  openPackageFirewallAuthorizeWindow,
+  openPackageFirewallAuthorizeFallback,
   PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE,
 } from "../package-firewall-connect-browser";
 import { EvidenceInsightsShareSheet } from "./evidence-insights-share-sheet";
@@ -85,7 +85,7 @@ export function EvidenceInsightsShareModal({
   }, [cloudConnected, refreshConnectState]);
 
   useEffect(() => {
-    if (connectFlow?.state !== "running") {
+    if (connectFlow?.state !== "running" && connectFlow?.state !== "starting") {
       return;
     }
     const handle = window.setTimeout(() => {
@@ -102,7 +102,10 @@ export function EvidenceInsightsShareModal({
       setConnectFlow(status.connect_flow);
       if (
         status.connect_flow?.authorize_url &&
-        !openPackageFirewallAuthorizeWindow(status.connect_flow.authorize_url)
+        !openPackageFirewallAuthorizeFallback(
+          status.connect_flow.authorize_url,
+          status.connect_flow.browser_opened,
+        )
       ) {
         setConnectError(PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE);
       }

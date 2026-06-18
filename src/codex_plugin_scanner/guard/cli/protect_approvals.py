@@ -81,6 +81,8 @@ def _queue_local_protect_approvals(
 def _should_queue_local_protect_approval(response_payload: dict[str, object]) -> bool:
     if os.environ.get(SHIM_PROBE_ENV_VAR) == SHIM_PROBE_ENV_VALUE:
         return False
+    if os.environ.get("PYTEST_CURRENT_TEST") and os.environ.get("HOL_GUARD_TEST_SKIP_LOCAL_APPROVAL_QUEUE") == "1":
+        return False
     return not _protect_has_reason_code(response_payload, "saved_package_block")
 
 
