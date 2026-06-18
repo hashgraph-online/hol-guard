@@ -17,7 +17,9 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+from codex_plugin_scanner.guard.store import GuardStore
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -27,6 +29,21 @@ def _write_text(path: Path, text: str) -> None:
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     _write_text(path, json.dumps(payload, indent=2) + "\n")
+
+
+def _trust_local_policy_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _valid_policy_row(
+        self: GuardStore,
+        row,
+        *,
+        mode: str,
+        key: bytes | None,
+        key_id: str | None,
+        trusted_generation: int | None = None,
+    ) -> PolicyIntegrityVerificationResult:
+        return PolicyIntegrityVerificationResult(status="valid")
+
+    monkeypatch.setattr(GuardStore, "_policy_integrity_result_for_row", _valid_policy_row)
 
 
 def _build_guard_fixture(home_dir: Path, workspace_dir: Path) -> None:
@@ -205,6 +222,7 @@ def test_guard_run_launches_copilot_with_passthrough_args(monkeypatch, tmp_path,
 
 
 def test_guard_run_blocks_direct_env_prompt_until_approved(monkeypatch, tmp_path, capsys):
+    _trust_local_policy_rows(monkeypatch)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     fake_bin = tmp_path / "fake-bin"
@@ -251,6 +269,7 @@ def test_guard_run_blocks_direct_env_prompt_until_approved(monkeypatch, tmp_path
             str(home_dir),
             "--workspace",
             str(workspace_dir),
+            "--remember",
             "--json",
         ]
     )

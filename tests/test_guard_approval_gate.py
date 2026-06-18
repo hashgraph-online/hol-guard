@@ -41,6 +41,7 @@ from codex_plugin_scanner.guard.consumer.service import record_policy
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.mcp_tool_calls import allow_tool_call
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
+from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
@@ -85,6 +86,21 @@ WRONG_PASSWORD = "wrong-password"
 
 def _store(tmp_path: Path) -> GuardStore:
     return GuardStore(tmp_path / "guard-home")
+
+
+def _trust_local_policy_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _valid_policy_row(
+        self: GuardStore,
+        row,
+        *,
+        mode: str,
+        key: bytes | None,
+        key_id: str | None,
+        trusted_generation: int | None = None,
+    ) -> PolicyIntegrityVerificationResult:
+        return PolicyIntegrityVerificationResult(status="valid")
+
+    monkeypatch.setattr(GuardStore, "_policy_integrity_result_for_row", _valid_policy_row)
 
 
 def _enable_gate(store: GuardStore, *, cooldown_seconds: int = 0, strict_all_decisions: bool = False) -> None:
@@ -228,17 +244,80 @@ def test_approval_gate_wrong_password_fails_closed(tmp_path: Path) -> None:
     assert store.list_policy_decisions("codex") == []
 
 
-def test_approval_gate_correct_password_succeeds(tmp_path: Path) -> None:
+def test_approval_gate_approve_once_does_not_persist_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _trust_local_policy_rows(monkeypatch)
     store = _store(tmp_path)
     _enable_gate(store)
-    _add_request(store, "req-correct")
+    _add_request(store, "req-once")
 
-    resolved = _approve(store, "req-correct", gate_input=ApprovalGateInput(password=PASSWORD))
+    resolved = _approve(store, "req-once", gate_input=ApprovalGateInput(password=PASSWORD))
+
+    assert resolved["status"] == "resolved"
+    assert store.list_policy_decisions("codex") == []
+    first_retry = store.resolve_policy_decision(
+        "codex",
+        "codex:project:req-once",
+        "hash-req-once",
+        now="2026-04-11T00:02:00+00:00",
+    )
+    assert first_retry is not None
+    assert first_retry["action"] == "allow"
+    assert (
+        store.resolve_policy_decision(
+            "codex",
+            "codex:project:req-once",
+            "hash-req-once",
+            now="2026-04-11T00:03:00+00:00",
+        )
+        is None
+    )
+    assert store.list_policy_decisions("codex") == []
+
+
+def test_approval_gate_artifact_remember_persists_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _trust_local_policy_rows(monkeypatch)
+    store = _store(tmp_path)
+    _enable_gate(store)
+    _add_request(store, "req-remember")
+
+    resolved = apply_approval_resolution(
+        store=store,
+        request_id="req-remember",
+        action="allow",
+        scope="artifact",
+        workspace=None,
+        reason="reviewed",
+        now="2026-04-11T00:01:00+00:00",
+        approval_gate_input=ApprovalGateInput(password=PASSWORD),
+        persist_policy=True,
+    )
 
     assert resolved["status"] == "resolved"
     policy = store.list_policy_decisions("codex")[0]
     assert policy["action"] == "allow"
-    assert policy["artifact_id"] == "codex:project:req-correct"
+    assert policy["artifact_id"] == "codex:project:req-remember"
+    first_retry = store.resolve_policy_decision(
+        "codex",
+        "codex:project:req-remember",
+        "hash-req-remember",
+        now="2026-04-11T00:02:00+00:00",
+    )
+    second_retry = store.resolve_policy_decision(
+        "codex",
+        "codex:project:req-remember",
+        "hash-req-remember",
+        now="2026-04-11T00:03:00+00:00",
+    )
+    assert first_retry is not None
+    assert second_retry is not None
+    assert first_retry["action"] == "allow"
+    assert second_retry["action"] == "allow"
 
 
 def test_approval_gate_cooldown_works_expires_and_revokes(tmp_path: Path) -> None:
@@ -1177,6 +1256,83 @@ def test_approval_gate_daemon_api_cannot_bypass_password(tmp_path: Path) -> None
     assert revoke_body["error"] == "unauthorized"
     assert store.get_approval_request("req-daemon")["status"] == "pending"
     assert store.list_policy_decisions("codex") == []
+
+
+def test_daemon_approval_defaults_artifact_scope_to_one_time(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _add_request(store, "req-daemon-once")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        body = _post_daemon_json(daemon, "/v1/requests/req-daemon-once/approve", {"scope": "artifact"})
+    finally:
+        daemon.stop()
+
+    assert body["resolved"] is True
+    assert store.get_approval_request("req-daemon-once")["status"] == "resolved"
+    assert store.list_policy_decisions("codex") == []
+
+
+@pytest.mark.parametrize("field_name", ["remember", "persist_policy"])
+def test_daemon_approval_false_artifact_scope_still_allows_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field_name: str,
+) -> None:
+    _trust_local_policy_rows(monkeypatch)
+    store = _store(tmp_path)
+    request_id = f"req-daemon-false-{field_name.replace('_', '-')}"
+    _add_request(store, request_id)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        body = _post_daemon_json(
+            daemon,
+            f"/v1/requests/{request_id}/approve",
+            {"scope": "artifact", field_name: False},
+        )
+    finally:
+        daemon.stop()
+
+    assert body["resolved"] is True
+    assert store.list_policy_decisions("codex") == []
+    assert (
+        store.resolve_policy(
+            "codex",
+            f"codex:project:{request_id}",
+            f"hash-{request_id}",
+            now="2026-04-11T00:02:00+00:00",
+        )
+        == "allow"
+    )
+    assert (
+        store.resolve_policy(
+            "codex",
+            f"codex:project:{request_id}",
+            f"hash-{request_id}",
+            now="2026-04-11T00:03:00+00:00",
+        )
+        is None
+    )
+
+
+def test_daemon_approval_can_remember_exact_artifact_scope(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _add_request(store, "req-daemon-remember")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        body = _post_daemon_json(
+            daemon,
+            "/v1/requests/req-daemon-remember/approve",
+            {"scope": "artifact", "remember": True},
+        )
+    finally:
+        daemon.stop()
+
+    assert body["resolved"] is True
+    policy = store.list_policy_decisions("codex")[0]
+    assert policy["artifact_id"] == "codex:project:req-daemon-remember"
 
 
 def test_approval_gate_direct_lower_layers_cannot_bypass(tmp_path: Path) -> None:
