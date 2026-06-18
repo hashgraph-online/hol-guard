@@ -50,6 +50,7 @@ _COMMON_HANDLERS = {
     "aibom": "_run_guard_aibom_command",
     "abom": "_run_guard_abom_command",
     "policies": "_run_guard_policies_command",
+    "trust": "_run_guard_trust_command",
     "settings": "_run_guard_settings_command",
     "exceptions": "_run_guard_exceptions_command",
     "advisories": "_run_guard_advisories_command",
