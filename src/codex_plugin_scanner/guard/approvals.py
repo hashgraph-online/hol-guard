@@ -788,8 +788,8 @@ def build_runtime_snapshot(
         "latest_receipts": latest_receipts,
         "managed_installs": store.list_managed_installs(),
         "supply_chain": build_local_supply_chain_posture(store, config, now=snapshot_now),
-        "trust_status": policy_integrity_status.get("trust_status", {}),
         **cloud_context,
+        "trust_status": policy_integrity_status.get("trust_status", {}),
     }
 
 
