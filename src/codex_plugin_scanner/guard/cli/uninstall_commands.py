@@ -240,13 +240,9 @@ def _managed_install_context(
 def _planned_uninstall_message(*, managed_count: int, package_shim_count: int) -> str:
     actions: list[str] = ["remove the installed hol-guard package"]
     if managed_count:
-        actions.append(
-            f"disconnect {managed_count} Guard-managed harness{'es' if managed_count != 1 else ''}"
-        )
+        actions.append(f"disconnect {managed_count} Guard-managed harness{'es' if managed_count != 1 else ''}")
     if package_shim_count:
-        actions.append(
-            f"remove {package_shim_count} package-manager shim{'s' if package_shim_count != 1 else ''}"
-        )
+        actions.append(f"remove {package_shim_count} package-manager shim{'s' if package_shim_count != 1 else ''}")
     return f"Review the planned steps to {' and '.join(actions)}."
 
 
@@ -255,9 +251,7 @@ def _success_uninstall_message(*, managed_count: int, package_shim_count: int) -
     if managed_count:
         parts.append(f"disconnected {managed_count} managed harness{'es' if managed_count != 1 else ''}")
     if package_shim_count:
-        parts.append(
-            f"removed {package_shim_count} package-manager shim{'s' if package_shim_count != 1 else ''}"
-        )
+        parts.append(f"removed {package_shim_count} package-manager shim{'s' if package_shim_count != 1 else ''}")
     return "; ".join(parts) + "."
 
 
