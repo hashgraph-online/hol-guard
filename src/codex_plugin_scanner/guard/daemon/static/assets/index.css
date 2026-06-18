@@ -689,10 +689,6 @@
     margin-inline: calc(var(--spacing) * -1);
   }
 
-  .mx-1 {
-    margin-inline: calc(var(--spacing) * 1);
-  }
-
   .mx-1\.5 {
     margin-inline: calc(var(--spacing) * 1.5);
   }
@@ -1051,6 +1047,10 @@
     max-height: min(85vh, 40rem);
   }
 
+  .max-h-\[min\(85vh\,44rem\)\] {
+    max-height: min(85vh, 44rem);
+  }
+
   .min-h-0 {
     min-height: calc(var(--spacing) * 0);
   }
@@ -1227,10 +1227,6 @@
     width: calc(var(--spacing) * 40);
   }
 
-  .w-44 {
-    width: calc(var(--spacing) * 44);
-  }
-
   .w-48 {
     width: calc(var(--spacing) * 48);
   }
@@ -1261,10 +1257,6 @@
 
   .w-full {
     width: 100%;
-  }
-
-  .w-px {
-    width: 1px;
   }
 
   .max-w-2xl {
@@ -3196,6 +3188,16 @@
     }
   }
 
+  .bg-white\/20 {
+    background-color: #fff3;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-white\/20 {
+      background-color: color-mix(in oklab, var(--color-white) 20%, transparent);
+    }
+  }
+
   .bg-white\/60 {
     background-color: #fff9;
   }
@@ -4703,6 +4705,25 @@
     padding-bottom: calc(var(--spacing) * 0);
   }
 
+  .focus-within\:border-brand-blue:focus-within {
+    border-color: var(--brand-blue);
+  }
+
+  .focus-within\:ring-2:focus-within {
+    --tw-ring-shadow: var(--tw-ring-inset, ) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+
+  .focus-within\:ring-brand-blue\/20:focus-within {
+    --tw-ring-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .focus-within\:ring-brand-blue\/20:focus-within {
+      --tw-ring-color: color-mix(in oklab, var(--brand-blue) 20%, transparent);
+    }
+  }
+
   @media (hover: hover) {
     .hover\:-translate-y-0\.5:hover {
       --tw-translate-y: calc(var(--spacing) * -.5);
@@ -5009,6 +5030,10 @@
 
     .hover\:text-slate-600:hover {
       color: var(--color-slate-600);
+    }
+
+    .hover\:text-slate-700:hover {
+      color: var(--color-slate-700);
     }
 
     .hover\:text-slate-900:hover {

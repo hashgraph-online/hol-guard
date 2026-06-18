@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, r as reactExports, S as SectionLabel, A as ActionButton, aw as HiMiniArrowPath, aK as HiMiniBugAnt, b as EmptyState, ac as Tag, aL as GuardModalLayer, m as formatRelativeTime, aM as ConnectFlowCard, w as HiMiniExclamationTriangle, ad as HiMiniMagnifyingGlass, bx as HiMiniChevronLeft, y as HiMiniChevronRight, aG as IconActionButton, o as HiMiniXMark, by as HiMiniArrowDown, bz as HiMiniArrowUp, bA as runAuditRemediation, B as Badge, aC as isSupplyChainAuditEvidence, d as HiMiniCheckCircle, I as HiMiniXCircle, h as harnessDisplayName, b3 as HiMiniDocumentText, b2 as guardAwareHref, l as HiMiniShieldCheck } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, ac as Tag, m as formatRelativeTime, r as reactExports, A as ActionButton, by as HiMiniChevronLeft, y as HiMiniChevronRight, aG as IconActionButton, o as HiMiniXMark, aL as GuardModalLayer, bz as HiMiniFunnel, ad as HiMiniMagnifyingGlass, bA as HiMiniArrowDown, bB as HiMiniArrowUp, S as SectionLabel, aw as HiMiniArrowPath, aK as HiMiniBugAnt, b as EmptyState, T as HiMiniAdjustmentsHorizontal, aM as ConnectFlowCard, w as HiMiniExclamationTriangle, bC as runAuditRemediation, B as Badge, aC as isSupplyChainAuditEvidence, d as HiMiniCheckCircle, I as HiMiniXCircle, h as harnessDisplayName, b3 as HiMiniDocumentText, b2 as guardAwareHref, l as HiMiniShieldCheck } from "../guard-dashboard.js";
 import { p as packageWorkbenchEcosystems, f as filterPackageWorkbenchFindings, s as sortPackageWorkbenchFindings, u as useResolvedApprovalGate, i as isApprovalGateRequiredError, A as ApprovalProofModal } from "./supply-chain-hub-workspace.js";
 import { r as resolveManagerCoverageStatus } from "./supply-chain-protection-stats.js";
 const STEPS = [
@@ -62,7 +62,6 @@ function AuditProgressStepList({ phase, running }) {
 function auditProgressActive(phase, running) {
   return running || phase !== "idle";
 }
-const WORKBENCH_PAGE_SIZE = 25;
 const decisionTone = (decision) => {
   if (decision === "block") {
     return "destructive";
@@ -96,15 +95,6 @@ const severityTone = (severity) => {
   }
   return "default";
 };
-function humanizeReasonMessage(code, message) {
-  if (code === "unknown_package") {
-    return "Guard Cloud has not indexed this package yet. It is not treated as a security finding.";
-  }
-  if (code === "no_cached_match") {
-    return "No local intel match yet. Sync Guard Cloud or retry after the next bundle refresh.";
-  }
-  return message;
-}
 function cloudIntelLabel(cloudState, source) {
   if (cloudState === "local_only") {
     return "Local intel only";
@@ -164,6 +154,53 @@ function WorkbenchHeader({
       " across this workspace."
     ] }) : null
   ] });
+}
+function WorkbenchPagination({ page, pageCount, total, onPageChange }) {
+  const handlePrevious = reactExports.useCallback(() => {
+    onPageChange(Math.max(0, page - 1));
+  }, [onPageChange, page]);
+  const handleNext = reactExports.useCallback(() => {
+    onPageChange(Math.min(pageCount - 1, page + 1));
+  }, [onPageChange, page, pageCount]);
+  if (pageCount <= 1) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
+      "Showing ",
+      total,
+      " finding",
+      total === 1 ? "" : "s"
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
+      "Page ",
+      page + 1,
+      " of ",
+      pageCount,
+      " · ",
+      total,
+      " finding",
+      total === 1 ? "" : "s"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: handlePrevious, disabled: page === 0, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronLeft, { className: "h-4 w-4", "aria-hidden": "true" }),
+        "Previous"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: handleNext, disabled: page >= pageCount - 1, children: [
+        "Next",
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4", "aria-hidden": "true" })
+      ] })
+    ] })
+  ] });
+}
+function humanizeReasonMessage(code, message) {
+  if (code === "unknown_package") {
+    return "Guard Cloud has not indexed this package yet. It is not treated as a security finding.";
+  }
+  if (code === "no_cached_match") {
+    return "No local intel match yet. Sync Guard Cloud or retry after the next bundle refresh.";
+  }
+  return message;
 }
 function FindingDetailPanel({ finding, onClose }) {
   const handleClose = reactExports.useCallback(() => {
@@ -247,151 +284,294 @@ function FindingRow({ finding, selected, onSelect }) {
     }
   );
 }
-function WorkbenchPagination({ page, pageCount, total, onPageChange }) {
-  const handlePrevious = reactExports.useCallback(() => {
-    onPageChange(Math.max(0, page - 1));
-  }, [onPageChange, page]);
-  const handleNext = reactExports.useCallback(() => {
-    onPageChange(Math.min(pageCount - 1, page + 1));
-  }, [onPageChange, page, pageCount]);
-  if (pageCount <= 1) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
-      "Showing ",
-      total,
-      " finding",
-      total === 1 ? "" : "s"
-    ] });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
-      "Page ",
-      page + 1,
-      " of ",
-      pageCount,
-      " · ",
-      total,
-      " finding",
-      total === 1 ? "" : "s"
+function FilterModalContent({
+  filters,
+  ecosystems,
+  onEcosystemChange,
+  onDecisionChange,
+  onSeverityChange
+}) {
+  const options = reactExports.useMemo(() => {
+    return {
+      ecosystems: ["all", ...ecosystems],
+      decisions: ["all", "block", "ask", "warn", "monitor", "allow"],
+      severities: ["all", "critical", "high", "medium", "low", "unknown"]
+    };
+  }, [ecosystems]);
+  const handleEcosystemChange = reactExports.useCallback(
+    (event) => onEcosystemChange(event.target.value),
+    [onEcosystemChange]
+  );
+  const handleDecisionChange = reactExports.useCallback(
+    (event) => onDecisionChange(event.target.value),
+    [onDecisionChange]
+  );
+  const handleSeverityChange = reactExports.useCallback(
+    (event) => onSeverityChange(event.target.value),
+    [onSeverityChange]
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400", children: "Ecosystem" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "select",
+        {
+          value: filters.ecosystem,
+          onChange: handleEcosystemChange,
+          className: "mt-1.5 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          children: options.ecosystems.map((value) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value, children: value === "all" ? "All ecosystems" : value }, value))
+        }
+      )
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: handlePrevious, disabled: page === 0, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronLeft, { className: "h-4 w-4", "aria-hidden": "true" }),
-        "Previous"
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: handleNext, disabled: page >= pageCount - 1, children: [
-        "Next",
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4", "aria-hidden": "true" })
-      ] })
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400", children: "Decision" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "select",
+        {
+          value: filters.decision,
+          onChange: handleDecisionChange,
+          className: "mt-1.5 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          children: options.decisions.map((value) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value, children: value === "all" ? "All decisions" : value }, value))
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400", children: "Severity" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "select",
+        {
+          value: filters.severity,
+          onChange: handleSeverityChange,
+          className: "mt-1.5 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          children: options.severities.map((value) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value, children: value === "all" ? "All severities" : value }, value))
+        }
+      )
     ] })
   ] });
 }
-function SortButton({ label, sortKey, activeSort, direction, onSort }) {
-  const handleClick = reactExports.useCallback(() => {
-    onSort(sortKey);
-  }, [onSort, sortKey]);
-  const active = activeSort === sortKey;
-  let sortIcon = null;
-  if (active) {
-    sortIcon = direction === "desc" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDown, { className: "h-3 w-3", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowUp, { className: "h-3 w-3", "aria-hidden": "true" });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "button",
-    {
-      type: "button",
-      onClick: handleClick,
-      "aria-pressed": active,
-      className: `inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${active ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`,
-      children: [
-        label,
-        sortIcon
-      ]
-    }
+function SortModalContent({
+  sortKey,
+  sortDirection,
+  onSortChange
+}) {
+  const handleSortChange = reactExports.useCallback(
+    (event) => onSortChange(event.target.value),
+    [onSortChange]
   );
+  const toggleDirection = reactExports.useCallback(() => {
+    onSortChange(sortKey);
+  }, [onSortChange, sortKey]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400", children: "Sort by" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "select",
+        {
+          value: sortKey,
+          onChange: handleSortChange,
+          className: "mt-1.5 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "severity", children: "Severity" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "package", children: "Package" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "ecosystem", children: "Ecosystem" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "decision", children: "Decision" })
+          ]
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: toggleDirection,
+        className: "flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+        children: sortDirection === "desc" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDown, { className: "h-4 w-4", "aria-hidden": "true" }),
+          " Descending"
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowUp, { className: "h-4 w-4", "aria-hidden": "true" }),
+          " Ascending"
+        ] })
+      }
+    )
+  ] });
 }
-function FilterChip({ label, active, onSelect }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "button",
-    {
-      type: "button",
-      onClick: onSelect,
-      "aria-pressed": active,
-      className: `rounded-full px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${active ? "bg-brand-dark text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`,
-      children: label
-    }
-  );
-}
-function WorkbenchControls({
+function FilterModal({
   filters,
+  activeFilterCount,
   ecosystems,
   sortKey,
   sortDirection,
+  onClose,
   onSearchChange,
   onEcosystemChange,
   onDecisionChange,
   onSeverityChange,
-  onSortChange
+  onSortChange,
+  onClearFilters
 }) {
-  const handleEcosystemAll = reactExports.useCallback(() => onEcosystemChange("all"), [onEcosystemChange]);
-  const handleDecisionAll = reactExports.useCallback(() => onDecisionChange("all"), [onDecisionChange]);
-  const handleDecisionBlock = reactExports.useCallback(() => onDecisionChange("block"), [onDecisionChange]);
-  const handleDecisionAsk = reactExports.useCallback(() => onDecisionChange("ask"), [onDecisionChange]);
-  const handleDecisionWarn = reactExports.useCallback(() => onDecisionChange("warn"), [onDecisionChange]);
-  const handleSeverityAll = reactExports.useCallback(() => onSeverityChange("all"), [onSeverityChange]);
-  const handleSeverityCritical = reactExports.useCallback(() => onSeverityChange("critical"), [onSeverityChange]);
-  const handleSeverityHigh = reactExports.useCallback(() => onSeverityChange("high"), [onSeverityChange]);
-  const handleSeverityMedium = reactExports.useCallback(() => onSeverityChange("medium"), [onSeverityChange]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "h-3.5 w-3.5 text-slate-400", "aria-hidden": "true" }),
+  const [activeView, setActiveView] = reactExports.useState("filters");
+  const searchRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    if (searchRef.current) {
+      searchRef.current.focus();
+    }
+  }, [activeView]);
+  const handleClearSearch = reactExports.useCallback(() => {
+    onSearchChange({ target: { value: "" } });
+  }, [onSearchChange]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: "Filter and sort package findings", onClose, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-h-[min(85vh,44rem)] overflow-y-auto rounded-2xl border border-slate-100 bg-white shadow-xl", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white/95 px-4 py-3 backdrop-blur-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFunnel, { className: "h-4 w-4 text-slate-500", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Filters" }),
+        activeFilterCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-brand-blue px-2 py-0.5 text-[10px] font-semibold text-white", children: activeFilterCount }) : null
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        IconActionButton,
+        {
+          variant: "ghost",
+          label: "Close filters",
+          icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-4 w-4" }),
+          onClick: onClose
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 py-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2 border-b border-slate-100 pb-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
+          "button",
           {
-            type: "search",
-            placeholder: "Search packages…",
-            value: filters.search,
-            onChange: onSearchChange,
-            "aria-label": "Search package findings",
-            className: "w-44 bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none"
+            type: "button",
+            onClick: () => setActiveView("filters"),
+            "aria-pressed": activeView === "filters",
+            className: `flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${activeView === "filters" ? "bg-brand-blue/10 text-brand-blue" : "text-slate-600 hover:bg-slate-50"}`,
+            children: "Filters"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => setActiveView("sort"),
+            "aria-pressed": activeView === "sort",
+            className: `flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${activeView === "sort" ? "bg-brand-blue/10 text-brand-blue" : "text-slate-600 hover:bg-slate-50"}`,
+            children: "Sort"
           }
         )
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "All ecosystems", active: filters.ecosystem === "all", onSelect: handleEcosystemAll }),
-      ecosystems.map((ecosystem) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        EcosystemChip,
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pt-4", children: activeView === "filters" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400", children: "Search" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1.5 flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 focus-within:border-brand-blue focus-within:ring-2 focus-within:ring-brand-blue/20", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                ref: searchRef,
+                type: "search",
+                value: filters.search,
+                onChange: onSearchChange,
+                placeholder: "Search packages, advisories, CVEs…",
+                "aria-label": "Search package findings",
+                className: "w-full bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none"
+              }
+            ),
+            filters.search.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: handleClearSearch,
+                "aria-label": "Clear search",
+                className: "rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-3.5 w-3.5" })
+              }
+            ) : null
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          FilterModalContent,
+          {
+            filters,
+            ecosystems,
+            onEcosystemChange,
+            onDecisionChange,
+            onSeverityChange
+          }
+        )
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(SortModalContent, { sortKey, sortDirection, onSortChange }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
         {
-          ecosystem,
-          active: filters.ecosystem === ecosystem,
-          onSelect: onEcosystemChange
-        },
-        ecosystem
-      ))
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "All decisions", active: filters.decision === "all", onSelect: handleDecisionAll }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "Block", active: filters.decision === "block", onSelect: handleDecisionBlock }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "Ask", active: filters.decision === "ask", onSelect: handleDecisionAsk }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "Warn", active: filters.decision === "warn", onSelect: handleDecisionWarn }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mx-1 h-4 w-px bg-slate-200", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "All severities", active: filters.severity === "all", onSelect: handleSeverityAll }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "Critical", active: filters.severity === "critical", onSelect: handleSeverityCritical }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "High", active: filters.severity === "high", onSelect: handleSeverityHigh }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "Medium", active: filters.severity === "medium", onSelect: handleSeverityMedium })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", children: "Sort" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SortButton, { label: "Severity", sortKey: "severity", activeSort: sortKey, direction: sortDirection, onSort: onSortChange }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SortButton, { label: "Package", sortKey: "package", activeSort: sortKey, direction: sortDirection, onSort: onSortChange }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SortButton, { label: "Ecosystem", sortKey: "ecosystem", activeSort: sortKey, direction: sortDirection, onSort: onSortChange }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SortButton, { label: "Decision", sortKey: "decision", activeSort: sortKey, direction: sortDirection, onSort: onSortChange })
-    ] })
+          type: "button",
+          onClick: onClearFilters,
+          className: "text-sm font-medium text-slate-500 hover:text-slate-700",
+          children: "Reset all"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: onClose, children: "Show results" })
+    ] }) })
+  ] }) });
+}
+function ActiveFilterChip({ label, onRemove }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-brand-dark", children: [
+    label,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: onRemove,
+        "aria-label": `Remove ${label}`,
+        className: "rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-3 w-3" })
+      }
+    )
   ] });
 }
-function EcosystemChip({ ecosystem, active, onSelect }) {
-  const handleSelect = reactExports.useCallback(() => {
-    onSelect(ecosystem);
-  }, [ecosystem, onSelect]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: ecosystem, active, onSelect: handleSelect });
+function buildFilterSummary(filters, sortKey, sortDirection) {
+  const items = [];
+  if (filters.ecosystem !== "all") {
+    items.push({ key: "ecosystem", label: `Ecosystem: ${filters.ecosystem}` });
+  }
+  if (filters.decision !== "all") {
+    items.push({ key: "decision", label: `Decision: ${filters.decision}` });
+  }
+  if (filters.severity !== "all") {
+    items.push({ key: "severity", label: `Severity: ${filters.severity}` });
+  }
+  if (filters.search.trim().length > 0) {
+    items.push({ key: "search", label: `Search: "${filters.search.trim()}"` });
+  }
+  if (sortKey !== "severity" || sortDirection !== "desc") {
+    items.push({ key: "sort", label: `Sort: ${sortKey} ${sortDirection === "desc" ? "↓" : "↑"}` });
+  }
+  return items;
+}
+const WORKBENCH_PAGE_SIZE = 25;
+function FilterChip({ label, active, count, onSelect }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      role: "switch",
+      "aria-checked": active,
+      onClick: onSelect,
+      className: `inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${active ? "bg-brand-dark text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: label }),
+        count !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "span",
+          {
+            className: `rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`,
+            "aria-label": `${count} result${count === 1 ? "" : "s"}`,
+            children: count
+          }
+        ) : null
+      ]
+    }
+  );
 }
 function WorkbenchAuditErrorBanner({ message }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -437,13 +617,6 @@ function WorkbenchEmptyState({ auditConnectGate }) {
     }
   );
 }
-function ecosystemSummary(packages) {
-  const counts = /* @__PURE__ */ new Map();
-  for (const pkg of packages) {
-    counts.set(pkg.ecosystem, (counts.get(pkg.ecosystem) ?? 0) + 1);
-  }
-  return [...counts.entries()].map(([ecosystem, count]) => ({ ecosystem, count })).sort((left, right) => right.count - left.count || left.ecosystem.localeCompare(right.ecosystem));
-}
 function PackageWorkbenchPanel({
   auditConnectGate = null,
   auditError = null,
@@ -464,13 +637,13 @@ function PackageWorkbenchPanel({
   const { sortKey, sortDirection } = sortState;
   const [selectedId, setSelectedId] = reactExports.useState("");
   const [page, setPage] = reactExports.useState(0);
+  const [filterModalOpen, setFilterModalOpen] = reactExports.useState(false);
   const findings = auditSnapshot?.findings ?? [];
   const packages = auditSnapshot?.packages ?? [];
   const tableSource = viewMode === "review" ? findings : packages;
   const progressActive = auditProgressActive(auditPhase, auditRunning);
   const showResults = auditSnapshot !== null && !progressActive && (auditConnectGate === null || auditConnectGate === void 0);
   const ecosystems = reactExports.useMemo(() => packageWorkbenchEcosystems(tableSource), [tableSource]);
-  const ecosystemBreakdown = reactExports.useMemo(() => ecosystemSummary(packages), [packages]);
   const filteredFindings = reactExports.useMemo(
     () => filterPackageWorkbenchFindings(tableSource, filters),
     [tableSource, filters]
@@ -524,6 +697,9 @@ function PackageWorkbenchPanel({
     });
     setPage(0);
   }, []);
+  const handleResetSort = reactExports.useCallback(() => {
+    setSortState({ sortKey: "severity", sortDirection: "desc" });
+  }, []);
   const handleSelectFinding = reactExports.useCallback((id) => {
     setSelectedId(id);
   }, []);
@@ -547,6 +723,18 @@ function PackageWorkbenchPanel({
   const handleRunAudit = reactExports.useCallback(() => {
     onRunAudit?.();
   }, [onRunAudit]);
+  const openFilterModal = reactExports.useCallback(() => setFilterModalOpen(true), []);
+  const closeFilterModal = reactExports.useCallback(() => setFilterModalOpen(false), []);
+  const handleClearFilters = reactExports.useCallback(() => {
+    setFilters({ ecosystem: "all", decision: "all", severity: "all", search: "" });
+    setPage(0);
+    setSelectedId("");
+  }, []);
+  const activeFilterCount = (filters.ecosystem !== "all" ? 1 : 0) + (filters.decision !== "all" ? 1 : 0) + (filters.severity !== "all" ? 1 : 0) + (filters.search.trim().length > 0 ? 1 : 0);
+  const filterSummary = reactExports.useMemo(
+    () => buildFilterSummary(filters, sortKey, sortDirection),
+    [filters, sortKey, sortDirection]
+  );
   const headerTitle = progressActive ? "Auditing workspace" : "Workspace audit";
   const headerBody = progressActive ? "Guard is scanning manifests, lockfiles, and package intel for this workspace." : "Browse indexed packages, filter by ecosystem, and open any row for advisory detail.";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", "data-testid": "workspace-audit-panel", children: [
@@ -601,37 +789,48 @@ function PackageWorkbenchPanel({
         }
       ) : null,
       showResults && packages.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-2", children: ecosystemBreakdown.map((entry) => /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "default", children: [
-          entry.ecosystem,
-          " · ",
-          entry.count
-        ] }, entry.ecosystem)) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: `All packages (${packages.length})`, active: viewMode === "all", onSelect: handleViewAll }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            FilterChip,
-            {
-              label: `Needs review (${findings.length})`,
-              active: viewMode === "review",
-              onSelect: handleViewReview
-            }
-          )
-        ] }),
         cloudState === "local_only" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-relaxed text-slate-500", children: "This device is using local intel only. Connect Guard Cloud and sync supply-chain intel for live CVE and malware coverage." }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          WorkbenchControls,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              FilterChip,
+              {
+                label: "All packages",
+                count: packages.length,
+                active: viewMode === "all",
+                onSelect: handleViewAll
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              FilterChip,
+              {
+                label: "Needs review",
+                count: findings.length,
+                active: viewMode === "review",
+                onSelect: handleViewReview
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: openFilterModal, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
+            "Filters",
+            activeFilterCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1.5 rounded-full bg-brand-blue px-1.5 py-0.5 text-[10px] font-semibold text-white", children: activeFilterCount }) : null
+          ] }) })
+        ] }),
+        filterSummary.length > 1 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap items-center gap-2", children: filterSummary.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ActiveFilterChip,
           {
-            filters,
-            ecosystems,
-            sortKey,
-            sortDirection,
-            onSearchChange: handleSearchChange,
-            onEcosystemChange: handleEcosystemChange,
-            onDecisionChange: handleDecisionChange,
-            onSeverityChange: handleSeverityChange,
-            onSortChange: handleSortChange
-          }
-        ),
+            label: item.label,
+            onRemove: () => {
+              if (item.key === "ecosystem") handleEcosystemChange("all");
+              else if (item.key === "decision") handleDecisionChange("all");
+              else if (item.key === "severity") handleSeverityChange("all");
+              else if (item.key === "search") handleSearchChange({ target: { value: "" } });
+              else if (item.key === "sort") handleResetSort();
+            }
+          },
+          item.key
+        )) }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           WorkbenchPagination,
           {
@@ -641,6 +840,23 @@ function PackageWorkbenchPanel({
             onPageChange: handlePageChange
           }
         ),
+        filterModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          FilterModal,
+          {
+            filters,
+            activeFilterCount,
+            ecosystems,
+            sortKey,
+            sortDirection,
+            onClose: closeFilterModal,
+            onSearchChange: handleSearchChange,
+            onEcosystemChange: handleEcosystemChange,
+            onDecisionChange: handleDecisionChange,
+            onSeverityChange: handleSeverityChange,
+            onSortChange: handleSortChange,
+            onClearFilters: handleClearFilters
+          }
+        ) : null,
         sortedFindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "py-6 text-center text-sm text-slate-500", children: viewMode === "review" && findings.length === 0 ? "No packages need review in this audit." : "No packages match the current filters." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "div",
           {
