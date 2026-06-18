@@ -2974,11 +2974,16 @@ class GuardStore:
         workspace: str | None = None,
         publisher: str | None = None,
         now: str | None = None,
+        runtime_exact_match_context: str | None = None,
     ) -> dict[str, object] | None:
         current_time = now or _now()
         workspace_key = _workspace_policy_key(workspace)
         action_family_key = _artifact_family_key(artifact_id)
-        runtime_exact_match_key = _runtime_scoped_exact_match_key(artifact_id) if artifact_hash is not None else None
+        runtime_exact_match_key = (
+            _runtime_scoped_exact_match_key(artifact_id, runtime_exact_match_context)
+            if artifact_hash is not None
+            else None
+        )
         events: list[tuple[str, dict[str, object]]] = []
         selected_payload: dict[str, object] | None = None
         with self._connect() as connection:
@@ -3062,6 +3067,7 @@ class GuardStore:
                     ),
                     source=str(candidate["source"]),
                     requested_artifact_id=artifact_id,
+                    requested_runtime_exact_match_key=runtime_exact_match_key,
                 ):
                     continue
                 integrity_result = self._policy_integrity_result_for_row(
@@ -6352,14 +6358,48 @@ def _artifact_family_key(artifact_id: str | None) -> str | None:
     return f"family:{family}"
 
 
-def _runtime_scoped_exact_match_key(artifact_id: str | None) -> str | None:
+def _runtime_scoped_exact_match_key(
+    artifact_id: str | None,
+    runtime_exact_match_context: str | None = None,
+) -> str | None:
     if artifact_id is None or not artifact_id.strip() or artifact_id.startswith("family:"):
         return None
     family_key = _artifact_family_key(artifact_id)
     if family_key is None or _family_key_value(family_key) not in _SCOPED_RUNTIME_EXACT_FAMILIES:
         return None
-    digest = sha256(artifact_id.encode("utf-8")).hexdigest()
+    if runtime_exact_match_context is None:
+        digest = sha256(artifact_id.encode("utf-8")).hexdigest()
+    else:
+        digest = sha256(
+            json.dumps(
+                {
+                    "artifact_id": artifact_id,
+                    "context": runtime_exact_match_context,
+                    "version": 2,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
     return f"{_RUNTIME_SCOPED_EXACT_MATCH_PREFIX}{digest}"
+
+
+def runtime_tool_action_exact_match_context(
+    *,
+    config_path: str | None,
+    source_scope: str | None,
+    raw_command_text: str | None = None,
+    wrapper_chain: Sequence[object] | None = None,
+) -> str | None:
+    if not config_path and not source_scope and not raw_command_text and not wrapper_chain:
+        return None
+    payload: dict[str, object] = {
+        "config_path": str(Path(config_path).expanduser()) if config_path else None,
+        "source_scope": source_scope,
+        "raw_command_text": raw_command_text,
+        "wrapper_chain": [item for item in wrapper_chain or () if isinstance(item, str) and item],
+    }
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 
 def _is_runtime_scoped_exact_match_key(value: str | None) -> bool:
@@ -6373,6 +6413,7 @@ def _scoped_runtime_row_requires_exact_match(
     stored_artifact_hash: str | None,
     source: str,
     requested_artifact_id: str | None,
+    requested_runtime_exact_match_key: str | None = None,
 ) -> bool:
     if scope not in {"harness", "global"}:
         return False
@@ -6381,10 +6422,17 @@ def _scoped_runtime_row_requires_exact_match(
     family_key = _artifact_family_key(stored_artifact_id)
     if family_key is None or _family_key_value(family_key) not in _SCOPED_RUNTIME_EXACT_FAMILIES:
         return False
-    expected_exact_key = _runtime_scoped_exact_match_key(requested_artifact_id)
-    if expected_exact_key is None:
+    expected_exact_keys = {
+        key
+        for key in (
+            _runtime_scoped_exact_match_key(requested_artifact_id),
+            requested_runtime_exact_match_key,
+        )
+        if key is not None
+    }
+    if not expected_exact_keys:
         return True
-    return stored_artifact_hash != expected_exact_key
+    return stored_artifact_hash not in expected_exact_keys
 
 
 def _warn_only_policy_integrity_status(status: str, state: Mapping[str, object], *, source: str = "local") -> bool:
