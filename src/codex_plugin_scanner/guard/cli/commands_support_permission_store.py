@@ -493,6 +493,14 @@ def _persist_claude_native_permission_for_runtime_artifact(
     if pending is None:
         return False
     now = _now()
+    raw_command_text_value = artifact.metadata.get("raw_command_text")
+    raw_command_text = raw_command_text_value if isinstance(raw_command_text_value, str) else None
+    wrapper_chain_value = artifact.metadata.get("wrapper_chain")
+    wrapper_chain = (
+        wrapper_chain_value
+        if isinstance(wrapper_chain_value, Sequence) and not isinstance(wrapper_chain_value, str)
+        else None
+    )
     saved_policy = _persist_claude_native_permission_policy(
         store=store,
         artifact_id=artifact.artifact_id,
@@ -500,13 +508,8 @@ def _persist_claude_native_permission_for_runtime_artifact(
         artifact_type=artifact.artifact_type,
         config_path=artifact.config_path,
         source_scope=artifact.source_scope,
-        raw_command_text=artifact.metadata.get("raw_command_text")
-        if isinstance(artifact.metadata.get("raw_command_text"), str)
-        else None,
-        wrapper_chain=artifact.metadata.get("wrapper_chain")
-        if isinstance(artifact.metadata.get("wrapper_chain"), Sequence)
-        and not isinstance(artifact.metadata.get("wrapper_chain"), str)
-        else None,
+        raw_command_text=raw_command_text,
+        wrapper_chain=wrapper_chain,
         action=action,
         reason=reason,
         now=now,

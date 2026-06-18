@@ -6396,7 +6396,7 @@ def runtime_tool_action_exact_match_context(
         "config_path": str(Path(config_path).expanduser()) if config_path else None,
         "source_scope": source_scope,
         "raw_command_text": raw_command_text,
-        "wrapper_chain": [str(item) for item in wrapper_chain or () if isinstance(item, str) and item],
+        "wrapper_chain": [item for item in wrapper_chain or () if isinstance(item, str) and item],
     }
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
