@@ -2158,6 +2158,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 decision,
                 _now(),
                 approval_gate_grant=approval_gate_grant,
+                remote_write_authorized=True,
             )
         except ApprovalGateError as error:
             self._write_approval_gate_error(error)
