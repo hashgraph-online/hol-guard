@@ -421,10 +421,21 @@ def _persist_claude_native_permission_policy(
     now: str,
     source: str = "claude-native-approval",
 ) -> bool:
-    stored_artifact_hash = (
+    exact_artifact_hash = (
         _runtime_scoped_exact_match_key(artifact_id) if artifact_type == "tool_action_request" else None
-    ) or artifact_hash
+    )
+    stored_artifact_hash = exact_artifact_hash or artifact_hash
     try:
+        if artifact_type == "tool_action_request" and exact_artifact_hash is None:
+            store.add_event(
+                "claude/native_permission_exact_key_missing",
+                {
+                    "artifact_id": artifact_id,
+                    "artifact_type": artifact_type,
+                    "source": source,
+                },
+                now,
+            )
         store.upsert_policy(
             PolicyDecision(
                 harness="claude-code",
