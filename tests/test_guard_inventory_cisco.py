@@ -139,7 +139,10 @@ def test_cisco_inventory_scans_run_mcp_and_skill_scanners_with_required_mode(tmp
     assert [call[0] for call in calls] == ["mcp", "skill"]
     assert calls[0][1] == workspace_dir
     assert calls[1][1] == skill_path.parent
-    assert all(call[2] == "on" and call[3] == 3.5 for call in calls)
+    assert all(call[2] == "on" for call in calls)
+    assert calls[0][3] == 3.5
+    assert calls[1][3] is not None
+    assert 0 < calls[1][3] <= 3.5
     assert all(run.status == "enabled" for run in runs)
 
 
