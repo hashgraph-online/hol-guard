@@ -190,9 +190,16 @@ assert(
 );
 
 const requestDateLabel = formatQueueRequestDate(midItem);
+const expectedDateLabel = new Intl.DateTimeFormat("en-US", {
+  month: "2-digit",
+  day: "2-digit",
+  year: "2-digit",
+  hour: "numeric",
+  minute: "2-digit",
+}).format(new Date(midItem.created_at));
 assert(
-  requestDateLabel === "02/01/26, 10:00 AM",
-  "T-QS-17D: formatQueueRequestDate exposes an abbreviated local date with time"
+  requestDateLabel === expectedDateLabel,
+  "T-QS-17D: formatQueueRequestDate matches abbreviated local date/time format"
 );
 
 const recentlySeenOldItem: GuardApprovalRequest = {
