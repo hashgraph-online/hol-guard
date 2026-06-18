@@ -796,6 +796,20 @@ def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(monkeypatch, tmp_
         generated_at="2026-06-10T12:00:00+00:00",
         home_dir=tmp_path,
         workspace_dir=workspace,
+        cisco_runs=(
+            CiscoInventoryRun(
+                source="cisco-mcp-scanner",
+                status="enabled",
+                message="Cisco MCP scanner completed.",
+                findings=(),
+                duration_ms=12,
+                metadata={
+                    "target": str(mcp_file),
+                    "findingsBySeverity": {"critical": 0, "high": 0, "medium": 0, "low": 0},
+                    "targetsScanned": 1,
+                },
+            ),
+        ),
     )
     search_tool = next(item for item in snapshot.items if item.item_id.endswith(":tool:search_docs"))
     delete_tool = next(item for item in snapshot.items if item.item_id.endswith(":tool:delete_docs"))
@@ -829,6 +843,15 @@ def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(monkeypatch, tmp_
         envelope=attestation,
         trusted_keys=(verification_key,),
     )
+    trust_layers = search_tool.metadata.get("trustLayers")
+    assert isinstance(trust_layers, list)
+    cisco_layer = next(
+        layer for layer in trust_layers if isinstance(layer, dict) and layer.get("layerType") == "cisco_mcp_scanner"
+    )
+    cisco_layer_metadata = cisco_layer.get("metadata")
+    assert isinstance(cisco_layer_metadata, dict)
+    assert cisco_layer_metadata.get("attestationStatus") == "unsigned"
+    assert cisco_layer_metadata.get("attestation") is None
     assert search_trust.get("trustScore") is not None
 
 

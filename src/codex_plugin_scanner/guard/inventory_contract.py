@@ -766,22 +766,6 @@ def _mcp_tool_items_from_artifact(
             "annotations": safe_annotations,
             "schemaPresent": input_schema is not None or output_schema is not None,
         }
-        if inherited_layers:
-            inherited_tool_layers: list[dict[str, object]] = []
-            for layer in inherited_layers:
-                raw_layer_metadata = layer.get("metadata")
-                layer_metadata = dict(raw_layer_metadata) if isinstance(raw_layer_metadata, dict) else {}
-                inherited_tool_layers.append(
-                    {
-                        **layer,
-                        "metadata": {
-                            **{key: value for key, value in layer_metadata.items() if key != "attestation"},
-                            "attestationStatus": "unsigned",
-                            "inheritedFromServerItemId": server_item.item_id,
-                        },
-                    }
-                )
-            metadata["trustLayers"] = inherited_tool_layers
         tool_artifact = SimpleNamespace(
             artifact_id=f"{getattr(artifact, 'artifact_id', server_item.item_id)}:tool:{name}",
             artifact_type="mcp_tool",
@@ -817,6 +801,24 @@ def _mcp_tool_items_from_artifact(
             content_hash=semantic_hash,
             trust_attestation_context=trust_attestation_context,
         )
+        if inherited_layers:
+            tool_layers = metadata.get("trustLayers")
+            signed_tool_layers = list(tool_layers) if isinstance(tool_layers, list) else []
+            inherited_tool_layers: list[dict[str, object]] = []
+            for layer in inherited_layers:
+                raw_layer_metadata = layer.get("metadata")
+                layer_metadata = dict(raw_layer_metadata) if isinstance(raw_layer_metadata, dict) else {}
+                inherited_tool_layers.append(
+                    {
+                        **layer,
+                        "metadata": {
+                            **{key: value for key, value in layer_metadata.items() if key != "attestation"},
+                            "attestationStatus": "unsigned",
+                            "inheritedFromServerItemId": server_item.item_id,
+                        },
+                    }
+                )
+            metadata["trustLayers"] = [*signed_tool_layers, *inherited_tool_layers]
         tool_description = _inventory_item_description_module().resolve_inventory_item_description(
             harness=harness,
             item_kind="mcp_tool",
