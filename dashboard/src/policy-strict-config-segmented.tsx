@@ -54,7 +54,7 @@ export function StrictConfigActionSegmented({
       </div>
       <div className="w-full max-w-[17.5rem] lg:justify-self-end">
         <div
-          className="inline-flex w-full max-w-[17.5rem] flex-wrap gap-0.5 rounded-xl border border-slate-200 bg-slate-100/80 p-0.5"
+          className="flex w-full flex-wrap gap-0.5 rounded-xl border border-slate-200 bg-slate-100/80 p-0.5"
           role="group"
           aria-label={label}
         >

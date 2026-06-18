@@ -74,7 +74,7 @@ export function resolveStrictScenarioSimulation(
   settings: GuardSettings,
   scenarioId: StrictScenarioId,
 ): StrictPolicySimulationResult {
-  const fallbackAction = settings.new_network_domain_action;
+  const fallbackAction = settings.new_network_domain_action ?? settings.default_action ?? "review";
 
   if (scenarioId === "remembered-allow") {
     return simulateStrictPolicyOutcome({
