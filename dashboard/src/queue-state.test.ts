@@ -191,8 +191,8 @@ assert(
 
 const requestDateLabel = formatQueueRequestDate(midItem);
 assert(
-  requestDateLabel.includes("2026") && requestDateLabel.includes("Feb"),
-  "T-QS-17D: formatQueueRequestDate exposes a human-readable request date with year"
+  requestDateLabel.includes("02/01/26") && requestDateLabel.includes("ET"),
+  "T-QS-17D: formatQueueRequestDate exposes an abbreviated ET date with time"
 );
 
 const recentlySeenOldItem: GuardApprovalRequest = {

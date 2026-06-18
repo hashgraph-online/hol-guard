@@ -588,10 +588,11 @@ export function filterQueueByDateRange(
   });
 }
 
-const queueDateFormatter = new Intl.DateTimeFormat("en", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
+const queueDateFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York",
+  month: "2-digit",
+  day: "2-digit",
+  year: "2-digit",
   hour: "numeric",
   minute: "2-digit",
 });
@@ -601,7 +602,7 @@ export function formatQueueRequestDate(item: GuardApprovalRequest): string {
   if (timestamp === 0) {
     return "Date unknown";
   }
-  return queueDateFormatter.format(new Date(timestamp));
+  return `${queueDateFormatter.format(new Date(timestamp))} ET`;
 }
 
 export function queueCategoryById(id: QueueCategoryId): QueueCategory {
