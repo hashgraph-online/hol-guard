@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Literal
 
 LocalTrustMode = Literal[
@@ -11,6 +12,9 @@ LocalTrustMode = Literal[
     "setup_required",
     "unsupported",
 ]
+RuntimeProtectionStatus = Literal["protected", "degraded", "unknown"]
+RememberedRulesStatus = Literal["enforced", "disabled_degraded", "unknown"]
+CloudPoliciesStatus = Literal["available", "setup_unavailable", "unknown"]
 
 PolicyIntegrityMode = Literal["protected", "degraded"]
 PolicyIntegrityEnforcement = Literal["enforce", "warn"]
@@ -49,3 +53,82 @@ POLICY_INTEGRITY_REASON_GUARD_HOME_PERMISSIONS = "guard_home_permissions"
 POLICY_INTEGRITY_REASON_GUARD_DB_PERMISSIONS = "guard_db_permissions"
 POLICY_INTEGRITY_REASON_GUARD_HOME_INACCESSIBLE = "guard_home_inaccessible"
 POLICY_INTEGRITY_REASON_GUARD_DB_INACCESSIBLE = "guard_db_inaccessible"
+
+LOCAL_TRUST_DEGRADED_REASON_LABELS: dict[str, str] = {
+    POLICY_INTEGRITY_REASON_SYSTEM_KEYRING_UNAVAILABLE: "System credential store unavailable",
+    POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE: "Local rule signing key unavailable",
+    POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE: "Local rollback control unavailable",
+    POLICY_INTEGRITY_REASON_GUARD_HOME_SYMLINK: "Guard home path is not trusted",
+    POLICY_INTEGRITY_REASON_GUARD_DB_SYMLINK: "Guard database path is not trusted",
+    POLICY_INTEGRITY_REASON_GUARD_HOME_PERMISSIONS: "Guard home permissions are too broad",
+    POLICY_INTEGRITY_REASON_GUARD_DB_PERMISSIONS: "Guard database permissions are too broad",
+    POLICY_INTEGRITY_REASON_GUARD_HOME_INACCESSIBLE: "Guard home could not be inspected",
+    POLICY_INTEGRITY_REASON_GUARD_DB_INACCESSIBLE: "Guard database could not be inspected",
+}
+
+
+@dataclass(frozen=True)
+class TrustStatus:
+    """User-safe trust summary for runtime, local rules, and Cloud policy authority."""
+
+    runtime_protection: RuntimeProtectionStatus
+    remembered_rules: RememberedRulesStatus
+    cloud_policies: CloudPoliciesStatus
+    backend: str
+    degraded_reasons: tuple[str, ...] = field(default_factory=tuple)
+    setup_available: bool = False
+    last_proof: str | None = None
+
+    @classmethod
+    def from_policy_integrity_state(cls, state: dict[str, object]) -> TrustStatus:
+        mode = state.get("mode")
+        reasons = state.get("degraded_reasons")
+        clean_reasons = (
+            tuple(reason for reason in reasons if isinstance(reason, str)) if isinstance(reasons, list) else ()
+        )
+        if mode == POLICY_INTEGRITY_MODE_PROTECTED:
+            runtime_protection: RuntimeProtectionStatus = "protected"
+            remembered_rules: RememberedRulesStatus = "enforced"
+        elif mode == POLICY_INTEGRITY_MODE_DEGRADED:
+            runtime_protection = "degraded"
+            remembered_rules = "disabled_degraded"
+        else:
+            runtime_protection = "unknown"
+            remembered_rules = "unknown"
+        setup_available = bool(state.get("setup_available"))
+        if not setup_available:
+            setup_available = any(reason in LOCAL_TRUST_DEGRADED_REASON_LABELS for reason in clean_reasons)
+        runtime_override = state.get("runtime_protection")
+        if runtime_override in ("protected", "degraded", "unknown"):
+            runtime_protection = runtime_override
+        cloud_override = state.get("cloud_policies")
+        if cloud_override in ("available", "setup_unavailable", "unknown"):
+            cloud_policies: CloudPoliciesStatus = cloud_override
+        elif setup_available:
+            cloud_policies = "setup_unavailable"
+        else:
+            cloud_policies = "available"
+        return cls(
+            runtime_protection=runtime_protection,
+            remembered_rules=remembered_rules,
+            cloud_policies=cloud_policies,
+            backend=str(state.get("backend") or "unknown"),
+            degraded_reasons=clean_reasons,
+            setup_available=setup_available,
+            last_proof=None,
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "runtime_protection": self.runtime_protection,
+            "remembered_rules": self.remembered_rules,
+            "cloud_policies": self.cloud_policies,
+            "backend": self.backend,
+            "degraded_reasons": list(self.degraded_reasons),
+            "degraded_reason_labels": {
+                reason: LOCAL_TRUST_DEGRADED_REASON_LABELS.get(reason, "Guard trust check degraded")
+                for reason in self.degraded_reasons
+            },
+            "setup_available": self.setup_available,
+            "last_proof": self.last_proof,
+        }

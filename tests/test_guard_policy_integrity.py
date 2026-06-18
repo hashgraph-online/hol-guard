@@ -14,12 +14,14 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.local_trust_contract import (
+    LOCAL_TRUST_DEGRADED_REASON_LABELS,
     LOCAL_TRUST_MODES,
     POLICY_INTEGRITY_DEGRADED_REASONS,
     POLICY_INTEGRITY_ENFORCEMENT_ENFORCE,
     POLICY_INTEGRITY_ENFORCEMENT_WARN,
     POLICY_INTEGRITY_MODE_DEGRADED,
     POLICY_INTEGRITY_MODE_PROTECTED,
+    TrustStatus,
 )
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore, SystemKeyringSecretStore
@@ -58,6 +60,70 @@ def test_local_trust_contract_exports_stable_status_vocabulary() -> None:
     assert "guard_db_symlink" in POLICY_INTEGRITY_DEGRADED_REASONS
     assert "guard_home_permissions" in POLICY_INTEGRITY_DEGRADED_REASONS
     assert "guard_db_permissions" in POLICY_INTEGRITY_DEGRADED_REASONS
+    assert set(LOCAL_TRUST_DEGRADED_REASON_LABELS) == set(POLICY_INTEGRITY_DEGRADED_REASONS)
+
+
+def test_trust_status_serializes_policy_integrity_authority_without_paths() -> None:
+    status = TrustStatus.from_policy_integrity_state(
+        {
+            "backend": "unavailable",
+            "mode": POLICY_INTEGRITY_MODE_DEGRADED,
+            "degraded_reasons": ["system_keyring_unavailable", "guard_home_symlink"],
+            "key_id": "/Users/example/.hol-guard/key",
+        }
+    ).to_dict()
+
+    assert status["runtime_protection"] == "degraded"
+    assert status["remembered_rules"] == "disabled_degraded"
+    assert status["cloud_policies"] == "setup_unavailable"
+    assert status["backend"] == "unavailable"
+    assert status["degraded_reasons"] == ["system_keyring_unavailable", "guard_home_symlink"]
+    assert status["setup_available"] is True
+    assert status["last_proof"] is None
+
+
+def test_trust_status_hides_policy_integrity_proof_ids_and_handles_unknown_mode() -> None:
+    status = TrustStatus.from_policy_integrity_state(
+        {
+            "backend": "system-keyring",
+            "mode": "future-mode",
+            "degraded_reasons": [],
+            "key_id": "abc/def==",
+        }
+    ).to_dict()
+
+    assert status["runtime_protection"] == "unknown"
+    assert status["remembered_rules"] == "unknown"
+    assert status["cloud_policies"] == "available"
+    assert status["setup_available"] is False
+    assert status["last_proof"] is None
+
+    windows_status = TrustStatus.from_policy_integrity_state(
+        {
+            "backend": "system-keyring",
+            "mode": POLICY_INTEGRITY_MODE_PROTECTED,
+            "degraded_reasons": [],
+            "key_id": "\\Users\\alice\\.hol-guard\\key",
+        }
+    ).to_dict()
+    assert windows_status["runtime_protection"] == "protected"
+    assert windows_status["last_proof"] is None
+
+
+def test_policy_integrity_status_includes_trust_status(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+
+    status = store.get_policy_integrity_status()
+    trust_status = status["trust_status"]
+
+    assert isinstance(trust_status, dict)
+    assert trust_status["runtime_protection"] == "degraded"
+    assert trust_status["remembered_rules"] == "disabled_degraded"
+    assert trust_status["cloud_policies"] == "setup_unavailable"
+    assert trust_status["degraded_reasons"] == status["degraded_reasons"]
+
+    verify = store.verify_policy_integrity()
+    assert verify["trust_status"] == trust_status
 
 
 def test_guard_store_init_does_not_create_policy_integrity_keyring_material(tmp_path: Path) -> None:
