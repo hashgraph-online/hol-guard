@@ -81,11 +81,20 @@ assert(detailSource.includes("Open in Guard Cloud"), "detail panel links to Guar
 
 const requestSource = readSource("policy-cloud-exception-request-panel.tsx");
 const requestLayoutSource = readSource("policy-cloud-exception-request-layout.tsx");
+const requestStepsSource = readSource("policy-cloud-exception-request-steps.tsx");
 assert(requestSource.includes("Request cloud exception"), "request panel contains section title");
 assert(
   requestLayoutSource.includes('aria-labelledby="cloud-exception-request-title"'),
   "request panel exposes labelled heading",
 );
+assert(requestLayoutSource.includes("max-w-5xl"), "request modal uses focused shell width");
+assert(!requestLayoutSource.includes("max-w-6xl"), "request modal must not use page-like max-w-6xl");
+assert(requestLayoutSource.includes("RequestSummaryRail"), "request modal includes summary rail");
+assert(requestStepsSource.includes("CloudExceptionSourceStep"), "request flow isolates source step");
+assert(requestLayoutSource.includes('"Review"'), "request stepper includes Review step");
+assert(!requestLayoutSource.includes('"Submit"'), "request stepper must not label a step Submit");
+assert(requestLayoutSource.includes("Submitted"), "request flow includes Submitted state");
+assert(requestLayoutSource.includes("sm:items-center"), "request modal supports mobile-safe layout classes");
 
 const tabSource = readSource("policy-cloud-exceptions-tab.tsx");
 assert(tabSource.includes("PolicyCloudExceptionsListSkeleton"), "cloud exceptions tab preserves loading layout");
