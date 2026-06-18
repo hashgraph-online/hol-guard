@@ -90,6 +90,11 @@ def _write_nested_trust_marker(marker_path: str) -> None:
     Path(marker_path).write_text("ok", encoding="utf-8")
 
 
+def _write_delayed_nested_trust_marker(marker_path: str) -> None:
+    time.sleep(0.4)
+    Path(marker_path).write_text("late", encoding="utf-8")
+
+
 def test_local_trust_contract_exports_stable_status_vocabulary() -> None:
     assert LOCAL_TRUST_MODES == (
         "protected",
@@ -184,6 +189,35 @@ def test_trust_backend_timeout_contains_late_side_effects(tmp_path: Path) -> Non
         timeout_result=timeout_result,
     )
     time.sleep(0.1)
+
+    assert result == timeout_result
+    assert not marker_path.exists()
+
+
+def test_trust_backend_timeout_kills_nested_helper_process(tmp_path: Path) -> None:
+    marker_path = tmp_path / "nested-late-side-effect"
+
+    def slow_nested_mutation() -> TrustStatus:
+        context = local_trust_contract_module.multiprocessing.get_context("fork")
+        process = context.Process(target=_write_delayed_nested_trust_marker, args=(str(marker_path),))
+        process.start()
+        time.sleep(2.0)
+        return _FakeTrustBackend("slow", 1).status()
+
+    timeout_result = TrustStatus(
+        runtime_protection="degraded",
+        remembered_rules="disabled_degraded",
+        cloud_policies="setup_unavailable",
+        backend="timeout",
+        degraded_reasons=(POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,),
+    )
+
+    result = run_trust_backend_check(
+        slow_nested_mutation,
+        timeout_seconds=0.05,
+        timeout_result=timeout_result,
+    )
+    time.sleep(0.6)
 
     assert result == timeout_result
     assert not marker_path.exists()

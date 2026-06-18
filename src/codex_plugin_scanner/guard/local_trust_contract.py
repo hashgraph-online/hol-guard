@@ -6,6 +6,7 @@ import json
 import multiprocessing
 import os
 import pickle
+import signal
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -126,6 +127,8 @@ def _trust_backend_check_worker(
     operation: Callable[[], object],
     result_path: str,
 ) -> None:
+    if hasattr(os, "setsid"):
+        os.setsid()
     try:
         payload = (True, operation())
     except Exception as error:
@@ -134,6 +137,33 @@ def _trust_backend_check_worker(
     with Path(temp_result_path).open("wb") as handle:
         pickle.dump(payload, handle, protocol=pickle.HIGHEST_PROTOCOL)
     os.replace(temp_result_path, result_path)
+
+
+def _terminate_trust_backend_process_tree(process: multiprocessing.Process) -> None:
+    pid = process.pid
+    if pid is None:
+        return
+    if hasattr(os, "killpg"):
+        try:
+            os.killpg(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        except PermissionError:
+            process.terminate()
+        process.join(timeout=0.2)
+        try:
+            os.killpg(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            return
+        except PermissionError:
+            process.kill()
+        process.join(timeout=0.2)
+        return
+    process.terminate()
+    process.join(timeout=0.2)
+    if process.is_alive():
+        process.kill()
+        process.join(timeout=0.2)
 
 
 def select_trust_backend(
@@ -177,11 +207,7 @@ def run_trust_backend_check(
             return on_error(error)
         process.join(timeout=timeout_seconds)
         if process.is_alive():
-            process.terminate()
-            process.join(timeout=0.2)
-            if process.is_alive():
-                process.kill()
-                process.join(timeout=0.2)
+            _terminate_trust_backend_process_tree(process)
             return timeout_result
         result_file = Path(result_path)
         if not result_file.exists():
