@@ -223,6 +223,37 @@ def test_trust_backend_timeout_kills_nested_helper_process(tmp_path: Path) -> No
     assert not marker_path.exists()
 
 
+def test_trust_backend_timeout_falls_back_when_process_group_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    class FakeProcess:
+        pid = 12345
+
+        def is_alive(self) -> bool:
+            return False
+
+        def join(self, timeout: float | None = None) -> None:
+            calls.append(f"join:{timeout}")
+
+        def terminate(self) -> None:
+            calls.append("terminate")
+
+        def kill(self) -> None:
+            calls.append("kill")
+
+    def fake_killpg(pid: int, sig: int) -> None:
+        calls.append(f"killpg:{pid}:{sig}")
+        raise ProcessLookupError("process group not ready")
+
+    monkeypatch.setattr(local_trust_contract_module.os, "killpg", fake_killpg)
+
+    local_trust_contract_module._terminate_trust_backend_process_tree(FakeProcess())
+
+    assert calls == ["killpg:12345:15", "terminate", "join:0.2"]
+
+
 def test_trust_backend_timeout_helper_allows_minimal_fallback_contract() -> None:
     timeout_result = {"mode": "degraded"}
 

@@ -116,6 +116,18 @@ class TrustBackend(Protocol):
         ...
 
 
+class _ProcessHandle(Protocol):
+    pid: int | None
+
+    def is_alive(self) -> bool: ...
+
+    def join(self, timeout: float | None = None) -> None: ...
+
+    def terminate(self) -> None: ...
+
+    def kill(self) -> None: ...
+
+
 _TrustResult = TypeVar("_TrustResult")
 
 
@@ -139,7 +151,7 @@ def _trust_backend_check_worker(
     os.replace(temp_result_path, result_path)
 
 
-def _terminate_trust_backend_process_tree(process: multiprocessing.Process) -> None:
+def _terminate_trust_backend_process_tree(process: _ProcessHandle) -> None:
     pid = process.pid
     if pid is None:
         return
@@ -147,17 +159,20 @@ def _terminate_trust_backend_process_tree(process: multiprocessing.Process) -> N
         try:
             os.killpg(pid, signal.SIGTERM)
         except ProcessLookupError:
-            return
+            pass
         except PermissionError:
-            process.terminate()
+            pass
+        process.terminate()
         process.join(timeout=0.2)
-        try:
-            os.killpg(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            return
-        except PermissionError:
+        if process.is_alive():
+            try:
+                os.killpg(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                pass
             process.kill()
-        process.join(timeout=0.2)
+            process.join(timeout=0.2)
         return
     process.terminate()
     process.join(timeout=0.2)
