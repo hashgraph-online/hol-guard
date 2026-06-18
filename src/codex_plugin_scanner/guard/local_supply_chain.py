@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 import json
 import os
 import shlex
@@ -133,6 +134,10 @@ _STALE_REFRESH_GRACE_SECONDS = 5 * 60
 _CLOUD_AUDIT_TIMEOUT_SECONDS = 20
 _CLOUD_AUDIT_PAGE_SIZE = 500
 _CLOUD_AUDIT_MAX_PAGES = 100
+_CLOUD_AUDIT_JOB_PAGE_SIZE = 1
+_CLOUD_AUDIT_JOB_POLL_INTERVAL_SECONDS = 0.5
+_CLOUD_AUDIT_JOB_POLL_TIMEOUT_SECONDS = 20
+_CLOUD_AUDIT_SYNC_PAGE_SIZE = 25
 _MAX_SBOM_BYTES = 10 * 1024 * 1024
 _ECOSYSTEM_BY_LOCKFILE = {
     "package-lock.json": "npm",
@@ -212,12 +217,20 @@ def _supply_chain_package_eval_module():
     return importlib.import_module(".runtime.supply_chain_package_eval", __package__)
 
 
-def sync_local_guard_cloud_proof(store: GuardStore) -> dict[str, object]:
-    return _runtime_runner_module().sync_local_guard_cloud_proof(store)
+def sync_local_guard_cloud_proof(
+    store: GuardStore,
+    *,
+    auth_context: dict[str, object] | None = None,
+) -> dict[str, object]:
+    return _runtime_runner_module().sync_local_guard_cloud_proof(store, auth_context=auth_context)
 
 
-def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object] | None:
-    return _runtime_runner_module().sync_supply_chain_bundle(store)
+def sync_supply_chain_bundle(
+    store: GuardStore,
+    *,
+    auth_context: dict[str, object] | None = None,
+) -> dict[str, object] | None:
+    return _runtime_runner_module().sync_supply_chain_bundle(store, auth_context=auth_context)
 
 
 def _resolve_guard_sync_auth_context(store: GuardStore):
@@ -409,6 +422,21 @@ def build_supply_chain_status_payload(
     }
 
 
+def _call_sync_with_optional_auth_context(
+    refresh: Any,
+    *,
+    store: Any,
+    auth_context: dict[str, object],
+) -> dict[str, object]:
+    try:
+        parameters = inspect.signature(refresh).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+    if "auth_context" in parameters:
+        return refresh(store, auth_context=auth_context)
+    return refresh(store)
+
+
 def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, object]:
     """Resolve package-firewall access and opportunistically heal stale cloud state."""
 
@@ -437,9 +465,26 @@ def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, o
         ):
             return entitlement
         _write_package_firewall_refresh_state(store.guard_home, now)
+    try:
+        shared_auth_context = runner._resolve_guard_sync_auth_context(store)
+    except runner.GuardSyncAuthorizationExpiredError as error:
+        if str(entitlement.get("reason") or "") == "guard_cloud_connect_required":
+            store.record_latest_guard_connect_sync_result(
+                status="retry_required",
+                milestone="first_sync_failed",
+                now=now_iso,
+                reason=str(error),
+            )
+        return entitlement_module.resolve_package_firewall_entitlement(store)
+    except (runner.GuardSyncNotAvailableError, runner.GuardSyncNotConfiguredError, OSError, RuntimeError):
+        return entitlement_module.resolve_package_firewall_entitlement(store)
     for refresh in (sync_local_guard_cloud_proof, sync_supply_chain_bundle):
         try:
-            refresh(store)
+            _call_sync_with_optional_auth_context(
+                refresh,
+                store=store,
+                auth_context=shared_auth_context,
+            )
         except runner.GuardSyncAuthorizationExpiredError as error:
             if str(entitlement.get("reason") or "") == "guard_cloud_connect_required":
                 store.record_latest_guard_connect_sync_result(
@@ -494,6 +539,32 @@ def managed_install_audit_workspace_dirs(store: Any) -> tuple[str, ...]:
             continue
         seen.add(normalized)
         candidates.append(normalized)
+    return tuple(candidates)
+
+
+def _managed_workspace_audit_candidates(
+    store: Any,
+    *,
+    workspace_dir: Path | None = None,
+) -> tuple[Path, ...]:
+    candidates: list[Path] = []
+    seen: set[str] = set()
+    raw_candidates: list[Path] = []
+    if workspace_dir is not None:
+        raw_candidates.append(workspace_dir)
+    raw_candidates.extend(Path(entry).expanduser() for entry in managed_install_audit_workspace_dirs(store))
+    for candidate in raw_candidates:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        normalized = str(resolved)
+        if normalized in seen or not resolved.exists() or not resolved.is_dir():
+            continue
+        if not _workspace_has_project_markers(resolved):
+            continue
+        seen.add(normalized)
+        candidates.append(resolved)
     return tuple(candidates)
 
 
@@ -2197,6 +2268,8 @@ def _build_cloud_audit_payload(
     manifest_paths: tuple[str, ...],
     lockfile_paths: tuple[str, ...],
     inventory: tuple[dict[str, object], ...],
+    mode: str = "paged",
+    page_size: int | None = None,
 ) -> dict[str, object]:
     summary = store.get_sync_payload("supply_chain_bundle_summary")
     policy_version = "local:none"
@@ -2221,8 +2294,8 @@ def _build_cloud_audit_payload(
         },
         "harness": _LOCAL_SUPPLY_CHAIN_HARNESS,
         "lockfileContext": _workspace_audit_lockfile_context(workspace_dir, manifest_paths, lockfile_paths, inventory),
-        "mode": "paged",
-        "pageSize": min(_CLOUD_AUDIT_PAGE_SIZE, max(len(inventory), 1)),
+        "mode": mode,
+        "pageSize": min(_CLOUD_AUDIT_PAGE_SIZE, max(page_size or len(inventory), 1)),
         "packages": [
             {
                 "direct": bool(item.get("direct")),
@@ -2240,6 +2313,121 @@ def _build_cloud_audit_payload(
     if payload["lockfileContext"] is None:
         payload.pop("lockfileContext")
     return payload
+
+
+def _execute_cloud_workspace_audit_request(
+    *,
+    auth_context: dict[str, object],
+    request_url: str,
+    method: str,
+    payload: dict[str, object] | None = None,
+) -> dict[str, object]:
+    runner = _runtime_runner_module()
+    request_headers = runner._guard_sync_headers(auth_context, request_url=request_url, method=method)
+    if payload is not None:
+        request_headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(
+        request_url,
+        data=json.dumps(payload).encode("utf-8") if payload is not None else None,
+        headers=request_headers,
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=_CLOUD_AUDIT_TIMEOUT_SECONDS) as response:
+            response_payload = json.load(response)
+    except urllib.error.HTTPError as error:
+        if error.code == 403:
+            is_plan_restricted, message = runner._check_plan_restriction_403(error)
+            if is_plan_restricted:
+                raise runner.GuardSyncNotAvailableError(message) from error
+            raise RuntimeError(message) from error
+        message, retryable = runner._guard_cloud_http_error_details(error)
+        if retryable:
+            raise runner.GuardSyncNotAvailableError(message, retryable=True) from error
+        raise RuntimeError(message) from error
+    except OSError as error:
+        raise RuntimeError(runner._sync_url_error_message(error)) from error
+    except (ValueError, json.JSONDecodeError) as error:
+        raise RuntimeError("Guard cloud workspace audit returned an invalid response.") from error
+    if not isinstance(response_payload, dict):
+        raise RuntimeError("Guard cloud workspace audit returned an invalid response.")
+    return response_payload
+
+
+def _normalized_supply_chain_batch_job_url(
+    sync_url: str,
+    workspace_id: str,
+    job_id: str,
+    *,
+    page_size: int,
+) -> str:
+    batch_url = _normalized_supply_chain_batch_url(sync_url, workspace_id)
+    parsed = urllib.parse.urlsplit(batch_url)
+    query_pairs = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+    query_pairs = [(key, value) for key, value in query_pairs if key not in {"cursor", "pageSize"}]
+    query_pairs.append(("pageSize", str(max(page_size, 1))))
+    return urllib.parse.urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            f"{parsed.path.rstrip('/')}/{urllib.parse.quote(job_id, safe='')}",
+            urllib.parse.urlencode(query_pairs),
+            "",
+        )
+    )
+
+
+def _enqueue_cloud_workspace_audit_job(
+    *,
+    auth_context: dict[str, object],
+    request_payload: dict[str, object],
+    workspace_id: str,
+) -> dict[str, object]:
+    sync_url = str(auth_context["sync_url"])
+    request_url = _normalized_supply_chain_batch_url(sync_url, workspace_id)
+    response_payload = _execute_cloud_workspace_audit_request(
+        auth_context=auth_context,
+        request_url=request_url,
+        method="POST",
+        payload=request_payload,
+    )
+    job_id = response_payload.get("jobId")
+    if not isinstance(job_id, str) or not job_id.strip():
+        raise RuntimeError("Guard cloud workspace audit did not return a batch job id.")
+    return response_payload
+
+
+def _poll_cloud_workspace_audit_job(
+    *,
+    auth_context: dict[str, object],
+    job_id: str,
+    workspace_id: str,
+) -> dict[str, object]:
+    sync_url = str(auth_context["sync_url"])
+    request_url = _normalized_supply_chain_batch_job_url(
+        sync_url,
+        workspace_id,
+        job_id,
+        page_size=_CLOUD_AUDIT_JOB_PAGE_SIZE,
+    )
+    deadline = time.monotonic() + _CLOUD_AUDIT_JOB_POLL_TIMEOUT_SECONDS
+    last_response: dict[str, object] = {
+        "jobId": job_id,
+        "status": "queued",
+        "workspaceId": workspace_id,
+    }
+    while time.monotonic() < deadline:
+        response_payload = _execute_cloud_workspace_audit_request(
+            auth_context=auth_context,
+            request_url=request_url,
+            method="GET",
+        )
+        status = str(response_payload.get("status") or "").strip().lower()
+        last_response = response_payload
+        if status in {"completed", "failed"}:
+            return response_payload
+        time.sleep(_CLOUD_AUDIT_JOB_POLL_INTERVAL_SECONDS)
+    return last_response
 
 
 def _workspace_audit_lockfile_context(
@@ -2392,6 +2580,145 @@ def _normalized_supply_chain_batch_url(sync_url: str, workspace_id: str) -> str:
             "",
         )
     )
+
+
+def sync_managed_workspace_audits(
+    store: GuardStore,
+    *,
+    auth_context: dict[str, object] | None = None,
+    workspace_dir: Path | None = None,
+) -> dict[str, object]:
+    runner = _runtime_runner_module()
+    resolved_auth_context = auth_context if auth_context is not None else runner._resolve_guard_sync_auth_context(store)
+    workspace_id = store.get_cloud_workspace_id()
+    if not isinstance(workspace_id, str) or not workspace_id.strip():
+        raise runner.GuardSyncNotConfiguredError(
+            "Guard Cloud is not connected yet. Run `hol-guard connect` to sign in and pair this machine, "
+            "or use `hol-guard login` as a compatibility alias for the same browser flow."
+        )
+    synced_at = datetime.now(timezone.utc).isoformat()
+    workspaces_payload: list[dict[str, object]] = []
+    completed_jobs = 0
+    failed_jobs = 0
+    queued_jobs = 0
+    skipped_workspaces = 0
+    for candidate in _managed_workspace_audit_candidates(store, workspace_dir=workspace_dir):
+        workspace_label = candidate.name or str(candidate)
+        try:
+            manifest_paths, lockfile_paths, _sbom_paths, inventory = _workspace_audit_inventory(
+                candidate,
+                sbom_paths=(),
+            )
+            if not inventory:
+                skipped_workspaces += 1
+                workspaces_payload.append(
+                    {
+                        "workspace": workspace_label,
+                        "status": "skipped",
+                        "message": "No supported package inventory was detected for workspace audit sync.",
+                        "package_count": 0,
+                    }
+                )
+                continue
+            request_payload = _build_cloud_audit_payload(
+                workspace_dir=candidate,
+                workspace_id=workspace_id,
+                store=store,
+                manifest_paths=manifest_paths,
+                lockfile_paths=lockfile_paths,
+                inventory=inventory,
+                mode="job",
+                page_size=min(_CLOUD_AUDIT_SYNC_PAGE_SIZE, max(len(inventory), 1)),
+            )
+            enqueue_response = _enqueue_cloud_workspace_audit_job(
+                auth_context=resolved_auth_context,
+                request_payload=request_payload,
+                workspace_id=workspace_id,
+            )
+            job_id = str(enqueue_response.get("jobId") or "").strip()
+            final_response = _poll_cloud_workspace_audit_job(
+                auth_context=resolved_auth_context,
+                job_id=job_id,
+                workspace_id=workspace_id,
+            )
+            final_status = str(final_response.get("status") or enqueue_response.get("status") or "queued").strip().lower()
+            if final_status == "completed":
+                completed_jobs += 1
+            elif final_status == "failed":
+                failed_jobs += 1
+            else:
+                queued_jobs += 1
+            workspaces_payload.append(
+                {
+                    "workspace": workspace_label,
+                    "workspace_fingerprint": request_payload.get("workspaceFingerprint"),
+                    "job_id": job_id,
+                    "status": final_status,
+                    "package_count": len(inventory),
+                    "manifest_paths": list(manifest_paths),
+                    "lockfile_paths": list(lockfile_paths),
+                    "message": final_response.get("error"),
+                }
+            )
+        except (
+            runner.GuardSyncAuthorizationExpiredError,
+            runner.GuardSyncNotAvailableError,
+            runner.GuardSyncNotConfiguredError,
+        ):
+            raise
+        except (OSError, RuntimeError, ValueError) as error:
+            failed_jobs += 1
+            workspaces_payload.append(
+                {
+                    "workspace": workspace_label,
+                    "status": "failed",
+                    "message": str(error),
+                    "package_count": 0,
+                }
+            )
+    if failed_jobs > 0 and completed_jobs == 0 and queued_jobs == 0:
+        status = "failed"
+    elif failed_jobs > 0:
+        status = "partial"
+    elif completed_jobs > 0 or queued_jobs > 0:
+        status = "synced"
+    else:
+        status = "idle"
+    summary = {
+        "synced_at": synced_at,
+        "status": status,
+        "workspace_count": len(workspaces_payload),
+        "completed_jobs": completed_jobs,
+        "queued_jobs": queued_jobs,
+        "failed_jobs": failed_jobs,
+        "skipped_workspaces": skipped_workspaces,
+        "workspaces": workspaces_payload,
+    }
+    store.set_sync_payload("workspace_audits_sync_summary", summary, synced_at)
+    return summary
+
+
+def sync_supply_chain_cloud_state(
+    store: GuardStore,
+    *,
+    auth_context: dict[str, object] | None = None,
+    workspace_dir: Path | None = None,
+) -> dict[str, object]:
+    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
+    bundle_summary = _call_sync_with_optional_auth_context(
+        sync_supply_chain_bundle,
+        store=store,
+        auth_context=resolved_auth_context,
+    )
+    payload = dict(bundle_summary) if isinstance(bundle_summary, dict) else {}
+    workspace_audits = sync_managed_workspace_audits(
+        store,
+        auth_context=resolved_auth_context,
+        workspace_dir=workspace_dir,
+    )
+    payload["workspace_audits"] = workspace_audits
+    payload.setdefault("synced_at", workspace_audits.get("synced_at"))
+    return payload
 
 
 def _target_from_manifest_dependency(ecosystem: str, package_name: str, version: str) -> PackageIntentTarget:

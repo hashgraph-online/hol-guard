@@ -110,10 +110,12 @@ from ..harness_usage import record_harness_usage_events
 from ..incident import build_incident_context
 from ..local_dashboard_session import build_local_dashboard_session_token
 from ..local_supply_chain import (
+    _resolve_guard_sync_auth_context,
     apply_stored_package_policy_override,
     build_local_supply_chain_posture,
     build_supply_chain_explain_payload,
     build_supply_chain_status_payload,
+    sync_supply_chain_cloud_state,
     build_workspace_audit_payload,
     build_workspace_scan_payload,
     package_request_policy_hash,

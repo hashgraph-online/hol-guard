@@ -144,25 +144,9 @@ def _refresh_cloud_policy_bundle(store: GuardStore) -> None:
         return
     now = _now()
     try:
-        sync_receipts(store)
-    except GuardSyncAuthorizationExpiredError as error:
-        store.set_sync_payload(
-            "policy_bundle_last_error",
-            {"reason": "auth_expired", "message": str(error)},
-            now,
-        )
-        return
-    except GuardSyncNotConfiguredError:
-        return
-    except RuntimeError as error:
-        store.set_sync_payload(
-            "policy_bundle_last_error",
-            {"reason": "sync_failed", "message": str(error)},
-            now,
-        )
-        return
-    try:
-        sync_supply_chain_bundle(store)
+        auth_context = _resolve_guard_sync_auth_context(store)
+        sync_receipts(store, auth_context=auth_context)
+        sync_supply_chain_cloud_state(store, auth_context=auth_context)
     except GuardSyncAuthorizationExpiredError as error:
         store.set_sync_payload(
             "policy_bundle_last_error",
@@ -337,7 +321,10 @@ def _finalize_guard_connect_payload(
         }
     )
     try:
-        payload["supply_chain"] = sync_supply_chain_bundle(store)
+        payload["supply_chain"] = sync_supply_chain_cloud_state(
+            store,
+            auth_context=resolved_sync_auth_context,
+        )
     except (GuardSyncNotConfiguredError, GuardSyncNotAvailableError, RuntimeError) as error:
         payload["supply_chain_error"] = str(error)
     return payload

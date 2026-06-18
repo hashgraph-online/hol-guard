@@ -236,12 +236,19 @@ def _run_guard_sync_command(
     store = _require_guard_store(store)
     context = _require_guard_context(context)
     try:
+        auth_context = _resolve_guard_sync_auth_context(store)
         payload = sync_receipts(
             store,
+            auth_context=auth_context,
             home_dir=context.home_dir,
             workspace_dir=context.workspace_dir,
         )
-    except GuardSyncNotConfiguredError as error:
+        payload["supply_chain"] = sync_supply_chain_cloud_state(
+            store,
+            auth_context=auth_context,
+            workspace_dir=context.workspace_dir,
+        )
+    except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
         message = _guard_sync_failure_message(error)
         if getattr(args, "json", False):
             _emit("sync", {"synced": False, "error": message}, True)
@@ -340,8 +347,15 @@ def _run_guard_supply_chain_command(
         return exit_code
     if supply_chain_command == "sync":
         try:
-            payload = _validated_supply_chain_sync_payload(sync_supply_chain_bundle(store))
-        except GuardSyncNotConfiguredError as error:
+            auth_context = _resolve_guard_sync_auth_context(store)
+            payload = _validated_supply_chain_sync_payload(
+                sync_supply_chain_cloud_state(
+                    store,
+                    auth_context=auth_context,
+                    workspace_dir=workspace_dir,
+                )
+            )
+        except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
             message = _guard_sync_failure_message(error)
             if getattr(args, "json", False):
                 _emit("supply-chain-sync", {"synced": False, "error": message}, True)

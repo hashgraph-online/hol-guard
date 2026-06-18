@@ -20,10 +20,10 @@ from ..local_supply_chain import (
     build_workspace_audit_payload,
     managed_install_audit_workspace_dirs,
     resolve_supply_chain_audit_workspace_dir,
+    sync_supply_chain_cloud_state,
 )
 from ..models import DecisionScope, PolicyDecision
 from ..package_shim_status import record_package_shim_audit_result
-from ..runtime.runner import sync_supply_chain_bundle
 from ..shims import (
     activate_package_shims,
     package_shim_status,
@@ -138,7 +138,13 @@ def _execute_package_shim_operation(
             generated_at=generated_at,
         )
     if operation == "guard.packageShims.sync":
-        return _result(sync_supply_chain_bundle(store), generated_at=generated_at)
+        return _result(
+            sync_supply_chain_cloud_state(
+                store,
+                workspace_dir=command_context.workspace_dir,
+            ),
+            generated_at=generated_at,
+        )
     if operation == "guard.packageShims.audit":
         if command_context.workspace_dir is None:
             return {
