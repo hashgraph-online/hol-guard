@@ -19,7 +19,12 @@ from codex_plugin_scanner.guard.runtime.detectors import (
     DetectorContext,
     FalsePositiveSuppressorDetector,
 )
-from codex_plugin_scanner.guard.store import GuardStore, _warn_only_policy_integrity_status
+from codex_plugin_scanner.guard.store import (
+    GuardStore,
+    _runtime_scoped_exact_match_key,
+    _warn_only_policy_integrity_status,
+    runtime_tool_action_exact_match_context,
+)
 from codex_plugin_scanner.guard.store_approvals import approval_queue_identity_for_request
 
 
@@ -722,9 +727,24 @@ def test_artifact_runtime_scope_reuses_approval_for_same_exact_action_retry(tmp_
     assert result["resolved"] is True
     assert store.get_approval_request("req-shell")["status"] == "resolved"
     assert store.get_approval_request("req-shell-other")["status"] == "pending"
-    assert store.resolve_policy("codex", shell_request.artifact_id, "hash-retry") == "allow"
-    assert store.resolve_policy("codex", shell_request.artifact_id, None) is None
-    assert store.resolve_policy("codex", other_shell_request.artifact_id, "hash-retry") is None
+    runtime_exact_match_context = runtime_tool_action_exact_match_context(
+        config_path=shell_request.config_path,
+        source_scope=shell_request.source_scope,
+    )
+    contextual_exact_key = _runtime_scoped_exact_match_key(shell_request.artifact_id, runtime_exact_match_context)
+    legacy_exact_key = _runtime_scoped_exact_match_key(shell_request.artifact_id)
+    with store._connect() as connection:
+        rows = connection.execute(
+            """
+            select artifact_id, artifact_hash, action
+            from policy_decisions
+            where scope = 'artifact'
+            """,
+        ).fetchall()
+    assert [(row["artifact_id"], row["artifact_hash"], row["action"]) for row in rows] == [
+        (shell_request.artifact_id, contextual_exact_key, "allow")
+    ]
+    assert contextual_exact_key != legacy_exact_key
 
 
 def test_empty_degraded_reasons_do_not_honor_warn_only_policy() -> None:
@@ -760,6 +780,7 @@ def test_backend_degraded_warn_mode_ignores_local_approval(tmp_path: Path) -> No
         )
         is None
     )
+
 
 def test_path_degraded_warn_mode_ignores_local_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _store(tmp_path)
