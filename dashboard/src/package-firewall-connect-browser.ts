@@ -14,3 +14,13 @@ export function openPackageFirewallAuthorizeWindow(
   }
   return false;
 }
+
+export function openPackageFirewallAuthorizeFallback(
+  authorizeUrl: string | null | undefined,
+  browserOpened: boolean | null | undefined,
+): boolean {
+  if (browserOpened === true) {
+    return true;
+  }
+  return openPackageFirewallAuthorizeWindow(authorizeUrl);
+}

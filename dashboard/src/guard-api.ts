@@ -2371,7 +2371,7 @@ function normalizePackageFirewallConnectFlow(
     return null;
   }
   const state = value.state;
-  if (state !== "idle" && state !== "running" && state !== "failed") {
+  if (state !== "idle" && state !== "starting" && state !== "running" && state !== "failed") {
     return null;
   }
   const title = stringValue(value.title);

@@ -215,6 +215,16 @@ def _seed_workspace_sync_credentials(home_dir: Path, sync_url: str, *, now: str 
     _seed_guard_cloud(GuardStore(home_dir), workspace_id=WORKSPACE_ID, sync_url=sync_url, now=now)
 
 
+def _with_subprocess_sync_auth(env: dict[str, str], sync_url: str) -> dict[str, str]:
+    env["HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON"] = json.dumps(
+        {
+            "sync_url": sync_url,
+            "access_token": "demo-token",
+        }
+    )
+    return env
+
+
 def _start_cloud_eval_server(
     *,
     decision: str,
@@ -899,39 +909,34 @@ def test_guard_package_shims_block_before_manager_execution(
     fake_bin.mkdir(parents=True, exist_ok=True)
     marker_path = tmp_path / f"{manager}-marker.json"
     write_fake_manager_script(fake_bin=fake_bin, manager=manager, marker_path=marker_path, exit_code=0)
-    server, thread, sync_url = _start_cloud_eval_server(
-        decision="allow",
+    sync_url = "http://127.0.0.1:9/api/guard/receipts/sync"
+    _seed_bundle(
+        home_dir=home_dir,
+        ecosystem=ecosystem,
         package_name=package_name,
-        evaluate_status=401,
+        package_version=package_version,
+        action="block",
     )
-    try:
-        _seed_bundle(
-            home_dir=home_dir,
-            ecosystem=ecosystem,
-            package_name=package_name,
-            package_version=package_version,
-            action="block",
-        )
-        _seed_workspace_sync_credentials(home_dir, sync_url)
-        shim_path = _install_single_manager_shim(
-            home_dir=home_dir,
-            workspace_dir=workspace_dir,
-            manager=manager,
-            capsys=capsys,
-        )
+    _seed_workspace_sync_credentials(home_dir, sync_url)
+    shim_path = _install_single_manager_shim(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        manager=manager,
+        capsys=capsys,
+    )
 
-        env = dict(os.environ)
-        env["PATH"] = os.pathsep.join(filter(None, [str(fake_bin), env.get("PATH")]))
-        result = subprocess.run(
-            [str(shim_path), *shim_args],
-            cwd=workspace_dir,
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    finally:
-        _stop_cloud_eval_server(server, thread)
+    env = _with_subprocess_sync_auth(dict(os.environ), sync_url)
+    env["HOL_GUARD_TEST_SKIP_LOCAL_APPROVAL_QUEUE"] = "1"
+    env["PATH"] = os.pathsep.join(filter(None, [str(fake_bin), env.get("PATH")]))
+    result = subprocess.run(
+        [str(shim_path), *shim_args],
+        cwd=workspace_dir,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
 
     assert result.returncode != 0
     assert marker_path.exists() is False
