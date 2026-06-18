@@ -13,13 +13,13 @@ type PolicyEnforcementPreviewCardProps = {
 
 export function PolicyEnforcementPreviewCard({ cloudControlsUrl }: PolicyEnforcementPreviewCardProps) {
   return (
-    <div className={`${POLICY_PANEL_CARD_CLASS} p-5`}>
+    <div className={`${POLICY_PANEL_CARD_CLASS} p-4`}>
       <SectionLabel>Local enforcement preview</SectionLabel>
-      <p className="mt-2 text-sm leading-relaxed text-slate-600">
+      <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
         Evaluation order when Guard decides what to do next.
       </p>
 
-      <div className="mt-5 -mx-1 overflow-x-auto px-1 pb-1">
+      <div className="mt-4 -mx-1 overflow-x-auto px-1 pb-1">
         <div className="flex min-w-[52rem] items-stretch">
           {STRICT_CONFIG_EVALUATION_STEPS.map((step, index) => {
             const Icon = step.icon;
@@ -44,7 +44,7 @@ export function PolicyEnforcementPreviewCard({ cloudControlsUrl }: PolicyEnforce
         </div>
       </div>
 
-      <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="max-w-xl text-xs leading-relaxed text-slate-500">
           Evaluation order: {STRICT_POLICY_EVALUATION_ORDER.join(" → ")}. Team-wide exceptions are managed in Guard
           Cloud.

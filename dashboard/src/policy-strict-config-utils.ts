@@ -70,6 +70,38 @@ export function resolveStrictScenarioOutcome(
   };
 }
 
+export function resolveStrictScenarioSimulation(
+  settings: GuardSettings,
+  scenarioId: StrictScenarioId,
+): StrictPolicySimulationResult {
+  const fallbackAction = settings.new_network_domain_action;
+
+  if (scenarioId === "remembered-allow") {
+    return simulateStrictPolicyOutcome({
+      rememberedRuleAction: "allow",
+      cloudPolicyAction: "none",
+      cloudExceptionActive: false,
+      fallbackAction,
+    });
+  }
+
+  if (scenarioId === "cloud-exception") {
+    return simulateStrictPolicyOutcome({
+      rememberedRuleAction: "none",
+      cloudPolicyAction: "none",
+      cloudExceptionActive: true,
+      fallbackAction,
+    });
+  }
+
+  return simulateStrictPolicyOutcome({
+    rememberedRuleAction: "none",
+    cloudPolicyAction: "none",
+    cloudExceptionActive: false,
+    fallbackAction,
+  });
+}
+
 export function fingerprintLocalPolicySettings(settings: GuardSettings): string {
   const payload = JSON.stringify({
     mode: settings.mode,

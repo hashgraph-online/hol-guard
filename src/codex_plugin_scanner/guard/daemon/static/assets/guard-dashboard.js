@@ -16535,7 +16535,7 @@ function normalizePackageFirewallConnectFlow(value) {
     return null;
   }
   const state = value.state;
-  if (state !== "idle" && state !== "running" && state !== "failed") {
+  if (state !== "idle" && state !== "starting" && state !== "running" && state !== "failed") {
     return null;
   }
   const title = stringValue(value.title);
@@ -20154,7 +20154,7 @@ function resolveConnectUnlockCopy(purpose) {
   };
 }
 function resolveConnectSteps(connectFlow, purpose = "package_firewall") {
-  const running = connectFlow.state === "running";
+  const running = connectFlow.state === "running" || connectFlow.state === "starting";
   const failed = connectFlow.state === "failed";
   const browserOpened = connectFlow.browser_opened === true;
   const unlockCopy = resolveConnectUnlockCopy(purpose);
@@ -20233,9 +20233,9 @@ function ConnectFlowCard({
   onStartConnect,
   purpose = "package_firewall"
 }) {
-  const manualHref = connectFlow.authorize_url ?? connectFlow.connect_url;
-  const running = connectFlow.state === "running";
+  const running = connectFlow.state === "running" || connectFlow.state === "starting";
   const failed = connectFlow.state === "failed";
+  const manualHref = connectFlow.authorize_url ?? (failed ? connectFlow.connect_url : null);
   const primaryBusy = connectStarting || running;
   const primaryLabel = resolveConnectPrimaryLabel({
     actionLabel: connectFlow.action_label,
@@ -20245,7 +20245,7 @@ function ConnectFlowCard({
   const steps = resolveConnectSteps(connectFlow, purpose);
   const statusTone = running ? "blue" : mode === "repair" ? "attention" : "blue";
   const statusLabel = running ? "Waiting for approval" : mode === "repair" ? "Repair required" : "Connection required";
-  const showManualLink = connectFlow.authorize_url !== null || running || failed;
+  const showManualLink = manualHref !== null;
   const titleCopy = headline ?? connectFlow.title;
   const detailCopy = detail ?? connectFlow.detail;
   if (minimal) {
@@ -20510,6 +20510,12 @@ function openPackageFirewallAuthorizeWindow(authorizeUrl) {
   }
   return false;
 }
+function openPackageFirewallAuthorizeFallback(authorizeUrl, browserOpened) {
+  if (browserOpened === true) {
+    return true;
+  }
+  return openPackageFirewallAuthorizeWindow(authorizeUrl);
+}
 function FiShare2(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2", "strokeLinecap": "round", "strokeLinejoin": "round" }, "child": [{ "tag": "circle", "attr": { "cx": "18", "cy": "5", "r": "3" }, "child": [] }, { "tag": "circle", "attr": { "cx": "6", "cy": "12", "r": "3" }, "child": [] }, { "tag": "circle", "attr": { "cx": "18", "cy": "19", "r": "3" }, "child": [] }, { "tag": "line", "attr": { "x1": "8.59", "y1": "13.51", "x2": "15.42", "y2": "17.49" }, "child": [] }, { "tag": "line", "attr": { "x1": "15.41", "y1": "6.51", "x2": "8.59", "y2": "10.49" }, "child": [] }] })(props);
 }
@@ -20747,7 +20753,7 @@ function EvidenceInsightsShareModal({
     });
   }, [cloudConnected, refreshConnectState]);
   reactExports.useEffect(() => {
-    if (connectFlow?.state !== "running") {
+    if (connectFlow?.state !== "running" && connectFlow?.state !== "starting") {
       return;
     }
     const handle = window.setTimeout(() => {
@@ -20761,7 +20767,10 @@ function EvidenceInsightsShareModal({
     try {
       const status = await startGuardCloudConnect();
       setConnectFlow(status.connect_flow);
-      if (status.connect_flow?.authorize_url && !openPackageFirewallAuthorizeWindow(status.connect_flow.authorize_url)) {
+      if (status.connect_flow?.authorize_url && !openPackageFirewallAuthorizeFallback(
+        status.connect_flow.authorize_url,
+        status.connect_flow.browser_opened
+      )) {
         setConnectError(PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE);
       }
       if (!status.connect_required) {
@@ -26215,7 +26224,7 @@ export {
   resolveSupplyChainAuditFailure as aR,
   runPackageSync as aS,
   startPackageFirewallConnect as aT,
-  openPackageFirewallAuthorizeWindow as aU,
+  openPackageFirewallAuthorizeFallback as aU,
   PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as aV,
   runPackageFirewallAction as aW,
   parseInterceptProofSnapshot as aX,

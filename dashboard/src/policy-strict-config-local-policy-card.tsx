@@ -46,14 +46,9 @@ export function PolicyLocalStrictPolicyCard({
   const fileWriteAction = resolveStrictFileWriteAction(settings);
 
   return (
-    <div className={`${POLICY_PANEL_CARD_CLASS} p-5`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <SectionLabel>Local strict policy</SectionLabel>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">
-            Fallback controls when no remembered rule, Cloud policy, or Cloud exception matches.
-          </p>
-        </div>
+    <div className={`${POLICY_PANEL_CARD_CLASS} p-4`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SectionLabel>Local strict policy</SectionLabel>
         <button
           type="button"
           onClick={onResetDefaults}
@@ -64,7 +59,7 @@ export function PolicyLocalStrictPolicyCard({
           Reset to defaults
         </button>
       </div>
-      <div className="mt-4 divide-y divide-slate-100">
+      <div className="mt-3 divide-y divide-slate-100">
         <StrictConfigActionSegmented
           label="Default action"
           help="For any action not explicitly allowed."
