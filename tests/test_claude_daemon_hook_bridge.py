@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import threading
 import urllib.request
@@ -52,6 +53,7 @@ def test_daemon_url_rejects_non_loopback_fallback() -> None:
 class _DaemonHandler(BaseHTTPRequestHandler):
     response_marker = "from-real-daemon"
     captured_guard_token: ClassVar[str | None] = None
+    raw_response_body: ClassVar[bytes | None] = None
 
     def do_POST(self) -> None:
         type(self).captured_guard_token = self.headers.get("X-Guard-Token")
@@ -60,6 +62,9 @@ class _DaemonHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
+        if type(self).raw_response_body is not None:
+            self.wfile.write(type(self).raw_response_body)
+            return
         self.wfile.write(
             json.dumps(
                 {
@@ -93,6 +98,7 @@ def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPa
     daemon_thread.start()
     daemon_port = daemon_server.server_address[1]
     _DaemonHandler.captured_guard_token = None
+    _DaemonHandler.raw_response_body = None
 
     monkeypatch.setenv("HTTP_PROXY", f"http://127.0.0.1:{proxy_server.server_address[1]}")
     monkeypatch.setenv("http_proxy", f"http://127.0.0.1:{proxy_server.server_address[1]}")
@@ -115,6 +121,57 @@ def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPa
     assert payload["marker"] == _DaemonHandler.response_marker
     assert _CapturingProxyHandler.captured_paths == []
     assert _DaemonHandler.captured_guard_token == auth_token
+
+
+def test_main_degrades_when_daemon_returns_malformed_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    state_path = guard_home / "daemon-state.json"
+    daemon_server = HTTPServer(("127.0.0.1", 0), _DaemonHandler)
+    daemon_thread = threading.Thread(target=daemon_server.serve_forever, daemon=True)
+    daemon_thread.start()
+    daemon_port = daemon_server.server_address[1]
+    _DaemonHandler.raw_response_body = b"not-json"
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
+
+    try:
+        exit_code = bridge.main(
+            state_path=state_path,
+            fallback_daemon_url=f"http://127.0.0.1:{daemon_port}",
+            fallback_command=("python3", "-c", "print('{}')"),
+            query="guard-home=%2Ftmp",
+        )
+        assert exit_code == 0
+    finally:
+        daemon_server.shutdown()
+        daemon_thread.join(timeout=5)
+        _DaemonHandler.raw_response_body = None
+    output = capsys.readouterr().out
+    payload = json.loads(output)
+    assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_run_local_fallback_degrades_invalid_json() -> None:
+    response = bridge._run_local_fallback(
+        "daemon unavailable",
+        json.dumps({"hook_event_name": "PreToolUse"}),
+        ("python3", "-c", "print('not-json')"),
+    )
+
+    payload = json.loads(response)
+    assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert "malformed hook JSON" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_bridge_timeouts_stay_under_harness_budget() -> None:
+    assert bridge._DAEMON_TIMEOUT_SECONDS <= 10
+    assert bridge._FALLBACK_TIMEOUT_SECONDS <= 10
 
 
 def test_loopback_redirect_handler_rejects_remote_redirect() -> None:
