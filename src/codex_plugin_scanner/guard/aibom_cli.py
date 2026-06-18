@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import time
 import urllib.error
 import uuid
 from dataclasses import dataclass
@@ -60,17 +61,24 @@ def collect_aibom_snapshots(
 ) -> tuple[GuardAgentInventorySnapshot, ...]:
     resolved = options or AibomCliOptions()
     snapshots: list[GuardAgentInventorySnapshot] = []
+    remaining_cisco_timeout_seconds = resolved.cisco_timeout_seconds
     for detection in detect_all(context):
         if not detection.installed and not detection.artifacts:
             continue
+        cisco_started = time.monotonic()
         cisco_runs = run_cisco_inventory_scans(
             harness=str(getattr(detection, "harness", "unknown")),
             context=context,
             detection=detection,
             mcp_mode=resolved.cisco_mcp_scan,
             skill_mode=resolved.cisco_skill_scan,
-            timeout_seconds=resolved.cisco_timeout_seconds,
+            timeout_seconds=remaining_cisco_timeout_seconds,
         )
+        if remaining_cisco_timeout_seconds is not None:
+            remaining_cisco_timeout_seconds = max(
+                remaining_cisco_timeout_seconds - max(time.monotonic() - cisco_started, 0.0),
+                0.0,
+            )
         snapshots.append(
             inventory_snapshot_from_detection(
                 detection,
