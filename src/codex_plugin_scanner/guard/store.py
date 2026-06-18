@@ -5368,6 +5368,8 @@ class GuardStore:
         dpop_private_key_pem = _string_value(credentials.get("dpop_private_key_pem"))
         dpop_public_jwk = credentials.get("dpop_public_jwk")
         dpop_public_jwk_thumbprint = _string_value(credentials.get("dpop_public_jwk_thumbprint"))
+        supply_chain_firewall = credentials.get("supply_chain_firewall")
+        supply_chain_firewall_value = supply_chain_firewall if isinstance(supply_chain_firewall, bool) else None
         if (
             issuer is None
             or client_id is None
@@ -5377,7 +5379,7 @@ class GuardStore:
             or dpop_public_jwk_thumbprint is None
         ):
             return None
-        return {
+        recovered_inputs: _RecoveredOAuthLocalCredentialInputs = {
             "issuer": issuer,
             "client_id": client_id,
             "refresh_token": refresh_token,
@@ -5389,16 +5391,13 @@ class GuardStore:
             "supply_chain_entitlement_expires_at": _string_value(
                 credentials.get("supply_chain_entitlement_expires_at"),
             ),
-            "supply_chain_firewall": (
-                credentials.get("supply_chain_firewall")
-                if isinstance(credentials.get("supply_chain_firewall"), bool)
-                else None
-            ),
+            "supply_chain_firewall": supply_chain_firewall_value,
             "supply_chain_plan_id": _string_value(credentials.get("supply_chain_plan_id")),
             "workspace_id": _string_value(credentials.get("workspace_id")),
             "runtime_id": _string_value(credentials.get("runtime_id")),
             "runtime_label": _string_value(credentials.get("runtime_label")),
         }
+        return recovered_inputs
 
     def _load_oauth_secret_payload(
         self,
