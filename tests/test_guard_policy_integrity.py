@@ -351,6 +351,32 @@ def test_trust_backend_result_loader_preserves_permission_denied() -> None:
         local_trust_contract_module._load_trust_backend_result(cast(Path, PermissionDeniedResultPath()))
 
 
+def test_trust_backend_check_handles_result_permission_denied(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def denied_loader(result_file: Path):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(local_trust_contract_module, "_load_trust_backend_result", denied_loader)
+
+    result = run_trust_backend_check(
+        lambda: {"mode": "protected"},
+        timeout_seconds=1.0,
+        timeout_result={"mode": "degraded"},
+        on_error=lambda error: {
+            "mode": "degraded",
+            "error": error.__class__.__name__,
+            "reason": degraded_reason_for_backend_error(error),
+        },
+    )
+
+    assert result == {
+        "mode": "degraded",
+        "error": "PermissionError",
+        "reason": POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED,
+    }
+
+
 def test_trust_backend_check_reports_missing_result_with_exit_code(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

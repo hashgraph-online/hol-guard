@@ -264,7 +264,7 @@ def run_trust_backend_check(
             return on_error(_trust_backend_process_failed_error(process))
         try:
             ok, value = _load_trust_backend_result(result_file)
-        except TrustBackendCorruptResultError as error:
+        except (PermissionError, TrustBackendCorruptResultError) as error:
             if on_error is None:
                 return timeout_result
             return on_error(error)
