@@ -1326,7 +1326,24 @@ def test_trust_cli_macos_native_setup_is_explicitly_unavailable(tmp_path: Path, 
     assert rc == 2
     assert payload["backend_requested"] == "macos-native"
     assert "not enabled yet" in payload["error"]
+    assert "trust setup" in payload["error"]
     assert payload["passive_prompt_allowed"] is False
+
+    reset_rc = main(
+        [
+            "guard",
+            "trust",
+            "reset",
+            "--backend",
+            "macos-native",
+            "--home",
+            str(home_dir),
+            "--json",
+        ]
+    )
+    reset_payload = json.loads(capsys.readouterr().out)
+    assert reset_rc == 2
+    assert "trust reset" in reset_payload["error"]
 
 
 def test_policies_cli_verify_returns_nonzero_for_rollback_detected(tmp_path: Path, capsys) -> None:

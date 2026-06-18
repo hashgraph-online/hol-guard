@@ -80,11 +80,6 @@ def _configure_guard_policy_parsers(
         action="store_true",
         help="Run only bounded no-user-interaction checks.",
     )
-    trust_parser.add_argument(
-        "--yes",
-        action="store_true",
-        help="Confirm explicit setup or reset prompts.",
-    )
     _add_guard_common_args(trust_parser)
     trust_parser.add_argument("--json", action="store_true")
 

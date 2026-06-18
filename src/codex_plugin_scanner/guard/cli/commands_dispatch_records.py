@@ -480,7 +480,7 @@ def _run_guard_trust_command(
     if trust_command in {"setup", "reset"}:
         if backend == "macos-native":
             payload["error"] = (
-                "macOS native trust setup is not enabled yet. Passive checks remain no-UI and degraded-safe."
+                f"macOS native trust {trust_command} is not enabled yet. Passive checks remain no-UI and degraded-safe."
             )
             payload["next_action"] = "Use one-time approvals or Guard Cloud policies until native setup is available."
         elif trust_command == "setup":
