@@ -1273,6 +1273,62 @@ def test_policies_cli_verify_status_migrate_and_repair(
     assert GuardStore(home_dir).list_policy_decisions() == []
 
 
+def test_trust_cli_status_reports_no_passive_prompts(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "home"
+    rc = main(["guard", "trust", "status", "--home", str(home_dir), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["command"] == "status"
+    assert payload["no_ui_passive"] is True
+    assert payload["passive_prompt_allowed"] is False
+    assert payload["runtime_protection"] in {"protected", "degraded", "unknown"}
+    assert payload["remembered_rules"] in {"enforced", "disabled_degraded", "unknown"}
+    assert payload["one_time_approvals"] == "available"
+    assert payload["durable_local_rules"] in {"enforced", "limited"}
+    assert "key_id" not in payload
+    assert "last_proof" not in payload
+
+
+def test_trust_cli_no_ui_probe_requires_no_ui_flag(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "home"
+
+    missing_flag_rc = main(["guard", "trust", "test", "--home", str(home_dir), "--json"])
+    missing_flag_payload = json.loads(capsys.readouterr().out)
+    assert missing_flag_rc == 2
+    assert "Use --no-ui" in missing_flag_payload["error"]
+    assert missing_flag_payload["passive_prompt_allowed"] is False
+
+    no_ui_rc = main(["guard", "trust", "test", "--home", str(home_dir), "--no-ui", "--json"])
+    no_ui_payload = json.loads(capsys.readouterr().out)
+    assert no_ui_rc == 0
+    assert no_ui_payload["probe"] == "passive_no_ui"
+    assert no_ui_payload["ok"] is True
+    assert no_ui_payload["passive_prompt_allowed"] is False
+
+
+def test_trust_cli_macos_native_setup_is_explicitly_unavailable(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "home"
+    rc = main(
+        [
+            "guard",
+            "trust",
+            "setup",
+            "--backend",
+            "macos-native",
+            "--home",
+            str(home_dir),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 2
+    assert payload["backend_requested"] == "macos-native"
+    assert "not enabled yet" in payload["error"]
+    assert payload["passive_prompt_allowed"] is False
+
+
 def test_policies_cli_verify_returns_nonzero_for_rollback_detected(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)

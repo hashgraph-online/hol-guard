@@ -62,6 +62,32 @@ def _configure_guard_policy_parsers(
     _add_guard_common_args(policies_parser)
     policies_parser.add_argument("--json", action="store_true")
 
+    trust_parser = guard_subparsers.add_parser("trust", help="Inspect local trust without passive OS prompts")
+    trust_parser.add_argument(
+        "trust_command",
+        nargs="?",
+        default="status",
+        choices=("status", "doctor", "test", "setup", "reset"),
+    )
+    trust_parser.add_argument(
+        "--backend",
+        choices=("auto", "degraded-safe", "macos-native"),
+        default="auto",
+        help="Local trust backend to inspect or set up.",
+    )
+    trust_parser.add_argument(
+        "--no-ui",
+        action="store_true",
+        help="Run only bounded no-user-interaction checks.",
+    )
+    trust_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Confirm explicit setup or reset prompts.",
+    )
+    _add_guard_common_args(trust_parser)
+    trust_parser.add_argument("--json", action="store_true")
+
     settings_parser = guard_subparsers.add_parser("settings", help="Show or update local Guard settings")
     _add_guard_common_args(settings_parser)
     settings_parser.add_argument("--json", action="store_true")
