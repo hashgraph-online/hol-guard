@@ -788,7 +788,7 @@ def test_headless_connect_slows_down_polling_when_server_requests_it(tmp_path: P
     assert sleeps == [7]
 
 
-def test_headless_connect_persists_encrypted_fallback_when_macos_keychain_reads_are_unavailable(
+def test_headless_connect_rejects_macos_keychain_readback_failure(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -827,30 +827,28 @@ def test_headless_connect_persists_encrypted_fallback_when_macos_keychain_reads_
         def read(self) -> bytes:
             return json.dumps(self._payload).encode("utf-8")
 
-    payload = connect_flow.run_guard_device_connect_command(
-        store=store,
-        connect_url="https://hol.org/guard/connect",
-        request_device_authorization=fake_request,
-        token_urlopen=lambda request, timeout: _Response(
-            {
-                "access_token": _fake_access_token(
-                    grant_id="grant-123",
-                    machine_id="machine-123",
-                    workspace_id="workspace-123",
-                ),
-                "refresh_token": "refresh-123",
-                "expires_in": 3600,
-                "scope": "guard:runtime.sync guard:offline_access",
-                "token_type": "Bearer",
-            }
-        ),
-        now="2026-06-01T12:00:00+00:00",
-    )
+    with pytest.raises(RuntimeError, match="persist local Guard Cloud authorization securely"):
+        connect_flow.run_guard_device_connect_command(
+            store=store,
+            connect_url="https://hol.org/guard/connect",
+            request_device_authorization=fake_request,
+            token_urlopen=lambda request, timeout: _Response(
+                {
+                    "access_token": _fake_access_token(
+                        grant_id="grant-123",
+                        machine_id="machine-123",
+                        workspace_id="workspace-123",
+                    ),
+                    "refresh_token": "refresh-123",
+                    "expires_in": 3600,
+                    "scope": "guard:runtime.sync guard:offline_access",
+                    "token_type": "Bearer",
+                }
+            ),
+            now="2026-06-01T12:00:00+00:00",
+        )
 
-    assert payload["status"] == "connected"
-    credentials = store.get_oauth_local_credentials()
-    assert credentials is not None
-    assert credentials["refresh_token"] == "refresh-123"
+    assert store.get_oauth_local_credentials() is None
 
 
 def test_headless_connect_expired_code_surfaces_retry_command(tmp_path: Path) -> None:
