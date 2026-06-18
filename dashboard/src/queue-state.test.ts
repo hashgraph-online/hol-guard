@@ -190,13 +190,14 @@ assert(
 );
 
 const requestDateLabel = formatQueueRequestDate(midItem);
+const expectedTimestamp = new Date(midItem.last_seen_at ?? midItem.created_at).getTime();
 const expectedDateLabel = new Intl.DateTimeFormat("en-US", {
   month: "2-digit",
   day: "2-digit",
   year: "2-digit",
   hour: "numeric",
   minute: "2-digit",
-}).format(new Date(midItem.created_at));
+}).format(new Date(expectedTimestamp));
 assert(
   requestDateLabel === expectedDateLabel,
   "T-QS-17D: formatQueueRequestDate matches abbreviated local date/time format"
