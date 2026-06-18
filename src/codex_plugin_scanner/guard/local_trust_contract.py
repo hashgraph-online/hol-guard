@@ -92,18 +92,23 @@ class TrustBackend(Protocol):
 
     def status(self) -> TrustStatus:
         """Return current backend trust status."""
+        ...
 
     def sign(self, payload: bytes) -> str:
         """Sign canonical trust payload bytes."""
+        ...
 
     def verify(self, payload: bytes, signature: str) -> bool:
         """Verify canonical trust payload bytes."""
+        ...
 
     def setup(self) -> TrustStatus:
         """Run explicit foreground setup."""
+        ...
 
     def revoke(self) -> TrustStatus:
         """Revoke backend trust material."""
+        ...
 
 
 _TrustResult = TypeVar("_TrustResult")
