@@ -471,6 +471,24 @@ def test_oauth_secret_store_uses_system_keyring_with_encrypted_fallback_on_macos
     assert isinstance(secret_store.fallback, EncryptedFileSecretStore)
 
 
+def test_oauth_secret_store_uses_cached_macos_availability_when_healthy(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(parents=True)
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    guard_store_module._write_system_keyring_availability_cache(guard_home, available=True)
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_is_available",
+        classmethod(lambda cls: (_ for _ in ()).throw(AssertionError("cache miss"))),
+    )
+
+    secret_store = _build_oauth_secret_store(guard_home)
+
+    assert isinstance(secret_store, FallbackSecretStore)
+    assert isinstance(secret_store.primary, SystemKeyringSecretStore)
+    assert isinstance(secret_store.fallback, EncryptedFileSecretStore)
+
+
 def test_oauth_secret_store_unavailable_on_macos_does_not_create_local_secret_files(tmp_path, monkeypatch):
     _install_fake_system_keyring(monkeypatch, usable_macos_keychain=False)
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)

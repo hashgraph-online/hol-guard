@@ -1015,6 +1015,12 @@ def _system_keyring_is_available(guard_home: Path, *, use_cache: bool = True) ->
 def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
     fallback_store = EncryptedFileSecretStore(guard_home)
     if sys.platform == "darwin":
+        cached_availability = _read_system_keyring_availability_cache(guard_home)
+        if cached_availability is True:
+            return FallbackSecretStore(
+                SystemKeyringSecretStore(service_name="hol-guard.oauth"),
+                fallback_store,
+            )
         if _system_keyring_is_available(guard_home, use_cache=False):
             return FallbackSecretStore(
                 SystemKeyringSecretStore(service_name="hol-guard.oauth"),
@@ -5499,25 +5505,32 @@ class GuardStore:
         milestone: str,
         now: str,
         reason: str | None = None,
+        request_id: str | None = None,
         sync_payload: dict[str, object] | None = None,
     ) -> dict[str, object] | None:
         with self._connect() as connection:
-            row = connection.execute(
-                """
-                select request_id
-                from guard_connect_states
-                where status in ('connected', 'retry_required')
-                  and milestone != 'first_sync_succeeded'
-                order by updated_at desc
-                limit 1
-                """
-            ).fetchone()
-            if row is None:
-                return None
-            latest_state = load_connect_state(connection, str(row["request_id"]), now=now)
+            latest_state: dict[str, object] | None
+            if isinstance(request_id, str) and request_id.strip():
+                latest_state = load_connect_state(connection, request_id.strip(), now=now)
+            else:
+                row = connection.execute(
+                    """
+                    select request_id
+                    from guard_connect_states
+                    where status in ('connected', 'retry_required')
+                      and milestone != 'first_sync_succeeded'
+                    order by updated_at desc
+                    limit 1
+                    """
+                ).fetchone()
+                if row is None:
+                    return None
+                latest_state = load_connect_state(connection, str(row["request_id"]), now=now)
             if latest_state is None:
                 return None
             if latest_state.get("status") not in {"connected", "retry_required"}:
+                return latest_state
+            if request_id is None and latest_state.get("status") != "connected":
                 return latest_state
             return persist_connect_result(
                 connection,
@@ -5534,12 +5547,14 @@ class GuardStore:
         *,
         sync_payload: dict[str, object],
         now: str,
+        request_id: str | None = None,
     ) -> dict[str, object] | None:
         return self.record_latest_guard_connect_sync_result(
             status="connected",
             milestone="first_sync_succeeded",
             now=now,
             reason=None,
+            request_id=request_id,
             sync_payload=sync_payload,
         )
 

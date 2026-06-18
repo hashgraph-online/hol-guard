@@ -324,6 +324,7 @@ def _finalize_guard_connect_payload(
     latest_state = store.record_latest_guard_connect_sync_success(
         sync_payload=sync_payload,
         now=str(sync_payload.get("synced_at") or now),
+        request_id=str(latest_state.get("request_id") or ""),
     )
     payload.update(
         {
