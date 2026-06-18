@@ -457,7 +457,8 @@ def _resolve_targets(
         return [get_adapter(requested_harness).harness]
     if not install_all:
         action = "install" if command == "install" else "uninstall"
-        raise ValueError(f"Guard {action} requires a harness or --all.")
+        suffix = " or --self" if command == "uninstall" else ""
+        raise ValueError(f"Guard {action} requires a harness or --all{suffix}.")
     detected = {
         detection.harness
         for detection in detect_all(context)

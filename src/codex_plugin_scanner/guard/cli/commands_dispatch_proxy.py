@@ -166,6 +166,21 @@ def _run_guard_uninstall_command(
 ) -> int:
     context = _require_guard_context(context)
     store = _require_guard_store(store)
+    if bool(getattr(args, "self_uninstall", False)):
+        if getattr(args, "harness", None) is not None or bool(getattr(args, "all", False)):
+            print("Guard self uninstall does not accept a harness or --all.", file=sys.stderr)
+            return 2
+        payload, exit_code = run_guard_self_uninstall(
+            dry_run=bool(getattr(args, "dry_run", False)),
+            context=context,
+            store=store,
+            now=_now(),
+        )
+        _emit("uninstall", payload, getattr(args, "json", False))
+        return exit_code
+    if bool(getattr(args, "dry_run", False)):
+        print("Guard uninstall --dry-run requires --self.", file=sys.stderr)
+        return 2
     try:
         payload = apply_managed_install(
             "uninstall",

@@ -24,6 +24,7 @@ from codex_plugin_scanner.guard.shims import (
     _upsert_managed_profile_block,
     ensure_guard_shim_path_in_shell_profile,
     ensure_package_shim_path_in_shell_profile,
+    remove_guard_profile_blocks,
 )
 
 
@@ -215,3 +216,54 @@ class TestEnsureSkipsOnWindows:
         assert result["changed"] is False
         assert result["manual_path_required"] is True
         assert not (ctx.home_dir / ".zshrc").exists()
+
+
+class TestRemoveGuardProfileBlocks:
+    def test_removes_guard_markers_across_common_shell_profiles(self, tmp_path: Path) -> None:
+        home = tmp_path / "home"
+        home.mkdir()
+        fish_config = home / ".config" / "fish" / "config.fish"
+        bash_profile = home / ".bashrc"
+        zsh_profile = home / ".zshrc"
+        bash_profile.write_text(
+            "\n".join(
+                [
+                    "export KEEP=1",
+                    "# HOL Guard harness launchers",
+                    'export PATH="/tmp/guard-home/bin:$PATH"',
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        zsh_profile.write_text(
+            "\n".join(
+                [
+                    "# HOL Guard package manager shims",
+                    'export PATH="/tmp/guard-home/package-shims/bin:$PATH"',
+                    "alias ll='ls -l'",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        fish_config.parent.mkdir(parents=True, exist_ok=True)
+        fish_config.write_text(
+            "# HOL Guard harness launchers\nfish_add_path --prepend /tmp/guard-home/bin\n",
+            encoding="utf-8",
+        )
+
+        result = remove_guard_profile_blocks(_context(home, home / ".hol-guard"))
+
+        assert result["changed"] is True
+        assert sorted(Path(path).name for path in result["changed_paths"]) == [
+            ".bashrc",
+            ".zshrc",
+            "config.fish",
+        ]
+        assert Path(fish_config) == Path(result["removed_paths"][0])
+        assert "# HOL Guard" not in bash_profile.read_text(encoding="utf-8")
+        assert bash_profile.read_text(encoding="utf-8") == "export KEEP=1\n"
+        assert "# HOL Guard" not in zsh_profile.read_text(encoding="utf-8")
+        assert "alias ll='ls -l'" in zsh_profile.read_text(encoding="utf-8")
+        assert not fish_config.exists()

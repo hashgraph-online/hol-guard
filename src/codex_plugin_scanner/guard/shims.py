@@ -808,6 +808,19 @@ def ensure_package_shim_path_in_shell_profile(context: HarnessContext) -> dict[s
     }
 
 
+def remove_guard_profile_blocks(context: HarnessContext) -> dict[str, object]:
+    """Remove Guard-managed PATH blocks from common interactive shell profiles."""
+
+    from .shell_profile_cleanup import remove_guard_profile_blocks as remove_profile_blocks
+
+    return remove_profile_blocks(
+        context,
+        strip_managed_marker_blocks=_strip_managed_marker_blocks,
+        guard_profile_marker=_GUARD_PROFILE_MARKER,
+        package_profile_marker=_PACKAGE_PROFILE_MARKER,
+    )
+
+
 def _upsert_managed_profile_block(
     profile_path: Path,
     export_line: str,
@@ -1285,6 +1298,7 @@ __all__ = [
     "package_shim_status",
     "package_shim_supported_managers",
     "probe_package_shim_intercepts",
+    "remove_guard_profile_blocks",
     "remove_guard_shim",
     "uninstall_package_shims",
 ]
