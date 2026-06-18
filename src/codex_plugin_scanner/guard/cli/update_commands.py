@@ -18,6 +18,7 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
 
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from ..adapters.base import HarnessContext
@@ -481,11 +482,54 @@ def _latest_version_from_pypi() -> str | None:
         return None
     if not isinstance(payload, dict):
         return None
-    info = payload.get("info")
-    if not isinstance(info, dict):
+    return _latest_compatible_release_version(payload, python_version=_runtime_python_version())
+
+
+def _runtime_python_version() -> str:
+    return f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+
+
+def _latest_compatible_release_version(payload: dict[str, object], *, python_version: str) -> str | None:
+    releases = payload.get("releases")
+    if not isinstance(releases, dict):
+        info = payload.get("info")
+        if not isinstance(info, dict):
+            return None
+        version = info.get("version")
+        return version if isinstance(version, str) and version.strip() else None
+    candidates: list[tuple[Version, str]] = []
+    for version_text, files in releases.items():
+        if not isinstance(version_text, str) or not version_text.strip():
+            continue
+        try:
+            parsed_version = Version(version_text)
+        except InvalidVersion:
+            continue
+        if _release_has_compatible_file(files, python_version=python_version):
+            candidates.append((parsed_version, version_text.strip()))
+    if not candidates:
         return None
-    version = info.get("version")
-    return version if isinstance(version, str) and version.strip() else None
+    stable_candidates = [candidate for candidate in candidates if not candidate[0].is_prerelease]
+    return max(stable_candidates or candidates, key=lambda candidate: candidate[0])[1]
+
+
+def _release_has_compatible_file(files: object, *, python_version: str) -> bool:
+    if not isinstance(files, list):
+        return False
+    for file_payload in files:
+        if not isinstance(file_payload, dict):
+            continue
+        if file_payload.get("yanked") is True:
+            continue
+        requires_python = file_payload.get("requires_python")
+        if not isinstance(requires_python, str) or not requires_python.strip():
+            return True
+        try:
+            if SpecifierSet(requires_python).contains(python_version, prereleases=True):
+                return True
+        except InvalidSpecifier:
+            continue
+    return False
 
 
 def _is_newer_version(latest_version: str, current_version: str) -> bool | None:

@@ -133,6 +133,21 @@ def test_update_binary_diagnostics_treats_pipx_shim_as_healthy(monkeypatch: pyte
     assert payload["binary_diagnostics"]["expected_script_dir"] is None
 
 
+def test_update_pypi_latest_version_ignores_python_incompatible_releases() -> None:
+    payload = {
+        "info": {"version": "2.0.807"},
+        "releases": {
+            "2.0.788": [{"requires_python": ">=3.10", "yanked": False}],
+            "2.0.789": [{"requires_python": ">=3.10", "yanked": False}],
+            "2.0.806": [{"requires_python": ">=3.10,<3.14", "yanked": False}],
+            "2.0.807": [{"requires_python": ">=3.10,<3.14", "yanked": False}],
+        },
+    }
+
+    assert update_commands._latest_compatible_release_version(payload, python_version="3.14.0") == "2.0.789"
+    assert update_commands._latest_compatible_release_version(payload, python_version="3.13.7") == "2.0.807"
+
+
 def test_update_skips_existing_local_source_install(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     source_dir = tmp_path / "src-install"
     source_dir.mkdir()
