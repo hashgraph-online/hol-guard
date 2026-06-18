@@ -631,6 +631,53 @@ def test_daemon_update_recovery_reinstall_rejected_for_editable(
     schedule_mock.assert_not_called()
 
 
+def test_daemon_update_recovery_reinstall_rejected_when_python_incompatible(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
+        lambda: {
+            "current_version": "2.0.789",
+            "latest_version": "2.0.807",
+            "installer": "pipx",
+            "version_check": {
+                "source": "pypi",
+                "status": "python_incompatible",
+                "current_version": "2.0.789",
+                "latest_version": "2.0.807",
+                "update_available": True,
+                "required_python": ">=3.10,<3.14",
+                "runtime_python": "3.14.0",
+            },
+            "auto_updatable": False,
+            "update_available": False,
+            "blocked_reason": "HOL Guard 2.0.807 requires Python >=3.10,<3.14.",
+            "python_update_required": True,
+            "recovery_reinstall_available": True,
+            "recovery_reinstall_command": "pipx install --force hol-guard",
+        },
+    )
+    schedule_mock = MagicMock()
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.server.schedule_guard_dashboard_update",
+        schedule_mock,
+    )
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _post_json_body(daemon, "/v1/update", {"force_pypi_reinstall": True})
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "update_not_supported"
+    assert "requires Python" in str(payload["message"])
+    schedule_mock.assert_not_called()
+
+
 def test_runner_command_appends_force_pypi_reinstall_flag(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()

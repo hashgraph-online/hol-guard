@@ -1576,6 +1576,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/update":
             force_pypi_reinstall = bool(payload.get("force_pypi_reinstall"))
             status_payload = build_guard_update_status_payload()
+            if status_payload.get("python_update_required") is True:
+                self._write_json(
+                    {
+                        "error": "update_not_supported",
+                        "message": status_payload.get("blocked_reason")
+                        or "Update requires a different Python runtime.",
+                    },
+                    status=400,
+                )
+                return
             recovery_reinstall_available = bool(status_payload.get("recovery_reinstall_available"))
             if force_pypi_reinstall and not recovery_reinstall_available:
                 self._write_json(
