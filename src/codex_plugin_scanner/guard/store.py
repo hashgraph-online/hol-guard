@@ -183,6 +183,7 @@ _OAUTH_LOCAL_CREDENTIALS_STATE_KEY = "oauth_local_credentials"
 _OAUTH_LOCAL_CREDENTIALS_HASH_KEY = "credentials_sha256"
 _OAUTH_LOCAL_CREDENTIALS_REF_KEY = "credentials_ref"
 _OAUTH_PRIMARY_SECRET_TIMEOUT_SECONDS = 2.0
+_APPROVAL_GATE_POLICY_SOURCE = "approval-gate"
 _GUARD_CLOUD_RESET_STATE_KEYS = (
     "sync_summary",
     "receipt_sync_cursor",
@@ -198,6 +199,12 @@ _GUARD_CLOUD_RESET_STATE_KEYS = (
     "supply_chain_bundle_daemon",
     "headless_app_sync_summary",
 )
+
+
+def _is_approval_gate_one_shot_policy(row: sqlite3.Row) -> bool:
+    return str(row["source"]) == _APPROVAL_GATE_POLICY_SOURCE and row["expires_at"] is not None
+
+
 _DEVICE_ROW_KEY = "local-device"
 _MAX_RESOLVED_SCOPE_IDS = 200
 _SQLITE_ID_BATCH_SIZE = 500
@@ -3081,6 +3088,11 @@ class GuardStore:
                         integrity_result=integrity_result,
                         state=state,
                     )
+                    if _is_approval_gate_one_shot_policy(candidate):
+                        connection.execute(
+                            "delete from policy_decisions where decision_id = ?",
+                            (int(candidate["decision_id"]),),
+                        )
                     break
                 events.append(
                     (
@@ -3948,10 +3960,12 @@ class GuardStore:
                    payload_hash, payload_mac, integrity_key_id, signed_at
             from policy_decisions
         """
-        params: tuple[object, ...] = ()
+        params: tuple[object, ...] = (_APPROVAL_GATE_POLICY_SOURCE,)
+        conditions = ["not (source = ? and expires_at is not null)"]
         if harness is not None:
-            query += " where harness = ?"
-            params = (harness,)
+            conditions.append("harness = ?")
+            params = (_APPROVAL_GATE_POLICY_SOURCE, harness)
+        query += " where " + " and ".join(conditions)
         query += " order by updated_at desc"
         with self._connect() as connection:
             state = self._refresh_policy_integrity_state(connection, now=_now(), create_key=True)

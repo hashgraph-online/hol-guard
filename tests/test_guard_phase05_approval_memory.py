@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.approvals import apply_approval_resolution, queu
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.composition_rules import compose_action_from_signals
 from codex_plugin_scanner.guard.runtime.detectors import (
@@ -25,6 +26,21 @@ from codex_plugin_scanner.guard.store_approvals import approval_queue_identity_f
 
 def _store(tmp_path: Path) -> GuardStore:
     return GuardStore(tmp_path / "guard-home")
+
+
+def _trust_local_policy_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _valid_policy_row(
+        self: GuardStore,
+        row,
+        *,
+        mode: str,
+        key: bytes | None,
+        key_id: str | None,
+        trusted_generation: int | None = None,
+    ) -> PolicyIntegrityVerificationResult:
+        return PolicyIntegrityVerificationResult(status="valid")
+
+    monkeypatch.setattr(GuardStore, "_policy_integrity_result_for_row", _valid_policy_row)
 
 
 def _request(
@@ -470,7 +486,11 @@ NODE"""
     assert node_url_literal == ()
 
 
-def test_gr101_gr102_resolved_allow_and_block_persist_exact_action_policy(tmp_path: Path) -> None:
+def test_gr101_gr102_resolved_allow_and_block_persist_exact_action_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _trust_local_policy_rows(monkeypatch)
     store = _store(tmp_path)
     allow_request = _request("req-allow", artifact_hash_value="hash-allow")
     block_request = _request(
@@ -489,6 +509,7 @@ def test_gr101_gr102_resolved_allow_and_block_persist_exact_action_policy(tmp_pa
         workspace=allow_request.workspace,
         reason="approved once",
         now="2026-05-13T00:02:00+00:00",
+        persist_policy=True,
     )
     apply_approval_resolution(
         store=store,
@@ -498,6 +519,7 @@ def test_gr101_gr102_resolved_allow_and_block_persist_exact_action_policy(tmp_pa
         workspace=block_request.workspace,
         reason="keep blocked",
         now="2026-05-13T00:03:00+00:00",
+        persist_policy=True,
     )
 
     assert store.resolve_policy("codex", allow_request.artifact_id, "hash-allow") == "allow"
@@ -691,7 +713,11 @@ def test_gr117_broad_runtime_scope_applies_only_same_exact_action(tmp_path: Path
     assert store.resolve_policy("codex", "codex:project:prompt-file:abcdef", "hash-new") is None
 
 
-def test_artifact_runtime_scope_reuses_approval_for_same_exact_action_retry(tmp_path: Path) -> None:
+def test_artifact_runtime_scope_reuses_approval_for_same_exact_action_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _trust_local_policy_rows(monkeypatch)
     store = _store(tmp_path)
     shell_request = _request(
         "req-shell",
@@ -722,9 +748,34 @@ def test_artifact_runtime_scope_reuses_approval_for_same_exact_action_retry(tmp_
     assert result["resolved"] is True
     assert store.get_approval_request("req-shell")["status"] == "resolved"
     assert store.get_approval_request("req-shell-other")["status"] == "pending"
-    assert store.resolve_policy("codex", shell_request.artifact_id, "hash-retry") == "allow"
-    assert store.resolve_policy("codex", shell_request.artifact_id, None) is None
-    assert store.resolve_policy("codex", other_shell_request.artifact_id, "hash-retry") is None
+    assert (
+        store.resolve_policy(
+            "codex",
+            shell_request.artifact_id,
+            "hash-retry",
+            now="2026-05-13T00:03:00+00:00",
+        )
+        == "allow"
+    )
+    assert store.resolve_policy("codex", shell_request.artifact_id, None, now="2026-05-13T00:04:00+00:00") is None
+    assert (
+        store.resolve_policy(
+            "codex",
+            shell_request.artifact_id,
+            "hash-retry",
+            now="2026-05-13T00:04:00+00:00",
+        )
+        is None
+    )
+    assert (
+        store.resolve_policy(
+            "codex",
+            other_shell_request.artifact_id,
+            "hash-retry",
+            now="2026-05-13T00:04:00+00:00",
+        )
+        is None
+    )
 
 
 def test_empty_degraded_reasons_do_not_honor_warn_only_policy() -> None:
@@ -760,6 +811,7 @@ def test_backend_degraded_warn_mode_ignores_local_approval(tmp_path: Path) -> No
         )
         is None
     )
+
 
 def test_path_degraded_warn_mode_ignores_local_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _store(tmp_path)

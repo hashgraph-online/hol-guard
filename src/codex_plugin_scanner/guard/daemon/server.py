@@ -3360,9 +3360,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _approval_persist_policy(self, payload: dict[str, object]) -> bool | None:
         if "persist_policy" in payload:
-            return self._optional_bool(payload.get("persist_policy"), default=False)
+            return True if self._optional_bool(payload.get("persist_policy"), default=False) else None
         if "remember" in payload:
-            return self._optional_bool(payload.get("remember"), default=False)
+            return True if self._optional_bool(payload.get("remember"), default=False) else None
         return None
 
     def _write_approval_gate_error(self, error: ApprovalGateError, *, resolved: bool | None = None) -> None:
