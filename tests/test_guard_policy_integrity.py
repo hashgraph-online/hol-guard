@@ -14,7 +14,7 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.cli import _resolve_legacy_args, main
 from codex_plugin_scanner.guard import local_trust_contract as local_trust_contract_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.local_trust_contract import (
@@ -1288,6 +1288,15 @@ def test_trust_cli_status_reports_no_passive_prompts(tmp_path: Path, capsys) -> 
     assert payload["durable_local_rules"] in {"enforced", "limited"}
     assert "key_id" not in payload
     assert "last_proof" not in payload
+
+
+def test_trust_cli_bare_combined_command_routes_to_guard() -> None:
+    assert _resolve_legacy_args(["trust", "status", "--json"], program_mode="combined") == [
+        "guard",
+        "trust",
+        "status",
+        "--json",
+    ]
 
 
 def test_trust_cli_no_ui_probe_requires_no_ui_flag(tmp_path: Path, capsys) -> None:
