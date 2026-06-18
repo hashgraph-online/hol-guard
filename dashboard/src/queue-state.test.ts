@@ -191,8 +191,8 @@ assert(
 
 const requestDateLabel = formatQueueRequestDate(midItem);
 assert(
-  requestDateLabel === "02/01/26, 5:00 AM EST",
-  "T-QS-17D: formatQueueRequestDate exposes an abbreviated ET date with time"
+  requestDateLabel === "02/01/26, 10:00 AM",
+  "T-QS-17D: formatQueueRequestDate exposes an abbreviated local date with time"
 );
 
 const recentlySeenOldItem: GuardApprovalRequest = {
