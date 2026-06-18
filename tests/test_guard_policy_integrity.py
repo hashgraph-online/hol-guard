@@ -106,6 +106,10 @@ def _write_malformed_trust_result(operation, result_path: str) -> None:
     Path(result_path).write_bytes(pickle.dumps({"ok": True}))
 
 
+def _write_list_trust_result(operation, result_path: str) -> None:
+    Path(result_path).write_bytes(pickle.dumps([True, {"mode": "protected"}]))
+
+
 def _skip_trust_result(operation, result_path: str) -> None:
     operation()
 
@@ -313,6 +317,38 @@ def test_trust_backend_check_rejects_malformed_result_payload(
         "error": "TrustBackendCorruptResultError",
         "reason": POLICY_INTEGRITY_REASON_BACKEND_CORRUPT,
     }
+
+
+def test_trust_backend_check_rejects_list_result_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(local_trust_contract_module, "_trust_backend_check_worker", _write_list_trust_result)
+
+    result = run_trust_backend_check(
+        lambda: {"mode": "protected"},
+        timeout_seconds=1.0,
+        timeout_result={"mode": "degraded"},
+        on_error=lambda error: {
+            "mode": "degraded",
+            "error": error.__class__.__name__,
+            "reason": degraded_reason_for_backend_error(error),
+        },
+    )
+
+    assert result == {
+        "mode": "degraded",
+        "error": "TrustBackendCorruptResultError",
+        "reason": POLICY_INTEGRITY_REASON_BACKEND_CORRUPT,
+    }
+
+
+def test_trust_backend_result_loader_preserves_permission_denied() -> None:
+    class PermissionDeniedResultPath:
+        def open(self, mode: str = "rb"):
+            raise PermissionError("denied")
+
+    with pytest.raises(PermissionError):
+        local_trust_contract_module._load_trust_backend_result(cast(Path, PermissionDeniedResultPath()))
 
 
 def test_trust_backend_check_reports_missing_result_with_exit_code(

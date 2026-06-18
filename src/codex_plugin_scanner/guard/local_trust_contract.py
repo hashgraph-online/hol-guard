@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import multiprocessing
 import os
 import pickle
@@ -201,9 +200,11 @@ def _load_trust_backend_result(result_file: Path) -> tuple[bool, object]:
     try:
         with result_file.open("rb") as handle:
             payload = pickle.load(handle)
+    except PermissionError:
+        raise
     except Exception as error:
         raise TrustBackendCorruptResultError("trust_backend_result_corrupt") from error
-    if not isinstance(payload, (tuple, list)) or len(payload) != 2:
+    if not isinstance(payload, tuple) or len(payload) != 2:
         raise TrustBackendCorruptResultError("trust_backend_result_corrupt")
     ok, value = payload
     if not isinstance(ok, bool):
@@ -283,7 +284,7 @@ def degraded_reason_for_backend_error(error: BaseException) -> str:
         return POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE
     if isinstance(error, PermissionError):
         return POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED
-    if isinstance(error, (TrustBackendCorruptResultError, ValueError, json.JSONDecodeError)):
+    if isinstance(error, ValueError):
         return POLICY_INTEGRITY_REASON_BACKEND_CORRUPT
     return POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE
 
