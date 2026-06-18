@@ -43,6 +43,16 @@ def _empty_counts() -> dict[str, int]:
     return {severity.value: 0 for severity in Severity}
 
 
+def cisco_runtime_unavailable_message() -> str | None:
+    if sys.version_info < (3, 14):
+        return None
+    return (
+        "Cisco scanner evidence is unavailable on Python 3.14+ because the patched LiteLLM releases required "
+        "by Cisco scanning currently support Python <3.14. HOL Guard will continue without Cisco evidence; "
+        "use Python 3.10 through 3.13 for Cisco scanner evidence."
+    )
+
+
 def _normalize_string_items(value: object) -> tuple[str, ...]:
     if not isinstance(value, list | tuple):
         return ()
@@ -222,6 +232,12 @@ def run_cisco_skill_scan(
         return _build_unavailable_summary(
             "Cisco skill scanning disabled by configuration.",
             status=CiscoIntegrationStatus.SKIPPED,
+        )
+    runtime_message = cisco_runtime_unavailable_message()
+    if runtime_message is not None:
+        return _build_unavailable_summary(
+            runtime_message,
+            status=CiscoIntegrationStatus.UNAVAILABLE,
         )
 
     try:

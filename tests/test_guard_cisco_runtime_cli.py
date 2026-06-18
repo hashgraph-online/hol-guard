@@ -166,6 +166,23 @@ def test_default_detector_registry_includes_cisco_sources() -> None:
     assert "cisco.mcp" in detector_ids
 
 
+def test_cisco_scanners_warn_and_skip_on_python_314(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cisco_skill_scanner.sys, "version_info", (3, 14, 5))
+    (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+
+    skill_summary = cisco_skill_scanner.run_cisco_skill_scan(tmp_path, mode="on")
+    mcp_summary = cisco_mcp_scanner.run_cisco_mcp_scan(tmp_path, mode="on")
+
+    assert skill_summary.status is CiscoIntegrationStatus.UNAVAILABLE
+    assert mcp_summary.status is CiscoIntegrationStatus.UNAVAILABLE
+    assert "Python 3.14+" in skill_summary.message
+    assert "Python 3.10 through 3.13" in skill_summary.message
+    assert "Python 3.14+" in mcp_summary.message
+
+
 def test_guard_scan_skills_deep_uses_cisco_skill_scanner(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
