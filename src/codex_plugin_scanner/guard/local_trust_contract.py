@@ -140,6 +140,10 @@ class TrustBackendProcessFailedError(RuntimeError):
     """Raised when passive trust backend worker exits without a readable result."""
 
 
+class TrustBackendCorruptResultError(ValueError):
+    """Raised when passive trust backend worker writes malformed result data."""
+
+
 def _trust_backend_check_worker(
     operation: Callable[[], object],
     result_path: str,
@@ -193,6 +197,22 @@ def _trust_backend_process_failed_error(process: _ProcessHandle) -> TrustBackend
     return TrustBackendProcessFailedError("trust_backend_process_failed")
 
 
+def _load_trust_backend_result(result_file: Path) -> tuple[bool, object]:
+    try:
+        with result_file.open("rb") as handle:
+            payload = pickle.load(handle)
+    except Exception as error:
+        raise TrustBackendCorruptResultError("trust_backend_result_corrupt") from error
+    if not isinstance(payload, (tuple, list)) or len(payload) != 2:
+        raise TrustBackendCorruptResultError("trust_backend_result_corrupt")
+    ok, value = payload
+    if not isinstance(ok, bool):
+        raise TrustBackendCorruptResultError("trust_backend_result_corrupt")
+    if not ok and not isinstance(value, BaseException):
+        raise TrustBackendCorruptResultError("trust_backend_result_corrupt")
+    return ok, value
+
+
 def select_trust_backend(
     backends: tuple[TrustBackend, ...],
     *,
@@ -242,9 +262,8 @@ def run_trust_backend_check(
                 return timeout_result
             return on_error(_trust_backend_process_failed_error(process))
         try:
-            with result_file.open("rb") as handle:
-                ok, value = pickle.load(handle)
-        except (EOFError, OSError, pickle.UnpicklingError) as error:
+            ok, value = _load_trust_backend_result(result_file)
+        except TrustBackendCorruptResultError as error:
             if on_error is None:
                 return timeout_result
             return on_error(error)
@@ -264,7 +283,7 @@ def degraded_reason_for_backend_error(error: BaseException) -> str:
         return POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE
     if isinstance(error, PermissionError):
         return POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED
-    if isinstance(error, (ValueError, json.JSONDecodeError)):
+    if isinstance(error, (TrustBackendCorruptResultError, ValueError, json.JSONDecodeError)):
         return POLICY_INTEGRITY_REASON_BACKEND_CORRUPT
     return POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE
 
