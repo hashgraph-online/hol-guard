@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from .commands_support_runtime_resolution import _runtime_capabilities_summary
 
 
+from ..store import _runtime_scoped_exact_match_key
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -414,11 +415,17 @@ def _persist_claude_native_permission_policy(
     store: GuardStore,
     artifact_id: str,
     artifact_hash: str,
+    artifact_type: str | None = None,
     action: str,
     reason: str,
     now: str,
     source: str = "claude-native-approval",
 ) -> bool:
+    stored_artifact_hash = (
+        _runtime_scoped_exact_match_key(artifact_id)
+        if artifact_type == "tool_action_request"
+        else None
+    ) or artifact_hash
     try:
         store.upsert_policy(
             PolicyDecision(
@@ -426,7 +433,7 @@ def _persist_claude_native_permission_policy(
                 scope="artifact",
                 action="allow" if action == "allow" else "block",
                 artifact_id=artifact_id,
-                artifact_hash=artifact_hash,
+                artifact_hash=stored_artifact_hash,
                 reason=reason,
                 source=source,
             ),
@@ -436,7 +443,7 @@ def _persist_claude_native_permission_policy(
             "claude/native_permission_saved",
             {
                 "artifact_id": artifact_id,
-                "artifact_hash": artifact_hash,
+                "artifact_hash": stored_artifact_hash,
                 "action": action,
                 "reason": reason,
             },
@@ -464,6 +471,7 @@ def _persist_claude_native_permission_for_runtime_artifact(
         store=store,
         artifact_id=artifact.artifact_id,
         artifact_hash=artifact_hash,
+        artifact_type=artifact.artifact_type,
         action=action,
         reason=reason,
         now=now,
