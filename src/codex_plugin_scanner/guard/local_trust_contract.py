@@ -12,6 +12,9 @@ LocalTrustMode = Literal[
     "setup_required",
     "unsupported",
 ]
+RuntimeProtectionStatus = Literal["protected", "degraded", "unknown"]
+RememberedRulesStatus = Literal["enforced", "disabled_degraded", "unknown"]
+CloudPoliciesStatus = Literal["available", "setup_unavailable", "unknown"]
 
 PolicyIntegrityMode = Literal["protected", "degraded"]
 PolicyIntegrityEnforcement = Literal["enforce", "warn"]
@@ -68,9 +71,9 @@ LOCAL_TRUST_DEGRADED_REASON_LABELS: dict[str, str] = {
 class TrustStatus:
     """User-safe trust summary for runtime, local rules, and Cloud policy authority."""
 
-    runtime_protection: LocalTrustMode
-    remembered_rules: LocalTrustMode
-    cloud_policies: LocalTrustMode
+    runtime_protection: RuntimeProtectionStatus
+    remembered_rules: RememberedRulesStatus
+    cloud_policies: CloudPoliciesStatus
     backend: str
     degraded_reasons: tuple[str, ...] = field(default_factory=tuple)
     setup_available: bool = False
@@ -84,22 +87,31 @@ class TrustStatus:
             tuple(reason for reason in reasons if isinstance(reason, str)) if isinstance(reasons, list) else ()
         )
         if mode == POLICY_INTEGRITY_MODE_PROTECTED:
-            remembered_rules: LocalTrustMode = "protected"
+            runtime_protection: RuntimeProtectionStatus = "protected"
+            remembered_rules: RememberedRulesStatus = "enforced"
         elif mode == POLICY_INTEGRITY_MODE_DEGRADED:
-            remembered_rules = "degraded_safe"
+            runtime_protection = "degraded"
+            remembered_rules = "disabled_degraded"
         else:
-            remembered_rules = "unsupported"
+            runtime_protection = "unknown"
+            remembered_rules = "unknown"
         setup_available = bool(state.get("setup_available"))
         if not setup_available:
             setup_available = any(reason in LOCAL_TRUST_DEGRADED_REASON_LABELS for reason in clean_reasons)
-        runtime_protection = state.get("runtime_protection")
-        cloud_policies = state.get("cloud_policies")
-        if mode == POLICY_INTEGRITY_MODE_PROTECTED and runtime_protection not in LOCAL_TRUST_MODES:
-            runtime_protection = "protected"
+        runtime_override = state.get("runtime_protection")
+        if runtime_override in ("protected", "degraded", "unknown"):
+            runtime_protection = runtime_override
+        cloud_override = state.get("cloud_policies")
+        if cloud_override in ("available", "setup_unavailable", "unknown"):
+            cloud_policies: CloudPoliciesStatus = cloud_override
+        elif setup_available:
+            cloud_policies = "setup_unavailable"
+        else:
+            cloud_policies = "available"
         return cls(
-            runtime_protection=runtime_protection if runtime_protection in LOCAL_TRUST_MODES else "unsupported",
+            runtime_protection=runtime_protection,
             remembered_rules=remembered_rules,
-            cloud_policies=cloud_policies if cloud_policies in LOCAL_TRUST_MODES else "unsupported",
+            cloud_policies=cloud_policies,
             backend=str(state.get("backend") or "unknown"),
             degraded_reasons=clean_reasons,
             setup_available=setup_available,

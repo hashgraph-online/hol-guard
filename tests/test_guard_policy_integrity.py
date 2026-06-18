@@ -73,9 +73,9 @@ def test_trust_status_serializes_policy_integrity_authority_without_paths() -> N
         }
     ).to_dict()
 
-    assert status["runtime_protection"] == "unsupported"
-    assert status["remembered_rules"] == "degraded_safe"
-    assert status["cloud_policies"] == "unsupported"
+    assert status["runtime_protection"] == "degraded"
+    assert status["remembered_rules"] == "disabled_degraded"
+    assert status["cloud_policies"] == "setup_unavailable"
     assert status["backend"] == "unavailable"
     assert status["degraded_reasons"] == ["system_keyring_unavailable", "guard_home_symlink"]
     assert status["setup_available"] is True
@@ -92,7 +92,9 @@ def test_trust_status_hides_policy_integrity_proof_ids_and_handles_unknown_mode(
         }
     ).to_dict()
 
-    assert status["remembered_rules"] == "unsupported"
+    assert status["runtime_protection"] == "unknown"
+    assert status["remembered_rules"] == "unknown"
+    assert status["cloud_policies"] == "available"
     assert status["setup_available"] is False
     assert status["last_proof"] is None
 
@@ -115,9 +117,9 @@ def test_policy_integrity_status_includes_trust_status(tmp_path: Path) -> None:
     trust_status = status["trust_status"]
 
     assert isinstance(trust_status, dict)
-    assert trust_status["runtime_protection"] == "unsupported"
-    assert trust_status["remembered_rules"] == "degraded_safe"
-    assert trust_status["cloud_policies"] == "unsupported"
+    assert trust_status["runtime_protection"] == "degraded"
+    assert trust_status["remembered_rules"] == "disabled_degraded"
+    assert trust_status["cloud_policies"] == "setup_unavailable"
     assert trust_status["degraded_reasons"] == status["degraded_reasons"]
 
     verify = store.verify_policy_integrity()
