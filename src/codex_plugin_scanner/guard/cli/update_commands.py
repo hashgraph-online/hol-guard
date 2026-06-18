@@ -40,7 +40,7 @@ _ALREADY_CURRENT_HINTS = (
 )
 _PYPI_JSON_URL = "https://pypi.org/pypi/hol-guard/json"
 _PYPI_TIMEOUT_SECONDS = 3.0
-_LAST_PYPI_PAYLOAD: dict[str, object] | None = None
+_last_pypi_payload: dict[str, object] | None = None
 
 
 def _read_direct_url_dir_info(direct_url: dict[str, object] | None) -> dict[str, object]:
@@ -491,7 +491,7 @@ def _version_check_payload(current_version: str) -> dict[str, object]:
 
 
 def _latest_version_from_pypi() -> str | None:
-    global _LAST_PYPI_PAYLOAD
+    global _last_pypi_payload
     request = urllib.request.Request(_PYPI_JSON_URL, headers={"Accept": "application/json"})
     try:
         with urllib.request.urlopen(request, timeout=_PYPI_TIMEOUT_SECONDS) as response:
@@ -507,7 +507,7 @@ def _latest_version_from_pypi() -> str | None:
         return None
     if not isinstance(payload, dict):
         return None
-    _LAST_PYPI_PAYLOAD = payload
+    _last_pypi_payload = payload
     info = payload.get("info")
     if not isinstance(info, dict):
         return None
@@ -520,7 +520,7 @@ def _runtime_python_version() -> str:
 
 
 def _latest_version_python_requirement(latest_version: str) -> str | None:
-    payload = _LAST_PYPI_PAYLOAD
+    payload = _last_pypi_payload
     if not isinstance(payload, dict):
         return None
     info = payload.get("info")
