@@ -1305,6 +1305,52 @@ def test_trust_cli_no_ui_probe_requires_no_ui_flag(tmp_path: Path, capsys) -> No
     assert no_ui_payload["probe"] == "passive_no_ui"
     assert no_ui_payload["ok"] is True
     assert no_ui_payload["passive_prompt_allowed"] is False
+    assert no_ui_payload["trust_health"] in {"protected", "degraded_safe"}
+
+
+def test_trust_cli_rejects_unavailable_backend_status(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "home"
+    rc = main(
+        [
+            "guard",
+            "trust",
+            "status",
+            "--backend",
+            "macos-native",
+            "--home",
+            str(home_dir),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 2
+    assert payload["backend_requested"] == "macos-native"
+    assert "not available for passive status" in payload["error"]
+    assert payload["passive_prompt_allowed"] is False
+
+
+def test_trust_cli_degraded_safe_backend_is_explicit(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "home"
+    rc = main(
+        [
+            "guard",
+            "trust",
+            "status",
+            "--backend",
+            "degraded-safe",
+            "--home",
+            str(home_dir),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["backend_requested"] == "degraded-safe"
+    assert payload["backend"] == "degraded-safe"
+    assert payload["remembered_rules"] == "disabled_degraded"
+    assert payload["durable_local_rules"] == "limited"
 
 
 def test_trust_cli_macos_native_setup_is_explicitly_unavailable(tmp_path: Path, capsys) -> None:
