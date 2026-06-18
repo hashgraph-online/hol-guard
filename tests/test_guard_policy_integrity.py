@@ -1323,6 +1323,71 @@ def test_trust_cli_status_reports_no_passive_prompts(tmp_path: Path, capsys) -> 
     assert "last_proof" not in payload
 
 
+def test_guard_doctor_includes_safe_trust_diagnostics(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+
+    rc = main(
+        [
+            "guard",
+            "doctor",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    trust_payload = payload["trust"]
+
+    assert rc == 0
+    assert trust_payload["command"] == "doctor"
+    assert trust_payload["no_ui_passive"] is True
+    assert trust_payload["passive_prompt_allowed"] is False
+    assert trust_payload["one_time_approvals"] == "available"
+    assert trust_payload["durable_local_rules"] in {"enforced", "limited"}
+    assert trust_payload["checks"]["passive_no_ui"] is True
+    assert trust_payload["checks"]["runtime_protection"] is (
+        trust_payload["runtime_protection"] == "protected"
+    )
+    assert trust_payload["official_install"]["package"] == "hol-guard"
+    assert trust_payload["official_install"]["update_command"] == "hol-guard update"
+    assert "recommended_actions" in trust_payload
+    assert "key_id" not in trust_payload
+    assert "last_proof" not in trust_payload
+
+
+def test_guard_doctor_human_output_includes_trust_diagnostics(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+
+    rc = main(["guard", "doctor", "--home", str(home_dir), "--workspace", str(workspace_dir)])
+    output = capsys.readouterr().out
+
+    assert rc == 0
+    assert "Local trust" in output
+    assert "Passive OS prompts" in output
+    assert "hol-guard update" in output
+    assert "Guard Cloud policies" in output
+    assert "trust test --no-ui --json" in output
+
+
+def test_trust_cli_doctor_human_output_uses_trust_renderer(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "home"
+
+    rc = main(["guard", "trust", "doctor", "--home", str(home_dir)])
+    output = capsys.readouterr().out
+
+    assert rc == 0
+    assert "Local trust" in output
+    assert "Passive OS prompts" in output
+    assert "hol-guard update" in output
+    assert '"runtime_protection"' not in output
+
+
 def test_trust_cli_bare_combined_command_routes_to_guard() -> None:
     assert _resolve_legacy_args(["trust", "status", "--json"], program_mode="combined") == [
         "guard",
@@ -1393,6 +1458,29 @@ def test_trust_cli_degraded_safe_backend_is_explicit(tmp_path: Path, capsys) -> 
     assert payload["backend"] == "degraded-safe"
     assert payload["remembered_rules"] == "disabled_degraded"
     assert payload["durable_local_rules"] == "limited"
+
+
+def test_trust_cli_doctor_degraded_safe_does_not_pass_runtime_check(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "home"
+    rc = main(
+        [
+            "guard",
+            "trust",
+            "doctor",
+            "--backend",
+            "degraded-safe",
+            "--home",
+            str(home_dir),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["runtime_protection"] == "degraded"
+    assert payload["checks"]["runtime_protection"] is False
+    assert payload["checks"]["local_rules_protected"] is False
+    assert payload["summary"].startswith("Runtime protection is degraded.")
 
 
 def test_trust_cli_macos_native_setup_is_explicitly_unavailable(tmp_path: Path, capsys) -> None:
