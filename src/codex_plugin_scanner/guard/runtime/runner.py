@@ -3699,12 +3699,35 @@ def _cloud_package_manager_coverage(
         ),
         generated_at=generated_at,
     )
-    summary = store.get_sync_payload("supply_chain_bundle_summary")
     synced_at = None
     next_refresh_at = None
-    if isinstance(summary, dict):
-        synced_at = _optional_string(summary.get("synced_at") or summary.get("syncedAt"))
-        next_refresh_at = _optional_string(summary.get("next_refresh_at") or summary.get("nextRefreshAt"))
+    synced_timestamp = None
+    for source_name, summary in (
+        ("sync", store.get_sync_payload("sync_summary")),
+        ("runtime", store.get_sync_payload("runtime_session_summary")),
+        ("bundle", store.get_sync_payload("supply_chain_bundle_summary")),
+    ):
+        if not isinstance(summary, dict):
+            continue
+        candidate_synced_at = _optional_string(
+            summary.get("synced_at")
+            or summary.get("syncedAt")
+            or summary.get("runtime_session_synced_at")
+            or summary.get("runtimeSessionSyncedAt")
+            or summary.get("local_guard_online_at"),
+        )
+        candidate_timestamp = _parse_iso_timestamp(candidate_synced_at) if candidate_synced_at is not None else None
+        if candidate_timestamp is None:
+            continue
+        if synced_timestamp is not None and candidate_timestamp <= synced_timestamp:
+            continue
+        synced_at = candidate_synced_at
+        synced_timestamp = candidate_timestamp
+        next_refresh_at = (
+            _optional_string(summary.get("next_refresh_at") or summary.get("nextRefreshAt"))
+            if source_name == "bundle"
+            else None
+        )
     reference_timestamp = _parse_iso_timestamp(generated_at) or datetime.now(timezone.utc)
     stale_status = "unknown"
     if synced_at is not None:

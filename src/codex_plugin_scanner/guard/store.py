@@ -253,6 +253,8 @@ _SECRET_FINGERPRINT_PREFIX = "pbkdf2-sha256$"
 _SECRET_FINGERPRINT_SALT = b"hol-guard-secret-fingerprint:v1"
 _OAUTH_REFRESH_LOCK_TIMEOUT_SECONDS = 30.0
 _OAUTH_REFRESH_LOCK_POLL_SECONDS = 0.05
+_OAUTH_CREDENTIAL_LOCK_TIMEOUT_SECONDS = 30.0
+_OAUTH_CREDENTIAL_LOCK_POLL_SECONDS = 0.05
 _CLOUD_SYNC_LOCK_TIMEOUT_SECONDS = 30.0
 _CLOUD_SYNC_LOCK_POLL_SECONDS = 0.05
 _GUARD_STORE_PRIVATE_DIR_MODE = 0o700
@@ -1152,6 +1154,14 @@ class GuardStore:
                 persisted_value = self._get_secret_from_primary_store(primary, secret_id)
                 if persisted_value == value:
                     return
+                if isinstance(secret_store.fallback, EncryptedFileSecretStore):
+                    fallback_value = self._get_secret_from_store(secret_store.fallback, secret_id)
+                    if fallback_value == value:
+                        _store_logger.warning(
+                            "OAuth secret persisted via encrypted fallback store because Keychain "
+                            "readback was unavailable."
+                        )
+                        return
                 raise RuntimeError("Guard could not persist local Guard Cloud authorization securely.")
         if isinstance(secret_store, UnavailableSecretStore):
             raise RuntimeError(
@@ -1817,6 +1827,29 @@ class GuardStore:
                     if time.monotonic() >= deadline:
                         raise TimeoutError("Timed out waiting for Guard Cloud sync lock.") from None
                     time.sleep(_CLOUD_SYNC_LOCK_POLL_SECONDS)
+            try:
+                yield
+            finally:
+                with suppress(OSError):
+                    _release_advisory_file_lock(handle)
+
+    @contextmanager
+    def hold_oauth_credential_lock(
+        self,
+        *,
+        timeout_seconds: float = _OAUTH_CREDENTIAL_LOCK_TIMEOUT_SECONDS,
+    ) -> Iterator[None]:
+        lock_path = self.guard_home / "oauth-credentials.lock"
+        deadline = time.monotonic() + max(timeout_seconds, 0.0)
+        with lock_path.open("a+b") as handle:
+            while True:
+                try:
+                    _acquire_advisory_file_lock(handle)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("Timed out waiting for Guard OAuth credential lock.") from None
+                    time.sleep(_OAUTH_CREDENTIAL_LOCK_POLL_SECONDS)
             try:
                 yield
             finally:
@@ -5024,6 +5057,44 @@ class GuardStore:
         runtime_id: str | None = None,
         runtime_label: str | None = None,
     ) -> None:
+        with self.hold_oauth_credential_lock():
+            self._set_oauth_local_credentials_unlocked(
+                issuer=issuer,
+                client_id=client_id,
+                refresh_token=refresh_token,
+                dpop_private_key_pem=dpop_private_key_pem,
+                dpop_public_jwk=dpop_public_jwk,
+                dpop_public_jwk_thumbprint=dpop_public_jwk_thumbprint,
+                now=now,
+                grant_id=grant_id,
+                machine_id=machine_id,
+                supply_chain_entitlement_expires_at=supply_chain_entitlement_expires_at,
+                supply_chain_firewall=supply_chain_firewall,
+                supply_chain_plan_id=supply_chain_plan_id,
+                workspace_id=workspace_id,
+                runtime_id=runtime_id,
+                runtime_label=runtime_label,
+            )
+
+    def _set_oauth_local_credentials_unlocked(
+        self,
+        *,
+        issuer: str,
+        client_id: str,
+        refresh_token: str,
+        dpop_private_key_pem: str,
+        dpop_public_jwk: dict[str, str],
+        dpop_public_jwk_thumbprint: str,
+        now: str,
+        grant_id: str | None = None,
+        machine_id: str | None = None,
+        supply_chain_entitlement_expires_at: str | None = None,
+        supply_chain_firewall: bool | None = None,
+        supply_chain_plan_id: str | None = None,
+        workspace_id: str | None = None,
+        runtime_id: str | None = None,
+        runtime_label: str | None = None,
+    ) -> None:
         normalized_issuer = resolve_guard_oauth_client_config(issuer).issuer
         secret_payload = {
             "refresh_token": refresh_token,
@@ -5148,6 +5219,10 @@ class GuardStore:
             allow_primary=self._oauth_primary_reads_are_no_ui_safe(),
         )
         if secret_payload is None and self.repair_oauth_local_credential_storage_from_primary():
+            refreshed_payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+            if isinstance(refreshed_payload, dict):
+                payload = refreshed_payload
+                secret_hash = payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY)
             secret_payload = self._load_oauth_secret_payload(
                 payload,
                 promote=False,
@@ -5241,20 +5316,75 @@ class GuardStore:
         self._write_oauth_keychain_access_state(state)
 
     def repair_oauth_local_credential_storage_from_primary(self) -> bool:
-        """Re-mirror OAuth secrets from the system keychain into encrypted fallback storage."""
+        """Rebuild OAuth credential storage from primary or recoverable fallback state."""
         payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
         if not isinstance(payload, dict):
             return False
-        if not self._should_attempt_oauth_storage_repair():
-            return False
-        self._mark_oauth_storage_repair_attempt()
-        repaired_payload = self._load_oauth_secret_payload(payload, promote=True, allow_primary=True)
-        if repaired_payload is None:
-            return False
-        cache_key = self._oauth_health_process_cache_key(_string_value(payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY)))
-        if cache_key is not None:
-            _OAUTH_HEALTH_RESULT_PROCESS_CACHE.pop(cache_key, None)
-        return True
+        with self.hold_oauth_credential_lock():
+            repaired_payload = None
+            if self._should_attempt_oauth_storage_repair():
+                self._mark_oauth_storage_repair_attempt()
+                repaired_payload = self._load_oauth_secret_payload(payload, promote=True, allow_primary=True)
+            if repaired_payload is None:
+                recoverable_credentials = self.get_recoverable_oauth_local_credentials()
+                if recoverable_credentials is None:
+                    return False
+                recovered_inputs = self._build_recovered_oauth_local_credentials_inputs(
+                    recoverable_credentials,
+                )
+                if recovered_inputs is None:
+                    return False
+                self._set_oauth_local_credentials_unlocked(now=_now(), **recovered_inputs)
+            cache_key = self._oauth_health_process_cache_key(
+                _string_value(payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY)),
+            )
+            if cache_key is not None:
+                _OAUTH_HEALTH_RESULT_PROCESS_CACHE.pop(cache_key, None)
+            return True
+
+    @staticmethod
+    def _build_recovered_oauth_local_credentials_inputs(
+        credentials: dict[str, object],
+    ) -> dict[str, object] | None:
+        issuer = _string_value(credentials.get("issuer"))
+        client_id = _string_value(credentials.get("client_id"))
+        refresh_token = _string_value(credentials.get("refresh_token"))
+        dpop_private_key_pem = _string_value(credentials.get("dpop_private_key_pem"))
+        dpop_public_jwk = credentials.get("dpop_public_jwk")
+        dpop_public_jwk_thumbprint = _string_value(credentials.get("dpop_public_jwk_thumbprint"))
+        if (
+            issuer is None
+            or client_id is None
+            or refresh_token is None
+            or dpop_private_key_pem is None
+            or not isinstance(dpop_public_jwk, dict)
+            or dpop_public_jwk_thumbprint is None
+        ):
+            return None
+        return {
+            "issuer": issuer,
+            "client_id": client_id,
+            "refresh_token": refresh_token,
+            "dpop_private_key_pem": dpop_private_key_pem,
+            "dpop_public_jwk": {
+                str(key): str(value) for key, value in dpop_public_jwk.items()
+            },
+            "dpop_public_jwk_thumbprint": dpop_public_jwk_thumbprint,
+            "grant_id": _string_value(credentials.get("grant_id")),
+            "machine_id": _string_value(credentials.get("machine_id")),
+            "supply_chain_entitlement_expires_at": _string_value(
+                credentials.get("supply_chain_entitlement_expires_at"),
+            ),
+            "supply_chain_firewall": (
+                credentials.get("supply_chain_firewall")
+                if isinstance(credentials.get("supply_chain_firewall"), bool)
+                else None
+            ),
+            "supply_chain_plan_id": _string_value(credentials.get("supply_chain_plan_id")),
+            "workspace_id": _string_value(credentials.get("workspace_id")),
+            "runtime_id": _string_value(credentials.get("runtime_id")),
+            "runtime_label": _string_value(credentials.get("runtime_label")),
+        }
 
     def _load_oauth_secret_payload(
         self,

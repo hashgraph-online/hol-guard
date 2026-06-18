@@ -1616,6 +1616,98 @@ def test_oauth_health_auto_repairs_stale_encrypted_fallback_from_primary(tmp_pat
     }
 
 
+def test_oauth_health_auto_repairs_from_recoverable_fallback_when_primary_secret_is_missing(
+    tmp_path,
+    monkeypatch,
+):
+    fake_keyring = _install_fake_system_keyring(monkeypatch)
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----[REDACTED:Private key block]\\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    oauth_payload = store.get_sync_payload("oauth_local_credentials")
+    assert isinstance(oauth_payload, dict)
+    secret_id = str(oauth_payload["credentials_ref"])
+    fallback_secret = store._oauth_secret_store.fallback.get_secret(secret_id)
+    assert isinstance(fallback_secret, str)
+    fake_keyring.delete_password("hol-guard.oauth", secret_id)
+    oauth_payload["credentials_sha256"] = "pbkdf2-sha256$" + ("0" * 64)
+    store.set_sync_payload("oauth_local_credentials", oauth_payload, "2026-06-01T00:01:00+00:00")
+
+    health = store.get_oauth_local_credential_health()
+    profile = store.get_cloud_sync_profile()
+    repaired_payload = store.get_sync_payload("oauth_local_credentials")
+
+    assert health["state"] == "healthy"
+    assert store.get_oauth_local_credentials() is not None
+    assert profile == {
+        "auth_mode": "oauth",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "workspace_id": "workspace-123",
+    }
+    assert isinstance(repaired_payload, dict)
+    assert repaired_payload["credentials_sha256"] == guard_store_module._secret_fingerprint(fallback_secret)
+
+
+def test_oauth_health_auto_repairs_from_recoverable_fallback_when_macos_keychain_readback_is_unavailable(
+    tmp_path,
+    monkeypatch,
+):
+    fake_keyring = _install_fake_system_keyring(monkeypatch)
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----[REDACTED:Private key block]\\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    oauth_payload = store.get_sync_payload("oauth_local_credentials")
+    assert isinstance(oauth_payload, dict)
+    secret_id = str(oauth_payload["credentials_ref"])
+    fallback_secret = store._oauth_secret_store.fallback.get_secret(secret_id)
+    assert isinstance(fallback_secret, str)
+    fake_keyring.delete_password("hol-guard.oauth", secret_id)
+    oauth_payload["credentials_sha256"] = "pbkdf2-sha256$" + ("0" * 64)
+    store.set_sync_payload("oauth_local_credentials", oauth_payload, "2026-06-01T00:01:00+00:00")
+    monkeypatch.setattr(
+        store._oauth_secret_store.primary,
+        "get_secret_with_timeout",
+        lambda _secret_id, *, timeout_seconds: None,
+    )
+
+    health = store.get_oauth_local_credential_health()
+    profile = store.get_cloud_sync_profile()
+    repaired_payload = store.get_sync_payload("oauth_local_credentials")
+
+    assert health["state"] == "healthy"
+    assert store.get_oauth_local_credentials(allow_primary=False) is not None
+    assert profile == {
+        "auth_mode": "oauth",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "workspace_id": "workspace-123",
+    }
+    assert isinstance(repaired_payload, dict)
+    assert repaired_payload["credentials_sha256"] == guard_store_module._secret_fingerprint(fallback_secret)
+
+
 def test_oauth_health_caches_degraded_state_between_failed_repair_attempts(tmp_path, monkeypatch):
     fake_keyring = _install_fake_system_keyring(monkeypatch)
     monkeypatch.setattr(guard_store_module.sys, "platform", "linux", raising=False)
