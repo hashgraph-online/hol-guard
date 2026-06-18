@@ -200,7 +200,6 @@ def build_mcp_surface_domain(
                     else "The MCP server definition is missing both command and endpoint details."
                 )
             },
-            evidence={"score": tuple(value for value in (normalized_command, normalized_url) if value)},
         ),
         build_adapter_score(
             spec_by_id["metadata.config-shape"],
