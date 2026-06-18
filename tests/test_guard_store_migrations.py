@@ -456,14 +456,19 @@ def test_oauth_secret_store_skips_system_keyring_when_macos_user_keychain_search
     assert isinstance(secret_store, UnavailableSecretStore)
 
 
-def test_oauth_secret_store_uses_only_system_keyring_on_macos_when_available(tmp_path, monkeypatch):
+def test_oauth_secret_store_uses_system_keyring_with_encrypted_fallback_on_macos_when_available(
+    tmp_path,
+    monkeypatch,
+):
     _install_fake_system_keyring(monkeypatch, usable_macos_keychain=True)
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     SystemKeyringSecretStore._clear_macos_keychain_health_cache()
 
     secret_store = _build_oauth_secret_store(tmp_path / "guard-home")
 
-    assert isinstance(secret_store, SystemKeyringSecretStore)
+    assert isinstance(secret_store, FallbackSecretStore)
+    assert isinstance(secret_store.primary, SystemKeyringSecretStore)
+    assert isinstance(secret_store.fallback, EncryptedFileSecretStore)
 
 
 def test_oauth_secret_store_unavailable_on_macos_does_not_create_local_secret_files(tmp_path, monkeypatch):
@@ -509,7 +514,9 @@ def test_oauth_secret_store_ignores_stale_macos_unavailable_cache_for_login(tmp_
 
     secret_store = _build_oauth_secret_store(guard_home)
 
-    assert isinstance(secret_store, SystemKeyringSecretStore)
+    assert isinstance(secret_store, FallbackSecretStore)
+    assert isinstance(secret_store.primary, SystemKeyringSecretStore)
+    assert isinstance(secret_store.fallback, EncryptedFileSecretStore)
 
 
 def test_oauth_secret_store_rechecks_stale_macos_health_cache_for_login(tmp_path, monkeypatch):
@@ -525,7 +532,9 @@ def test_oauth_secret_store_rechecks_stale_macos_health_cache_for_login(tmp_path
 
     secret_store = _build_oauth_secret_store(guard_home)
 
-    assert isinstance(secret_store, SystemKeyringSecretStore)
+    assert isinstance(secret_store, FallbackSecretStore)
+    assert isinstance(secret_store.primary, SystemKeyringSecretStore)
+    assert isinstance(secret_store.fallback, EncryptedFileSecretStore)
 
 
 def test_macos_oauth_write_rejects_unreadable_keychain_secret(tmp_path, monkeypatch):
