@@ -238,6 +238,9 @@ _REMOTE_POLICY_SOURCE_PARAMS = tuple(sorted(REMOTE_POLICY_SOURCES))
 _REMOTE_POLICY_SOURCE_PLACEHOLDERS = "(" + ",".join("?" for _ in _REMOTE_POLICY_SOURCE_PARAMS) + ")"
 _POLICY_SCOPES = frozenset({"artifact", "workspace", "publisher", "harness", "global"})
 _SLOW_STORE_WARNING_ENV = "HOL_GUARD_WARN_SLOW_STORE"
+_SQLITE_CONNECT_TIMEOUT_SECONDS = 30.0
+_SQLITE_LOCK_RETRY_ATTEMPTS = 5
+_SQLITE_LOCK_RETRY_DELAY_SECONDS = 0.1
 _SECRET_FINGERPRINT_PREFIX = "pbkdf2-sha256$"
 _SECRET_FINGERPRINT_SALT = b"hol-guard-secret-fingerprint:v1"
 _OAUTH_REFRESH_LOCK_TIMEOUT_SECONDS = 30.0
@@ -1729,7 +1732,7 @@ class GuardStore:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.path)
+        connection = sqlite3.connect(self.path, timeout=_SQLITE_CONNECT_TIMEOUT_SECONDS)
         connection.row_factory = sqlite3.Row
         start = time.monotonic()
         try:
@@ -2167,9 +2170,20 @@ class GuardStore:
             self._ensure_local_device(connection)
             if not self._schema_version_applied(connection, version=2):
                 self._record_schema_version(connection, version=2)
-            connection.execute("pragma journal_mode=WAL")
+            self._enable_wal_mode(connection)
             self._repair_store_permissions()
             self._refresh_policy_integrity_state(connection, now=_now(), create_key=False)
+
+    @staticmethod
+    def _enable_wal_mode(connection: sqlite3.Connection) -> None:
+        for attempt in range(_SQLITE_LOCK_RETRY_ATTEMPTS):
+            try:
+                connection.execute("pragma journal_mode=WAL")
+                return
+            except sqlite3.OperationalError as exc:
+                if "database is locked" not in str(exc).lower() or attempt == _SQLITE_LOCK_RETRY_ATTEMPTS - 1:
+                    raise
+                time.sleep(_SQLITE_LOCK_RETRY_DELAY_SECONDS)
 
     @staticmethod
     def _ensure_policy_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
