@@ -2686,7 +2686,7 @@ def sync_managed_workspace_audits(
         status = "synced"
     else:
         status = "idle"
-    summary = {
+    summary: dict[str, object] = {
         "synced_at": synced_at,
         "status": status,
         "workspace_count": len(workspaces_payload),

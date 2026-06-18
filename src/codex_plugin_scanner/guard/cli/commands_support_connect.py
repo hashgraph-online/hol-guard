@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from .commands_support_runtime_artifacts import _optional_string
 
 
+from ._commands_shared import _resolve_guard_sync_auth_context
 from ._commands_shared import *
 from .commands_parser_helpers import *
 

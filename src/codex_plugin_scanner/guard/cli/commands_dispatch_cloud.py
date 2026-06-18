@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
 from ..runtime.command_queue import command_queue_status
 from ._commands_shared import *
+from ._commands_shared import _resolve_guard_sync_auth_context
 from .commands_parser_helpers import *
 
 
