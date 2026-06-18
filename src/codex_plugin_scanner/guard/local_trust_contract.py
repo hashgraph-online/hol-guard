@@ -136,6 +136,10 @@ class TrustBackendUnavailableError(RuntimeError):
     """Raised when passive trust backend execution cannot be started."""
 
 
+class TrustBackendProcessFailedError(RuntimeError):
+    """Raised when passive trust backend worker exits without a readable result."""
+
+
 def _trust_backend_check_worker(
     operation: Callable[[], object],
     result_path: str,
@@ -180,6 +184,13 @@ def _terminate_trust_backend_process_tree(process: _ProcessHandle) -> None:
     if process.is_alive():
         process.kill()
         process.join(timeout=0.2)
+
+
+def _trust_backend_process_failed_error(process: _ProcessHandle) -> TrustBackendProcessFailedError:
+    exitcode = getattr(process, "exitcode", None)
+    if isinstance(exitcode, int):
+        return TrustBackendProcessFailedError(f"trust_backend_process_failed:{exitcode}")
+    return TrustBackendProcessFailedError("trust_backend_process_failed")
 
 
 def select_trust_backend(
@@ -229,9 +240,14 @@ def run_trust_backend_check(
         if not result_file.exists():
             if on_error is None:
                 return timeout_result
-            return on_error(RuntimeError("trust_backend_process_failed"))
-        with result_file.open("rb") as handle:
-            ok, value = pickle.load(handle)
+            return on_error(_trust_backend_process_failed_error(process))
+        try:
+            with result_file.open("rb") as handle:
+                ok, value = pickle.load(handle)
+        except (EOFError, OSError, pickle.UnpicklingError) as error:
+            if on_error is None:
+                return timeout_result
+            return on_error(error)
         if ok:
             return cast("_TrustResult", value)
         if on_error is None:
@@ -244,7 +260,7 @@ def degraded_reason_for_backend_error(error: BaseException) -> str:
 
     if isinstance(error, TimeoutError):
         return POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT
-    if isinstance(error, TrustBackendUnavailableError):
+    if isinstance(error, (TrustBackendProcessFailedError, TrustBackendUnavailableError)):
         return POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE
     if isinstance(error, PermissionError):
         return POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED

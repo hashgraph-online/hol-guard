@@ -28,6 +28,7 @@ from codex_plugin_scanner.guard.local_trust_contract import (
     POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED,
     POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,
     POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE,
+    TrustBackendProcessFailedError,
     TrustBackendUnavailableError,
     TrustStatus,
     degraded_reason_for_backend_error,
@@ -93,6 +94,14 @@ def _write_nested_trust_marker(marker_path: str) -> None:
 def _write_delayed_nested_trust_marker(marker_path: str) -> None:
     time.sleep(0.4)
     Path(marker_path).write_text("late", encoding="utf-8")
+
+
+def _write_corrupt_trust_result(operation, result_path: str) -> None:
+    Path(result_path).write_bytes(b"not a pickle")
+
+
+def _skip_trust_result(operation, result_path: str) -> None:
+    operation()
 
 
 def test_local_trust_contract_exports_stable_status_vocabulary() -> None:
@@ -254,6 +263,36 @@ def test_trust_backend_timeout_falls_back_when_process_group_missing(
     assert calls == ["killpg:12345:15", "terminate", "join:0.2"]
 
 
+def test_trust_backend_check_handles_corrupt_result_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(local_trust_contract_module, "_trust_backend_check_worker", _write_corrupt_trust_result)
+
+    result = run_trust_backend_check(
+        lambda: {"mode": "protected"},
+        timeout_seconds=1.0,
+        timeout_result={"mode": "degraded"},
+        on_error=lambda error: {"mode": "degraded", "error": error.__class__.__name__},
+    )
+
+    assert result == {"mode": "degraded", "error": "UnpicklingError"}
+
+
+def test_trust_backend_check_reports_missing_result_with_exit_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(local_trust_contract_module, "_trust_backend_check_worker", _skip_trust_result)
+
+    result = run_trust_backend_check(
+        lambda: {"mode": "protected"},
+        timeout_seconds=1.0,
+        timeout_result={"mode": "degraded"},
+        on_error=lambda error: {"mode": "degraded", "error": str(error)},
+    )
+
+    assert result == {"mode": "degraded", "error": "trust_backend_process_failed:0"}
+
+
 def test_trust_backend_timeout_helper_allows_minimal_fallback_contract() -> None:
     timeout_result = {"mode": "degraded"}
 
@@ -326,6 +365,10 @@ def test_trust_backend_errors_normalize_to_safe_degraded_reasons() -> None:
     assert degraded_reason_for_backend_error(TimeoutError("slow")) == POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT
     assert (
         degraded_reason_for_backend_error(TrustBackendUnavailableError("fork unavailable"))
+        == POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE
+    )
+    assert (
+        degraded_reason_for_backend_error(TrustBackendProcessFailedError("worker died"))
         == POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE
     )
     assert (
