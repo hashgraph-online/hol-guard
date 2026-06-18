@@ -85,6 +85,10 @@ class _FakeTrustBackend:
         )
 
 
+def _write_nested_trust_marker(marker_path: str) -> None:
+    Path(marker_path).write_text("ok", encoding="utf-8")
+
+
 def test_local_trust_contract_exports_stable_status_vocabulary() -> None:
     assert LOCAL_TRUST_MODES == (
         "protected",
@@ -207,6 +211,25 @@ def test_trust_backend_check_drains_large_completed_result_before_timeout() -> N
     )
 
     assert result == large_status
+
+
+def test_trust_backend_check_allows_native_helper_child_process(tmp_path: Path) -> None:
+    marker_path = tmp_path / "nested-helper"
+
+    def operation() -> dict[str, str]:
+        context = local_trust_contract_module.multiprocessing.get_context("fork")
+        process = context.Process(target=_write_nested_trust_marker, args=(str(marker_path),))
+        process.start()
+        process.join(timeout=1.0)
+        return {"mode": "protected", "nested": str(marker_path.exists())}
+
+    result = run_trust_backend_check(
+        operation,
+        timeout_seconds=1.0,
+        timeout_result={"mode": "degraded", "nested": "False"},
+    )
+
+    assert result == {"mode": "protected", "nested": "True"}
 
 
 def test_trust_backend_check_degrades_without_spawn_when_fork_unavailable(

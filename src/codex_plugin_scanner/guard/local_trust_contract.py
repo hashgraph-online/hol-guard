@@ -164,7 +164,7 @@ def run_trust_backend_check(
         return on_error(error)
     with tempfile.TemporaryDirectory(prefix="hol-guard-trust-") as temp_dir:
         result_path = str(Path(temp_dir) / "result.pickle")
-        process = context.Process(target=_trust_backend_check_worker, args=(operation, result_path), daemon=True)
+        process = context.Process(target=_trust_backend_check_worker, args=(operation, result_path))
         try:
             process.start()
         except Exception as error:
