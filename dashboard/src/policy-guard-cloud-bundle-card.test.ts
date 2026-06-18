@@ -11,12 +11,16 @@ function assert(condition: boolean, message: string): void {
 }
 
 assert(
-  formatCloudBundleHashDisplay("sha256:abcdef1234567890") === "sha256:abcdef12…",
-  "bundle hash display truncates sha256 hashes",
+  formatCloudBundleHashDisplay("sha256:abcdef1234567890") === "sha256:abcdef…7890",
+  "bundle hash display uses middle truncation for sha256 hashes",
 );
 assert(
   formatCloudBundleHashDisplay("sha256:abc") === "sha256:abc",
   "bundle hash display preserves prefix for short hashes",
+);
+assert(
+  formatCloudBundleHashDisplay("abcdefghijklmnopqrstu") === "abcdefgh…rstu",
+  "bundle hash display middle-truncates long non-sha256 hashes",
 );
 assert(formatCloudBundleHashDisplay(null) === "Unavailable", "missing hash shows unavailable");
 

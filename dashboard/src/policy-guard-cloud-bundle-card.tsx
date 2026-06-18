@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { HiMiniCheckCircle, HiMiniClipboardDocument, HiMiniCloudArrowUp } from "react-icons/hi2";
-import { ActionButton, SectionLabel, Tag } from "./approval-center-primitives";
+import { ActionButton, PolicyStatField, SectionLabel, Tag } from "./approval-center-primitives";
 import { formatRelativeTime } from "./approval-center-utils";
 import type { GuardRuntimeSnapshot } from "./guard-types";
 import {
@@ -18,13 +18,9 @@ type PolicyGuardCloudBundleCardProps = {
   snapshot: GuardRuntimeSnapshot;
 };
 
-function CloudBundleHeader({
-  cloudControlsUrl,
-}: {
-  cloudControlsUrl: string | null;
-}) {
+function CloudBundleHeader({ cloudControlsUrl }: { cloudControlsUrl: string | null }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
       <SectionLabel>Guard Cloud bundle</SectionLabel>
       {cloudControlsUrl ? (
         <ActionButton href={cloudControlsUrl} variant="secondary">
@@ -81,27 +77,27 @@ export function PolicyGuardCloudBundleCard({ snapshot }: PolicyGuardCloudBundleC
 
   const synced = cloudBundleCopy.tone === "green";
   const statusSubtitle = resolveCloudBundleStatusSubtitle(cloudBundleCopy);
-  const showDetail = !synced;
 
   return (
     <div className={`${POLICY_SUMMARY_CARD_CLASS} self-start p-4`}>
       <CloudBundleHeader cloudControlsUrl={cloudControlsUrl} />
 
-      <dl className="mt-3 grid grid-cols-3 gap-x-3 gap-y-1">
-        <div className="min-w-0">
-          <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Status</dt>
-          <dd className="mt-1 flex min-w-0 items-center gap-1">
+      <dl className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:gap-x-8 sm:gap-y-3">
+        <PolicyStatField label="Status" className="sm:min-w-[7.5rem] sm:max-w-[9rem]">
+          <div className="flex items-center gap-1.5">
             {synced ? (
               <HiMiniCheckCircle className="h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden="true" />
             ) : null}
             <Tag tone={synced ? "green" : "amber"}>{synced ? "Synced" : cloudBundleCopy.label}</Tag>
-          </dd>
-        </div>
+          </div>
+        </PolicyStatField>
 
-        <div className="min-w-0">
-          <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Bundle hash</dt>
-          <dd className="mt-1 flex min-w-0 items-center gap-1">
-            <span className="truncate font-mono text-sm text-brand-dark" title={policyHash ?? undefined}>
+        <PolicyStatField label="Bundle hash" className="min-w-0 flex-1 sm:min-w-[10rem]">
+          <div className="flex min-w-0 items-center gap-1">
+            <span
+              className="min-w-0 font-mono text-sm text-brand-dark break-all sm:break-normal sm:truncate"
+              title={policyHash ?? undefined}
+            >
               {policyHashDisplay}
             </span>
             {policyHash ? (
@@ -114,33 +110,26 @@ export function PolicyGuardCloudBundleCard({ snapshot }: PolicyGuardCloudBundleC
                 <HiMiniClipboardDocument className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             ) : null}
-          </dd>
-        </div>
+          </div>
+        </PolicyStatField>
 
-        <div className="min-w-0">
-          <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Last ack</dt>
-          <dd className="mt-1 min-w-0">
-            <p className="truncate text-sm text-brand-dark">
-              {lastAckAt ? formatRelativeTime(lastAckAt) : "Not yet"}
+        <PolicyStatField label="Last ack" className="sm:min-w-[6.5rem] sm:max-w-[9rem]">
+          <p className="text-sm text-brand-dark">{lastAckAt ? formatRelativeTime(lastAckAt) : "Not yet"}</p>
+          {bundleVersion ? (
+            <p className="mt-0.5 truncate text-xs text-slate-500" title={bundleVersion}>
+              {bundleVersion}
             </p>
-            {bundleVersion ? (
-              <p className="truncate text-xs text-slate-500" title={bundleVersion}>
-                {bundleVersion}
-              </p>
-            ) : null}
-          </dd>
-        </div>
+          ) : null}
+        </PolicyStatField>
       </dl>
 
       {synced ? (
-        <p className="mt-2 truncate text-xs text-slate-500">{statusSubtitle}</p>
-      ) : null}
-
-      {showDetail ? (
+        <p className="mt-2 text-xs text-slate-500">{statusSubtitle}</p>
+      ) : (
         <p className="mt-3 rounded-xl border border-amber-200/80 bg-amber-50/60 px-3 py-2 text-sm leading-snug text-slate-700">
           {cloudBundleCopy.detail}
         </p>
-      ) : null}
+      )}
     </div>
   );
 }
