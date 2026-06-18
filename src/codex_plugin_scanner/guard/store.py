@@ -42,6 +42,7 @@ from .local_trust_contract import (
     TrustStatus,
 )
 from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
+from .policy_authority import validate_policy_write_authority
 from .policy_integrity import (
     REMOTE_POLICY_SOURCES,
     PolicyIntegrityVerificationResult,
@@ -2833,6 +2834,10 @@ class GuardStore:
         *,
         approval_gate_grant: ApprovalGateGrant | None = None,
     ) -> None:
+        validate_policy_write_authority(
+            decision,
+            remote_write_authorized=False,
+        )
         require_policy_write(
             self.guard_home,
             decision=decision,
@@ -2852,6 +2857,10 @@ class GuardStore:
                 create_key=not is_remote_policy_source(decision.source),
                 secret_material=secret_material,
                 allow_cutover_resign=False,
+            )
+            validate_policy_write_authority(
+                decision,
+                remote_write_authorized=False,
             )
             connection.execute(
                 """

@@ -38,6 +38,7 @@ from codex_plugin_scanner.guard.local_trust_contract import (
     select_trust_backend,
 )
 from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.policy_authority import PolicyAuthorityError
 from codex_plugin_scanner.guard.store import GuardStore, SystemKeyringSecretStore
 
 
@@ -979,6 +980,30 @@ def test_remote_policy_row_is_honored_without_local_mac(tmp_path: Path) -> None:
         "codex:project:remote",
         "hash-remote",
         now="2026-06-14T00:01:00Z",
+    )
+
+    assert resolved == "allow"
+
+
+def test_local_policy_write_cannot_impersonate_remote_policy_source(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+
+    with pytest.raises(PolicyAuthorityError, match="remote_policy_source_requires_validated_sync_path"):
+        store.upsert_policy(
+            _decision(artifact_id="codex:project:forged-remote", artifact_hash="hash-forged", source="team-policy"),
+            "2026-06-14T00:00:00Z",
+        )
+
+    store.replace_remote_policies(
+        [_decision(artifact_id="codex:project:valid-remote", artifact_hash="hash-valid", source="team-policy")],
+        "2026-06-14T00:01:00Z",
+    )
+
+    resolved = store.resolve_policy(
+        "codex",
+        "codex:project:valid-remote",
+        "hash-valid",
+        now="2026-06-14T00:02:00Z",
     )
 
     assert resolved == "allow"
