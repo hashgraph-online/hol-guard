@@ -125,6 +125,7 @@ For security reviews, sales conversations, and GRC packets, see the
 | :--- | :--- | :--- |
 | I need the current protection posture | `hol-guard status` | What is Guard watching, is sync connected, and what is the next action? |
 | I need first-run setup | `hol-guard init` | Open the local dashboard, install supported harnesses, start optional Cloud connect, and check desktop notifications. |
+| I need to remove Guard from this machine | `hol-guard uninstall --self` | Can Guard disconnect its managed harnesses, remove package shims and local state, then uninstall itself cleanly? |
 | I need install/connect docs | `hol-guard explain install-connect` | Which local-first setup and optional cloud commands should I share? |
 | I need to preview one install before I run it | `hol-guard protect npm install <package> --dry-run` | Would Guard allow, warn, review, or block this exact install request right now? |
 | I need setup or runtime troubleshooting | `hol-guard doctor <harness>` | Why is this harness or Guard runtime not behaving correctly? |

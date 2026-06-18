@@ -1053,13 +1053,21 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
     supply_chain_risks = _coerce_dict_list(payload.get("supply_chain_risks"))
     safe_decode_risks = _coerce_dict_list(payload.get("safe_decode_risks"))
     sandbox_analysis = _coerce_dict_list(payload.get("sandbox_analysis"))
+    if bool(payload.get("self_uninstall")):
+        _render_self_uninstall(console, payload)
     managed_install = payload.get("managed_install")
     if isinstance(managed_install, dict):
         _render_single_managed_install(console, managed_install)
     else:
         managed_installs = _coerce_dict_list(payload.get("managed_installs"))
         if not managed_installs:
-            if not skill_scan and not supply_chain_risks and not safe_decode_risks and not sandbox_analysis:
+            if (
+                not bool(payload.get("self_uninstall"))
+                and not skill_scan
+                and not supply_chain_risks
+                and not safe_decode_risks
+                and not sandbox_analysis
+            ):
                 _render_fallback(console, payload)
                 return
         else:
@@ -1082,6 +1090,50 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
         _render_safe_decode_results(console, safe_decode_risks)
     if sandbox_analysis:
         _render_sandbox_results(console, sandbox_analysis)
+
+
+def _render_self_uninstall(console: Console, payload: dict[str, object]) -> None:
+    body = Table.grid(padding=(0, 1))
+    body.add_row("Current version", str(payload.get("current_version") or "unknown"))
+    body.add_row("Installer", str(payload.get("installer") or "unknown"))
+    command = payload.get("command")
+    if isinstance(command, list) and command:
+        body.add_row("Command", " ".join(str(part) for part in command))
+    body.add_row("Dry run", _bool_label(bool(payload.get("dry_run"))))
+    planned_harnesses = _coerce_string_list(payload.get("planned_managed_harnesses"))
+    if planned_harnesses:
+        body.add_row("Planned harness cleanup", str(len(planned_harnesses)))
+    planned_shims = _coerce_string_list(payload.get("planned_package_shim_managers"))
+    if planned_shims:
+        body.add_row("Planned package shims", str(len(planned_shims)))
+    if payload.get("oauth_credentials_cleared") is not None:
+        body.add_row("Cloud credentials cleared", _bool_label(bool(payload.get("oauth_credentials_cleared"))))
+    if payload.get("guard_home_removed") is not None:
+        body.add_row("Guard home removed", _bool_label(bool(payload.get("guard_home_removed"))))
+    if payload.get("message"):
+        body.add_row("Message", str(payload.get("message")))
+    status = str(payload.get("status") or "unknown")
+    border_style = {
+        "planned": "blue",
+        "pending": "yellow",
+        "removed": "green",
+        "failed": "red",
+    }.get(status, "red")
+    console.print(Panel(body, title=f"Guard uninstall: {status}", border_style=border_style))
+    notes = _coerce_string_list(payload.get("notes"))
+    stdout = str(payload.get("stdout") or "").strip()
+    stderr = str(payload.get("stderr") or "").strip()
+    error = str(payload.get("error") or "").strip()
+    if notes:
+        console.print(Panel("\n".join(f"• {note}" for note in notes), title="Notes", border_style="blue"))
+    if status == "removed" and stdout:
+        console.print(Panel(stdout, title="stdout", border_style="green"))
+    if status == "failed" and stdout:
+        console.print(Panel(stdout, title="stdout", border_style="yellow"))
+    if status == "failed" and stderr:
+        console.print(Panel(stderr, title="stderr", border_style="yellow"))
+    if error:
+        console.print(Panel(error, title="error", border_style="red"))
 
 
 def _render_apps(console: Console, payload: dict[str, object]) -> None:

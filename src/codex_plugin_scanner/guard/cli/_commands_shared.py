@@ -215,6 +215,7 @@ from .install_commands import (
 )
 from .protect_approvals import _queue_local_protect_approvals, _suppress_package_shim_allow_output
 from .remote_pair_flow import dispatch_guard_remote_pair_command
+from .uninstall_commands import run_guard_self_uninstall
 from .update_commands import run_guard_update
 
 DEFAULT_GUARD_APPS_URL = "https://hol.org/guard/apps"
@@ -279,7 +280,7 @@ _GUARD_HELP_GROUPS = (
     "  doctor       Run local diagnostics\n"
     "  bootstrap    Detect, install, and launch the approval center\n"
     "  install      Enable Guard management for a harness\n"
-    "  uninstall    Disable Guard management for a harness\n"
+    "  uninstall    Disable Guard management or remove hol-guard entirely\n"
     "  update       Update hol-guard in the current environment\n"
     "\n"
     "Command selection:\n"

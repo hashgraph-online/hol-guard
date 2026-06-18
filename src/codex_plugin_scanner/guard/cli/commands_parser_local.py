@@ -106,10 +106,17 @@ def _configure_guard_local_parsers(
 
     uninstall_parser = guard_subparsers.add_parser(
         "uninstall",
-        help="Disable Guard management for one or more harnesses",
+        help="Disable Guard management or remove hol-guard entirely",
     )
     uninstall_parser.add_argument("harness", nargs="?")
     uninstall_parser.add_argument("--all", action="store_true")
+    uninstall_parser.add_argument(
+        "--self",
+        dest="self_uninstall",
+        action="store_true",
+        help="Remove the installed hol-guard package and local Guard state",
+    )
+    uninstall_parser.add_argument("--dry-run", action="store_true")
     _add_guard_common_args(uninstall_parser)
     uninstall_parser.add_argument("--json", action="store_true")
 
