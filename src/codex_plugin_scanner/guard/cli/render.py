@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TextIO, TypeAlias
 
 from ..redaction import redact_text
+from .render_uninstall import render_self_uninstall
 
 try:
     from ..redaction import redact_local_path
@@ -1053,13 +1054,21 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
     supply_chain_risks = _coerce_dict_list(payload.get("supply_chain_risks"))
     safe_decode_risks = _coerce_dict_list(payload.get("safe_decode_risks"))
     sandbox_analysis = _coerce_dict_list(payload.get("sandbox_analysis"))
+    if bool(payload.get("self_uninstall")):
+        render_self_uninstall(console, payload)
     managed_install = payload.get("managed_install")
     if isinstance(managed_install, dict):
         _render_single_managed_install(console, managed_install)
     else:
         managed_installs = _coerce_dict_list(payload.get("managed_installs"))
         if not managed_installs:
-            if not skill_scan and not supply_chain_risks and not safe_decode_risks and not sandbox_analysis:
+            if (
+                not bool(payload.get("self_uninstall"))
+                and not skill_scan
+                and not supply_chain_risks
+                and not safe_decode_risks
+                and not sandbox_analysis
+            ):
                 _render_fallback(console, payload)
                 return
         else:
