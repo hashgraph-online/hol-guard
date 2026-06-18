@@ -156,6 +156,45 @@ def test_trust_backend_timeout_returns_degraded_result_without_waiting() -> None
     assert time.monotonic() - started < 0.5
 
 
+def test_trust_backend_timeout_contains_late_side_effects(tmp_path: Path) -> None:
+    marker_path = tmp_path / "late-side-effect"
+
+    def slow_mutation() -> TrustStatus:
+        time.sleep(0.5)
+        marker_path.write_text("mutated", encoding="utf-8")
+        return _FakeTrustBackend("slow", 1).status()
+
+    timeout_result = TrustStatus(
+        runtime_protection="degraded",
+        remembered_rules="disabled_degraded",
+        cloud_policies="setup_unavailable",
+        backend="timeout",
+        degraded_reasons=(POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,),
+    )
+
+    result = run_trust_backend_check(
+        slow_mutation,
+        timeout_seconds=0.01,
+        timeout_result=timeout_result,
+    )
+    time.sleep(0.1)
+
+    assert result == timeout_result
+    assert not marker_path.exists()
+
+
+def test_trust_backend_timeout_helper_allows_minimal_fallback_contract() -> None:
+    timeout_result = {"mode": "degraded"}
+
+    result = run_trust_backend_check(
+        lambda: (time.sleep(1.0), {"mode": "protected"})[1],
+        timeout_seconds=0.01,
+        timeout_result=timeout_result,
+    )
+
+    assert result == timeout_result
+
+
 def test_trust_backend_errors_normalize_to_safe_degraded_reasons() -> None:
     assert degraded_reason_for_backend_error(TimeoutError("slow")) == POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT
     assert (

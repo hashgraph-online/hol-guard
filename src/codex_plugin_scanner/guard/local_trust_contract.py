@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import json
-import queue
-import threading
+import multiprocessing
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal, Protocol, TypeVar, cast
@@ -128,28 +127,43 @@ def run_trust_backend_check(
     *,
     timeout_seconds: float,
     timeout_result: _TrustResult,
-    on_error: Callable[[BaseException], _TrustResult],
+    on_error: Callable[[BaseException], _TrustResult] | None = None,
 ) -> _TrustResult:
-    """Run passive backend work under a bounded timeout without blocking caller."""
+    """Run side-effect-free passive backend work under a contained timeout."""
 
     if timeout_seconds <= 0:
         return timeout_result
-    results: queue.Queue[tuple[bool, _TrustResult | BaseException]] = queue.Queue(maxsize=1)
-
-    def _worker() -> None:
-        try:
-            results.put((True, operation()))
-        except BaseException as error:
-            results.put((False, error))
-
-    thread = threading.Thread(target=_worker, daemon=True)
-    thread.start()
     try:
-        ok, value = results.get(timeout=timeout_seconds)
-    except queue.Empty:
+        context = multiprocessing.get_context("fork")
+    except ValueError:
         return timeout_result
+    results = context.Queue(maxsize=1)
+
+    def _worker(result_queue) -> None:
+        try:
+            result_queue.put((True, operation()))
+        except Exception as error:
+            result_queue.put((False, error))
+
+    process = context.Process(target=_worker, args=(results,), daemon=True)
+    process.start()
+    process.join(timeout=timeout_seconds)
+    if process.is_alive():
+        process.terminate()
+        process.join(timeout=0.2)
+        if process.is_alive():
+            process.kill()
+            process.join(timeout=0.2)
+        return timeout_result
+    if results.empty():
+        if on_error is None:
+            return timeout_result
+        return on_error(RuntimeError("trust_backend_process_failed"))
+    ok, value = results.get()
     if ok:
         return cast("_TrustResult", value)
+    if on_error is None:
+        return timeout_result
     return on_error(cast("BaseException", value))
 
 
