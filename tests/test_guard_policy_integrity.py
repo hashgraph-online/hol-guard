@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import pickle
 import sqlite3
 import sys
 import time
@@ -28,6 +29,7 @@ from codex_plugin_scanner.guard.local_trust_contract import (
     POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED,
     POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,
     POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE,
+    TrustBackendCorruptResultError,
     TrustBackendProcessFailedError,
     TrustBackendUnavailableError,
     TrustStatus,
@@ -98,6 +100,14 @@ def _write_delayed_nested_trust_marker(marker_path: str) -> None:
 
 def _write_corrupt_trust_result(operation, result_path: str) -> None:
     Path(result_path).write_bytes(b"not a pickle")
+
+
+def _write_malformed_trust_result(operation, result_path: str) -> None:
+    Path(result_path).write_bytes(pickle.dumps({"ok": True}))
+
+
+def _write_list_trust_result(operation, result_path: str) -> None:
+    Path(result_path).write_bytes(pickle.dumps([True, {"mode": "protected"}]))
 
 
 def _skip_trust_result(operation, result_path: str) -> None:
@@ -272,10 +282,99 @@ def test_trust_backend_check_handles_corrupt_result_file(
         lambda: {"mode": "protected"},
         timeout_seconds=1.0,
         timeout_result={"mode": "degraded"},
-        on_error=lambda error: {"mode": "degraded", "error": error.__class__.__name__},
+        on_error=lambda error: {
+            "mode": "degraded",
+            "error": error.__class__.__name__,
+            "reason": degraded_reason_for_backend_error(error),
+        },
     )
 
-    assert result == {"mode": "degraded", "error": "UnpicklingError"}
+    assert result == {
+        "mode": "degraded",
+        "error": "TrustBackendCorruptResultError",
+        "reason": POLICY_INTEGRITY_REASON_BACKEND_CORRUPT,
+    }
+
+
+def test_trust_backend_check_rejects_malformed_result_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(local_trust_contract_module, "_trust_backend_check_worker", _write_malformed_trust_result)
+
+    result = run_trust_backend_check(
+        lambda: {"mode": "protected"},
+        timeout_seconds=1.0,
+        timeout_result={"mode": "degraded"},
+        on_error=lambda error: {
+            "mode": "degraded",
+            "error": error.__class__.__name__,
+            "reason": degraded_reason_for_backend_error(error),
+        },
+    )
+
+    assert result == {
+        "mode": "degraded",
+        "error": "TrustBackendCorruptResultError",
+        "reason": POLICY_INTEGRITY_REASON_BACKEND_CORRUPT,
+    }
+
+
+def test_trust_backend_check_rejects_list_result_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(local_trust_contract_module, "_trust_backend_check_worker", _write_list_trust_result)
+
+    result = run_trust_backend_check(
+        lambda: {"mode": "protected"},
+        timeout_seconds=1.0,
+        timeout_result={"mode": "degraded"},
+        on_error=lambda error: {
+            "mode": "degraded",
+            "error": error.__class__.__name__,
+            "reason": degraded_reason_for_backend_error(error),
+        },
+    )
+
+    assert result == {
+        "mode": "degraded",
+        "error": "TrustBackendCorruptResultError",
+        "reason": POLICY_INTEGRITY_REASON_BACKEND_CORRUPT,
+    }
+
+
+def test_trust_backend_result_loader_preserves_permission_denied() -> None:
+    class PermissionDeniedResultPath:
+        def open(self, mode: str = "rb"):
+            raise PermissionError("denied")
+
+    with pytest.raises(PermissionError):
+        local_trust_contract_module._load_trust_backend_result(cast(Path, PermissionDeniedResultPath()))
+
+
+def test_trust_backend_check_handles_result_permission_denied(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def denied_loader(result_file: Path):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(local_trust_contract_module, "_load_trust_backend_result", denied_loader)
+
+    result = run_trust_backend_check(
+        lambda: {"mode": "protected"},
+        timeout_seconds=1.0,
+        timeout_result={"mode": "degraded"},
+        on_error=lambda error: {
+            "mode": "degraded",
+            "error": error.__class__.__name__,
+            "reason": degraded_reason_for_backend_error(error),
+        },
+    )
+
+    assert result == {
+        "mode": "degraded",
+        "error": "PermissionError",
+        "reason": POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED,
+    }
 
 
 def test_trust_backend_check_reports_missing_result_with_exit_code(
@@ -370,6 +469,10 @@ def test_trust_backend_errors_normalize_to_safe_degraded_reasons() -> None:
     assert (
         degraded_reason_for_backend_error(TrustBackendProcessFailedError("worker died"))
         == POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE
+    )
+    assert (
+        degraded_reason_for_backend_error(TrustBackendCorruptResultError("bad result"))
+        == POLICY_INTEGRITY_REASON_BACKEND_CORRUPT
     )
     assert (
         degraded_reason_for_backend_error(PermissionError("denied"))
