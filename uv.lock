@@ -1165,7 +1165,7 @@ name = "hol-guard"
 version = "2.0.764"
 source = { editable = "." }
 dependencies = [
-    { name = "cisco-ai-skill-scanner" },
+    { name = "cisco-ai-skill-scanner", marker = "python_full_version < '3.14'" },
     { name = "cryptography" },
     { name = "keyring" },
     { name = "packaging" },
@@ -1175,7 +1175,7 @@ dependencies = [
 
 [package.optional-dependencies]
 cisco = [
-    { name = "litellm" },
+    { name = "litellm", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
 ]
 dev = [
     { name = "basedpyright" },
