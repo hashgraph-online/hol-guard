@@ -168,6 +168,12 @@ def _record_claude_permission_notice(
         "approval_options": list(_CLAUDE_GUARD_APPROVAL_OPTIONS),
         "approval_code": approval_code,
     }
+    raw_command_text = artifact.metadata.get("raw_command_text")
+    if isinstance(raw_command_text, str) and raw_command_text:
+        notice_payload["raw_command_text"] = raw_command_text
+    wrapper_chain = artifact.metadata.get("wrapper_chain")
+    if isinstance(wrapper_chain, list):
+        notice_payload["wrapper_chain"] = [str(item) for item in wrapper_chain if isinstance(item, str) and item]
     if tool_name is not None:
         notice_payload["tool_name"] = tool_name
     try:

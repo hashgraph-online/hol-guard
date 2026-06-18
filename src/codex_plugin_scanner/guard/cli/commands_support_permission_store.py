@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -29,7 +30,7 @@ if TYPE_CHECKING:
     from .commands_support_runtime_resolution import _runtime_capabilities_summary
 
 
-from ..store import _runtime_scoped_exact_match_key
+from ..store import _runtime_scoped_exact_match_key, runtime_tool_action_exact_match_context
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -416,13 +417,29 @@ def _persist_claude_native_permission_policy(
     artifact_id: str,
     artifact_hash: str,
     artifact_type: str | None = None,
+    config_path: str | None = None,
+    source_scope: str | None = None,
+    raw_command_text: str | None = None,
+    wrapper_chain: Sequence[object] | None = None,
     action: str,
     reason: str,
     now: str,
     source: str = "claude-native-approval",
 ) -> bool:
+    exact_match_context = (
+        runtime_tool_action_exact_match_context(
+            config_path=config_path,
+            source_scope=source_scope,
+            raw_command_text=raw_command_text,
+            wrapper_chain=wrapper_chain,
+        )
+        if artifact_type == "tool_action_request"
+        else None
+    )
     exact_artifact_hash = (
-        _runtime_scoped_exact_match_key(artifact_id) if artifact_type == "tool_action_request" else None
+        _runtime_scoped_exact_match_key(artifact_id, exact_match_context)
+        if artifact_type == "tool_action_request"
+        else None
     )
     stored_artifact_hash = exact_artifact_hash or artifact_hash
     try:
@@ -481,6 +498,15 @@ def _persist_claude_native_permission_for_runtime_artifact(
         artifact_id=artifact.artifact_id,
         artifact_hash=artifact_hash,
         artifact_type=artifact.artifact_type,
+        config_path=artifact.config_path,
+        source_scope=artifact.source_scope,
+        raw_command_text=artifact.metadata.get("raw_command_text")
+        if isinstance(artifact.metadata.get("raw_command_text"), str)
+        else None,
+        wrapper_chain=artifact.metadata.get("wrapper_chain")
+        if isinstance(artifact.metadata.get("wrapper_chain"), Sequence)
+        and not isinstance(artifact.metadata.get("wrapper_chain"), str)
+        else None,
         action=action,
         reason=reason,
         now=now,

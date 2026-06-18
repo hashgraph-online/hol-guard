@@ -2974,11 +2974,16 @@ class GuardStore:
         workspace: str | None = None,
         publisher: str | None = None,
         now: str | None = None,
+        runtime_exact_match_context: str | None = None,
     ) -> dict[str, object] | None:
         current_time = now or _now()
         workspace_key = _workspace_policy_key(workspace)
         action_family_key = _artifact_family_key(artifact_id)
-        runtime_exact_match_key = _runtime_scoped_exact_match_key(artifact_id) if artifact_hash is not None else None
+        runtime_exact_match_key = (
+            _runtime_scoped_exact_match_key(artifact_id, runtime_exact_match_context)
+            if artifact_hash is not None
+            else None
+        )
         events: list[tuple[str, dict[str, object]]] = []
         selected_payload: dict[str, object] | None = None
         with self._connect() as connection:
@@ -6352,14 +6357,48 @@ def _artifact_family_key(artifact_id: str | None) -> str | None:
     return f"family:{family}"
 
 
-def _runtime_scoped_exact_match_key(artifact_id: str | None) -> str | None:
+def _runtime_scoped_exact_match_key(
+    artifact_id: str | None,
+    runtime_exact_match_context: str | None = None,
+) -> str | None:
     if artifact_id is None or not artifact_id.strip() or artifact_id.startswith("family:"):
         return None
     family_key = _artifact_family_key(artifact_id)
     if family_key is None or _family_key_value(family_key) not in _SCOPED_RUNTIME_EXACT_FAMILIES:
         return None
-    digest = sha256(artifact_id.encode("utf-8")).hexdigest()
+    if runtime_exact_match_context is None:
+        digest = sha256(artifact_id.encode("utf-8")).hexdigest()
+    else:
+        digest = sha256(
+            json.dumps(
+                {
+                    "artifact_id": artifact_id,
+                    "context": runtime_exact_match_context,
+                    "version": 2,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
     return f"{_RUNTIME_SCOPED_EXACT_MATCH_PREFIX}{digest}"
+
+
+def runtime_tool_action_exact_match_context(
+    *,
+    config_path: str | None,
+    source_scope: str | None,
+    raw_command_text: str | None = None,
+    wrapper_chain: Sequence[object] | None = None,
+) -> str | None:
+    if not config_path and not source_scope and not raw_command_text and not wrapper_chain:
+        return None
+    payload: dict[str, object] = {
+        "config_path": str(Path(config_path).expanduser()) if config_path else None,
+        "source_scope": source_scope,
+        "raw_command_text": raw_command_text,
+        "wrapper_chain": [str(item) for item in wrapper_chain or () if isinstance(item, str) and item],
+    }
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 
 def _is_runtime_scoped_exact_match_key(value: str | None) -> bool:

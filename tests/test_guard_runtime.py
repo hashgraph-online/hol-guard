@@ -8210,15 +8210,26 @@ def test_guard_hook_claude_ask_user_question_docker_retry_uses_exact_action_poli
     policy = policies[0]
     artifact_id = str(policy["artifact_id"])
     stored_hash = str(policy["artifact_hash"])
-    drifted_hash_decision = store.resolve_policy_decision(
+    legacy_context_decision = store.resolve_policy_decision(
         "claude-code",
         artifact_id,
         "runtime-hash-from-retry",
         str(workspace_dir),
     )
+    other_workspace_dir = tmp_path / "other-workspace"
+    _build_guard_fixture(home_dir, other_workspace_dir)
+    other_workspace_rc, other_workspace_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=other_workspace_dir,
+        harness="claude-code",
+        event={**first_event, "session_id": "session-claude-docker-allow-other-workspace"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
     first_payload = json.loads(first_output)
     permission_payload = json.loads(permission_output)
     second_payload = json.loads(second_output)
+    other_workspace_payload = json.loads(other_workspace_output)
 
     assert first_rc == 0
     assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
@@ -8229,10 +8240,12 @@ def test_guard_hook_claude_ask_user_question_docker_retry_uses_exact_action_poli
     assert question_output == ""
     assert second_rc == 0
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert other_workspace_rc == 0
+    assert other_workspace_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert policy["source"] == "claude-ask-user-question"
-    assert stored_hash == _runtime_scoped_exact_match_key(artifact_id)
-    assert drifted_hash_decision is not None
-    assert drifted_hash_decision["action"] == "allow"
+    assert stored_hash.startswith("runtime-exact:")
+    assert stored_hash != _runtime_scoped_exact_match_key(artifact_id)
+    assert legacy_context_decision is None
 
 
 def test_guard_hook_claude_notification_only_ask_user_question_persists_approval(tmp_path, capsys, monkeypatch):

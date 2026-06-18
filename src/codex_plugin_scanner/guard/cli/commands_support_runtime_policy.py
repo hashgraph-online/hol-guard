@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import importlib
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
     from .commands_support_prompts import _prompt_request_classes, _prompt_requires_hard_block
 
 
-from ..store import _runtime_scoped_exact_match_key
+from ..store import _runtime_scoped_exact_match_key, runtime_tool_action_exact_match_context
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -228,13 +229,25 @@ def _runtime_stored_policy_action(
     artifact_hash: str,
     workspace: str | None,
 ) -> str | None:
+    runtime_exact_match_context = _runtime_artifact_exact_match_context(artifact)
     decision = store.resolve_policy_decision(
         harness,
         artifact_id,
         artifact_hash,
         workspace,
         artifact.publisher,
+        runtime_exact_match_context=runtime_exact_match_context,
     )
+    if decision is None and runtime_exact_match_context is not None:
+        legacy_decision = store.resolve_policy_decision(
+            harness,
+            artifact_id,
+            artifact_hash,
+            workspace,
+            artifact.publisher,
+        )
+        if _optional_string((legacy_decision or {}).get("scope")) in {"harness", "global"}:
+            decision = legacy_decision
     if decision is None:
         return None
     action = _optional_string(decision.get("action"))
@@ -262,6 +275,22 @@ def _runtime_stored_policy_action(
             return action if decision_artifact_hash == exact_match_key else None
         return None
     return action
+
+
+def _runtime_artifact_exact_match_context(artifact: GuardArtifact) -> str | None:
+    if artifact.artifact_type != "tool_action_request":
+        return None
+    raw_command_text = artifact.metadata.get("raw_command_text")
+    wrapper_chain = artifact.metadata.get("wrapper_chain")
+    normalized_wrapper_chain = (
+        wrapper_chain if isinstance(wrapper_chain, Sequence) and not isinstance(wrapper_chain, str) else None
+    )
+    return runtime_tool_action_exact_match_context(
+        config_path=artifact.config_path,
+        source_scope=artifact.source_scope,
+        raw_command_text=raw_command_text if isinstance(raw_command_text, str) else None,
+        wrapper_chain=normalized_wrapper_chain,
+    )
 def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact, harness: str) -> str:
     if _prompt_requires_hard_block(artifact):
         return "block"
