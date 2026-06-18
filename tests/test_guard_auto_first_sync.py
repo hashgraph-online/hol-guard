@@ -236,6 +236,7 @@ def test_daemon_finalize_guard_connect_payload_uses_fresh_oauth_access_token_onc
     connect_url = "https://hol.org/guard/connect"
     now = "2026-06-04T12:00:00+00:00"
     sync_calls: list[dict[str, object] | None] = []
+    bundle_calls: list[dict[str, object] | None] = []
 
     monkeypatch.setattr(
         store,
@@ -264,6 +265,11 @@ def test_daemon_finalize_guard_connect_payload_uses_fresh_oauth_access_token_onc
         }
 
     monkeypatch.setattr(daemon_server_module, "sync_local_guard_cloud_proof", _fake_sync)
+    monkeypatch.setattr(
+        daemon_server_module,
+        "sync_supply_chain_bundle",
+        lambda _store, *, auth_context=None: bundle_calls.append(auth_context) or {"packages": []},
+    )
 
     payload = daemon_server_module._finalize_daemon_guard_connect_payload(
         store=store,
@@ -280,6 +286,13 @@ def test_daemon_finalize_guard_connect_payload_uses_fresh_oauth_access_token_onc
     )
 
     assert sync_calls == [
+        {
+            "access_token": "access-token-1",
+            "dpop_key_material": "dpop",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        }
+    ]
+    assert bundle_calls == [
         {
             "access_token": "access-token-1",
             "dpop_key_material": "dpop",

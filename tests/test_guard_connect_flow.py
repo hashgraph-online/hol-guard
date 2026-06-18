@@ -21,7 +21,9 @@ from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.package_firewall_entitlement import resolve_package_firewall_entitlement
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.test_guard_store_migrations import _install_fake_system_keyring
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -503,6 +505,76 @@ def test_browser_connect_caches_paid_package_firewall_entitlement(tmp_path: Path
         "tier": "pro",
         "upgrade_cta": None,
     }
+
+
+def test_browser_connect_persists_oauth_state_when_macos_keychain_readback_is_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    _install_fake_system_keyring(monkeypatch)
+    store = GuardStore(tmp_path / "guard-home")
+
+    class _BrowserSession:
+        authorize_url = "https://hol.org/guard/connect?step=authorize"
+        redirect_uri = "http://127.0.0.1:55221/oauth/callback"
+        pkce_verifier = "pkce-verifier"
+        dpop_key_material = GuardDpopKeyMaterial(
+            algorithm="ES256",
+            private_key_pem="private-key",
+            public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value"},
+            public_jwk_thumbprint="thumbprint-1",
+        )
+
+        def wait_for_callback(self, _timeout_seconds: float) -> GuardOAuthLoopbackCallback:
+            return GuardOAuthLoopbackCallback(code="auth-code-1", state="state-1")
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        store._oauth_secret_store.primary,
+        "get_secret_with_timeout",
+        lambda _secret_id, *, timeout_seconds: None,
+    )
+
+    payload = run_guard_browser_connect_command(
+        store=store,
+        connect_url="https://hol.org/guard/connect",
+        start_browser_session=lambda **_kwargs: _BrowserSession(),
+        open_browser=lambda _url: True,
+        exchange_authorization_code=lambda **_kwargs: GuardOAuthTokenExchangeResult(
+            access_token="access-token-1",
+            refresh_token="refresh-token-1",
+            expires_in=300,
+            scope=(
+                "guard:runtime.sync guard:receipt.write guard:runtime.session.write "
+                "guard:insights.share guard:offline_access"
+            ),
+            token_type="Bearer",
+            grant_id="grant-1",
+            machine_id="machine-1",
+            supply_chain_entitlement={
+                "supply_chain_entitlement_expires_at": "2026-07-05T01:39:51+00:00",
+                "supply_chain_firewall": True,
+                "supply_chain_plan_id": "pro",
+            },
+            workspace_id="workspace-1",
+        ),
+        now="2026-06-05T01:39:51+00:00",
+    )
+
+    assert payload["status"] == "connected"
+    assert store.get_oauth_local_credential_health()["state"] == "healthy"
+    assert store.get_cloud_sync_profile() == {
+        "auth_mode": "oauth",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "workspace_id": "workspace-1",
+    }
+    credentials = store.get_oauth_local_credentials(allow_primary=False)
+    assert isinstance(credentials, dict)
+    assert credentials["grant_id"] == "grant-1"
+    assert credentials["machine_id"] == "machine-1"
 
 
 def test_missing_cloud_connection_prefers_connect_over_false_paywall(tmp_path: Path) -> None:
