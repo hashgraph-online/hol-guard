@@ -1793,22 +1793,13 @@ class GuardStore:
         *,
         timeout_seconds: float = _OAUTH_REFRESH_LOCK_TIMEOUT_SECONDS,
     ) -> Iterator[None]:
-        lock_path = self.guard_home / "oauth-refresh.lock"
-        deadline = time.monotonic() + max(timeout_seconds, 0.0)
-        with lock_path.open("a+b") as handle:
-            while True:
-                try:
-                    _acquire_advisory_file_lock(handle)
-                    break
-                except BlockingIOError:
-                    if time.monotonic() >= deadline:
-                        raise TimeoutError("Timed out waiting for Guard OAuth refresh lock.") from None
-                    time.sleep(_OAUTH_REFRESH_LOCK_POLL_SECONDS)
-            try:
-                yield
-            finally:
-                with suppress(OSError):
-                    _release_advisory_file_lock(handle)
+        with self._hold_advisory_file_lock(
+            path=self.guard_home / "oauth-refresh.lock",
+            timeout_seconds=timeout_seconds,
+            poll_seconds=_OAUTH_REFRESH_LOCK_POLL_SECONDS,
+            timeout_message="Timed out waiting for Guard OAuth refresh lock.",
+        ):
+            yield
 
     @contextmanager
     def hold_cloud_sync_lock(
@@ -1816,22 +1807,13 @@ class GuardStore:
         *,
         timeout_seconds: float = _CLOUD_SYNC_LOCK_TIMEOUT_SECONDS,
     ) -> Iterator[None]:
-        lock_path = self.guard_home / "cloud-sync.lock"
-        deadline = time.monotonic() + max(timeout_seconds, 0.0)
-        with lock_path.open("a+b") as handle:
-            while True:
-                try:
-                    _acquire_advisory_file_lock(handle)
-                    break
-                except BlockingIOError:
-                    if time.monotonic() >= deadline:
-                        raise TimeoutError("Timed out waiting for Guard Cloud sync lock.") from None
-                    time.sleep(_CLOUD_SYNC_LOCK_POLL_SECONDS)
-            try:
-                yield
-            finally:
-                with suppress(OSError):
-                    _release_advisory_file_lock(handle)
+        with self._hold_advisory_file_lock(
+            path=self.guard_home / "cloud-sync.lock",
+            timeout_seconds=timeout_seconds,
+            poll_seconds=_CLOUD_SYNC_LOCK_POLL_SECONDS,
+            timeout_message="Timed out waiting for Guard Cloud sync lock.",
+        ):
+            yield
 
     @contextmanager
     def hold_oauth_credential_lock(
@@ -1839,17 +1821,33 @@ class GuardStore:
         *,
         timeout_seconds: float = _OAUTH_CREDENTIAL_LOCK_TIMEOUT_SECONDS,
     ) -> Iterator[None]:
-        lock_path = self.guard_home / "oauth-credentials.lock"
+        with self._hold_advisory_file_lock(
+            path=self.guard_home / "oauth-credentials.lock",
+            timeout_seconds=timeout_seconds,
+            poll_seconds=_OAUTH_CREDENTIAL_LOCK_POLL_SECONDS,
+            timeout_message="Timed out waiting for Guard OAuth credential lock.",
+        ):
+            yield
+
+    @contextmanager
+    def _hold_advisory_file_lock(
+        self,
+        *,
+        path: Path,
+        timeout_seconds: float,
+        poll_seconds: float,
+        timeout_message: str,
+    ) -> Iterator[None]:
         deadline = time.monotonic() + max(timeout_seconds, 0.0)
-        with lock_path.open("a+b") as handle:
+        with path.open("a+b") as handle:
             while True:
                 try:
                     _acquire_advisory_file_lock(handle)
                     break
                 except BlockingIOError:
                     if time.monotonic() >= deadline:
-                        raise TimeoutError("Timed out waiting for Guard OAuth credential lock.") from None
-                    time.sleep(_OAUTH_CREDENTIAL_LOCK_POLL_SECONDS)
+                        raise TimeoutError(timeout_message) from None
+                    time.sleep(poll_seconds)
             try:
                 yield
             finally:
@@ -5317,10 +5315,10 @@ class GuardStore:
 
     def repair_oauth_local_credential_storage_from_primary(self) -> bool:
         """Rebuild OAuth credential storage from primary or recoverable fallback state."""
-        payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
-        if not isinstance(payload, dict):
-            return False
         with self.hold_oauth_credential_lock():
+            payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+            if not isinstance(payload, dict):
+                return False
             repaired_payload = None
             if self._should_attempt_oauth_storage_repair():
                 self._mark_oauth_storage_repair_attempt()

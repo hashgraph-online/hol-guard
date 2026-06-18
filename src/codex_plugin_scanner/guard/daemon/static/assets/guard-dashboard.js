@@ -20513,8 +20513,7 @@ function openPackageFirewallAuthorizeWindow(authorizeUrl) {
   }
   return false;
 }
-function openPackageFirewallAuthorizeFallback(authorizeUrl, browserOpened) {
-  void authorizeUrl;
+function openPackageFirewallAuthorizeFallback(_authorizeUrl, browserOpened) {
   return browserOpened === true;
 }
 function FiShare2(props) {
