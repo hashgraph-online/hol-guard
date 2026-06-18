@@ -473,6 +473,19 @@ def _version_check_payload(current_version: str) -> dict[str, object]:
     required_python_requirements = _latest_version_python_requirements(latest_version)
     runtime_python = _runtime_python_version()
     if update_available and not _python_requirements_satisfied(required_python_requirements, runtime_python):
+        compatible_version = _latest_compatible_release_version(current_version, runtime_python)
+        if compatible_version is not None:
+            return {
+                "source": "pypi",
+                "status": "stale",
+                "current_version": current_version,
+                "latest_version": compatible_version,
+                "update_available": True,
+                "pypi_latest_version": latest_version,
+                "pypi_latest_python_incompatible": True,
+                "pypi_latest_required_python": _format_python_requirements(required_python_requirements),
+                "runtime_python": runtime_python,
+            }
         return {
             "source": "pypi",
             "status": "python_incompatible",
@@ -514,6 +527,40 @@ def _latest_version_from_pypi() -> str | None:
         return None
     version = info.get("version")
     return version if isinstance(version, str) and version.strip() else None
+
+
+def _latest_compatible_release_version(current_version: str, runtime_python: str) -> str | None:
+    payload = _last_pypi_payload
+    if not isinstance(payload, dict):
+        return None
+    releases = payload.get("releases")
+    if not isinstance(releases, dict):
+        return None
+    candidates: list[tuple[Version, str]] = []
+    for version_text, files in releases.items():
+        if not isinstance(version_text, str) or not version_text.strip():
+            continue
+        try:
+            parsed_version = Version(version_text)
+        except InvalidVersion:
+            continue
+        if _is_newer_version(version_text, current_version) is not True:
+            continue
+        if not _release_has_non_yanked_file(files):
+            continue
+        requirements = _latest_version_python_requirements(version_text)
+        if _python_requirements_satisfied(requirements, runtime_python):
+            candidates.append((parsed_version, version_text.strip()))
+    if not candidates:
+        return None
+    stable_candidates = [candidate for candidate in candidates if not candidate[0].is_prerelease]
+    return max(stable_candidates or candidates, key=lambda candidate: candidate[0])[1]
+
+
+def _release_has_non_yanked_file(files: object) -> bool:
+    if not isinstance(files, list):
+        return False
+    return any(isinstance(file_payload, dict) and not file_payload.get("yanked") for file_payload in files)
 
 
 def _runtime_python_version() -> str:

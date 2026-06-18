@@ -136,6 +136,7 @@ def test_update_binary_diagnostics_treats_pipx_shim_as_healthy(monkeypatch: pyte
 def test_version_check_reports_python_incompatible_latest_release(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.807")
     monkeypatch.setattr(update_commands, "_latest_version_python_requirements", lambda latest: (">=3.10,<3.14",))
+    monkeypatch.setattr(update_commands, "_latest_compatible_release_version", lambda current, runtime: None)
     monkeypatch.setattr(update_commands, "_runtime_python_version", lambda: "3.14.0")
 
     payload = update_commands._version_check_payload("2.0.789")
@@ -171,10 +172,38 @@ def test_latest_version_python_requirements_uses_all_non_yanked_files(monkeypatc
     assert update_commands._python_requirements_satisfied((">=3.10,<3.14", ">=3.11,<3.15"), "3.14.0")
 
 
+def test_version_check_targets_newer_compatible_release_when_pypi_latest_is_incompatible(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.900")
+    monkeypatch.setattr(
+        update_commands,
+        "_last_pypi_payload",
+        {
+            "info": {"version": "2.0.900", "requires_python": ">=3.10,<3.14"},
+            "releases": {
+                "2.0.765": [{"requires_python": ">=3.10", "yanked": True}],
+                "2.0.800": [{"requires_python": ">=3.10", "yanked": False}],
+                "2.0.900": [{"requires_python": ">=3.10,<3.14", "yanked": False}],
+            },
+        },
+    )
+    monkeypatch.setattr(update_commands, "_runtime_python_version", lambda: "3.14.0")
+
+    payload = update_commands._version_check_payload("2.0.764")
+
+    assert payload["status"] == "stale"
+    assert payload["latest_version"] == "2.0.800"
+    assert payload["update_available"] is True
+    assert payload["pypi_latest_version"] == "2.0.900"
+    assert payload["pypi_latest_python_incompatible"] is True
+
+
 def test_update_blocks_python_incompatible_latest_release(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.789")
     monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.807")
     monkeypatch.setattr(update_commands, "_latest_version_python_requirements", lambda latest: (">=3.10,<3.14",))
+    monkeypatch.setattr(update_commands, "_latest_compatible_release_version", lambda current, runtime: None)
     monkeypatch.setattr(update_commands, "_runtime_python_version", lambda: "3.14.0")
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
     monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
