@@ -1190,7 +1190,10 @@ class GuardStore:
         self._cached_policy_integrity_control_state = None
 
     def _oauth_primary_reads_are_no_ui_safe(self) -> bool:
-        return sys.platform == "darwin" and isinstance(self._oauth_secret_store, SystemKeyringSecretStore)
+        secret_store = self._oauth_secret_store
+        if isinstance(secret_store, FallbackSecretStore):
+            secret_store = secret_store.primary
+        return sys.platform == "darwin" and isinstance(secret_store, SystemKeyringSecretStore)
 
     def _get_secret_candidates(
         self,

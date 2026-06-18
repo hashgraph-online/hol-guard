@@ -628,6 +628,46 @@ def test_oauth_default_macos_keychain_read_uses_no_ui_path(tmp_path, monkeypatch
     assert credentials["refresh_token"] == "refresh-secret-value"
 
 
+def test_macos_oauth_default_reads_backfill_encrypted_fallback_from_keychain_only_state(
+    tmp_path,
+    monkeypatch,
+):
+    guard_home = tmp_path / "guard-home"
+    fake_keyring = _install_fake_system_keyring(monkeypatch, usable_macos_keychain=True)
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+
+    def fake_no_ui_read(self: SystemKeyringSecretStore, secret_id: str, *, timeout_seconds: float = 0.0) -> str | None:
+        _ = timeout_seconds
+        return fake_keyring._secrets.get((self.service_name, secret_id))
+
+    monkeypatch.setattr(SystemKeyringSecretStore, "get_secret_with_timeout", fake_no_ui_read)
+    store = GuardStore(guard_home)
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    assert isinstance(store._oauth_secret_store, FallbackSecretStore)
+    store._oauth_secret_store.fallback.delete_secret(store._oauth_local_credentials_ref)
+    store._clear_oauth_secret_payload_cache()
+
+    restarted_store = GuardStore(guard_home)
+
+    credentials = restarted_store.get_oauth_local_credentials()
+
+    assert credentials is not None
+    assert credentials["refresh_token"] == "refresh-secret-value"
+    assert isinstance(restarted_store._oauth_secret_store, FallbackSecretStore)
+    assert restarted_store._oauth_secret_store.fallback.get_secret(restarted_store._oauth_local_credentials_ref)
+
+
 def test_clear_oauth_local_credentials_removes_legacy_macos_encrypted_secret(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
