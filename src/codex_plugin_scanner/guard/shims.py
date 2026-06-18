@@ -811,40 +811,14 @@ def ensure_package_shim_path_in_shell_profile(context: HarnessContext) -> dict[s
 def remove_guard_profile_blocks(context: HarnessContext) -> dict[str, object]:
     """Remove Guard-managed PATH blocks from common interactive shell profiles."""
 
-    if os.name == "nt":
-        return {
-            "changed": False,
-            "changed_paths": [],
-            "removed_paths": [],
-            "markers_removed": [_GUARD_PROFILE_MARKER, _PACKAGE_PROFILE_MARKER],
-        }
-    changed_paths: list[str] = []
-    removed_paths: list[str] = []
-    for profile_path in _managed_shell_profile_paths(context.home_dir):
-        if not profile_path.exists():
-            continue
-        existing = profile_path.read_text(encoding="utf-8")
-        if _GUARD_PROFILE_MARKER not in existing and _PACKAGE_PROFILE_MARKER not in existing:
-            continue
-        cleaned = existing
-        if _GUARD_PROFILE_MARKER in cleaned:
-            cleaned = _strip_managed_marker_blocks(cleaned, _GUARD_PROFILE_MARKER)
-        if _PACKAGE_PROFILE_MARKER in cleaned:
-            cleaned = _strip_managed_marker_blocks(cleaned, _PACKAGE_PROFILE_MARKER)
-        if cleaned == existing:
-            continue
-        if cleaned:
-            profile_path.write_text(cleaned, encoding="utf-8")
-        else:
-            profile_path.unlink()
-            removed_paths.append(str(profile_path))
-        changed_paths.append(str(profile_path))
-    return {
-        "changed": bool(changed_paths),
-        "changed_paths": changed_paths,
-        "removed_paths": removed_paths,
-        "markers_removed": [_GUARD_PROFILE_MARKER, _PACKAGE_PROFILE_MARKER],
-    }
+    from .shell_profile_cleanup import remove_guard_profile_blocks as remove_profile_blocks
+
+    return remove_profile_blocks(
+        context,
+        strip_managed_marker_blocks=_strip_managed_marker_blocks,
+        guard_profile_marker=_GUARD_PROFILE_MARKER,
+        package_profile_marker=_PACKAGE_PROFILE_MARKER,
+    )
 
 
 def _upsert_managed_profile_block(
@@ -963,14 +937,6 @@ def _package_shim_profile_target(home_dir: Path, shim_dir: Path) -> tuple[Path, 
     return (
         home_dir / ".zshrc",
         f'{marker}\nexport PATH="{shim_dir}:$PATH"',
-    )
-
-
-def _managed_shell_profile_paths(home_dir: Path) -> tuple[Path, ...]:
-    return (
-        home_dir / ".bashrc",
-        home_dir / ".zshrc",
-        home_dir / ".config" / "fish" / "config.fish",
     )
 
 

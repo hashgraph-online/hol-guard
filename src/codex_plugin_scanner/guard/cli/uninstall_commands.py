@@ -12,7 +12,7 @@ from ..daemon.manager import retire_all_guard_daemons_for_home
 from ..redaction import redact_sensitive_text
 from ..shims import package_shim_status, remove_guard_profile_blocks, uninstall_package_shims
 from ..store import GuardStore
-from .install_commands import _managed_install_payload, apply_managed_install
+from .install_commands import apply_managed_install
 from .update_commands import _current_version, _installer_kind
 
 
@@ -26,9 +26,16 @@ def run_guard_self_uninstall(
     current_version = _current_version()
     installer = _installer_kind()
     command = _uninstall_command(installer)
-    managed_installs = _active_managed_installs(store)
-    shim_status = package_shim_status(context)
-    planned_managers = [manager for manager in _string_items(shim_status.get("installed_managers"))]
+    managed_installs, managed_install_error = _active_managed_installs(store)
+    notes: list[str] = []
+    if managed_install_error is not None:
+        notes.append(managed_install_error)
+    try:
+        shim_status = package_shim_status(context)
+        planned_managers = _string_items(shim_status.get("installed_managers"))
+    except (OSError, RuntimeError, ValueError) as error:
+        planned_managers = []
+        notes.append(f"Could not read package shim state before uninstall: {error}")
     payload: dict[str, object] = {
         "self_uninstall": True,
         "status": "planned" if dry_run else "pending",
@@ -40,6 +47,8 @@ def run_guard_self_uninstall(
         "planned_managed_harnesses": [str(item.get("harness") or "unknown") for item in managed_installs],
         "planned_package_shim_managers": planned_managers,
     }
+    if notes:
+        payload["notes"] = [_clean_output(note) for note in notes]
     if dry_run:
         payload["changed"] = False
         payload["message"] = _planned_uninstall_message(
@@ -52,7 +61,6 @@ def run_guard_self_uninstall(
     package_shim_uninstall: dict[str, object] | None = None
     daemon_cleanup: dict[str, object] | None = None
     profile_cleanup: dict[str, object] | None = None
-    notes: list[str] = []
 
     try:
         retired_pids = retire_all_guard_daemons_for_home(context.guard_home)
@@ -63,8 +71,8 @@ def run_guard_self_uninstall(
 
     for managed_install in managed_installs:
         harness = str(managed_install.get("harness") or "").strip()
-        uninstall_context, uninstall_workspace = _managed_install_context(context, managed_install)
         try:
+            uninstall_context, uninstall_workspace = _managed_install_context(context, managed_install)
             uninstall_payload = apply_managed_install(
                 "uninstall",
                 harness,
@@ -83,7 +91,7 @@ def run_guard_self_uninstall(
                     "daemon_cleanup": daemon_cleanup,
                     "message": "HOL Guard removal stopped before the package uninstall command ran.",
                     "error": _clean_output(str(error)),
-                    "notes": notes,
+                    "notes": [_clean_output(note) for note in notes],
                 }
             )
             return payload, 1
@@ -102,7 +110,7 @@ def run_guard_self_uninstall(
                 "daemon_cleanup": daemon_cleanup,
                 "message": "HOL Guard removal stopped before the package uninstall command ran.",
                 "error": _clean_output(str(error)),
-                "notes": notes,
+                "notes": [_clean_output(note) for note in notes],
             }
         )
         return payload, 1
@@ -137,7 +145,7 @@ def run_guard_self_uninstall(
                 "package_removed": False,
                 "message": "HOL Guard package uninstall failed before the installer started.",
                 "error": _clean_output(str(error)),
-                "notes": notes,
+                "notes": [_clean_output(note) for note in notes],
             }
         )
         return payload, 1
@@ -161,7 +169,7 @@ def run_guard_self_uninstall(
         )
         payload["message"] = "HOL Guard package uninstall failed after local protection cleanup."
         if notes:
-            payload["notes"] = notes
+            payload["notes"] = [_clean_output(note) for note in notes]
         return payload, 1
 
     oauth_cleared = False
@@ -215,8 +223,12 @@ def _uninstall_command(installer: str) -> list[str]:
     return [sys.executable, "-m", "pip", "uninstall", "-y", "hol-guard"]
 
 
-def _active_managed_installs(store: GuardStore) -> list[dict[str, object]]:
-    return [_managed_install_payload(item) for item in store.list_managed_installs() if bool(item.get("active"))]
+def _active_managed_installs(store: GuardStore) -> tuple[list[dict[str, object]], str | None]:
+    try:
+        installs = [item for item in store.list_managed_installs() if bool(item.get("active"))]
+    except Exception as error:  # pragma: no cover - defensive path depends on local store failures.
+        return [], f"Could not read managed install state before uninstall: {error}"
+    return installs, None
 
 
 def _managed_install_context(
@@ -234,7 +246,7 @@ def _managed_install_context(
             ),
             str(workspace_path),
         )
-    return HarnessContext(context.home_dir, None, context.guard_home), None
+    return HarnessContext(home_dir=context.home_dir, workspace_dir=None, guard_home=context.guard_home), None
 
 
 def _planned_uninstall_message(*, managed_count: int, package_shim_count: int) -> str:
