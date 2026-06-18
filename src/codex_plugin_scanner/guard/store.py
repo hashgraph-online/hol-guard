@@ -4124,6 +4124,11 @@ class GuardStore:
             "local_rows_scanned": sum(counts.values()),
         }
 
+    def get_cached_policy_trust_status(self) -> dict[str, object]:
+        with self._connect() as connection:
+            state = self._load_policy_integrity_state(connection) or {}
+        return TrustStatus.from_policy_integrity_state(state).to_dict()
+
     def verify_policy_integrity(self, harness: str | None = None) -> dict[str, object]:
         now = _now()
         with self._connect() as connection:
