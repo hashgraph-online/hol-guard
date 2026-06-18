@@ -10,7 +10,7 @@ from .base import HarnessContext
 from .hook_python import package_root_from_python, resolve_guard_hook_python
 
 PLUGIN_FILENAME = "hol-guard-pretool.ts"
-_INTERCEPT_TOOLS = ("bash", "shell", "sh", "zsh", "terminal")
+_INTERCEPT_TOOLS = ("bash", "ctx_shell", "shell", "sh", "zsh", "terminal")
 _HOOK_ARGV_ENV = "HOL_GUARD_HOOK_ARGV"
 _INHERIT_ENV_KEYS = ("PATH", "HOME", "USER", "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL", "SYSTEMROOT")
 

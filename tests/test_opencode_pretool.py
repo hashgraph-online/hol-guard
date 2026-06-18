@@ -99,6 +99,13 @@ def test_pretool_plugin_source_normalizes_argv_array_commands(tmp_path: Path) ->
     assert "Array.isArray(command)" in source
 
 
+def test_pretool_plugin_source_intercepts_lean_ctx_shell(tmp_path: Path) -> None:
+    source = pretool_plugin_source(_ctx(tmp_path))
+
+    assert '"ctx_shell"' in source
+    assert 'const command = normalizeCommand(output.args?.command);' in source
+
+
 def test_pretool_plugin_guard_block_message_appends_primary_approval_url(tmp_path: Path) -> None:
     message = _run_generated_guard_block_message(
         tmp_path,
