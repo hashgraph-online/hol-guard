@@ -11,7 +11,7 @@ function assert(condition: boolean, message: string): void {
 }
 
 assert(
-  formatCloudBundleHashDisplay("sha256:abcdef1234567890") === "sha256:abcd…",
+  formatCloudBundleHashDisplay("sha256:abcdef1234567890") === "sha256:abcdef12…",
   "bundle hash display truncates sha256 hashes",
 );
 assert(
@@ -27,7 +27,7 @@ const attentionCopy = resolveCloudPolicyBundleCopy({
 });
 assert(attentionCopy?.label === "Needs attention", "sync error surfaces attention label");
 assert(
-  resolveCloudBundleStatusSubtitle(attentionCopy!) === "Latest sync needs attention",
+  resolveCloudBundleStatusSubtitle(attentionCopy!) === "Sync needs attention",
   "status subtitle stays short when sync needs attention",
 );
 assert(
