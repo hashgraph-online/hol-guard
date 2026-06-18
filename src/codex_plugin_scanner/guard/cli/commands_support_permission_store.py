@@ -422,9 +422,7 @@ def _persist_claude_native_permission_policy(
     source: str = "claude-native-approval",
 ) -> bool:
     stored_artifact_hash = (
-        _runtime_scoped_exact_match_key(artifact_id)
-        if artifact_type == "tool_action_request"
-        else None
+        _runtime_scoped_exact_match_key(artifact_id) if artifact_type == "tool_action_request" else None
     ) or artifact_hash
     try:
         store.upsert_policy(
