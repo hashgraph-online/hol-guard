@@ -1,6 +1,6 @@
-import { useCallback, type ReactNode } from "react";
+import { useCallback } from "react";
 import { HiMiniCheckCircle, HiMiniClipboardDocument, HiMiniCloudArrowUp } from "react-icons/hi2";
-import { ActionButton, SectionLabel, Tag } from "./approval-center-primitives";
+import { ActionButton, PolicyStatField, SectionLabel, Tag } from "./approval-center-primitives";
 import { formatRelativeTime } from "./approval-center-utils";
 import type { GuardRuntimeSnapshot } from "./guard-types";
 import {
@@ -28,23 +28,6 @@ function CloudBundleHeader({ cloudControlsUrl }: { cloudControlsUrl: string | nu
           Open Guard Cloud
         </ActionButton>
       ) : null}
-    </div>
-  );
-}
-
-function BundleStat({
-  label,
-  children,
-  className = "",
-}: {
-  label: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={`min-w-0 ${className}`}>
-      <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</dt>
-      <dd className="mt-1 min-w-0">{children}</dd>
     </div>
   );
 }
@@ -100,16 +83,16 @@ export function PolicyGuardCloudBundleCard({ snapshot }: PolicyGuardCloudBundleC
       <CloudBundleHeader cloudControlsUrl={cloudControlsUrl} />
 
       <dl className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:gap-x-8 sm:gap-y-3">
-        <BundleStat label="Status" className="sm:min-w-[7.5rem] sm:max-w-[9rem]">
+        <PolicyStatField label="Status" className="sm:min-w-[7.5rem] sm:max-w-[9rem]">
           <div className="flex items-center gap-1.5">
             {synced ? (
               <HiMiniCheckCircle className="h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden="true" />
             ) : null}
             <Tag tone={synced ? "green" : "amber"}>{synced ? "Synced" : cloudBundleCopy.label}</Tag>
           </div>
-        </BundleStat>
+        </PolicyStatField>
 
-        <BundleStat label="Bundle hash" className="min-w-0 flex-1 sm:min-w-[10rem]">
+        <PolicyStatField label="Bundle hash" className="min-w-0 flex-1 sm:min-w-[10rem]">
           <div className="flex min-w-0 items-center gap-1">
             <span
               className="min-w-0 font-mono text-sm text-brand-dark break-all sm:break-normal sm:truncate"
@@ -128,16 +111,16 @@ export function PolicyGuardCloudBundleCard({ snapshot }: PolicyGuardCloudBundleC
               </button>
             ) : null}
           </div>
-        </BundleStat>
+        </PolicyStatField>
 
-        <BundleStat label="Last ack" className="sm:min-w-[6.5rem] sm:max-w-[9rem]">
+        <PolicyStatField label="Last ack" className="sm:min-w-[6.5rem] sm:max-w-[9rem]">
           <p className="text-sm text-brand-dark">{lastAckAt ? formatRelativeTime(lastAckAt) : "Not yet"}</p>
           {bundleVersion ? (
             <p className="mt-0.5 truncate text-xs text-slate-500" title={bundleVersion}>
               {bundleVersion}
             </p>
           ) : null}
-        </BundleStat>
+        </PolicyStatField>
       </dl>
 
       {synced ? (

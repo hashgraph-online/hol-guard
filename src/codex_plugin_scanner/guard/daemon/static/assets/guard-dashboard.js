@@ -17405,6 +17405,12 @@ function Surface(props) {
 function SectionLabel(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-blue", children: props.children });
 }
+function PolicyStatField(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `min-w-0 ${props.className ?? ""}`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-[10px] font-semibold uppercase tracking-wider text-slate-500", children: props.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 min-w-0", children: props.children })
+  ] });
+}
 function Badge(props) {
   const toneClass = badgeToneClass(props.tone);
   return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-normal w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1.5 [&>svg]:pointer-events-none transition-colors duration-200 overflow-hidden ${toneClass}`, children: props.children });
@@ -26271,8 +26277,9 @@ export {
   HiMiniClipboardDocument as b7,
   HiMiniUsers as b8,
   HiMiniFolder as b9,
-  runAuditRemediation as bA,
-  HiMiniSignal as bB,
+  HiMiniArrowUp as bA,
+  runAuditRemediation as bB,
+  HiMiniSignal as bC,
   HiMiniInformationCircle as ba,
   HiMiniIdentification as bb,
   policyActionLabel as bc,
@@ -26283,22 +26290,22 @@ export {
   fetchCloudExceptions as bh,
   fetchCloudExceptionRequests as bi,
   downloadBlob as bj,
-  PaginationControls as bk,
-  HiMiniNoSymbol as bl,
-  HiMiniCube as bm,
-  HiMiniArrowDownTray as bn,
-  HiMiniQueueList as bo,
-  HiMiniPlay as bp,
-  Surface as bq,
-  HiMiniCheckBadge as br,
-  fetchSupplyChainBundle as bs,
-  isSupplyChainScannerEvidence as bt,
-  HiMiniDocumentMagnifyingGlass as bu,
-  HiMiniShieldExclamation as bv,
-  HiMiniComputerDesktop as bw,
-  HiMiniChevronLeft as bx,
-  HiMiniArrowDown as by,
-  HiMiniArrowUp as bz,
+  PolicyStatField as bk,
+  PaginationControls as bl,
+  HiMiniNoSymbol as bm,
+  HiMiniCube as bn,
+  HiMiniArrowDownTray as bo,
+  HiMiniQueueList as bp,
+  HiMiniPlay as bq,
+  Surface as br,
+  HiMiniCheckBadge as bs,
+  fetchSupplyChainBundle as bt,
+  isSupplyChainScannerEvidence as bu,
+  HiMiniDocumentMagnifyingGlass as bv,
+  HiMiniShieldExclamation as bw,
+  HiMiniComputerDesktop as bx,
+  HiMiniChevronLeft as by,
+  HiMiniArrowDown as bz,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,

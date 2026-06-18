@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, S as SectionLabel, o as HiMiniXMark, B as Badge, ac as Tag, aA as HiMiniCommandLine, w as HiMiniExclamationTriangle, b1 as scopeLabel, h as harnessDisplayName, A as ActionButton, b2 as guardAwareHref, m as formatRelativeTime$1, b3 as HiMiniDocumentText, d as HiMiniCheckCircle, b4 as HiMiniCloudArrowUp, b5 as HiMiniCheck, b6 as HiMiniCodeBracket, b7 as HiMiniClipboardDocument, b8 as HiMiniUsers, aH as HiMiniBeaker, b9 as HiMiniFolder, Q as HiMiniLockClosed, l as HiMiniShieldCheck, ba as HiMiniInformationCircle, aO as HiMiniCloudArrowDown, aN as HiMiniArrowTopRightOnSquare, bb as HiMiniIdentification, bc as policyActionLabel, r as reactExports, bd as createCloudExceptionRequest, be as HiMiniArrowRight, b as EmptyState, ad as HiMiniMagnifyingGlass, p as HiMiniChevronUp, q as HiMiniChevronDown, y as HiMiniChevronRight, bf as HiMiniPuzzlePiece, bg as HiMiniGlobeAlt, aF as HiMiniClock, bh as fetchCloudExceptions, bi as fetchCloudExceptionRequests, bj as downloadBlob, bk as PaginationControls, bl as HiMiniNoSymbol, bm as HiMiniCube, aw as HiMiniArrowPath, t as HiMiniCloud, T as HiMiniAdjustmentsHorizontal, bn as HiMiniArrowDownTray, bo as HiMiniQueueList, x as HiMiniBolt, bp as HiMiniPlay, Y as fetchSettings, _ as updateSettings, a$ as WorkspacePageHeader, b0 as __vitePreload } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, S as SectionLabel, o as HiMiniXMark, B as Badge, ac as Tag, aA as HiMiniCommandLine, w as HiMiniExclamationTriangle, b1 as scopeLabel, h as harnessDisplayName, A as ActionButton, b2 as guardAwareHref, m as formatRelativeTime$1, b3 as HiMiniDocumentText, d as HiMiniCheckCircle, b4 as HiMiniCloudArrowUp, b5 as HiMiniCheck, b6 as HiMiniCodeBracket, b7 as HiMiniClipboardDocument, b8 as HiMiniUsers, aH as HiMiniBeaker, b9 as HiMiniFolder, Q as HiMiniLockClosed, l as HiMiniShieldCheck, ba as HiMiniInformationCircle, aO as HiMiniCloudArrowDown, aN as HiMiniArrowTopRightOnSquare, bb as HiMiniIdentification, bc as policyActionLabel, r as reactExports, bd as createCloudExceptionRequest, be as HiMiniArrowRight, b as EmptyState, ad as HiMiniMagnifyingGlass, p as HiMiniChevronUp, q as HiMiniChevronDown, y as HiMiniChevronRight, bf as HiMiniPuzzlePiece, bg as HiMiniGlobeAlt, aF as HiMiniClock, bh as fetchCloudExceptions, bi as fetchCloudExceptionRequests, bj as downloadBlob, bk as PolicyStatField, bl as PaginationControls, bm as HiMiniNoSymbol, bn as HiMiniCube, aw as HiMiniArrowPath, t as HiMiniCloud, T as HiMiniAdjustmentsHorizontal, bo as HiMiniArrowDownTray, bp as HiMiniQueueList, x as HiMiniBolt, bq as HiMiniPlay, Y as fetchSettings, _ as updateSettings, a$ as WorkspacePageHeader, b0 as __vitePreload } from "../guard-dashboard.js";
 const CLOUD_EXCEPTION_EXPIRING_SOON_DAYS = 7;
 function parseCloudExceptionTimestamp(value) {
   if (!value || !value.trim()) {
@@ -3147,16 +3147,6 @@ function CloudBundleHeader({ cloudControlsUrl }) {
     ] }) : null
   ] });
 }
-function BundleStat({
-  label,
-  children,
-  className = ""
-}) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `min-w-0 ${className}`, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-[10px] font-semibold uppercase tracking-wider text-slate-500", children: label }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 min-w-0", children })
-  ] });
-}
 function PolicyGuardCloudBundleCard({ snapshot }) {
   const cloudBundleCopy = resolveCloudPolicyBundleCopy(snapshot);
   const cloudControlsUrl = resolveCloudPolicyControlsUrl(snapshot);
@@ -3185,11 +3175,11 @@ function PolicyGuardCloudBundleCard({ snapshot }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `${POLICY_SUMMARY_CARD_CLASS} self-start p-4`, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(CloudBundleHeader, { cloudControlsUrl }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:gap-x-8 sm:gap-y-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(BundleStat, { label: "Status", className: "sm:min-w-[7.5rem] sm:max-w-[9rem]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyStatField, { label: "Status", className: "sm:min-w-[7.5rem] sm:max-w-[9rem]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5", children: [
         synced ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5 shrink-0 text-emerald-600", "aria-hidden": "true" }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: synced ? "green" : "amber", children: synced ? "Synced" : cloudBundleCopy.label })
       ] }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(BundleStat, { label: "Bundle hash", className: "min-w-0 flex-1 sm:min-w-[10rem]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyStatField, { label: "Bundle hash", className: "min-w-0 flex-1 sm:min-w-[10rem]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-1", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "span",
           {
@@ -3209,7 +3199,7 @@ function PolicyGuardCloudBundleCard({ snapshot }) {
           }
         ) : null
       ] }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(BundleStat, { label: "Last ack", className: "sm:min-w-[6.5rem] sm:max-w-[9rem]", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(PolicyStatField, { label: "Last ack", className: "sm:min-w-[6.5rem] sm:max-w-[9rem]", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: lastAckAt ? formatRelativeTime$1(lastAckAt) : "Not yet" }),
         bundleVersion ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 truncate text-xs text-slate-500", title: bundleVersion, children: bundleVersion }) : null
       ] })
