@@ -117,7 +117,8 @@ class TrustBackend(Protocol):
 
 
 class _ProcessHandle(Protocol):
-    pid: int | None
+    @property
+    def pid(self) -> int | None: ...
 
     def is_alive(self) -> bool: ...
 
