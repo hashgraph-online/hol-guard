@@ -751,15 +751,15 @@ def test_backend_degraded_warn_mode_ignores_local_approval(tmp_path: Path) -> No
         now="2026-05-13T00:01:00+00:00",
     )
 
-    decision = store.resolve_policy_decision(
-        "codex",
-        shell_request.artifact_id,
-        "hash-retry",
-        now="2026-05-13T00:02:00+00:00",
+    assert (
+        store.resolve_policy_decision(
+            "codex",
+            shell_request.artifact_id,
+            "hash-retry",
+            now="2026-05-13T00:02:00+00:00",
+        )
+        is None
     )
-
-    assert decision is None
-
 
 def test_path_degraded_warn_mode_ignores_local_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _store(tmp_path)
