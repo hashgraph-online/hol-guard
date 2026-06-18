@@ -747,7 +747,8 @@ def test_inventory_snapshot_attaches_agent_config_trust_resolution(tmp_path: Pat
     )
 
 
-def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(tmp_path: Path) -> None:
+def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(monkeypatch, tmp_path: Path) -> None:
+    verification_key = _install_test_attestation_key(monkeypatch)
     workspace = tmp_path / "repo"
     workspace.mkdir()
     mcp_file = workspace / ".mcp.json"
@@ -772,6 +773,7 @@ def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(tmp_path: Path) -
             artifact_type="mcp_server",
             source_scope="project",
             config_path=str(mcp_file),
+            command="python",
             transport="stdio",
             metadata={
                 "tools": [
@@ -801,6 +803,32 @@ def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(tmp_path: Path) -
     search_trust, search_metadata = _assert_local_trust(search_tool.metadata, trust_domain="mcp")
     _delete_trust, delete_metadata = _assert_local_trust(delete_tool.metadata, trust_domain="mcp")
     assert search_metadata.get("evidenceHash") != delete_metadata.get("evidenceHash")
+    assert search_tool.metadata.get("serverCommand") == "python"
+    assert search_tool.metadata.get("serverTransport") == "stdio"
+    components = search_trust.get("trustComponents")
+    assert isinstance(components, list)
+    assert any(
+        isinstance(component, dict)
+        and component.get("componentId") == "metadata.command-or-endpoint:score"
+        and component.get("score") == 100
+        for component in components
+    )
+    assert search_metadata.get("attestationStatus") == "signed"
+    attestation = search_metadata.get("attestation")
+    assert isinstance(attestation, dict)
+    verify_trust_attestation(
+        payload=build_trust_attestation_payload(
+            agent_id=snapshot.agent_id,
+            item_id=search_tool.item_id,
+            item_kind=search_tool.item_kind,
+            content_hash=search_tool.content_hash,
+            captured_at=str(search_trust.get("capturedAt")),
+            evidence_hash=str(search_metadata.get("evidenceHash")),
+            scope="trust_resolution",
+        ),
+        envelope=attestation,
+        trusted_keys=(verification_key,),
+    )
     assert search_trust.get("trustScore") is not None
 
 

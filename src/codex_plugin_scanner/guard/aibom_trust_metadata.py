@@ -309,6 +309,11 @@ def _local_skill_scripts_total(run: object) -> int:
     return 0
 
 
+def _metadata_string(metadata: dict[str, object], key: str) -> str | None:
+    value = metadata.get(key)
+    return value if isinstance(value, str) and value else None
+
+
 def _local_trust_domain_for_artifact(
     artifact: object,
     *,
@@ -334,9 +339,9 @@ def _local_trust_domain_for_artifact(
     if item_kind == "mcp_tool":
         return build_mcp_surface_domain(
             name=str(metadata.get("toolName") or metadata.get("title") or ""),
-            command=None,
-            url=None,
-            transport=None,
+            command=_metadata_string(metadata, "serverCommand"),
+            url=_metadata_string(metadata, "serverUrl"),
+            transport=_metadata_string(metadata, "serverTransport"),
         )
     if item_kind in _INSTRUCTION_BASELINE_ITEM_KINDS:
         role = metadata.get("instructionRole")

@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -427,6 +428,7 @@ def inventory_snapshot_from_detection(
                 generated_at=generated_at,
                 home_dir=home_dir,
                 workspace_dir=workspace_dir,
+                trust_attestation_context=trust_attestation_context,
             )
         )
     config_paths = tuple(dict.fromkeys(str(path) for path in getattr(detection, "config_paths", ())))
@@ -720,6 +722,7 @@ def _mcp_tool_items_from_artifact(
     generated_at: str,
     home_dir: Path,
     workspace_dir: Path | None,
+    trust_attestation_context: Mapping[str, object] | None = None,
 ) -> tuple[GuardAgentInventoryItem, ...]:
     artifact_type = str(getattr(artifact, "artifact_type", "unknown"))
     if artifact_type != "mcp_server":
@@ -754,6 +757,9 @@ def _mcp_tool_items_from_artifact(
             "serverItemId": server_item.item_id,
             "toolName": name,
             "title": display_name,
+            "serverCommand": getattr(artifact, "command", None),
+            "serverUrl": getattr(artifact, "url", None),
+            "serverTransport": getattr(artifact, "transport", None),
             "descriptionHash": fingerprint_text(description),
             "inputSchemaHash": fingerprint_mapping(input_schema) if input_schema is not None else None,
             "outputSchemaHash": fingerprint_mapping(output_schema) if output_schema is not None else None,
@@ -776,14 +782,24 @@ def _mcp_tool_items_from_artifact(
                     }
                 )
             metadata["trustLayers"] = inherited_tool_layers
+        tool_artifact = SimpleNamespace(
+            artifact_id=f"{getattr(artifact, 'artifact_id', server_item.item_id)}:tool:{name}",
+            artifact_type="mcp_tool",
+            config_path=getattr(artifact, "config_path", ""),
+            name=name,
+            command=getattr(artifact, "command", None),
+            url=getattr(artifact, "url", None),
+            transport=getattr(artifact, "transport", None),
+        )
         metadata = _aibom_trust_metadata_module().apply_local_trust_metadata(
-            artifact,
+            tool_artifact,
             captured_at=generated_at,
             item_kind="mcp_tool",
             metadata=metadata,
             workspace_dir=workspace_dir,
         )
         capabilities = _capabilities_for_mcp_tool(name, description, input_schema, safe_annotations)
+        tool_item_id = f"{server_item.item_id}:tool:{name}"
         semantic_hash = fingerprint_mapping(
             {
                 "server": server_item.item_id,
@@ -793,6 +809,13 @@ def _mcp_tool_items_from_artifact(
                 "outputSchema": output_schema,
                 "annotations": safe_annotations,
             }
+        )
+        metadata = _apply_tool_trust_attestation_metadata(
+            metadata,
+            harness=harness,
+            item_id=tool_item_id,
+            content_hash=semantic_hash,
+            trust_attestation_context=trust_attestation_context,
         )
         tool_description = _inventory_item_description_module().resolve_inventory_item_description(
             harness=harness,
@@ -805,7 +828,7 @@ def _mcp_tool_items_from_artifact(
         )
         items.append(
             GuardAgentInventoryItem(
-                item_id=f"{server_item.item_id}:tool:{name}",
+                item_id=tool_item_id,
                 item_kind="mcp_tool",
                 display_name=display_name,
                 description=tool_description,
@@ -820,6 +843,60 @@ def _mcp_tool_items_from_artifact(
             )
         )
     return tuple(items)
+
+
+def _apply_tool_trust_attestation_metadata(
+    metadata: dict[str, object],
+    *,
+    harness: str,
+    item_id: str,
+    content_hash: str,
+    trust_attestation_context: Mapping[str, object] | None,
+) -> dict[str, object]:
+    from .runtime.trust_attestation import (
+        GuardTrustAttestationSigningConfig,
+        apply_trust_attestation_metadata,
+    )
+
+    if not isinstance(trust_attestation_context, Mapping):
+        return apply_trust_attestation_metadata(
+            metadata,
+            agent_id=f"{harness}:local",
+            item_id=item_id,
+            item_kind="mcp_tool",
+            content_hash=content_hash,
+        )
+
+    raw_signing_config = trust_attestation_context.get("signingConfig")
+    signing_config = raw_signing_config if isinstance(raw_signing_config, GuardTrustAttestationSigningConfig) else None
+    raw_sequence = trust_attestation_context.get("sequence")
+    sequence = raw_sequence if isinstance(raw_sequence, int) else None
+
+    return apply_trust_attestation_metadata(
+        metadata,
+        agent_id=f"{harness}:local",
+        analyzer_id=_optional_context_string(trust_attestation_context, "analyzerId"),
+        analyzer_spec_version=_optional_context_string(trust_attestation_context, "analyzerSpecVersion"),
+        analyzer_version=_optional_context_string(trust_attestation_context, "analyzerVersion"),
+        item_id=item_id,
+        item_kind="mcp_tool",
+        content_hash=content_hash,
+        challenge_id=_optional_context_string(trust_attestation_context, "challengeId"),
+        expires_at=_optional_context_string(trust_attestation_context, "expiresAt"),
+        installation_id=_optional_context_string(trust_attestation_context, "installationId"),
+        nonce=_optional_context_string(trust_attestation_context, "nonce"),
+        policy_version=_optional_context_string(trust_attestation_context, "policyVersion"),
+        sequence=sequence,
+        upload_id=_optional_context_string(trust_attestation_context, "uploadId"),
+        workspace_id=_optional_context_string(trust_attestation_context, "workspaceId"),
+        device_id=_optional_context_string(trust_attestation_context, "deviceId"),
+        signing_config=signing_config,
+    )
+
+
+def _optional_context_string(context: Mapping[str, object], key: str) -> str | None:
+    value = context.get(key)
+    return value if isinstance(value, str) and value else None
 
 
 def _string_value(value: object) -> str | None:
