@@ -2858,10 +2858,6 @@ class GuardStore:
                 secret_material=secret_material,
                 allow_cutover_resign=False,
             )
-            validate_policy_write_authority(
-                decision,
-                remote_write_authorized=False,
-            )
             connection.execute(
                 """
                 delete from policy_decisions
