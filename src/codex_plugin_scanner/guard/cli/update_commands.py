@@ -587,7 +587,8 @@ def _python_runtime_block_message(version_check: object) -> str:
     runtime_label = runtime_python if isinstance(runtime_python, str) and runtime_python.strip() else "this Python"
     return (
         f"HOL Guard {latest_label} requires Python {requirement_label}; this install is running Python "
-        f"{runtime_label}. Install HOL Guard with a supported Python runtime, then rerun hol-guard update."
+        f"{runtime_label}. Reinstall HOL Guard with Python {requirement_label} (for example, Python 3.13 when "
+        "the latest release requires <3.14), then rerun hol-guard update."
     )
 
 
