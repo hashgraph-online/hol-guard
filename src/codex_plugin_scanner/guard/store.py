@@ -39,6 +39,7 @@ from .local_trust_contract import (
     POLICY_INTEGRITY_REASON_GUARD_HOME_SYMLINK,
     POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE,
     POLICY_INTEGRITY_REASON_SYSTEM_KEYRING_UNAVAILABLE,
+    TrustStatus,
 )
 from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
 from .policy_integrity import (
@@ -4118,6 +4119,7 @@ class GuardStore:
             "generation": state.get("generation"),
             "key_id": state.get("key_id"),
             "degraded_reasons": state.get("degraded_reasons", []),
+            "trust_status": TrustStatus.from_policy_integrity_state(state).to_dict(),
             "counts": counts,
             "local_rows_scanned": sum(counts.values()),
         }
@@ -4143,6 +4145,7 @@ class GuardStore:
             "generation": state.get("generation"),
             "key_id": state.get("key_id"),
             "degraded_reasons": state.get("degraded_reasons", []),
+            "trust_status": TrustStatus.from_policy_integrity_state(state).to_dict(),
             "counts": counts,
             "local_rows_scanned": sum(counts.values()),
             "items": invalid_items,
@@ -4214,6 +4217,7 @@ class GuardStore:
             "generation": state.get("generation"),
             "key_id": state.get("key_id"),
             "degraded_reasons": state.get("degraded_reasons", []),
+            "trust_status": TrustStatus.from_policy_integrity_state(state).to_dict(),
             "counts": counts,
             "local_rows_scanned": sum(counts.values()),
             "cleared": cleared,
@@ -4319,6 +4323,7 @@ class GuardStore:
             "generation": final_state.get("generation"),
             "key_id": final_state.get("key_id"),
             "degraded_reasons": final_state.get("degraded_reasons", []),
+            "trust_status": TrustStatus.from_policy_integrity_state(final_state).to_dict(),
             "legacy_row_ids": legacy_ids,
             "rollback_row_ids": rollback_row_ids,
             "unknown_key_row_ids": unknown_key_ids,
