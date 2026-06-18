@@ -23,7 +23,7 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     cisco_mcp_group = " ".join(pyproject["dependency-groups"]["cisco-mcp"])
     override_entries = pyproject["tool"]["uv"]["override-dependencies"]
 
-    assert requires_python == ">=3.10,<3.14"
+    assert requires_python == ">=3.10"
     assert "cisco-ai-mcp-scanner" not in dependencies
     assert "cisco-ai-mcp-scanner" not in cisco_extra
     assert "cisco-ai-mcp-scanner==4.7.3" in cisco_mcp_group
@@ -31,7 +31,7 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "python_version >= '3.11'" in cisco_extra
     assert "python_version < '3.14'" in cisco_extra
     assert "python_version < '3.14'" in cisco_mcp_group
-    assert "cisco-ai-skill-scanner~=2.0.11" in dependency_entries
+    assert "cisco-ai-skill-scanner~=2.0.11; python_version < '3.14'" in dependency_entries
     assert "aiohttp==3.14.1" in override_entries
     assert "click==8.4.1" in override_entries
     assert "cisco-ai-skill-scanner==2.0.11" in override_entries

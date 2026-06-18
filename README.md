@@ -303,7 +303,7 @@ Scanner package:
 pip install plugin-scanner
 ```
 
-The lean baseline keeps Python 3.10 support intact and includes the shipped `cisco-ai-skill-scanner` integration on Python 3.10 through 3.13.
+The lean baseline keeps Python 3.10+ support intact. It includes the shipped `cisco-ai-skill-scanner` integration on Python 3.10 through 3.13; on Python 3.14+ Guard installs without the LiteLLM-dependent Cisco scanner path and reports Cisco evidence as unavailable until patched LiteLLM releases support that runtime.
 
 ### Resolver-safe Cisco extra
 

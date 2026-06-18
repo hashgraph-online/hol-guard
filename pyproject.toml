@@ -8,7 +8,7 @@ version = "2.0.764"
 description = "Protect local AI harnesses with HOL Guard and run scanner checks for Codex, Claude, Cursor, Gemini, and OpenCode."
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.10"
 authors = [
     { name = "HOL", email = "support@hol.org" },
 ]
@@ -23,6 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Security",
     "Topic :: Software Development :: Quality Assurance",
 ]
@@ -32,7 +33,7 @@ dependencies = [
     "keyring>=25.0",
     "packaging>=24.0",
     "tomli>=2.0; python_version < '3.11'",
-    "cisco-ai-skill-scanner~=2.0.11",
+    "cisco-ai-skill-scanner~=2.0.11; python_version < '3.14'",
 ]
 
 [project.optional-dependencies]
