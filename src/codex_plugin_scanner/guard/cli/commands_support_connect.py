@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from ..local_supply_chain import _resolve_guard_sync_auth_context
 
 def _validate_policy_scope(
     scope: str,

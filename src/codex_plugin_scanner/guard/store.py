@@ -17,7 +17,7 @@ from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from hashlib import pbkdf2_hmac, sha256
 from pathlib import Path
-from typing import Protocol, TypeVar
+from typing import Protocol, TypedDict, TypeVar
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -175,6 +175,24 @@ from .store_threat_intel import (
     threat_intel_matches_schema_statement,
 )
 from .types import CapabilitySet, TransportKind
+
+
+class _RecoveredOAuthLocalCredentialInputs(TypedDict):
+    issuer: str
+    client_id: str
+    refresh_token: str
+    dpop_private_key_pem: str
+    dpop_public_jwk: dict[str, str]
+    dpop_public_jwk_thumbprint: str
+    grant_id: str | None
+    machine_id: str | None
+    supply_chain_entitlement_expires_at: str | None
+    supply_chain_firewall: bool | None
+    supply_chain_plan_id: str | None
+    workspace_id: str | None
+    runtime_id: str | None
+    runtime_label: str | None
+
 
 _POLICY_INTEGRITY_KEY_REF = "guard-policy-integrity-key"
 _POLICY_INTEGRITY_CONTROL_REF = "guard-policy-integrity-control"
@@ -5343,7 +5361,7 @@ class GuardStore:
     @staticmethod
     def _build_recovered_oauth_local_credentials_inputs(
         credentials: dict[str, object],
-    ) -> dict[str, object] | None:
+    ) -> _RecoveredOAuthLocalCredentialInputs | None:
         issuer = _string_value(credentials.get("issuer"))
         client_id = _string_value(credentials.get("client_id"))
         refresh_token = _string_value(credentials.get("refresh_token"))

@@ -968,7 +968,7 @@ def _sync_supply_chain_cloud_state_with_optional_auth_context(
         parameters = inspect.signature(sync_supply_chain_cloud_state).parameters
     except (TypeError, ValueError):
         parameters = {}
-    kwargs: dict[str, object] = {}
+    kwargs: dict[str, Any] = {}
     if auth_context is not None and "auth_context" in parameters:
         kwargs["auth_context"] = auth_context
     if workspace_dir is not None and "workspace_dir" in parameters:
