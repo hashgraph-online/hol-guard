@@ -269,10 +269,17 @@ def _runtime_stored_policy_action(
             return None
         if scope in {"harness", "global"}:
             decision_artifact_hash = _optional_string(decision.get("artifact_hash"))
-            exact_match_key = _runtime_scoped_exact_match_key(artifact_id)
-            if exact_match_key is None:
+            exact_match_keys = {
+                key
+                for key in (
+                    _runtime_scoped_exact_match_key(artifact_id),
+                    _runtime_scoped_exact_match_key(artifact_id, runtime_exact_match_context),
+                )
+                if key is not None
+            }
+            if not exact_match_keys:
                 return action if decision_artifact_id is not None else None
-            return action if decision_artifact_hash == exact_match_key else None
+            return action if decision_artifact_hash in exact_match_keys else None
         return None
     return action
 

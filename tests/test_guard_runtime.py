@@ -54,7 +54,11 @@ from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime import secret_file_requests as secret_file_requests_module
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
-from codex_plugin_scanner.guard.store import GuardStore, _runtime_scoped_exact_match_key
+from codex_plugin_scanner.guard.store import (
+    GuardStore,
+    _runtime_scoped_exact_match_key,
+    runtime_tool_action_exact_match_context,
+)
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -8931,6 +8935,58 @@ def test_guard_hook_claude_ask_user_question_legacy_pending_state_still_persists
     assert policies[0]["source"] == "claude-ask-user-question"
 
 
+def test_guard_hook_claude_native_denial_uses_contextual_tool_action_key(tmp_path):
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    session_id = "session-claude-deny"
+    artifact_id = "claude-code:runtime:tool-action:bash"
+    now = "2026-04-24T00:00:00+00:00"
+    pending_key = guard_commands_module._claude_pending_permission_state_key(session_id, artifact_id)
+    wrapper_chain = ["bash", "zsh"]
+    store.set_sync_payload(
+        pending_key,
+        {
+            "saved_at": now,
+            "reason": "HOL Guard intercepted Claude's shell action.",
+            "artifact_id": artifact_id,
+            "artifact_hash": "hash-denied",
+            "artifact_name": "Bash",
+            "artifact_type": "tool_action_request",
+            "tool_name": "Bash",
+            "config_path": "workspace/app/claude-settings.json",
+            "source_scope": "project",
+            "raw_command_text": "docker compose up -d postgres",
+            "wrapper_chain": wrapper_chain,
+            "permission_prompt_seen": True,
+        },
+        now,
+    )
+    store.set_sync_payload(
+        guard_commands_module._claude_pending_permission_index_key(session_id),
+        [pending_key],
+        now,
+    )
+
+    denied = guard_commands_module._persist_claude_pending_permission_denials(
+        store,
+        {"session_id": session_id},
+    )
+    context = runtime_tool_action_exact_match_context(
+        config_path="workspace/app/claude-settings.json",
+        source_scope="project",
+        raw_command_text="docker compose up -d postgres",
+        wrapper_chain=wrapper_chain,
+    )
+    contextual_key = _runtime_scoped_exact_match_key(artifact_id, context)
+
+    policies = store.list_policy_decisions("claude-code")
+    assert denied == 1
+    assert len(policies) == 1
+    assert policies[0]["artifact_id"] == artifact_id
+    assert policies[0]["artifact_hash"] == contextual_key
+    assert policies[0]["action"] == "block"
+
+
 def test_guard_hook_claude_ask_user_question_bound_pending_without_prompt_seen_still_persists_decision(tmp_path):
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)
@@ -14570,6 +14626,71 @@ def test_guard_runtime_rejects_saved_allows_for_different_risky_tool_action(
     assert (
         guard_commands_module._runtime_artifact_policy_action(config, later_artifact, "opencode")
         == "require-reapproval"
+    )
+
+
+def test_guard_runtime_accepts_contextual_harness_tool_action_policy(tmp_path):
+    workspace = tmp_path / "workspace"
+    artifact_id = "opencode:project:tool-action:docker-compose-postgres"
+    wrapper_chain = ["bash", "zsh"]
+    context = runtime_tool_action_exact_match_context(
+        config_path=str(workspace / "opencode.json"),
+        source_scope="project",
+        raw_command_text="docker compose up -d postgres",
+        wrapper_chain=wrapper_chain,
+    )
+    contextual_key = _runtime_scoped_exact_match_key(artifact_id, context)
+    assert contextual_key is not None
+
+    class _Store:
+        def resolve_policy_decision(
+            self,
+            harness: str,
+            requested_artifact_id: str,
+            artifact_hash: str,
+            workspace_value: str,
+            publisher: str | None,
+            *,
+            runtime_exact_match_context: str | None = None,
+        ) -> dict[str, object]:
+            assert harness == "opencode"
+            assert requested_artifact_id == artifact_id
+            assert artifact_hash == "hash-retry"
+            assert workspace_value == str(workspace)
+            assert publisher is None
+            assert runtime_exact_match_context == context
+            return {
+                "action": "allow",
+                "scope": "harness",
+                "artifact_id": artifact_id,
+                "artifact_hash": contextual_key,
+            }
+
+    runtime_artifact = GuardArtifact(
+        artifact_id=artifact_id,
+        name="Bash docker-sensitive command",
+        harness="opencode",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=str(workspace / "opencode.json"),
+        publisher=None,
+        metadata={
+            "action_class": "docker-sensitive command",
+            "raw_command_text": "docker compose up -d postgres",
+            "wrapper_chain": wrapper_chain,
+        },
+    )
+
+    assert (
+        guard_commands_module._runtime_stored_policy_action(
+            store=_Store(),
+            harness="opencode",
+            artifact=runtime_artifact,
+            artifact_id=runtime_artifact.artifact_id,
+            artifact_hash="hash-retry",
+            workspace=str(workspace),
+        )
+        == "allow"
     )
 
 

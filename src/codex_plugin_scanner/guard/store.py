@@ -3067,6 +3067,7 @@ class GuardStore:
                     ),
                     source=str(candidate["source"]),
                     requested_artifact_id=artifact_id,
+                    requested_runtime_exact_match_key=runtime_exact_match_key,
                 ):
                     continue
                 integrity_result = self._policy_integrity_result_for_row(
@@ -6412,6 +6413,7 @@ def _scoped_runtime_row_requires_exact_match(
     stored_artifact_hash: str | None,
     source: str,
     requested_artifact_id: str | None,
+    requested_runtime_exact_match_key: str | None = None,
 ) -> bool:
     if scope not in {"harness", "global"}:
         return False
@@ -6420,10 +6422,17 @@ def _scoped_runtime_row_requires_exact_match(
     family_key = _artifact_family_key(stored_artifact_id)
     if family_key is None or _family_key_value(family_key) not in _SCOPED_RUNTIME_EXACT_FAMILIES:
         return False
-    expected_exact_key = _runtime_scoped_exact_match_key(requested_artifact_id)
-    if expected_exact_key is None:
+    expected_exact_keys = {
+        key
+        for key in (
+            _runtime_scoped_exact_match_key(requested_artifact_id),
+            requested_runtime_exact_match_key,
+        )
+        if key is not None
+    }
+    if not expected_exact_keys:
         return True
-    return stored_artifact_hash != expected_exact_key
+    return stored_artifact_hash not in expected_exact_keys
 
 
 def _warn_only_policy_integrity_status(status: str, state: Mapping[str, object], *, source: str = "local") -> bool:

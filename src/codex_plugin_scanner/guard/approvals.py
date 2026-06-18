@@ -463,9 +463,21 @@ def _artifact_scope_runtime_exact_match_key(request: Mapping[str, object], scope
     if scope != "artifact" or request.get("artifact_type") != "tool_action_request":
         return None
     artifact_id = request.get("artifact_id")
+    raw_command_text = _string_or_none(request.get("raw_command_text"))
+    wrapper_chain = request.get("wrapper_chain")
+    envelope = request.get("action_envelope_json")
+    if isinstance(envelope, Mapping):
+        raw_command_text = raw_command_text or _string_or_none(envelope.get("raw_command_text"))
+        if not isinstance(wrapper_chain, Sequence) or isinstance(wrapper_chain, str):
+            wrapper_chain = envelope.get("wrapper_chain")
+    normalized_wrapper_chain = (
+        wrapper_chain if isinstance(wrapper_chain, Sequence) and not isinstance(wrapper_chain, str) else None
+    )
     context = runtime_tool_action_exact_match_context(
         config_path=_string_or_none(request.get("config_path")),
         source_scope=_string_or_none(request.get("source_scope")),
+        raw_command_text=raw_command_text,
+        wrapper_chain=normalized_wrapper_chain,
     )
     return _runtime_scoped_exact_match_key(artifact_id, context) if isinstance(artifact_id, str) else None
 
