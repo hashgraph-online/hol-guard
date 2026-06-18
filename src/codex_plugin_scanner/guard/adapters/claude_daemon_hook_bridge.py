@@ -31,8 +31,8 @@ _RISKY_PROMPT_ADDITIONAL_CONTEXT = (
     "HOL Guard will intercept Claude's next attempt to access local secrets and open a branded "
     "approval question to protect you."
 )
-_DAEMON_TIMEOUT_SECONDS = 8
-_FALLBACK_TIMEOUT_SECONDS = 8
+_HARNESS_TIMEOUT_BUDGET_SECONDS = 10
+_HOOK_IO_TIMEOUT_SECONDS = _HARNESS_TIMEOUT_BUDGET_SECONDS - 2
 
 
 def main(
@@ -114,7 +114,7 @@ def _post_to_loopback_daemon(endpoint: str, data: str, *, state_path: str | Path
         method="POST",
     )
     opener = _build_loopback_opener()
-    with opener.open(request, timeout=_DAEMON_TIMEOUT_SECONDS) as response:
+    with opener.open(request, timeout=_HOOK_IO_TIMEOUT_SECONDS) as response:
         final_url = response.geturl()
         if final_url:
             _assert_loopback_http_url(final_url)
@@ -207,7 +207,7 @@ def _should_suppress_output(data: str, response_body: str) -> bool:
 def _valid_hook_json_or_degraded(output: str, *, reason: str, data: str) -> str:
     trimmed = (output or "").strip()
     if not trimmed:
-        return "{}"
+        return _degraded(reason, data)
     try:
         decoded = json.loads(trimmed)
     except json.JSONDecodeError:
@@ -225,7 +225,7 @@ def _run_local_fallback(reason: str, data: str, fallback_command: tuple[str, ...
             capture_output=True,
             text=True,
             errors="replace",
-            timeout=_FALLBACK_TIMEOUT_SECONDS,
+            timeout=_HOOK_IO_TIMEOUT_SECONDS,
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as error:

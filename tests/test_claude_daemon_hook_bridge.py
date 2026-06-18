@@ -135,6 +135,7 @@ def test_main_degrades_when_daemon_returns_malformed_json(
     daemon_thread = threading.Thread(target=daemon_server.serve_forever, daemon=True)
     daemon_thread.start()
     daemon_port = daemon_server.server_address[1]
+    _DaemonHandler.captured_guard_token = None
     _DaemonHandler.raw_response_body = b"not-json"
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
 
@@ -169,9 +170,22 @@ def test_run_local_fallback_degrades_invalid_json() -> None:
     assert "malformed hook JSON" in payload["hookSpecificOutput"]["permissionDecisionReason"]
 
 
+def test_valid_hook_json_degrades_empty_daemon_body() -> None:
+    response = bridge._valid_hook_json_or_degraded(
+        "",
+        reason="daemon returned empty hook JSON",
+        data=json.dumps({"hook_event_name": "PreToolUse"}),
+    )
+
+    payload = json.loads(response)
+    assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert "full HOL Guard approval flow" in payload["systemMessage"]
+
+
 def test_bridge_timeouts_stay_under_harness_budget() -> None:
-    assert bridge._DAEMON_TIMEOUT_SECONDS <= 10
-    assert bridge._FALLBACK_TIMEOUT_SECONDS <= 10
+    assert bridge._HARNESS_TIMEOUT_BUDGET_SECONDS == 10
+    assert bridge._HOOK_IO_TIMEOUT_SECONDS == bridge._HARNESS_TIMEOUT_BUDGET_SECONDS - 2
 
 
 def test_loopback_redirect_handler_rejects_remote_redirect() -> None:
