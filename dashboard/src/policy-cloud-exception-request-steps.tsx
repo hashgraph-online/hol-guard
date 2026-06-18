@@ -344,7 +344,6 @@ export function CloudExceptionScopeStep({
       value: "harness",
       label: "This harness",
       description: "Any matching action for this harness.",
-      disabledReason: "Needs signed project identity",
     },
     {
       value: "team-policy",

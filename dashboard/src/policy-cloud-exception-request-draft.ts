@@ -50,9 +50,12 @@ export function toDatetimeLocalValue(iso: string): string {
 }
 
 export function fromDatetimeLocalValue(value: string): string {
+  if (!value) {
+    return "";
+  }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return new Date().toISOString();
+    return "";
   }
   return date.toISOString();
 }
@@ -112,7 +115,7 @@ export function createDefaultDraft(snapshot: GuardRuntimeSnapshot): CloudExcepti
 }
 
 export function isDraftRecord(value: unknown): value is Partial<CloudExceptionRequestDraft> {
-  return value !== null && typeof value === "object";
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 export function loadDraftFromStorage(): Partial<CloudExceptionRequestDraft> | null {
@@ -195,10 +198,16 @@ export function canAdvanceFromScope(draft: CloudExceptionRequestDraft): boolean 
   return true;
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function isEmailValid(value: string): boolean {
+  return EMAIL_REGEX.test(value.trim());
+}
+
 export function canAdvanceFromGuardrails(draft: CloudExceptionRequestDraft): boolean {
   return (
-    draft.owner.trim().length > 0 &&
-    draft.requestedBy.trim().length > 0 &&
+    isEmailValid(draft.owner) &&
+    isEmailValid(draft.requestedBy) &&
     isReasonValid(draft.reason) &&
     isExpiryValid(draft.requestedExpiresAt)
   );

@@ -17,6 +17,7 @@ import {
   createDefaultDraft,
   hasValidSourceAnchor,
   isDraftRecord,
+  isEmailValid,
   isExpiryValid,
   isReasonValid,
   loadDraftFromStorage,
@@ -114,6 +115,9 @@ assertEqual(payload.scope, "workspace", "payload scope");
 assertEqual(payload.sourceReceiptId, "receipt-local-1", "payload receipt");
 assertEqual(payload.workingDirectory, "/tmp/project", "payload workspace");
 
+assertEqual(isEmailValid("not-an-email"), false, "invalid email");
+assertEqual(isEmailValid("owner@example.com"), true, "valid email");
+assertEqual(isDraftRecord([1, 2]), false, "array is not draft record");
 assertEqual(isDraftRecord({ sourceReceiptId: "x" }), true, "draft record");
 assertEqual(isDraftRecord(null), false, "not draft record");
 assertEqual(mergeDraft(baseDraft, { reason: "saved" }).reason, "saved", "merge draft");

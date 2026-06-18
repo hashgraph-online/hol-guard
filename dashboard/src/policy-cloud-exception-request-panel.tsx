@@ -53,7 +53,9 @@ export function PolicyCloudExceptionRequestPanel({
   onSubmitted,
   onCancel,
 }: PolicyCloudExceptionRequestPanelProps) {
-  const openerRef = useRef<HTMLElement | null>(document.activeElement as HTMLElement | null);
+  const openerRef = useRef<HTMLElement | null>(
+    typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null,
+  );
   const receiptOptions = snapshot.latest_receipts ?? [];
 
   const harnessOptions = useMemo(() => {
