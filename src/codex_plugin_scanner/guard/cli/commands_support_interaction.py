@@ -497,16 +497,45 @@ def _primary_approval_lookup_kwargs(response_payload: dict[str, object], *, harn
     }
 
 def _preferred_approval_review_url(response_payload: Mapping[str, object], *, harness: str) -> str | None:
+    approval_center_url = _optional_string(response_payload.get("approval_center_url"))
     queued = response_payload.get("approval_requests")
-    return (
-        _optional_string(response_payload.get("primary_approval_url"))
-        or (
-            first_approval_url(queued, **_primary_approval_lookup_kwargs(dict(response_payload), harness=harness))
-            if isinstance(queued, list)
-            else None
-        )
-        or _optional_string(response_payload.get("approval_center_url"))
+    lookup_kwargs = _primary_approval_lookup_kwargs(dict(response_payload), harness=harness)
+    artifact_id = lookup_kwargs.get("artifact_id")
+    queued_has_artifact_metadata = (
+        any(_optional_string(item.get("artifact_id")) is not None for item in queued if isinstance(item, Mapping))
+        if isinstance(queued, list)
+        else False
     )
+    queued_url = (
+        first_approval_url(
+            queued,
+            **lookup_kwargs,
+        )
+        if isinstance(queued, list)
+        else None
+    )
+    if queued_url is None and isinstance(queued, list) and artifact_id is not None:
+        queued_url = first_approval_url(
+            queued,
+            harness=harness,
+            approval_center_url=approval_center_url,
+            artifact_id=artifact_id,
+        )
+    if queued_url is None and isinstance(queued, list) and (artifact_id is None or not queued_has_artifact_metadata):
+        queued_url = first_approval_url(
+            queued,
+            harness=harness,
+            approval_center_url=approval_center_url,
+        )
+    if queued_url is not None:
+        return queued_url
+    primary_url = _optional_string(response_payload.get("primary_approval_url"))
+    if primary_url is not None:
+        return canonical_local_approval_url(
+            primary_url,
+            approval_center_url=approval_center_url,
+        )
+    return approval_center_url
 
 def _open_codex_live_approval(response_payload: Mapping[str, object], *, guard_home: Path | None = None) -> None:
     harness = _optional_string(response_payload.get("harness")) or "codex"
