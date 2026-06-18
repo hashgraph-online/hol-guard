@@ -40,6 +40,7 @@ _ALREADY_CURRENT_HINTS = (
 )
 _PYPI_JSON_URL = "https://pypi.org/pypi/hol-guard/json"
 _PYPI_TIMEOUT_SECONDS = 3.0
+_LAST_PYPI_PAYLOAD: dict[str, object] | None = None
 
 
 def _read_direct_url_dir_info(direct_url: dict[str, object] | None) -> dict[str, object]:
@@ -97,6 +98,17 @@ def run_guard_update(
         if local_source_install is not None and not bool(local_source_install.get("path_exists")):
             payload["recovery_source_install"] = True
     version_check = _version_check_payload(current_version)
+    if _python_runtime_blocks_update(version_check):
+        payload.update(
+            {
+                "version_check": version_check,
+                "status": "blocked",
+                "changed": False,
+                "python_update_required": True,
+                "message": _python_runtime_block_message(version_check),
+            }
+        )
+        return payload, 1
     use_pypi = force_pypi_reinstall or _should_upgrade_from_pypi(
         current_version=current_version,
         version_check=version_check,
@@ -457,6 +469,18 @@ def _version_check_payload(current_version: str) -> dict[str, object]:
             "latest_version": latest_version,
             "update_available": None,
         }
+    required_python = _latest_version_python_requirement(latest_version)
+    runtime_python = _runtime_python_version()
+    if update_available and not _python_requirement_satisfied(required_python, runtime_python):
+        return {
+            "source": "pypi",
+            "status": "python_incompatible",
+            "current_version": current_version,
+            "latest_version": latest_version,
+            "update_available": True,
+            "required_python": required_python,
+            "runtime_python": runtime_python,
+        }
     return {
         "source": "pypi",
         "status": "stale" if update_available else "current",
@@ -467,6 +491,7 @@ def _version_check_payload(current_version: str) -> dict[str, object]:
 
 
 def _latest_version_from_pypi() -> str | None:
+    global _LAST_PYPI_PAYLOAD
     request = urllib.request.Request(_PYPI_JSON_URL, headers={"Accept": "application/json"})
     try:
         with urllib.request.urlopen(request, timeout=_PYPI_TIMEOUT_SECONDS) as response:
@@ -482,54 +507,75 @@ def _latest_version_from_pypi() -> str | None:
         return None
     if not isinstance(payload, dict):
         return None
-    return _latest_compatible_release_version(payload, python_version=_runtime_python_version())
+    _LAST_PYPI_PAYLOAD = payload
+    info = payload.get("info")
+    if not isinstance(info, dict):
+        return None
+    version = info.get("version")
+    return version if isinstance(version, str) and version.strip() else None
 
 
 def _runtime_python_version() -> str:
     return f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
 
 
-def _latest_compatible_release_version(payload: dict[str, object], *, python_version: str) -> str | None:
+def _latest_version_python_requirement(latest_version: str) -> str | None:
+    payload = _LAST_PYPI_PAYLOAD
+    if not isinstance(payload, dict):
+        return None
+    info = payload.get("info")
+    if isinstance(info, dict) and info.get("version") == latest_version:
+        requires_python = info.get("requires_python")
+        if isinstance(requires_python, str) and requires_python.strip():
+            return requires_python.strip()
     releases = payload.get("releases")
     if not isinstance(releases, dict):
-        info = payload.get("info")
-        if not isinstance(info, dict):
-            return None
-        version = info.get("version")
-        return version if isinstance(version, str) and version.strip() else None
-    candidates: list[tuple[Version, str]] = []
-    for version_text, files in releases.items():
-        if not isinstance(version_text, str) or not version_text.strip():
-            continue
-        try:
-            parsed_version = Version(version_text)
-        except InvalidVersion:
-            continue
-        if _release_has_compatible_file(files, python_version=python_version):
-            candidates.append((parsed_version, version_text.strip()))
-    if not candidates:
         return None
-    stable_candidates = [candidate for candidate in candidates if not candidate[0].is_prerelease]
-    return max(stable_candidates or candidates, key=lambda candidate: candidate[0])[1]
-
-
-def _release_has_compatible_file(files: object, *, python_version: str) -> bool:
+    files = releases.get(latest_version)
     if not isinstance(files, list):
-        return False
+        return None
+    requirements: list[str] = []
     for file_payload in files:
-        if not isinstance(file_payload, dict):
-            continue
-        if file_payload.get("yanked") is True:
+        if not isinstance(file_payload, dict) or file_payload.get("yanked") is True:
             continue
         requires_python = file_payload.get("requires_python")
-        if not isinstance(requires_python, str) or not requires_python.strip():
-            return True
-        try:
-            if SpecifierSet(requires_python).contains(python_version, prereleases=True):
-                return True
-        except InvalidSpecifier:
-            continue
-    return False
+        if isinstance(requires_python, str) and requires_python.strip():
+            requirements.append(requires_python.strip())
+    return requirements[0] if requirements else None
+
+
+def _python_requirement_satisfied(required_python: str | None, runtime_python: str) -> bool:
+    if not isinstance(required_python, str) or not required_python.strip():
+        return True
+    try:
+        return SpecifierSet(required_python).contains(runtime_python, prereleases=True)
+    except InvalidSpecifier:
+        return True
+
+
+def _python_runtime_blocks_update(version_check: object) -> bool:
+    return isinstance(version_check, dict) and version_check.get("status") == "python_incompatible"
+
+
+def _python_runtime_block_message(version_check: object) -> str:
+    if not isinstance(version_check, dict):
+        return "HOL Guard update requires a different Python runtime."
+    latest_version = version_check.get("latest_version")
+    required_python = version_check.get("required_python")
+    runtime_python = version_check.get("runtime_python")
+    latest_label = (
+        latest_version if isinstance(latest_version, str) and latest_version.strip() else "the latest release"
+    )
+    requirement_label = (
+        required_python
+        if isinstance(required_python, str) and required_python.strip()
+        else "the supported Python range"
+    )
+    runtime_label = runtime_python if isinstance(runtime_python, str) and runtime_python.strip() else "this Python"
+    return (
+        f"HOL Guard {latest_label} requires Python {requirement_label}; this install is running Python "
+        f"{runtime_label}. Install HOL Guard with a supported Python runtime, then rerun hol-guard update."
+    )
 
 
 def _is_newer_version(latest_version: str, current_version: str) -> bool | None:
@@ -858,7 +904,10 @@ def build_guard_update_status_payload() -> dict[str, object]:
     blocked_reason: str | None = None
     recovery_reinstall_available = False
 
-    if isinstance(direct_url, dict):
+    if _python_runtime_blocks_update(version_check):
+        auto_updatable = False
+        blocked_reason = _python_runtime_block_message(version_check)
+    elif isinstance(direct_url, dict):
         if bool(_read_direct_url_dir_info(direct_url).get("editable")):
             auto_updatable = False
             blocked_reason = (
@@ -885,6 +934,7 @@ def build_guard_update_status_payload() -> dict[str, object]:
         "auto_updatable": auto_updatable,
         "update_available": update_available,
         "blocked_reason": blocked_reason,
+        "python_update_required": _python_runtime_blocks_update(version_check),
         "recovery_reinstall_available": recovery_reinstall_available,
         "recovery_reinstall_command": recovery_reinstall_command,
     }

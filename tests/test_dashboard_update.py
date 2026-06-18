@@ -464,6 +464,42 @@ def test_status_payload_exposes_recovery_for_local_folder_install(
     assert payload["recovery_reinstall_command"] == "pipx install --force hol-guard"
 
 
+def test_status_payload_blocks_python_incompatible_latest_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._current_version",
+        lambda: "2.0.789",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._installer_kind",
+        lambda: "pipx",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._direct_url_payload",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._latest_version_from_pypi",
+        lambda: "2.0.807",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._latest_version_python_requirement",
+        lambda latest: ">=3.10,<3.14",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._runtime_python_version",
+        lambda: "3.14.0",
+    )
+
+    payload = build_guard_update_status_payload()
+
+    assert payload["auto_updatable"] is False
+    assert payload["update_available"] is False
+    assert payload["python_update_required"] is True
+    assert "requires Python >=3.10,<3.14" in str(payload["blocked_reason"])
+
+
 def test_status_payload_hides_recovery_for_editable_install(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
