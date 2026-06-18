@@ -1642,14 +1642,18 @@ def _sync_supply_chain_bundle_incremental(
     }
 
 
-def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
+def sync_supply_chain_bundle(
+    store: GuardStore,
+    *,
+    auth_context: dict[str, object] | None = None,
+) -> dict[str, object]:
     """Fetch, verify, and persist the active supply-chain bundle for the cloud workspace."""
 
-    auth_context = _resolve_guard_sync_auth_context(store)
+    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
     workspace_id = store.get_cloud_workspace_id()
     if workspace_id is None:
         raise GuardSyncNotConfiguredError("Guard Cloud workspace is not connected.")
-    bundle_url = _normalized_supply_chain_bundle_url(str(auth_context["sync_url"]), workspace_id)
+    bundle_url = _normalized_supply_chain_bundle_url(str(resolved_auth_context["sync_url"]), workspace_id)
     cached_bundle = store.get_cached_supply_chain_bundle(workspace_id)
     cached_bundle_version = None
     if isinstance(cached_bundle, dict):
@@ -1663,7 +1667,7 @@ def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
         partition_sync: dict[str, object] | None = _sync_supply_chain_bundle_incremental(
             bundle_url=bundle_url,
             cached_bundle_version=cached_bundle_version,
-            auth_context=auth_context,
+            auth_context=resolved_auth_context,
             store=store,
             trusted_keys=trusted_keys,
             workspace_id=workspace_id,
@@ -1685,7 +1689,7 @@ def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
         except SupplyChainBundleError:
             try:
                 request = _guard_sync_request(
-                    auth_context,
+                    resolved_auth_context,
                     request_url=bundle_url,
                     method="GET",
                     data=None,
@@ -1702,7 +1706,7 @@ def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
                 raise RuntimeError(f"Guard supply-chain bundle sync failed: {error}") from error
     else:
         request = _guard_sync_request(
-            auth_context,
+            resolved_auth_context,
             request_url=bundle_url,
             method="GET",
             data=None,
@@ -3699,12 +3703,35 @@ def _cloud_package_manager_coverage(
         ),
         generated_at=generated_at,
     )
-    summary = store.get_sync_payload("supply_chain_bundle_summary")
     synced_at = None
     next_refresh_at = None
-    if isinstance(summary, dict):
-        synced_at = _optional_string(summary.get("synced_at") or summary.get("syncedAt"))
-        next_refresh_at = _optional_string(summary.get("next_refresh_at") or summary.get("nextRefreshAt"))
+    synced_timestamp = None
+    for source_name, summary in (
+        ("sync", store.get_sync_payload("sync_summary")),
+        ("runtime", store.get_sync_payload("runtime_session_summary")),
+        ("bundle", store.get_sync_payload("supply_chain_bundle_summary")),
+    ):
+        if not isinstance(summary, dict):
+            continue
+        candidate_synced_at = _optional_string(
+            summary.get("synced_at")
+            or summary.get("syncedAt")
+            or summary.get("runtime_session_synced_at")
+            or summary.get("runtimeSessionSyncedAt")
+            or summary.get("local_guard_online_at"),
+        )
+        candidate_timestamp = _parse_iso_timestamp(candidate_synced_at) if candidate_synced_at is not None else None
+        if candidate_timestamp is None:
+            continue
+        if synced_timestamp is not None and candidate_timestamp <= synced_timestamp:
+            continue
+        synced_at = candidate_synced_at
+        synced_timestamp = candidate_timestamp
+        next_refresh_at = (
+            _optional_string(summary.get("next_refresh_at") or summary.get("nextRefreshAt"))
+            if source_name == "bundle"
+            else None
+        )
     reference_timestamp = _parse_iso_timestamp(generated_at) or datetime.now(timezone.utc)
     stale_status = "unknown"
     if synced_at is not None:

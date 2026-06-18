@@ -162,9 +162,20 @@ def test_package_shims_status_self_heals_connected_cloud_auth_without_cached_ent
     capsys: pytest.CaptureFixture[str],
     seed_connected_oauth_without_entitlement,
 ) -> None:
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+
     guard_home = tmp_path / "guard-home"
     seed_connected_oauth_without_entitlement(GuardStore(guard_home))
     calls: list[str] = []
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_test_sync_auth_context_override",
+        {
+            "access_token": "demo-token",
+            "dpop_key_material": None,
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        },
+    )
 
     def _fake_sync_local_guard_cloud_proof(store: GuardStore) -> dict[str, object]:
         calls.append("proof")
@@ -204,6 +215,77 @@ def test_package_shims_status_self_heals_connected_cloud_auth_without_cached_ent
         "upgrade_cta": None,
     }
     assert payload["actions"]["install"] == "available"
+
+
+def test_package_firewall_entitlement_refresh_reuses_one_auth_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    seed_connected_oauth_without_entitlement,
+) -> None:
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    seed_connected_oauth_without_entitlement(store)
+    shared_auth_context = {
+        "access_token": "demo-token",
+        "dpop_key_material": None,
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+    }
+    calls: list[tuple[str, dict[str, object] | None]] = []
+
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_test_sync_auth_context_override",
+        shared_auth_context,
+    )
+
+    def _fake_sync_local_guard_cloud_proof(
+        current_store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        calls.append(("proof", auth_context))
+        current_store.record_latest_guard_connect_sync_success(
+            sync_payload={"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1},
+            now="2026-06-05T01:41:00+00:00",
+        )
+        return {"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1}
+
+    def _fake_sync_supply_chain_bundle(
+        current_store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        calls.append(("bundle", auth_context))
+        current_store.set_sync_payload(
+            "supply_chain_bundle_entitlement",
+            {
+                "bundle_version": "bundle-version-test",
+                "key_id": "bundle-key-test",
+                "policy_hash": "policy-hash-test",
+                "tier": "pro",
+                "workspace_id": "workspace-1",
+            },
+            "2026-06-05T01:41:05+00:00",
+        )
+        return {"bundle_version": "bundle-version-test", "tier": "pro"}
+
+    monkeypatch.setattr(local_supply_chain_module, "sync_local_guard_cloud_proof", _fake_sync_local_guard_cloud_proof)
+    monkeypatch.setattr(local_supply_chain_module, "sync_supply_chain_bundle", _fake_sync_supply_chain_bundle)
+
+    entitlement = local_supply_chain_module.resolve_package_firewall_entitlement_with_refresh(store)
+
+    assert calls == [
+        ("proof", shared_auth_context),
+        ("bundle", shared_auth_context),
+    ]
+    assert entitlement == {
+        "allowed": True,
+        "reason": "paid_entitlement_active",
+        "tier": "pro",
+        "upgrade_cta": None,
+    }
 
 
 def test_package_shims_status_preserves_reconnect_gate_when_connected_auth_refresh_expires(

@@ -944,7 +944,7 @@ def test_supply_chain_sync_returns_json_when_bundle_sync_fails_after_approval(
     def _fail_sync(_store: GuardStore) -> dict[str, object]:
         raise RuntimeError("Guard supply-chain bundle sync failed: simulated network failure")
 
-    monkeypatch.setattr(daemon_server, "sync_supply_chain_bundle", _fail_sync)
+    monkeypatch.setattr(daemon_server, "sync_supply_chain_cloud_state", _fail_sync)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -994,7 +994,7 @@ def test_supply_chain_sync_returns_retryable_unavailable_when_cloud_outage(
             retryable=True,
         )
 
-    monkeypatch.setattr(daemon_server, "sync_supply_chain_bundle", _fail_sync)
+    monkeypatch.setattr(daemon_server, "sync_supply_chain_cloud_state", _fail_sync)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -1043,7 +1043,7 @@ def test_supply_chain_sync_returns_reconnect_error_when_auth_expired(
             "Guard authorization expired. Run `hol-guard connect` to sign in again."
         )
 
-    monkeypatch.setattr(daemon_server, "sync_supply_chain_bundle", _fail_sync)
+    monkeypatch.setattr(daemon_server, "sync_supply_chain_cloud_state", _fail_sync)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:

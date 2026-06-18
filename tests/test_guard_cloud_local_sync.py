@@ -841,6 +841,71 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
     }
 
 
+def test_sync_runtime_session_prefers_latest_sync_summary_for_package_manager_coverage_freshness(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    context = HarnessContext(
+        home_dir=store.guard_home,
+        workspace_dir=workspace_dir,
+        guard_home=store.guard_home,
+    )
+    install_payload = install_package_shims(context, managers=("npm",))
+    shim_dir = Path(str(install_payload["shim_dir"]))
+    original_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", f"{shim_dir}{os.pathsep}{original_path}")
+    store.set_sync_payload(
+        "supply_chain_bundle_summary",
+        {
+            "synced_at": "2026-04-24T00:00:00+00:00",
+        },
+        "2026-04-24T00:00:00+00:00",
+    )
+    store.set_sync_payload(
+        "sync_summary",
+        {
+            "synced_at": "2026-04-24T00:20:00+00:00",
+        },
+        "2026-04-24T00:20:00+00:00",
+    )
+
+    captured_body: dict[str, object] = {}
+
+    def _runtime_sync_response(**kwargs):
+        request = kwargs["request"]
+        captured_body.update(json.loads(request.data.decode("utf-8")))
+        return {"syncedAt": "2026-04-24T00:21:00+00:00", "items": []}
+
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_urlopen_json_with_timeout_retry",
+        _runtime_sync_response,
+    )
+
+    guard_runner_module.sync_runtime_session(
+        store,
+        session={
+            "harness": "codex",
+            "surface": "cli",
+            "status": "active",
+            "updatedAt": "2026-04-24T00:21:00+00:00",
+            "workspace": str(workspace_dir),
+        },
+    )
+
+    session_payload = captured_body["session"]
+    assert isinstance(session_payload, dict)
+    assert session_payload["packageManagerCoverage"]["staleIntel"] == {
+        "status": "fresh",
+        "lastSyncedAt": "2026-04-24T00:20:00+00:00",
+        "nextRefreshAt": "2026-04-24T00:35:00+00:00",
+    }
+
+
 def test_sync_runtime_session_prefers_ipv6_private_identity_when_ipv4_unavailable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
