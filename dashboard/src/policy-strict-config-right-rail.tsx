@@ -7,17 +7,8 @@ import {
 } from "react-icons/hi2";
 import { ActionButton, Badge, SectionLabel } from "./approval-center-primitives";
 import { policyActionLabel } from "./approval-center-utils";
-import { POLICY_PANEL_CARD_CLASS, STRICT_CONFIG_WHAT_CHANGES } from "./policy-strict-config-surfaces";
+import { POLICY_PANEL_CARD_CLASS, STRICT_CONFIG_SCENARIOS, STRICT_CONFIG_WHAT_CHANGES } from "./policy-strict-config-surfaces";
 import type { StrictPolicySimulationResult, StrictScenarioId } from "./policy-strict-config-utils";
-
-const TEST_SCENARIOS: Array<{
-  id: StrictScenarioId;
-  label: string;
-}> = [
-  { id: "first-time", label: "New tool contacting unknown domain" },
-  { id: "remembered-allow", label: "Remembered allow wins" },
-  { id: "cloud-exception", label: "Active Cloud exception" },
-];
 
 function resolveExpectedActionTone(action: string): "success" | "destructive" | "warning" | "default" {
   if (action === "block") {
@@ -75,7 +66,7 @@ export function PolicyStrictConfigRightRail({
         <SectionLabel>Affected pending Inbox items</SectionLabel>
         <p className="mt-2 text-4xl font-semibold tabular-nums text-brand-blue">
           {pendingInboxCount}
-          <span className="ml-1.5 text-lg font-medium text-brand-blue/75">items</span>
+          <span className="ml-1.5 text-lg font-medium text-brand-blue/75">Items</span>
         </p>
         <p className="mt-1 text-sm leading-relaxed text-slate-600">
           Pending review items may be affected by stricter fallback controls.
@@ -123,7 +114,7 @@ export function PolicyStrictConfigRightRail({
             onChange={onScenarioChange}
             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark"
           >
-            {TEST_SCENARIOS.map((scenario) => (
+            {STRICT_CONFIG_SCENARIOS.map((scenario) => (
               <option key={scenario.id} value={scenario.id}>
                 {scenario.label}
               </option>

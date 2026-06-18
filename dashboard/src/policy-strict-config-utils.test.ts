@@ -1,5 +1,6 @@
 import {
   resolveStrictScenarioOutcome,
+  resolveStrictScenarioSimulation,
   fingerprintLocalPolicySettings,
   simulateStrictPolicyOutcome,
   STRICT_POLICY_EVALUATION_ORDER,
@@ -79,5 +80,12 @@ assert(
 const scenario = resolveStrictScenarioOutcome("first-time", baseSettings);
 assert(scenario.outcome === "review", "first-time scenario uses network domain action");
 assert(scenario.reasoning.includes("New network domain action"), "scenario reasoning names control");
+
+const firstTimeSimulation = resolveStrictScenarioSimulation(baseSettings, "first-time");
+assert(firstTimeSimulation.outcome === "review", "first-time simulation uses network domain fallback");
+assert(firstTimeSimulation.winningStep === "Ask or block", "first-time simulation reaches strict fallback");
+
+const rememberedSimulation = resolveStrictScenarioSimulation(baseSettings, "remembered-allow");
+assert(rememberedSimulation.outcome === "allow", "remembered-allow simulation wins at remembered rule");
 
 console.log("policy-strict-config-utils.test.ts: all assertions passed");

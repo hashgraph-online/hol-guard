@@ -40,7 +40,7 @@ export function StrictConfigActionSegmented({
   const showAdvanced = !PRIMARY_STRICT_ACTION_VALUES.has(value);
 
   return (
-    <div className="grid gap-4 py-5 first:pt-0 last:pb-0 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-6">
+    <div className="grid gap-3 py-4 first:pt-0 last:pb-0 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-4">
       <div className="flex min-w-0 items-start gap-3">
         {Icon ? (
           <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
@@ -52,9 +52,9 @@ export function StrictConfigActionSegmented({
           {help ? <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{help}</p> : null}
         </div>
       </div>
-      <div className="min-w-0 lg:justify-self-end">
+      <div className="w-full max-w-[17.5rem] lg:justify-self-end">
         <div
-          className="inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-slate-200 bg-slate-100/80 p-1"
+          className="flex w-full flex-wrap gap-0.5 rounded-xl border border-slate-200 bg-slate-100/80 p-0.5"
           role="group"
           aria-label={label}
         >
@@ -67,7 +67,7 @@ export function StrictConfigActionSegmented({
                 disabled={disabled}
                 aria-pressed={selected}
                 onClick={() => handleSelect(option.value)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
                   selected
                     ? "bg-brand-blue text-white shadow-sm"
                     : "text-slate-600 hover:bg-white/70 hover:text-brand-dark disabled:opacity-50"

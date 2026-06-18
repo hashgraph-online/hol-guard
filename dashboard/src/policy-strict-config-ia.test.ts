@@ -22,6 +22,10 @@ assert(rightRailSource.includes("Policy simulator outcome"), "strict config incl
 assert(enforcementSource.includes("Local enforcement preview"), "strict config shows enforcement preview");
 assert(rightRailSource.includes("Run simulation"), "strict config exposes run simulation");
 assert(tabSource.includes("PolicyStrictModeCard"), "strict config tab uses extracted cards");
+assert(tabSource.includes("resolveStrictScenarioSimulation"), "strict config derives simulation from settings");
+assert(!tabSource.includes("SCENARIO_FIXTURES"), "strict config removes scenario fixtures");
+assert(!tabSource.includes("simRemembered"), "strict config removes fake simulation state");
+assert(tabSource.includes("280px"), "strict config uses fixed-width right rail");
 assert(enforcementSource.includes("min-w-[52rem]"), "strict config uses horizontal enforcement flow");
 assert(rightRailSource.includes("Learn more"), "strict config links to cloud docs");
 assert(workspaceSource.includes("cloudControlsUrl={resolveCloudPolicyControlsUrl(snapshot)}"), "strict config receives cloud controls url");

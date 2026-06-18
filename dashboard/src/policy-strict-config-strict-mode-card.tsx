@@ -41,17 +41,15 @@ export function PolicyStrictModeCard({
   onReloadPolicy,
 }: PolicyStrictModeCardProps) {
   return (
-    <div className={`${POLICY_PANEL_CARD_CLASS} p-5`}>
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className={`${POLICY_PANEL_CARD_CLASS} p-4`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue">
-            <HiMiniShieldCheck className="h-5 w-5" aria-hidden="true" />
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue">
+            <HiMiniShieldCheck className="h-4 w-4" aria-hidden="true" />
           </span>
           <div className="min-w-0">
             <h3 className="text-base font-semibold text-brand-dark">Strict mode</h3>
-            <p className="mt-1 text-sm leading-relaxed text-slate-600">
-              Local enforcement tuning when no remembered rule, Cloud policy, or Cloud exception matches.
-            </p>
+            <p className="mt-0.5 text-sm text-slate-600">Local enforcement tuning</p>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -76,7 +74,7 @@ export function PolicyStrictModeCard({
         </div>
       </div>
 
-      <dl className="mt-5 grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2 xl:grid-cols-4">
+      <dl className="mt-4 grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Strict mode</dt>
           <dd className="mt-1.5 text-sm font-medium text-brand-dark">{isStrict ? "Enabled" : "Disabled"}</dd>
@@ -122,7 +120,7 @@ export function PolicyStrictModeCard({
       </dl>
 
       {!isStrict && onOpenSettings ? (
-        <div className="mt-4 border-t border-slate-100 pt-4">
+        <div className="mt-3 border-t border-slate-100 pt-3">
           <ActionButton variant="secondary" onClick={onOpenSettings}>
             Enable in Settings
           </ActionButton>
@@ -130,7 +128,7 @@ export function PolicyStrictModeCard({
       ) : null}
 
       {onReloadPolicy ? (
-        <div className="mt-4 flex justify-end border-t border-slate-100 pt-4">
+        <div className="mt-3 flex justify-end border-t border-slate-100 pt-3">
           <ActionButton variant="secondary" onClick={onReloadPolicy} disabled={reloadingPolicy}>
             <HiMiniArrowPath className={`mr-1.5 h-4 w-4 ${reloadingPolicy ? "animate-spin" : ""}`} aria-hidden="true" />
             Reload policy

@@ -15,7 +15,7 @@ import { PolicyStrictModeCard } from "./policy-strict-config-strict-mode-card";
 import {
   fingerprintLocalPolicySettings,
   resolveStrictScenarioOutcome,
-  simulateStrictPolicyOutcome,
+  resolveStrictScenarioSimulation,
   STRICT_POLICY_DEFAULTS,
   type StrictScenarioId,
 } from "./policy-strict-config-utils";
@@ -32,15 +32,6 @@ type PolicyStrictConfigTabProps = {
 
 type LoadState = "loading" | "ready" | "error";
 
-const SCENARIO_FIXTURES: Record<
-  StrictScenarioId,
-  { remembered: "allow" | "block" | "none"; cloudPolicy: "allow" | "block" | "none"; cloudException: boolean }
-> = {
-  "first-time": { remembered: "none", cloudPolicy: "none", cloudException: false },
-  "remembered-allow": { remembered: "allow", cloudPolicy: "block", cloudException: false },
-  "cloud-exception": { remembered: "block", cloudPolicy: "block", cloudException: true },
-};
-
 export function PolicyStrictConfigTab({
   snapshot,
   cloudControlsUrl = null,
@@ -54,9 +45,6 @@ export function PolicyStrictConfigTab({
   const [settings, setSettings] = useState<GuardSettings | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
-  const [simRemembered, setSimRemembered] = useState<"allow" | "block" | "none">("none");
-  const [simCloudPolicy, setSimCloudPolicy] = useState<"allow" | "block" | "none">("none");
-  const [simCloudException, setSimCloudException] = useState(false);
   const [scenarioId, setScenarioId] = useState<StrictScenarioId>("first-time");
   const [simulationVisible, setSimulationVisible] = useState(false);
 
@@ -101,16 +89,11 @@ export function PolicyStrictConfigTab({
   }, [scenarioId, settings]);
 
   const simulation = useMemo(() => {
-    if (!settings) {
+    if (!settings || !simulationVisible) {
       return null;
     }
-    return simulateStrictPolicyOutcome({
-      rememberedRuleAction: simRemembered,
-      cloudPolicyAction: simCloudPolicy,
-      cloudExceptionActive: simCloudException,
-      fallbackAction: settings.default_action,
-    });
-  }, [settings, simRemembered, simCloudPolicy, simCloudException]);
+    return resolveStrictScenarioSimulation(settings, scenarioId);
+  }, [settings, scenarioId, simulationVisible]);
 
   const persistSetting = useCallback(async (key: StrictConfigSettingKey, value: string) => {
     if (!settings) {
@@ -200,13 +183,8 @@ export function PolicyStrictConfigTab({
   }, []);
 
   const handleScenarioChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
-    const nextId = event.target.value as StrictScenarioId;
-    setScenarioId(nextId);
+    setScenarioId(event.target.value as StrictScenarioId);
     setSimulationVisible(false);
-    const scenario = SCENARIO_FIXTURES[nextId];
-    setSimRemembered(scenario.remembered);
-    setSimCloudPolicy(scenario.cloudPolicy);
-    setSimCloudException(scenario.cloudException);
   }, []);
 
   if (loadState === "loading") {
@@ -238,7 +216,7 @@ export function PolicyStrictConfigTab({
   const expectedReasoning = scenarioOutcome?.reasoning ?? "";
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(17rem,20rem)] xl:items-start">
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px] xl:items-start">
       <div className="min-w-0 space-y-4">
         <PolicyStrictModeCard
           isStrict={isStrict}
