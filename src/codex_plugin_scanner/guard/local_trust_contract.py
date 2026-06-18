@@ -109,6 +109,16 @@ class TrustBackend(Protocol):
 _TrustResult = TypeVar("_TrustResult")
 
 
+def _trust_backend_check_worker(
+    operation: Callable[[], object],
+    result_queue,
+) -> None:
+    try:
+        result_queue.put((True, operation()))
+    except Exception as error:
+        result_queue.put((False, error))
+
+
 def select_trust_backend(
     backends: tuple[TrustBackend, ...],
     *,
@@ -136,17 +146,16 @@ def run_trust_backend_check(
     try:
         context = multiprocessing.get_context("fork")
     except ValueError:
-        return timeout_result
+        context = multiprocessing.get_context()
     results = context.Queue(maxsize=1)
 
-    def _worker(result_queue) -> None:
-        try:
-            result_queue.put((True, operation()))
-        except Exception as error:
-            result_queue.put((False, error))
-
-    process = context.Process(target=_worker, args=(results,), daemon=True)
-    process.start()
+    process = context.Process(target=_trust_backend_check_worker, args=(operation, results), daemon=True)
+    try:
+        process.start()
+    except Exception as error:
+        if on_error is None:
+            return timeout_result
+        return on_error(error)
     process.join(timeout=timeout_seconds)
     if process.is_alive():
         process.terminate()
