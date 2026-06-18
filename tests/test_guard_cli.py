@@ -1447,6 +1447,7 @@ args = ["workspace-skill.js"]
             },
         )
         _write_text(home_dir / ".config" / "opencode" / "plugins" / "global-local.mjs", "export default {};\n")
+        _write_text(home_dir / ".config" / "opencode" / "plugins" / "hol-guard-pretool.ts", "export default {};\n")
         _write_text(workspace_dir / ".opencode" / "plugins" / "project-local.mjs", "export default {};\n")
         _write_text(home_dir / ".config" / "opencode" / "commands" / "global-cmd.md", "# global\n")
         _write_text(workspace_dir / ".opencode" / "commands" / "triage.md", "# triage\n")
@@ -1482,6 +1483,7 @@ args = ["workspace-skill.js"]
         assert "opencode:global:plugin:opencode-global-plugin" in artifacts
         assert "opencode:project:plugin:opencode-project-plugin" in artifacts
         assert "opencode:global:plugin-file:plugins/global-local.mjs" in artifacts
+        assert "opencode:global:plugin-file:plugins/hol-guard-pretool.ts" in artifacts
         assert "opencode:project:plugin-file:plugins/project-local.mjs" in artifacts
         assert "opencode:global:config-command:global-review" in artifacts
         assert "opencode:project:config-command:project-review" in artifacts
@@ -1491,6 +1493,7 @@ args = ["workspace-skill.js"]
         assert "opencode:project:skill:opencode:skills/repo-skill" in artifacts
         assert "opencode:project:skill:claude:skills/claude-skill" in artifacts
         assert artifacts["opencode:project:plugin-file:plugins/project-local.mjs"]["artifact_type"] == "plugin"
+        assert artifacts["opencode:global:plugin-file:plugins/hol-guard-pretool.ts"]["artifact_type"] == "daemon_plugin"
         assert artifacts["opencode:project:config-command:project-review"]["metadata"]["template"] == (
             "Review the workspace change set."
         )
