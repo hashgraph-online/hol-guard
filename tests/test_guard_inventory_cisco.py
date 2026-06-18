@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
+import codex_plugin_scanner.guard.inventory_cisco as inventory_cisco
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.inventory_cisco import run_cisco_inventory_scans
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
@@ -138,7 +139,10 @@ def test_cisco_inventory_scans_run_mcp_and_skill_scanners_with_required_mode(tmp
     assert [call[0] for call in calls] == ["mcp", "skill"]
     assert calls[0][1] == workspace_dir
     assert calls[1][1] == skill_path.parent
-    assert all(call[2] == "on" and call[3] == 3.5 for call in calls)
+    assert all(call[2] == "on" for call in calls)
+    assert calls[0][3] == 3.5
+    assert calls[1][3] is not None
+    assert 0 < calls[1][3] <= 3.5
     assert all(run.status == "enabled" for run in runs)
 
 
@@ -233,7 +237,7 @@ def test_cisco_inventory_scans_use_detected_nonstandard_skill_roots(tmp_path: Pa
         skill_mode="on",
     )
 
-    assert calls == [skill_path.parent]
+    assert calls == [extra_root]
 
 
 def test_cisco_inventory_scans_resolve_skill_root_collection_directories(tmp_path: Path, monkeypatch) -> None:
@@ -288,11 +292,13 @@ def test_cisco_inventory_scans_resolve_skill_root_collection_directories(tmp_pat
     )
 
     assert [run.source for run in runs] == ["cisco-skill-scanner"]
-    assert calls == [skill_path.parent]
-    assert [run.metadata["target"] for run in runs] == [str(skill_path.parent)]
+    assert calls == [collection_root]
+    assert [run.metadata["target"] for run in runs] == [str(collection_root)]
 
 
-def test_cisco_inventory_scans_runs_each_detected_skill_root(tmp_path: Path, monkeypatch) -> None:
+def test_cisco_inventory_scans_collapse_detected_skill_roots_into_collection_directories(
+    tmp_path: Path, monkeypatch
+) -> None:
     context = _ctx(tmp_path)
     home_dir = context.home_dir
     assert home_dir is not None
@@ -352,6 +358,77 @@ def test_cisco_inventory_scans_runs_each_detected_skill_root(tmp_path: Path, mon
         skill_mode="auto",
     )
 
-    assert [run.source for run in runs] == ["cisco-skill-scanner", "cisco-skill-scanner"]
-    assert calls == [skill_a.parent, skill_b.parent]
-    assert [run.metadata["target"] for run in runs] == [str(skill_a.parent), str(skill_b.parent)]
+    assert [run.source for run in runs] == ["cisco-skill-scanner"]
+    assert calls == [skill_a.parent.parent]
+    assert [run.metadata["target"] for run in runs] == [str(skill_a.parent.parent)]
+
+
+def test_cisco_inventory_scans_share_timeout_budget_across_skill_collection_roots(
+    tmp_path: Path, monkeypatch
+) -> None:
+    context = _ctx(tmp_path)
+    home_dir = context.home_dir
+    assert home_dir is not None
+    skill_a = home_dir / ".agents" / "skills" / "adapt" / "SKILL.md"
+    skill_b = home_dir / ".claude" / "skills" / "lean-ctx" / "SKILL.md"
+    skill_a.parent.mkdir(parents=True)
+    skill_b.parent.mkdir(parents=True)
+    skill_a.write_text("---\nname: adapt\n---\nAdapt layouts.\n")
+    skill_b.write_text("---\nname: lean-ctx\n---\nContext runtime.\n")
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=False,
+        config_paths=(str(skill_a), str(skill_b)),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:skill:adapt",
+                name="adapt",
+                harness="codex",
+                artifact_type="skill",
+                source_scope="global",
+                config_path=str(skill_a),
+            ),
+            GuardArtifact(
+                artifact_id="codex:skill:lean-ctx",
+                name="lean-ctx",
+                harness="codex",
+                artifact_type="skill",
+                source_scope="global",
+                config_path=str(skill_b),
+            ),
+        ),
+    )
+    timeouts: list[float | None] = []
+    perf_counter_values = iter([0.0, 0.0, 0.0, 4.0, 4.0, 4.0, 4.0, 9.0])
+
+    def fake_perf_counter() -> float:
+        return next(perf_counter_values)
+
+    def fake_skill_scan(root: Path, mode: str, timeout_seconds: float | None = None) -> _SkillSummary:
+        del root, mode
+        timeouts.append(timeout_seconds)
+        return _SkillSummary(
+            status=CiscoIntegrationStatus.ENABLED,
+            message="Skill scanner completed.",
+            findings=(),
+            skills_scanned=1,
+            skills_skipped=(),
+            analyzers_used=("prompt-injection",),
+            policy_name="balanced",
+            total_findings=0,
+            findings_by_severity={severity.value: 0 for severity in Severity},
+        )
+
+    monkeypatch.setattr(inventory_cisco.time, "perf_counter", fake_perf_counter)
+    monkeypatch.setattr("codex_plugin_scanner.guard.inventory_cisco.run_cisco_skill_scan", fake_skill_scan)
+
+    run_cisco_inventory_scans(
+        harness="codex",
+        context=context,
+        detection=detection,
+        skill_mode="auto",
+        timeout_seconds=10.0,
+    )
+
+    assert timeouts == [10.0, 6.0]
