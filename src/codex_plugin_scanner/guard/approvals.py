@@ -141,6 +141,7 @@ def primary_approval_request(
         for item in reversed(items):
             if _string_or_none(item.get("artifact_id")) == bound_artifact_id:
                 return item
+        return None
 
     if len(items) == 1:
         return items[0]
@@ -173,8 +174,8 @@ def primary_approval_url(
         return None
     approval_url = request.get("approval_url")
     if isinstance(approval_url, str) and approval_url.strip():
-        return _canonical_local_approval_url(
-            approval_url.strip().replace("/approvals/", "/requests/"),
+        return canonical_local_approval_url(
+            approval_url,
             approval_center_url=approval_center_url,
         )
     resolved_request_id = request.get("request_id")
@@ -185,19 +186,25 @@ def primary_approval_url(
     return None
 
 
-def _canonical_local_approval_url(approval_url: str, *, approval_center_url: str | None) -> str:
-    if not isinstance(approval_center_url, str) or not approval_center_url.strip():
-        return approval_url
+def canonical_local_approval_url(approval_url: str, *, approval_center_url: str | None) -> str:
+    """Rewrite stale loopback approval links to the active approval center."""
+
+    approval_url = approval_url.strip()
     try:
         parsed_approval = urlparse(approval_url)
-        parsed_center = urlparse(approval_center_url.strip())
     except ValueError:
         return approval_url
     loopback_hosts = {"127.0.0.1", "::1", "localhost"}
     approval_host = _parsed_url_host(parsed_approval)
-    center_host = _parsed_url_host(parsed_center)
     if parsed_approval.scheme not in {"http", "https"} or approval_host not in loopback_hosts:
         return approval_url
+    if not isinstance(approval_center_url, str) or not approval_center_url.strip():
+        return approval_url
+    try:
+        parsed_center = urlparse(approval_center_url.strip())
+    except ValueError:
+        return approval_url
+    center_host = _parsed_url_host(parsed_center)
     if parsed_center.scheme not in {"http", "https"} or center_host not in loopback_hosts:
         return approval_url
     return urlunparse(
