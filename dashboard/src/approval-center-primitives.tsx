@@ -316,6 +316,15 @@ export function SectionLabel(props: { children: ReactNode }) {
   return <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-blue">{props.children}</p>;
 }
 
+export function PolicyStatField(props: { label: string; children: ReactNode; className?: string }) {
+  return (
+    <div className={`min-w-0 ${props.className ?? ""}`}>
+      <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{props.label}</dt>
+      <dd className="mt-1 min-w-0">{props.children}</dd>
+    </div>
+  );
+}
+
 export function Badge(props: {
   children: ReactNode;
   tone?: "default" | "success" | "warning" | "info" | "destructive" | "attention";
