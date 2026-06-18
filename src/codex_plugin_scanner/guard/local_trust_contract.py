@@ -118,6 +118,10 @@ class TrustBackend(Protocol):
 _TrustResult = TypeVar("_TrustResult")
 
 
+class TrustBackendUnavailableError(RuntimeError):
+    """Raised when passive trust backend execution cannot be started."""
+
+
 def _trust_backend_check_worker(
     operation: Callable[[], object],
     result_path: str,
@@ -161,7 +165,7 @@ def run_trust_backend_check(
     except ValueError as error:
         if on_error is None:
             return timeout_result
-        return on_error(error)
+        return on_error(TrustBackendUnavailableError(str(error)))
     with tempfile.TemporaryDirectory(prefix="hol-guard-trust-") as temp_dir:
         result_path = str(Path(temp_dir) / "result.pickle")
         process = context.Process(target=_trust_backend_check_worker, args=(operation, result_path))
@@ -198,6 +202,8 @@ def degraded_reason_for_backend_error(error: BaseException) -> str:
 
     if isinstance(error, TimeoutError):
         return POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT
+    if isinstance(error, TrustBackendUnavailableError):
+        return POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE
     if isinstance(error, PermissionError):
         return POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED
     if isinstance(error, (ValueError, json.JSONDecodeError)):

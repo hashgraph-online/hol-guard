@@ -28,6 +28,7 @@ from codex_plugin_scanner.guard.local_trust_contract import (
     POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED,
     POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,
     POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE,
+    TrustBackendUnavailableError,
     TrustStatus,
     degraded_reason_for_backend_error,
     run_trust_backend_check,
@@ -249,14 +250,19 @@ def test_trust_backend_check_degrades_without_spawn_when_fork_unavailable(
         lambda: {"mode": "protected"},
         timeout_seconds=1.0,
         timeout_result={"mode": "degraded"},
+        on_error=lambda error: {"mode": "degraded", "reason": degraded_reason_for_backend_error(error)},
     )
 
-    assert result == {"mode": "degraded"}
+    assert result == {"mode": "degraded", "reason": POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE}
     assert calls == ["fork"]
 
 
 def test_trust_backend_errors_normalize_to_safe_degraded_reasons() -> None:
     assert degraded_reason_for_backend_error(TimeoutError("slow")) == POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT
+    assert (
+        degraded_reason_for_backend_error(TrustBackendUnavailableError("fork unavailable"))
+        == POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE
+    )
     assert (
         degraded_reason_for_backend_error(PermissionError("denied"))
         == POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED
