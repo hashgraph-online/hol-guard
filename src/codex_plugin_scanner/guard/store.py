@@ -844,6 +844,31 @@ class EncryptedFileSecretStore:
             return None
 
 
+class UnavailableSecretStore:
+    """Secret store placeholder for platforms without safe credential storage."""
+
+    def __init__(self, guard_home: Path | None = None) -> None:
+        self._legacy_fallback = EncryptedFileSecretStore(guard_home) if guard_home is not None else None
+
+    def set_secret(self, secret_id: str, value: str) -> None:
+        _ = (secret_id, value)
+        raise RuntimeError(
+            "Guard local credentials require an available OS credential store. "
+            "Fix the system credential store, then sign in again."
+        )
+
+    def get_secret(self, secret_id: str) -> str | None:
+        _ = secret_id
+        return None
+
+    def delete_secret(self, secret_id: str) -> None:
+        if self._legacy_fallback is None:
+            return
+        legacy_path = self._legacy_fallback._path_for(secret_id)
+        with suppress(OSError):
+            legacy_path.unlink()
+
+
 class FallbackSecretStore:
     """Fallback-capable secret store that tolerates primary backend failures."""
 
@@ -965,16 +990,22 @@ def _write_system_keyring_availability_cache(guard_home: Path, *, available: boo
             tmp_path.unlink()
 
 
-def _system_keyring_is_available(guard_home: Path) -> bool:
-    cached = _read_system_keyring_availability_cache(guard_home)
+def _system_keyring_is_available(guard_home: Path, *, use_cache: bool = True) -> bool:
+    cached = _read_system_keyring_availability_cache(guard_home) if use_cache else None
     if cached is not None:
         return cached
+    if not use_cache and sys.platform == "darwin":
+        SystemKeyringSecretStore._clear_macos_keychain_health_cache()
     available = SystemKeyringSecretStore._is_available()
     _write_system_keyring_availability_cache(guard_home, available=available)
     return available
 
 
 def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
+    if sys.platform == "darwin":
+        if _system_keyring_is_available(guard_home, use_cache=False):
+            return SystemKeyringSecretStore(service_name="hol-guard.oauth")
+        return UnavailableSecretStore(guard_home)
     fallback_store = EncryptedFileSecretStore(guard_home)
     if _system_keyring_is_available(guard_home):
         return FallbackSecretStore(
@@ -998,6 +1029,8 @@ def _secret_store_backend_name(secret_store: SecretStore) -> str:
         return "system-keyring"
     if isinstance(secret_store, EncryptedFileSecretStore):
         return "encrypted-file"
+    if isinstance(secret_store, UnavailableSecretStore):
+        return "unavailable"
     if isinstance(secret_store, FallbackSecretStore):
         return _secret_store_backend_name(secret_store.primary)
     return "unknown"
@@ -1087,6 +1120,16 @@ class GuardStore:
 
     def _assert_oauth_secret_persisted(self, secret_id: str, value: str) -> None:
         secret_store = self._oauth_secret_store
+        if sys.platform == "darwin" and isinstance(secret_store, SystemKeyringSecretStore):
+            persisted_value = self._get_secret_from_primary_store(secret_store, secret_id)
+            if persisted_value == value:
+                return
+            raise RuntimeError("Guard could not persist local Guard Cloud authorization securely.")
+        if isinstance(secret_store, UnavailableSecretStore):
+            raise RuntimeError(
+                "Guard local credentials require an available OS credential store. "
+                "Fix the system credential store, then sign in again."
+            )
         if isinstance(secret_store, FallbackSecretStore) and isinstance(
             secret_store.fallback,
             EncryptedFileSecretStore,
@@ -1139,6 +1182,9 @@ class GuardStore:
         self._cached_policy_integrity_secret_material = None
         self._cached_policy_integrity_control_state = None
 
+    def _oauth_primary_reads_are_no_ui_safe(self) -> bool:
+        return sys.platform == "darwin" and isinstance(self._oauth_secret_store, SystemKeyringSecretStore)
+
     def _get_secret_candidates(
         self,
         secret_store: SecretStore,
@@ -1164,11 +1210,7 @@ class GuardStore:
                     return [primary_token]
                 if fallback_token is not None and expected_hash_value is not None:
                     return []
-            primary_token = (
-                self._get_secret_from_primary_store(secret_store.primary, secret_id)
-                if prefer_fallback_first
-                else self._get_secret_from_store(secret_store.primary, secret_id)
-            )
+            primary_token = self._get_secret_from_primary_store(secret_store.primary, secret_id)
             if primary_token is not None:
                 if expected_hash_value is None or _secret_matches_hash(primary_token, expected_hash_value):
                     return [primary_token]
@@ -1180,7 +1222,7 @@ class GuardStore:
             if fallback_token is None:
                 return []
             return [fallback_token]
-        token = secret_store.get_secret(secret_id)
+        token = self._get_secret_from_primary_store(secret_store, secret_id)
         if token is None:
             return []
         return [token]
@@ -4963,6 +5005,7 @@ class GuardStore:
             self._oauth_secret_store.set_secret(self._oauth_local_credentials_ref, secret_json)
         self._mirror_oauth_secret_to_fallback(self._oauth_local_credentials_ref, secret_json)
         self._assert_oauth_secret_persisted(self._oauth_local_credentials_ref, secret_json)
+        self._remember_oauth_secret_payload(self._oauth_local_credentials_ref, secret_hash, secret_json)
         self.set_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY, payload, now)
 
     def get_oauth_local_credentials(self, *, allow_primary: bool = False) -> dict[str, object] | None:
@@ -4972,7 +5015,10 @@ class GuardStore:
         metadata = self._oauth_local_credentials_metadata(payload)
         if metadata is None:
             return None
-        secret_payload = self._load_oauth_secret_payload(payload, allow_primary=allow_primary)
+        secret_payload = self._load_oauth_secret_payload(
+            payload,
+            allow_primary=allow_primary or self._oauth_primary_reads_are_no_ui_safe(),
+        )
         if secret_payload is None:
             return None
         return self._build_oauth_local_credentials_result(metadata=metadata, secret_payload=secret_payload)
@@ -4996,6 +5042,11 @@ class GuardStore:
             secret_ref = payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY)
             if isinstance(secret_ref, str) and secret_ref:
                 self._oauth_secret_store.delete_secret(secret_ref)
+                if sys.platform == "darwin":
+                    legacy_fallback = EncryptedFileSecretStore(self.guard_home)
+                    legacy_path = legacy_fallback._path_for(secret_ref)
+                    with suppress(OSError):
+                        legacy_path.unlink()
         self.delete_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
 
     def get_oauth_local_credential_health(self) -> dict[str, object]:
@@ -5017,9 +5068,17 @@ class GuardStore:
         if cached_health is not None:
             health.update(cached_health)
             return health
-        secret_payload = self._load_oauth_secret_payload(payload, promote=False, allow_primary=False)
+        secret_payload = self._load_oauth_secret_payload(
+            payload,
+            promote=False,
+            allow_primary=self._oauth_primary_reads_are_no_ui_safe(),
+        )
         if secret_payload is None and self.repair_oauth_local_credential_storage_from_primary():
-            secret_payload = self._load_oauth_secret_payload(payload, promote=False, allow_primary=False)
+            secret_payload = self._load_oauth_secret_payload(
+                payload,
+                promote=False,
+                allow_primary=self._oauth_primary_reads_are_no_ui_safe(),
+            )
         if secret_payload is None:
             health["state"] = "degraded"
             self._remember_oauth_health_result(secret_hash, health)

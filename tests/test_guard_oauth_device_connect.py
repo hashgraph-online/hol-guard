@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import _build_parser
+from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.cli import commands as guard_commands
 from codex_plugin_scanner.guard.cli import connect_flow
 from codex_plugin_scanner.guard.cli.commands import run_guard_command
@@ -787,12 +788,15 @@ def test_headless_connect_slows_down_polling_when_server_requests_it(tmp_path: P
     assert sleeps == [7]
 
 
-def test_headless_connect_avoids_keychain_password_prompts_when_system_keyring_is_available(
+def test_headless_connect_rejects_unreadable_macos_keychain_credentials_without_prompt(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     guard_home = tmp_path / "guard-home"
     _install_fake_system_keyring(monkeypatch)
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    monkeypatch.setattr(SystemKeyringSecretStore, "_macos_default_keychain_is_usable", classmethod(lambda cls: True))
+    monkeypatch.setattr(SystemKeyringSecretStore, "get_secret_with_timeout", lambda *args, **kwargs: None)
 
     def fail_on_keychain(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
         raise AssertionError("device connect should not shell out to macOS keychain prompts")
@@ -823,31 +827,28 @@ def test_headless_connect_avoids_keychain_password_prompts_when_system_keyring_i
         def read(self) -> bytes:
             return json.dumps(self._payload).encode("utf-8")
 
-    payload = connect_flow.run_guard_device_connect_command(
-        store=store,
-        connect_url="https://hol.org/guard/connect",
-        request_device_authorization=fake_request,
-        token_urlopen=lambda request, timeout: _Response(
-            {
-                "access_token": _fake_access_token(
-                    grant_id="grant-123",
-                    machine_id="machine-123",
-                    workspace_id="workspace-123",
-                ),
-                "refresh_token": "refresh-123",
-                "expires_in": 3600,
-                "scope": "guard:runtime.sync guard:offline_access",
-                "token_type": "Bearer",
-            }
-        ),
-        now="2026-06-01T12:00:00+00:00",
-    )
+    with pytest.raises(RuntimeError, match="persist local Guard Cloud authorization"):
+        connect_flow.run_guard_device_connect_command(
+            store=store,
+            connect_url="https://hol.org/guard/connect",
+            request_device_authorization=fake_request,
+            token_urlopen=lambda request, timeout: _Response(
+                {
+                    "access_token": _fake_access_token(
+                        grant_id="grant-123",
+                        machine_id="machine-123",
+                        workspace_id="workspace-123",
+                    ),
+                    "refresh_token": "refresh-123",
+                    "expires_in": 3600,
+                    "scope": "guard:runtime.sync guard:offline_access",
+                    "token_type": "Bearer",
+                }
+            ),
+            now="2026-06-01T12:00:00+00:00",
+        )
 
-    assert payload["status"] == "connected"
-    credentials = store.get_oauth_local_credentials()
-    assert credentials is not None
-    assert credentials["refresh_token"] == "refresh-123"
-    assert credentials["grant_id"] == "grant-123"
+    assert store.get_oauth_local_credentials() is None
 
 
 def test_headless_connect_expired_code_surfaces_retry_command(tmp_path: Path) -> None:
