@@ -2090,7 +2090,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     device_name=device_name,
                 )
             )
-            self.server.store.replace_remote_policies(existing_remote_decisions, applied_at)  # type: ignore[attr-defined]
+            self.server.store.replace_remote_policies(  # type: ignore[attr-defined]
+                existing_remote_decisions,
+                applied_at,
+                remote_write_authorized=True,
+            )
             _persist_cloud_exceptions(
                 self.server.store,  # type: ignore[attr-defined]
                 policy_bundle=validated_policy_bundle,
@@ -2158,6 +2162,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 decision,
                 _now(),
                 approval_gate_grant=approval_gate_grant,
+                remote_write_authorized=True,
             )
         except ApprovalGateError as error:
             self._write_approval_gate_error(error)

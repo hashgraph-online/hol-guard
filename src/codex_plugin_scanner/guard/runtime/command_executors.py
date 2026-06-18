@@ -284,7 +284,7 @@ def _execute_policy_sync(
         source="cloud-sync",
         expires_at=_optional_string(policy_memory.get("expiry")),
     )
-    store.upsert_policy(decision, generated_at)
+    store.upsert_policy(decision, generated_at, remote_write_authorized=True)
     return _result(
         {
             "action": "policy_sync",

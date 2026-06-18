@@ -17589,7 +17589,7 @@ def test_policy_bundle_decisions_map_to_runtime_families(tmp_path):
         device_id=guard_runner_module._guard_device_metadata(store)[0],
         device_name="MacBook Pro",
     )
-    store.replace_remote_policies(decisions, "2026-04-19T00:00:11+00:00")
+    store.replace_remote_policies(decisions, "2026-04-19T00:00:11+00:00", remote_write_authorized=True)
 
     assert store.resolve_policy("codex", "codex:project:package-request:abc", "hash") == "block"
     assert store.resolve_policy("codex", "codex:project:mcp:shell", "hash") == "review"
@@ -18054,6 +18054,7 @@ def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, mo
             device_name="MacBook Pro",
         ),
         "2026-06-05T13:31:00+00:00",
+        remote_write_authorized=True,
     )
 
     order: list[str] = []
