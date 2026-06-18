@@ -75,9 +75,14 @@ export function PolicyCloudExceptionsTab({
     setRequestOpen(false);
   }, [setRequestOpen]);
 
-  const handleRequestSubmitted = useCallback(() => {
+  const handleRequestSubmitted = useCallback((requestId?: string) => {
     setRequestOpen(false);
     setReloadToken((current) => current + 1);
+    if (requestId?.trim()) {
+      setScopeFilter("all");
+      setActionFilter("all");
+      setSelectedExceptionId(null);
+    }
   }, [setRequestOpen]);
 
   const handleRetryLoad = useCallback(() => {

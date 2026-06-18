@@ -50,6 +50,22 @@ def test_validate_cloud_exception_request_payload_normalizes_artifact_scope() ->
     assert payload["sourceReceiptId"] == "receipt_demo_001"
 
 
+def test_validate_cloud_exception_request_payload_accepts_source_review_item() -> None:
+    payload = validate_cloud_exception_request_payload(
+        {
+            "scope": "workspace",
+            "requestedBy": "requester@example.com",
+            "owner": "owner@example.com",
+            "reason": "Temporary acceptance for this project.",
+            "requestedExpiresAt": "2026-12-31T00:00:00.000Z",
+            "sourceReviewItemId": "request-local-42",
+            "workingDirectory": "/tmp/project",
+        }
+    )
+    assert payload["sourceReviewItemId"] == "request-local-42"
+    assert "sourceReceiptId" not in payload
+
+
 def test_validate_cloud_exception_request_payload_requires_workspace_selector() -> None:
     with pytest.raises(ValueError, match="selector"):
         validate_cloud_exception_request_payload(
