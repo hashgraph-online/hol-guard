@@ -110,7 +110,7 @@ def build_instruction_domain(
     governance_score = _score_by_count(len(governance_terms), high=90.0, medium=70.0, low=55.0, zero=30.0)
     provenance_score = _score_by_count(len(provenance_terms), high=100.0, medium=75.0, low=55.0, zero=25.0)
 
-    operational_role = role in _OPERATIONAL_ROLES or item_kind == "prompt_pack"
+    operational_role = role in _OPERATIONAL_ROLES or item_kind in {"agent", "daemon_plugin", "prompt_pack"}
 
     adapters = (
         build_adapter_score(

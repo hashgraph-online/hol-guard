@@ -39,6 +39,21 @@ InventoryItemKind = Literal[
 
 TrustLayerType = Literal["local_baseline", "cisco_skill_scanner", "cisco_mcp_scanner"]
 
+_LOCAL_BASELINE_ITEM_KINDS = frozenset(
+    {
+        "agent",
+        "daemon_plugin",
+        "mcp_server",
+        "mcp_tool",
+        "overlay",
+        "plugin",
+        "policy",
+        "prompt_pack",
+        "skill",
+    }
+)
+_INSTRUCTION_BASELINE_ITEM_KINDS = frozenset({"agent", "daemon_plugin", "overlay", "policy", "prompt_pack"})
+
 
 def trust_resolution_from_domain(
     domain: TrustDomainScore,
@@ -91,7 +106,7 @@ def apply_local_trust_metadata(
     enriched = dict(metadata)
     trust_layers: list[dict[str, object]] = []
 
-    if item_kind in {"skill", "plugin", "mcp_server", "overlay", "policy", "prompt_pack"} and not isinstance(
+    if item_kind in _LOCAL_BASELINE_ITEM_KINDS and not isinstance(
         metadata.get("trustResolution"),
         dict,
     ):
@@ -294,6 +309,11 @@ def _local_skill_scripts_total(run: object) -> int:
     return 0
 
 
+def _metadata_string(metadata: dict[str, object], key: str) -> str | None:
+    value = metadata.get(key)
+    return value if isinstance(value, str) and value else None
+
+
 def _local_trust_domain_for_artifact(
     artifact: object,
     *,
@@ -316,9 +336,16 @@ def _local_trust_domain_for_artifact(
             url=getattr(artifact, "url", None),
             transport=getattr(artifact, "transport", None),
         )
-    if item_kind in {"overlay", "policy", "prompt_pack"}:
+    if item_kind == "mcp_tool":
+        return build_mcp_surface_domain(
+            name=str(metadata.get("toolName") or metadata.get("title") or ""),
+            command=_metadata_string(metadata, "serverCommand"),
+            url=_metadata_string(metadata, "serverUrl"),
+            transport=_metadata_string(metadata, "serverTransport"),
+        )
+    if item_kind in _INSTRUCTION_BASELINE_ITEM_KINDS:
         role = metadata.get("instructionRole")
-        normalized_role = role if isinstance(role, str) and role else "unknown_instruction"
+        normalized_role = role if isinstance(role, str) and role else f"{item_kind}_config"
         return build_instruction_domain(trust_root, role=normalized_role, item_kind=item_kind)
     return None
 
@@ -345,7 +372,7 @@ def _trust_root_for_artifact(
                 break
         return skill_dir if skill_dir.is_dir() else None
 
-    if item_kind == "mcp_server":
+    if item_kind in {"mcp_server", "mcp_tool"}:
         if path.is_file():
             return path.parent
         return path if path.is_dir() else None
@@ -356,7 +383,7 @@ def _trust_root_for_artifact(
         parent = path.parent
         return parent if parent.is_dir() else None
 
-    if item_kind in {"overlay", "policy", "prompt_pack"}:
+    if item_kind in _INSTRUCTION_BASELINE_ITEM_KINDS:
         return path if path.is_file() else None
 
     return None

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.reporting import build_json_payload
 from codex_plugin_scanner.scanner import scan_plugin
-from codex_plugin_scanner.trust_mcp_scoring import build_mcp_domain
+from codex_plugin_scanner.trust_mcp_scoring import build_mcp_domain, build_mcp_surface_domain
 from codex_plugin_scanner.trust_plugin_scoring import build_plugin_domain
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -162,6 +162,23 @@ def test_missing_mcp_security_evidence_defaults_execution_safety_to_zero(tmp_pat
         adapter for adapter in mcp_domain.adapters if adapter.adapter_id == "verification.execution-safety"
     )
     assert execution_safety.score == 0
+
+
+def test_mcp_surface_endpoint_score_omits_raw_command_evidence():
+    mcp_domain = build_mcp_surface_domain(
+        name="local-demo",
+        command="/home/alice/server --token raw-token",
+        url="https://mcp.example.test/sse?token=raw-token",
+        transport="stdio",
+    )
+
+    assert mcp_domain is not None
+    endpoint_adapter = next(
+        adapter for adapter in mcp_domain.adapters if adapter.adapter_id == "metadata.command-or-endpoint"
+    )
+    endpoint_score = next(component for component in endpoint_adapter.components if component.key == "score")
+    assert endpoint_score.score == 100
+    assert endpoint_score.evidence == ()
 
 
 def test_missing_manifest_validation_evidence_defaults_manifest_integrity_to_zero(tmp_path: Path):
