@@ -315,10 +315,12 @@ def _persist_claude_guard_question_decision(store: GuardStore, payload: dict[str
     artifact_hash_value = _optional_string(pending.get("artifact_hash"))
     if artifact_id is None or artifact_hash_value is None:
         return False
+    artifact_type = _optional_string(pending.get("artifact_type"))
     saved = _persist_claude_native_permission_policy(
         store=store,
         artifact_id=artifact_id,
         artifact_hash=artifact_hash_value,
+        artifact_type=artifact_type,
         action=action,
         reason=(
             "Allowed through HOL Guard AskUserQuestion approval."

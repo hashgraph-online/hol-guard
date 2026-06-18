@@ -25,6 +25,7 @@ from typing import ClassVar
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
@@ -53,7 +54,7 @@ from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime import secret_file_requests as secret_file_requests_module
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
-from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store import GuardStore, _runtime_scoped_exact_match_key
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -8119,6 +8120,119 @@ def test_guard_hook_claude_ask_user_question_allow_persists_approval(tmp_path, c
     assert second_rc == 0
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert policies[0]["source"] == "claude-ask-user-question"
+
+
+def test_guard_hook_claude_ask_user_question_docker_retry_uses_exact_action_policy(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    monkeypatch.setattr(GuardStore, "_policy_integrity_path_warnings", lambda self: [])
+    monkeypatch.setattr(
+        guard_store_module,
+        "_warn_only_policy_integrity_status",
+        lambda status, state, *, source="local": status == "degraded_mode",
+    )
+    command = "docker compose -f scripts/guard-cloud/docker-lab/docker-compose.yml up -d postgres"
+    first_event = {
+        "session_id": "session-claude-docker-allow",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    first_rc, first_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=first_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    permission_rc, permission_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={**first_event, "hook_event_name": "PermissionRequest"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    approval_question, question_options = _load_claude_pending_question_contract(
+        home_dir,
+        "session-claude-docker-allow",
+    )
+    question_rc, question_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={
+            "session_id": "session-claude-docker-allow",
+            "hook_event_name": "PostToolUse",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {
+                        "header": "HOL Guard",
+                        "question": approval_question,
+                        "options": question_options,
+                    }
+                ]
+            },
+            "tool_response": {
+                "questions": [
+                    {
+                        "header": "HOL Guard",
+                        "question": approval_question,
+                        "options": question_options,
+                    }
+                ],
+                "answers": {approval_question: "Allow during this session"},
+            },
+        },
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    second_rc, second_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={**first_event, "session_id": "session-claude-docker-allow-retry"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    store = GuardStore(home_dir)
+    policies = store.list_policy_decisions("claude-code")
+    policy = policies[0]
+    artifact_id = str(policy["artifact_id"])
+    stored_hash = str(policy["artifact_hash"])
+    drifted_hash_decision = store.resolve_policy_decision(
+        "claude-code",
+        artifact_id,
+        "runtime-hash-from-retry",
+        str(workspace_dir),
+    )
+    first_payload = json.loads(first_output)
+    permission_payload = json.loads(permission_output)
+    second_payload = json.loads(second_output)
+
+    assert first_rc == 0
+    assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert "docker-sensitive command" in first_payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert permission_rc == 0
+    assert permission_payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+    assert question_rc == 0
+    assert question_output == ""
+    assert second_rc == 0
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert policy["source"] == "claude-ask-user-question"
+    assert stored_hash == _runtime_scoped_exact_match_key(artifact_id)
+    assert drifted_hash_decision is not None
+    assert drifted_hash_decision["action"] == "allow"
 
 
 def test_guard_hook_claude_notification_only_ask_user_question_persists_approval(tmp_path, capsys, monkeypatch):
