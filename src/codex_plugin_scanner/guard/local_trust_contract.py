@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
+import multiprocessing
+import os
+import pickle
+import signal
+import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Literal
+from pathlib import Path
+from typing import Literal, Protocol, TypeVar, cast
 
 LocalTrustMode = Literal[
     "protected",
@@ -42,6 +49,10 @@ POLICY_INTEGRITY_DEGRADED_REASONS: tuple[str, ...] = (
     "guard_db_permissions",
     "guard_home_inaccessible",
     "guard_db_inaccessible",
+    "trust_backend_timeout",
+    "trust_backend_unavailable",
+    "trust_backend_permission_denied",
+    "trust_backend_corrupt",
 )
 
 POLICY_INTEGRITY_REASON_SYSTEM_KEYRING_UNAVAILABLE = "system_keyring_unavailable"
@@ -53,6 +64,10 @@ POLICY_INTEGRITY_REASON_GUARD_HOME_PERMISSIONS = "guard_home_permissions"
 POLICY_INTEGRITY_REASON_GUARD_DB_PERMISSIONS = "guard_db_permissions"
 POLICY_INTEGRITY_REASON_GUARD_HOME_INACCESSIBLE = "guard_home_inaccessible"
 POLICY_INTEGRITY_REASON_GUARD_DB_INACCESSIBLE = "guard_db_inaccessible"
+POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT = "trust_backend_timeout"
+POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE = "trust_backend_unavailable"
+POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED = "trust_backend_permission_denied"
+POLICY_INTEGRITY_REASON_BACKEND_CORRUPT = "trust_backend_corrupt"
 
 LOCAL_TRUST_DEGRADED_REASON_LABELS: dict[str, str] = {
     POLICY_INTEGRITY_REASON_SYSTEM_KEYRING_UNAVAILABLE: "System credential store unavailable",
@@ -64,7 +79,214 @@ LOCAL_TRUST_DEGRADED_REASON_LABELS: dict[str, str] = {
     POLICY_INTEGRITY_REASON_GUARD_DB_PERMISSIONS: "Guard database permissions are too broad",
     POLICY_INTEGRITY_REASON_GUARD_HOME_INACCESSIBLE: "Guard home could not be inspected",
     POLICY_INTEGRITY_REASON_GUARD_DB_INACCESSIBLE: "Guard database could not be inspected",
+    POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT: "Local trust backend timed out",
+    POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE: "Local trust backend unavailable",
+    POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED: "Local trust backend permission denied",
+    POLICY_INTEGRITY_REASON_BACKEND_CORRUPT: "Local trust backend data could not be read",
 }
+
+
+class TrustBackend(Protocol):
+    """Local trust backend contract for passive and explicit trust operations."""
+
+    name: str
+    priority: int
+    supported: bool
+    passive_no_ui_safe: bool
+
+    def status(self) -> TrustStatus:
+        """Return current backend trust status."""
+        ...
+
+    def sign(self, payload: bytes) -> str:
+        """Sign canonical trust payload bytes."""
+        ...
+
+    def verify(self, payload: bytes, signature: str) -> bool:
+        """Verify canonical trust payload bytes."""
+        ...
+
+    def setup(self) -> TrustStatus:
+        """Run explicit foreground setup."""
+        ...
+
+    def revoke(self) -> TrustStatus:
+        """Revoke backend trust material."""
+        ...
+
+
+class _ProcessHandle(Protocol):
+    @property
+    def pid(self) -> int | None: ...
+
+    def is_alive(self) -> bool: ...
+
+    def join(self, timeout: float | None = None) -> None: ...
+
+    def terminate(self) -> None: ...
+
+    def kill(self) -> None: ...
+
+
+_TrustResult = TypeVar("_TrustResult")
+
+
+class TrustBackendUnavailableError(RuntimeError):
+    """Raised when passive trust backend execution cannot be started."""
+
+
+class TrustBackendProcessFailedError(RuntimeError):
+    """Raised when passive trust backend worker exits without a readable result."""
+
+
+class TrustBackendCorruptResultError(ValueError):
+    """Raised when passive trust backend worker writes malformed result data."""
+
+
+def _trust_backend_check_worker(
+    operation: Callable[[], object],
+    result_path: str,
+) -> None:
+    if hasattr(os, "setsid"):
+        os.setsid()
+    try:
+        payload = (True, operation())
+    except Exception as error:
+        payload = (False, error)
+    temp_result_path = f"{result_path}.{os.getpid()}.tmp"
+    with Path(temp_result_path).open("wb") as handle:
+        pickle.dump(payload, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    os.replace(temp_result_path, result_path)
+
+
+def _terminate_trust_backend_process_tree(process: _ProcessHandle) -> None:
+    pid = process.pid
+    if pid is None:
+        return
+    if hasattr(os, "killpg"):
+        try:
+            os.killpg(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            pass
+        process.terminate()
+        process.join(timeout=0.2)
+        if process.is_alive():
+            try:
+                os.killpg(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                pass
+            process.kill()
+            process.join(timeout=0.2)
+        return
+    process.terminate()
+    process.join(timeout=0.2)
+    if process.is_alive():
+        process.kill()
+        process.join(timeout=0.2)
+
+
+def _trust_backend_process_failed_error(process: _ProcessHandle) -> TrustBackendProcessFailedError:
+    exitcode = getattr(process, "exitcode", None)
+    if isinstance(exitcode, int):
+        return TrustBackendProcessFailedError(f"trust_backend_process_failed:{exitcode}")
+    return TrustBackendProcessFailedError("trust_backend_process_failed")
+
+
+def _load_trust_backend_result(result_file: Path) -> tuple[bool, object]:
+    try:
+        with result_file.open("rb") as handle:
+            payload = pickle.load(handle)
+    except PermissionError:
+        raise
+    except Exception as error:
+        raise TrustBackendCorruptResultError("trust_backend_result_corrupt") from error
+    if not isinstance(payload, tuple) or len(payload) != 2:
+        raise TrustBackendCorruptResultError("trust_backend_result_corrupt")
+    ok, value = payload
+    if not isinstance(ok, bool):
+        raise TrustBackendCorruptResultError("trust_backend_result_corrupt")
+    if not ok and not isinstance(value, BaseException):
+        raise TrustBackendCorruptResultError("trust_backend_result_corrupt")
+    return ok, value
+
+
+def select_trust_backend(
+    backends: tuple[TrustBackend, ...],
+    *,
+    passive: bool,
+) -> TrustBackend | None:
+    """Select highest-priority supported backend, gating passive use on no-UI safety."""
+
+    candidates = [backend for backend in backends if backend.supported and (not passive or backend.passive_no_ui_safe)]
+    if not candidates:
+        return None
+    return sorted(candidates, key=lambda backend: (-backend.priority, backend.name))[0]
+
+
+def run_trust_backend_check(
+    operation: Callable[[], _TrustResult],
+    *,
+    timeout_seconds: float,
+    timeout_result: _TrustResult,
+    on_error: Callable[[BaseException], _TrustResult] | None = None,
+) -> _TrustResult:
+    """Run side-effect-free passive backend work under a contained timeout."""
+
+    if timeout_seconds <= 0:
+        return timeout_result
+    try:
+        context = multiprocessing.get_context("fork")
+    except ValueError as error:
+        if on_error is None:
+            return timeout_result
+        return on_error(TrustBackendUnavailableError(str(error)))
+    with tempfile.TemporaryDirectory(prefix="hol-guard-trust-") as temp_dir:
+        result_path = str(Path(temp_dir) / "result.pickle")
+        process = context.Process(target=_trust_backend_check_worker, args=(operation, result_path))
+        try:
+            process.start()
+        except Exception as error:
+            if on_error is None:
+                return timeout_result
+            return on_error(error)
+        process.join(timeout=timeout_seconds)
+        if process.is_alive():
+            _terminate_trust_backend_process_tree(process)
+            return timeout_result
+        result_file = Path(result_path)
+        if not result_file.exists():
+            if on_error is None:
+                return timeout_result
+            return on_error(_trust_backend_process_failed_error(process))
+        try:
+            ok, value = _load_trust_backend_result(result_file)
+        except (PermissionError, TrustBackendCorruptResultError) as error:
+            if on_error is None:
+                return timeout_result
+            return on_error(error)
+        if ok:
+            return cast("_TrustResult", value)
+        if on_error is None:
+            return timeout_result
+        return on_error(cast("BaseException", value))
+
+
+def degraded_reason_for_backend_error(error: BaseException) -> str:
+    """Normalize backend failures into user-safe degraded reasons."""
+
+    if isinstance(error, TimeoutError):
+        return POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT
+    if isinstance(error, (TrustBackendProcessFailedError, TrustBackendUnavailableError)):
+        return POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE
+    if isinstance(error, PermissionError):
+        return POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED
+    if isinstance(error, ValueError):
+        return POLICY_INTEGRITY_REASON_BACKEND_CORRUPT
+    return POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE
 
 
 @dataclass(frozen=True)
