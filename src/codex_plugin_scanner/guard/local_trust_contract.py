@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import queue
+import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, Protocol, TypeVar, cast
 
 LocalTrustMode = Literal[
     "protected",
@@ -42,6 +46,10 @@ POLICY_INTEGRITY_DEGRADED_REASONS: tuple[str, ...] = (
     "guard_db_permissions",
     "guard_home_inaccessible",
     "guard_db_inaccessible",
+    "trust_backend_timeout",
+    "trust_backend_unavailable",
+    "trust_backend_permission_denied",
+    "trust_backend_corrupt",
 )
 
 POLICY_INTEGRITY_REASON_SYSTEM_KEYRING_UNAVAILABLE = "system_keyring_unavailable"
@@ -53,6 +61,10 @@ POLICY_INTEGRITY_REASON_GUARD_HOME_PERMISSIONS = "guard_home_permissions"
 POLICY_INTEGRITY_REASON_GUARD_DB_PERMISSIONS = "guard_db_permissions"
 POLICY_INTEGRITY_REASON_GUARD_HOME_INACCESSIBLE = "guard_home_inaccessible"
 POLICY_INTEGRITY_REASON_GUARD_DB_INACCESSIBLE = "guard_db_inaccessible"
+POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT = "trust_backend_timeout"
+POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE = "trust_backend_unavailable"
+POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED = "trust_backend_permission_denied"
+POLICY_INTEGRITY_REASON_BACKEND_CORRUPT = "trust_backend_corrupt"
 
 LOCAL_TRUST_DEGRADED_REASON_LABELS: dict[str, str] = {
     POLICY_INTEGRITY_REASON_SYSTEM_KEYRING_UNAVAILABLE: "System credential store unavailable",
@@ -64,7 +76,93 @@ LOCAL_TRUST_DEGRADED_REASON_LABELS: dict[str, str] = {
     POLICY_INTEGRITY_REASON_GUARD_DB_PERMISSIONS: "Guard database permissions are too broad",
     POLICY_INTEGRITY_REASON_GUARD_HOME_INACCESSIBLE: "Guard home could not be inspected",
     POLICY_INTEGRITY_REASON_GUARD_DB_INACCESSIBLE: "Guard database could not be inspected",
+    POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT: "Local trust backend timed out",
+    POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE: "Local trust backend unavailable",
+    POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED: "Local trust backend permission denied",
+    POLICY_INTEGRITY_REASON_BACKEND_CORRUPT: "Local trust backend data could not be read",
 }
+
+
+class TrustBackend(Protocol):
+    """Local trust backend contract for passive and explicit trust operations."""
+
+    name: str
+    priority: int
+    supported: bool
+    passive_no_ui_safe: bool
+
+    def status(self) -> TrustStatus:
+        """Return current backend trust status."""
+
+    def sign(self, payload: bytes) -> str:
+        """Sign canonical trust payload bytes."""
+
+    def verify(self, payload: bytes, signature: str) -> bool:
+        """Verify canonical trust payload bytes."""
+
+    def setup(self) -> TrustStatus:
+        """Run explicit foreground setup."""
+
+    def revoke(self) -> TrustStatus:
+        """Revoke backend trust material."""
+
+
+_TrustResult = TypeVar("_TrustResult")
+
+
+def select_trust_backend(
+    backends: tuple[TrustBackend, ...],
+    *,
+    passive: bool,
+) -> TrustBackend | None:
+    """Select highest-priority supported backend, gating passive use on no-UI safety."""
+
+    candidates = [backend for backend in backends if backend.supported and (not passive or backend.passive_no_ui_safe)]
+    if not candidates:
+        return None
+    return sorted(candidates, key=lambda backend: (-backend.priority, backend.name))[0]
+
+
+def run_trust_backend_check(
+    operation: Callable[[], _TrustResult],
+    *,
+    timeout_seconds: float,
+    timeout_result: _TrustResult,
+    on_error: Callable[[BaseException], _TrustResult],
+) -> _TrustResult:
+    """Run passive backend work under a bounded timeout without blocking caller."""
+
+    if timeout_seconds <= 0:
+        return timeout_result
+    results: queue.Queue[tuple[bool, _TrustResult | BaseException]] = queue.Queue(maxsize=1)
+
+    def _worker() -> None:
+        try:
+            results.put((True, operation()))
+        except BaseException as error:
+            results.put((False, error))
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
+    try:
+        ok, value = results.get(timeout=timeout_seconds)
+    except queue.Empty:
+        return timeout_result
+    if ok:
+        return cast("_TrustResult", value)
+    return on_error(cast("BaseException", value))
+
+
+def degraded_reason_for_backend_error(error: BaseException) -> str:
+    """Normalize backend failures into user-safe degraded reasons."""
+
+    if isinstance(error, TimeoutError):
+        return POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT
+    if isinstance(error, PermissionError):
+        return POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED
+    if isinstance(error, (ValueError, json.JSONDecodeError)):
+        return POLICY_INTEGRITY_REASON_BACKEND_CORRUPT
+    return POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE
 
 
 @dataclass(frozen=True)
