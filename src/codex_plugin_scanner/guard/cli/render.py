@@ -874,9 +874,14 @@ def _render_policies(console: Console, payload: dict[str, object]) -> None:
         body.add_row("Backend", str(payload.get("backend") or "unknown"))
         body.add_row("Local rows", str(_coerce_int(payload.get("local_rows_scanned"))))
         if payload.get("key_id"):
-            body.add_row("Key", str(payload.get("key_id")))
+            body.add_row("Integrity key", "present")
         if payload.get("backup_path"):
             body.add_row("Backup", str(payload.get("backup_path")))
+        trust_status = payload.get("trust_status")
+        if isinstance(trust_status, dict):
+            body.add_row("Runtime protection", str(trust_status.get("runtime_protection") or "unknown"))
+            body.add_row("Remembered rules", str(trust_status.get("remembered_rules") or "unknown"))
+            body.add_row("Cloud policies", str(trust_status.get("cloud_policies") or "unknown"))
         if "cleared" in payload:
             body.add_row("Cleared", str(_coerce_int(payload.get("cleared"))))
         for label, key in (

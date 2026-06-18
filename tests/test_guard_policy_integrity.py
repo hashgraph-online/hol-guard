@@ -1271,6 +1271,13 @@ def test_policies_cli_verify_status_migrate_and_repair(
     assert status_rc == 0
     assert status_payload["enforcement"] == "enforce"
 
+    human_status_rc = main(["guard", "policies", "integrity-status", "--home", str(home_dir)])
+    human_status_output = capsys.readouterr().out
+    assert human_status_rc == 0
+    assert "Runtime protection" in human_status_output
+    assert "Remembered rules" in human_status_output
+    assert "Cloud policies" in human_status_output
+
     migrate_rc = main(
         [
             "guard",
@@ -1304,6 +1311,29 @@ def test_policies_cli_verify_status_migrate_and_repair(
     assert repair_rc == 0
     assert repair_payload["cleared"] == 1
     assert GuardStore(home_dir).list_policy_decisions() == []
+
+
+def test_policies_integrity_status_human_output_hides_real_key_id(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:key-visible", artifact_hash="hash-key"),
+        "2026-06-18T00:00:00Z",
+    )
+
+    status_rc = main(["guard", "policies", "integrity-status", "--home", str(home_dir), "--json"])
+    status_payload = json.loads(capsys.readouterr().out)
+    key_id = status_payload.get("key_id")
+    assert status_rc == 0
+    assert isinstance(key_id, str)
+    assert key_id
+
+    human_rc = main(["guard", "policies", "integrity-status", "--home", str(home_dir)])
+    human_output = capsys.readouterr().out
+    assert human_rc == 0
+    assert "Integrity key" in human_output
+    assert "present" in human_output
+    assert key_id not in human_output
 
 
 def test_trust_cli_status_reports_no_passive_prompts(tmp_path: Path, capsys) -> None:
