@@ -58,10 +58,21 @@ def _persist_claude_pending_permission_denials(store: GuardStore, payload: dict[
         if artifact_id is None or artifact_hash_value is None:
             continue
         reason = _optional_string(pending.get("reason")) or "Denied in Claude's native approval prompt."
+        artifact_type = _optional_string(pending.get("artifact_type"))
+        config_path = _optional_string(pending.get("config_path"))
+        source_scope = _optional_string(pending.get("source_scope"))
+        raw_command_text = _optional_string(pending.get("raw_command_text"))
+        pending_wrapper_chain = pending.get("wrapper_chain")
+        wrapper_chain = pending_wrapper_chain if isinstance(pending_wrapper_chain, list) else None
         saved_policy = _persist_claude_native_permission_policy(
             store=store,
             artifact_id=artifact_id,
             artifact_hash=artifact_hash_value,
+            artifact_type=artifact_type,
+            config_path=config_path,
+            source_scope=source_scope,
+            raw_command_text=raw_command_text,
+            wrapper_chain=wrapper_chain,
             action="block",
             reason=f"Denied in Claude native approval prompt. {reason}",
             now=_now(),
@@ -316,11 +327,20 @@ def _persist_claude_guard_question_decision(store: GuardStore, payload: dict[str
     if artifact_id is None or artifact_hash_value is None:
         return False
     artifact_type = _optional_string(pending.get("artifact_type"))
+    config_path = _optional_string(pending.get("config_path"))
+    source_scope = _optional_string(pending.get("source_scope"))
+    raw_command_text = _optional_string(pending.get("raw_command_text"))
+    pending_wrapper_chain = pending.get("wrapper_chain")
+    wrapper_chain = pending_wrapper_chain if isinstance(pending_wrapper_chain, list) else None
     saved = _persist_claude_native_permission_policy(
         store=store,
         artifact_id=artifact_id,
         artifact_hash=artifact_hash_value,
         artifact_type=artifact_type,
+        config_path=config_path,
+        source_scope=source_scope,
+        raw_command_text=raw_command_text,
+        wrapper_chain=wrapper_chain,
         action=action,
         reason=(
             "Allowed through HOL Guard AskUserQuestion approval."
