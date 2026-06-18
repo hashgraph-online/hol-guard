@@ -131,8 +131,8 @@ from ..runtime.runner import (
     _persist_cloud_exceptions,
     _policy_bundle_acknowledgement_payload,
     _policy_bundle_is_version_downgrade,
-    prepare_guard_cloud_connect_authorization,
     _resolve_guard_sync_auth_context,
+    prepare_guard_cloud_connect_authorization,
     sync_local_guard_cloud_proof,
     sync_supply_chain_bundle,
 )
