@@ -157,6 +157,7 @@ def test_latest_version_python_requirements_uses_all_non_yanked_files(monkeypatc
                 "2.0.807": [
                     {"requires_python": ">=3.10,<3.14", "yanked": "bad wheel"},
                     {"requires_python": ">=3.10,<3.14", "yanked": False},
+                    {"yanked": False},
                     {"requires_python": ">=3.11,<3.15", "yanked": False},
                 ],
             },

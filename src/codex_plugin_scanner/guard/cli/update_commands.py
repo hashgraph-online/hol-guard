@@ -534,7 +534,7 @@ def _latest_version_python_requirements(latest_version: str) -> tuple[str, ...] 
                     continue
                 requires_python = file_payload.get("requires_python")
                 if not isinstance(requires_python, str) or not requires_python.strip():
-                    return None
+                    continue
                 requirement = requires_python.strip()
                 if requirement not in requirements:
                     requirements.append(requirement)
