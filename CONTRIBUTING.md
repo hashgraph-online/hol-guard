@@ -18,7 +18,7 @@ This repository ships:
 ```bash
 git clone https://github.com/hashgraph-online/ai-plugin-scanner.git
 cd ai-plugin-scanner
-uv sync --extra dev --extra cisco
+uv sync --extra dev --extra cisco --group cisco-mcp
 ```
 
 For lean baseline validation on Python 3.10, use `uv sync --extra dev --python 3.10` instead.
@@ -31,7 +31,7 @@ source .venv/bin/activate
 pip install -e ".[dev,cisco]"
 ```
 
-The editable Cisco extra is intended for Python 3.11+ contributor environments.
+The editable Cisco extra is intended for Python 3.11+ contributor environments and keeps published metadata resolver-safe. Use uv with `--group cisco-mcp` when you need the repo-controlled Cisco MCP scanner surface.
 
 ## Validation Requirements
 

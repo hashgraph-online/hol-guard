@@ -16,21 +16,28 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     project = pyproject["project"]
+    requires_python = project["requires-python"]
     dependency_entries = project["dependencies"]
     dependencies = " ".join(dependency_entries)
     cisco_extra = " ".join(project["optional-dependencies"]["cisco"])
+    cisco_mcp_group = " ".join(pyproject["dependency-groups"]["cisco-mcp"])
     override_entries = pyproject["tool"]["uv"]["override-dependencies"]
 
+    assert requires_python == ">=3.10,<3.14"
     assert "cisco-ai-mcp-scanner" not in dependencies
-    assert "cisco-ai-mcp-scanner~=4.6" in cisco_extra
+    assert "cisco-ai-mcp-scanner" not in cisco_extra
+    assert "cisco-ai-mcp-scanner==4.7.3" in cisco_mcp_group
+    assert "litellm==1.89.1" in cisco_extra
     assert "python_version >= '3.11'" in cisco_extra
+    assert "python_version < '3.14'" in cisco_extra
+    assert "python_version < '3.14'" in cisco_mcp_group
     assert "cisco-ai-skill-scanner~=2.0.11" in dependency_entries
     assert "aiohttp==3.14.1" in override_entries
     assert "click==8.4.1" in override_entries
     assert "cisco-ai-skill-scanner==2.0.11" in override_entries
     assert "importlib-metadata==9.0.0" in override_entries
     assert "jsonschema==4.26.0" in override_entries
-    assert "litellm==1.84.0" in override_entries
+    assert "litellm==1.89.1" in override_entries
     assert "openai==2.41.1" in override_entries
     assert "pyjwt==2.13.0" in override_entries
     assert "python-dotenv==1.2.2" in override_entries
@@ -59,11 +66,13 @@ def test_readme_distinguishes_baseline_and_full_cisco_installs() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     assert "Lean baseline install" in readme
-    assert "Full Cisco coverage" in readme
+    assert "Python 3.10 through 3.13" in readme
+    assert "Resolver-safe Cisco extra" in readme
     assert 'pip install "hol-guard[cisco]"' in readme
     assert 'pip install "plugin-scanner[cisco]"' in readme
-    assert "Python 3.11+" in readme
-    assert "published `litellm==1.84.0` release" in readme
+    assert "Python 3.11 through 3.13" in readme
+    assert "the published `cisco` extra remains resolver-safe" in readme
+    assert "repo-controlled Docker image or `cisco-mcp` uv group" in readme
     assert "deferred" in readme
     assert "cisco-ai-a2a-scanner" in readme
     assert "cisco-aibom" in readme
@@ -77,12 +86,14 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     docker_requirements = (ROOT / "docker-requirements.txt").read_text(encoding="utf-8")
 
     assert "cisco-full" in ci_workflow
-    assert "python3.12 -m pip install --dry-run --no-deps --require-hashes -r docker-requirements.txt" in ci_workflow
-    assert "uv sync --frozen --extra dev --extra cisco --python 3.12" in ci_workflow
+    assert "python3.13 -m pip install --dry-run --no-deps --require-hashes -r docker-requirements.txt" in ci_workflow
+    assert "uv sync --frozen --extra dev --extra cisco --group cisco-mcp --python 3.13" in ci_workflow
     assert "uv sync --frozen --extra dev --python ${{ matrix.python-version }}" in ci_workflow
     assert "uv sync --frozen --extra dev --extra publish --extra cisco" in publish_workflow
     assert 'uv tool install "hol-guard[cisco]==' in publish_workflow
     assert "COPY docker-requirements.txt LICENSE README.md /app/" in dockerfile
+    assert "FROM python:3.13-slim@" in dockerfile
+    assert "FROM python:3.14-slim" not in dockerfile
     assert "python3 -m pip install --no-deps --require-hashes -r /app/docker-requirements.txt" in dockerfile
     assert "apt-get install -y --no-install-recommends gcc libc6-dev" in dockerfile
     assert "apt-get purge -y --auto-remove gcc libc6-dev" in dockerfile
@@ -101,7 +112,7 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert "aiohttp==3.14.1" in docker_requirements
     assert "cisco-ai-mcp-scanner==" in docker_requirements
     assert "importlib-metadata==9.0.0" in docker_requirements
-    assert "litellm==1.84.0" in docker_requirements
+    assert "litellm==1.89.1" in docker_requirements
     assert "python-dotenv==1.2.2" in docker_requirements
     assert "python-multipart==0.0.32" in docker_requirements
     assert "pyjwt==2.13.0" in docker_requirements
@@ -109,7 +120,7 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert "tokenizers==0.23.1" in docker_requirements
     assert "--hash=sha256:" in docker_requirements
     assert "uv sync --extra dev" in contributing
-    assert "uv sync --extra dev --extra cisco" in contributing
+    assert "uv sync --extra dev --extra cisco --group cisco-mcp" in contributing
 
 
 def test_publish_workflow_builds_only_guard_and_scanner_packages() -> None:

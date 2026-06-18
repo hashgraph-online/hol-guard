@@ -8,7 +8,7 @@ version = "2.0.764"
 description = "Protect local AI harnesses with HOL Guard and run scanner checks for Codex, Claude, Cursor, Gemini, and OpenCode."
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.14"
 authors = [
     { name = "HOL", email = "support@hol.org" },
 ]
@@ -37,7 +37,7 @@ dependencies = [
 
 [project.optional-dependencies]
 cisco = [
-    "cisco-ai-mcp-scanner~=4.6; python_version >= '3.11'",
+    "litellm==1.89.1; python_version >= '3.11' and python_version < '3.14'",
 ]
 dev = [
     "basedpyright>=1.39.8",
@@ -52,6 +52,11 @@ publish = [
     "twine>=6.2.0",
 ]
 
+[dependency-groups]
+cisco-mcp = [
+    "cisco-ai-mcp-scanner==4.7.3; python_version >= '3.11' and python_version < '3.14'",
+]
+
 [tool.uv]
 override-dependencies = [
     "aiohttp==3.14.1",
@@ -60,7 +65,7 @@ override-dependencies = [
     "fastapi==0.137.1",
     "importlib-metadata==9.0.0",
     "jsonschema==4.26.0",
-    "litellm==1.84.0",
+    "litellm==1.89.1",
     "openai==2.41.1",
     "pyjwt==2.13.0",
     "python-dotenv==1.2.2",
