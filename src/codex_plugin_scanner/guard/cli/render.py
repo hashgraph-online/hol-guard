@@ -703,6 +703,9 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         supply_chain = payload.get("supply_chain")
         if isinstance(supply_chain, dict):
             console.print(_build_supply_chain_posture_panel(supply_chain))
+    trust = payload.get("trust")
+    if isinstance(trust, dict):
+        console.print(_build_trust_doctor_panel(trust))
     perf_items = payload.get("detector_perf")
     if isinstance(perf_items, list) and perf_items:
         perf_table = Table(title="Detector performance", box=box.SIMPLE_HEAVY, show_header=True)
@@ -719,6 +722,37 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
                 "[red]yes[/red]" if slow else "no",
             )
         console.print(perf_table)
+    console.print(_build_diagnostic_command_panel())
+
+
+def _build_trust_doctor_panel(trust: dict[str, object]) -> Panel:
+    body = Table.grid(padding=(0, 1))
+    body.add_row("Runtime", str(trust.get("runtime_protection") or "unknown"))
+    body.add_row("Remembered rules", str(trust.get("remembered_rules") or "unknown"))
+    body.add_row("Cloud policies", str(trust.get("cloud_policies") or "unknown"))
+    body.add_row("Passive OS prompts", "blocked" if trust.get("passive_prompt_allowed") is False else "unknown")
+    checks = trust.get("checks")
+    if isinstance(checks, dict):
+        body.add_row("Local rules protected", _bool_label(bool(checks.get("local_rules_protected"))))
+        body.add_row("Passive no-UI check", _bool_label(bool(checks.get("passive_no_ui"))))
+    official_install = trust.get("official_install")
+    if isinstance(official_install, dict):
+        version = official_install.get("version") or "unknown"
+        update_command = official_install.get("update_command") or "hol-guard update"
+        body.add_row("Installed package", f"hol-guard {version}")
+        body.add_row("Update", str(update_command))
+    summary = trust.get("summary")
+    if isinstance(summary, str) and summary.strip():
+        body.add_row("Summary", textwrap.fill(summary.strip(), width=72))
+    actions = _coerce_string_list(trust.get("recommended_actions"))
+    if actions:
+        body.add_row("Next", "\n".join(textwrap.fill(f"* {action}", width=72) for action in actions))
+    border_style = "green" if str(trust.get("remembered_rules") or "") == "enforced" else "yellow"
+    return Panel(body, title="Local trust", border_style=border_style)
+
+
+def _render_trust_doctor(console: Console, payload: dict[str, object]) -> None:
+    console.print(_build_trust_doctor_panel(payload))
     console.print(_build_diagnostic_command_panel())
 
 
@@ -2593,6 +2627,7 @@ _RENDERERS: dict[str, Renderer] = {
     "bootstrap": _render_bootstrap,
     "detect": _render_detect,
     "doctor": _render_doctor,
+    "trust.doctor": _render_trust_doctor,
     "run": _render_run,
     "diff": _render_diff,
     "receipts": _render_receipts,

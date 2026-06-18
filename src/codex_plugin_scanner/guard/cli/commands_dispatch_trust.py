@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 from pathlib import Path
 from typing import TextIO
 
@@ -99,6 +100,57 @@ def _trust_status_payload(store: GuardStore, *, command: str, backend: str) -> d
     }
 
 
+def _installed_trust_cli_payload() -> dict[str, object]:
+    try:
+        version = importlib.metadata.version("hol-guard")
+    except importlib.metadata.PackageNotFoundError:
+        version = None
+    return {
+        "package": "hol-guard",
+        "version": version,
+        "update_command": "hol-guard update",
+        "dry_run_command": "hol-guard update --dry-run --json",
+    }
+
+
+def build_trust_doctor_payload(store: GuardStore, *, backend: str = "auto") -> dict[str, object]:
+    payload = _trust_status_payload(store, command="doctor", backend=backend)
+    remembered_rules = str(payload.get("remembered_rules") or "unknown")
+    runtime_protection = str(payload.get("runtime_protection") or "unknown")
+    if runtime_protection != "protected":
+        payload["summary"] = (
+            "Runtime protection is degraded. One-time approvals remain available, but broad remembered local rules "
+            "stay limited until local trust is protected."
+        )
+    elif remembered_rules != "enforced":
+        payload["summary"] = (
+            "Runtime protection is active. Broad remembered local rules are limited until local trust is protected."
+        )
+    else:
+        payload["summary"] = "Runtime protection and remembered local rules are protected."
+    payload["checks"] = {
+        "runtime_protection": runtime_protection == "protected",
+        "one_time_approvals": payload.get("one_time_approvals") == "available",
+        "passive_no_ui": payload.get("passive_prompt_allowed") is False,
+        "local_rules_protected": remembered_rules == "enforced",
+        "cloud_policy_authority": payload.get("cloud_policy_authority") == "available",
+    }
+    payload["recommended_actions"] = (
+        [
+            "Use one-time approvals for local-only work.",
+            "Use Guard Cloud policies for durable team exceptions.",
+            "Run `hol-guard guard trust test --no-ui --json` to verify passive checks stay prompt-free.",
+        ]
+        if remembered_rules != "enforced"
+        else [
+            "Run `hol-guard guard trust test --no-ui --json` after Guard updates.",
+            "Use Guard Cloud policies for team-wide exceptions.",
+        ]
+    )
+    payload["official_install"] = _installed_trust_cli_payload()
+    return payload
+
+
 def _run_guard_trust_command(
     args: argparse.Namespace,
     *,
@@ -118,7 +170,11 @@ def _run_guard_trust_command(
         payload = _unsupported_backend_payload(command=trust_command, backend=backend)
         _emit(f"trust.{trust_command}", payload, getattr(args, "json", False))
         return 2
-    payload = _trust_status_payload(store, command=trust_command, backend=backend)
+    payload = (
+        build_trust_doctor_payload(store, backend=backend)
+        if trust_command == "doctor"
+        else _trust_status_payload(store, command=trust_command, backend=backend)
+    )
     if trust_command in {"status", "doctor"}:
         _emit(f"trust.{trust_command}", payload, getattr(args, "json", False))
         return 0
@@ -152,4 +208,5 @@ def _run_guard_trust_command(
 
 __all__ = [
     "_run_guard_trust_command",
+    "build_trust_doctor_payload",
 ]
