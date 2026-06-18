@@ -1277,6 +1277,10 @@
     max-width: 3.25rem;
   }
 
+  .max-w-\[17\.5rem\] {
+    max-width: 17.5rem;
+  }
+
   .max-w-\[260px\] {
     max-width: 260px;
   }
@@ -5734,8 +5738,8 @@
       justify-content: space-between;
     }
 
-    .lg\:gap-6 {
-      gap: calc(var(--spacing) * 6);
+    .lg\:gap-4 {
+      gap: calc(var(--spacing) * 4);
     }
 
     :where(.lg\:divide-x > :not(:last-child)) {
@@ -5818,12 +5822,12 @@
       grid-template-columns: 300px minmax(0, 1fr);
     }
 
-    .xl\:grid-cols-\[minmax\(0\,1fr\)_380px\] {
-      grid-template-columns: minmax(0, 1fr) 380px;
+    .xl\:grid-cols-\[minmax\(0\,1fr\)_280px\] {
+      grid-template-columns: minmax(0, 1fr) 280px;
     }
 
-    .xl\:grid-cols-\[minmax\(0\,1fr\)_minmax\(17rem\,20rem\)\] {
-      grid-template-columns: minmax(0, 1fr) minmax(17rem, 20rem);
+    .xl\:grid-cols-\[minmax\(0\,1fr\)_380px\] {
+      grid-template-columns: minmax(0, 1fr) 380px;
     }
 
     .xl\:items-start {

@@ -57,5 +57,10 @@ export const STRICT_CONFIG_WHAT_CHANGES = [
   "First-time actions follow your default strict action.",
   "Changed tool hashes trigger your configured review path.",
   "New network domains and subprocesses use strict fallback rules.",
-  "Cloud exceptions and remembered rules still win when they match.",
+] as const;
+
+export const STRICT_CONFIG_SCENARIOS = [
+  { id: "first-time", label: "New tool contacting unknown domain" },
+  { id: "remembered-allow", label: "Remembered allow wins" },
+  { id: "cloud-exception", label: "Active Cloud exception" },
 ] as const;
