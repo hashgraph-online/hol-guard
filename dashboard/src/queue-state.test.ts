@@ -190,9 +190,17 @@ assert(
 );
 
 const requestDateLabel = formatQueueRequestDate(midItem);
+const expectedTimestamp = new Date(midItem.last_seen_at ?? midItem.created_at).getTime();
+const expectedDateLabel = new Intl.DateTimeFormat("en-US", {
+  month: "2-digit",
+  day: "2-digit",
+  year: "2-digit",
+  hour: "numeric",
+  minute: "2-digit",
+}).format(new Date(expectedTimestamp));
 assert(
-  requestDateLabel.includes("2026") && requestDateLabel.includes("Feb"),
-  "T-QS-17D: formatQueueRequestDate exposes a human-readable request date with year"
+  requestDateLabel === expectedDateLabel,
+  "T-QS-17D: formatQueueRequestDate matches abbreviated local date/time format"
 );
 
 const recentlySeenOldItem: GuardApprovalRequest = {

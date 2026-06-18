@@ -588,10 +588,10 @@ export function filterQueueByDateRange(
   });
 }
 
-const queueDateFormatter = new Intl.DateTimeFormat("en", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
+const queueDateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "2-digit",
+  day: "2-digit",
+  year: "2-digit",
   hour: "numeric",
   minute: "2-digit",
 });
