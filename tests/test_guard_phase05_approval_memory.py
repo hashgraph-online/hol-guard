@@ -19,7 +19,13 @@ from codex_plugin_scanner.guard.runtime.detectors import (
     DetectorContext,
     FalsePositiveSuppressorDetector,
 )
-from codex_plugin_scanner.guard.store import GuardStore, _warn_only_policy_integrity_status
+from codex_plugin_scanner.guard.store import (
+    GuardStore,
+    _runtime_scoped_exact_match_key,
+    _scoped_runtime_row_requires_exact_match,
+    _warn_only_policy_integrity_status,
+    runtime_tool_action_exact_match_context,
+)
 from codex_plugin_scanner.guard.store_approvals import approval_queue_identity_for_request
 
 
@@ -722,9 +728,125 @@ def test_artifact_runtime_scope_reuses_approval_for_same_exact_action_retry(tmp_
     assert result["resolved"] is True
     assert store.get_approval_request("req-shell")["status"] == "resolved"
     assert store.get_approval_request("req-shell-other")["status"] == "pending"
-    assert store.resolve_policy("codex", shell_request.artifact_id, "hash-retry") == "allow"
-    assert store.resolve_policy("codex", shell_request.artifact_id, None) is None
-    assert store.resolve_policy("codex", other_shell_request.artifact_id, "hash-retry") is None
+    runtime_exact_match_context = runtime_tool_action_exact_match_context(
+        config_path=shell_request.config_path,
+        source_scope=shell_request.source_scope,
+    )
+    contextual_exact_key = _runtime_scoped_exact_match_key(shell_request.artifact_id, runtime_exact_match_context)
+    legacy_exact_key = _runtime_scoped_exact_match_key(shell_request.artifact_id)
+    with store._connect() as connection:
+        rows = connection.execute(
+            """
+            select artifact_id, artifact_hash, action
+            from policy_decisions
+            where scope = 'artifact'
+            """,
+        ).fetchall()
+    assert [(row["artifact_id"], row["artifact_hash"], row["action"]) for row in rows] == [
+        (shell_request.artifact_id, contextual_exact_key, "allow")
+    ]
+    assert contextual_exact_key != legacy_exact_key
+
+
+def test_artifact_runtime_scope_includes_wrapped_action_context(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    wrapper_chain = ["bash", "zsh"]
+    request = GuardApprovalRequest(
+        request_id="req-wrapped-shell",
+        harness="codex",
+        artifact_id="codex:project:tool-action:shell",
+        artifact_name="Shell command",
+        artifact_type="tool_action_request",
+        artifact_hash="hash-original",
+        policy_action="require-reapproval",
+        recommended_scope="artifact",
+        changed_fields=("shell_command",),
+        source_scope="project",
+        config_path="workspace/app/codex-config.toml",
+        workspace="workspace/app",
+        launch_target="docker compose up -d postgres",
+        review_command="hol-guard approvals approve req-wrapped-shell",
+        approval_url="http://127.0.0.1:5474/approvals/req-wrapped-shell",
+        action_envelope_json={
+            "action_type": "shell_command",
+            "tool_name": "Bash",
+            "command": "docker compose up -d postgres",
+            "raw_command_text": "docker compose up -d postgres",
+            "wrapper_chain": wrapper_chain,
+        },
+    )
+    store.add_approval_request(request, "2026-05-13T00:00:00+00:00")
+
+    result = apply_approval_resolution(
+        store=store,
+        request_id=request.request_id,
+        action="allow",
+        scope="artifact",
+        workspace=request.workspace,
+        reason="same wrapped runtime action only",
+        now="2026-05-13T00:02:00+00:00",
+        return_queue_result=True,
+    )
+    runtime_exact_match_context = runtime_tool_action_exact_match_context(
+        config_path=request.config_path,
+        source_scope=request.source_scope,
+        raw_command_text="docker compose up -d postgres",
+        wrapper_chain=wrapper_chain,
+    )
+    contextual_exact_key = _runtime_scoped_exact_match_key(request.artifact_id, runtime_exact_match_context)
+    legacy_exact_key = _runtime_scoped_exact_match_key(request.artifact_id)
+    with store._connect() as connection:
+        rows = connection.execute(
+            """
+            select artifact_id, artifact_hash, action
+            from policy_decisions
+            where scope = 'artifact'
+            """,
+        ).fetchall()
+
+    assert result["resolved"] is True
+    assert [(row["artifact_id"], row["artifact_hash"], row["action"]) for row in rows] == [
+        (request.artifact_id, contextual_exact_key, "allow")
+    ]
+    assert contextual_exact_key != legacy_exact_key
+
+
+def test_contextual_harness_runtime_exact_key_matches_same_context() -> None:
+    artifact_id = "codex:project:tool-action:shell"
+    runtime_exact_match_context = runtime_tool_action_exact_match_context(
+        config_path="workspace/app/codex-config.toml",
+        source_scope="project",
+        raw_command_text="docker compose up -d postgres",
+        wrapper_chain=("bash", "zsh"),
+    )
+    contextual_exact_key = _runtime_scoped_exact_match_key(artifact_id, runtime_exact_match_context)
+    legacy_exact_key = _runtime_scoped_exact_match_key(artifact_id)
+
+    assert contextual_exact_key is not None
+    assert legacy_exact_key is not None
+    assert not _scoped_runtime_row_requires_exact_match(
+        scope="harness",
+        stored_artifact_id=artifact_id,
+        stored_artifact_hash=contextual_exact_key,
+        source="claude-native-approval",
+        requested_artifact_id=artifact_id,
+        requested_runtime_exact_match_key=contextual_exact_key,
+    )
+    assert not _scoped_runtime_row_requires_exact_match(
+        scope="harness",
+        stored_artifact_id=artifact_id,
+        stored_artifact_hash=legacy_exact_key,
+        source="claude-native-approval",
+        requested_artifact_id=artifact_id,
+        requested_runtime_exact_match_key=contextual_exact_key,
+    )
+    assert _scoped_runtime_row_requires_exact_match(
+        scope="harness",
+        stored_artifact_id=artifact_id,
+        stored_artifact_hash=contextual_exact_key,
+        source="claude-native-approval",
+        requested_artifact_id=artifact_id,
+    )
 
 
 def test_empty_degraded_reasons_do_not_honor_warn_only_policy() -> None:
@@ -760,6 +882,7 @@ def test_backend_degraded_warn_mode_ignores_local_approval(tmp_path: Path) -> No
         )
         is None
     )
+
 
 def test_path_degraded_warn_mode_ignores_local_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _store(tmp_path)
