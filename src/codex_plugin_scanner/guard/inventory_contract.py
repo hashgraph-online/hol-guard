@@ -753,12 +753,16 @@ def _mcp_tool_items_from_artifact(
         output_schema = _first_present_value(raw_tool, "outputSchema", "output_schema")
         annotations = raw_tool.get("annotations")
         safe_annotations = annotations if isinstance(annotations, dict) else {}
+        server_command = getattr(artifact, "command", None)
+        server_url = getattr(artifact, "url", None)
         metadata: dict[str, object] = {
             "serverItemId": server_item.item_id,
             "toolName": name,
             "title": display_name,
-            "serverCommand": getattr(artifact, "command", None),
-            "serverUrl": getattr(artifact, "url", None),
+            "serverCommand": _redact_command_value(server_command, home_dir, workspace_dir)
+            if isinstance(server_command, str) and server_command
+            else None,
+            "serverUrl": redact_url(server_url) if isinstance(server_url, str) and server_url else None,
             "serverTransport": getattr(artifact, "transport", None),
             "descriptionHash": fingerprint_text(description),
             "inputSchemaHash": fingerprint_mapping(input_schema) if input_schema is not None else None,

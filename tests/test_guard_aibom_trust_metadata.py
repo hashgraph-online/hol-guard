@@ -752,13 +752,16 @@ def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(monkeypatch, tmp_
     workspace = tmp_path / "repo"
     workspace.mkdir()
     mcp_file = workspace / ".mcp.json"
+    server_file = workspace / "server.py"
+    server_url = "https://mcp.example.test/sse?token=raw-token"
     mcp_file.write_text(
         json.dumps(
             {
                 "mcpServers": {
                     "local-demo": {
-                        "command": "python",
+                        "command": f"python {server_file} --token raw-token",
                         "args": ["-m", "demo_server"],
+                        "url": server_url,
                     }
                 }
             }
@@ -773,7 +776,8 @@ def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(monkeypatch, tmp_
             artifact_type="mcp_server",
             source_scope="project",
             config_path=str(mcp_file),
-            command="python",
+            command=f"python {server_file} --token raw-token",
+            url=server_url,
             transport="stdio",
             metadata={
                 "tools": [
@@ -817,7 +821,10 @@ def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(monkeypatch, tmp_
     search_trust, search_metadata = _assert_local_trust(search_tool.metadata, trust_domain="mcp")
     _delete_trust, delete_metadata = _assert_local_trust(delete_tool.metadata, trust_domain="mcp")
     assert search_metadata.get("evidenceHash") != delete_metadata.get("evidenceHash")
-    assert search_tool.metadata.get("serverCommand") == "python"
+    assert search_tool.metadata.get("serverCommand") == "python {home}/repo/server.py --token redacted"
+    assert search_tool.metadata.get("serverUrl") == "https://mcp.example.test/sse?token=redacted"
+    assert str(server_file) not in json.dumps(search_tool.metadata)
+    assert "raw-token" not in json.dumps(search_tool.metadata)
     assert search_tool.metadata.get("serverTransport") == "stdio"
     components = search_trust.get("trustComponents")
     assert isinstance(components, list)
