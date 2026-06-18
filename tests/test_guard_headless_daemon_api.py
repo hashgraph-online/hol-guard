@@ -269,6 +269,28 @@ def test_headless_capabilities_endpoint_reports_safe_action_contract(tmp_path: P
     assert codex_item["status"] in {"inactive", "observed", "protected"}
 
 
+def test_headless_runtime_endpoint_exposes_safe_trust_status(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(daemon.port, "/v1/runtime", method="GET", token=token),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    trust_status = payload["trust_status"]
+    assert trust_status["runtime_protection"] in {"protected", "degraded", "unknown"}
+    assert trust_status["remembered_rules"] in {"enforced", "disabled_degraded", "unknown"}
+    assert trust_status["cloud_policies"] in {"available", "setup_unavailable", "unknown"}
+    assert trust_status["last_proof"] is None
+    serialized = json.dumps(payload, sort_keys=True)
+    assert "key_id" not in serialized
+
+
 def test_supply_chain_package_firewall_status_reports_connect_gate_when_cloud_is_not_connected(
     tmp_path: Path,
 ) -> None:
