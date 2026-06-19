@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 
 from ..store import _runtime_scoped_exact_match_key, runtime_tool_action_exact_match_context
+from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -83,12 +84,6 @@ def _native_hook_reason(*values: object | None) -> str:
     if messages:
         return " ".join(messages)
     return "HOL Guard flagged this tool call for review."
-
-def _ensure_terminal_punctuation(message: str) -> str:
-    trimmed = message.strip()
-    if trimmed.endswith((".", "!", "?")):
-        return trimmed
-    return f"{trimmed}."
 
 def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str:
     reason = _native_hook_reason(*values)

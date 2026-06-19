@@ -32,6 +32,7 @@ from ..models import GuardArtifact
 from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
+from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from .js_semver import highest_js_version_for_selector, version_matches_js_selector
 from .manifest_dependency_targets import evaluation_targets as _manifest_evaluation_targets
 from .package_intent_common import split_python_extras
@@ -553,7 +554,7 @@ def _finalize_evaluation(
             summary = f"{summary} Also flagged: {others}."
     harness_parts = [risk_summary]
     if reason_message:
-        harness_parts.append(f"Reason: {reason_message}.")
+        harness_parts.append(f"Reason: {_ensure_terminal_punctuation(reason_message)}")
     if fix_command:
         harness_parts.append(f"Fix: install `{fix_command}` or choose a team exception.")
     user_copy = _normalize_package_user_copy(

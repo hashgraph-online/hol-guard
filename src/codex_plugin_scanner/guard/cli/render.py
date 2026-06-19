@@ -1959,7 +1959,13 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
         if isinstance(user_copy, dict):
             harness_message = str(user_copy.get("harness_message") or "").strip()
             if harness_message:
-                console.print(Panel(Text(harness_message), title="Guard guidance", border_style="magenta"))
+                console.print(
+                    Panel(
+                        Text(harness_message, no_wrap=False, overflow="fold"),
+                        title="Guard guidance",
+                        border_style="magenta",
+                    )
+                )
     supply_chain = payload.get("supply_chain")
     if isinstance(supply_chain, dict):
         console.print(_build_supply_chain_posture_panel(supply_chain))
