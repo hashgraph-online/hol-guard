@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
 import json
+import shlex
+from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 SHIM_PROBE_ENV_VAR = "HOL_GUARD_SHIM_PROBE"
@@ -31,6 +35,23 @@ def package_shim_probe_args(manager: str) -> tuple[str, ...]:
     """Return install-shaped probe args that route through package protect."""
 
     return _PACKAGE_SHIM_PROBE_ARGS.get(manager, ("--version",))
+
+
+def package_shim_command_requires_guard(
+    manager: str,
+    argv: Sequence[str],
+    *,
+    workspace: Path | None = None,
+) -> bool:
+    """Return whether a shimmed package-manager command should enter Guard protect."""
+
+    normalized_manager = manager.strip().lower()
+    if not normalized_manager:
+        return False
+    command = [normalized_manager, *[str(argument) for argument in argv]]
+    parser_module = importlib.import_module(".runtime.package_intent_parser", __package__)
+    intent = parser_module.parse_package_intent(shlex.join(command), workspace=workspace)
+    return intent is not None
 
 
 def parse_protect_json_stdout(stdout: str) -> dict[str, Any]:

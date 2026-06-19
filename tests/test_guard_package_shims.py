@@ -25,7 +25,11 @@ from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.protect import build_protect_payload
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
-from codex_plugin_scanner.guard.shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
+from codex_plugin_scanner.guard.shim_probe import (
+    SHIM_PROBE_ENV_VALUE,
+    SHIM_PROBE_ENV_VAR,
+    package_shim_command_requires_guard,
+)
 from codex_plugin_scanner.guard.shims import build_shim_content_hash, install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.shim_execution_helpers import write_fake_manager_script
@@ -448,6 +452,73 @@ def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path
     assert result.returncode == 0
     assert marker_payload["argv"][1:] == ["install", "minimist@1.2.9"]
     assert marker_payload["cwd"] == str(workspace_dir)
+
+
+@pytest.mark.parametrize(
+    ("manager", "argv", "expected"),
+    [
+        ("npm", ("install", "minimist@1.2.9"), True),
+        ("npm", ("run", "dev"), False),
+        ("pnpm", ("add", "minimist@1.2.9"), True),
+        ("pnpm", ("run", "dev"), False),
+    ],
+)
+def test_package_shim_command_requires_guard_only_for_supply_chain_actions(
+    tmp_path: Path,
+    manager: str,
+    argv: tuple[str, ...],
+    expected: bool,
+) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+
+    assert package_shim_command_requires_guard(manager, argv, workspace=workspace_dir) is expected
+
+
+def test_package_manager_shim_bypasses_guard_for_pnpm_run_commands(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    marker_path = tmp_path / "pnpm-run-marker.json"
+    write_fake_manager_script(
+        fake_bin=fake_bin,
+        manager="pnpm",
+        marker_path=marker_path,
+        exit_code=7,
+        stdout_text="pnpm-run-stdout",
+        stderr_text="pnpm-run-stderr",
+    )
+    shim_path = _install_single_manager_shim(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        manager="pnpm",
+        capsys=capsys,
+    )
+    baseline_receipt_count = len(GuardStore(home_dir).list_receipts(limit=20))
+
+    env = dict(os.environ)
+    env["PATH"] = f"{shim_path.parent}{os.pathsep}{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+    env["SHIM_TEST_VAR"] = "shim-value"
+    result = subprocess.run(
+        [str(shim_path), "run", "dev"],
+        cwd=workspace_dir,
+        env=env,
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=30,
+    )
+    marker_payload = json.loads(marker_path.read_text(encoding="utf-8"))
+
+    assert result.returncode == 7
+    assert result.stdout.strip() == "pnpm-run-stdout"
+    assert result.stderr.strip().endswith("pnpm-run-stderr")
+    assert marker_payload["argv"][1:] == ["run", "dev"]
+    assert marker_payload["cwd"] == str(workspace_dir)
+    assert marker_payload["shim_var"] == "shim-value"
+    assert len(GuardStore(home_dir).list_receipts(limit=20)) == baseline_receipt_count
 
 
 _BLOCKING_SHIM_CASES = (
