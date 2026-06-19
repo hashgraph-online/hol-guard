@@ -8,6 +8,7 @@ import json
 import re
 import sqlite3
 
+from .approval_scope_support import supported_request_scopes
 from .models import GuardApprovalRequest
 from .runtime.action_identity import normalize_command_identity
 
@@ -532,7 +533,7 @@ def count_approval_requests(
 
 
 def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "request_id": str(row["request_id"]),
         "harness": str(row["harness"]),
         "artifact_id": str(row["artifact_id"]),
@@ -576,6 +577,8 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "created_at": str(row["created_at"]),
         "resolved_at": row["resolved_at"],
     }
+    payload["allowed_scopes"] = list(supported_request_scopes(payload))
+    return payload
 
 
 def _safe_json_list(value: object) -> list[object]:

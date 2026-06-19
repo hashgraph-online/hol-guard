@@ -903,8 +903,8 @@ class TestGuardApprovals:
     def test_guard_broad_scope_resolution_clears_matching_pending_requests(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         for request_id, artifact_id in (
-            ("req-a", "codex:project:first"),
-            ("req-b", "codex:project:second"),
+            ("req-a", "codex:project:mcp:first"),
+            ("req-b", "codex:project:mcp:second"),
         ):
             store.add_approval_request(
                 GuardApprovalRequest(
@@ -944,7 +944,7 @@ class TestGuardApprovals:
                 GuardApprovalRequest(
                     request_id=request_id,
                     harness=harness,
-                    artifact_id=f"{harness}:project:item",
+                    artifact_id=f"{harness}:project:mcp:item",
                     artifact_name=f"{harness}-item",
                     artifact_hash=f"hash-{request_id}",
                     policy_action="require-reapproval",
@@ -982,7 +982,7 @@ class TestGuardApprovals:
                 GuardApprovalRequest(
                     request_id=f"req-{index}",
                     harness="codex",
-                    artifact_id=f"codex:project:item-{index}",
+                    artifact_id=f"codex:project:mcp:item-{index}",
                     artifact_name=f"item-{index}",
                     artifact_hash=f"hash-{index}",
                     policy_action="require-reapproval",
@@ -1043,6 +1043,35 @@ class TestGuardApprovals:
         assert after_expiry is None
         assert decisions[0]["expires_at"] == "2026-04-11T01:00:00+00:00"
         assert decisions[0]["source"] == "local"
+
+    def test_guard_pending_request_payload_lists_supported_scopes(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        workspace = tmp_path / "workspace"
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-supported-scopes",
+                harness="codex",
+                artifact_id="codex:project:tool-action:req-supported-scopes",
+                artifact_name="Shell command",
+                artifact_type="tool_action_request",
+                artifact_hash="hash-supported-scopes",
+                policy_action="require-reapproval",
+                recommended_scope="publisher",
+                changed_fields=("shell_command",),
+                source_scope="project",
+                config_path=str(workspace / ".codex" / "config.toml"),
+                workspace=str(workspace),
+                publisher="hashgraph-online",
+                review_command="hol-guard approvals approve req-supported-scopes",
+                approval_url="http://127.0.0.1:5474/requests/req-supported-scopes",
+            ),
+            "2026-04-11T00:00:00+00:00",
+        )
+
+        request = store.get_approval_request("req-supported-scopes")
+
+        assert request is not None
+        assert request["allowed_scopes"] == ["artifact", "publisher", "workspace", "harness", "global"]
 
     def test_guard_store_ignores_expired_policy_decisions_without_explicit_now(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -1887,7 +1916,7 @@ class TestGuardApprovals:
         assert status == 400
         assert payload["error"] == "missing_required_fields"
 
-    def test_guard_daemon_approve_route_requires_workspace_for_workspace_scope(self, tmp_path):
+    def test_guard_daemon_approve_route_derives_workspace_scope_from_request(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         store.add_approval_request(
             GuardApprovalRequest(
@@ -1916,18 +1945,15 @@ class TestGuardApprovals:
                 headers=_guard_json_headers(daemon._server.auth_token),
                 method="POST",
             )
-            try:
-                urllib.request.urlopen(request, timeout=5)
-            except urllib.error.HTTPError as error:
-                payload = json.loads(error.read().decode("utf-8"))
-                status = error.code
-            else:
-                raise AssertionError("expected HTTPError for missing workspace path")
+            with urllib.request.urlopen(request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+                status = response.status
         finally:
             daemon.stop()
 
-        assert status == 400
-        assert "requires --workspace" in payload["error"]
+        assert status == 200
+        assert payload["resolved"] is True
+        assert payload["resolved_request"]["resolution_scope"] == "workspace"
 
     @pytest.mark.parametrize("action", ["approve", "block"])
     @pytest.mark.parametrize("scope", ["artifact", "workspace", "publisher", "harness", "global"])
@@ -1937,11 +1963,20 @@ class TestGuardApprovals:
         store = GuardStore(tmp_path / "guard-home")
         workspace = tmp_path / "workspace"
         request_id = f"req-{action}-{scope}"
+        artifact_family = "tool-action" if scope in {"harness", "global"} else scope
+        artifact_id = (
+            f"codex:project:{artifact_family}:{scope}" if scope in {"harness", "global"} else f"codex:project:{scope}"
+        )
+        other_artifact_id = (
+            f"codex:project:{artifact_family}:{scope}-other"
+            if scope in {"harness", "global"}
+            else f"codex:project:{scope}-other"
+        )
         store.add_approval_request(
             GuardApprovalRequest(
                 request_id=request_id,
                 harness="codex",
-                artifact_id=f"codex:project:{scope}",
+                artifact_id=artifact_id,
                 artifact_name=f"{scope} action",
                 artifact_hash=f"hash-{action}-{scope}",
                 publisher="codex-local",
@@ -1960,7 +1995,7 @@ class TestGuardApprovals:
             GuardApprovalRequest(
                 request_id=f"{request_id}-other",
                 harness="codex",
-                artifact_id=f"codex:project:{scope}-other",
+                artifact_id=other_artifact_id,
                 artifact_name=f"{scope} other action",
                 artifact_hash=f"hash-{action}-{scope}-other",
                 publisher="codex-local",
@@ -2980,7 +3015,7 @@ class TestGuardApprovals:
             )
         ]
 
-    def test_guard_approvals_cli_rejects_workspace_scope_without_workspace(self, tmp_path, capsys):
+    def test_guard_approvals_cli_derives_workspace_scope_without_workspace_override(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
         store.add_approval_request(
@@ -3018,13 +3053,16 @@ class TestGuardApprovals:
         except SystemExit as error:
             rc = error.code
         else:
-            raise AssertionError("expected argparse failure for missing workspace scope target")
+            rc = 0
 
         captured = capsys.readouterr()
+        payload = json.loads(captured.out)
 
-        assert rc == 2
-        assert "requires --workspace" in captured.err
-        assert store.get_approval_request("req-workspace")["status"] == "pending"
+        assert rc == 0
+        assert captured.err == ""
+        assert payload["resolved"] is True
+        assert payload["item"]["resolution_scope"] == "workspace"
+        assert store.get_approval_request("req-workspace")["status"] == "resolved"
 
     def test_guard_workspace_resolution_does_not_match_sibling_workspace(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
