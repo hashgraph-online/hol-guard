@@ -141,6 +141,56 @@ def test_runtime_guard_proxy_queue_block_includes_request_url(tmp_path, monkeypa
     assert opened_urls == []
 
 
+def test_runtime_guard_proxy_rewrites_stale_request_url_to_active_approval_center(tmp_path, monkeypatch):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(runtime_mcp_module, "load_guard_daemon_auth_token", lambda _guard_home: "secret-token")
+    monkeypatch.setattr(runtime_mcp_module.webbrowser, "open", lambda _url: True)
+    monkeypatch.setattr(
+        runtime_mcp_module,
+        "queue_blocked_approvals",
+        lambda **_kwargs: [
+            {
+                "request_id": "stale-port-request",
+                "approval_url": "http://127.0.0.1:4833/requests/stale-port-request",
+            }
+        ],
+    )
+    proxy = RuntimeMcpGuardProxy(
+        harness="hermes",
+        server_name="danger_lab",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / "hermes.json"),
+        transport="local",
+    )
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "dangerous_delete", "arguments": {"target": ".env.guard-proof"}},
+            },
+        ]
+    )
+
+    error = result["responses"][1]["error"]
+
+    assert error["data"]["approvalCenterUrl"] == "http://127.0.0.1:4455"
+    assert error["data"]["approvalRequests"][0]["approval_url"] == "http://127.0.0.1:4833/requests/stale-port-request"
+    assert error["data"]["reviewUrl"] == "http://127.0.0.1:4455/requests/stale-port-request"
+    assert error["data"]["reviewUrl"] in error["message"]
+
+
 def test_runtime_guard_proxy_respects_native_only_approval_surface_policy(tmp_path, monkeypatch):
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
