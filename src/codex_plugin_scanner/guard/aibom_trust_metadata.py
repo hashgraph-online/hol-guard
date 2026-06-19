@@ -384,6 +384,7 @@ def _trust_root_for_artifact(
                 getattr(artifact, "artifact_type", None) == "skill_file"
                 and candidate.parent.name.lower() == "skills"
                 and ((candidate / "README.md").is_file() or (candidate / "SECURITY.md").is_file())
+                and _skill_file_name_matches_root(artifact, candidate)
             ):
                 return candidate
             if workspace_dir is not None and candidate.resolve() == workspace_dir.resolve():
@@ -405,6 +406,15 @@ def _trust_root_for_artifact(
         return path if path.is_file() else None
 
     return None
+
+
+def _skill_file_name_matches_root(artifact: object, root: Path) -> bool:
+    root_name = root.name
+    name = getattr(artifact, "name", None)
+    if isinstance(name, str) and (name == root_name or name.startswith(f"{root_name}/")):
+        return True
+    artifact_id = getattr(artifact, "artifact_id", None)
+    return isinstance(artifact_id, str) and f":{root_name}:" in artifact_id
 
 
 def _trust_layer_from_domain(

@@ -190,6 +190,39 @@ def test_aibom_export_adds_trust_to_readme_marked_store_only_skill_files(tmp_pat
     assert isinstance(rows[0].get("trustLayers"), list)
 
 
+def test_aibom_export_does_not_use_unrelated_skills_ancestor_as_skill_root(tmp_path: Path) -> None:
+    utility_root = tmp_path / ".agents" / "skills" / "utilities"
+    skill_dir = utility_root / "caveman-compress"
+    script_path = skill_dir / "scripts" / "cli.py"
+    script_path.parent.mkdir(parents=True)
+    (utility_root / "README.md").write_text("# Utilities\n", encoding="utf-8")
+    script_path.write_text("print('compress')\n", encoding="utf-8")
+    store = _FakeInventoryStore(
+        [
+            {
+                "artifact_id": "openclaw:skill:local:caveman-compress:scripts/cli.py",
+                "artifact_name": "caveman-compress/scripts/cli.py",
+                "artifact_type": "skill_file",
+                "config_path": str(script_path),
+                "harness": "openclaw",
+                "last_policy_action": None,
+                "present": True,
+                "source_scope": "skill-root:local",
+            }
+        ]
+    )
+
+    rows = _artifact_rows_from_store(
+        store,
+        (),
+        context=HarnessContext(home_dir=tmp_path, workspace_dir=tmp_path, guard_home=tmp_path / ".guard"),
+        generated_at="2026-06-10T00:00:00Z",
+    )
+
+    assert rows[0]["present"] is True
+    assert "trustResolution" not in rows[0]
+
+
 def test_aibom_export_marks_missing_store_only_skill_files_not_present(tmp_path: Path) -> None:
     store = _FakeInventoryStore(
         [

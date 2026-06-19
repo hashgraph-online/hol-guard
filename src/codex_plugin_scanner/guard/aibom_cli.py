@@ -170,7 +170,7 @@ def build_inventory_json_payload(
         config_path_exists = config_path.exists() if config_path is not None else None
         if not extensions:
             extensions = _store_only_artifact_metadata_extensions(
-                item,
+                enriched,
                 context=context,
                 generated_at=generated_at,
                 config_path=config_path,
