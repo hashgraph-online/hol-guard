@@ -17,7 +17,7 @@ from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from hashlib import pbkdf2_hmac, sha256
 from pathlib import Path
-from typing import Protocol, TypedDict, TypeVar
+from typing import Any, Protocol, TypedDict, TypeVar, cast
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -5346,7 +5346,10 @@ class GuardStore:
                 )
                 if recovered_inputs is None:
                     return False
-                self._set_oauth_local_credentials_unlocked(now=_now(), **recovered_inputs)
+                self._set_oauth_local_credentials_unlocked(
+                    now=_now(),
+                    **cast(dict[str, Any], recovered_inputs),
+                )
             cache_key = self._oauth_health_process_cache_key(
                 _string_value(payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY)),
             )

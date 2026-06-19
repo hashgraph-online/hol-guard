@@ -1,27 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
-import type { ChangeEvent, ReactNode } from "react";
-import {
-  HiMiniArrowDown,
-  HiMiniArrowUp,
-  HiMiniArrowPath,
-  HiMiniBugAnt,
-  HiMiniChevronLeft,
-  HiMiniChevronRight,
-  HiMiniExclamationTriangle,
-  HiMiniMagnifyingGlass,
-  HiMiniXMark,
-} from "react-icons/hi2";
-import { SectionLabel, Tag, ActionButton, EmptyState, IconActionButton } from "./approval-center-primitives";
-import { formatRelativeTime } from "./approval-center-utils";
+import type { ChangeEvent } from "react";
+import { HiMiniAdjustmentsHorizontal, HiMiniArrowPath, HiMiniBugAnt, HiMiniExclamationTriangle } from "react-icons/hi2";
+import { SectionLabel, ActionButton, EmptyState } from "./approval-center-primitives";
 import { GuardModalLayer } from "./guard-modal-layer";
 import { AuditProgressStepList, auditProgressActive } from "./audit-run-progress";
 import type { AuditRunPhase } from "./use-supply-chain-audit-session";
 import type {
   PackageWorkbenchFilters,
   PackageWorkbenchSortKey,
-  SupplyChainAuditDecision,
   SupplyChainAuditFinding,
-  SupplyChainAuditSeverity,
   SupplyChainAuditSnapshot,
 } from "./guard-types";
 import {
@@ -31,6 +18,9 @@ import {
 } from "./supply-chain-audit-normalize";
 import { ConnectFlowCard } from "./supply-chain-firewall-views";
 import type { AuditConnectGateViewState } from "./supply-chain-firewall-panel";
+import { FindingDetailPanel, FindingRow } from "./package-workbench-finding-detail";
+import { ActiveFilterChip, FilterModal, buildFilterSummary } from "./package-workbench-filter-modal";
+import { WorkbenchHeader, WorkbenchPagination } from "./package-workbench-common";
 
 const WORKBENCH_PAGE_SIZE = 25;
 
@@ -46,427 +36,36 @@ type PackageWorkbenchPanelProps = {
   cloudState?: string | null;
 };
 
-const decisionTone = (
-  decision: SupplyChainAuditDecision,
-): "destructive" | "attention" | "warning" | "info" | "green" | "default" => {
-  if (decision === "block") {
-    return "destructive";
-  }
-  if (decision === "ask") {
-    return "attention";
-  }
-  if (decision === "warn") {
-    return "warning";
-  }
-  if (decision === "monitor") {
-    return "info";
-  }
-  if (decision === "allow") {
-    return "green";
-  }
-  return "default";
-};
-
-const severityTone = (
-  severity: SupplyChainAuditSeverity,
-): "destructive" | "attention" | "warning" | "info" | "default" => {
-  if (severity === "critical") {
-    return "destructive";
-  }
-  if (severity === "high") {
-    return "attention";
-  }
-  if (severity === "medium") {
-    return "warning";
-  }
-  if (severity === "low") {
-    return "info";
-  }
-  return "default";
-};
-
-function humanizeReasonMessage(code: string, message: string): string {
-  if (code === "unknown_package") {
-    return "Guard Cloud has not indexed this package yet. It is not treated as a security finding.";
-  }
-  if (code === "no_cached_match") {
-    return "No local intel match yet. Sync Guard Cloud or retry after the next bundle refresh.";
-  }
-  return message;
-}
-
-type WorkbenchHeaderProps = {
-  auditSnapshot: SupplyChainAuditSnapshot;
-  flaggedCount: number;
-  packageCount: number;
-  cloudState?: string | null;
-};
-
-function cloudIntelLabel(cloudState: string | null | undefined, source: string | null): string {
-  if (cloudState === "local_only") {
-    return "Local intel only";
-  }
-  if (source !== null && source.length > 0) {
-    return `${source} intel`;
-  }
-  return "Guard Cloud";
-}
-
-function cloudIntelTone(cloudState: string | null | undefined): "attention" | "green" | "info" {
-  if (cloudState === "local_only") {
-    return "attention";
-  }
-  if (cloudState === "paired_active") {
-    return "green";
-  }
-  return "info";
-}
-
-function WorkbenchHeader({
-  auditSnapshot,
-  flaggedCount,
-  packageCount,
-  cloudState,
-}: WorkbenchHeaderProps) {
-  const manifestSummary =
-    auditSnapshot.manifestPaths.length > 0
-      ? `${auditSnapshot.manifestPaths.length} manifest${auditSnapshot.manifestPaths.length === 1 ? "" : "s"}`
-      : null;
-  const lockfileSummary =
-    auditSnapshot.lockfilePaths.length > 0
-      ? `${auditSnapshot.lockfilePaths.length} lockfile${auditSnapshot.lockfilePaths.length === 1 ? "" : "s"}`
-      : null;
-  const scanSummary = [manifestSummary, lockfileSummary].filter((entry) => entry !== null).join(" · ");
-
-  return (
-    <div className="space-y-1">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-        <Tag tone={decisionTone(auditSnapshot.decision)}>{auditSnapshot.decision}</Tag>
-        <Tag tone={cloudIntelTone(cloudState)}>{cloudIntelLabel(cloudState, auditSnapshot.source)}</Tag>
-        <span>
-          {auditSnapshot.inventory.totalPackages} package
-          {auditSnapshot.inventory.totalPackages === 1 ? "" : "s"} indexed
-        </span>
-        <span aria-hidden="true">·</span>
-        <span>
-          {packageCount} in table
-        </span>
-        <span aria-hidden="true">·</span>
-        <span>
-          {flaggedCount} need review
-        </span>
-        <span aria-hidden="true">·</span>
-        <span>Last audit {formatRelativeTime(auditSnapshot.generatedAt)}</span>
-      </div>
-      {scanSummary.length > 0 ? (
-        <p className="text-[11px] text-slate-400">Scanned {scanSummary} across this workspace.</p>
-      ) : null}
-    </div>
-  );
-}
-
-type FindingDetailPanelProps = {
-  finding: SupplyChainAuditFinding;
-  onClose: () => void;
-};
-
-function FindingDetailPanel({ finding, onClose }: FindingDetailPanelProps) {
-  const handleClose = useCallback(() => {
-    onClose();
-  }, [onClose]);
-
-  return (
-    <div className="max-h-[min(85vh,40rem)] overflow-y-auto rounded-2xl border border-slate-100 bg-white shadow-xl">
-      <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-slate-100 bg-white/95 px-4 py-3 backdrop-blur-sm">
-        <div className="min-w-0">
-          <p className="text-base font-semibold text-brand-dark">{finding.packageName}</p>
-          <p className="mt-0.5 text-xs text-slate-500">
-            {finding.ecosystem}
-            {finding.namespace !== null ? ` · ${finding.namespace}` : ""}
-          </p>
-        </div>
-        <IconActionButton
-          variant="ghost"
-          label="Close finding detail"
-          icon={<HiMiniXMark className="h-4 w-4" />}
-          onClick={handleClose}
-        />
-      </div>
-      <div className="px-4 py-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <Tag tone={decisionTone(finding.decision)}>{finding.decision}</Tag>
-          <Tag tone={severityTone(finding.severity)}>{finding.severity}</Tag>
-        </div>
-        {finding.reasons.length > 0 ? (
-          <ul className="mt-4 space-y-3">
-            {finding.reasons.map((reason) => (
-              <li
-                key={`${finding.id}-${reason.code}`}
-                className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5 text-xs leading-relaxed text-slate-600"
-              >
-                <span className="font-semibold text-slate-700">{reason.code}</span>
-                <span className="text-slate-400"> · </span>
-                {humanizeReasonMessage(reason.code, reason.message)}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-4 text-xs text-slate-500">No advisory detail recorded for this package yet.</p>
-        )}
-        <div className="mt-5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-            Advisory aliases
-          </p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {finding.advisoryAliases.map((alias) => (
-              <span
-                key={`${finding.id}-${alias}`}
-                className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 font-mono text-[11px] text-slate-600"
-              >
-                {alias}
-              </span>
-            ))}
-          </div>
-          {finding.advisoryAliases.length === 0 ? (
-            <p className="mt-2 text-[11px] text-slate-500">
-              No linked CVE or GHSA aliases for this finding.
-            </p>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-type FindingRowProps = {
-  finding: SupplyChainAuditFinding;
-  selected: boolean;
-  onSelect: (id: string) => void;
-};
-
-function FindingRow({ finding, selected, onSelect }: FindingRowProps) {
-  const handleSelect = useCallback(() => {
-    onSelect(finding.id);
-  }, [finding.id, onSelect]);
-
-  return (
-    <button
-      type="button"
-      onClick={handleSelect}
-      aria-pressed={selected}
-      className={`flex w-full items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-slate-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-blue/30 ${
-        selected ? "bg-brand-blue/[0.04]" : ""
-      }`}
-    >
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-brand-dark">{finding.packageName}</p>
-        <p className="mt-0.5 truncate text-xs text-slate-500">
-          {finding.ecosystem}
-          {finding.namespace !== null ? ` · ${finding.namespace}` : ""}
-        </p>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <Tag tone={decisionTone(finding.decision)}>{finding.decision}</Tag>
-        <Tag tone={severityTone(finding.severity)}>{finding.severity}</Tag>
-      </div>
-    </button>
-  );
-}
-
-type WorkbenchPaginationProps = {
-  page: number;
-  pageCount: number;
-  total: number;
-  onPageChange: (page: number) => void;
-};
-
-function WorkbenchPagination({ page, pageCount, total, onPageChange }: WorkbenchPaginationProps) {
-  const handlePrevious = useCallback(() => {
-    onPageChange(Math.max(0, page - 1));
-  }, [onPageChange, page]);
-  const handleNext = useCallback(() => {
-    onPageChange(Math.min(pageCount - 1, page + 1));
-  }, [onPageChange, page, pageCount]);
-
-  if (pageCount <= 1) {
-    return (
-      <p className="text-xs text-slate-500">
-        Showing {total} finding{total === 1 ? "" : "s"}
-      </p>
-    );
-  }
-
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <p className="text-xs text-slate-500">
-        Page {page + 1} of {pageCount} · {total} finding{total === 1 ? "" : "s"}
-      </p>
-      <div className="flex items-center gap-1">
-        <ActionButton variant="outline" onClick={handlePrevious} disabled={page === 0}>
-          <HiMiniChevronLeft className="h-4 w-4" aria-hidden="true" />
-          Previous
-        </ActionButton>
-        <ActionButton variant="outline" onClick={handleNext} disabled={page >= pageCount - 1}>
-          Next
-          <HiMiniChevronRight className="h-4 w-4" aria-hidden="true" />
-        </ActionButton>
-      </div>
-    </div>
-  );
-}
-
-type SortButtonProps = {
-  label: string;
-  sortKey: PackageWorkbenchSortKey;
-  activeSort: PackageWorkbenchSortKey;
-  direction: "asc" | "desc";
-  onSort: (sortKey: PackageWorkbenchSortKey) => void;
-};
-
-function SortButton({ label, sortKey, activeSort, direction, onSort }: SortButtonProps) {
-  const handleClick = useCallback(() => {
-    onSort(sortKey);
-  }, [onSort, sortKey]);
-  const active = activeSort === sortKey;
-  let sortIcon: ReactNode = null;
-  if (active) {
-    sortIcon =
-      direction === "desc" ? (
-        <HiMiniArrowDown className="h-3 w-3" aria-hidden="true" />
-      ) : (
-        <HiMiniArrowUp className="h-3 w-3" aria-hidden="true" />
-      );
-  }
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      aria-pressed={active}
-      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${
-        active
-          ? "bg-brand-blue text-white"
-          : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-      }`}
-    >
-      {label}
-      {sortIcon}
-    </button>
-  );
-}
-
 type FilterChipProps = {
   label: string;
   active: boolean;
+  count?: number;
   onSelect: () => void;
 };
 
-function FilterChip({ label, active, onSelect }: FilterChipProps) {
+function FilterChip({ label, active, count, onSelect }: FilterChipProps) {
   return (
     <button
       type="button"
-      onClick={onSelect}
       aria-pressed={active}
-      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${
-        active
-          ? "bg-brand-dark text-white"
-          : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+      onClick={onSelect}
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${
+        active ? "bg-brand-dark text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
       }`}
     >
-      {label}
+      <span>{label}</span>
+      {count !== undefined ? (
+        <span
+          className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+            active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+          }`}
+          aria-label={`${count} result${count === 1 ? "" : "s"}`}
+        >
+          {count}
+        </span>
+      ) : null}
     </button>
   );
-}
-
-type WorkbenchControlsProps = {
-  filters: PackageWorkbenchFilters;
-  ecosystems: string[];
-  sortKey: PackageWorkbenchSortKey;
-  sortDirection: "asc" | "desc";
-  onSearchChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  onEcosystemChange: (ecosystem: string) => void;
-  onDecisionChange: (decision: PackageWorkbenchFilters["decision"]) => void;
-  onSeverityChange: (severity: PackageWorkbenchFilters["severity"]) => void;
-  onSortChange: (sortKey: PackageWorkbenchSortKey) => void;
-};
-
-function WorkbenchControls({
-  filters,
-  ecosystems,
-  sortKey,
-  sortDirection,
-  onSearchChange,
-  onEcosystemChange,
-  onDecisionChange,
-  onSeverityChange,
-  onSortChange,
-}: WorkbenchControlsProps) {
-  const handleEcosystemAll = useCallback(() => onEcosystemChange("all"), [onEcosystemChange]);
-  const handleDecisionAll = useCallback(() => onDecisionChange("all"), [onDecisionChange]);
-  const handleDecisionBlock = useCallback(() => onDecisionChange("block"), [onDecisionChange]);
-  const handleDecisionAsk = useCallback(() => onDecisionChange("ask"), [onDecisionChange]);
-  const handleDecisionWarn = useCallback(() => onDecisionChange("warn"), [onDecisionChange]);
-  const handleSeverityAll = useCallback(() => onSeverityChange("all"), [onSeverityChange]);
-  const handleSeverityCritical = useCallback(() => onSeverityChange("critical"), [onSeverityChange]);
-  const handleSeverityHigh = useCallback(() => onSeverityChange("high"), [onSeverityChange]);
-  const handleSeverityMedium = useCallback(() => onSeverityChange("medium"), [onSeverityChange]);
-
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
-          <HiMiniMagnifyingGlass className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
-          <input
-            type="search"
-            placeholder="Search packages…"
-            value={filters.search}
-            onChange={onSearchChange}
-            aria-label="Search package findings"
-            className="w-44 bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none"
-          />
-        </div>
-        <FilterChip label="All ecosystems" active={filters.ecosystem === "all"} onSelect={handleEcosystemAll} />
-        {ecosystems.map((ecosystem) => (
-          <EcosystemChip
-            key={ecosystem}
-            ecosystem={ecosystem}
-            active={filters.ecosystem === ecosystem}
-            onSelect={onEcosystemChange}
-          />
-        ))}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <FilterChip label="All decisions" active={filters.decision === "all"} onSelect={handleDecisionAll} />
-        <FilterChip label="Block" active={filters.decision === "block"} onSelect={handleDecisionBlock} />
-        <FilterChip label="Ask" active={filters.decision === "ask"} onSelect={handleDecisionAsk} />
-        <FilterChip label="Warn" active={filters.decision === "warn"} onSelect={handleDecisionWarn} />
-        <span className="mx-1 h-4 w-px bg-slate-200" aria-hidden="true" />
-        <FilterChip label="All severities" active={filters.severity === "all"} onSelect={handleSeverityAll} />
-        <FilterChip label="Critical" active={filters.severity === "critical"} onSelect={handleSeverityCritical} />
-        <FilterChip label="High" active={filters.severity === "high"} onSelect={handleSeverityHigh} />
-        <FilterChip label="Medium" active={filters.severity === "medium"} onSelect={handleSeverityMedium} />
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Sort</span>
-        <SortButton label="Severity" sortKey="severity" activeSort={sortKey} direction={sortDirection} onSort={onSortChange} />
-        <SortButton label="Package" sortKey="package" activeSort={sortKey} direction={sortDirection} onSort={onSortChange} />
-        <SortButton label="Ecosystem" sortKey="ecosystem" activeSort={sortKey} direction={sortDirection} onSort={onSortChange} />
-        <SortButton label="Decision" sortKey="decision" activeSort={sortKey} direction={sortDirection} onSort={onSortChange} />
-      </div>
-    </div>
-  );
-}
-
-type EcosystemChipProps = {
-  ecosystem: string;
-  active: boolean;
-  onSelect: (ecosystem: string) => void;
-};
-
-function EcosystemChip({ ecosystem, active, onSelect }: EcosystemChipProps) {
-  const handleSelect = useCallback(() => {
-    onSelect(ecosystem);
-  }, [ecosystem, onSelect]);
-  return <FilterChip label={ecosystem} active={active} onSelect={handleSelect} />;
 }
 
 type WorkbenchEmptyStateProps = {
@@ -516,16 +115,6 @@ function WorkbenchEmptyState({ auditConnectGate }: WorkbenchEmptyStateProps) {
   );
 }
 
-function ecosystemSummary(packages: SupplyChainAuditFinding[]): Array<{ ecosystem: string; count: number }> {
-  const counts = new Map<string, number>();
-  for (const pkg of packages) {
-    counts.set(pkg.ecosystem, (counts.get(pkg.ecosystem) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([ecosystem, count]) => ({ ecosystem, count }))
-    .sort((left, right) => right.count - left.count || left.ecosystem.localeCompare(right.ecosystem));
-}
-
 export function PackageWorkbenchPanel({
   auditConnectGate = null,
   auditError = null,
@@ -549,6 +138,7 @@ export function PackageWorkbenchPanel({
   const { sortKey, sortDirection } = sortState;
   const [selectedId, setSelectedId] = useState("");
   const [page, setPage] = useState(0);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
 
   const findings = auditSnapshot?.findings ?? [];
   const packages = auditSnapshot?.packages ?? [];
@@ -556,7 +146,6 @@ export function PackageWorkbenchPanel({
   const progressActive = auditProgressActive(auditPhase, auditRunning);
   const showResults = auditSnapshot !== null && !progressActive && (auditConnectGate === null || auditConnectGate === undefined);
   const ecosystems = useMemo(() => packageWorkbenchEcosystems(tableSource), [tableSource]);
-  const ecosystemBreakdown = useMemo(() => ecosystemSummary(packages), [packages]);
   const filteredFindings = useMemo(
     () => filterPackageWorkbenchFindings(tableSource, filters),
     [tableSource, filters],
@@ -616,6 +205,10 @@ export function PackageWorkbenchPanel({
     setPage(0);
   }, []);
 
+  const handleResetSort = useCallback(() => {
+    setSortState({ sortKey: "severity", sortDirection: "desc" });
+  }, []);
+
   const handleSelectFinding = useCallback((id: string) => {
     setSelectedId(id);
   }, []);
@@ -644,6 +237,26 @@ export function PackageWorkbenchPanel({
   const handleRunAudit = useCallback(() => {
     onRunAudit?.();
   }, [onRunAudit]);
+
+  const openFilterModal = useCallback(() => setFilterModalOpen(true), []);
+  const closeFilterModal = useCallback(() => setFilterModalOpen(false), []);
+  const handleClearFilters = useCallback(() => {
+    setFilters({ ecosystem: "all", decision: "all", severity: "all", search: "" });
+    setSortState({ sortKey: "severity", sortDirection: "desc" });
+    setPage(0);
+    setSelectedId("");
+  }, []);
+
+  const activeFilterCount =
+    (filters.ecosystem !== "all" ? 1 : 0) +
+    (filters.decision !== "all" ? 1 : 0) +
+    (filters.severity !== "all" ? 1 : 0) +
+    (filters.search.trim().length > 0 ? 1 : 0);
+
+  const filterSummary = useMemo(
+    () => buildFilterSummary(filters, sortKey, sortDirection),
+    [filters, sortKey, sortDirection],
+  );
 
   const headerTitle = progressActive ? "Auditing workspace" : "Workspace audit";
   const headerBody = progressActive
@@ -703,98 +316,132 @@ export function PackageWorkbenchPanel({
               <WorkbenchEmptyState auditConnectGate={null} />
             ) : null}
 
-        {showResults && auditSnapshot !== null && packages.length === 0 && auditSnapshot.inventory.totalPackages > 0 ? (
-          <EmptyState
-            title="Package list not loaded"
-            body="This audit indexed packages, but the detailed list was not stored yet. Run audit again to load the full inventory table."
-            tone="teach"
-          />
-        ) : null}
-
-        {showResults && auditSnapshot !== null && packages.length === 0 && auditSnapshot.inventory.totalPackages === 0 ? (
-          <EmptyState
-            title="No packages indexed"
-            body="The latest workspace audit completed, but no supported package manifests or lockfiles were found."
-            tone="teach"
-          />
-        ) : null}
-
-        {showResults && packages.length > 0 ? (
-          <>
-            <div className="flex flex-wrap gap-2">
-              {ecosystemBreakdown.map((entry) => (
-                <Tag key={entry.ecosystem} tone="default">
-                  {entry.ecosystem} · {entry.count}
-                </Tag>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <FilterChip label={`All packages (${packages.length})`} active={viewMode === "all"} onSelect={handleViewAll} />
-              <FilterChip
-                label={`Needs review (${findings.length})`}
-                active={viewMode === "review"}
-                onSelect={handleViewReview}
+            {showResults && auditSnapshot !== null && packages.length === 0 && auditSnapshot.inventory.totalPackages > 0 ? (
+              <EmptyState
+                title="Package list not loaded"
+                body="This audit indexed packages, but the detailed list was not stored yet. Run audit again to load the full inventory table."
+                tone="teach"
               />
-            </div>
-            {cloudState === "local_only" ? (
-              <p className="text-xs leading-relaxed text-slate-500">
-                This device is using local intel only. Connect Guard Cloud and sync supply-chain intel for live CVE and malware coverage.
-              </p>
             ) : null}
-            <WorkbenchControls
-              filters={filters}
-              ecosystems={ecosystems}
-              sortKey={sortKey}
-              sortDirection={sortDirection}
-              onSearchChange={handleSearchChange}
-              onEcosystemChange={handleEcosystemChange}
-              onDecisionChange={handleDecisionChange}
-              onSeverityChange={handleSeverityChange}
-              onSortChange={handleSortChange}
-            />
-            <WorkbenchPagination
-              page={safePage}
-              pageCount={pageCount}
-              total={sortedFindings.length}
-              onPageChange={handlePageChange}
-            />
-            {sortedFindings.length === 0 ? (
-              <p className="py-6 text-center text-sm text-slate-500">
-                {viewMode === "review" && findings.length === 0
-                  ? "No packages need review in this audit."
-                  : "No packages match the current filters."}
-              </p>
-            ) : (
-              <div
-                className="overflow-hidden rounded-xl border border-slate-100"
-                role="table"
-                aria-label={viewMode === "review" ? "Packages needing review" : "Indexed packages"}
-              >
-                <div
-                  className="sticky top-0 z-[1] hidden border-b border-slate-100 bg-slate-50 px-4 py-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3"
-                  role="row"
-                >
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400" role="columnheader">
-                    Package
-                  </span>
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400" role="columnheader">
-                    Decision · Severity
-                  </span>
-                </div>
-                <div className="max-h-[min(60vh,32rem)] overflow-y-auto overscroll-y-contain" role="rowgroup">
-                  {pagedFindings.map((finding) => (
-                    <FindingRow
-                      key={finding.id}
-                      finding={finding}
-                      selected={selectedId === finding.id}
-                      onSelect={handleSelectFinding}
+
+            {showResults && auditSnapshot !== null && packages.length === 0 && auditSnapshot.inventory.totalPackages === 0 ? (
+              <EmptyState
+                title="No packages indexed"
+                body="The latest workspace audit completed, but no supported package manifests or lockfiles were found."
+                tone="teach"
+              />
+            ) : null}
+
+            {showResults && packages.length > 0 ? (
+              <>
+                {cloudState === "local_only" ? (
+                  <p className="text-xs leading-relaxed text-slate-500">
+                    This device is using local intel only. Connect Guard Cloud and sync supply-chain intel for live CVE and malware coverage.
+                  </p>
+                ) : null}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <FilterChip
+                      label="All packages"
+                      count={packages.length}
+                      active={viewMode === "all"}
+                      onSelect={handleViewAll}
                     />
-                  ))}
+                    <FilterChip
+                      label="Needs review"
+                      count={findings.length}
+                      active={viewMode === "review"}
+                      onSelect={handleViewReview}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <ActionButton variant="outline" onClick={openFilterModal}>
+                      <HiMiniAdjustmentsHorizontal className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                      Filters
+                      {activeFilterCount > 0 ? (
+                        <span className="ml-1.5 rounded-full bg-brand-blue px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                          {activeFilterCount}
+                        </span>
+                      ) : null}
+                    </ActionButton>
+                  </div>
                 </div>
-              </div>
-            )}
-          </>
-        ) : null}
+                {filterSummary.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {filterSummary.map((item) => (
+                      <ActiveFilterChip
+                        key={item.key}
+                        label={item.label}
+                        onRemove={() => {
+                          if (item.key === "ecosystem") handleEcosystemChange("all");
+                          else if (item.key === "decision") handleDecisionChange("all");
+                          else if (item.key === "severity") handleSeverityChange("all");
+                          else if (item.key === "search") handleSearchChange({ target: { value: "" } } as ChangeEvent<HTMLInputElement>);
+                          else if (item.key === "sort") handleResetSort();
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+                <WorkbenchPagination
+                  page={safePage}
+                  pageCount={pageCount}
+                  total={sortedFindings.length}
+                  onPageChange={handlePageChange}
+                />
+                {filterModalOpen ? (
+                  <FilterModal
+                    filters={filters}
+                    activeFilterCount={activeFilterCount}
+                    ecosystems={ecosystems}
+                    sortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onClose={closeFilterModal}
+                    onSearchChange={handleSearchChange}
+                    onEcosystemChange={handleEcosystemChange}
+                    onDecisionChange={handleDecisionChange}
+                    onSeverityChange={handleSeverityChange}
+                    onSortChange={handleSortChange}
+                    onClearFilters={handleClearFilters}
+                  />
+                ) : null}
+                {sortedFindings.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-slate-500">
+                    {viewMode === "review" && findings.length === 0
+                      ? "No packages need review in this audit."
+                      : "No packages match the current filters."}
+                  </p>
+                ) : (
+                  <div
+                    className="overflow-hidden rounded-xl border border-slate-100"
+                    role="table"
+                    aria-label={viewMode === "review" ? "Packages needing review" : "Indexed packages"}
+                  >
+                    <div
+                      className="sticky top-0 z-[1] hidden border-b border-slate-100 bg-slate-50 px-4 py-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3"
+                      role="row"
+                    >
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400" role="columnheader">
+                        Package
+                      </span>
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400" role="columnheader">
+                        Decision · Severity
+                      </span>
+                    </div>
+                    <div className="max-h-[min(60vh,32rem)] overflow-y-auto overscroll-y-contain" role="rowgroup">
+                      {pagedFindings.map((finding) => (
+                        <FindingRow
+                          key={finding.id}
+                          finding={finding}
+                          selected={selectedId === finding.id}
+                          onSelect={handleSelectFinding}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : null}
           </>
         )}
       </div>
