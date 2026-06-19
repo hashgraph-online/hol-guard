@@ -1158,7 +1158,7 @@ def _codex_backup_repair_contexts(context: HarnessContext) -> tuple[HarnessConte
 def build_guard_update_status_payload() -> dict[str, object]:
     current_version = _current_version()
     install_surface = build_guard_install_surface_payload()
-    installer = str(install_surface.get("installer") or _installer_kind())
+    installer = str(install_surface.get("installer") or "")
     binary_diagnostics = install_surface.get("binary_diagnostics")
     if not isinstance(binary_diagnostics, dict):
         binary_diagnostics = {}
