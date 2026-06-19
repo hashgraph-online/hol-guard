@@ -32,6 +32,7 @@ from ..models import GuardArtifact
 from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
+from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from .js_semver import highest_js_version_for_selector, version_matches_js_selector
 from .manifest_dependency_targets import evaluation_targets as _manifest_evaluation_targets
 from .package_intent_common import split_python_extras
@@ -871,13 +872,6 @@ def _normalize_package_user_copy(user_copy: SupplyChainUserCopy, *, policy_actio
     if needs_local_review and _LOCAL_REVIEW_INSTRUCTION.lower() not in harness_message.lower():
         harness_message = f"{harness_message} {_LOCAL_REVIEW_INSTRUCTION}".strip()
     return replace(user_copy, dashboard_url=dashboard_url, harness_message=harness_message)
-
-
-def _ensure_terminal_punctuation(message: str) -> str:
-    trimmed = message.strip()
-    if trimmed.endswith((".", "!", "?")):
-        return trimmed
-    return f"{trimmed}."
 
 
 def _strip_review_evidence_tail(message: str) -> str:
