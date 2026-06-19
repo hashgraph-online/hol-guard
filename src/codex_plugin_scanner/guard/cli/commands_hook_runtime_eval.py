@@ -36,6 +36,7 @@ from ..models import GuardAction
 from ._commands_shared import *
 from .commands_hook_runtime_state import RuntimeArtifactHookState
 from .commands_parser_helpers import *
+from .commands_support_runtime_policy import _remembered_rule_rejection_reason, _runtime_artifact_exact_match_context
 
 
 def _resolved_guard_action(value: object, fallback: GuardAction) -> GuardAction:
@@ -112,6 +113,15 @@ def _evaluate_runtime_artifact_hook(
             policy_action="allow",
         )
         return 0
+    runtime_exact_match_context = _runtime_artifact_exact_match_context(runtime_artifact)
+    policy_lookup = store.resolve_policy_decision_lookup(
+        policy_harness,
+        artifact_id,
+        artifact_hash=runtime_artifact_hash,
+        workspace=str(runtime_workspace) if runtime_workspace else None,
+        publisher=runtime_artifact.publisher,
+        runtime_exact_match_context=runtime_exact_match_context,
+    )
     stored_policy_action = _runtime_stored_policy_action(
         store=store,
         harness=policy_harness,
@@ -119,7 +129,10 @@ def _evaluate_runtime_artifact_hook(
         artifact_id=artifact_id,
         artifact_hash=runtime_artifact_hash,
         workspace=str(runtime_workspace) if runtime_workspace else None,
+        decision_lookup=policy_lookup,
     )
+    remembered_rule_rejection = policy_lookup["ignored_local_integrity"]
+    trust_status = policy_lookup["trust_status"]
     if stored_policy_action is None:
         legacy_artifact = _legacy_claude_alias_runtime_artifact(
             artifact=runtime_artifact,
@@ -343,7 +356,21 @@ def _evaluate_runtime_artifact_hook(
         "launch_summary": incident["launch_summary"],
         "risk_headline": incident["risk_headline"],
         "path_summary": _runtime_requested_path(runtime_artifact),
+        "trust_status": trust_status,
     }
+    if remembered_rule_rejection is not None:
+        response_payload["remembered_rule_rejection"] = remembered_rule_rejection
+        if policy_action in {"review", "require-reapproval"}:
+            remembered_rule_reason = _remembered_rule_rejection_reason(
+                response_payload=response_payload,
+                artifact=runtime_artifact,
+            )
+        else:
+            remembered_rule_reason = None
+        if remembered_rule_reason is not None:
+            decision_v2_payload["harness_message"] = remembered_rule_reason
+            decision_v2_payload["dashboard_primary_detail"] = remembered_rule_reason
+            response_payload["risk_headline"] = remembered_rule_reason
     if package_evaluation is not None:
         response_payload["supply_chain_evaluation"] = package_evaluation.to_dict()
     if (

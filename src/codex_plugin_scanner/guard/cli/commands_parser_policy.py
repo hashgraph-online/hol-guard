@@ -19,7 +19,10 @@ from .commands_parser_helpers import *
 def _configure_guard_policy_parsers(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
-    policies_parser = guard_subparsers.add_parser("policies", help="List or clear stored Guard policy decisions")
+    policies_parser = guard_subparsers.add_parser(
+        "policies",
+        help="List or clear remembered rules and synced Cloud policy rows",
+    )
     policies_parser.add_argument(
         "policies_command",
         nargs="?",
