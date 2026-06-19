@@ -241,8 +241,11 @@ def _normalized_package_shim_content(content: bytes) -> str:
         if line.startswith("base_command = "):
             normalized_lines.append(f"base_command = {_normalized_base_command_repr(line)}")
             continue
-        if line.startswith("guard_cwd = "):
-            normalized_lines.append("guard_cwd = '<path>'")
+        if line.startswith("guard_cwd = ") or line.startswith("guard_cli_cwd = "):
+            normalized_lines.append("guard_cli_cwd = '<path>'")
+            continue
+        if line.startswith("guard_workspace = "):
+            normalized_lines.append("guard_workspace = <workspace-path>")
             continue
         if line.startswith("guard_has_explicit_workspace = "):
             normalized_lines.append("guard_has_explicit_workspace = <workspace-mode>")
@@ -1002,11 +1005,46 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             "import shutil",
             "import subprocess",
             "import sys",
+            "from pathlib import Path",
             f"base_command = {command_args!r}",
             f"command_name = {command!r}",
-            f"guard_cwd = {str(_trusted_import_root())!r}",
+            f"guard_cli_cwd = {str(_trusted_import_root())!r}",
+            f"guard_workspace = {str(context.workspace_dir) if context.workspace_dir is not None else None!r}",
             f"guard_has_explicit_workspace = {context.workspace_dir is not None!r}",
             f"shim_dir = {str(shim_dir.resolve())!r}",
+            "def _exec_real_manager():",
+            "    path_entries = [entry for entry in os.environ.get('PATH', '').split(os.pathsep) if entry]",
+            "    shim_dir_abs = os.path.abspath(shim_dir)",
+            "    filtered_entries = [entry for entry in path_entries if os.path.abspath(entry) != shim_dir_abs]",
+            "    filtered_path = os.pathsep.join(filtered_entries)",
+            "    resolved_command = shutil.which(command_name, path=filtered_path)",
+            "    if resolved_command is None:",
+            "        sys.stderr.write(f'Unable to locate real {command_name} binary on PATH\\n')",
+            "        raise SystemExit(127)",
+            "    manager_env = dict(os.environ)",
+            "    manager_env['PATH'] = filtered_path",
+            "    if os.name == 'nt':",
+            "        try:",
+            "            raise SystemExit(subprocess.call([resolved_command, *sys.argv[1:]], env=manager_env))",
+            "        except KeyboardInterrupt:",
+            "            raise SystemExit(130)",
+            "    os.execvpe(resolved_command, [resolved_command, *sys.argv[1:]], manager_env)",
+            "def _command_requires_guard():",
+            f"    if os.environ.get({SHIM_PROBE_ENV_VAR!r}) == {SHIM_PROBE_ENV_VALUE!r}:",
+            "        return True",
+            "    cwd = os.path.realpath(os.getcwd())",
+            "    normalize = lambda entry: cwd if entry in ('', '.', os.curdir) else os.path.realpath(entry)",
+            "    blocked_entries = {cwd, guard_cli_cwd}",
+            "    sys.path = [guard_cli_cwd, *[entry for entry in sys.path if normalize(entry) not in blocked_entries]]",
+            "    from codex_plugin_scanner.guard.package_shim_gate import package_shim_command_requires_guard",
+            "    workspace = Path(guard_workspace) if guard_workspace is not None else Path.cwd()",
+            "    return package_shim_command_requires_guard(command_name, tuple(sys.argv[1:]), workspace=workspace)",
+            "try:",
+            "    guard_required = _command_requires_guard()",
+            "except Exception:",
+            "    guard_required = True",
+            "if not guard_required:",
+            "    _exec_real_manager()",
             "guard_env = dict(os.environ)",
             "guard_env.pop('PYTHONPATH', None)",
             "guard_command = [*base_command, command_name]",
@@ -1014,8 +1052,11 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             "    guard_command = [*base_command, '--json', command_name]",
             "guard_kwargs = {'capture_output': True, 'text': True, 'env': guard_env}",
             "if guard_has_explicit_workspace:",
-            "    guard_kwargs['cwd'] = guard_cwd",
-            "guard_process = subprocess.run([*guard_command, *sys.argv[1:]], **guard_kwargs)",
+            "    guard_kwargs['cwd'] = guard_cli_cwd",
+            "try:",
+            "    guard_process = subprocess.run([*guard_command, *sys.argv[1:]], **guard_kwargs)",
+            "except KeyboardInterrupt:",
+            "    raise SystemExit(130)",
             "if guard_process.stdout:",
             "    sys.stdout.write(guard_process.stdout)",
             "if guard_process.stderr:",
@@ -1024,17 +1065,7 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             "    raise SystemExit(guard_process.returncode)",
             f"if os.environ.get({SHIM_PROBE_ENV_VAR!r}) == {SHIM_PROBE_ENV_VALUE!r}:",
             "    raise SystemExit(0)",
-            "path_entries = [entry for entry in os.environ.get('PATH', '').split(os.pathsep) if entry]",
-            "shim_dir_abs = os.path.abspath(shim_dir)",
-            "filtered_entries = [entry for entry in path_entries if os.path.abspath(entry) != shim_dir_abs]",
-            "filtered_path = os.pathsep.join(filtered_entries)",
-            "resolved_command = shutil.which(command_name, path=filtered_path)",
-            "if resolved_command is None:",
-            "    sys.stderr.write(f'Unable to locate real {command_name} binary on PATH\\n')",
-            "    raise SystemExit(127)",
-            "manager_env = dict(os.environ)",
-            "manager_env['PATH'] = filtered_path",
-            "raise SystemExit(subprocess.call([resolved_command, *sys.argv[1:]], env=manager_env))",
+            "_exec_real_manager()",
             "",
         )
     )
