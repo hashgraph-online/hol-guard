@@ -6,9 +6,7 @@ from __future__ import annotations
 def ensure_terminal_punctuation(message: str | None) -> str:
     """Normalize trailing terminal punctuation for user-facing copy."""
 
-    if not message:
-        return ""
-    trimmed = message.strip()
+    trimmed = (message or "").strip()
     if not trimmed:
         return ""
     if trimmed.endswith((".", "!", "?")):
