@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 import shlex
 from collections.abc import Sequence
@@ -11,6 +10,28 @@ from typing import Any
 
 SHIM_PROBE_ENV_VAR = "HOL_GUARD_SHIM_PROBE"
 SHIM_PROBE_ENV_VALUE = "1"
+_PACKAGE_SHIM_PARSER_MANAGERS = frozenset(
+    {
+        "bun",
+        "bundle",
+        "cargo",
+        "composer",
+        "go",
+        "gradle",
+        "mvn",
+        "npm",
+        "npx",
+        "pip",
+        "pip3",
+        "pipenv",
+        "pipx",
+        "pnpm",
+        "poetry",
+        "uv",
+        "uvx",
+        "yarn",
+    }
+)
 
 _PACKAGE_SHIM_PROBE_ARGS: dict[str, tuple[str, ...]] = {
     "npm": ("install", "--dry-run", "lodash@4.17.21"),
@@ -48,9 +69,12 @@ def package_shim_command_requires_guard(
     normalized_manager = manager.strip().lower()
     if not normalized_manager:
         return False
+    if normalized_manager not in _PACKAGE_SHIM_PARSER_MANAGERS:
+        return True
     command = [normalized_manager, *[str(argument) for argument in argv]]
-    parser_module = importlib.import_module(".runtime.package_intent_parser", __package__)
-    intent = parser_module.parse_package_intent(shlex.join(command), workspace=workspace)
+    from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
+
+    intent = parse_package_intent(shlex.join(command), workspace=workspace)
     return intent is not None
 
 

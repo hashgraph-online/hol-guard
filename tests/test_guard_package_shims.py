@@ -457,10 +457,14 @@ def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path
 @pytest.mark.parametrize(
     ("manager", "argv", "expected"),
     [
+        ("bun", ("add", "minimist@1.2.9"), True),
+        ("pip", ("install", "requests==2.32.3"), True),
         ("npm", ("install", "minimist@1.2.9"), True),
         ("npm", ("run", "dev"), False),
         ("pnpm", ("add", "minimist@1.2.9"), True),
+        ("pnpm", ("install",), True),
         ("pnpm", ("run", "dev"), False),
+        ("yarn", ("add", "minimist@1.2.9"), True),
     ],
 )
 def test_package_shim_command_requires_guard_only_for_supply_chain_actions(
