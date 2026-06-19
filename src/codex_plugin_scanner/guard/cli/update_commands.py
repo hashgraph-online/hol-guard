@@ -797,12 +797,10 @@ def _execution_update_command(
     installer: str,
     context: HarnessContext | None,
 ) -> list[str]:
-    if installer != "pipx" or context is None or not _package_shim_manifest_has_installed_managers(context):
-        return command
-    real_binary = _resolve_unshimmed_binary(command[0], context)
-    if real_binary is None:
-        return command
-    return [real_binary, *command[1:]]
+    if installer == "pipx" and context is not None and _package_shim_manifest_has_installed_managers(context):
+        if real_binary := _resolve_unshimmed_binary(command[0], context):
+            return [real_binary, *command[1:]]
+    return command
 
 
 def _vcs_install_payload(direct_url: dict[str, object] | None) -> dict[str, object] | None:

@@ -150,14 +150,18 @@ def test_update_uses_real_pipx_binary_when_guard_package_shims_are_installed(
     monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.830")
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
     monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    def fake_which(name: str, path: str | None = None) -> str | None:
+        if name == "pipx" and isinstance(path, str) and "/package-shims/bin" not in path:
+            return "/opt/homebrew/bin/pipx"
+        if name == "hol-guard":
+            return "/mock-home/.local/bin/hol-guard"
+        return None
+
     monkeypatch.setattr(
         update_commands.shutil,
         "which",
-        lambda name, path=None: (
-            "/opt/homebrew/bin/pipx"
-            if name == "pipx" and isinstance(path, str) and "/package-shims/bin" not in path
-            else ("/mock-home/.local/bin/hol-guard" if name == "hol-guard" else None)
-        ),
+        fake_which,
     )
     monkeypatch.setattr(update_commands, "_sync_dashboard_assets", lambda: None)
     monkeypatch.setattr(update_commands, "_refresh_package_shims_after_update", lambda **_: (None, None))
