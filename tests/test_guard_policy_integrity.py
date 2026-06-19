@@ -1846,6 +1846,26 @@ def test_trust_cli_doctor_redacts_secret_like_assignments_in_json_output(
     assert summary
 
 
+def test_trust_cli_explain_preserves_non_secret_colon_rule_text(capsys) -> None:
+    trust_dispatch_module._emit_trust_payload(
+        "trust.explain",
+        {
+            "rule": {
+                "pattern": "api_key: forbidden_pattern",
+                "description": "credential: oauth-style",
+                "status": "token: active",
+            }
+        },
+        True,
+    )
+    payload = json.loads(capsys.readouterr().out)
+    rule = payload["rule"]
+
+    assert rule["pattern"] == "api_key: forbidden_pattern"
+    assert rule["description"] == "credential: oauth-style"
+    assert rule["status"] == "token: active"
+
+
 def test_trust_cli_bare_combined_command_routes_to_guard() -> None:
     assert _resolve_legacy_args(["trust", "status", "--json"], program_mode="combined") == [
         "guard",

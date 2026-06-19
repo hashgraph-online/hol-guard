@@ -29,7 +29,7 @@ _TRUST_SECRET_ASSIGNMENT_PATTERNS: tuple[re.Pattern[str], ...] = (
     ),
     re.compile(
         r"(?i)\b[a-z0-9_.-]*(?:token|secret|api[-_]?key|password|credential)[a-z0-9_.-]*\s*:\s*"
-        r"(?:bearer\s+)?[^\s,;]+"
+        r"(?:bearer\s+[^\s,;]+|[a-f0-9]{16,}|[a-z0-9._-]{24,})"
     ),
 )
 
@@ -76,14 +76,18 @@ def _sanitize_trust_text(value: str) -> str:
     return sanitized
 
 
-def _sanitize_trust_payload(value: object) -> object:
+def _sanitize_trust_value(value: object) -> object:
     if isinstance(value, dict):
-        return {key: _sanitize_trust_payload(item) for key, item in value.items()}
+        return {key: _sanitize_trust_value(item) for key, item in value.items()}
     if isinstance(value, list):
-        return [_sanitize_trust_payload(item) for item in value]
+        return [_sanitize_trust_value(item) for item in value]
     if isinstance(value, str):
         return _sanitize_trust_text(value)
     return value
+
+
+def _sanitize_trust_payload(payload: dict[str, object]) -> dict[str, object]:
+    return {key: _sanitize_trust_value(value) for key, value in payload.items()}
 
 
 def _emit_trust_payload(command: str, payload: dict[str, object], as_json: bool) -> None:
