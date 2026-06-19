@@ -664,9 +664,9 @@ def _store_only_artifact_metadata_extensions(
         config_path=str(config_path),
         name=str(row.get("artifact_name") or row.get("artifact_id") or "skill_file"),
     )
-    from . import aibom_trust_metadata
+    from .aibom_trust_metadata import apply_local_trust_metadata
 
-    metadata = aibom_trust_metadata.apply_local_trust_metadata(
+    metadata = apply_local_trust_metadata(
         artifact,
         captured_at=generated_at,
         item_kind="skill",
