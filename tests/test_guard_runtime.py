@@ -16376,6 +16376,62 @@ def test_stdio_proxy_respects_native_only_approval_surface_policy(tmp_path, monk
     assert blocked["responses"][0]["error"]["data"]["reviewHint"]
 
 
+def test_stdio_proxy_rewrites_stale_request_url_to_active_approval_center(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace_dir)
+    monkeypatch.setattr(
+        stdio_proxy_module,
+        "queue_blocked_approvals",
+        lambda **_kwargs: [
+            {
+                "request_id": "stale-read-request",
+                "approval_url": "http://127.0.0.1:4833/requests/stale-read-request",
+            }
+        ],
+    )
+    proxy = StdioGuardProxy(
+        command=[
+            sys.executable,
+            "-u",
+            "-c",
+            "\n".join(
+                [
+                    "import json, sys",
+                    "for line in sys.stdin:",
+                    "    message = json.loads(line)",
+                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
+                    "    sys.stdout.flush()",
+                ]
+            ),
+        ],
+        cwd=workspace_dir,
+        guard_store=store,
+        guard_config=config,
+        approval_center_url="http://127.0.0.1:4455",
+        harness="codex",
+    )
+
+    blocked = proxy.run_session(
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "read_file", "arguments": {"path": ".env"}},
+            }
+        ]
+    )
+
+    error = blocked["responses"][0]["error"]
+
+    assert error["data"]["approvalCenterUrl"] == "http://127.0.0.1:4455"
+    assert error["data"]["approvalRequests"][0]["approval_url"] == "http://127.0.0.1:4833/requests/stale-read-request"
+    assert error["data"]["reviewUrl"] == "http://127.0.0.1:4455/requests/stale-read-request"
+    assert "http://127.0.0.1:4455/requests/stale-read-request" in error["data"]["reviewHint"]
+
+
 def test_stdio_proxy_respects_adapter_no_browser_flow(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     workspace_dir = tmp_path / "workspace"

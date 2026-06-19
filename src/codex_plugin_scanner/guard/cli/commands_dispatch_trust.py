@@ -59,7 +59,7 @@ def _approval_center_locator_is_fresh(
     locator_port = _guard_daemon_url_port(locator_url)
     if isinstance(state_pid, int) and state_pid != locator_pid:
         return False
-    if isinstance(state_port, int) and locator_port != state_port:
+    if isinstance(state_port, int) and isinstance(locator_port, int) and locator_port != state_port:
         return False
     raw_started_at = state.get("started_at")
     state_started_at = _parse_iso8601(raw_started_at if isinstance(raw_started_at, str) else None)

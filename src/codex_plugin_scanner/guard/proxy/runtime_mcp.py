@@ -802,7 +802,7 @@ class RuntimeMcpGuardProxy:
                 now=_now(),
             )
         request_id = str(queued[0]["request_id"]) if queued else "stored-block"
-        review_url = first_approval_url(queued) or approval_center_url
+        review_url = first_approval_url(queued, approval_center_url=approval_center_url) or approval_center_url
         self._maybe_open_approval_center(
             approval_center_url=approval_center_url,
             review_url=review_url,
@@ -1169,7 +1169,7 @@ class RuntimeMcpGuardProxy:
             risk_categories=tool_call_risk_categories(artifact, params.get("arguments")),
         )
         request_id = str(queued[0]["request_id"]) if queued else "unknown"
-        review_url = first_approval_url(queued) or approval_center_url
+        review_url = first_approval_url(queued, approval_center_url=approval_center_url) or approval_center_url
         self._maybe_open_approval_center(
             approval_center_url=approval_center_url,
             review_url=review_url,

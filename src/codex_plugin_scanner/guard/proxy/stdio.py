@@ -466,7 +466,13 @@ class StdioGuardProxy:
                         )
                         event["approval_center_url"] = self.approval_center_url
                         event["approval_delivery"] = approval_delivery_payload(approval_flow)
-                        review_url = first_approval_url(event["approval_requests"]) or self.approval_center_url
+                        review_url = (
+                            first_approval_url(
+                                event["approval_requests"],
+                                approval_center_url=self.approval_center_url,
+                            )
+                            or self.approval_center_url
+                        )
                         request_id = next(
                             (
                                 str(item["request_id"])
