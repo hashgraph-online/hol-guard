@@ -14891,6 +14891,51 @@ def test_guard_runtime_accepts_contextual_harness_tool_action_policy(tmp_path):
     )
 
 
+def test_guard_runtime_contextual_tool_action_lookup_skips_legacy_fallback_after_integrity_rejection(tmp_path):
+    workspace = tmp_path / "workspace"
+    artifact_id = "opencode:project:tool-action:docker-compose-postgres"
+    runtime_artifact = GuardArtifact(
+        artifact_id=artifact_id,
+        name="Bash docker-sensitive command",
+        harness="opencode",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=str(workspace / "opencode.json"),
+        publisher=None,
+        metadata={
+            "action_class": "docker-sensitive command",
+            "raw_command_text": "docker compose up -d postgres",
+            "wrapper_chain": ["bash", "zsh"],
+        },
+    )
+
+    class _Store:
+        def resolve_policy_decision(self, *args, **kwargs) -> dict[str, object] | None:
+            raise AssertionError("legacy fallback should not re-query after an integrity rejection lookup")
+
+    assert (
+        guard_commands_module._runtime_stored_policy_action(
+            store=_Store(),
+            harness="opencode",
+            artifact=runtime_artifact,
+            artifact_id=runtime_artifact.artifact_id,
+            artifact_hash="hash-retry",
+            workspace=str(workspace),
+            decision_lookup={
+                "decision": None,
+                "ignored_local_integrity": {
+                    "source": "local_rule",
+                    "scope": "harness",
+                },
+                "trust_status": {
+                    "remembered_rules": "disabled_degraded",
+                },
+            },
+        )
+        is None
+    )
+
+
 def test_guard_runtime_tool_action_policy_prefers_configured_risk_action_over_default(tmp_path):
     artifact = GuardArtifact(
         artifact_id="codex:test:tool-action:upload",

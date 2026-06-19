@@ -235,9 +235,14 @@ def _runtime_stored_policy_action(
     decision_lookup: Mapping[str, object] | None = None,
 ) -> str | None:
     runtime_exact_match_context = _runtime_artifact_exact_match_context(artifact)
+    ignored_local_integrity: Mapping[str, object] | None = None
     if isinstance(decision_lookup, Mapping):
         raw_decision = decision_lookup.get("decision")
         decision = raw_decision if isinstance(raw_decision, Mapping) else None
+        raw_ignored_local_integrity = decision_lookup.get("ignored_local_integrity")
+        ignored_local_integrity = (
+            raw_ignored_local_integrity if isinstance(raw_ignored_local_integrity, Mapping) else None
+        )
     else:
         decision = store.resolve_policy_decision(
             harness,
@@ -247,7 +252,7 @@ def _runtime_stored_policy_action(
             publisher=artifact.publisher,
             runtime_exact_match_context=runtime_exact_match_context,
         )
-    if decision is None and runtime_exact_match_context is not None:
+    if decision is None and runtime_exact_match_context is not None and ignored_local_integrity is None:
         legacy_decision = store.resolve_policy_decision(
             harness,
             artifact_id,
