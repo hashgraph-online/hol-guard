@@ -41,6 +41,7 @@ _ALREADY_CURRENT_HINTS = (
 )
 _PYPI_JSON_URL = "https://pypi.org/pypi/hol-guard/json"
 _PYPI_TIMEOUT_SECONDS = 3.0
+_PACKAGE_SHIM_REFRESH_TIMEOUT_SECONDS = 30.0
 _last_pypi_payload: dict[str, object] | None = None
 _PACKAGE_SHIM_REFRESH_SCRIPT = """
 from __future__ import annotations
@@ -59,7 +60,7 @@ def _resolve_path(value: object) -> Path | None:
     return Path(value).expanduser().resolve()
 
 
-payload = json.loads(sys.argv[1])
+payload = json.loads(sys.stdin.read())
 home_dir = _resolve_path(payload.get("home_dir")) or Path.home().resolve()
 guard_home = _resolve_path(payload.get("guard_home")) or (home_dir / ".hol-guard")
 context = HarnessContext(
@@ -260,13 +261,14 @@ def run_guard_update(
         notes = [*notes, nonzero_success_note]
     if notes:
         payload["notes"] = notes
-    package_shims, package_shim_note = _refresh_package_shims_after_update(
-        context=context,
-        dry_run=dry_run,
-    )
-    if package_shims is not None:
-        payload["package_shims"] = package_shims
-    _append_payload_note(payload, package_shim_note)
+    if payload.get("changed") is True or payload.get("status") == "current":
+        package_shims, package_shim_note = _refresh_package_shims_after_update(
+            context=context,
+            dry_run=dry_run,
+        )
+        if package_shims is not None:
+            payload["package_shims"] = package_shims
+        _append_payload_note(payload, package_shim_note)
     repaired_installs, repair_notes = _repair_supported_harnesses(
         context=context,
         store=store,
@@ -867,7 +869,7 @@ def _refresh_package_shims_after_update(
     context: HarnessContext | None,
     dry_run: bool,
 ) -> tuple[dict[str, object] | None, str | None]:
-    if dry_run or context is None:
+    if dry_run or context is None or not _package_shim_manifest_has_installed_managers(context):
         return None, None
     refresh_context = {
         "home_dir": str(context.home_dir),
@@ -876,12 +878,14 @@ def _refresh_package_shims_after_update(
     }
     try:
         result = subprocess.run(
-            [sys.executable, "-c", _PACKAGE_SHIM_REFRESH_SCRIPT, json.dumps(refresh_context)],
+            [sys.executable, "-c", _PACKAGE_SHIM_REFRESH_SCRIPT],
+            input=json.dumps(refresh_context),
             capture_output=True,
             check=False,
             text=True,
+            timeout=_PACKAGE_SHIM_REFRESH_TIMEOUT_SECONDS,
         )
-    except OSError as error:
+    except (OSError, subprocess.SubprocessError) as error:
         return None, f"Could not refresh package firewall shims during update: {redact_sensitive_text(str(error))}"
     stdout = _normalize_output_text(result.stdout)
     stderr = _normalize_output_text(result.stderr)
@@ -901,6 +905,21 @@ def _refresh_package_shims_after_update(
     if not installed_managers:
         return None, None
     return refresh_payload, _package_shim_refresh_note(refresh_payload)
+
+
+def _package_shim_manifest_has_installed_managers(context: HarnessContext) -> bool:
+    manifest_path = context.guard_home / "package-shims" / "manifest.json"
+    try:
+        raw_manifest = manifest_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    try:
+        manifest = json.loads(raw_manifest)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(manifest, dict):
+        return False
+    return bool(_string_list(manifest.get("installed_managers")))
 
 
 def _package_shim_refresh_note(refresh_payload: dict[str, object]) -> str | None:
