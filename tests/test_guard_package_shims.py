@@ -456,12 +456,17 @@ def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path
     [
         ("bun", ("add", "minimist@1.2.9"), True),
         ("pip", ("install", "requests==2.32.3"), True),
+        ("pip", ("--isolated", "install", "requests==2.32.3"), True),
         ("npm", ("install", "minimist@1.2.9"), True),
+        ("npm", ("--registry=https://registry.example.com", "install", "minimist@1.2.9"), True),
         ("npm", ("run", "dev"), False),
         ("pnpm", ("add", "minimist@1.2.9"), True),
+        ("pnpm", ("--dir", ".", "add", "minimist@1.2.9"), True),
         ("pnpm", ("install",), True),
+        ("pnpm", ("--dir", ".", "run", "dev"), False),
         ("pnpm", ("run", "dev"), False),
         ("yarn", ("add", "minimist@1.2.9"), True),
+        ("yarn", ("--cwd", ".", "add", "minimist@1.2.9"), True),
     ],
 )
 def test_package_shim_command_requires_guard_only_for_supply_chain_actions(
@@ -524,10 +529,20 @@ def test_package_manager_shim_bypasses_guard_for_pnpm_run_commands(tmp_path: Pat
 
 _BLOCKING_SHIM_CASES = (
     ("npm", ("install", "minimist@1.2.8"), "npm", "minimist", "1.2.8"),
+    (
+        "npm",
+        ("--registry=https://registry.example.com", "install", "minimist@1.2.8"),
+        "npm",
+        "minimist",
+        "1.2.8",
+    ),
     ("pnpm", ("add", "minimist@1.2.8"), "npm", "minimist", "1.2.8"),
+    ("pnpm", ("--dir", ".", "add", "minimist@1.2.8"), "npm", "minimist", "1.2.8"),
     ("yarn", ("add", "minimist@1.2.8"), "npm", "minimist", "1.2.8"),
+    ("yarn", ("--cwd", ".", "add", "minimist@1.2.8"), "npm", "minimist", "1.2.8"),
     ("bun", ("add", "minimist@1.2.8"), "npm", "minimist", "1.2.8"),
     ("pip", ("install", "requests==2.32.0"), "pypi", "requests", "2.32.0"),
+    ("pip", ("--isolated", "install", "requests==2.32.0"), "pypi", "requests", "2.32.0"),
     ("uv", ("add", "requests==2.32.0"), "pypi", "requests", "2.32.0"),
     ("poetry", ("add", "requests@2.32.0"), "pypi", "requests", "2.32.0"),
     ("pipenv", ("install", "requests==2.32.0"), "pypi", "requests", "2.32.0"),

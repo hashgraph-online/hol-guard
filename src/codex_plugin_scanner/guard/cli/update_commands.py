@@ -31,6 +31,7 @@ from ..adapters.opencode_pretool import (
     pretool_plugin_source,
 )
 from ..redaction import redact_sensitive_text
+from ..shims import _trusted_import_root, _trusted_python_flags
 from ..store import GuardStore
 from .dashboard_sync import sync_dashboard_assets as _sync_dashboard_assets
 from .install_commands import apply_managed_install
@@ -933,11 +934,15 @@ def _refresh_package_shims_after_update(
         "guard_home": str(context.guard_home),
     }
     try:
+        refresh_env = dict(os.environ)
+        refresh_env.pop("PYTHONPATH", None)
         result = subprocess.run(
-            [sys.executable, "-c", _PACKAGE_SHIM_REFRESH_SCRIPT],
+            [sys.executable, *_trusted_python_flags(), "-c", _PACKAGE_SHIM_REFRESH_SCRIPT],
             input=json.dumps(refresh_context),
             capture_output=True,
             check=False,
+            cwd=str(_trusted_import_root()),
+            env=refresh_env,
             text=True,
             timeout=_PACKAGE_SHIM_REFRESH_TIMEOUT_SECONDS,
         )
