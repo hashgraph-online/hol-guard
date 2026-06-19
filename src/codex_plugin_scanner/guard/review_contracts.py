@@ -282,7 +282,9 @@ def _policy_version(request_row: dict[str, object]) -> str:
     value = _non_empty_string(decision_v2.get("policyVersion"))
     if value is not None:
         return value
-    last_seen_at = _non_empty_string(request_row.get("last_seen_at")) or _non_empty_string(request_row.get("created_at"))
+    last_seen_at = _non_empty_string(request_row.get("last_seen_at")) or _non_empty_string(
+        request_row.get("created_at")
+    )
     return f"request:{last_seen_at or request_row['request_id']}"
 
 
