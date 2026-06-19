@@ -902,7 +902,7 @@ def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(monkeypatch, tmp_
     assert search_trust.get("trustScore") is not None
 
 
-def test_inventory_snapshot_does_not_score_hooks_as_instruction_trust(tmp_path: Path) -> None:
+def test_inventory_snapshot_scores_hooks_as_instruction_trust(tmp_path: Path) -> None:
     workspace = tmp_path / "repo"
     workspace.mkdir()
     hook_config = workspace / "settings.json"
@@ -927,5 +927,7 @@ def test_inventory_snapshot_does_not_score_hooks_as_instruction_trust(tmp_path: 
     )
     hook_item = next(item for item in snapshot.items if item.item_kind == "hook")
 
-    assert hook_item.metadata.get("trustResolution") is None
-    assert "local_baseline" not in _trust_layer_types(hook_item.metadata)
+    hook_trust = hook_item.metadata.get("trustResolution")
+    assert isinstance(hook_trust, dict)
+    assert hook_trust.get("trustScore") is not None
+    assert "local_baseline" in _trust_layer_types(hook_item.metadata)
