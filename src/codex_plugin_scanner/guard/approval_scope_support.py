@@ -39,7 +39,8 @@ def resolve_request_workspace_scope(
     workspace = _derived_workspace_scope_target(request)
     if workspace is None:
         raise ValueError("workspace_scope_unavailable")
-    if selected_workspace is not None and _normalized_workspace_path(selected_workspace) != _normalized_workspace_path(
+    bound_selected = _string_or_none(selected_workspace)
+    if bound_selected is not None and _normalized_workspace_path(bound_selected) != _normalized_workspace_path(
         workspace
     ):
         raise ValueError("workspace_scope_mismatch")
@@ -53,7 +54,10 @@ def _derived_workspace_scope_target(request: Mapping[str, object]) -> str | None
     config_path = _string_or_none(request.get("config_path"))
     if config_path is None:
         return None
-    config_file = Path(config_path)
+    try:
+        config_file = Path(config_path).resolve()
+    except Exception:
+        config_file = Path(config_path)
     parent = config_file.parent
     workspace_root = parent.parent if parent.name.startswith(".") else parent
     workspace_value = str(workspace_root)
@@ -69,7 +73,7 @@ def _artifact_family_key(artifact_id: str | None) -> str | None:
         return None
     if artifact_id.startswith("family:"):
         family = artifact_id.removeprefix("family:").strip().lower()
-        return artifact_id if family in _SCOPED_APPROVAL_FAMILIES else None
+        return f"family:{family}" if family in _SCOPED_APPROVAL_FAMILIES else None
     parts = artifact_id.split(":")
     if len(parts) < 3:
         return None
@@ -86,7 +90,11 @@ def _string_or_none(value: object) -> str | None:
 
 
 def _normalized_workspace_path(value: str) -> str:
-    normalized = value.strip().replace("\\", "/")
+    try:
+        resolved = str(Path(value).resolve())
+    except Exception:
+        resolved = value
+    normalized = resolved.strip().replace("\\", "/")
     while len(normalized) > 1 and normalized.endswith("/"):
         normalized = normalized[:-1]
     if len(normalized) >= 2 and normalized[1] == ":":

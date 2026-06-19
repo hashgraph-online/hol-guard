@@ -533,7 +533,7 @@ def count_approval_requests(
 
 
 def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
-    payload = {
+    payload: dict[str, object] = {
         "request_id": str(row["request_id"]),
         "harness": str(row["harness"]),
         "artifact_id": str(row["artifact_id"]),
