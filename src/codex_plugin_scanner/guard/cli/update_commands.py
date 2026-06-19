@@ -935,10 +935,7 @@ def _package_shim_refresh_note(refresh_payload: dict[str, object]) -> str | None
     ]
     path_repair_required = _string_list(after_status.get("path_repair_required"))
     if unhealthy_managers:
-        return (
-            "Package firewall shims still need repair after update for "
-            f"{', '.join(unhealthy_managers)}."
-        )
+        return f"Package firewall shims still need repair after update for {', '.join(unhealthy_managers)}."
     repair_result = refresh_payload.get("repair")
     repaired = _string_list(repair_result.get("repaired")) if isinstance(repair_result, dict) else []
     if repaired:
