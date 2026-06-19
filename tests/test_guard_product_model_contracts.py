@@ -76,6 +76,7 @@ def test_canonical_harnesses_match_launch_harnesses_and_existing_contracts() -> 
         "gemini",
         "hermes",
         "openclaw",
+        "pi",
     )
     assert set(CANONICAL_HARNESS_VALUES).issubset(contract_harnesses)
 

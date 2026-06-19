@@ -23,6 +23,7 @@ _HARNESS_RETRY_COPY: dict[str, str] = {
     "claude-code": "Return to Claude and retry",
     "opencode": "Return to OpenCode and retry",
     "copilot": "Return to Copilot and retry",
+    "pi": "Return to Pi and retry",
 }
 _DEFAULT_RETRY_COPY = "Return to your AI assistant and retry"
 

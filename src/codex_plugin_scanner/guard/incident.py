@@ -13,6 +13,7 @@ _HARNESS_LABELS = {
     "cursor": "Cursor",
     "gemini": "Gemini",
     "opencode": "OpenCode",
+    "pi": "Pi",
 }
 
 _ARTIFACT_LABELS = {

@@ -209,6 +209,14 @@ def _run_hook_generic_payload(
                 reason=block_reason,
                 output_stream=output_stream,
             )
+        elif _canonical_harness_name(args.harness) == "pi":
+            from ..adapters.pi_hooks import emit_pi_hook_response
+
+            emit_pi_hook_response(
+                policy_action=policy_action,
+                reason=block_reason,
+                output_stream=output_stream,
+            )
         elif _canonical_harness_name(args.harness) == "zcode":
             from ..adapters.zcode_hooks import emit_zcode_hook_response
 
@@ -252,6 +260,15 @@ def _run_hook_generic_payload(
             from ..adapters.grok_hooks import emit_grok_hook_response
 
             emit_grok_hook_response(
+                policy_action=policy_action,
+                reason=reason,
+                output_stream=output_stream,
+            )
+            return 0 if policy_action not in {"block", "sandbox-required", "require-reapproval"} else 2
+        if _canonical_harness_name(args.harness) == "pi":
+            from ..adapters.pi_hooks import emit_pi_hook_response
+
+            emit_pi_hook_response(
                 policy_action=policy_action,
                 reason=reason,
                 output_stream=output_stream,

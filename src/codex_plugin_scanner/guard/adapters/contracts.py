@@ -139,6 +139,7 @@ _DISPLAY_NAMES = {
     "antigravity": "Antigravity",
     "kimi": "Kimi",
     "grok": "Grok",
+    "pi": "Pi",
     "zcode": "ZCode",
 }
 
@@ -314,6 +315,25 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
             "prompt policy but PreToolUse hooks still run when installed."
         ),
         smoke_command="hol-guard install grok --dry-run",
+    ),
+    HarnessProtectionContract(
+        harness="pi",
+        install_aliases=("pi", "pi-agent", "pi-coding-agent"),
+        config_paths=(
+            "~/.pi/agent/settings.json",
+            ".pi/settings.json",
+            "~/.pi/agent/extensions/*.ts",
+            ".pi/extensions/*.ts",
+        ),
+        event_surfaces=("shell", "prompt", "mcp_tool", "file_read"),
+        native_approval=True,
+        browser_fallback=True,
+        resume_support=False,
+        known_blind_spots=(
+            "Pi package install and update flows happen outside the runtime extension bridge, so Guard observes the "
+            "configured package surfaces plus the prompt and tool events forwarded by the managed extension."
+        ),
+        smoke_command="hol-guard install pi --dry-run",
     ),
     HarnessProtectionContract(
         harness="zcode",
