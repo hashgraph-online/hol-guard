@@ -4617,12 +4617,14 @@ class GuardStore:
             )
             key, key_id = self._policy_integrity_secret_material(create=True)
             trusted_state = self._load_policy_integrity_control_state(create=True)
-            if (
+            if not (
                 state.get("mode") == "protected"
                 and key is not None
                 and key_id is not None
                 and trusted_state is not None
             ):
+                connection.rollback()
+            else:
                 local_ids = {
                     int(row["decision_id"]) for row in self._load_local_policy_rows(connection, harness=harness)
                 }

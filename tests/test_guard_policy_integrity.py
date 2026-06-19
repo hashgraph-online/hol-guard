@@ -1647,6 +1647,28 @@ def test_trust_cli_macos_native_setup_and_reset_work(
     assert reset_payload["ok"] is True
 
 
+def test_setup_policy_integrity_rolls_back_degraded_refresh_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "home")
+    monkeypatch.setattr(store, "_load_policy_integrity_control_state", lambda create: None)
+
+    baseline = _policy_integrity_state_payload(store.guard_home)
+    observed: dict[str, dict[str, object]] = {}
+
+    def _verify_policy_integrity(*, harness: str | None = None) -> dict[str, object]:
+        observed["state_payload"] = _policy_integrity_state_payload(store.guard_home)
+        return {"harness": harness, "mode": "degraded"}
+
+    monkeypatch.setattr(store, "verify_policy_integrity", _verify_policy_integrity)
+
+    result = store.setup_policy_integrity(harness="codex", now="2026-06-14T00:00:00Z")
+
+    assert result == {"harness": "codex", "mode": "degraded"}
+    assert observed["state_payload"] == baseline
+
+
 def test_policies_cli_verify_returns_nonzero_for_rollback_detected(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)
