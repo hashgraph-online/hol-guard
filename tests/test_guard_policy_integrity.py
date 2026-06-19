@@ -1530,6 +1530,42 @@ def test_build_trust_doctor_payload_reports_active_approval_center_port(
     assert payload["approval_url_base"] == "http://127.0.0.1:5481"
 
 
+def test_build_trust_doctor_payload_prefers_live_daemon_port_when_locator_is_stale(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    stale_locator = ApprovalCenterLocator(
+        guard_home=home_dir,
+        daemon_url="http://127.0.0.1:5481",
+        approval_url_base="http://127.0.0.1:5481",
+        pid=1234,
+        started_at="2026-06-19T12:00:00+00:00",
+        state_path=home_dir / "guard-daemon-state.json",
+    )
+    monkeypatch.setattr(trust_dispatch_module, "read_approval_center_locator", lambda _home: stale_locator)
+    monkeypatch.setattr(trust_dispatch_module, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:5499")
+    monkeypatch.setattr(
+        trust_dispatch_module,
+        "_load_state",
+        lambda _home: {
+            "pid": 7777,
+            "port": 5499,
+            "package_version": trust_dispatch_module.__version__,
+            "started_at": "2026-06-19T12:01:00+00:00",
+        },
+    )
+
+    payload = trust_dispatch_module.build_trust_doctor_payload(store)
+
+    assert payload["approval_center"]["approval_url_base"] == "http://127.0.0.1:5499"
+    assert payload["approval_center"]["port"] == 5499
+    assert payload["approval_center"]["snapshot_fresh"] is False
+    assert payload["checks"]["approval_center_route_current"] is False
+    assert any("refresh the local browser approval route" in action for action in payload["recommended_actions"])
+
+
 def test_build_trust_doctor_payload_detects_editable_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)
@@ -1685,6 +1721,74 @@ def test_build_trust_doctor_payload_verifies_official_pipx_command_path(
     assert payload["checks"]["official_install_verified"] is True
 
 
+def test_build_trust_doctor_payload_recommends_daemon_restart_only_for_version_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    locator = ApprovalCenterLocator(
+        guard_home=home_dir,
+        daemon_url="http://127.0.0.1:5481",
+        approval_url_base="http://127.0.0.1:5481",
+        pid=1234,
+        started_at="2026-06-19T12:01:00+00:00",
+        state_path=home_dir / "guard-daemon-state.json",
+    )
+    monkeypatch.setattr(trust_dispatch_module, "read_approval_center_locator", lambda _home: locator)
+    monkeypatch.setattr(trust_dispatch_module, "load_guard_daemon_url", lambda _home: locator.daemon_url)
+    monkeypatch.setattr(
+        trust_dispatch_module,
+        "_load_state",
+        lambda _home: {
+            "pid": 1234,
+            "port": 5481,
+            "package_version": "0.0.1",
+            "started_at": "2026-06-19T12:00:00+00:00",
+        },
+    )
+
+    payload = trust_dispatch_module.build_trust_doctor_payload(store)
+
+    assert payload["approval_center"]["snapshot_fresh"] is True
+    assert payload["approval_center"]["restart_required"] is True
+    assert any("restart the Guard daemon" in action for action in payload["recommended_actions"])
+
+
+def test_build_trust_doctor_payload_skips_daemon_restart_when_current(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    locator = ApprovalCenterLocator(
+        guard_home=home_dir,
+        daemon_url="http://127.0.0.1:5481",
+        approval_url_base="http://127.0.0.1:5481",
+        pid=1234,
+        started_at="2026-06-19T12:01:00+00:00",
+        state_path=home_dir / "guard-daemon-state.json",
+    )
+    monkeypatch.setattr(trust_dispatch_module, "read_approval_center_locator", lambda _home: locator)
+    monkeypatch.setattr(trust_dispatch_module, "load_guard_daemon_url", lambda _home: locator.daemon_url)
+    monkeypatch.setattr(
+        trust_dispatch_module,
+        "_load_state",
+        lambda _home: {
+            "pid": 1234,
+            "port": 5481,
+            "package_version": trust_dispatch_module.__version__,
+            "started_at": "2026-06-19T12:00:00+00:00",
+        },
+    )
+
+    payload = trust_dispatch_module.build_trust_doctor_payload(store)
+
+    assert payload["approval_center"]["snapshot_fresh"] is True
+    assert payload["approval_center"]["restart_required"] is False
+    assert not any("restart the Guard daemon" in action for action in payload["recommended_actions"])
+
+
 def test_trust_cli_doctor_reports_macos_no_prompt_copy(
     tmp_path: Path,
     capsys,
@@ -1698,6 +1802,48 @@ def test_trust_cli_doctor_reports_macos_no_prompt_copy(
 
     assert rc == 0
     assert "No passive macOS Keychain access" in output
+
+
+def test_trust_cli_doctor_redacts_secret_like_assignments_in_json_output(
+    tmp_path: Path,
+    capsys,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    original_trust_payload = trust_dispatch_module._trust_status_payload
+
+    def fake_trust_payload(store: GuardStore, *, command: str, backend: str) -> dict[str, object]:
+        payload = original_trust_payload(store, command=command, backend=backend)
+        payload["summary"] = (
+            "Guard saw MY_SECRET_TOKEN=super-secret-value and "
+            "guard-oauth-local-credentials:8126370c0eb65a02 while checking trust."
+        )
+        return payload
+
+    monkeypatch.setattr(trust_dispatch_module, "_trust_status_payload", fake_trust_payload)
+
+    rc = main(
+        [
+            "guard",
+            "trust",
+            "doctor",
+            "--home",
+            str(home_dir),
+            "--json",
+        ]
+    )
+    output = capsys.readouterr().out
+    payload = json.loads(output)
+    summary = str(payload.get("summary") or "")
+
+    assert rc == 0
+    assert "MY_SECRET_TOKEN" not in output
+    assert "super-secret-value" not in output
+    assert "8126370c0eb65a02" not in output
+    assert "MY_SECRET_TOKEN" not in summary
+    assert "super-secret-value" not in summary
+    assert "8126370c0eb65a02" not in summary
+    assert summary
 
 
 def test_trust_cli_bare_combined_command_routes_to_guard() -> None:

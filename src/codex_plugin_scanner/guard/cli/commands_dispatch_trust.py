@@ -5,19 +5,88 @@ from __future__ import annotations
 import argparse
 import importlib.metadata
 import json
+import re
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import TextIO
 
+from ...version import __version__
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
-from ..daemon.manager import _guard_daemon_url_port, load_guard_daemon_url, read_approval_center_locator
+from ..daemon.manager import _guard_daemon_url_port, _load_state, load_guard_daemon_url, read_approval_center_locator
 from ..local_trust_contract import TrustStatus
 from ..local_trust_controller import macos_native_backend_supported, resolve_passive_trust_state
 from ..policy_integrity import is_remote_policy_source
 from ..store import GuardStore
 from .commands_support_interaction import _emit
 from .update_commands import build_guard_install_surface_payload
+
+_TRUST_SECRET_ASSIGNMENT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"(?i)\b[a-z0-9_.-]*(?:token|secret|api[-_]?key|password|credential)[a-z0-9_.-]*\s*=\s*"
+        r"(?:'[^']*'|\"[^\"]*\"|[^\s]+)"
+    ),
+    re.compile(
+        r"(?i)\b[a-z0-9_.-]*(?:token|secret|api[-_]?key|password|credential)[a-z0-9_.-]*\s*:\s*"
+        r"(?:bearer\s+)?[^\s,;]+"
+    ),
+)
+
+
+def _parse_iso8601(value: str | None) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = f"{normalized[:-1]}+00:00"
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+
+def _approval_center_locator_is_fresh(
+    locator_pid: int,
+    locator_url: str,
+    locator_started_at: str,
+    state: dict[str, object] | None,
+) -> bool:
+    if not isinstance(state, dict):
+        return True
+    state_pid = state.get("pid")
+    state_port = state.get("port")
+    locator_port = _guard_daemon_url_port(locator_url)
+    if isinstance(state_pid, int) and state_pid != locator_pid:
+        return False
+    if isinstance(state_port, int) and locator_port != state_port:
+        return False
+    state_started_at = _parse_iso8601(state.get("started_at") if isinstance(state.get("started_at"), str) else None)
+    locator_started_at_dt = _parse_iso8601(locator_started_at)
+    if state_started_at is None or locator_started_at_dt is None:
+        return True
+    return locator_started_at_dt >= state_started_at
+
+
+def _sanitize_trust_text(value: str) -> str:
+    sanitized = value
+    for pattern in _TRUST_SECRET_ASSIGNMENT_PATTERNS:
+        sanitized = pattern.sub("credential redacted", sanitized)
+    return sanitized
+
+
+def _sanitize_trust_payload(value: object) -> object:
+    if isinstance(value, dict):
+        return {key: _sanitize_trust_payload(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_trust_payload(item) for item in value]
+    if isinstance(value, str):
+        return _sanitize_trust_text(value)
+    return value
+
+
+def _emit_trust_payload(command: str, payload: dict[str, object], as_json: bool) -> None:
+    _emit(command, _sanitize_trust_payload(payload), as_json)
 
 
 def _now() -> str:
@@ -143,8 +212,22 @@ def _installed_trust_cli_payload() -> dict[str, object]:
 
 
 def _approval_center_status_payload(guard_home: Path) -> dict[str, object]:
+    state = _load_state(guard_home)
+    daemon_package_version = state.get("package_version") if isinstance(state, dict) else None
+    restart_required = isinstance(daemon_package_version, str) and daemon_package_version != __version__
     locator = read_approval_center_locator(guard_home)
-    if locator is not None:
+    if locator is not None and _approval_center_locator_is_fresh(
+        locator.pid,
+        locator.daemon_url,
+        locator.started_at,
+        state,
+    ):
+        detail = None
+        if restart_required:
+            detail = (
+                f"Guard daemon is still serving hol-guard {daemon_package_version}. "
+                f"Restart it so browser approvals use hol-guard {__version__}."
+            )
         return {
             "active": True,
             "approval_url_base": locator.approval_url_base,
@@ -156,19 +239,35 @@ def _approval_center_status_payload(guard_home: Path) -> dict[str, object]:
             ),
             "started_at": locator.started_at,
             "pid": locator.pid,
+            "snapshot_fresh": True,
+            "restart_required": restart_required,
+            "daemon_package_version": daemon_package_version,
+            "detail": detail,
         }
     daemon_url = load_guard_daemon_url(guard_home)
     if isinstance(daemon_url, str) and daemon_url.strip():
+        detail = "Guard daemon is healthy, but the browser approval locator has not been refreshed yet."
+        if restart_required:
+            detail = (
+                f"Guard daemon is still serving hol-guard {daemon_package_version}. "
+                f"Restart it so browser approvals use hol-guard {__version__}."
+            )
         return {
             "active": True,
             "approval_url_base": daemon_url,
             "daemon_url": daemon_url,
             "port": _guard_daemon_url_port(daemon_url),
-            "detail": "Guard daemon is healthy, but the browser approval locator has not been refreshed yet.",
+            "detail": detail,
+            "snapshot_fresh": False,
+            "restart_required": restart_required,
+            "daemon_package_version": daemon_package_version,
         }
     return {
         "active": False,
         "detail": "No active Guard approval center daemon detected.",
+        "snapshot_fresh": False,
+        "restart_required": False,
+        "daemon_package_version": daemon_package_version,
     }
 
 
@@ -202,6 +301,7 @@ def build_trust_doctor_payload(store: GuardStore, *, backend: str = "auto") -> d
         "local_rules_protected": remembered_rules == "enforced",
         "cloud_policy_available": payload.get("cloud_policy_status") == "available",
         "approval_center_active": bool(approval_center.get("active")),
+        "approval_center_route_current": bool(approval_center.get("snapshot_fresh")),
         "official_install_verified": bool(install_info.get("official_install_verified")),
     }
     payload["recommended_actions"] = (
@@ -219,6 +319,14 @@ def build_trust_doctor_payload(store: GuardStore, *, backend: str = "auto") -> d
     if not bool(approval_center.get("active")):
         payload["recommended_actions"].append(
             "Run `hol-guard dashboard` if browser approvals are unavailable and Guard needs a fresh local route."
+        )
+    elif bool(approval_center.get("restart_required")):
+        payload["recommended_actions"].append(
+            "Run `hol-guard daemon repair` or restart the Guard daemon so browser approvals reconnect to this install."
+        )
+    elif not bool(approval_center.get("snapshot_fresh")):
+        payload["recommended_actions"].append(
+            "Run `hol-guard dashboard` once to refresh the local browser approval route for the active daemon."
         )
     if bool(install_info.get("editable_install")):
         payload["recommended_actions"].append(
@@ -330,22 +438,22 @@ def _run_guard_trust_command(
         else _trust_status_payload(store, command=trust_command, backend=backend)
     )
     if trust_command in {"status", "doctor"}:
-        _emit(f"trust.{trust_command}", payload, getattr(args, "json", False))
+        _emit_trust_payload(f"trust.{trust_command}", payload, getattr(args, "json", False))
         return 0
     if trust_command == "test":
         if not bool(getattr(args, "no_ui", False)):
             payload["error"] = "Use --no-ui so Guard can prove this probe will not open an OS credential prompt."
-            _emit("trust.test", payload, getattr(args, "json", False))
+            _emit_trust_payload("trust.test", payload, getattr(args, "json", False))
             return 2
         payload["probe"] = "passive_no_ui"
         payload["ok"] = payload["passive_prompt_allowed"] is False and payload.get("mode") != "unsupported"
         payload["trust_health"] = str(payload.get("mode") or "degraded_safe")
-        _emit("trust.test", payload, getattr(args, "json", False))
+        _emit_trust_payload("trust.test", payload, getattr(args, "json", False))
         return 0
     if trust_command == "explain":
         rule_id = getattr(args, "rule", None)
         if not isinstance(rule_id, int) or isinstance(rule_id, bool):
-            _emit(
+            _emit_trust_payload(
                 "trust.explain",
                 {
                     "generated_at": _now(),
@@ -356,7 +464,7 @@ def _run_guard_trust_command(
             )
             return 2
         payload = build_trust_explain_payload(store, rule_id=rule_id, backend=backend)
-        _emit("trust.explain", payload, getattr(args, "json", False))
+        _emit_trust_payload("trust.explain", payload, getattr(args, "json", False))
         return 0 if "error" not in payload else 2
     if trust_command in {"setup", "reset"}:
         if backend == "degraded-safe":
@@ -370,7 +478,7 @@ def _run_guard_trust_command(
                 if trust_command == "setup"
                 else "Nothing changed."
             )
-            _emit(f"trust.{trust_command}", payload, getattr(args, "json", False))
+            _emit_trust_payload(f"trust.{trust_command}", payload, getattr(args, "json", False))
             return 2
         if sys.platform != "darwin":
             payload["error"] = (
@@ -383,7 +491,7 @@ def _run_guard_trust_command(
                 if trust_command == "setup"
                 else "Nothing changed."
             )
-            _emit(f"trust.{trust_command}", payload, getattr(args, "json", False))
+            _emit_trust_payload(f"trust.{trust_command}", payload, getattr(args, "json", False))
             return 2
         if not macos_native_backend_supported(store):
             payload["error"] = (
@@ -391,7 +499,7 @@ def _run_guard_trust_command(
                 "Guard will not fall back to a prompt-capable backend."
             )
             payload["next_action"] = "Use one-time approvals or Guard Cloud policies until native setup is available."
-            _emit(f"trust.{trust_command}", payload, getattr(args, "json", False))
+            _emit_trust_payload(f"trust.{trust_command}", payload, getattr(args, "json", False))
             return 2
         result = (
             store.setup_policy_integrity(now=_now())
@@ -425,7 +533,7 @@ def _run_guard_trust_command(
             )
             if not payload["ok"]:
                 payload["next_action"] = "Keep using one-time approvals, then run trust doctor for the degraded reason."
-                _emit("trust.setup", payload, getattr(args, "json", False))
+                _emit_trust_payload("trust.setup", payload, getattr(args, "json", False))
                 return 2
         else:
             payload["message"] = (
@@ -435,9 +543,13 @@ def _run_guard_trust_command(
             payload["next_action"] = (
                 "Run `hol-guard guard trust setup --backend macos-native --json` to protect local rules again."
             )
-        _emit(f"trust.{trust_command}", payload, getattr(args, "json", False))
+        _emit_trust_payload(f"trust.{trust_command}", payload, getattr(args, "json", False))
         return 0
-    _emit("trust", {"error": "Use: hol-guard guard trust status|doctor|test|setup|reset"}, getattr(args, "json", False))
+    _emit_trust_payload(
+        "trust",
+        {"error": "Use: hol-guard guard trust status|doctor|test|setup|reset"},
+        getattr(args, "json", False),
+    )
     return 2
 
 
