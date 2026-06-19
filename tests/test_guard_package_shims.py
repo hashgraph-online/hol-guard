@@ -23,13 +23,10 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.package_shim_gate import package_shim_command_requires_guard
 from codex_plugin_scanner.guard.protect import build_protect_payload
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
-from codex_plugin_scanner.guard.shim_probe import (
-    SHIM_PROBE_ENV_VALUE,
-    SHIM_PROBE_ENV_VAR,
-    package_shim_command_requires_guard,
-)
+from codex_plugin_scanner.guard.shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from codex_plugin_scanner.guard.shims import build_shim_content_hash, install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.shim_execution_helpers import write_fake_manager_script

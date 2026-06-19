@@ -1033,7 +1033,7 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             "    normalize = lambda entry: cwd if entry in ('', '.', os.curdir) else os.path.realpath(entry)",
             "    blocked_entries = {cwd, guard_cli_cwd}",
             "    sys.path = [guard_cli_cwd, *[entry for entry in sys.path if normalize(entry) not in blocked_entries]]",
-            "    from codex_plugin_scanner.guard.shim_probe import package_shim_command_requires_guard",
+            "    from codex_plugin_scanner.guard.package_shim_gate import package_shim_command_requires_guard",
             "    workspace = Path(guard_workspace) if guard_workspace is not None else Path.cwd()",
             "    return package_shim_command_requires_guard(command_name, tuple(sys.argv[1:]), workspace=workspace)",
             "try:",
