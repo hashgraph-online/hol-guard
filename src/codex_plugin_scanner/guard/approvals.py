@@ -342,13 +342,15 @@ def apply_approval_resolution(
         raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
     if not _is_decision_scope(scope):
         raise ValueError(f"Unsupported approval scope: {scope}")
+    request_publisher = _string_or_none(request.get("publisher"))
+    if scope == "publisher" and request_publisher is None:
+        raise ValueError("no publisher scope")
+    resolved_workspace = resolve_request_workspace_scope(request, workspace) if scope == "workspace" else None
     if scope not in supported_request_scopes(request):
         raise ValueError("unsupported_request_scope")
-    resolved_workspace = resolve_request_workspace_scope(request, workspace) if scope == "workspace" else None
     workspace_artifact_id, workspace_artifact_hash = _workspace_policy_artifact_keys(request, scope)
     request_artifact_id = _string_or_none(request.get("artifact_id"))
     request_artifact_hash = _string_or_none(request.get("artifact_hash"))
-    request_publisher = _string_or_none(request.get("publisher"))
     scoped_artifact_id = request_artifact_id if scope in {"artifact", "harness", "global"} else workspace_artifact_id
     scoped_artifact_hash = request_artifact_hash if scope == "artifact" else workspace_artifact_hash
     artifact_runtime_exact_match_key = _artifact_scope_runtime_exact_match_key(request, scope)

@@ -657,7 +657,13 @@ def test_resolving_duplicate_group_reports_collapsed_ids(tmp_path: Path) -> None
 
 def test_broad_scope_resolution_keeps_other_reviews_pending(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    _populate(store, [_request("req-active"), _request("req-covered", command="cat ~/.pypirc")])
+    _populate(
+        store,
+        [
+            _request("req-active", artifact_id="codex:project:mcp:req-active"),
+            _request("req-covered", command="cat ~/.pypirc", artifact_id="codex:project:mcp:req-covered"),
+        ],
+    )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
 
