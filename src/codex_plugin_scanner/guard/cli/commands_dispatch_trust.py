@@ -13,8 +13,9 @@ from ..adapters.base import HarnessContext
 from ..config import GuardConfig
 from ..daemon.manager import _guard_daemon_url_port, load_guard_daemon_url, read_approval_center_locator
 from ..local_trust_contract import TrustStatus
+from ..local_trust_controller import macos_native_backend_supported, resolve_passive_trust_state
 from ..policy_integrity import is_remote_policy_source
-from ..store import GuardStore, SystemKeyringSecretStore
+from ..store import GuardStore
 from .commands_support_interaction import _emit
 
 
@@ -30,49 +31,9 @@ def _require_guard_store(store: GuardStore | None) -> GuardStore:
     return _shared_require_guard_store(store)
 
 
-def _degraded_safe_trust_status() -> dict[str, object]:
-    return TrustStatus(
-        runtime_protection="degraded",
-        remembered_rules="disabled_degraded",
-        cloud_policies="setup_unavailable",
-        backend="degraded-safe",
-        setup_available=False,
-    ).to_dict()
-
-
-def _unsupported_backend_payload(*, command: str, backend: str) -> dict[str, object]:
-    return {
-        "generated_at": _now(),
-        "command": command,
-        "backend_requested": backend,
-        "backend": backend,
-        "runtime_protection": "degraded",
-        "remembered_rules": "disabled_degraded",
-        "cloud_policies": "setup_unavailable",
-        "degraded_reasons": ["trust_backend_unavailable"],
-        "degraded_reason_labels": {"trust_backend_unavailable": "Local trust backend unavailable"},
-        "setup_available": backend == "macos-native",
-        "no_ui_passive": True,
-        "passive_prompt_allowed": False,
-        "one_time_approvals": "available",
-        "durable_local_rules": "limited",
-        "cloud_policy_status": "setup_unavailable",
-        "error": (
-            f"Backend {backend!r} is not available for passive {command}. "
-            "Guard will not probe it in the background because that could open an OS credential prompt."
-        ),
-        "next_action": "Use --backend auto or run an explicit setup command when a backend is available.",
-    }
-
-
 def _trust_status_payload(store: GuardStore, *, command: str, backend: str) -> dict[str, object]:
-    if backend == "degraded-safe":
-        trust_status = _degraded_safe_trust_status()
-    else:
-        status_payload = store.get_policy_integrity_status()
-        trust_status = status_payload.get("trust_status")
-        if not isinstance(trust_status, dict):
-            trust_status = TrustStatus.from_policy_integrity_state(status_payload).to_dict()
+    resolved = resolve_passive_trust_state(store, backend_requested=backend)
+    trust_status = resolved.trust_status.to_dict()
     degraded_reasons = trust_status.get("degraded_reasons")
     reasons = (
         [reason for reason in degraded_reasons if isinstance(reason, str)] if isinstance(degraded_reasons, list) else []
@@ -80,11 +41,31 @@ def _trust_status_payload(store: GuardStore, *, command: str, backend: str) -> d
     runtime_protection = str(trust_status.get("runtime_protection") or "unknown")
     remembered_rules = str(trust_status.get("remembered_rules") or "unknown")
     cloud_policies = str(trust_status.get("cloud_policies") or "unknown")
+    actual_backend = trust_status.get("backend")
+    backend_name = (
+        str(actual_backend)
+        if isinstance(actual_backend, str) and actual_backend and actual_backend != "unknown"
+        else resolved.backend_selected
+    )
+    mode = resolved.mode
+    if mode == "unsupported":
+        message = "This local trust backend is unsupported on this platform. Runtime blocking stays active."
+    elif mode == "setup_required":
+        message = "Local trust setup is available. Broad remembered local rules stay limited until you finish it."
+    elif remembered_rules != "enforced":
+        message = (
+            "Guard is blocking risky actions. Broad remembered local rules are limited until local trust is protected."
+        )
+    else:
+        message = "Guard local trust is protected. Remembered local rules are enforced."
     return {
         "generated_at": _now(),
         "command": command,
-        "backend_requested": backend,
-        "backend": trust_status.get("backend") or "unknown",
+        "mode": mode,
+        "backend_requested": resolved.backend_requested,
+        "backend_selected": resolved.backend_selected,
+        "backend_supported": resolved.backend_supported,
+        "backend": backend_name or "unknown",
         "runtime_protection": runtime_protection,
         "remembered_rules": remembered_rules,
         "cloud_policies": cloud_policies,
@@ -96,11 +77,7 @@ def _trust_status_payload(store: GuardStore, *, command: str, backend: str) -> d
         "one_time_approvals": "available",
         "durable_local_rules": "enforced" if remembered_rules == "enforced" else "limited",
         "cloud_policy_status": cloud_policies,
-        "message": (
-            "Guard is blocking risky actions. Broad remembered local rules are limited until local trust is protected."
-            if remembered_rules != "enforced"
-            else "Guard local trust is protected. Remembered local rules are enforced."
-        ),
+        "message": message,
     }
 
 
@@ -303,15 +280,6 @@ def build_trust_explain_payload(store: GuardStore, *, rule_id: int, backend: str
     }
 
 
-def _macos_native_backend_supported(store: GuardStore) -> bool:
-    secret_store = getattr(store, "_policy_integrity_secret_store", None)
-    return (
-        sys.platform == "darwin"
-        and isinstance(secret_store, SystemKeyringSecretStore)
-        and secret_store._supports_native_macos_security_reads()
-    )
-
-
 def _run_guard_trust_command(
     args: argparse.Namespace,
     *,
@@ -327,10 +295,6 @@ def _run_guard_trust_command(
     store = _require_guard_store(store)
     trust_command = getattr(args, "trust_command", None) or "status"
     backend = str(getattr(args, "backend", None) or "auto")
-    if backend == "macos-native" and not _macos_native_backend_supported(store):
-        payload = _unsupported_backend_payload(command=trust_command, backend=backend)
-        _emit(f"trust.{trust_command}", payload, getattr(args, "json", False))
-        return 2
     payload = (
         build_trust_doctor_payload(store, backend=backend)
         if trust_command == "doctor"
@@ -345,8 +309,8 @@ def _run_guard_trust_command(
             _emit("trust.test", payload, getattr(args, "json", False))
             return 2
         payload["probe"] = "passive_no_ui"
-        payload["ok"] = payload["passive_prompt_allowed"] is False
-        payload["trust_health"] = "protected" if payload["remembered_rules"] == "enforced" else "degraded_safe"
+        payload["ok"] = payload["passive_prompt_allowed"] is False and payload.get("mode") != "unsupported"
+        payload["trust_health"] = str(payload.get("mode") or "degraded_safe")
         _emit("trust.test", payload, getattr(args, "json", False))
         return 0
     if trust_command == "explain":
@@ -392,7 +356,7 @@ def _run_guard_trust_command(
             )
             _emit(f"trust.{trust_command}", payload, getattr(args, "json", False))
             return 2
-        if not _macos_native_backend_supported(store):
+        if not macos_native_backend_supported(store):
             payload["error"] = (
                 f"macOS native trust {trust_command} is unavailable. "
                 "Guard will not fall back to a prompt-capable backend."
