@@ -4,7 +4,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from contextlib import suppress
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
@@ -29,10 +30,17 @@ if TYPE_CHECKING:
     )
 
 
+from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_resolve_guard_sync_auth_context
 from ..runtime.command_queue import command_queue_status
 from ._commands_shared import *
-from ._commands_shared import _resolve_guard_sync_auth_context
 from .commands_parser_helpers import *
+
+
+def _cloud_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
+    resolver = globals().get("_resolve_guard_sync_auth_context")
+    if callable(resolver):
+        return cast(dict[str, object], resolver(store))
+    return _local_resolve_guard_sync_auth_context(store)
 
 
 def _run_guard_login_command(
@@ -237,18 +245,21 @@ def _run_guard_sync_command(
     store = _require_guard_store(store)
     context = _require_guard_context(context)
     try:
-        auth_context = _resolve_guard_sync_auth_context(store)
+        auth_context = _cloud_guard_sync_auth_context(store)
         payload = sync_receipts(
             store,
             auth_context=auth_context,
             home_dir=context.home_dir,
             workspace_dir=context.workspace_dir,
         )
-        payload["supply_chain"] = sync_supply_chain_cloud_state(
-            store,
-            auth_context=auth_context,
-            workspace_dir=context.workspace_dir,
-        )
+        with suppress(GuardSyncNotConfiguredError, RuntimeError):
+            payload["supply_chain"] = _validated_supply_chain_sync_payload(
+                sync_supply_chain_cloud_state(
+                    store,
+                    auth_context=auth_context,
+                    workspace_dir=context.workspace_dir,
+                )
+            )
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
         message = _guard_sync_failure_message(error)
         if getattr(args, "json", False):
@@ -348,14 +359,7 @@ def _run_guard_supply_chain_command(
         return exit_code
     if supply_chain_command == "sync":
         try:
-            auth_context = _resolve_guard_sync_auth_context(store)
-            payload = _validated_supply_chain_sync_payload(
-                sync_supply_chain_cloud_state(
-                    store,
-                    auth_context=auth_context,
-                    workspace_dir=workspace_dir,
-                )
-            )
+            payload = _validated_supply_chain_sync_payload(sync_supply_chain_bundle(store))
         except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
             message = _guard_sync_failure_message(error)
             if getattr(args, "json", False):

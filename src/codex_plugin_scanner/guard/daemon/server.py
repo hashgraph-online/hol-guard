@@ -6,6 +6,7 @@ import argparse
 import base64
 import hashlib
 import hmac
+import inspect
 import io
 import json
 import mimetypes
@@ -548,7 +549,10 @@ def _run_headless_cloud_sync(
     summary: dict[str, object]
     try:
         auth_context = _resolve_guard_sync_auth_context(store)
-        sync_payload = sync_local_guard_cloud_proof(store, auth_context=auth_context)
+        sync_payload = _sync_local_guard_cloud_proof_with_optional_auth_context(
+            store,
+            auth_context,
+        )
         supply_chain_payload = _sync_supply_chain_cloud_state_with_optional_auth_context(
             store,
             auth_context,
@@ -963,13 +967,29 @@ def _sync_supply_chain_cloud_state_with_optional_auth_context(
     *,
     workspace_dir: Path | None = None,
 ) -> dict[str, object]:
-    if auth_context is not None:
-        if workspace_dir is not None:
-            return sync_supply_chain_cloud_state(store, auth_context=auth_context, workspace_dir=workspace_dir)
-        return sync_supply_chain_cloud_state(store, auth_context=auth_context)
-    if workspace_dir is not None:
-        return sync_supply_chain_cloud_state(store, workspace_dir=workspace_dir)
-    return sync_supply_chain_cloud_state(store)
+    try:
+        parameters = inspect.signature(sync_supply_chain_cloud_state).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+    kwargs: dict[str, Any] = {}
+    if auth_context is not None and "auth_context" in parameters:
+        kwargs["auth_context"] = auth_context
+    if workspace_dir is not None and "workspace_dir" in parameters:
+        kwargs["workspace_dir"] = workspace_dir
+    return sync_supply_chain_cloud_state(store, **kwargs)
+
+
+def _sync_local_guard_cloud_proof_with_optional_auth_context(
+    store: GuardStore,
+    auth_context: dict[str, object] | None,
+) -> dict[str, object]:
+    try:
+        parameters = inspect.signature(sync_local_guard_cloud_proof).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+    if auth_context is not None and "auth_context" in parameters:
+        return sync_local_guard_cloud_proof(store, auth_context=auth_context)
+    return sync_local_guard_cloud_proof(store)
 
 
 def _finalize_daemon_guard_connect_payload(
