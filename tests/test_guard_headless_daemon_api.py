@@ -65,6 +65,12 @@ _REVIEW_PUBLIC_KEY_PEM = (
 @pytest.fixture(autouse=True)
 def _default_store_platform(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(guard_store_module.sys, "platform", "linux", raising=False)
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_test_sync_auth_context_override",
+        None,
+        raising=False,
+    )
 
 
 @pytest.fixture(autouse=True)
