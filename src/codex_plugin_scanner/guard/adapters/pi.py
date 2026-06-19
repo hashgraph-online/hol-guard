@@ -317,53 +317,53 @@ class PiHarnessAdapter(HarnessAdapter):
             "function runGuard(payload: Record<string, unknown>): GuardResponse {\n"
             "  const args = [...GUARD_ARGS];\n"
             "  const workspace = process.cwd();\n"
-            "  if (workspace) args.push(\"--workspace\", workspace);\n"
-            "  const result = spawnSync(\"hol-guard\", args, {\n"
+            '  if (workspace) args.push("--workspace", workspace);\n'
+            '  const result = spawnSync("hol-guard", args, {\n'
             "    input: `${JSON.stringify(payload)}\\n`,\n"
-            "    encoding: \"utf-8\",\n"
+            '    encoding: "utf-8",\n'
             "  });\n"
-            "  if (result.error) return { decision: \"allow\" };\n"
-            "  const lines = (result.stdout ?? \"\").split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);\n"
+            '  if (result.error) return { decision: "allow" };\n'
+            '  const lines = (result.stdout ?? "").split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);\n'
             "  const lastLine = lines.length > 0 ? lines[lines.length - 1] : null;\n"
             "  if (lastLine) {\n"
             "    try {\n"
             "      const parsed = JSON.parse(lastLine) as GuardResponse;\n"
-            "      if (parsed && typeof parsed === \"object\") return parsed;\n"
+            '      if (parsed && typeof parsed === "object") return parsed;\n'
             "    } catch {}\n"
             "  }\n"
             "  if ((result.status ?? 0) !== 0) {\n"
             "    return {\n"
-            "      decision: \"deny\",\n"
-            "      reason: (result.stderr ?? \"\").trim() || \"Blocked by HOL Guard.\",\n"
+            '      decision: "deny",\n'
+            '      reason: (result.stderr ?? "").trim() || "Blocked by HOL Guard.",\n'
             "    };\n"
             "  }\n"
-            "  return { decision: \"allow\" };\n"
+            '  return { decision: "allow" };\n'
             "}\n"
             "\n"
             "export default function (pi: ExtensionAPI) {\n"
-            "  pi.on(\"input\", async (event, ctx) => {\n"
-            "    if (event.source === \"extension\") return { action: \"continue\" };\n"
-            "    const response = runGuard({ hook_event_name: \"UserPromptSubmit\", prompt: event.text });\n"
-            "    if (response.decision === \"deny\") {\n"
-            "      ctx.ui.notify(response.reason ?? \"Blocked by HOL Guard.\", \"warning\");\n"
-            "      return { action: \"handled\" };\n"
+            '  pi.on("input", async (event, ctx) => {\n'
+            '    if (event.source === "extension") return { action: "continue" };\n'
+            '    const response = runGuard({ hook_event_name: "UserPromptSubmit", prompt: event.text });\n'
+            '    if (response.decision === "deny") {\n'
+            '      ctx.ui.notify(response.reason ?? "Blocked by HOL Guard.", "warning");\n'
+            '      return { action: "handled" };\n'
             "    }\n"
-            "    return { action: \"continue\" };\n"
+            '    return { action: "continue" };\n'
             "  });\n"
-            "  pi.on(\"tool_call\", async (event, ctx) => {\n"
+            '  pi.on("tool_call", async (event, ctx) => {\n'
             "    const toolInput =\n"
             "      (event as { input?: Record<string, unknown> }).input ??\n"
             "      (event as { toolInput?: Record<string, unknown> }).toolInput ??\n"
             "      (event as { arguments?: Record<string, unknown> }).arguments ??\n"
             "      {};\n"
             "    const response = runGuard({\n"
-            "      hook_event_name: \"PreToolUse\",\n"
+            '      hook_event_name: "PreToolUse",\n'
             "      tool_name: event.toolName,\n"
             "      tool_input: toolInput,\n"
             "    });\n"
-            "    if (response.decision === \"deny\") {\n"
-            "      ctx.ui.notify(response.reason ?? \"Blocked by HOL Guard.\", \"warning\");\n"
-            "      return { block: true, reason: response.reason ?? \"Blocked by HOL Guard.\" };\n"
+            '    if (response.decision === "deny") {\n'
+            '      ctx.ui.notify(response.reason ?? "Blocked by HOL Guard.", "warning");\n'
+            '      return { block: true, reason: response.reason ?? "Blocked by HOL Guard." };\n'
             "    }\n"
             "    return undefined;\n"
             "  });\n"
