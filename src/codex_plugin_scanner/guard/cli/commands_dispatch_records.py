@@ -260,7 +260,7 @@ def _run_guard_policies_command(
             _emit(
                 "policies",
                 {
-                    "error": "Choose either --all or --harness <name> when clearing Guard policy decisions.",
+                    "error": "Choose either --all or --harness <name> when clearing Guard rules.",
                     "cleared": 0,
                     "harness": harness,
                     "source": getattr(args, "source", None),
@@ -272,7 +272,7 @@ def _run_guard_policies_command(
             _emit(
                 "policies",
                 {
-                    "error": "Choose --harness <name> or --all when clearing Guard policy decisions.",
+                    "error": "Choose --harness <name> or --all when clearing Guard rules.",
                     "cleared": 0,
                 },
                 getattr(args, "json", False),

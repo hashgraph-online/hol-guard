@@ -2791,7 +2791,7 @@ class TestGuardApprovals:
         output = capsys.readouterr().out
 
         assert rc == 0
-        assert "Guard policy clear" in output
+        assert "Guard rules clear" in output
         assert "cleared 1 decision" in output
         assert store.list_policy_decisions("claude-code") == []
 
@@ -2800,8 +2800,45 @@ class TestGuardApprovals:
         output = capsys.readouterr().out
 
         assert rc == 2
-        assert "Guard policy clear" in output
+        assert "Guard rules clear" in output
         assert "Choose --harness <name> or --all" in output
+
+    def test_guard_policies_list_uses_remembered_rule_copy(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        store.upsert_policy(
+            PolicyDecision(
+                harness="codex",
+                scope="artifact",
+                action="allow",
+                artifact_id="codex:project:package-request:pnpm",
+                artifact_hash="hash-pnpm",
+                reason="approved",
+                source="manual",
+            ),
+            "2026-04-23T00:00:00+00:00",
+        )
+        store.replace_remote_policies(
+            [
+                PolicyDecision(
+                    harness="codex",
+                    scope="publisher",
+                    action="block",
+                    publisher="npm",
+                    reason="cloud bundle block",
+                    source="cloud-sync",
+                )
+            ],
+            "2026-04-23T00:01:00+00:00",
+            remote_write_authorized=True,
+        )
+
+        rc = main(["guard", "policies", "--home", str(home_dir)])
+        output = capsys.readouterr().out
+
+        assert rc == 0
+        assert "Guard remembered rules and Cloud policies" in output
+        assert "policy_decisions" not in output
 
     def test_guard_policies_clear_rejects_all_with_harness(self, tmp_path, capsys):
         rc = main(

@@ -194,6 +194,12 @@ class _RecoveredOAuthLocalCredentialInputs(TypedDict):
     runtime_label: str | None
 
 
+class PolicyDecisionLookupResult(TypedDict):
+    decision: dict[str, object] | None
+    ignored_local_integrity: dict[str, object] | None
+    trust_status: dict[str, object]
+
+
 _POLICY_INTEGRITY_KEY_REF = "guard-policy-integrity-key"
 _POLICY_INTEGRITY_CONTROL_REF = "guard-policy-integrity-control"
 _POLICY_INTEGRITY_SERVICE_NAME = "hol-guard.policy-integrity"
@@ -3109,17 +3115,18 @@ class GuardStore:
         publisher: str | None = None,
         now: str | None = None,
     ) -> str | None:
-        decision = self.resolve_policy_decision(
+        lookup = self.resolve_policy_decision_lookup(
             harness,
             artifact_id,
-            artifact_hash,
-            workspace,
-            publisher,
-            now,
+            artifact_hash=artifact_hash,
+            workspace=workspace,
+            publisher=publisher,
+            now=now,
         )
+        decision = lookup["decision"]
         return str(decision["action"]) if decision is not None else None
 
-    def resolve_policy_decision(
+    def resolve_policy_decision_lookup(
         self,
         harness: str,
         artifact_id: str | None,
@@ -3128,7 +3135,7 @@ class GuardStore:
         publisher: str | None = None,
         now: str | None = None,
         runtime_exact_match_context: str | None = None,
-    ) -> dict[str, object] | None:
+    ) -> PolicyDecisionLookupResult:
         current_time = now or _now()
         workspace_key = _workspace_policy_key(workspace)
         action_family_key = _artifact_family_key(artifact_id)
@@ -3139,8 +3146,10 @@ class GuardStore:
         )
         events: list[tuple[str, dict[str, object]]] = []
         selected_payload: dict[str, object] | None = None
+        ignored_local_integrity: dict[str, object] | None = None
         with self._connect() as connection:
             state = self._refresh_policy_integrity_state(connection, now=current_time, create_key=True)
+            trust_status = TrustStatus.from_policy_integrity_state(state).to_dict()
             key, key_id = self._policy_integrity_secret_material(create=True)
             rows = connection.execute(
                 """
@@ -3208,7 +3217,11 @@ class GuardStore:
                 ),
             ).fetchall()
             if not rows:
-                return None
+                return {
+                    "decision": None,
+                    "ignored_local_integrity": None,
+                    "trust_status": trust_status,
+                }
             for candidate in rows:
                 if _scoped_runtime_row_requires_exact_match(
                     scope=str(candidate["scope"]),
@@ -3240,6 +3253,20 @@ class GuardStore:
                         integrity_result=integrity_result,
                         state=state,
                     )
+                    if is_remote_policy_source(str(candidate["source"])):
+                        events.append(
+                            (
+                                "policy.cloud.applied",
+                                {
+                                    "decision_id": int(candidate["decision_id"]),
+                                    "harness": str(candidate["harness"]),
+                                    "artifact_id": candidate["artifact_id"],
+                                    "scope": str(candidate["scope"]),
+                                    "source": str(candidate["source"]),
+                                    "action": str(candidate["action"]),
+                                },
+                            )
+                        )
                     if _is_approval_gate_one_shot_policy(candidate):
                         connection.execute(
                             "delete from policy_decisions where decision_id = ?",
@@ -3258,6 +3285,32 @@ class GuardStore:
                         },
                     )
                 )
+                if ignored_local_integrity is None and not is_remote_policy_source(str(candidate["source"])):
+                    ignored_local_integrity = {
+                        "decision_id": int(candidate["decision_id"]),
+                        "harness": str(candidate["harness"]),
+                        "artifact_id": candidate["artifact_id"],
+                        "scope": str(candidate["scope"]),
+                        "source": str(candidate["source"]),
+                        "integrity_status": integrity_result.status,
+                        "integrity_message": integrity_result.message,
+                        "trust_status": trust_status,
+                    }
+                if not is_remote_policy_source(str(candidate["source"])):
+                    events.append(
+                        (
+                            "rule.ignored.local_integrity",
+                            {
+                                "decision_id": int(candidate["decision_id"]),
+                                "harness": str(candidate["harness"]),
+                                "artifact_id": candidate["artifact_id"],
+                                "scope": str(candidate["scope"]),
+                                "source": str(candidate["source"]),
+                                "integrity_status": integrity_result.status,
+                                "message": integrity_result.message,
+                            },
+                        )
+                    )
                 _store_logger.warning(
                     "Guard ignored local policy decision %s because integrity status was %s.",
                     candidate["decision_id"],
@@ -3265,7 +3318,32 @@ class GuardStore:
                 )
         for event_name, payload in events:
             self.add_event(event_name, payload, current_time)
-        return selected_payload
+        return {
+            "decision": selected_payload,
+            "ignored_local_integrity": ignored_local_integrity,
+            "trust_status": trust_status,
+        }
+
+    def resolve_policy_decision(
+        self,
+        harness: str,
+        artifact_id: str | None,
+        artifact_hash: str | None = None,
+        workspace: str | None = None,
+        publisher: str | None = None,
+        now: str | None = None,
+        runtime_exact_match_context: str | None = None,
+    ) -> dict[str, object] | None:
+        lookup = self.resolve_policy_decision_lookup(
+            harness,
+            artifact_id,
+            artifact_hash=artifact_hash,
+            workspace=workspace,
+            publisher=publisher,
+            now=now,
+            runtime_exact_match_context=runtime_exact_match_context,
+        )
+        return lookup["decision"]
 
     @staticmethod
     def _normalized_policy_keys(decision: PolicyDecision) -> tuple[str | None, str | None, str | None, str | None]:

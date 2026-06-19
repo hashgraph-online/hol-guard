@@ -375,7 +375,8 @@ def apply_approval_resolution(
         approval_gate_grant=approval_gate_grant,
         now=resolved_at,
     )
-    if persist_policy is True or (persist_policy is None and scope != "artifact"):
+    persisted_rule = persist_policy is True or (persist_policy is None and scope != "artifact")
+    if persisted_rule:
         store.upsert_policy(decision, resolved_at, approval_gate_grant=resolved_gate_grant)
     elif persist_policy is None and scope == "artifact":
         store.upsert_policy(
@@ -421,7 +422,14 @@ def apply_approval_resolution(
             )
             if resolved_scope_ids:
                 _refresh_queue_result(store, result, resolved_scope_ids)
-        _record_resolution_event(store, request_id, action, scope, resolved_at)
+        _record_resolution_event(
+            store,
+            request_id,
+            action,
+            scope,
+            resolved_at,
+            persisted_rule=persisted_rule,
+        )
         return result
     resolved_ids: list[str] = []
     if resolve_scope_matches:
@@ -453,7 +461,14 @@ def apply_approval_resolution(
     updated = store.get_approval_request(request_id)
     if updated is None:
         raise ValueError(f"Approval request disappeared: {request_id}")
-    _record_resolution_event(store, request_id, action, scope, resolved_at)
+    _record_resolution_event(
+        store,
+        request_id,
+        action,
+        scope,
+        resolved_at,
+        persisted_rule=persisted_rule,
+    )
     return updated
 
 
@@ -566,9 +581,22 @@ def _string_or_none(value: object) -> str | None:
     return None
 
 
-def _record_resolution_event(store: GuardStore, request_id: str, action: str, scope: str, resolved_at: str) -> None:
+def _record_resolution_event(
+    store: GuardStore,
+    request_id: str,
+    action: str,
+    scope: str,
+    resolved_at: str,
+    *,
+    persisted_rule: bool,
+) -> None:
     store.add_event(
         "approval.resolved",
+        {"request_id": request_id, "action": action, "scope": scope, "persisted_rule": persisted_rule},
+        resolved_at,
+    )
+    store.add_event(
+        "rule.remembered.local" if persisted_rule else "approval.once",
         {"request_id": request_id, "action": action, "scope": scope},
         resolved_at,
     )

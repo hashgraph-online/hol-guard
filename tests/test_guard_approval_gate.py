@@ -274,6 +274,8 @@ def test_approval_gate_approve_once_does_not_persist_policy(
         )
         is None
     )
+    once_events = store.list_events(limit=20, event_name="approval.once")
+    assert any(event["payload"]["request_id"] == "req-once" for event in once_events)
     assert store.list_policy_decisions("codex") == []
 
 
@@ -318,6 +320,8 @@ def test_approval_gate_artifact_remember_persists_policy(
     assert second_retry is not None
     assert first_retry["action"] == "allow"
     assert second_retry["action"] == "allow"
+    remembered_events = store.list_events(limit=20, event_name="rule.remembered.local")
+    assert any(event["payload"]["request_id"] == "req-remember" for event in remembered_events)
 
 
 def test_approval_gate_cooldown_works_expires_and_revokes(tmp_path: Path) -> None:
