@@ -31,6 +31,7 @@ from codex_plugin_scanner.guard.daemon.server import _headless_action_error_payl
 from codex_plugin_scanner.guard.local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
+    policy_bundle_keyring_payload,
     policy_bundle_verification_key_from_public_key,
 )
 from codex_plugin_scanner.guard.review_contracts import (
@@ -100,6 +101,11 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
         "access_token": token,
         "dpop_key_material": None,
     }
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        _review_trusted_keyring_payload(workspace_id=workspace_id),
+        now,
+    )
 
 
 def _read_json_response_details(
@@ -256,6 +262,24 @@ def _review_verification_keys() -> list[dict[str, object]]:
             public_key_pem=_REVIEW_PUBLIC_KEY_PEM,
         ).to_dict()
     ]
+
+
+def _review_trusted_keyring_payload(
+    *,
+    workspace_id: str | None = "workspace-1",
+) -> dict[str, object]:
+    return policy_bundle_keyring_payload(
+        tuple(
+            policy_bundle_verification_key_from_public_key(
+                key_id=item["keyId"],
+                public_key_pem=str(item["publicKeyPem"]),
+                state=str(item["state"]),
+                valid_until=str(item["validUntil"]) if item["validUntil"] is not None else None,
+            )
+            for item in _review_verification_keys()
+        ),
+        workspace_id=workspace_id,
+    )
 
 
 def _sign_review_payload(payload: dict[str, object]) -> str:

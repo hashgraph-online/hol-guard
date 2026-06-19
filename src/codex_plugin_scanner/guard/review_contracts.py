@@ -14,7 +14,14 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
-from .policy_bundle_trusted_keys import PolicyBundleVerificationKey
+from .policy_bundle_trusted_keys import (
+    PolicyBundleVerificationKey,
+    merge_policy_bundle_trusted_keys,
+    policy_bundle_keys_from_supply_chain_keyring,
+    resolve_policy_bundle_signing_key,
+    safe_load_policy_bundle_verification_keys,
+    signing_key_is_current,
+)
 
 _LOCAL_REVIEW_REQUEST_CONTRACT_VERSION = "guard.local-review-request.v1"
 _REMOTE_APPROVAL_CONTRACT_VERSION = "guard.remote-approval.v1"
@@ -25,6 +32,7 @@ _REMOTE_APPROVAL_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
 _DECISION_MEMORY_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
 _CLAIM_HASH_KEYS = ("claimHash",)
 _SIGNED_PAYLOAD_STRIP_KEYS = ("payloadHash", "signature", "signatureAlgorithm", "verificationKeys", "bundleHash")
+_GUARD_REVIEW_VERIFICATION_KEYRING_SYNC_KEY = "guard_review_verification_keyring"
 
 
 class GuardReviewContractError(ValueError):
@@ -116,21 +124,42 @@ def _verification_keys_from_payload(value: object) -> tuple[PolicyBundleVerifica
     return tuple(parsed)
 
 
-def _resolve_signing_key(
+def _anchored_review_verification_keys(store) -> tuple[PolicyBundleVerificationKey, ...]:
+    return merge_policy_bundle_trusted_keys(
+        safe_load_policy_bundle_verification_keys(
+            store.get_sync_payload(_GUARD_REVIEW_VERIFICATION_KEYRING_SYNC_KEY)
+        ),
+        safe_load_policy_bundle_verification_keys(store.get_sync_payload("policy_bundle_keyring")),
+        policy_bundle_keys_from_supply_chain_keyring(
+            store.get_sync_payload("supply_chain_bundle_keyring")
+        ),
+    )
+
+
+def _resolve_anchored_signing_key(
     *,
+    advertised_keys: tuple[PolicyBundleVerificationKey, ...],
+    anchored_keys: tuple[PolicyBundleVerificationKey, ...],
     key_id: str,
-    verification_keys: tuple[PolicyBundleVerificationKey, ...],
 ) -> PolicyBundleVerificationKey:
-    for key in verification_keys:
-        if key.key_id == key_id:
-            return key
-    raise GuardReviewContractError("unknown_signing_key")
+    signing_key = resolve_policy_bundle_signing_key(key_id, anchored_keys)
+    if signing_key is None:
+        raise GuardReviewContractError("unknown_signing_key")
+    advertised_key = resolve_policy_bundle_signing_key(key_id, advertised_keys)
+    if advertised_key is None:
+        raise GuardReviewContractError("missing_signing_key")
+    if advertised_key.fingerprint_sha256 != signing_key.fingerprint_sha256:
+        raise GuardReviewContractError("untrusted_signing_key")
+    if not signing_key_is_current(signing_key):
+        raise GuardReviewContractError("expired_signing_key")
+    return signing_key
 
 
 def _verify_signed_payload(
     payload: dict[str, object],
     *,
     signature_algorithm: str,
+    store,
 ) -> None:
     if signature_algorithm not in {
         _REMOTE_APPROVAL_SIGNATURE_ALGORITHM,
@@ -147,8 +176,12 @@ def _verify_signed_payload(
             key_id = _non_empty_string(verifier.get("keyId"))
     if key_id is None:
         raise GuardReviewContractError("missing_signing_key_id")
-    verification_keys = _verification_keys_from_payload(payload.get("verificationKeys"))
-    signing_key = _resolve_signing_key(key_id=key_id, verification_keys=verification_keys)
+    advertised_keys = _verification_keys_from_payload(payload.get("verificationKeys"))
+    signing_key = _resolve_anchored_signing_key(
+        advertised_keys=advertised_keys,
+        anchored_keys=_anchored_review_verification_keys(store),
+        key_id=key_id,
+    )
     try:
         public_key = serialization.load_pem_public_key(signing_key.public_key_pem.encode("utf-8"))
     except (UnsupportedAlgorithm, ValueError, TypeError) as error:
@@ -180,8 +213,9 @@ def guard_review_oauth_metadata(store) -> GuardReviewOAuthMetadata:
     workspace_id = _non_empty_string(credentials.get("workspace_id"))
     if installation_id is None or machine_id is None or workspace_id is None:
         raise GuardReviewContractError("missing_oauth_binding")
+    device_id = _non_empty_string(credentials.get("device_id")) or machine_id
     return GuardReviewOAuthMetadata(
-        device_id=machine_id,
+        device_id=device_id,
         grant_id=_non_empty_string(credentials.get("grant_id")),
         installation_id=installation_id,
         machine_id=machine_id,
@@ -334,7 +368,7 @@ def payload_hash_for_remote_approval_envelope(envelope: dict[str, object]) -> st
     return _sha256_hex(_canonical_signed_payload(envelope))
 
 
-def validated_remote_approval_envelope(envelope: dict[str, object]) -> dict[str, object]:
+def validated_remote_approval_envelope(envelope: dict[str, object], *, store) -> dict[str, object]:
     if envelope.get("contractVersion") != _REMOTE_APPROVAL_CONTRACT_VERSION:
         raise GuardReviewContractError("unsupported_remote_approval_contract")
     if envelope.get("scope") != _REMOTE_APPROVAL_REQUIRED_SCOPE:
@@ -349,6 +383,7 @@ def validated_remote_approval_envelope(envelope: dict[str, object]) -> dict[str,
     _verify_signed_payload(
         envelope,
         signature_algorithm=_non_empty_string(envelope.get("signatureAlgorithm")) or "",
+        store=store,
     )
     return envelope
 
@@ -387,7 +422,7 @@ def payload_hash_for_decision_memory_bundle(bundle: dict[str, object]) -> str:
     return _sha256_hex(_canonical_signed_payload(bundle))
 
 
-def validated_decision_memory_bundle(bundle: dict[str, object]) -> dict[str, object]:
+def validated_decision_memory_bundle(bundle: dict[str, object], *, store) -> dict[str, object]:
     if bundle.get("contractVersion") != _DECISION_MEMORY_BUNDLE_CONTRACT_VERSION:
         raise GuardReviewContractError("unsupported_memory_bundle_contract")
     issued_at = _parse_iso_timestamp(bundle.get("issuedAt"), field_name="issued_at")
@@ -403,8 +438,27 @@ def validated_decision_memory_bundle(bundle: dict[str, object]) -> dict[str, obj
     _verify_signed_payload(
         bundle,
         signature_algorithm=_non_empty_string(bundle.get("signatureAlgorithm")) or "",
+        store=store,
     )
     return bundle
+
+
+def _policy_version_ordering_key(value: str) -> tuple[datetime, str] | None:
+    prefix, separator, suffix = value.partition(":")
+    if not separator:
+        return None
+    try:
+        return (_parse_iso_timestamp(prefix, field_name="policy_version"), suffix)
+    except GuardReviewContractError:
+        return None
+
+
+def _policy_version_is_stale(current: str, previous: str) -> bool:
+    current_key = _policy_version_ordering_key(current)
+    previous_key = _policy_version_ordering_key(previous)
+    if current_key is not None and previous_key is not None:
+        return current_key <= previous_key
+    return current <= previous
 
 
 def validate_decision_memory_bundle_target(
@@ -417,7 +471,7 @@ def validate_decision_memory_bundle_target(
         raise GuardReviewContractError("decision_memory_workspace_mismatch")
     if last_policy_version is not None:
         current = _non_empty_string(bundle.get("policyVersion"))
-        if current is not None and current <= last_policy_version:
+        if current is not None and _policy_version_is_stale(current, last_policy_version):
             raise GuardReviewContractError("decision_memory_policy_version_stale")
     rules = bundle.get("memoryRules")
     revocations = bundle.get("revocations")

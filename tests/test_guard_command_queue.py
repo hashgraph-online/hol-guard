@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.daemon.command_queue_worker import (
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard import review_contracts as review_contracts_module
 from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
+    policy_bundle_keyring_payload,
     policy_bundle_verification_key_from_public_key,
 )
 from codex_plugin_scanner.guard.review_contracts import (
@@ -54,7 +55,9 @@ def _default_store_platform(monkeypatch: pytest.MonkeyPatch) -> None:
 class FakeStore:
     def __init__(self, guard_home: Path) -> None:
         self.guard_home = guard_home
-        self.payloads: dict[str, dict[str, object] | list[object]] = {}
+        self.payloads: dict[str, dict[str, object] | list[object]] = {
+            "policy_bundle_keyring": _review_trusted_keyring_payload(),
+        }
 
     def get_sync_payload(self, key: str) -> dict[str, object] | list[object] | None:
         return self.payloads.get(key)
@@ -113,6 +116,18 @@ class FakeStore:
     ) -> None:
         del decisions, generated_at, remote_write_authorized
 
+    def list_approval_requests(
+        self,
+        *,
+        status: str | None = "pending",
+        harness: str | None = None,
+        limit: int | None = 50,
+        cursor: str | None = None,
+        search: str | None = None,
+    ) -> list[dict[str, object]]:
+        del status, harness, limit, cursor, search
+        return []
+
 
 def _review_verification_keys() -> list[dict[str, object]]:
     return [
@@ -121,6 +136,24 @@ def _review_verification_keys() -> list[dict[str, object]]:
             public_key_pem=_REVIEW_PUBLIC_KEY_PEM,
         ).to_dict()
     ]
+
+
+def _review_trusted_keyring_payload(
+    *,
+    workspace_id: str | None = "workspace-1",
+) -> dict[str, object]:
+    return policy_bundle_keyring_payload(
+        tuple(
+            policy_bundle_verification_key_from_public_key(
+                key_id=item["keyId"],
+                public_key_pem=str(item["publicKeyPem"]),
+                state=str(item["state"]),
+                valid_until=str(item["validUntil"]) if item["validUntil"] is not None else None,
+            )
+            for item in _review_verification_keys()
+        ),
+        workspace_id=workspace_id,
+    )
 
 
 def _sign_review_payload(payload: dict[str, object]) -> str:
@@ -272,18 +305,6 @@ def _signed_decision_memory_bundle(
     bundle["signature"] = _sign_review_payload(bundle)
     return bundle
 
-    def list_approval_requests(
-        self,
-        *,
-        status: str | None = "pending",
-        harness: str | None = None,
-        limit: int | None = 50,
-        cursor: str | None = None,
-        search: str | None = None,
-    ) -> list[dict[str, object]]:
-        del status, harness, limit, cursor, search
-        return []
-
 
 def _context(tmp_path: Path) -> HarnessContext:
     return HarnessContext(
@@ -313,6 +334,109 @@ def _oauth_store(tmp_path: Path) -> GuardStore:
         now="2026-06-13T00:00:00+00:00",
     )
     return store
+
+
+def test_guard_review_oauth_metadata_prefers_explicit_device_id(tmp_path: Path) -> None:
+    class DeviceStore(FakeStore):
+        def get_oauth_local_credentials(self, *, allow_primary: bool = False) -> dict[str, object]:
+            del allow_primary
+            return {
+                "device_id": "device-9",
+                "grant_id": "grant-1",
+                "machine_id": "machine-1",
+                "runtime_id": "runtime-1",
+                "workspace_id": "workspace-1",
+            }
+
+    oauth = guard_review_oauth_metadata(DeviceStore(tmp_path / "guard-home"))
+
+    assert oauth.device_id == "device-9"
+    assert oauth.machine_id == "machine-1"
+
+
+def test_local_request_snapshot_items_continues_without_oauth_metadata(tmp_path: Path) -> None:
+    class MissingOauthStore(FakeStore):
+        def get_oauth_local_credentials(self, *, allow_primary: bool = False) -> dict[str, object]:
+            del allow_primary
+            return {}
+
+        def list_approval_requests(
+            self,
+            *,
+            status: str | None = "pending",
+            harness: str | None = None,
+            limit: int | None = 50,
+            cursor: str | None = None,
+            search: str | None = None,
+        ) -> list[dict[str, object]]:
+            del harness, limit, cursor, search
+            if status == "pending":
+                return [_approval_request_row("req-no-oauth")]
+            return []
+
+    snapshot = command_executors._local_request_snapshot_items(MissingOauthStore(tmp_path / "guard-home"))
+
+    assert len(snapshot) == 1
+    assert snapshot[0]["localRequestId"] == "req-no-oauth"
+    assert snapshot[0]["claim"] is None
+
+
+def test_local_request_snapshot_items_continues_when_request_claim_is_invalid(tmp_path: Path) -> None:
+    class MalformedRequestStore(FakeStore):
+        def list_approval_requests(
+            self,
+            *,
+            status: str | None = "pending",
+            harness: str | None = None,
+            limit: int | None = 50,
+            cursor: str | None = None,
+            search: str | None = None,
+        ) -> list[dict[str, object]]:
+            del harness, limit, cursor, search
+            if status == "pending":
+                row = _approval_request_row("req-malformed")
+                row.pop("created_at", None)
+                return [row]
+            return []
+
+    snapshot = command_executors._local_request_snapshot_items(MalformedRequestStore(tmp_path / "guard-home"))
+
+    assert len(snapshot) == 1
+    assert snapshot[0]["localRequestId"] == "req-malformed"
+    assert snapshot[0]["claim"] is None
+
+
+def test_executor_rejects_remote_approval_without_trusted_keyring(tmp_path: Path) -> None:
+    class RequestStore(FakeStore):
+        def __init__(self, guard_home: Path) -> None:
+            super().__init__(guard_home)
+            self.request_row = _approval_request_row("request-untrusted")
+
+        def get_approval_request(self, request_id: str) -> dict[str, object] | None:
+            return self.request_row if request_id == "request-untrusted" else None
+
+    store = RequestStore(tmp_path / "guard-home")
+    store.payloads["policy_bundle_keyring"] = {"contractVersion": "guard-policy-keyring.v1", "keys": []}
+
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {
+                "action": "allow_once",
+                "localRequestId": "request-untrusted",
+                "remoteApproval": _signed_remote_approval(
+                    store,
+                    store.request_row,
+                    receipt_id="receipt-untrusted",
+                ),
+            },
+        },
+        context=_context(tmp_path),
+        store=store,  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert result["failureCode"] == "unknown_signing_key"
 
 
 def _block_local_daemon_client(monkeypatch: pytest.MonkeyPatch) -> None:
