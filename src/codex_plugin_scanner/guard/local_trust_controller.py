@@ -116,11 +116,7 @@ def _trust_mode_for_backend(
     backend_supported: bool,
     passive_no_ui_safe: bool,
 ) -> LocalTrustMode:
-    if (
-        trust_status.runtime_protection == "protected"
-        and trust_status.remembered_rules == "enforced"
-        and backend_requested != "degraded-safe"
-    ):
+    if trust_status.runtime_protection == "protected" and trust_status.remembered_rules == "enforced":
         return "protected"
     if backend_requested != "auto" and not backend_supported:
         return "unsupported"
