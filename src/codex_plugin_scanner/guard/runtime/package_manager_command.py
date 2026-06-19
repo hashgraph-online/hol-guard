@@ -126,12 +126,12 @@ def _leading_option_width(
     config: _GlobalOptionConfig,
 ) -> int:
     token = tokens[index]
-    if token in config.value_options:
-        return 2 if index + 1 < len(tokens) else 1
-    if _matches_inline_value_option(token, config.value_options):
-        return 1
     next_index = index + 1
     if next_index < len(tokens) and tokens[next_index] in config.subcommands:
+        return 1
+    if token in config.value_options:
+        return 2 if next_index < len(tokens) else 1
+    if _matches_inline_value_option(token, config.value_options):
         return 1
     next_token = tokens[next_index] if next_index < len(tokens) else None
     if token.startswith("--"):

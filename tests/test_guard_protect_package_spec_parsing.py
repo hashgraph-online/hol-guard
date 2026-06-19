@@ -115,3 +115,19 @@ def test_parse_protect_command_records_pip_global_flags_before_install_subcomman
     assert target.raw_spec == "requests==2.32.3"
     assert target.package_name == "requests"
     assert target.version == "2.32.3"
+
+
+def test_parse_protect_command_keeps_install_subcommand_when_global_option_value_is_missing() -> None:
+    request = protect.parse_protect_command(
+        [
+            "pip",
+            "--index-url",
+            "install",
+            "requests==2.32.3",
+        ],
+    )
+
+    target = request.targets[0]
+    assert target.raw_spec == "requests==2.32.3"
+    assert target.package_name == "requests"
+    assert target.version == "2.32.3"

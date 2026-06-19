@@ -260,6 +260,14 @@ def test_parse_package_intent_supports_manager_global_options_before_guarded_sub
     assert pip_intent.targets[0].package_name == "requests"
 
 
+def test_parse_package_intent_keeps_install_subcommand_when_global_option_value_is_missing(tmp_path: Path) -> None:
+    intent = parse_package_intent("pip --index-url install requests==2.32.3", workspace=tmp_path)
+
+    assert intent is not None
+    assert intent.package_manager == "pip"
+    assert intent.targets[0].package_name == "requests"
+
+
 def test_parse_package_intent_poetry_and_pipenv_use_project_lockfile_context(tmp_path: Path) -> None:
     _write_text(tmp_path / "pyproject.toml", "[tool.poetry]\nname = 'demo'\n")
     _write_text(tmp_path / "poetry.lock", "[[package]]\nname='requests'\nversion='2.32.0'\n")
