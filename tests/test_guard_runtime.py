@@ -10558,6 +10558,95 @@ def test_guard_hook_explains_ignored_remembered_rule_when_local_trust_is_degrade
     assert "remembered local rule was ignored" in output["approval_requests"][0]["decision_v2_json"]["harness_message"]
 
 
+def test_guard_hook_does_not_override_cloud_allow_with_remembered_rule_review_copy(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    store = GuardStore(home_dir)
+    command = "npm install minimist@1.2.8"
+    intent = extract_package_intent_request(
+        "Bash",
+        {"command": command},
+        action_envelope_command=None,
+        workspace=workspace_dir,
+    )
+    assert intent is not None
+    artifact = build_package_request_artifact(
+        "codex",
+        intent,
+        config_path=str(workspace_dir / ".codex" / "config.toml"),
+        source_scope="project",
+    )
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="workspace",
+            action="allow",
+            artifact_id=artifact.artifact_id,
+            artifact_hash=None,
+            workspace=str(workspace_dir),
+            reason="remember this install in this project",
+            source="manual",
+        ),
+        "2026-06-19T00:00:00Z",
+    )
+    store.replace_remote_policies(
+        [
+                PolicyDecision(
+                    harness="codex",
+                    scope="harness",
+                    action="allow",
+                    artifact_id=artifact.artifact_id,
+                    artifact_hash=_runtime_scoped_exact_match_key(artifact.artifact_id),
+                    workspace=None,
+                    publisher=None,
+                    reason="cloud allow",
+                    source="cloud-sync",
+                )
+        ],
+        "2026-06-19T00:01:00Z",
+        remote_write_authorized=True,
+    )
+
+    def _degraded_state(_self, _connection, *, now, create_key):
+        return {
+            "mode": "degraded",
+            "enforcement": "enforce",
+            "generation": 1,
+            "degraded_reasons": ["system_keyring_unavailable"],
+        }
+
+    monkeypatch.setattr(GuardStore, "_refresh_policy_integrity_state", _degraded_state)
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event={
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "source_scope": "project",
+        },
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+    )
+
+    assert rc == 0
+    assert output["policy_action"] == "allow"
+    assert output["trust_status"]["remembered_rules"] == "disabled_degraded"
+    assert output["remembered_rule_rejection"]["integrity_status"] == "degraded_mode"
+    assert "remembered local rule was ignored" not in output["decision_v2_json"]["harness_message"]
+    assert "kept npm install minimist in review" not in output["risk_headline"]
+
+
 def test_guard_hook_emits_claude_native_ask_for_sensitive_file_reads(
     tmp_path,
     capsys,

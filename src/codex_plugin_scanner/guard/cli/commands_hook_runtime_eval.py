@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from .commands_support_prompts import _runtime_artifact_native_reason
     from .commands_support_runtime_artifacts import _hook_event_name, _optional_string
     from .commands_support_runtime_policy import (
+        _remembered_rule_rejection_reason,
         _runtime_artifact_exact_match_context,
         _runtime_artifact_policy_action,
         _runtime_data_flow_summary,
@@ -37,7 +38,7 @@ from ..models import GuardAction
 from ._commands_shared import *
 from .commands_hook_runtime_state import RuntimeArtifactHookState
 from .commands_parser_helpers import *
-from .commands_support_runtime_policy import _runtime_artifact_exact_match_context
+from .commands_support_runtime_policy import _remembered_rule_rejection_reason, _runtime_artifact_exact_match_context
 
 
 def _resolved_guard_action(value: object, fallback: GuardAction) -> GuardAction:
@@ -360,13 +361,14 @@ def _evaluate_runtime_artifact_hook(
         "trust_status": trust_status,
     }
     if remembered_rule_rejection is not None:
-        from .commands_support_runtime_policy import _remembered_rule_rejection_reason
-
         response_payload["remembered_rule_rejection"] = remembered_rule_rejection
-        remembered_rule_reason = _remembered_rule_rejection_reason(
-            response_payload=response_payload,
-            artifact=runtime_artifact,
-        )
+        if policy_action in {"review", "require-reapproval"}:
+            remembered_rule_reason = _remembered_rule_rejection_reason(
+                response_payload=response_payload,
+                artifact=runtime_artifact,
+            )
+        else:
+            remembered_rule_reason = None
         if remembered_rule_reason is not None:
             decision_v2_payload["harness_message"] = remembered_rule_reason
             decision_v2_payload["dashboard_primary_detail"] = remembered_rule_reason
