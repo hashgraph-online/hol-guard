@@ -1186,10 +1186,7 @@ class GuardStore:
             persisted_value = self._get_secret_from_primary_store(secret_store, secret_id)
             if persisted_value == value:
                 return
-            if (
-                SystemKeyringSecretStore._test_keyring_module() is not None
-                and secret_store.get_secret(secret_id) == value
-            ):
+            if self._oauth_primary_direct_test_reads_are_safe() and secret_store.get_secret(secret_id) == value:
                 return
             raise RuntimeError("Guard could not persist local Guard Cloud authorization securely.")
         if sys.platform == "darwin" and isinstance(secret_store, FallbackSecretStore):
@@ -1198,10 +1195,7 @@ class GuardStore:
                 persisted_value = self._get_secret_from_primary_store(primary, secret_id)
                 if persisted_value == value:
                     return
-                if (
-                    SystemKeyringSecretStore._test_keyring_module() is not None
-                    and primary.get_secret(secret_id) == value
-                ):
+                if self._oauth_primary_direct_test_reads_are_safe() and primary.get_secret(secret_id) == value:
                     return
                 raise RuntimeError("Guard could not persist local Guard Cloud authorization securely.")
         if isinstance(secret_store, UnavailableSecretStore):
@@ -1290,6 +1284,19 @@ class GuardStore:
         if not isinstance(secret_store, SystemKeyringSecretStore):
             return False
         return secret_store._load_keyring_module_or_none() is not None
+
+    def _oauth_primary_direct_test_reads_are_safe(self) -> bool:
+        if os.environ.get("PYTEST_CURRENT_TEST", "").strip() == "":
+            return False
+        secret_store = self._oauth_secret_store
+        if isinstance(secret_store, FallbackSecretStore):
+            secret_store = secret_store.primary
+        if not isinstance(secret_store, SystemKeyringSecretStore):
+            return False
+        test_keyring = SystemKeyringSecretStore._test_keyring_module()
+        if test_keyring is None:
+            return False
+        return secret_store._load_keyring_module_or_none() is test_keyring
 
     def _oauth_primary_secret_definitely_missing(self, secret_ref: str) -> bool:
         secret_store = self._oauth_secret_store

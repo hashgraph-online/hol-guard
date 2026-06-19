@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
@@ -251,8 +252,14 @@ def _run_guard_sync_command(
             home_dir=context.home_dir,
             workspace_dir=context.workspace_dir,
         )
-        if store.get_cloud_workspace_id() is not None:
-            payload["supply_chain"] = _validated_supply_chain_sync_payload(sync_supply_chain_bundle(store))
+        with suppress(GuardSyncNotConfiguredError, RuntimeError):
+            payload["supply_chain"] = _validated_supply_chain_sync_payload(
+                sync_supply_chain_cloud_state(
+                    store,
+                    auth_context=auth_context,
+                    workspace_dir=context.workspace_dir,
+                )
+            )
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
         message = _guard_sync_failure_message(error)
         if getattr(args, "json", False):

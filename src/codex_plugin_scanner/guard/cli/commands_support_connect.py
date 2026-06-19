@@ -155,9 +155,13 @@ def _refresh_cloud_policy_bundle(store: GuardStore) -> None:
         sync_receipts(store)
         sync_supply_chain_cloud_state(store)
     except GuardSyncAuthorizationExpiredError as error:
+        message = str(error).strip()
+        auth_expired_message = "Guard authorization expired. Run `hol-guard connect` to sign in again."
+        if message.startswith(auth_expired_message):
+            message = auth_expired_message
         store.set_sync_payload(
             "policy_bundle_last_error",
-            {"reason": "auth_expired", "message": str(error)},
+            {"reason": "auth_expired", "message": message},
             now,
         )
         return
