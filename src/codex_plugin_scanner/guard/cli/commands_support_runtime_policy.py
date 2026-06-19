@@ -43,6 +43,10 @@ def _canonical_harness_name(value: str) -> str:
     return _runtime_resolution_module()._canonical_harness_name(value)
 
 
+def _runtime_request_summary(artifact: GuardArtifact) -> str | None:
+    return _runtime_resolution_module()._runtime_request_summary(artifact)
+
+
 def _claude_notification_tool_name(payload: dict[str, object]) -> str | None:
     direct_name = _optional_string(payload.get("tool_name"))
     if direct_name is not None:
