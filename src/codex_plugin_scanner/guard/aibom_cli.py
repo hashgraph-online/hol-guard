@@ -16,6 +16,7 @@ from typing import Any, Literal
 
 from ..version import __version__
 from .adapters.base import HarnessContext
+from .aibom_trust_metadata import apply_local_trust_metadata
 from .inventory_cisco import run_cisco_inventory_scans
 from .inventory_contract import (
     GuardAgentInventorySnapshot,
@@ -664,8 +665,6 @@ def _store_only_artifact_metadata_extensions(
         config_path=str(config_path),
         name=str(row.get("artifact_name") or row.get("artifact_id") or "skill_file"),
     )
-    from .aibom_trust_metadata import apply_local_trust_metadata
-
     metadata = apply_local_trust_metadata(
         artifact,
         captured_at=generated_at,
