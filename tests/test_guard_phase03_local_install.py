@@ -550,13 +550,22 @@ def test_refresh_package_shims_after_update_uses_fresh_python_process(
     manifest_path.write_text(json.dumps({"installed_managers": ["pnpm"]}), encoding="utf-8")
 
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        assert command == [update_commands.sys.executable, "-c", update_commands._PACKAGE_SHIM_REFRESH_SCRIPT]
+        assert command == [
+            update_commands.sys.executable,
+            *update_commands._trusted_python_flags(),
+            "-c",
+            update_commands._PACKAGE_SHIM_REFRESH_SCRIPT,
+        ]
         refresh_context = json.loads(str(kwargs.get("input")))
         assert refresh_context == {
             "home_dir": str(context.home_dir),
             "workspace_dir": str(context.workspace_dir),
             "guard_home": str(context.guard_home),
         }
+        assert kwargs.get("cwd") == str(update_commands._trusted_import_root())
+        refresh_env = kwargs.get("env")
+        assert isinstance(refresh_env, dict)
+        assert "PYTHONPATH" not in refresh_env
         assert kwargs.get("timeout") == update_commands._PACKAGE_SHIM_REFRESH_TIMEOUT_SECONDS
         refresh_payload = {
             "before": {"installed_managers": ["pnpm"]},

@@ -55,6 +55,22 @@ def test_parse_protect_command_records_npm_registry_override_before_package() ->
     assert target.version == "1.2.3"
 
 
+def test_parse_protect_command_records_npm_global_registry_override_before_install_subcommand() -> None:
+    request = protect.parse_protect_command(
+        [
+            "npm",
+            "--registry=https://registry.example.com",
+            "install",
+            "@scope/guard-safe@1.2.3",
+        ],
+    )
+
+    target = request.targets[0]
+    assert target.raw_spec == "@scope/guard-safe@1.2.3"
+    assert target.package_name == "@scope/guard-safe"
+    assert target.version == "1.2.3"
+
+
 def test_parse_protect_command_records_pip_pep508_direct_url_spec() -> None:
     request = protect.parse_protect_command(
         ["pip", "install", "requests @ https://files.example.com/requests-2.32.3.tar.gz"],
@@ -73,6 +89,40 @@ def test_parse_protect_command_records_pip_registry_override_before_package() ->
             "install",
             "--index-url",
             "https://pypi.example/simple",
+            "requests==2.32.3",
+        ],
+    )
+
+    target = request.targets[0]
+    assert target.raw_spec == "requests==2.32.3"
+    assert target.package_name == "requests"
+    assert target.version == "2.32.3"
+
+
+def test_parse_protect_command_records_pip_global_flags_before_install_subcommand() -> None:
+    request = protect.parse_protect_command(
+        [
+            "pip",
+            "--isolated",
+            "--index-url",
+            "https://pypi.example/simple",
+            "install",
+            "requests==2.32.3",
+        ],
+    )
+
+    target = request.targets[0]
+    assert target.raw_spec == "requests==2.32.3"
+    assert target.package_name == "requests"
+    assert target.version == "2.32.3"
+
+
+def test_parse_protect_command_keeps_install_subcommand_when_global_option_value_is_missing() -> None:
+    request = protect.parse_protect_command(
+        [
+            "pip",
+            "--index-url",
+            "install",
             "requests==2.32.3",
         ],
     )

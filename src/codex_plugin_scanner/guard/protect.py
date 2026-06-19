@@ -18,6 +18,7 @@ from .advisory_model import ProtectTargetIdentity, advisory_matches_target, buil
 from .config import GuardConfig
 from .models import GuardReceipt
 from .redaction import redact_text
+from .runtime.package_manager_command import strip_package_manager_global_options
 
 ProtectAction = Literal["allow", "review", "block"]
 SeverityLabel = Literal["low", "medium", "high", "critical"]
@@ -422,27 +423,51 @@ def evaluate_protect_request(
 
 
 def _parse_npm_request(command: list[str]) -> ProtectRequest:
-    specs = _collect_package_specs(command[2:]) if len(command) > 1 and command[1] in {"install", "add", "i"} else ()
+    normalized_command = list(strip_package_manager_global_options(command))
+    specs = (
+        _collect_package_specs(normalized_command[2:])
+        if len(normalized_command) > 1 and normalized_command[1] in {"install", "add", "i"}
+        else ()
+    )
     return _package_manager_request(command, "npm", specs)
 
 
 def _parse_pnpm_request(command: list[str]) -> ProtectRequest:
-    specs = _collect_package_specs(command[2:]) if len(command) > 1 and command[1] in {"add", "install"} else ()
+    normalized_command = list(strip_package_manager_global_options(command))
+    specs = (
+        _collect_package_specs(normalized_command[2:])
+        if len(normalized_command) > 1 and normalized_command[1] in {"add", "install"}
+        else ()
+    )
     return _package_manager_request(command, "pnpm", specs)
 
 
 def _parse_yarn_request(command: list[str]) -> ProtectRequest:
-    specs = _collect_package_specs(command[2:]) if len(command) > 1 and command[1] == "add" else ()
+    normalized_command = tuple(strip_package_manager_global_options(command))
+    working_command = normalized_command
+    if len(normalized_command) >= 4 and normalized_command[1] == "workspace":
+        working_command = (normalized_command[0], *normalized_command[3:])
+    specs = (
+        _collect_package_specs(list(working_command[2:]))
+        if len(working_command) > 1 and working_command[1] == "add"
+        else ()
+    )
     return _package_manager_request(command, "yarn", specs)
 
 
 def _parse_pip_request(command: list[str]) -> ProtectRequest:
-    specs = _collect_package_specs(command[2:]) if len(command) > 1 and command[1] == "install" else ()
+    normalized_command = list(strip_package_manager_global_options(command))
+    specs = (
+        _collect_package_specs(normalized_command[2:])
+        if len(normalized_command) > 1 and normalized_command[1] == "install"
+        else ()
+    )
     return _package_manager_request(command, "pip", specs)
 
 
 def _parse_uv_request(command: list[str]) -> ProtectRequest:
-    specs = _collect_uv_specs(command)
+    normalized_command = list(strip_package_manager_global_options(command))
+    specs = _collect_uv_specs(normalized_command)
     return _package_manager_request(command, "uv", specs)
 
 

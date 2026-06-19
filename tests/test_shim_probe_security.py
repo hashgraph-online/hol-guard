@@ -152,3 +152,49 @@ def test_installed_shim_honors_probe_env_without_real_execution(
     assert not marker_path.exists()
     payload = parse_protect_json_stdout(result.stdout)
     assert payload.get("dry_run") is True
+
+
+@pytest.mark.parametrize(
+    ("manager", "argv"),
+    [
+        ("npm", ("--registry=https://registry.example.com", "install", "lodash@4.17.21")),
+        ("pnpm", ("--dir", ".", "add", "lodash@4.17.21")),
+        ("yarn", ("--cwd", ".", "add", "lodash@4.17.21")),
+        ("pip", ("--isolated", "install", "requests==2.32.3")),
+    ],
+)
+def test_installed_shim_probe_guards_global_option_package_commands(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    manager: str,
+    argv: tuple[str, ...],
+) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True)
+    context = _harness_context(tmp_path, workspace_dir=workspace_dir)
+    install_package_shims(context, managers=(manager,))
+    shim_dir = context.guard_home / "package-shims" / "bin"
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir(parents=True)
+    marker_path = tmp_path / f"{manager}-direct-marker.json"
+    write_fake_manager_script(
+        fake_bin=fake_bin,
+        manager=manager,
+        marker_path=marker_path,
+        exit_code=0,
+    )
+    monkeypatch.setenv("PATH", os.pathsep.join([str(shim_dir), str(fake_bin)]))
+
+    result = subprocess.run(
+        [str(shim_dir / manager), *argv],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=workspace_dir,
+        env={**os.environ, "HOL_GUARD_SHIM_PROBE": "1"},
+    )
+
+    assert result.returncode == 0
+    assert not marker_path.exists()
+    payload = parse_protect_json_stdout(result.stdout)
+    assert payload.get("dry_run") is True
