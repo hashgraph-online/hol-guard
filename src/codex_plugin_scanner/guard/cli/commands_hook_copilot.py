@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from ..mcp_tool_calls import ToolCallDecision
     from ._commands_shared import _hook_command_text, _now
     from .commands_support_hook_payload import _action_envelope_json, _approval_surface_policy_for_flow
     from .commands_support_interaction import (
