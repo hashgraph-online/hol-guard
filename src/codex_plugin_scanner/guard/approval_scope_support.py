@@ -60,8 +60,7 @@ def _derived_workspace_scope_target(request: Mapping[str, object]) -> str | None
         config_file = Path(config_path)
     parent = config_file.parent
     workspace_root = parent.parent if parent.name.startswith(".") else parent
-    workspace_value = str(workspace_root)
-    return workspace_value or None
+    return str(workspace_root)
 
 
 def _request_scoped_family_key(request: Mapping[str, object]) -> str | None:
