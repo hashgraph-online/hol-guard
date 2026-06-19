@@ -476,6 +476,172 @@ def test_update_syncs_dashboard_assets_after_partial_stale_upgrade(monkeypatch: 
     assert "synced dashboard" in payload["notes"]
 
 
+def test_refresh_package_shims_after_update_uses_fresh_python_process(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    manifest_path = context.guard_home / "package-shims" / "manifest.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps({"installed_managers": ["pnpm"]}), encoding="utf-8")
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert command == [update_commands.sys.executable, "-c", update_commands._PACKAGE_SHIM_REFRESH_SCRIPT]
+        refresh_context = json.loads(str(kwargs.get("input")))
+        assert refresh_context == {
+            "home_dir": str(context.home_dir),
+            "workspace_dir": str(context.workspace_dir),
+            "guard_home": str(context.guard_home),
+        }
+        assert kwargs.get("timeout") == update_commands._PACKAGE_SHIM_REFRESH_TIMEOUT_SECONDS
+        refresh_payload = {
+            "before": {"installed_managers": ["pnpm"]},
+            "repair": {"repaired": ["pnpm"], "repaired_count": 1},
+            "after": {
+                "installed_managers": ["pnpm"],
+                "manager_details": [{"manager": "pnpm", "integrity": "ok"}],
+                "path_repair_required": [],
+            },
+        }
+        return subprocess.CompletedProcess(command, 0, json.dumps(refresh_payload), "")
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, note = update_commands._refresh_package_shims_after_update(context=context, dry_run=False)
+
+    assert payload is not None
+    assert payload["repair"] == {"repaired": ["pnpm"], "repaired_count": 1}
+    assert note == "Refreshed package firewall shims during update for pnpm."
+
+
+def test_update_records_package_shim_refresh_after_successful_update(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.826")
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: "2.0.830")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.830")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(
+        update_commands.shutil,
+        "which",
+        lambda name: "/mock-home/.local/bin/hol-guard" if name == "hol-guard" else None,
+    )
+    monkeypatch.setattr(update_commands, "_sync_dashboard_assets", lambda: None)
+    monkeypatch.setattr(
+        update_commands,
+        "_refresh_package_shims_after_update",
+        lambda **_: (
+            {
+                "before": {"installed_managers": ["pnpm"]},
+                "repair": {"repaired": ["pnpm"], "repaired_count": 1},
+                "after": {
+                    "installed_managers": ["pnpm"],
+                    "manager_details": [{"manager": "pnpm", "integrity": "ok"}],
+                    "path_repair_required": [],
+                },
+            },
+            "Refreshed package firewall shims during update for pnpm.",
+        ),
+    )
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert command == ["pipx", "upgrade", "hol-guard"]
+        return subprocess.CompletedProcess(command, 0, "installed hol-guard 2.0.830", "")
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False, context=_context(tmp_path))
+
+    assert exit_code == 0
+    assert payload["status"] == "updated"
+    assert payload["package_shims"]["repair"] == {"repaired": ["pnpm"], "repaired_count": 1}
+    assert "Refreshed package firewall shims during update for pnpm." in payload["notes"]
+
+
+def test_update_keeps_success_when_package_shim_refresh_warns(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.826")
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: "2.0.830")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.830")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(
+        update_commands.shutil,
+        "which",
+        lambda name: "/mock-home/.local/bin/hol-guard" if name == "hol-guard" else None,
+    )
+    monkeypatch.setattr(update_commands, "_sync_dashboard_assets", lambda: None)
+    monkeypatch.setattr(
+        update_commands,
+        "_refresh_package_shims_after_update",
+        lambda **_: (None, "Could not refresh package firewall shims during update: import failed"),
+    )
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert command == ["pipx", "upgrade", "hol-guard"]
+        return subprocess.CompletedProcess(command, 0, "installed hol-guard 2.0.830", "")
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False, context=_context(tmp_path))
+
+    assert exit_code == 0
+    assert payload["status"] == "updated"
+    assert "Could not refresh package firewall shims during update: import failed" in payload["notes"]
+
+
+def test_update_skips_package_shim_refresh_for_stale_no_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.584")
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: "2.0.584")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.585")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(
+        update_commands.shutil,
+        "which",
+        lambda name: "/mock-home/.local/bin/hol-guard" if name == "hol-guard" else None,
+    )
+    monkeypatch.setattr(update_commands, "_sync_dashboard_assets", lambda: None)
+
+    refresh_attempted = False
+
+    def fake_refresh(**_: object) -> tuple[dict[str, object] | None, str | None]:
+        nonlocal refresh_attempted
+        refresh_attempted = True
+        return None, None
+
+    monkeypatch.setattr(update_commands, "_refresh_package_shims_after_update", fake_refresh)
+
+    captured_commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured_commands.append(command)
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            "hol-guard is already at latest version 2.0.584",
+            "upgrading shared libraries...\nupgrading hol-guard...\n",
+        )
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False)
+
+    assert exit_code == 0
+    assert captured_commands == [
+        ["pipx", "upgrade", "hol-guard"],
+        ["pipx", "install", "--force", "hol-guard==2.0.585"],
+    ]
+    assert payload["status"] == "stale"
+    assert refresh_attempted is False
+
+
 def test_update_marks_plain_pipx_upgrade_as_stale_when_version_does_not_change(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
