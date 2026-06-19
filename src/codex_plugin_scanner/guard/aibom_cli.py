@@ -11,6 +11,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Literal
 
 from ..version import __version__
@@ -223,7 +224,7 @@ def build_aibom_export_payload(
         trust_attestation_context=_resolve_trust_attestation_context(store, generated_at=generated_at),
     )
     serialized_snapshots = [serialize_inventory_snapshot(snapshot) for snapshot in snapshots]
-    artifacts = _artifact_rows_from_store(store, snapshots)
+    artifacts = _artifact_rows_from_store(store, snapshots, context=context, generated_at=generated_at)
     layer_summary, trust_summary, drift_summary = summarize_aibom_layers(
         snapshots,
         generated_at=generated_at,
@@ -594,6 +595,9 @@ def _metadata_lookup_from_snapshots(
 def _artifact_rows_from_store(
     store: Any,
     snapshots: tuple[GuardAgentInventorySnapshot, ...],
+    *,
+    context: HarnessContext,
+    generated_at: str,
 ) -> list[dict[str, object]]:
     metadata_by_artifact = _metadata_lookup_from_snapshots(snapshots)
     artifacts: list[dict[str, object]] = []
@@ -604,10 +608,52 @@ def _artifact_rows_from_store(
         row: dict[str, object] = dict(item)
         row["trust_verdict"] = trust_verdict
         extensions = metadata_by_artifact.get((harness, artifact_id))
+        if not extensions:
+            extensions = _store_only_artifact_metadata_extensions(row, context=context, generated_at=generated_at)
+            if str(row.get("artifact_type") or "") == "skill_file" and not _store_row_config_path_exists(row):
+                row["present"] = False
         if extensions:
             row.update(extensions)
         artifacts.append(row)
     return artifacts
+
+
+def _store_row_config_path_exists(row: dict[str, object]) -> bool:
+    raw_config_path = row.get("config_path")
+    if not isinstance(raw_config_path, str) or not raw_config_path.strip():
+        return False
+    return Path(raw_config_path).expanduser().exists()
+
+
+def _store_only_artifact_metadata_extensions(
+    row: dict[str, object],
+    *,
+    context: HarnessContext,
+    generated_at: str,
+) -> dict[str, object]:
+    artifact_type = str(row.get("artifact_type") or "")
+    if artifact_type != "skill_file":
+        return {}
+    raw_config_path = row.get("config_path")
+    if not isinstance(raw_config_path, str) or not raw_config_path.strip():
+        return {}
+    config_path = Path(raw_config_path).expanduser()
+    if not config_path.exists():
+        return {}
+    artifact = SimpleNamespace(
+        artifact_id=str(row.get("artifact_id") or ""),
+        artifact_type=artifact_type,
+        config_path=str(config_path),
+        name=str(row.get("artifact_name") or row.get("artifact_id") or "skill_file"),
+    )
+    metadata = importlib.import_module(".aibom_trust_metadata", __package__).apply_local_trust_metadata(
+        artifact,
+        captured_at=generated_at,
+        item_kind="skill",
+        metadata={"artifactType": artifact_type},
+        workspace_dir=context.workspace_dir,
+    )
+    return extract_aibom_metadata_extensions(metadata)
 
 
 def _aggregate_redaction_report(

@@ -329,7 +329,16 @@ def _local_trust_domain_for_artifact(
         return build_plugin_domain(trust_root, ())
     if item_kind == "skill":
         context = resolve_skill_security_context(trust_root, _INVENTORY_TRUST_SCAN_OPTIONS)
-        return build_skill_domain(trust_root, context)
+        skill_domain = build_skill_domain(trust_root, context)
+        if skill_domain is not None:
+            return skill_domain
+        if getattr(artifact, "artifact_type", None) == "skill_file":
+            config_path = getattr(artifact, "config_path", None)
+            if isinstance(config_path, str) and config_path.strip():
+                file_path = Path(config_path)
+                if file_path.is_file():
+                    return build_instruction_domain(file_path, role="skill_file", item_kind="skill")
+        return None
     if item_kind == "mcp_server":
         return build_mcp_domain(trust_root, ()) or build_mcp_surface_domain(
             name=getattr(artifact, "name", None),
@@ -370,6 +379,12 @@ def _trust_root_for_artifact(
             if (candidate / ".codex-plugin" / "plugin.json").is_file():
                 return candidate
             if path.name.lower() != "skill.md" and (candidate / "SKILL.md").is_file():
+                return candidate
+            if (
+                getattr(artifact, "artifact_type", None) == "skill_file"
+                and candidate.parent.name == "skills"
+                and ((candidate / "README.md").is_file() or (candidate / "SECURITY.md").is_file())
+            ):
                 return candidate
             if workspace_dir is not None and candidate.resolve() == workspace_dir.resolve():
                 break
