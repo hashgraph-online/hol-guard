@@ -608,7 +608,8 @@ def test_guard_supply_chain_sync_alias_rejects_invalid_payload(
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
 
-    monkeypatch.setattr(commands_module, "sync_supply_chain_bundle", lambda _store: None)
+    monkeypatch.setattr(commands_module, "_resolve_guard_sync_auth_context", lambda _store: {})
+    monkeypatch.setattr(commands_module, "sync_supply_chain_cloud_state", lambda _store, **_kwargs: None)
 
     rc = main(
         [

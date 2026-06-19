@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.cli.connect_flow import (
     GuardOAuthLoopbackCallback,
     GuardOAuthTokenExchangeResult,
@@ -21,7 +22,6 @@ from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.package_firewall_entitlement import resolve_package_firewall_entitlement
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
-from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_store_migrations import _install_fake_system_keyring
 
@@ -507,7 +507,7 @@ def test_browser_connect_caches_paid_package_firewall_entitlement(tmp_path: Path
     }
 
 
-def test_browser_connect_persists_oauth_state_when_macos_keychain_readback_is_unavailable(
+def test_browser_connect_persists_oauth_state_when_macos_keychain_readback_succeeds(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -535,7 +535,7 @@ def test_browser_connect_persists_oauth_state_when_macos_keychain_readback_is_un
     monkeypatch.setattr(
         store._oauth_secret_store.primary,
         "get_secret_with_timeout",
-        lambda _secret_id, *, timeout_seconds: None,
+        lambda secret_id, *, timeout_seconds: store._oauth_secret_store.primary.get_secret(secret_id),
     )
 
     payload = run_guard_browser_connect_command(

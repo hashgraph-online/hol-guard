@@ -1234,7 +1234,14 @@ class GuardStore:
         secret_store = self._oauth_secret_store
         if isinstance(secret_store, FallbackSecretStore):
             secret_store = secret_store.primary
-        return sys.platform == "darwin" and isinstance(secret_store, SystemKeyringSecretStore)
+        if not isinstance(secret_store, SystemKeyringSecretStore):
+            return False
+        if sys.platform != "darwin":
+            return True
+        return secret_store._supports_native_macos_security_reads()
+
+    def _oauth_fallback_recovery_allowed(self) -> bool:
+        return sys.platform != "darwin"
 
     def _get_secret_candidates(
         self,
@@ -5183,7 +5190,16 @@ class GuardStore:
         metadata = self._oauth_local_credentials_metadata(payload)
         if metadata is None:
             return None
-        secret_payload = self._load_oauth_fallback_secret_payload(payload)
+        secret_ref = payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY)
+        secret_hash = payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY)
+        if not isinstance(secret_ref, str) or not secret_ref:
+            return None
+        if not isinstance(secret_hash, str) or not secret_hash:
+            return None
+        secret_payload = self._load_validated_oauth_fallback_secret_payload(
+            self._load_oauth_fallback_secret_json(secret_ref),
+            secret_hash,
+        )
         if secret_payload is None:
             return None
         return self._build_oauth_local_credentials_result(metadata=metadata, secret_payload=secret_payload)
@@ -5228,7 +5244,8 @@ class GuardStore:
         )
         if (
             secret_payload is None
-            and not isinstance(self._oauth_secret_store, FallbackSecretStore)
+            and self._oauth_primary_repair_available()
+            and self._oauth_primary_reads_are_no_ui_safe()
             and self.repair_oauth_local_credential_storage_from_primary()
         ):
             refreshed_payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
@@ -5338,6 +5355,8 @@ class GuardStore:
                 self._mark_oauth_storage_repair_attempt()
                 repaired_payload = self._load_oauth_secret_payload(payload, promote=True, allow_primary=True)
             if repaired_payload is None:
+                if not self._oauth_fallback_recovery_allowed():
+                    return False
                 recoverable_credentials = self.get_recoverable_oauth_local_credentials()
                 if recoverable_credentials is None:
                     return False
