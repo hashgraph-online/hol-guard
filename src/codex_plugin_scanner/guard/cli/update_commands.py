@@ -797,9 +797,13 @@ def _execution_update_command(
     installer: str,
     context: HarnessContext | None,
 ) -> list[str]:
-    if installer == "pipx" and context is not None and _package_shim_manifest_has_installed_managers(context):
-        if real_binary := _resolve_unshimmed_binary(command[0], context):
-            return [real_binary, *command[1:]]
+    if (
+        installer == "pipx"
+        and context is not None
+        and _package_shim_manifest_has_installed_managers(context)
+        and (real_binary := _resolve_unshimmed_binary(command[0], context))
+    ):
+        return [real_binary, *command[1:]]
     return command
 
 
