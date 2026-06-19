@@ -11,10 +11,12 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Literal
 
 from ..version import __version__
 from .adapters.base import HarnessContext
+from .aibom_trust_metadata import apply_local_trust_metadata
 from .inventory_cisco import run_cisco_inventory_scans
 from .inventory_contract import (
     GuardAgentInventorySnapshot,
@@ -165,6 +167,18 @@ def build_inventory_json_payload(
         artifact_id = str(item.get("artifact_id") or "")
         harness = str(item.get("harness") or "")
         extensions = metadata_by_artifact.get((harness, artifact_id))
+        config_path = _store_row_config_path(item) if str(item.get("artifact_type") or "") == "skill_file" else None
+        config_path_exists = config_path.exists() if config_path is not None else None
+        if not extensions:
+            extensions = _store_only_artifact_metadata_extensions(
+                enriched,
+                context=context,
+                generated_at=generated_at,
+                config_path=config_path,
+                config_path_exists=config_path_exists,
+            )
+            if config_path_exists is False:
+                enriched["present"] = False
         if extensions:
             enriched.update(extensions)
         items.append(enriched)
@@ -223,7 +237,7 @@ def build_aibom_export_payload(
         trust_attestation_context=_resolve_trust_attestation_context(store, generated_at=generated_at),
     )
     serialized_snapshots = [serialize_inventory_snapshot(snapshot) for snapshot in snapshots]
-    artifacts = _artifact_rows_from_store(store, snapshots)
+    artifacts = _artifact_rows_from_store(store, snapshots, context=context, generated_at=generated_at)
     layer_summary, trust_summary, drift_summary = summarize_aibom_layers(
         snapshots,
         generated_at=generated_at,
@@ -594,6 +608,9 @@ def _metadata_lookup_from_snapshots(
 def _artifact_rows_from_store(
     store: Any,
     snapshots: tuple[GuardAgentInventorySnapshot, ...],
+    *,
+    context: HarnessContext,
+    generated_at: str,
 ) -> list[dict[str, object]]:
     metadata_by_artifact = _metadata_lookup_from_snapshots(snapshots)
     artifacts: list[dict[str, object]] = []
@@ -604,10 +621,58 @@ def _artifact_rows_from_store(
         row: dict[str, object] = dict(item)
         row["trust_verdict"] = trust_verdict
         extensions = metadata_by_artifact.get((harness, artifact_id))
+        config_path = _store_row_config_path(row) if str(row.get("artifact_type") or "") == "skill_file" else None
+        config_path_exists = config_path.exists() if config_path is not None else None
+        if not extensions:
+            extensions = _store_only_artifact_metadata_extensions(
+                row,
+                context=context,
+                generated_at=generated_at,
+                config_path=config_path,
+                config_path_exists=config_path_exists,
+            )
+            if config_path_exists is False:
+                row["present"] = False
         if extensions:
             row.update(extensions)
         artifacts.append(row)
     return artifacts
+
+
+def _store_row_config_path(row: dict[str, object]) -> Path | None:
+    raw_config_path = row.get("config_path")
+    if not isinstance(raw_config_path, str) or not raw_config_path.strip():
+        return None
+    return Path(raw_config_path).expanduser()
+
+
+def _store_only_artifact_metadata_extensions(
+    row: dict[str, object],
+    *,
+    context: HarnessContext,
+    generated_at: str,
+    config_path: Path | None,
+    config_path_exists: bool | None,
+) -> dict[str, object]:
+    artifact_type = str(row.get("artifact_type") or "")
+    if artifact_type != "skill_file":
+        return {}
+    if config_path is None or config_path_exists is not True:
+        return {}
+    artifact = SimpleNamespace(
+        artifact_id=str(row.get("artifact_id") or ""),
+        artifact_type=artifact_type,
+        config_path=str(config_path),
+        name=str(row.get("artifact_name") or row.get("artifact_id") or "skill_file"),
+    )
+    metadata = apply_local_trust_metadata(
+        artifact,
+        captured_at=generated_at,
+        item_kind="skill",
+        metadata={"artifactType": artifact_type},
+        workspace_dir=context.workspace_dir,
+    )
+    return extract_aibom_metadata_extensions(metadata)
 
 
 def _aggregate_redaction_report(

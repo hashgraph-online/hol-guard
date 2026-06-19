@@ -329,7 +329,16 @@ def _local_trust_domain_for_artifact(
         return build_plugin_domain(trust_root, ())
     if item_kind == "skill":
         context = resolve_skill_security_context(trust_root, _INVENTORY_TRUST_SCAN_OPTIONS)
-        return build_skill_domain(trust_root, context)
+        skill_domain = build_skill_domain(trust_root, context)
+        if skill_domain is not None:
+            return skill_domain
+        if getattr(artifact, "artifact_type", None) == "skill_file":
+            config_path = getattr(artifact, "config_path", None)
+            if isinstance(config_path, str) and config_path.strip():
+                file_path = Path(config_path)
+                if file_path.is_file():
+                    return build_instruction_domain(file_path, role="skill_file", item_kind="skill")
+        return None
     if item_kind == "mcp_server":
         return build_mcp_domain(trust_root, ()) or build_mcp_surface_domain(
             name=getattr(artifact, "name", None),
@@ -371,6 +380,13 @@ def _trust_root_for_artifact(
                 return candidate
             if path.name.lower() != "skill.md" and (candidate / "SKILL.md").is_file():
                 return candidate
+            if (
+                getattr(artifact, "artifact_type", None) == "skill_file"
+                and candidate.parent.name.lower() == "skills"
+                and ((candidate / "README.md").is_file() or (candidate / "SECURITY.md").is_file())
+                and _skill_file_name_matches_root(artifact, candidate)
+            ):
+                return candidate
             if workspace_dir is not None and candidate.resolve() == workspace_dir.resolve():
                 break
         return skill_dir if skill_dir.is_dir() else None
@@ -390,6 +406,15 @@ def _trust_root_for_artifact(
         return path if path.is_file() else None
 
     return None
+
+
+def _skill_file_name_matches_root(artifact: object, root: Path) -> bool:
+    root_name = root.name
+    name = getattr(artifact, "name", None)
+    if isinstance(name, str) and (name == root_name or name.startswith(f"{root_name}/")):
+        return True
+    artifact_id = getattr(artifact, "artifact_id", None)
+    return isinstance(artifact_id, str) and f":{root_name}:" in artifact_id
 
 
 def _trust_layer_from_domain(
