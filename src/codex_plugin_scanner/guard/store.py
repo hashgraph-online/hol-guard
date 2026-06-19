@@ -5348,7 +5348,7 @@ class GuardStore:
                     return False
                 self._set_oauth_local_credentials_unlocked(
                     now=_now(),
-                    **cast(dict[str, Any], recovered_inputs),
+                    **cast(dict[str, Any], cast(object, recovered_inputs)),
                 )
             cache_key = self._oauth_health_process_cache_key(
                 _string_value(payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY)),

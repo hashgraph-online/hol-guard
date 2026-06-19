@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from ._commands_shared import _SERVICE_RUNTIME_CHOICES, _SERVICE_RUNTIME_PROFILE_STATE_KEY, _now
@@ -20,7 +20,7 @@ from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_reso
 def _connect_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
     resolver = globals().get("_resolve_guard_sync_auth_context")
     if callable(resolver):
-        return resolver(store)
+        return cast(dict[str, object], resolver(store))
     return _local_resolve_guard_sync_auth_context(store)
 
 def _validate_policy_scope(
