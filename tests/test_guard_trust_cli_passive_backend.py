@@ -121,6 +121,49 @@ def test_trust_cli_macos_native_status_reports_setup_required_when_passive_backe
     assert payload["passive_prompt_allowed"] is False
 
 
+def test_trust_cli_macos_native_status_uses_native_api_even_when_keyring_module_is_shimmed(
+    tmp_path: Path,
+    capsys,
+    monkeypatch: pytest.MonkeyPatch,
+    install_fake_system_keyring,
+) -> None:
+    fake_keyring = install_fake_system_keyring()
+    home_dir = tmp_path / "home"
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    SystemKeyringSecretStore._native_macos_security_reads_cache = None
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_load_macos_keyring_api_module",
+        staticmethod(lambda: object()),
+    )
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_get_secret_without_macos_ui",
+        lambda self, secret_id: fake_keyring.get_password(self.service_name, secret_id),
+    )
+
+    rc = main(
+        [
+            "guard",
+            "trust",
+            "status",
+            "--backend",
+            "macos-native",
+            "--home",
+            str(home_dir),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["mode"] == "setup_required"
+    assert payload["backend_requested"] == "macos-native"
+    assert payload["backend_selected"] == "macos-native"
+    assert payload["setup_available"] is True
+    assert payload["passive_prompt_allowed"] is False
+
+
 def test_trust_cli_macos_native_test_stays_prompt_free_when_backend_is_unavailable(
     tmp_path: Path,
     capsys,

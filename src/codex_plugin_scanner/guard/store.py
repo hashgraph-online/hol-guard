@@ -396,7 +396,7 @@ class SystemKeyringSecretStore:
 
     _MACOS_KEYCHAIN_HEALTH_CACHE_TTL_SECONDS = 5.0
     _macos_keychain_health_cache: tuple[float, bool] | None = None
-    _native_macos_security_reads_cache: tuple[int, bool] | None = None
+    _native_macos_security_reads_cache: tuple[tuple[int, int], bool] | None = None
 
     def __init__(self, service_name: str) -> None:
         self.service_name = service_name
@@ -639,20 +639,25 @@ class SystemKeyringSecretStore:
         if cls._test_keyring_module() is not None:
             return True
         loader_ref = cls._load_keyring_module
-        loader_id = id(loader_ref)
+        api_loader_ref = cls._load_macos_keyring_api_module
+        cache_key = (id(loader_ref), id(api_loader_ref))
         cached = cls._native_macos_security_reads_cache
-        if cached is not None and cached[0] == loader_id:
+        if cached is not None and cached[0] == cache_key:
             return cached[1]
         try:
             keyring_module = loader_ref()
         except Exception:
             keyring_module = None
         if keyring_module is None:
-            cls._native_macos_security_reads_cache = (loader_id, False)
+            cls._native_macos_security_reads_cache = (cache_key, False)
             return False
-        module_name = getattr(keyring_module, "__name__", "")
-        supported = module_name == "keyring"
-        cls._native_macos_security_reads_cache = (loader_id, supported)
+        try:
+            api_loader_ref()
+        except Exception:
+            supported = False
+        else:
+            supported = True
+        cls._native_macos_security_reads_cache = (cache_key, supported)
         return supported
 
     def _get_secret_without_macos_ui(self, secret_id: str) -> str | None:
