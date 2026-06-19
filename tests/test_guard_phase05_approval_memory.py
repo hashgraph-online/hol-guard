@@ -1150,6 +1150,7 @@ def test_gr124_resolution_events_can_wake_polling_harness_clients(tmp_path: Path
     assert events[0]["payload"]["request_id"] == "req-event"
     assert events[0]["payload"]["action"] == "allow"
     assert events[0]["payload"]["scope"] == "artifact"
+    assert events[0]["payload"]["persisted_rule"] is False
 
 
 def test_gr122_duplicate_resolution_returns_idempotent_already_resolved_result(tmp_path: Path) -> None:

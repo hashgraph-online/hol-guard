@@ -78,7 +78,7 @@ def add_approval_parser(
     )
     clear_history_parser.add_argument(
         "--source",
-        help="Optional source filter for policy decisions (for example: manual, claude-ask-user-question)",
+        help="Optional source filter for remembered rules (for example: manual, claude-ask-user-question)",
     )
     add_common_args(clear_history_parser)
     clear_history_parser.add_argument("--json", action="store_true")

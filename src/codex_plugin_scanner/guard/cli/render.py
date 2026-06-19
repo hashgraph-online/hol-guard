@@ -939,7 +939,7 @@ def _render_policies(console: Console, payload: dict[str, object]) -> None:
         console.print(
             Panel(
                 body,
-                title="Guard policy clear",
+                title="Guard rules clear",
                 border_style="red" if error else "green",
             )
         )
@@ -947,7 +947,8 @@ def _render_policies(console: Console, payload: dict[str, object]) -> None:
     items = _coerce_dict_list(payload.get("items"))
     console.print(
         Panel.fit(
-            f"[bold]Guard policy decisions[/bold]\n{len(items)} active rule{'s' if len(items) != 1 else ''}",
+            f"[bold]Guard remembered rules and Cloud policies[/bold]\n"
+            f"{len(items)} active rule{'s' if len(items) != 1 else ''}",
             border_style="cyan",
         )
     )

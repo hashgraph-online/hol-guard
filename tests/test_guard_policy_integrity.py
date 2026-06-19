@@ -963,9 +963,11 @@ def test_tampered_signed_row_is_ignored_and_event_emitted(tmp_path: Path) -> Non
         now="2026-06-14T00:01:00Z",
     )
     events = store.list_events(limit=100, event_name="policy_integrity_violation")
+    ignored_events = store.list_events(limit=100, event_name="rule.ignored.local_integrity")
 
     assert resolved is None
     assert any(event.get("payload", {}).get("artifact_id") == "codex:project:tampered" for event in events)
+    assert any(event.get("payload", {}).get("artifact_id") == "codex:project:tampered" for event in ignored_events)
 
 
 def test_remote_policy_row_is_honored_without_local_mac(tmp_path: Path) -> None:
@@ -982,8 +984,10 @@ def test_remote_policy_row_is_honored_without_local_mac(tmp_path: Path) -> None:
         "hash-remote",
         now="2026-06-14T00:01:00Z",
     )
+    events = store.list_events(limit=100, event_name="policy.cloud.applied")
 
     assert resolved == "allow"
+    assert any(event.get("payload", {}).get("artifact_id") == "codex:project:remote" for event in events)
 
 
 def test_local_policy_write_cannot_impersonate_remote_policy_source(tmp_path: Path) -> None:
