@@ -65,7 +65,7 @@ def add_approval_parser(
 
     clear_history_parser = approvals_subparsers.add_parser(
         "clear-history",
-        help="Clear saved allow/deny history so flows can be re-tested",
+        help="Clear remembered rules and resolved approval history so flows can be re-tested",
     )
     clear_history_parser.add_argument(
         "--harness",

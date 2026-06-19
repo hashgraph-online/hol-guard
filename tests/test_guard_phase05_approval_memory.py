@@ -1116,7 +1116,7 @@ def test_gr119_publisher_scope_rejects_blank_publisher_identity(tmp_path: Path) 
     request = _request("req-no-publisher", publisher="")
     store.add_approval_request(request, "2026-05-13T00:00:00+00:00")
 
-    with pytest.raises(ValueError, match="no publisher scope"):
+    with pytest.raises(ValueError, match="unsupported_request_scope"):
         apply_approval_resolution(
             store=store,
             request_id="req-no-publisher",
