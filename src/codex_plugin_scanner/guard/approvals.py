@@ -15,6 +15,7 @@ from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 from .adapters import get_adapter
 from .adapters.base import HarnessContext
 from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approval_decision
+from .approval_scope_support import resolve_request_workspace_scope, supported_request_scopes
 from .cli.connect_flow import (
     connect_retry_refresh_race_from_reason,
     resolve_guard_cloud_repair_detail,
@@ -313,7 +314,9 @@ def queue_blocked_approvals(
         if created_new_request:
             _record_created_event(store, request, timestamp)
         _notify_pending_approval(store=store, request=request)
-        queued.append(request.to_dict())
+        request_payload = request.to_dict()
+        request_payload["allowed_scopes"] = list(supported_request_scopes(request_payload))
+        queued.append(request_payload)
     return queued
 
 
@@ -339,10 +342,9 @@ def apply_approval_resolution(
         raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
     if not _is_decision_scope(scope):
         raise ValueError(f"Unsupported approval scope: {scope}")
-    if scope == "workspace" and not workspace:
-        raise ValueError(f"Approval request {request_id} requires --workspace for workspace scope.")
-    if scope == "publisher" and _string_or_none(request.get("publisher")) is None:
-        raise ValueError(f"Approval request {request_id} has no publisher scope to approve.")
+    if scope not in supported_request_scopes(request):
+        raise ValueError("unsupported_request_scope")
+    resolved_workspace = resolve_request_workspace_scope(request, workspace) if scope == "workspace" else None
     workspace_artifact_id, workspace_artifact_hash = _workspace_policy_artifact_keys(request, scope)
     request_artifact_id = _string_or_none(request.get("artifact_id"))
     request_artifact_hash = _string_or_none(request.get("artifact_hash"))
@@ -361,7 +363,7 @@ def apply_approval_resolution(
         action="allow" if action == "allow" else "block",
         artifact_id=scoped_artifact_id,
         artifact_hash=scoped_artifact_hash,
-        workspace=workspace if scope == "workspace" else None,
+        workspace=resolved_workspace if scope == "workspace" else None,
         publisher=request_publisher if scope == "publisher" else None,
         reason=reason,
         source="approval-gate",
@@ -408,7 +410,7 @@ def apply_approval_resolution(
                 harness=resolution_harness,
                 scope=scope,
                 artifact_id=scoped_artifact_id,
-                workspace=workspace if scope == "workspace" else None,
+                workspace=resolved_workspace if scope == "workspace" else None,
                 publisher=(
                     str(request["publisher"])
                     if scope == "publisher" and isinstance(request.get("publisher"), str)
@@ -437,7 +439,7 @@ def apply_approval_resolution(
             harness=resolution_harness,
             scope=scope,
             artifact_id=scoped_artifact_id,
-            workspace=workspace if scope == "workspace" else None,
+            workspace=resolved_workspace if scope == "workspace" else None,
             publisher=(
                 str(request["publisher"])
                 if scope == "publisher" and isinstance(request.get("publisher"), str)
