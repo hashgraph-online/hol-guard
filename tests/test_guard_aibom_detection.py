@@ -276,7 +276,11 @@ def test_inventory_snapshot_items_include_descriptions(tmp_path: Path) -> None:
     assert "Review code changes carefully." in skill_items[0].description
 
     payload = serialize_inventory_snapshot(snapshot)
-    assert payload["items"][0]["description"] == skill_items[0].description
+    payload_items = payload["items"]
+    assert isinstance(payload_items, list)
+    first_payload_item = payload_items[0]
+    assert isinstance(first_payload_item, dict)
+    assert first_payload_item["description"] == skill_items[0].description
 
 
 def test_hermes_and_openclaw_inventory_snapshots_include_workspace_agents_md(tmp_path: Path) -> None:
