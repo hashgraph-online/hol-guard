@@ -239,6 +239,50 @@ def test_system_keyring_native_macos_read_uses_cfstr_decoder(
     assert secret_store.get_secret_with_timeout("policy-key", timeout_seconds=1.0) == "native-secret"
 
 
+def test_system_keyring_supports_native_macos_reads_with_nonstandard_keyring_module(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    module = _FakeSystemKeyringModule()
+    SystemKeyringSecretStore._native_macos_security_reads_cache = None
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_load_macos_keyring_api_module",
+        staticmethod(lambda: types.SimpleNamespace()),
+    )
+
+    assert SystemKeyringSecretStore._supports_native_macos_security_reads() is True
+
+
+def test_policy_integrity_timeout_uses_native_no_ui_path_with_nonstandard_keyring_module(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    module = _FakeSystemKeyringModule()
+    module._secrets[("hol-guard.policy-integrity", "policy-key")] = "native-secret"
+    SystemKeyringSecretStore._native_macos_security_reads_cache = None
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_load_macos_keyring_api_module",
+        staticmethod(lambda: types.SimpleNamespace()),
+    )
+    secret_store = SystemKeyringSecretStore(service_name="hol-guard.policy-integrity")
+    monkeypatch.setattr(
+        secret_store,
+        "_get_secret_without_macos_ui",
+        lambda _secret_id: module.get_password("hol-guard.policy-integrity", _secret_id),
+    )
+    monkeypatch.setattr(
+        secret_store,
+        "get_secret",
+        lambda _secret_id: (_ for _ in ()).throw(AssertionError("Python keyring reads should not run")),
+    )
+
+    assert secret_store.get_secret_with_timeout("policy-key", timeout_seconds=1.0) == "native-secret"
+
+
 def test_system_keyring_timeout_blocks_non_policy_macos_prompt_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
