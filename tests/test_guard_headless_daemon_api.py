@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
+from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
@@ -34,6 +35,11 @@ from codex_plugin_scanner.guard.runtime.runner import (
 from codex_plugin_scanner.guard.shims import install_package_shims
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_supply_chain_evaluator import WORKSPACE_ID, _bundle_response, _package
+
+
+@pytest.fixture(autouse=True)
+def _default_store_platform(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "linux")
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
