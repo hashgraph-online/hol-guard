@@ -348,10 +348,7 @@ def _execute_policy_sync(
     store.replace_remote_policies(
         [
             *_existing_non_review_remote_policies(store),
-            *[
-                _decision_from_registry_entry(entry)
-                for entry in registry.values()
-            ],
+            *[_decision_from_registry_entry(entry) for entry in registry.values()],
         ],
         generated_at,
         remote_write_authorized=True,
@@ -563,11 +560,7 @@ def _decision_from_memory_rule(
     workspace = _optional_string(bundle.get("workspaceId"))
     if scope == "workspace" and isinstance(workspace_ids, list):
         workspace = next(
-            (
-                candidate
-                for candidate in (_optional_string(item) for item in workspace_ids)
-                if candidate is not None
-            ),
+            (candidate for candidate in (_optional_string(item) for item in workspace_ids) if candidate is not None),
             workspace,
         )
     return PolicyDecision(
