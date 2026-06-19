@@ -465,26 +465,9 @@ def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, o
         ):
             return entitlement
         _write_package_firewall_refresh_state(store.guard_home, now)
-    try:
-        shared_auth_context = runner._resolve_guard_sync_auth_context(store)
-    except runner.GuardSyncAuthorizationExpiredError as error:
-        if str(entitlement.get("reason") or "") == "guard_cloud_connect_required":
-            store.record_latest_guard_connect_sync_result(
-                status="retry_required",
-                milestone="first_sync_failed",
-                now=now_iso,
-                reason=str(error),
-            )
-        return entitlement_module.resolve_package_firewall_entitlement(store)
-    except (runner.GuardSyncNotAvailableError, runner.GuardSyncNotConfiguredError, OSError, RuntimeError):
-        return entitlement_module.resolve_package_firewall_entitlement(store)
     for refresh in (sync_local_guard_cloud_proof, sync_supply_chain_bundle):
         try:
-            _call_sync_with_optional_auth_context(
-                refresh,
-                store=store,
-                auth_context=shared_auth_context,
-            )
+            refresh(store)
         except runner.GuardSyncAuthorizationExpiredError as error:
             if str(entitlement.get("reason") or "") == "guard_cloud_connect_required":
                 store.record_latest_guard_connect_sync_result(

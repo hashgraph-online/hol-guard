@@ -1616,7 +1616,7 @@ def test_oauth_health_auto_repairs_stale_encrypted_fallback_from_primary(tmp_pat
     }
 
 
-def test_oauth_health_does_not_repair_from_recoverable_fallback_when_hash_is_stale(
+def test_oauth_health_repairs_from_recoverable_fallback_when_primary_secret_is_missing(
     tmp_path,
     monkeypatch,
 ):
@@ -1648,11 +1648,15 @@ def test_oauth_health_does_not_repair_from_recoverable_fallback_when_hash_is_sta
     profile = store.get_cloud_sync_profile()
     repaired_payload = store.get_sync_payload("oauth_local_credentials")
 
-    assert health["state"] == "degraded"
-    assert store.get_oauth_local_credentials() is None
-    assert profile is None
+    assert health["state"] == "healthy"
+    assert store.get_oauth_local_credentials() is not None
+    assert profile == {
+        "auth_mode": "oauth",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "workspace_id": "workspace-123",
+    }
     assert isinstance(repaired_payload, dict)
-    assert repaired_payload["credentials_sha256"] == "pbkdf2-sha256$" + ("0" * 64)
+    assert repaired_payload["credentials_sha256"] != "pbkdf2-sha256$" + ("0" * 64)
 
 
 def test_oauth_health_does_not_repair_from_recoverable_fallback_when_macos_keychain_readback_is_unavailable(

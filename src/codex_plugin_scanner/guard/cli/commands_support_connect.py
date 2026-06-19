@@ -152,9 +152,8 @@ def _refresh_cloud_policy_bundle(store: GuardStore) -> None:
         return
     now = _now()
     try:
-        auth_context = _connect_guard_sync_auth_context(store)
-        sync_receipts(store, auth_context=auth_context)
-        sync_supply_chain_cloud_state(store, auth_context=auth_context)
+        sync_receipts(store)
+        sync_supply_chain_cloud_state(store)
     except GuardSyncAuthorizationExpiredError as error:
         store.set_sync_payload(
             "policy_bundle_last_error",
