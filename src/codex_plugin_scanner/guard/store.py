@@ -1172,14 +1172,6 @@ class GuardStore:
                 persisted_value = self._get_secret_from_primary_store(primary, secret_id)
                 if persisted_value == value:
                     return
-                if isinstance(secret_store.fallback, EncryptedFileSecretStore):
-                    fallback_value = self._get_secret_from_store(secret_store.fallback, secret_id)
-                    if fallback_value == value:
-                        _store_logger.warning(
-                            "OAuth secret persisted via encrypted fallback store because Keychain "
-                            "readback was unavailable."
-                        )
-                        return
                 raise RuntimeError("Guard could not persist local Guard Cloud authorization securely.")
         if isinstance(secret_store, UnavailableSecretStore):
             raise RuntimeError(
@@ -5234,7 +5226,11 @@ class GuardStore:
             promote=False,
             allow_primary=self._oauth_primary_reads_are_no_ui_safe(),
         )
-        if secret_payload is None and self.repair_oauth_local_credential_storage_from_primary():
+        if (
+            secret_payload is None
+            and not isinstance(self._oauth_secret_store, FallbackSecretStore)
+            and self.repair_oauth_local_credential_storage_from_primary()
+        ):
             refreshed_payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
             if isinstance(refreshed_payload, dict):
                 payload = refreshed_payload
@@ -5416,10 +5412,19 @@ class GuardStore:
         if cached_secret_payload is not None:
             return cached_secret_payload
         fallback_secret_json = self._load_oauth_fallback_secret_json(secret_ref)
-        fallback_secret_payload = self._load_validated_oauth_fallback_secret_payload(fallback_secret_json, secret_hash)
-        if fallback_secret_payload is not None:
-            self._remember_oauth_secret_payload(secret_ref, secret_hash, fallback_secret_json)
-            return fallback_secret_payload
+        skip_fallback_first = (
+            sys.platform == "darwin"
+            and isinstance(self._oauth_secret_store, FallbackSecretStore)
+            and isinstance(self._oauth_secret_store.primary, SystemKeyringSecretStore)
+        )
+        if not skip_fallback_first:
+            fallback_secret_payload = self._load_validated_oauth_fallback_secret_payload(
+                fallback_secret_json,
+                secret_hash,
+            )
+            if fallback_secret_payload is not None:
+                self._remember_oauth_secret_payload(secret_ref, secret_hash, fallback_secret_json)
+                return fallback_secret_payload
         if not allow_primary:
             return None
         for candidate in self._get_secret_candidates(

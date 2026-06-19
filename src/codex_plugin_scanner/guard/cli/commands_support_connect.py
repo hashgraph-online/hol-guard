@@ -14,7 +14,14 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
-from ..local_supply_chain import _resolve_guard_sync_auth_context
+from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_resolve_guard_sync_auth_context
+
+
+def _connect_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
+    resolver = globals().get("_resolve_guard_sync_auth_context")
+    if callable(resolver):
+        return resolver(store)
+    return _local_resolve_guard_sync_auth_context(store)
 
 def _validate_policy_scope(
     scope: str,
@@ -145,7 +152,7 @@ def _refresh_cloud_policy_bundle(store: GuardStore) -> None:
         return
     now = _now()
     try:
-        auth_context = _resolve_guard_sync_auth_context(store)
+        auth_context = _connect_guard_sync_auth_context(store)
         sync_receipts(store, auth_context=auth_context)
         sync_supply_chain_cloud_state(store, auth_context=auth_context)
     except GuardSyncAuthorizationExpiredError as error:
