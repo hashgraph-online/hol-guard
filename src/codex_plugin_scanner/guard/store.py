@@ -665,7 +665,9 @@ class SystemKeyringSecretStore:
             from ctypes import byref, c_ubyte
 
             macos_keyring_api = self._load_macos_keyring_api_module()
-            cfdata_to_str = getattr(macos_keyring_api, "cfdata_to_str", None)
+            # The macOS keyring backend returns password bytes here but exposes
+            # its decoder under the historical cfstr_to_str name.
+            cfstr_to_str = getattr(macos_keyring_api, "cfstr_to_str", None)
             cf_release = getattr(macos_keyring_api, "CFRelease", None)
             security_library = getattr(macos_keyring_api, "_sec", None)
             get_interaction_allowed = (
@@ -708,10 +710,10 @@ class SystemKeyringSecretStore:
                 with suppress(Exception):
                     set_interaction_allowed(restore_value)
         if status == 0:
-            if not callable(cfdata_to_str):
+            if not callable(cfstr_to_str):
                 return None
             try:
-                value = cfdata_to_str(data)
+                value = cfstr_to_str(data)
             except Exception:
                 value = None
             finally:
