@@ -6,7 +6,6 @@ import base64
 import json
 import pickle
 import sqlite3
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,6 +53,25 @@ def _default_store_platform(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _store(tmp_path: Path) -> GuardStore:
     return GuardStore(tmp_path / "guard-home")
+
+
+def _enable_macos_native_policy_integrity(
+    monkeypatch: pytest.MonkeyPatch,
+    install_fake_system_keyring,
+):
+    fake_keyring = install_fake_system_keyring()
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_supports_native_macos_security_reads",
+        classmethod(lambda cls: True),
+    )
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_get_secret_without_macos_ui",
+        lambda self, secret_id: fake_keyring.get_password(self.service_name, secret_id),
+    )
+    return fake_keyring
 
 
 @dataclass
@@ -894,31 +912,31 @@ def test_policy_integrity_status_and_verify_do_not_create_keyring_material_on_fr
     assert secret_store.get_secret(store._policy_integrity_control_ref) is None
 
 
-def test_policy_integrity_status_skips_passive_macos_keychain_reads(
+def test_policy_integrity_status_uses_native_no_ui_reads_on_macos(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    install_fake_system_keyring,
 ) -> None:
-    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    _enable_macos_native_policy_integrity(monkeypatch, install_fake_system_keyring)
     store = _store(tmp_path)
     store.upsert_policy(
         _decision(artifact_id="codex:project:passive-skip", artifact_hash="hash-passive-skip"),
         "2026-06-14T00:00:00Z",
     )
-    assert store._policy_integrity_secret_store is None
+    secret_store = store._policy_integrity_secret_store
+    assert isinstance(secret_store, SystemKeyringSecretStore)
     store._clear_policy_integrity_cache()
-    monkeypatch.setattr(sys, "platform", "darwin", raising=False)
     monkeypatch.setattr(
-        SystemKeyringSecretStore,
-        "_supports_native_macos_security_reads",
-        classmethod(lambda cls: (_ for _ in ()).throw(AssertionError("passive macOS keychain probe should not run"))),
+        secret_store,
+        "get_secret",
+        lambda _secret_id: (_ for _ in ()).throw(AssertionError("plain keyring reads should not run")),
     )
 
     status = store.get_policy_integrity_status()
     verify = store.verify_policy_integrity()
 
-    assert status["mode"] == "degraded"
-    assert verify["mode"] == "degraded"
-    assert status["degraded_reasons"] == ["system_keyring_unavailable", "policy_integrity_control_unavailable"]
+    assert status["mode"] == "protected"
+    assert verify["mode"] == "protected"
     assert verify["local_rows_scanned"] == 1
 
 
@@ -963,9 +981,11 @@ def test_tampered_signed_row_is_ignored_and_event_emitted(tmp_path: Path) -> Non
         now="2026-06-14T00:01:00Z",
     )
     events = store.list_events(limit=100, event_name="policy_integrity_violation")
+    ignored_events = store.list_events(limit=100, event_name="rule.ignored.local_integrity")
 
     assert resolved is None
     assert any(event.get("payload", {}).get("artifact_id") == "codex:project:tampered" for event in events)
+    assert any(event.get("payload", {}).get("artifact_id") == "codex:project:tampered" for event in ignored_events)
 
 
 def test_remote_policy_row_is_honored_without_local_mac(tmp_path: Path) -> None:
@@ -982,8 +1002,66 @@ def test_remote_policy_row_is_honored_without_local_mac(tmp_path: Path) -> None:
         "hash-remote",
         now="2026-06-14T00:01:00Z",
     )
+    events = store.list_events(limit=100, event_name="policy.cloud.applied")
 
     assert resolved == "allow"
+    assert any(event.get("payload", {}).get("artifact_id") == "codex:project:remote" for event in events)
+
+
+def test_remote_policy_integrity_failure_does_not_emit_local_rule_event(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
+
+    store = _store(tmp_path)
+    store.replace_remote_policies(
+        [_decision(artifact_id="codex:project:remote-tampered", artifact_hash="hash-remote", source="cloud-sync")],
+        "2026-06-14T00:00:00Z",
+        remote_write_authorized=True,
+    )
+    original_result = GuardStore._policy_integrity_result_for_row
+
+    def _forced_invalid(
+        self: GuardStore,
+        row: sqlite3.Row,
+        *,
+        mode: str,
+        key: bytes | None,
+        key_id: str | None,
+        trusted_generation: int | None = None,
+    ) -> PolicyIntegrityVerificationResult:
+        if row["artifact_id"] == "codex:project:remote-tampered":
+            return PolicyIntegrityVerificationResult(status="invalid_mac", message="remote bundle row was tampered")
+        return original_result(
+            self,
+            row,
+            mode=mode,
+            key=key,
+            key_id=key_id,
+            trusted_generation=trusted_generation,
+        )
+
+    monkeypatch.setattr(GuardStore, "_policy_integrity_result_for_row", _forced_invalid)
+
+    resolved = store.resolve_policy(
+        "codex",
+        "codex:project:remote-tampered",
+        "hash-remote",
+        now="2026-06-14T00:01:00Z",
+    )
+    integrity_events = store.list_events(limit=100, event_name="policy_integrity_violation")
+    ignored_events = store.list_events(limit=100, event_name="rule.ignored.local_integrity")
+
+    assert resolved is None
+    assert any(
+        event.get("payload", {}).get("artifact_id") == "codex:project:remote-tampered"
+        for event in integrity_events
+    )
+    assert not any(
+        event.get("payload", {}).get("artifact_id") == "codex:project:remote-tampered"
+        for event in ignored_events
+    )
 
 
 def test_local_policy_write_cannot_impersonate_remote_policy_source(tmp_path: Path) -> None:
@@ -1513,8 +1591,21 @@ def test_trust_cli_doctor_degraded_safe_does_not_pass_runtime_check(tmp_path: Pa
     assert payload["summary"].startswith("Runtime protection is degraded.")
 
 
-def test_trust_cli_macos_native_setup_is_explicitly_unavailable(tmp_path: Path, capsys) -> None:
+def test_trust_cli_macos_native_setup_and_reset_work(
+    tmp_path: Path,
+    capsys,
+    monkeypatch,
+    install_fake_system_keyring,
+) -> None:
+    _enable_macos_native_policy_integrity(monkeypatch, install_fake_system_keyring)
     home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:trust-setup", artifact_hash="hash-trust-setup"),
+        "2026-06-14T00:00:00Z",
+    )
+    store.reset_policy_integrity(now="2026-06-14T00:00:01Z")
+
     rc = main(
         [
             "guard",
@@ -1529,10 +1620,12 @@ def test_trust_cli_macos_native_setup_is_explicitly_unavailable(tmp_path: Path, 
     )
     payload = json.loads(capsys.readouterr().out)
 
-    assert rc == 2
+    assert rc == 0
     assert payload["backend_requested"] == "macos-native"
-    assert "not enabled yet" in payload["error"]
-    assert "trust setup" in payload["error"]
+    assert payload["backend"] == "system-keyring"
+    assert payload["mode"] == "protected"
+    assert payload["remembered_rules"] == "enforced"
+    assert payload["ok"] is True
     assert payload["passive_prompt_allowed"] is False
 
     reset_rc = main(
@@ -1548,8 +1641,32 @@ def test_trust_cli_macos_native_setup_is_explicitly_unavailable(tmp_path: Path, 
         ]
     )
     reset_payload = json.loads(capsys.readouterr().out)
-    assert reset_rc == 2
-    assert "trust reset" in reset_payload["error"]
+    assert reset_rc == 0
+    assert reset_payload["mode"] == "degraded"
+    assert reset_payload["remembered_rules"] == "disabled_degraded"
+    assert reset_payload["ok"] is True
+
+
+def test_setup_policy_integrity_rolls_back_degraded_refresh_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "home")
+    monkeypatch.setattr(store, "_load_policy_integrity_control_state", lambda create: None)
+
+    baseline = _policy_integrity_state_payload(store.guard_home)
+    observed: dict[str, dict[str, object]] = {}
+
+    def _verify_policy_integrity(*, harness: str | None = None) -> dict[str, object]:
+        observed["state_payload"] = _policy_integrity_state_payload(store.guard_home)
+        return {"harness": harness, "mode": "degraded"}
+
+    monkeypatch.setattr(store, "verify_policy_integrity", _verify_policy_integrity)
+
+    result = store.setup_policy_integrity(harness="codex", now="2026-06-14T00:00:00Z")
+
+    assert result == {"harness": "codex", "mode": "degraded"}
+    assert observed["state_payload"] == baseline
 
 
 def test_policies_cli_verify_returns_nonzero_for_rollback_detected(tmp_path: Path, capsys) -> None:

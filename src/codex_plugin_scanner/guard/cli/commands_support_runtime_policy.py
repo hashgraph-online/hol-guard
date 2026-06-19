@@ -43,6 +43,10 @@ def _canonical_harness_name(value: str) -> str:
     return _runtime_resolution_module()._canonical_harness_name(value)
 
 
+def _runtime_request_summary(artifact: GuardArtifact) -> str | None:
+    return _runtime_resolution_module()._runtime_request_summary(artifact)
+
+
 def _claude_notification_tool_name(payload: dict[str, object]) -> str | None:
     direct_name = _optional_string(payload.get("tool_name"))
     if direct_name is not None:
@@ -228,23 +232,33 @@ def _runtime_stored_policy_action(
     artifact_id: str,
     artifact_hash: str,
     workspace: str | None,
+    decision_lookup: Mapping[str, object] | None = None,
 ) -> str | None:
     runtime_exact_match_context = _runtime_artifact_exact_match_context(artifact)
-    decision = store.resolve_policy_decision(
-        harness,
-        artifact_id,
-        artifact_hash,
-        workspace,
-        artifact.publisher,
-        runtime_exact_match_context=runtime_exact_match_context,
-    )
-    if decision is None and runtime_exact_match_context is not None:
+    ignored_local_integrity: Mapping[str, object] | None = None
+    if isinstance(decision_lookup, Mapping):
+        raw_decision = decision_lookup.get("decision")
+        decision = raw_decision if isinstance(raw_decision, Mapping) else None
+        raw_ignored_local_integrity = decision_lookup.get("ignored_local_integrity")
+        ignored_local_integrity = (
+            raw_ignored_local_integrity if isinstance(raw_ignored_local_integrity, Mapping) else None
+        )
+    else:
+        decision = store.resolve_policy_decision(
+            harness,
+            artifact_id,
+            artifact_hash=artifact_hash,
+            workspace=workspace,
+            publisher=artifact.publisher,
+            runtime_exact_match_context=runtime_exact_match_context,
+        )
+    if decision is None and runtime_exact_match_context is not None and ignored_local_integrity is None:
         legacy_decision = store.resolve_policy_decision(
             harness,
             artifact_id,
-            artifact_hash,
-            workspace,
-            artifact.publisher,
+            artifact_hash=artifact_hash,
+            workspace=workspace,
+            publisher=artifact.publisher,
         )
         if _optional_string((legacy_decision or {}).get("scope")) in {"harness", "global"}:
             decision = legacy_decision
@@ -282,6 +296,34 @@ def _runtime_stored_policy_action(
             return action if decision_artifact_hash in exact_match_keys else None
         return None
     return action
+
+
+def _remembered_rule_rejection_reason(
+    *,
+    response_payload: dict[str, object],
+    artifact: GuardArtifact,
+) -> str | None:
+    rejection = response_payload.get("remembered_rule_rejection")
+    if not isinstance(rejection, Mapping):
+        return None
+    trust_status = rejection.get("trust_status")
+    remembered_rules = (
+        str(trust_status.get("remembered_rules") or "unknown") if isinstance(trust_status, Mapping) else "unknown"
+    )
+    if remembered_rules != "disabled_degraded":
+        return None
+    integrity_message = _optional_string(rejection.get("integrity_message"))
+    artifact_summary = _runtime_request_summary(artifact) or artifact.name
+    if isinstance(integrity_message, str) and integrity_message.strip():
+        message = integrity_message.strip()
+        detail = f" {message if message.endswith('.') else message + '.'}"
+    else:
+        detail = ""
+    return (
+        f"HOL Guard kept {artifact_summary} in review because a remembered local rule was ignored while local trust "
+        f"is degraded.{detail} One-time approvals still work, but broader remembered rules stay limited until local "
+        f"trust is protected."
+    )
 
 
 def _runtime_artifact_exact_match_context(artifact: GuardArtifact) -> str | None:
