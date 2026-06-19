@@ -382,7 +382,7 @@ def _trust_root_for_artifact(
                 return candidate
             if (
                 getattr(artifact, "artifact_type", None) == "skill_file"
-                and candidate.parent.name == "skills"
+                and candidate.parent.name.lower() == "skills"
                 and ((candidate / "README.md").is_file() or (candidate / "SECURITY.md").is_file())
             ):
                 return candidate

@@ -166,6 +166,18 @@ def build_inventory_json_payload(
         artifact_id = str(item.get("artifact_id") or "")
         harness = str(item.get("harness") or "")
         extensions = metadata_by_artifact.get((harness, artifact_id))
+        config_path = _store_row_config_path(item) if str(item.get("artifact_type") or "") == "skill_file" else None
+        config_path_exists = config_path.exists() if config_path is not None else None
+        if not extensions:
+            extensions = _store_only_artifact_metadata_extensions(
+                item,
+                context=context,
+                generated_at=generated_at,
+                config_path=config_path,
+                config_path_exists=config_path_exists,
+            )
+            if config_path_exists is False:
+                enriched["present"] = False
         if extensions:
             enriched.update(extensions)
         items.append(enriched)
@@ -608,9 +620,17 @@ def _artifact_rows_from_store(
         row: dict[str, object] = dict(item)
         row["trust_verdict"] = trust_verdict
         extensions = metadata_by_artifact.get((harness, artifact_id))
+        config_path = _store_row_config_path(row) if str(row.get("artifact_type") or "") == "skill_file" else None
+        config_path_exists = config_path.exists() if config_path is not None else None
         if not extensions:
-            extensions = _store_only_artifact_metadata_extensions(row, context=context, generated_at=generated_at)
-            if str(row.get("artifact_type") or "") == "skill_file" and not _store_row_config_path_exists(row):
+            extensions = _store_only_artifact_metadata_extensions(
+                row,
+                context=context,
+                generated_at=generated_at,
+                config_path=config_path,
+                config_path_exists=config_path_exists,
+            )
+            if config_path_exists is False:
                 row["present"] = False
         if extensions:
             row.update(extensions)
@@ -618,11 +638,11 @@ def _artifact_rows_from_store(
     return artifacts
 
 
-def _store_row_config_path_exists(row: dict[str, object]) -> bool:
+def _store_row_config_path(row: dict[str, object]) -> Path | None:
     raw_config_path = row.get("config_path")
     if not isinstance(raw_config_path, str) or not raw_config_path.strip():
-        return False
-    return Path(raw_config_path).expanduser().exists()
+        return None
+    return Path(raw_config_path).expanduser()
 
 
 def _store_only_artifact_metadata_extensions(
@@ -630,15 +650,13 @@ def _store_only_artifact_metadata_extensions(
     *,
     context: HarnessContext,
     generated_at: str,
+    config_path: Path | None,
+    config_path_exists: bool | None,
 ) -> dict[str, object]:
     artifact_type = str(row.get("artifact_type") or "")
     if artifact_type != "skill_file":
         return {}
-    raw_config_path = row.get("config_path")
-    if not isinstance(raw_config_path, str) or not raw_config_path.strip():
-        return {}
-    config_path = Path(raw_config_path).expanduser()
-    if not config_path.exists():
+    if config_path is None or config_path_exists is not True:
         return {}
     artifact = SimpleNamespace(
         artifact_id=str(row.get("artifact_id") or ""),
@@ -646,7 +664,9 @@ def _store_only_artifact_metadata_extensions(
         config_path=str(config_path),
         name=str(row.get("artifact_name") or row.get("artifact_id") or "skill_file"),
     )
-    metadata = importlib.import_module(".aibom_trust_metadata", __package__).apply_local_trust_metadata(
+    from . import aibom_trust_metadata
+
+    metadata = aibom_trust_metadata.apply_local_trust_metadata(
         artifact,
         captured_at=generated_at,
         item_kind="skill",

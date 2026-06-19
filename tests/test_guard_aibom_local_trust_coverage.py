@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from codex_plugin_scanner.guard import aibom_cli as aibom_cli_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.aibom_cli import _artifact_rows_from_store
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
@@ -13,6 +14,15 @@ class _FakeInventoryStore:
 
     def list_inventory(self) -> list[dict[str, object]]:
         return self._rows
+
+    def get_oauth_local_credentials(self, *, allow_primary: bool = False) -> None:
+        return None
+
+    def get_or_create_installation_id(self) -> str:
+        return "installation-1"
+
+    def get_cloud_workspace_id(self) -> None:
+        return None
 
 
 def test_inventory_snapshot_adds_local_trust_to_hooks(tmp_path: Path) -> None:
@@ -205,3 +215,40 @@ def test_aibom_export_marks_missing_store_only_skill_files_not_present(tmp_path:
 
     assert rows[0]["present"] is False
     assert "trustResolution" not in rows[0]
+
+
+def test_inventory_json_payload_enriches_store_only_skill_files(tmp_path: Path, monkeypatch) -> None:
+    skill_dir = tmp_path / ".agents" / "skills" / "caveman-compress"
+    script_path = skill_dir / "scripts" / "cli.py"
+    script_path.parent.mkdir(parents=True)
+    (skill_dir / "README.md").write_text("# Caveman Compress\n", encoding="utf-8")
+    script_path.write_text("print('compress')\n", encoding="utf-8")
+    store = _FakeInventoryStore(
+        [
+            {
+                "artifact_id": "openclaw:skill:local:caveman-compress:scripts/cli.py",
+                "artifact_name": "caveman-compress/scripts/cli.py",
+                "artifact_type": "skill_file",
+                "config_path": str(script_path),
+                "harness": "openclaw",
+                "last_policy_action": None,
+                "present": True,
+                "source_scope": "skill-root:local",
+            }
+        ]
+    )
+    monkeypatch.setattr(aibom_cli_module, "collect_aibom_snapshots", lambda *args, **kwargs: ())
+
+    payload = aibom_cli_module.build_inventory_json_payload(
+        store,
+        HarnessContext(home_dir=tmp_path, workspace_dir=tmp_path, guard_home=tmp_path / ".guard"),
+        generated_at="2026-06-10T00:00:00Z",
+    )
+
+    items = payload["items"]
+    assert isinstance(items, list)
+    item = items[0]
+    assert isinstance(item, dict)
+    assert item["present"] is True
+    assert isinstance(item.get("trustResolution"), dict)
+    assert isinstance(item.get("trustLayers"), list)
