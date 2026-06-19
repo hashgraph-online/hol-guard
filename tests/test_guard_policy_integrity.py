@@ -990,6 +990,61 @@ def test_remote_policy_row_is_honored_without_local_mac(tmp_path: Path) -> None:
     assert any(event.get("payload", {}).get("artifact_id") == "codex:project:remote" for event in events)
 
 
+def test_remote_policy_integrity_failure_does_not_emit_local_rule_event(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
+
+    store = _store(tmp_path)
+    store.replace_remote_policies(
+        [_decision(artifact_id="codex:project:remote-tampered", artifact_hash="hash-remote", source="cloud-sync")],
+        "2026-06-14T00:00:00Z",
+        remote_write_authorized=True,
+    )
+    original_result = GuardStore._policy_integrity_result_for_row
+
+    def _forced_invalid(
+        self: GuardStore,
+        row: sqlite3.Row,
+        *,
+        mode: str,
+        key: bytes | None,
+        key_id: str | None,
+        trusted_generation: int | None = None,
+    ) -> PolicyIntegrityVerificationResult:
+        if row["artifact_id"] == "codex:project:remote-tampered":
+            return PolicyIntegrityVerificationResult(status="invalid_mac", message="remote bundle row was tampered")
+        return original_result(
+            self,
+            row,
+            mode=mode,
+            key=key,
+            key_id=key_id,
+            trusted_generation=trusted_generation,
+        )
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(GuardStore, "_policy_integrity_result_for_row", _forced_invalid)
+
+    resolved = store.resolve_policy(
+        "codex",
+        "codex:project:remote-tampered",
+        "hash-remote",
+        now="2026-06-14T00:01:00Z",
+    )
+    integrity_events = store.list_events(limit=100, event_name="policy_integrity_violation")
+    ignored_events = store.list_events(limit=100, event_name="rule.ignored.local_integrity")
+
+    assert resolved is None
+    assert any(
+        event.get("payload", {}).get("artifact_id") == "codex:project:remote-tampered"
+        for event in integrity_events
+    )
+    assert not any(
+        event.get("payload", {}).get("artifact_id") == "codex:project:remote-tampered"
+        for event in ignored_events
+    )
+    monkeypatch.undo()
+
+
 def test_local_policy_write_cannot_impersonate_remote_policy_source(tmp_path: Path) -> None:
     store = _store(tmp_path)
 

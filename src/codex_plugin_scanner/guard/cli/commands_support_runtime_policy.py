@@ -238,18 +238,18 @@ def _runtime_stored_policy_action(
         decision = store.resolve_policy_decision(
             harness,
             artifact_id,
-            artifact_hash,
-            workspace,
-            artifact.publisher,
+            artifact_hash=artifact_hash,
+            workspace=workspace,
+            publisher=artifact.publisher,
             runtime_exact_match_context=runtime_exact_match_context,
         )
     if decision is None and runtime_exact_match_context is not None:
         legacy_decision = store.resolve_policy_decision(
             harness,
             artifact_id,
-            artifact_hash,
-            workspace,
-            artifact.publisher,
+            artifact_hash=artifact_hash,
+            workspace=workspace,
+            publisher=artifact.publisher,
         )
         if _optional_string((legacy_decision or {}).get("scope")) in {"harness", "global"}:
             decision = legacy_decision
@@ -305,11 +305,11 @@ def _remembered_rule_rejection_reason(
         return None
     integrity_message = _optional_string(rejection.get("integrity_message"))
     artifact_summary = _runtime_request_summary(artifact) or artifact.name
-    detail = (
-        f" {integrity_message.strip()}"
-        if isinstance(integrity_message, str) and integrity_message.strip()
-        else ""
-    )
+    if isinstance(integrity_message, str) and integrity_message.strip():
+        message = integrity_message.strip()
+        detail = f" {message if message.endswith('.') else message + '.'}"
+    else:
+        detail = ""
     return (
         f"HOL Guard kept {artifact_summary} in review because a remembered local rule was ignored while local trust "
         f"is degraded.{detail} One-time approvals still work, but broader remembered rules stay limited until local "

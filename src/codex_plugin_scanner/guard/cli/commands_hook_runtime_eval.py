@@ -118,9 +118,9 @@ def _evaluate_runtime_artifact_hook(
     policy_lookup = store.resolve_policy_decision_lookup(
         policy_harness,
         artifact_id,
-        runtime_artifact_hash,
-        str(runtime_workspace) if runtime_workspace else None,
-        runtime_artifact.publisher,
+        artifact_hash=runtime_artifact_hash,
+        workspace=str(runtime_workspace) if runtime_workspace else None,
+        publisher=runtime_artifact.publisher,
         runtime_exact_match_context=runtime_exact_match_context,
     )
     stored_policy_action = _runtime_stored_policy_action(

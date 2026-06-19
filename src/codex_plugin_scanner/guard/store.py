@@ -3118,10 +3118,10 @@ class GuardStore:
         lookup = self.resolve_policy_decision_lookup(
             harness,
             artifact_id,
-            artifact_hash,
-            workspace,
-            publisher,
-            now,
+            artifact_hash=artifact_hash,
+            workspace=workspace,
+            publisher=publisher,
+            now=now,
         )
         decision = lookup["decision"]
         return str(decision["action"]) if decision is not None else None
@@ -3296,20 +3296,21 @@ class GuardStore:
                         "integrity_message": integrity_result.message,
                         "trust_status": trust_status,
                     }
-                events.append(
-                    (
-                        "rule.ignored.local_integrity",
-                        {
-                            "decision_id": int(candidate["decision_id"]),
-                            "harness": str(candidate["harness"]),
-                            "artifact_id": candidate["artifact_id"],
-                            "scope": str(candidate["scope"]),
-                            "source": str(candidate["source"]),
-                            "integrity_status": integrity_result.status,
-                            "message": integrity_result.message,
-                        },
+                if not is_remote_policy_source(str(candidate["source"])):
+                    events.append(
+                        (
+                            "rule.ignored.local_integrity",
+                            {
+                                "decision_id": int(candidate["decision_id"]),
+                                "harness": str(candidate["harness"]),
+                                "artifact_id": candidate["artifact_id"],
+                                "scope": str(candidate["scope"]),
+                                "source": str(candidate["source"]),
+                                "integrity_status": integrity_result.status,
+                                "message": integrity_result.message,
+                            },
+                        )
                     )
-                )
                 _store_logger.warning(
                     "Guard ignored local policy decision %s because integrity status was %s.",
                     candidate["decision_id"],
@@ -3336,11 +3337,11 @@ class GuardStore:
         lookup = self.resolve_policy_decision_lookup(
             harness,
             artifact_id,
-            artifact_hash,
-            workspace,
-            publisher,
-            now,
-            runtime_exact_match_context,
+            artifact_hash=artifact_hash,
+            workspace=workspace,
+            publisher=publisher,
+            now=now,
+            runtime_exact_match_context=runtime_exact_match_context,
         )
         return lookup["decision"]
 
