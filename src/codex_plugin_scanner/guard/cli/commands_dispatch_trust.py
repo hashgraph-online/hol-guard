@@ -41,6 +41,12 @@ def _trust_status_payload(store: GuardStore, *, command: str, backend: str) -> d
     runtime_protection = str(trust_status.get("runtime_protection") or "unknown")
     remembered_rules = str(trust_status.get("remembered_rules") or "unknown")
     cloud_policies = str(trust_status.get("cloud_policies") or "unknown")
+    actual_backend = trust_status.get("backend")
+    backend_name = (
+        str(actual_backend)
+        if isinstance(actual_backend, str) and actual_backend and actual_backend != "unknown"
+        else resolved.backend_selected
+    )
     mode = resolved.mode
     if mode == "unsupported":
         message = "This local trust backend is unsupported on this platform. Runtime blocking stays active."
@@ -59,7 +65,7 @@ def _trust_status_payload(store: GuardStore, *, command: str, backend: str) -> d
         "backend_requested": resolved.backend_requested,
         "backend_selected": resolved.backend_selected,
         "backend_supported": resolved.backend_supported,
-        "backend": trust_status.get("backend") or resolved.backend_selected or "unknown",
+        "backend": backend_name or "unknown",
         "runtime_protection": runtime_protection,
         "remembered_rules": remembered_rules,
         "cloud_policies": cloud_policies,
