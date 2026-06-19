@@ -43,6 +43,7 @@ _LOCAL_BASELINE_ITEM_KINDS = frozenset(
     {
         "agent",
         "daemon_plugin",
+        "hook",
         "mcp_server",
         "mcp_tool",
         "overlay",
@@ -52,7 +53,7 @@ _LOCAL_BASELINE_ITEM_KINDS = frozenset(
         "skill",
     }
 )
-_INSTRUCTION_BASELINE_ITEM_KINDS = frozenset({"agent", "daemon_plugin", "overlay", "policy", "prompt_pack"})
+_INSTRUCTION_BASELINE_ITEM_KINDS = frozenset({"agent", "daemon_plugin", "hook", "overlay", "policy", "prompt_pack"})
 
 
 def trust_resolution_from_domain(
@@ -367,6 +368,8 @@ def _trust_root_for_artifact(
         skill_dir = path.parent if path.name.lower() == "skill.md" else path
         for candidate in (skill_dir, *skill_dir.parents):
             if (candidate / ".codex-plugin" / "plugin.json").is_file():
+                return candidate
+            if path.name.lower() != "skill.md" and (candidate / "SKILL.md").is_file():
                 return candidate
             if workspace_dir is not None and candidate.resolve() == workspace_dir.resolve():
                 break
