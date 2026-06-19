@@ -21,7 +21,6 @@ from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_
 from codex_plugin_scanner.guard import review_contracts as review_contracts_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.approval_gate import ApprovalGateError
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.cli.connect_flow import GuardOAuthTokenExchangeResult
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
@@ -37,7 +36,6 @@ from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
 from codex_plugin_scanner.guard.review_contracts import (
     build_local_review_request_claim,
     guard_review_oauth_metadata,
-    payload_hash_for_decision_memory_bundle,
     payload_hash_for_remote_approval_envelope,
 )
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
@@ -2788,7 +2786,7 @@ def test_headless_remote_once_rejects_wrong_target_and_does_not_apply(
     assert payload["error"] == "remote_once_wrong_target"
 
 
-def test_headless_remote_once_keeps_claimed_receipts_consumed_after_apply_failure(
+def test_headless_remote_once_releases_claimed_receipts_after_apply_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2840,8 +2838,9 @@ def test_headless_remote_once_keeps_claimed_receipts_consumed_after_apply_failur
 
     assert first_status == 409
     assert first_payload["error"] == "remote_once_apply_failed"
+    assert store.has_remote_once_receipt("cloud-receipt-unresolved") is False
     assert second_status == 409
-    assert second_payload["error"] == "remote_once_replayed"
+    assert second_payload["error"] == "remote_once_apply_failed"
 
 
 def test_headless_api_rejects_forged_dashboard_session_token(tmp_path: Path) -> None:

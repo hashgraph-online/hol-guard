@@ -2261,14 +2261,19 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "remote_once_replayed"}, status=409)
             return
         resolution_action = "block" if self._optional_string(envelope.get("decision")) == "block" else "allow"
-        result = self.server.store.resolve_request_with_signed_remote_result(  # type: ignore[attr-defined]
-            request_id,
-            resolution_action=resolution_action,
-            resolution_scope="artifact",
-            reason="Guard Cloud signed remote approval",
-            resolved_at=_now(),
-        )
+        try:
+            result = self.server.store.resolve_request_with_signed_remote_result(  # type: ignore[attr-defined]
+                request_id,
+                resolution_action=resolution_action,
+                resolution_scope="artifact",
+                reason="Guard Cloud signed remote approval",
+                resolved_at=_now(),
+            )
+        except Exception:
+            self.server.store.release_remote_once_receipt(receipt_id)  # type: ignore[attr-defined]
+            raise
         if result.get("resolved") is not True:
+            self.server.store.release_remote_once_receipt(receipt_id)  # type: ignore[attr-defined]
             self._write_json({"error": "remote_once_apply_failed"}, status=409)
             return
         resolved_request_value = result.get("resolved_request")

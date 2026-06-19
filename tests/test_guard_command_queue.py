@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import base64
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -10,6 +10,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import review_contracts as review_contracts_module
+from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.daemon import client as daemon_client_module
@@ -18,8 +20,6 @@ from codex_plugin_scanner.guard.daemon.command_queue_worker import (
     CommandQueueWorker,
     start_command_queue_worker,
 )
-from codex_plugin_scanner.guard import store as guard_store_module
-from codex_plugin_scanner.guard import review_contracts as review_contracts_module
 from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
     policy_bundle_keyring_payload,
     policy_bundle_verification_key_from_public_key,
@@ -102,6 +102,9 @@ class FakeStore:
     ) -> bool:
         del receipt_id, request_id, claimed_at
         return True
+
+    def release_remote_once_receipt(self, receipt_id: str) -> None:
+        del receipt_id
 
     def list_policy_decisions(self, harness: str | None = None) -> list[dict[str, object]]:
         del harness
@@ -1471,6 +1474,64 @@ def test_executor_resolves_local_approval_request(tmp_path: Path) -> None:
     ]
 
 
+def test_executor_releases_remote_once_receipt_when_resolution_not_applied(tmp_path: Path) -> None:
+    class ApprovalStore(FakeStore):
+        def __init__(self, guard_home: Path) -> None:
+            super().__init__(guard_home)
+            self.claimed_receipts: list[str] = []
+            self.released_receipts: list[str] = []
+            self.request_row = _approval_request_row("request-1")
+
+        def get_approval_request(self, request_id: str) -> dict[str, object] | None:
+            return self.request_row if request_id == "request-1" else None
+
+        def claim_remote_once_receipt(
+            self,
+            receipt_id: str,
+            *,
+            request_id: str,
+            claimed_at: str,
+        ) -> bool:
+            del request_id, claimed_at
+            self.claimed_receipts.append(receipt_id)
+            return True
+
+        def release_remote_once_receipt(self, receipt_id: str) -> None:
+            self.released_receipts.append(receipt_id)
+
+        def resolve_request_with_signed_remote_result(
+            self,
+            request_id: str,
+            *,
+            resolution_action: str,
+            resolution_scope: str,
+            reason: str | None,
+            resolved_at: str,
+        ) -> dict[str, object]:
+            del request_id, resolution_action, resolution_scope, reason, resolved_at
+            return {"resolved": False, "resolved_request": {}}
+
+    store = ApprovalStore(tmp_path / "guard-home")
+    remote_approval = _signed_remote_approval(store, store.request_row)
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {
+                "localRequestId": "request-1",
+                "action": "allow_once",
+                "remoteApproval": remote_approval,
+            },
+        },
+        context=_context(tmp_path),
+        store=store,  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert result["data"]["status"] == "not_resolved"
+    assert store.claimed_receipts == ["cloud-receipt-1"]
+    assert store.released_receipts == ["cloud-receipt-1"]
+
+
 def test_executor_syncs_policy_without_local_request_id(tmp_path: Path) -> None:
     class PolicyStore(FakeStore):
         def __init__(self, guard_home: Path) -> None:
@@ -1566,3 +1627,4 @@ def test_executor_rejects_overbroad_signed_allow_memory_rules(tmp_path: Path) ->
     assert result["data"]["status"] == "rejected"
     assert result["data"]["decisionMemoryAck"]["rejectedRuleIds"] == ["review-memory:receipt-team"]
     assert store.policies == [([], "2026-06-13T00:00:00+00:00", True)]
+    assert store.get_sync_payload("guard_review_memory_policy_version") is None

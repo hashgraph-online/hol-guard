@@ -286,13 +286,19 @@ def _execute_approval_operation(
     ):
         raise ValueError("remote_approval_replayed")
     resolution_action = "allow" if action == "allow_once" else "block"
-    result = store.resolve_request_with_signed_remote_result(
-        local_request_id,
-        resolution_action=resolution_action,
-        resolution_scope="artifact",
-        reason=_optional_string(payload.get("reason")) or "Guard Cloud signed remote approval",
-        resolved_at=generated_at,
-    )
+    try:
+        result = store.resolve_request_with_signed_remote_result(
+            local_request_id,
+            resolution_action=resolution_action,
+            resolution_scope="artifact",
+            reason=_optional_string(payload.get("reason")) or "Guard Cloud signed remote approval",
+            resolved_at=generated_at,
+        )
+    except Exception:
+        store.release_remote_once_receipt(receipt_id)
+        raise
+    if result.get("resolved") is not True:
+        store.release_remote_once_receipt(receipt_id)
     return _result(
         {
             "action": action,
@@ -358,15 +364,17 @@ def _execute_policy_sync(
         list(registry.values()),
         generated_at,
     )
-    store.set_sync_payload(
-        _GUARD_REVIEW_MEMORY_VERSION_SYNC_KEY,
-        {"policyVersion": _optional_string(bundle.get("policyVersion"))},
-        generated_at,
-    )
+    ack_status = "accepted" if not rejected_rule_ids else "rejected"
+    if ack_status == "accepted":
+        store.set_sync_payload(
+            _GUARD_REVIEW_MEMORY_VERSION_SYNC_KEY,
+            {"policyVersion": _optional_string(bundle.get("policyVersion"))},
+            generated_at,
+        )
     ack = build_decision_memory_ack(
         bundle=bundle,
         oauth=oauth,
-        status="accepted" if not rejected_rule_ids else "rejected",
+        status=ack_status,
         applied_rule_count=applied_rule_count,
         reason=None if not rejected_rule_ids else "decision_memory_rule_rejected",
         rejected_rule_ids=rejected_rule_ids,
