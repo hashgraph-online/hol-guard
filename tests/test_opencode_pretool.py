@@ -99,6 +99,14 @@ def test_pretool_plugin_source_normalizes_argv_array_commands(tmp_path: Path) ->
     assert "Array.isArray(command)" in source
 
 
+def test_pretool_plugin_source_intercepts_lean_ctx_shell(tmp_path: Path) -> None:
+    source = pretool_plugin_source(_ctx(tmp_path))
+    intercept_line = next(line for line in source.splitlines() if line.startswith("const INTERCEPT_TOOLS"))
+
+    assert '"ctx_shell"' in intercept_line
+    assert intercept_line.index('"bash"') < intercept_line.index('"ctx_shell"') < intercept_line.index('"shell"')
+
+
 def test_pretool_plugin_guard_block_message_appends_primary_approval_url(tmp_path: Path) -> None:
     message = _run_generated_guard_block_message(
         tmp_path,

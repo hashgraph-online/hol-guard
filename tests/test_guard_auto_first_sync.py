@@ -236,7 +236,7 @@ def test_daemon_finalize_guard_connect_payload_uses_fresh_oauth_access_token_onc
     connect_url = "https://hol.org/guard/connect"
     now = "2026-06-04T12:00:00+00:00"
     sync_calls: list[dict[str, object] | None] = []
-    bundle_calls: list[dict[str, object] | None] = []
+    supply_chain_calls: list[dict[str, object] | None] = []
 
     monkeypatch.setattr(
         store,
@@ -267,8 +267,8 @@ def test_daemon_finalize_guard_connect_payload_uses_fresh_oauth_access_token_onc
     monkeypatch.setattr(daemon_server_module, "sync_local_guard_cloud_proof", _fake_sync)
     monkeypatch.setattr(
         daemon_server_module,
-        "sync_supply_chain_bundle",
-        lambda _store, *, auth_context=None: bundle_calls.append(auth_context) or {"packages": []},
+        "sync_supply_chain_cloud_state",
+        lambda _store, *, auth_context=None: supply_chain_calls.append(auth_context) or {"packages": []},
     )
 
     payload = daemon_server_module._finalize_daemon_guard_connect_payload(
@@ -292,7 +292,7 @@ def test_daemon_finalize_guard_connect_payload_uses_fresh_oauth_access_token_onc
             "sync_url": "https://hol.org/api/guard/receipts/sync",
         }
     ]
-    assert bundle_calls == [
+    assert supply_chain_calls == [
         {
             "access_token": "access-token-1",
             "dpop_key_material": "dpop",
@@ -551,6 +551,14 @@ def test_headless_first_sync_auth_expiry_marks_connect_state_for_repair(tmp_path
         return {"status": "queued", "message": "Guard Cloud sync started."}
 
     monkeypatch.setattr(daemon_server_module, "sync_local_guard_cloud_proof", _raise_auth_expired)
+    monkeypatch.setattr(
+        daemon_server_module,
+        "_resolve_guard_sync_auth_context",
+        lambda _store: {
+            "access_token": "access-token-1",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        },
+    )
     monkeypatch.setattr(daemon_server_module, "_queue_headless_cloud_sync", _record_queue)
 
     daemon_server_module._run_headless_cloud_sync(store=store)

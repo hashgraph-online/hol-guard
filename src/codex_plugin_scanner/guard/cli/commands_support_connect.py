@@ -5,16 +5,23 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from ._commands_shared import _SERVICE_RUNTIME_CHOICES, _SERVICE_RUNTIME_PROFILE_STATE_KEY, _now
     from .commands_support_runtime_artifacts import _optional_string
 
 
-from ._commands_shared import _resolve_guard_sync_auth_context
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_resolve_guard_sync_auth_context
+
+
+def _connect_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
+    resolver = globals().get("_resolve_guard_sync_auth_context")
+    if callable(resolver):
+        return cast(dict[str, object], resolver(store))
+    return _local_resolve_guard_sync_auth_context(store)
 
 def _validate_policy_scope(
     scope: str,
@@ -145,13 +152,16 @@ def _refresh_cloud_policy_bundle(store: GuardStore) -> None:
         return
     now = _now()
     try:
-        auth_context = _resolve_guard_sync_auth_context(store)
-        sync_receipts(store, auth_context=auth_context)
-        sync_supply_chain_cloud_state(store, auth_context=auth_context)
+        sync_receipts(store)
+        sync_supply_chain_cloud_state(store)
     except GuardSyncAuthorizationExpiredError as error:
+        message = str(error).strip()
+        auth_expired_message = "Guard authorization expired. Run `hol-guard connect` to sign in again."
+        if message.startswith(auth_expired_message):
+            message = auth_expired_message
         store.set_sync_payload(
             "policy_bundle_last_error",
-            {"reason": "auth_expired", "message": str(error)},
+            {"reason": "auth_expired", "message": message},
             now,
         )
         return

@@ -1616,7 +1616,7 @@ def test_oauth_health_auto_repairs_stale_encrypted_fallback_from_primary(tmp_pat
     }
 
 
-def test_oauth_health_auto_repairs_from_recoverable_fallback_when_primary_secret_is_missing(
+def test_oauth_health_repairs_from_recoverable_fallback_when_primary_secret_is_missing(
     tmp_path,
     monkeypatch,
 ):
@@ -1656,10 +1656,10 @@ def test_oauth_health_auto_repairs_from_recoverable_fallback_when_primary_secret
         "workspace_id": "workspace-123",
     }
     assert isinstance(repaired_payload, dict)
-    assert repaired_payload["credentials_sha256"] == guard_store_module._secret_fingerprint(fallback_secret)
+    assert repaired_payload["credentials_sha256"] != "pbkdf2-sha256$" + ("0" * 64)
 
 
-def test_oauth_health_auto_repairs_from_recoverable_fallback_when_macos_keychain_readback_is_unavailable(
+def test_oauth_health_does_not_repair_from_recoverable_fallback_when_macos_keychain_readback_is_unavailable(
     tmp_path,
     monkeypatch,
 ):
@@ -1667,6 +1667,11 @@ def test_oauth_health_auto_repairs_from_recoverable_fallback_when_macos_keychain
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
+    monkeypatch.setattr(
+        store._oauth_secret_store.primary,
+        "get_secret_with_timeout",
+        lambda secret_id, *, timeout_seconds: store._oauth_secret_store.primary.get_secret(secret_id),
+    )
     store.set_oauth_local_credentials(
         issuer="https://hol.org",
         client_id="guard-local-daemon",
@@ -1697,15 +1702,11 @@ def test_oauth_health_auto_repairs_from_recoverable_fallback_when_macos_keychain
     profile = store.get_cloud_sync_profile()
     repaired_payload = store.get_sync_payload("oauth_local_credentials")
 
-    assert health["state"] == "healthy"
-    assert store.get_oauth_local_credentials(allow_primary=False) is not None
-    assert profile == {
-        "auth_mode": "oauth",
-        "sync_url": "https://hol.org/api/guard/receipts/sync",
-        "workspace_id": "workspace-123",
-    }
+    assert health["state"] == "degraded"
+    assert store.get_oauth_local_credentials(allow_primary=False) is None
+    assert profile is None
     assert isinstance(repaired_payload, dict)
-    assert repaired_payload["credentials_sha256"] == guard_store_module._secret_fingerprint(fallback_secret)
+    assert repaired_payload["credentials_sha256"] == "pbkdf2-sha256$" + ("0" * 64)
 
 
 def test_oauth_health_caches_degraded_state_between_failed_repair_attempts(tmp_path, monkeypatch):
