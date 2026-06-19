@@ -727,6 +727,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
 
 def _build_trust_doctor_panel(trust: dict[str, object]) -> Panel:
     body = Table.grid(padding=(0, 1))
+    body.add_row("Mode", str(trust.get("mode") or "unknown"))
     body.add_row("Runtime", str(trust.get("runtime_protection") or "unknown"))
     body.add_row("Remembered rules", str(trust.get("remembered_rules") or "unknown"))
     body.add_row("Cloud policies", str(trust.get("cloud_policies") or "unknown"))

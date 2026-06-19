@@ -1058,12 +1058,10 @@ def test_remote_policy_integrity_failure_does_not_emit_local_rule_event(
 
     assert resolved is None
     assert any(
-        event.get("payload", {}).get("artifact_id") == "codex:project:remote-tampered"
-        for event in integrity_events
+        event.get("payload", {}).get("artifact_id") == "codex:project:remote-tampered" for event in integrity_events
     )
     assert not any(
-        event.get("payload", {}).get("artifact_id") == "codex:project:remote-tampered"
-        for event in ignored_events
+        event.get("payload", {}).get("artifact_id") == "codex:project:remote-tampered" for event in ignored_events
     )
 
 
@@ -1460,9 +1458,7 @@ def test_guard_doctor_includes_safe_trust_diagnostics(tmp_path: Path, capsys) ->
     assert trust_payload["one_time_approvals"] == "available"
     assert trust_payload["durable_local_rules"] in {"enforced", "limited"}
     assert trust_payload["checks"]["passive_no_ui"] is True
-    assert trust_payload["checks"]["runtime_protection"] is (
-        trust_payload["runtime_protection"] == "protected"
-    )
+    assert trust_payload["checks"]["runtime_protection"] is (trust_payload["runtime_protection"] == "protected")
     assert trust_payload["official_install"]["package"] == "hol-guard"
     assert trust_payload["official_install"]["update_command"] == "hol-guard update"
     assert trust_payload["approval_center"]["active"] is False
@@ -1497,6 +1493,7 @@ def test_trust_cli_doctor_human_output_uses_trust_renderer(tmp_path: Path, capsy
 
     assert rc == 0
     assert "Local trust" in output
+    assert "Mode" in output
     assert "Passive OS prompts" in output
     assert "Install mode" in output
     assert "hol-guard update" in output
@@ -1721,7 +1718,7 @@ def test_trust_cli_explain_reports_guard_cloud_rule(tmp_path: Path, capsys) -> N
     assert "integrity_status" not in payload["rule"]
 
 
-def test_trust_cli_rejects_unavailable_backend_status(tmp_path: Path, capsys) -> None:
+def test_trust_cli_reports_unsupported_backend_status_without_prompt_error(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "home"
     rc = main(
         [
@@ -1737,9 +1734,10 @@ def test_trust_cli_rejects_unavailable_backend_status(tmp_path: Path, capsys) ->
     )
     payload = json.loads(capsys.readouterr().out)
 
-    assert rc == 2
+    assert rc == 0
+    assert payload["mode"] == "unsupported"
     assert payload["backend_requested"] == "macos-native"
-    assert "not available for passive status" in payload["error"]
+    assert payload["message"].startswith("This local trust backend is unsupported")
     assert payload["passive_prompt_allowed"] is False
 
 
@@ -1764,6 +1762,73 @@ def test_trust_cli_degraded_safe_backend_is_explicit(tmp_path: Path, capsys) -> 
     assert payload["backend"] == "degraded-safe"
     assert payload["remembered_rules"] == "disabled_degraded"
     assert payload["durable_local_rules"] == "limited"
+
+
+def test_trust_cli_macos_native_status_reports_setup_required_when_passive_backend_is_ready(
+    tmp_path: Path,
+    capsys,
+    monkeypatch: pytest.MonkeyPatch,
+    install_fake_system_keyring,
+) -> None:
+    _enable_macos_native_policy_integrity(monkeypatch, install_fake_system_keyring)
+    home_dir = tmp_path / "home"
+
+    rc = main(
+        [
+            "guard",
+            "trust",
+            "status",
+            "--backend",
+            "macos-native",
+            "--home",
+            str(home_dir),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["mode"] == "setup_required"
+    assert payload["backend_requested"] == "macos-native"
+    assert payload["backend_selected"] == "macos-native"
+    assert payload["setup_available"] is True
+    assert payload["passive_prompt_allowed"] is False
+
+
+def test_trust_cli_macos_native_test_stays_prompt_free_when_backend_is_unavailable(
+    tmp_path: Path,
+    capsys,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    monkeypatch.setattr(trust_dispatch_module.sys, "platform", "darwin", raising=False)
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_supports_native_macos_security_reads",
+        classmethod(lambda cls: False),
+    )
+
+    rc = main(
+        [
+            "guard",
+            "trust",
+            "test",
+            "--backend",
+            "macos-native",
+            "--home",
+            str(home_dir),
+            "--no-ui",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["mode"] == "degraded_safe"
+    assert payload["ok"] is True
+    assert payload["trust_health"] == "degraded_safe"
+    assert payload["passive_prompt_allowed"] is False
 
 
 def test_trust_cli_doctor_degraded_safe_does_not_pass_runtime_check(tmp_path: Path, capsys) -> None:

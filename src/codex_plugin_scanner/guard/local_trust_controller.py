@@ -1,0 +1,180 @@
+"""Local trust backend selection and passive status resolution."""
+
+from __future__ import annotations
+
+import sys
+from dataclasses import dataclass
+
+from .local_trust_contract import (
+    POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,
+    LocalTrustMode,
+    TrustBackend,
+    TrustBackendUnavailableError,
+    TrustStatus,
+    degraded_reason_for_backend_error,
+    run_trust_backend_check,
+    select_trust_backend,
+)
+from .store import GuardStore, SystemKeyringSecretStore
+
+PASSIVE_TRUST_TIMEOUT_SECONDS = 0.25
+
+
+def macos_native_backend_supported(store: GuardStore) -> bool:
+    secret_store = getattr(store, "_policy_integrity_secret_store", None)
+    return (
+        sys.platform == "darwin"
+        and isinstance(secret_store, SystemKeyringSecretStore)
+        and secret_store._supports_native_macos_security_reads()
+    )
+
+
+def _degraded_safe_status(*, backend: str, reason: str, setup_available: bool = False) -> TrustStatus:
+    return TrustStatus(
+        runtime_protection="degraded",
+        remembered_rules="disabled_degraded",
+        cloud_policies="setup_unavailable",
+        backend=backend,
+        degraded_reasons=(reason,),
+        setup_available=setup_available,
+    )
+
+
+class _DegradedSafeTrustBackend:
+    name = "degraded-safe"
+    priority = 0
+    supported = True
+    passive_no_ui_safe = True
+
+    def status(self) -> TrustStatus:
+        return _degraded_safe_status(backend=self.name, reason="trust_backend_unavailable")
+
+    def sign(self, payload: bytes) -> str:
+        raise TrustBackendUnavailableError("degraded_safe_backend_has_no_signing_material")
+
+    def verify(self, payload: bytes, signature: str) -> bool:
+        del payload, signature
+        return False
+
+    def setup(self) -> TrustStatus:
+        return self.status()
+
+    def revoke(self) -> TrustStatus:
+        return self.status()
+
+
+class _MacOSNativeTrustBackend:
+    name = "macos-native"
+    priority = 100
+
+    def __init__(self, store: GuardStore) -> None:
+        self._store = store
+        self.supported = sys.platform == "darwin"
+        self.passive_no_ui_safe = macos_native_backend_supported(store)
+
+    def status(self) -> TrustStatus:
+        return TrustStatus.from_policy_integrity_state(self._store.get_policy_integrity_status())
+
+    def sign(self, payload: bytes) -> str:
+        raise TrustBackendUnavailableError("macos_native_backend_signing_is_managed_by_guard_store")
+
+    def verify(self, payload: bytes, signature: str) -> bool:
+        del payload, signature
+        return False
+
+    def setup(self) -> TrustStatus:
+        raise TrustBackendUnavailableError("macos_native_backend_setup_is_managed_by_guard_store")
+
+    def revoke(self) -> TrustStatus:
+        raise TrustBackendUnavailableError("macos_native_backend_reset_is_managed_by_guard_store")
+
+
+@dataclass(frozen=True)
+class ResolvedTrustState:
+    mode: LocalTrustMode
+    backend_requested: str
+    backend_selected: str
+    backend_supported: bool
+    passive_no_ui_safe: bool
+    trust_status: TrustStatus
+
+
+def _trust_backends(store: GuardStore) -> tuple[TrustBackend, ...]:
+    return (_MacOSNativeTrustBackend(store), _DegradedSafeTrustBackend())
+
+
+def _backend_by_name(store: GuardStore, backend_requested: str) -> TrustBackend:
+    backends = {backend.name: backend for backend in _trust_backends(store)}
+    return backends.get(backend_requested, _DegradedSafeTrustBackend())
+
+
+def _trust_mode_for_backend(
+    trust_status: TrustStatus,
+    *,
+    backend_requested: str,
+    backend_selected: str,
+    backend_supported: bool,
+    passive_no_ui_safe: bool,
+) -> LocalTrustMode:
+    if (
+        trust_status.runtime_protection == "protected"
+        and trust_status.remembered_rules == "enforced"
+        and backend_requested != "degraded-safe"
+    ):
+        return "protected"
+    if backend_requested != "auto" and not backend_supported:
+        return "unsupported"
+    if backend_selected == "macos-native" and passive_no_ui_safe and trust_status.setup_available:
+        return "setup_required"
+    return "degraded_safe"
+
+
+def resolve_passive_trust_state(
+    store: GuardStore,
+    *,
+    backend_requested: str,
+    timeout_seconds: float = PASSIVE_TRUST_TIMEOUT_SECONDS,
+) -> ResolvedTrustState:
+    if backend_requested == "auto":
+        selected = select_trust_backend(_trust_backends(store), passive=True) or _DegradedSafeTrustBackend()
+    else:
+        selected = _backend_by_name(store, backend_requested)
+    timeout_result = _degraded_safe_status(
+        backend=selected.name,
+        reason=POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,
+        setup_available=bool(selected.name == "macos-native" and selected.supported and selected.passive_no_ui_safe),
+    )
+    trust_status = run_trust_backend_check(
+        selected.status,
+        timeout_seconds=timeout_seconds,
+        timeout_result=timeout_result,
+        on_error=lambda error: _degraded_safe_status(
+            backend=selected.name,
+            reason=degraded_reason_for_backend_error(error),
+            setup_available=bool(
+                selected.name == "macos-native" and selected.supported and selected.passive_no_ui_safe
+            ),
+        ),
+    )
+    return ResolvedTrustState(
+        mode=_trust_mode_for_backend(
+            trust_status,
+            backend_requested=backend_requested,
+            backend_selected=selected.name,
+            backend_supported=selected.supported,
+            passive_no_ui_safe=selected.passive_no_ui_safe,
+        ),
+        backend_requested=backend_requested,
+        backend_selected=selected.name,
+        backend_supported=selected.supported,
+        passive_no_ui_safe=selected.passive_no_ui_safe,
+        trust_status=trust_status,
+    )
+
+
+__all__ = [
+    "PASSIVE_TRUST_TIMEOUT_SECONDS",
+    "ResolvedTrustState",
+    "macos_native_backend_supported",
+    "resolve_passive_trust_state",
+]
