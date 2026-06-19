@@ -215,6 +215,9 @@ _SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         r"\1*****",
     ),
 )
+_TRUST_SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
+    item for item in _SENSITIVE_STRING_PATTERNS if item[0].pattern != r"(?i)(api[-_ ]?key:\s*)[^\s,;]+"
+)
 
 
 def emit_guard_payload(command: str, payload: PayloadDict, as_json: bool) -> None:
@@ -226,7 +229,7 @@ def emit_guard_payload(command: str, payload: PayloadDict, as_json: bool) -> Non
         sys.stdout.write("\n")
         return
 
-    redacted_payload = _coerce_object_dict(_redact_payload(payload))
+    redacted_payload = _coerce_object_dict(_sanitize_payload_for_output(payload, command=command))
     if not _RICH_AVAILABLE:
         plain_renderer = _PLAIN_TEXT_RENDERERS.get(command)
         if plain_renderer is None:
@@ -242,9 +245,12 @@ def emit_guard_payload(command: str, payload: PayloadDict, as_json: bool) -> Non
     renderer(console, redacted_payload)
 
 
-def _redact_payload(value: object, *, key: str | None = None) -> object:
+def _redact_payload(value: object, *, key: str | None = None, command: str | None = None) -> object:
     if key in _NON_SECRET_STRUCTURED_KEYS and isinstance(value, dict):
-        return {item_key: _redact_payload(item_value, key=item_key) for item_key, item_value in value.items()}
+        return {
+            item_key: _redact_payload(item_value, key=item_key, command=command)
+            for item_key, item_value in value.items()
+        }
     if (
         key is not None
         and key not in _NON_SECRET_STRUCTURED_KEYS
@@ -254,12 +260,20 @@ def _redact_payload(value: object, *, key: str | None = None) -> object:
             return value
         return "*****"
     if isinstance(value, dict):
-        return {item_key: _redact_payload(item_value, key=item_key) for item_key, item_value in value.items()}
+        return {
+            item_key: _redact_payload(item_value, key=item_key, command=command)
+            for item_key, item_value in value.items()
+        }
     if isinstance(value, list):
-        return [_redact_payload(item) for item in value]
+        return [_redact_payload(item, command=command) for item in value]
     if isinstance(value, str):
         redacted = value
-        for pattern, replacement in _SENSITIVE_STRING_PATTERNS:
+        patterns = (
+            _TRUST_SENSITIVE_STRING_PATTERNS
+            if isinstance(command, str) and command.startswith("trust.")
+            else _SENSITIVE_STRING_PATTERNS
+        )
+        for pattern, replacement in patterns:
             redacted = pattern.sub(replacement, redacted)
         return redact_local_path(redacted)
     return value
@@ -273,7 +287,7 @@ def _render_redacted_json_payload(redacted_payload: object) -> str:
 
 def _safe_json_output_text(command: str, payload: PayloadDict) -> str:
     json_payload = _json_payload_for_command(command, payload)
-    sanitized_payload = _sanitize_payload_for_output(json_payload)
+    sanitized_payload = _coerce_object_dict(_sanitize_payload_for_output(json_payload, command=command))
     return _render_redacted_json_payload(sanitized_payload)
 
 
@@ -330,8 +344,8 @@ def _plain_text_protect(payload: PayloadDict) -> str:
     return "\n".join(lines)
 
 
-def _sanitize_payload_for_output(value: object) -> object:
-    return _redact_payload(value)
+def _sanitize_payload_for_output(value: object, *, command: str | None = None) -> object:
+    return _redact_payload(value, command=command)
 
 
 def _json_payload_for_command(command: str, payload: PayloadDict) -> PayloadDict:
