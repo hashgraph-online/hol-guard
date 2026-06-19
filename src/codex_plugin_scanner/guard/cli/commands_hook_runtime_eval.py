@@ -18,8 +18,6 @@ if TYPE_CHECKING:
     from .commands_support_prompts import _runtime_artifact_native_reason
     from .commands_support_runtime_artifacts import _hook_event_name, _optional_string
     from .commands_support_runtime_policy import (
-        _remembered_rule_rejection_reason,
-        _runtime_artifact_exact_match_context,
         _runtime_artifact_policy_action,
         _runtime_data_flow_summary,
         _runtime_stored_policy_action,
