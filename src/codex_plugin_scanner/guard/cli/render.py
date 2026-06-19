@@ -753,6 +753,10 @@ def _build_trust_doctor_panel(trust: dict[str, object]) -> Panel:
         update_command = official_install.get("update_command") or "hol-guard update"
         body.add_row("Installed package", f"hol-guard {version}")
         body.add_row("Install mode", str(official_install.get("installation_mode") or "unknown"))
+        body.add_row("Install check", str(official_install.get("active_command_status") or "unknown"))
+        active_command_path = official_install.get("active_command_path")
+        if isinstance(active_command_path, str) and active_command_path.strip():
+            body.add_row("Active command", active_command_path.strip())
         body.add_row("Update", str(update_command))
     summary = trust.get("summary")
     if isinstance(summary, str) and summary.strip():

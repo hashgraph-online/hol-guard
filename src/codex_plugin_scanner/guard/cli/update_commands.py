@@ -354,10 +354,21 @@ def _binary_diagnostics(command: list[str], installer: str) -> dict[str, object]
 def _expected_script_dir(installer_binary: str, installer: str) -> Path | None:
     if installer != "pip" or not installer_binary:
         return None
-    scripts_dir = sysconfig.get_path("scripts")
+    try:
+        scripts_dir = sysconfig.get_path("scripts")
+    except Exception:
+        scripts_dir = None
     if scripts_dir:
         return _directory_path(scripts_dir)
     return _script_dir(installer_binary)
+
+
+def build_guard_install_surface_payload() -> dict[str, object]:
+    installer = _installer_kind()
+    return {
+        "installer": installer,
+        "binary_diagnostics": _binary_diagnostics(_update_command(installer, use_pypi=False), installer),
+    }
 
 
 def _script_dir(path: str) -> Path:
@@ -1146,7 +1157,11 @@ def _codex_backup_repair_contexts(context: HarnessContext) -> tuple[HarnessConte
 
 def build_guard_update_status_payload() -> dict[str, object]:
     current_version = _current_version()
-    installer = _installer_kind()
+    install_surface = build_guard_install_surface_payload()
+    installer = str(install_surface.get("installer") or "")
+    binary_diagnostics = install_surface.get("binary_diagnostics")
+    if not isinstance(binary_diagnostics, dict):
+        binary_diagnostics = {}
     direct_url = _direct_url_payload()
     local_source_install = _local_source_install_payload(direct_url)
     version_check = _version_check_payload(current_version)
@@ -1180,6 +1195,7 @@ def build_guard_update_status_payload() -> dict[str, object]:
         "current_version": current_version,
         "latest_version": latest_version if isinstance(latest_version, str) else None,
         "installer": installer,
+        "binary_diagnostics": binary_diagnostics,
         "version_check": version_check,
         "auto_updatable": auto_updatable,
         "update_available": update_available,
@@ -1190,4 +1206,4 @@ def build_guard_update_status_payload() -> dict[str, object]:
     }
 
 
-__all__ = ["build_guard_update_status_payload", "run_guard_update"]
+__all__ = ["build_guard_install_surface_payload", "build_guard_update_status_payload", "run_guard_update"]
