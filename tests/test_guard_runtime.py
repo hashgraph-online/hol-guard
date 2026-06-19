@@ -14836,23 +14836,25 @@ def test_guard_runtime_accepts_contextual_harness_tool_action_policy(tmp_path):
     )
     contextual_key = _runtime_scoped_exact_match_key(artifact_id, context)
     assert contextual_key is not None
+    expected_workspace = str(workspace)
 
     class _Store:
         def resolve_policy_decision(
             self,
             harness: str,
             requested_artifact_id: str,
-            artifact_hash: str,
-            workspace_value: str,
-            publisher: str | None,
-            *,
+            artifact_hash: str | None = None,
+            workspace: str | None = None,
+            publisher: str | None = None,
+            now: str | None = None,
             runtime_exact_match_context: str | None = None,
         ) -> dict[str, object]:
             assert harness == "opencode"
             assert requested_artifact_id == artifact_id
             assert artifact_hash == "hash-retry"
-            assert workspace_value == str(workspace)
+            assert workspace == expected_workspace
             assert publisher is None
+            assert now is None
             assert runtime_exact_match_context == context
             return {
                 "action": "allow",
