@@ -412,6 +412,40 @@ def test_codex_guard_proxy_falls_back_to_approval_center_when_client_cannot_elic
     assert pending[0]["artifact_type"] == "tool_call"
 
 
+def test_codex_guard_proxy_observe_mode_allows_risky_tool_calls_and_still_queues_review(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir, mode="observe")
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "dangerous_delete", "arguments": {"target": ".env"}},
+            },
+        ]
+    )
+    pending = store.list_approval_requests()
+
+    assert result["responses"][1]["result"]["content"][0]["text"] == "dangerous_delete"
+    assert json.loads(marker_path.read_text(encoding="utf-8"))["name"] == "dangerous_delete"
+    assert len(pending) == 1
+    assert store.list_receipts(limit=1)[0]["policy_decision"] == "allow"
+
+
 def test_codex_guard_proxy_queues_approval_when_inline_prompt_gets_no_response(tmp_path):
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
