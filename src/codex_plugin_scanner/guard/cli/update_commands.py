@@ -150,6 +150,7 @@ def run_guard_update(
         local_source_install=local_source_install,
     )
     command = _update_command(installer, use_pypi=use_pypi)
+    execution_command = _execution_update_command(command, installer=installer, context=context)
     if force_pypi_reinstall:
         payload["recovery_reinstall"] = True
     payload.update(
@@ -167,7 +168,8 @@ def run_guard_update(
         payload["changed"] = False
         payload["message"] = _planned_update_message(version_check=version_check, use_pypi=use_pypi)
         return payload, 0
-    active_command = command
+    active_command = execution_command
+    active_display_command = command
     attempted_force_retry = False
     nonzero_success_note: str | None = None
     while True:
@@ -184,7 +186,7 @@ def run_guard_update(
             payload["error"] = redact_sensitive_text(str(error))
             payload["message"] = "HOL Guard update failed before the installer started."
             return payload, 1
-        payload["command"] = active_command
+        payload["command"] = active_display_command
         payload["stdout"] = _normalize_output_text(result.stdout)
         payload["stderr"] = _normalize_output_text(result.stderr)
         payload["return_code"] = result.returncode
@@ -231,9 +233,14 @@ def run_guard_update(
                 if isinstance(latest, str) and latest.strip():
                     target_version = latest.strip()
             retry_command = _update_command(installer, use_pypi=True, target_version=target_version)
-            if retry_command != active_command:
+            if retry_command != active_display_command:
                 attempted_force_retry = True
-                active_command = retry_command
+                active_display_command = retry_command
+                active_command = _execution_update_command(
+                    retry_command,
+                    installer=installer,
+                    context=context,
+                )
                 payload["upgrade_source"] = "pypi"
                 continue
         break
@@ -784,6 +791,22 @@ def _update_command(installer: str, *, use_pypi: bool = False, target_version: s
     return [sys.executable, "-m", "pip", "install", "--upgrade", "hol-guard"]
 
 
+def _execution_update_command(
+    command: list[str],
+    *,
+    installer: str,
+    context: HarnessContext | None,
+) -> list[str]:
+    if (
+        installer == "pipx"
+        and context is not None
+        and _package_shim_manifest_has_installed_managers(context)
+        and (real_binary := _resolve_unshimmed_binary(command[0], context))
+    ):
+        return [real_binary, *command[1:]]
+    return command
+
+
 def _vcs_install_payload(direct_url: dict[str, object] | None) -> dict[str, object] | None:
     if not isinstance(direct_url, dict):
         return None
@@ -862,6 +885,28 @@ def _current_version_from_subprocess() -> str:
         return _current_version()
     version = result.stdout.strip()
     return version or _current_version()
+
+
+def _resolve_unshimmed_binary(command_name: str, context: HarnessContext) -> str | None:
+    filtered_path = _path_without_guard_package_shims(context)
+    if not filtered_path:
+        return None
+    return shutil.which(command_name, path=filtered_path)
+
+
+def _path_without_guard_package_shims(context: HarnessContext) -> str:
+    shim_dir = (context.guard_home / "package-shims" / "bin").expanduser().resolve()
+    filtered_entries = []
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        if not entry:
+            continue
+        try:
+            if Path(entry).expanduser().resolve() == shim_dir:
+                continue
+        except OSError:
+            pass
+        filtered_entries.append(entry)
+    return os.pathsep.join(filtered_entries)
 
 
 def _refresh_package_shims_after_update(

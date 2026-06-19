@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -131,6 +132,51 @@ def test_update_binary_diagnostics_treats_pipx_shim_as_healthy(monkeypatch: pyte
     assert exit_code == 0
     assert payload["binary_diagnostics"]["path_status"] == "pipx_shim_detected"
     assert payload["binary_diagnostics"]["expected_script_dir"] is None
+
+
+def test_update_uses_real_pipx_binary_when_guard_package_shims_are_installed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    manifest_path = context.guard_home / "package-shims" / "manifest.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps({"installed_managers": ["pipx"]}), encoding="utf-8")
+    shim_dir = context.guard_home / "package-shims" / "bin"
+    shim_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("PATH", f"{shim_dir}{os.pathsep}/opt/homebrew/bin")
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.829")
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: "2.0.830")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.830")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    def fake_which(name: str, path: str | None = None) -> str | None:
+        if name == "pipx" and isinstance(path, str) and "/package-shims/bin" not in path:
+            return "/opt/homebrew/bin/pipx"
+        if name == "hol-guard":
+            return "/mock-home/.local/bin/hol-guard"
+        return None
+
+    monkeypatch.setattr(
+        update_commands.shutil,
+        "which",
+        fake_which,
+    )
+    monkeypatch.setattr(update_commands, "_sync_dashboard_assets", lambda: None)
+    monkeypatch.setattr(update_commands, "_refresh_package_shims_after_update", lambda **_: (None, None))
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert command == ["/opt/homebrew/bin/pipx", "upgrade", "hol-guard"]
+        return subprocess.CompletedProcess(command, 0, "installed hol-guard 2.0.830", "")
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False, context=context)
+
+    assert exit_code == 0
+    assert payload["status"] == "updated"
+    assert payload["command"] == ["pipx", "upgrade", "hol-guard"]
 
 
 def test_version_check_reports_python_incompatible_latest_release(monkeypatch: pytest.MonkeyPatch) -> None:
