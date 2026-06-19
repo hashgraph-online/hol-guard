@@ -452,6 +452,34 @@ class RuntimeMcpGuardProxy:
                         **event,
                         "decision": "deny-inline-invalid",
                     }
+            if self.config.mode == "observe":
+                self._queue_observed_approval_requests(
+                    artifact=artifact,
+                    artifact_hash=tool_artifact_hash,
+                    tool_name=tool_name,
+                    params=params,
+                    policy_action="require-reapproval",
+                    risk_summary=decision.summary,
+                    risk_signals=list(decision.signals),
+                )
+                response, package_event = self._handle_package_request(
+                    message=message,
+                    child_stdin=child_stdin,
+                    child_stdout=child_stdout,
+                    client_input=client_input,
+                    server_output=server_output,
+                    tool_name=tool_name,
+                    params=params,
+                    artifact=package_artifact,
+                    remember_allow=True,
+                    remember_decision_source="policy-allow",
+                    remember_signals=decision.signals,
+                    remember_risk_categories=decision.risk_categories,
+                )
+                return response, {
+                    **package_event,
+                    "decision": "observe-tool-call",
+                }
             response, queued_event = self._queue_approval_center_response(
                 message_id=message.get("id"),
                 artifact=artifact,
@@ -545,6 +573,33 @@ class RuntimeMcpGuardProxy:
                     **event,
                     "decision": "deny-inline-invalid",
                 }
+        if self.config.mode == "observe":
+            self._queue_observed_approval_requests(
+                artifact=artifact,
+                artifact_hash=tool_artifact_hash,
+                tool_name=tool_name,
+                params=params,
+                policy_action="require-reapproval",
+                risk_summary=decision.summary,
+                risk_signals=list(decision.signals),
+            )
+            response, observe_event = self._allow_and_forward(
+                message=message,
+                child_stdin=child_stdin,
+                child_stdout=child_stdout,
+                client_input=client_input,
+                server_output=server_output,
+                artifact=artifact,
+                artifact_hash=tool_artifact_hash,
+                decision_source="policy-allow",
+                signals=decision.signals,
+                risk_categories=decision.risk_categories,
+                params=params,
+            )
+            return response, {
+                **observe_event,
+                "decision": "observe-tool-call",
+            }
         response, queued_event = self._queue_approval_center_response(
             message_id=message.get("id"),
             artifact=artifact,
@@ -637,6 +692,67 @@ class RuntimeMcpGuardProxy:
                 "method": "tools/call",
                 "tool_name": tool_name,
                 "decision": "timeout" if _is_timeout_response(response) else f"package-{queue_policy_action}",
+                "redacted_params": _redact_json(params),
+            }
+        if self.config.mode == "observe":
+            decision_v2_payload = build_decision_v2(
+                _guard_action(queue_policy_action),
+                reason=queue_policy_action,
+                signals=_package_reason_signals(package_evaluation.reasons),
+            ).to_dict()
+            decision_v2_payload["user_title"] = package_evaluation.user_copy.title
+            decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
+            decision_v2_payload["harness_message"] = package_evaluation.user_copy.harness_message
+            decision_v2_payload["dashboard_primary_detail"] = package_evaluation.user_copy.summary
+            self._queue_observed_approval_requests(
+                artifact=artifact,
+                artifact_hash=artifact_digest,
+                tool_name=tool_name,
+                params=params,
+                policy_action=queue_policy_action,
+                risk_summary=package_evaluation.risk_summary,
+                risk_signals=[
+                    str(item.get("message") or item.get("code") or "")
+                    for item in package_evaluation.reasons
+                ],
+                decision_v2_payload=decision_v2_payload,
+                extra_fields={
+                    "changed_fields": ["runtime_tool_call", "package_request"],
+                    "supply_chain_evaluation": package_evaluation.to_dict(),
+                },
+            )
+            if remember_allow and remember_decision_source is not None:
+                try:
+                    allow_tool_call(
+                        store=self.store,
+                        artifact=artifact,
+                        artifact_hash=artifact_digest,
+                        decision_source=remember_decision_source,
+                        now=_now(),
+                        signals=remember_signals,
+                        risk_categories=remember_risk_categories,
+                        remember=True,
+                    )
+                except ApprovalGateError:
+                    return self._queue_approval_center_response(
+                        message_id=message.get("id"),
+                        artifact=artifact,
+                        artifact_hash=artifact_digest,
+                        tool_name=tool_name,
+                        signals=remember_signals,
+                        params=params,
+                    )
+            response = self._forward_message(
+                message,
+                child_stdin,
+                child_stdout,
+                client_input=client_input,
+                server_output=server_output,
+            )
+            return response, {
+                "method": "tools/call",
+                "tool_name": tool_name,
+                "decision": "timeout" if _is_timeout_response(response) else "observe-package",
                 "redacted_params": _redact_json(params),
             }
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
@@ -1082,6 +1198,53 @@ class RuntimeMcpGuardProxy:
             "approval_requests": queued,
             "review_url": review_url,
         }
+
+    def _queue_observed_approval_requests(
+        self,
+        *,
+        artifact: Any,
+        artifact_hash: str,
+        tool_name: str,
+        params: dict[str, Any],
+        policy_action: str,
+        risk_summary: str,
+        risk_signals: list[str],
+        decision_v2_payload: dict[str, Any] | None = None,
+        extra_fields: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        if policy_action not in {"block", "sandbox-required", "require-reapproval"}:
+            return []
+        approval_center_url = ensure_guard_daemon(self.context.guard_home)
+        artifact_payload: dict[str, Any] = {
+            "artifact_id": artifact.artifact_id,
+            "artifact_name": artifact.name,
+            "artifact_hash": artifact_hash,
+            "artifact_type": artifact.artifact_type,
+            "source_scope": artifact.source_scope,
+            "config_path": artifact.config_path,
+            "changed_fields": ["runtime_tool_call"],
+            "policy_action": policy_action,
+            "launch_target": self._launch_target(tool_name, params.get("arguments")),
+            "risk_summary": risk_summary,
+            "risk_signals": risk_signals,
+        }
+        if decision_v2_payload is not None:
+            artifact_payload["decision_v2_json"] = decision_v2_payload
+        if extra_fields:
+            artifact_payload.update(extra_fields)
+        return queue_blocked_approvals(
+            detection=HarnessDetection(
+                harness=self.harness,
+                installed=True,
+                command_available=True,
+                config_paths=(self.config_path,),
+                artifacts=(artifact,),
+            ),
+            evaluation={"artifacts": [artifact_payload]},
+            store=self.store,
+            approval_center_url=approval_center_url,
+            now=_now(),
+        )
 
     def _capture_tools_catalog(
         self,
