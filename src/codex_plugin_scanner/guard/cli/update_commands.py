@@ -1205,4 +1205,5 @@ def build_guard_update_status_payload() -> dict[str, object]:
         "recovery_reinstall_command": recovery_reinstall_command,
     }
 
+
 __all__ = ["build_guard_install_surface_payload", "build_guard_update_status_payload", "run_guard_update"]
