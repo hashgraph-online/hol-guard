@@ -120,13 +120,13 @@ from ..policy_bundle_trusted_keys import (
     policy_bundle_keyring_payload,
     validate_synced_policy_bundle,
 )
+from ..receipts.manager import build_receipt
 from ..review_contracts import (
     GuardReviewContractError,
     guard_review_oauth_metadata,
     validate_remote_approval_request_binding,
     validated_remote_approval_envelope,
 )
-from ..receipts.manager import build_receipt
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncNotAvailableError,
@@ -2190,7 +2190,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "unknown_harness"}, status=404)
             return
         remote_approval = self._policy_memory_payload(
-            payload.get("remoteApproval") or payload.get("remote_approval") or payload.get("remote_once") or payload.get("remoteOnce")
+            payload.get("remoteApproval")
+            or payload.get("remote_approval")
+            or payload.get("remote_once")
+            or payload.get("remoteOnce")
         )
         if not remote_approval:
             self._write_json({"error": "missing_remote_approval"}, status=400)
