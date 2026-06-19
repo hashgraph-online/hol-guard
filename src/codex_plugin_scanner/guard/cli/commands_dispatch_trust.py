@@ -61,7 +61,8 @@ def _approval_center_locator_is_fresh(
         return False
     if isinstance(state_port, int) and locator_port != state_port:
         return False
-    state_started_at = _parse_iso8601(state.get("started_at") if isinstance(state.get("started_at"), str) else None)
+    raw_started_at = state.get("started_at")
+    state_started_at = _parse_iso8601(raw_started_at if isinstance(raw_started_at, str) else None)
     locator_started_at_dt = _parse_iso8601(locator_started_at)
     if state_started_at is None or locator_started_at_dt is None:
         return True
