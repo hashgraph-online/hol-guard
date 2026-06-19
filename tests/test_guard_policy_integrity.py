@@ -990,7 +990,10 @@ def test_remote_policy_row_is_honored_without_local_mac(tmp_path: Path) -> None:
     assert any(event.get("payload", {}).get("artifact_id") == "codex:project:remote" for event in events)
 
 
-def test_remote_policy_integrity_failure_does_not_emit_local_rule_event(tmp_path: Path) -> None:
+def test_remote_policy_integrity_failure_does_not_emit_local_rule_event(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
 
     store = _store(tmp_path)
@@ -1021,7 +1024,6 @@ def test_remote_policy_integrity_failure_does_not_emit_local_rule_event(tmp_path
             trusted_generation=trusted_generation,
         )
 
-    monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(GuardStore, "_policy_integrity_result_for_row", _forced_invalid)
 
     resolved = store.resolve_policy(
@@ -1042,7 +1044,6 @@ def test_remote_policy_integrity_failure_does_not_emit_local_rule_event(tmp_path
         event.get("payload", {}).get("artifact_id") == "codex:project:remote-tampered"
         for event in ignored_events
     )
-    monkeypatch.undo()
 
 
 def test_local_policy_write_cannot_impersonate_remote_policy_source(tmp_path: Path) -> None:
