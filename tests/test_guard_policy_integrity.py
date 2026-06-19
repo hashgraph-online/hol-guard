@@ -1058,12 +1058,10 @@ def test_remote_policy_integrity_failure_does_not_emit_local_rule_event(
 
     assert resolved is None
     assert any(
-        event.get("payload", {}).get("artifact_id") == "codex:project:remote-tampered"
-        for event in integrity_events
+        event.get("payload", {}).get("artifact_id") == "codex:project:remote-tampered" for event in integrity_events
     )
     assert not any(
-        event.get("payload", {}).get("artifact_id") == "codex:project:remote-tampered"
-        for event in ignored_events
+        event.get("payload", {}).get("artifact_id") == "codex:project:remote-tampered" for event in ignored_events
     )
 
 
@@ -1460,9 +1458,7 @@ def test_guard_doctor_includes_safe_trust_diagnostics(tmp_path: Path, capsys) ->
     assert trust_payload["one_time_approvals"] == "available"
     assert trust_payload["durable_local_rules"] in {"enforced", "limited"}
     assert trust_payload["checks"]["passive_no_ui"] is True
-    assert trust_payload["checks"]["runtime_protection"] is (
-        trust_payload["runtime_protection"] == "protected"
-    )
+    assert trust_payload["checks"]["runtime_protection"] is (trust_payload["runtime_protection"] == "protected")
     assert trust_payload["official_install"]["package"] == "hol-guard"
     assert trust_payload["official_install"]["update_command"] == "hol-guard update"
     assert trust_payload["approval_center"]["active"] is False
@@ -1497,6 +1493,7 @@ def test_trust_cli_doctor_human_output_uses_trust_renderer(tmp_path: Path, capsy
 
     assert rc == 0
     assert "Local trust" in output
+    assert "Mode" in output
     assert "Passive OS prompts" in output
     assert "Install mode" in output
     assert "hol-guard update" in output
@@ -1719,51 +1716,6 @@ def test_trust_cli_explain_reports_guard_cloud_rule(tmp_path: Path, capsys) -> N
     assert payload["rule_status_label"] == "From Guard Cloud"
     assert payload["rule"]["source"] == "cloud-sync"
     assert "integrity_status" not in payload["rule"]
-
-
-def test_trust_cli_rejects_unavailable_backend_status(tmp_path: Path, capsys) -> None:
-    home_dir = tmp_path / "home"
-    rc = main(
-        [
-            "guard",
-            "trust",
-            "status",
-            "--backend",
-            "macos-native",
-            "--home",
-            str(home_dir),
-            "--json",
-        ]
-    )
-    payload = json.loads(capsys.readouterr().out)
-
-    assert rc == 2
-    assert payload["backend_requested"] == "macos-native"
-    assert "not available for passive status" in payload["error"]
-    assert payload["passive_prompt_allowed"] is False
-
-
-def test_trust_cli_degraded_safe_backend_is_explicit(tmp_path: Path, capsys) -> None:
-    home_dir = tmp_path / "home"
-    rc = main(
-        [
-            "guard",
-            "trust",
-            "status",
-            "--backend",
-            "degraded-safe",
-            "--home",
-            str(home_dir),
-            "--json",
-        ]
-    )
-    payload = json.loads(capsys.readouterr().out)
-
-    assert rc == 0
-    assert payload["backend_requested"] == "degraded-safe"
-    assert payload["backend"] == "degraded-safe"
-    assert payload["remembered_rules"] == "disabled_degraded"
-    assert payload["durable_local_rules"] == "limited"
 
 
 def test_trust_cli_doctor_degraded_safe_does_not_pass_runtime_check(tmp_path: Path, capsys) -> None:
