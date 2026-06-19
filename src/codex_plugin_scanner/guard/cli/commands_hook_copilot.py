@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from ..mcp_tool_calls import ToolCallDecision
     from ._commands_shared import _hook_command_text, _now
     from .commands_support_hook_payload import _action_envelope_json, _approval_surface_policy_for_flow
     from .commands_support_interaction import (
@@ -29,6 +30,98 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
+
+def _queue_observed_copilot_approval(
+    *,
+    artifact: GuardArtifact,
+    artifact_hash: str,
+    artifact_name: str,
+    args: argparse.Namespace,
+    action_envelope: GuardActionEnvelope | None,
+    config: GuardConfig,
+    context: HarnessContext,
+    decision: ToolCallDecision,
+    guard_home: Path,
+    managed_install: dict[str, object] | None,
+    payload: Mapping[str, object],
+    runtime_arguments: object,
+    runtime_workspace: Path | None,
+    store: GuardStore,
+) -> list[dict[str, object]]:
+    approval_center_url = ensure_guard_daemon(guard_home)
+    runtime_detection = _runtime_detection(args.harness, artifact)
+    evaluation_payload: dict[str, object] = {
+        "artifacts": [
+            {
+                "artifact_id": artifact.artifact_id,
+                "artifact_name": artifact_name,
+                "artifact_hash": artifact_hash,
+                "policy_action": "require-reapproval",
+                "changed_fields": ["runtime_tool_call", *decision.signals],
+                "artifact_type": artifact.artifact_type,
+                "source_scope": artifact.source_scope,
+                "config_path": artifact.config_path,
+                "launch_target": json.dumps(runtime_arguments, sort_keys=True)
+                if runtime_arguments is not None
+                else artifact.command,
+                "action_envelope_json": _action_envelope_json(action_envelope),
+            }
+        ]
+    }
+    approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
+    try:
+        daemon_client = load_guard_surface_daemon_client(guard_home)
+    except RuntimeError:
+        queued = queue_blocked_approvals(
+            detection=runtime_detection,
+            evaluation=evaluation_payload,
+            store=store,
+            approval_center_url=approval_center_url,
+            now=_now(),
+        )
+    else:
+        session = daemon_client.start_session(
+            harness=args.harness,
+            surface="harness-adapter",
+            workspace=str(runtime_workspace) if runtime_workspace else None,
+            client_name=f"{args.harness}-permission-hook",
+            client_title=f"{args.harness} permission hook",
+            client_version="1.0.0",
+            capabilities=["approval-resolution", "receipt-view"],
+        )
+        blocked_operation = daemon_client.queue_blocked_operation(
+            session_id=str(session["session_id"]),
+            operation_type="tool_call",
+            harness=args.harness,
+            metadata={
+                "tool_name": str(payload.get("tool_name", "")),
+                "hook_name": "permissionRequest",
+                "hook_event_name": "PermissionRequest",
+                **_codex_browser_wait_metadata(
+                    args=args,
+                    event_name="PermissionRequest",
+                    policy_action="require-reapproval",
+                    config=config,
+                    payload=payload,
+                ),
+                "command_text": _hook_command_text(payload),
+                "workspace": str(runtime_workspace) if runtime_workspace else None,
+                **codex_resume_metadata_from_hook_payload(payload),
+            },
+            detection=runtime_detection.to_dict(),
+            evaluation=evaluation_payload,
+            approval_center_url=approval_center_url,
+            approval_surface_policy=_approval_surface_policy_for_flow(
+                config.approval_surface_policy,
+                approval_flow,
+            ),
+            open_key=artifact.artifact_id,
+        )
+        queued = blocked_operation.get("approval_requests")
+        if not isinstance(queued, list):
+            queued = []
+    return queued
 
 
 def _run_hook_copilot_pretool(
@@ -63,6 +156,24 @@ def _run_hook_copilot_pretool(
         "require-reapproval": "require-reapproval",
     }.get(decision.action, "require-reapproval")
     now = _now()
+    if config.mode == "observe" and policy_action != "allow":
+        _queue_observed_copilot_approval(
+            artifact=runtime_artifact,
+            artifact_hash=runtime_artifact_hash,
+            artifact_name=runtime_artifact.name,
+            args=args,
+            action_envelope=action_envelope,
+            config=config,
+            context=context,
+            decision=decision,
+            guard_home=context.guard_home,
+            managed_install=None,
+            payload=payload,
+            runtime_arguments=runtime_arguments,
+            runtime_workspace=runtime_workspace,
+            store=store,
+        )
+        policy_action = "allow"
     if policy_action == "allow":
         allow_tool_call(
             store=store,
@@ -176,6 +287,26 @@ def _run_hook_copilot_permission_request(
         if runtime_arguments is not None
         else runtime_artifact.command,
     }
+    if config.mode == "observe" and policy_action != "allow":
+        queued = _queue_observed_copilot_approval(
+            artifact=runtime_artifact,
+            artifact_hash=runtime_artifact_hash,
+            artifact_name=artifact_name,
+            args=args,
+            action_envelope=action_envelope,
+            config=config,
+            context=context,
+            decision=decision,
+            guard_home=guard_home,
+            managed_install=managed_install,
+            payload=payload,
+            runtime_arguments=runtime_arguments,
+            runtime_workspace=runtime_workspace,
+            store=store,
+        )
+        response_payload["approval_requests"] = queued
+        policy_action = "allow"
+        response_payload["policy_action"] = "allow"
     if policy_action == "allow":
         allow_tool_call(
             store=store,

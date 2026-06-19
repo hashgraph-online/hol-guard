@@ -4900,6 +4900,36 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         assert "http://127.0.0.1:" in reason
         assert "Approve it in HOL Guard, then retry." not in reason
 
+    def test_guard_codex_hook_observe_mode_does_not_pause_risky_tool_use(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        payload_path = workspace_dir / "hook-event.json"
+        _write_codex_pre_tool_payload(payload_path, workspace_dir, "echo MALICIOUS > dangerous-marker.json")
+        _write_text(home_dir / "config.toml", 'mode = "observe"\n')
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--harness",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--event-file",
+                str(payload_path),
+            ]
+        )
+        captured = capsys.readouterr()
+        store = GuardStore(home_dir)
+
+        assert rc == 0
+        assert captured.out == ""
+        pending = store.list_approval_requests(limit=5)
+        assert len(pending) == 1
+        assert pending[0]["policy_action"] == "require-reapproval"
+
     def test_guard_codex_pretooluse_returns_without_browser_wait_for_secret_exfil(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
