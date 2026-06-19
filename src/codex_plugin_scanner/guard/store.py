@@ -665,7 +665,7 @@ class SystemKeyringSecretStore:
             from ctypes import byref, c_ubyte
 
             macos_keyring_api = self._load_macos_keyring_api_module()
-            cfdata_to_str = getattr(macos_keyring_api, "cfdata_to_str", None)
+            cfdata_to_str = getattr(macos_keyring_api, "cfstr_to_str", None)
             cf_release = getattr(macos_keyring_api, "CFRelease", None)
             security_library = getattr(macos_keyring_api, "_sec", None)
             get_interaction_allowed = (
