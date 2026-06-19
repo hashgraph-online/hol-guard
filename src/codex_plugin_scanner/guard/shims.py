@@ -241,8 +241,11 @@ def _normalized_package_shim_content(content: bytes) -> str:
         if line.startswith("base_command = "):
             normalized_lines.append(f"base_command = {_normalized_base_command_repr(line)}")
             continue
-        if line.startswith("guard_cwd = "):
-            normalized_lines.append("guard_cwd = '<path>'")
+        if line.startswith("guard_cwd = ") or line.startswith("guard_cli_cwd = "):
+            normalized_lines.append("guard_cli_cwd = '<path>'")
+            continue
+        if line.startswith("guard_workspace = "):
+            normalized_lines.append("guard_workspace = <workspace-path>")
             continue
         if line.startswith("guard_has_explicit_workspace = "):
             normalized_lines.append("guard_has_explicit_workspace = <workspace-mode>")
