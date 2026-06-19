@@ -269,7 +269,7 @@ def _execute_approval_operation(
             generated_at=generated_at,
         )
     oauth = guard_review_oauth_metadata(store)
-    envelope = validated_remote_approval_envelope(remote_approval)
+    envelope = validated_remote_approval_envelope(remote_approval, store=store)
     validate_remote_approval_request_binding(
         envelope=envelope,
         request_row=request_row,
@@ -315,7 +315,7 @@ def _execute_policy_sync(
     if not bundle_payload:
         raise ValueError("missing_decision_memory_bundle")
     oauth = guard_review_oauth_metadata(store)
-    bundle = validated_decision_memory_bundle(bundle_payload)
+    bundle = validated_decision_memory_bundle(bundle_payload, store=store)
     validate_decision_memory_bundle_target(
         bundle=bundle,
         oauth=oauth,
@@ -399,7 +399,10 @@ def _local_policy_scope(scope: str | None) -> DecisionScope:
 
 def _local_request_snapshot_items(store: GuardStore) -> list[dict[str, object]]:
     items: list[dict[str, object]] = []
-    oauth = guard_review_oauth_metadata(store)
+    try:
+        oauth = guard_review_oauth_metadata(store)
+    except GuardReviewContractError:
+        oauth = None
     for status in ("pending", "resolved"):
         for item in store.list_approval_requests(status=status, limit=100):
             request_id = item.get("request_id")
@@ -408,11 +411,16 @@ def _local_request_snapshot_items(store: GuardStore) -> list[dict[str, object]]:
             created_at = str(item.get("created_at") or _now())
             last_seen_at = str(item.get("last_seen_at") or created_at)
             resolved_at = item.get("resolved_at")
-            claim = build_local_review_request_claim(
-                request_row=item,
-                oauth=oauth,
-                store=store,
-            )
+            claim = None
+            if oauth is not None:
+                try:
+                    claim = build_local_review_request_claim(
+                        request_row=item,
+                        oauth=oauth,
+                        store=store,
+                    )
+                except GuardReviewContractError:
+                    claim = None
             items.append(
                 {
                     "claim": claim,

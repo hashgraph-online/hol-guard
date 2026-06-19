@@ -2196,7 +2196,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "missing_remote_approval"}, status=400)
             return
         try:
-            envelope = validated_remote_approval_envelope(remote_approval)
+            envelope = validated_remote_approval_envelope(
+                remote_approval,
+                store=self.server.store,  # type: ignore[attr-defined]
+            )
             oauth = guard_review_oauth_metadata(self.server.store)  # type: ignore[attr-defined]
         except GuardReviewContractError as error:
             self._write_json({"error": str(error)}, status=400)
