@@ -4624,8 +4624,7 @@ class GuardStore:
                 and trusted_state is not None
             ):
                 local_ids = {
-                    int(row["decision_id"])
-                    for row in self._load_local_policy_rows(connection, harness=harness)
+                    int(row["decision_id"]) for row in self._load_local_policy_rows(connection, harness=harness)
                 }
                 next_control_state = self._advance_policy_integrity_generation(
                     connection,

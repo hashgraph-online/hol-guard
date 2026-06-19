@@ -253,9 +253,7 @@ def _run_guard_trust_command(
             "passive_prompt_allowed": False,
             "no_ui_passive": True,
             "one_time_approvals": "available",
-            "durable_local_rules": (
-                "enforced" if trust_status.get("remembered_rules") == "enforced" else "limited"
-            ),
+            "durable_local_rules": ("enforced" if trust_status.get("remembered_rules") == "enforced" else "limited"),
             "cloud_policy_authority": trust_status.get("cloud_policies") or "unknown",
             "ok": bool(result.get("mode") == "protected") if trust_command == "setup" else True,
         }
@@ -275,8 +273,7 @@ def _run_guard_trust_command(
                 "and broad remembered local rules are limited."
             )
             payload["next_action"] = (
-                "Run `hol-guard guard trust setup --backend macos-native --json` "
-                "to protect local rules again."
+                "Run `hol-guard guard trust setup --backend macos-native --json` to protect local rules again."
             )
         _emit(f"trust.{trust_command}", payload, getattr(args, "json", False))
         return 0
