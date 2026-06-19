@@ -363,6 +363,14 @@ def _expected_script_dir(installer_binary: str, installer: str) -> Path | None:
     return _script_dir(installer_binary)
 
 
+def build_guard_install_surface_payload() -> dict[str, object]:
+    installer = _installer_kind()
+    return {
+        "installer": installer,
+        "binary_diagnostics": _binary_diagnostics(_update_command(installer, use_pypi=False), installer),
+    }
+
+
 def _script_dir(path: str) -> Path:
     return _directory_path(Path(path).expanduser().parent)
 
@@ -1149,8 +1157,11 @@ def _codex_backup_repair_contexts(context: HarnessContext) -> tuple[HarnessConte
 
 def build_guard_update_status_payload() -> dict[str, object]:
     current_version = _current_version()
-    installer = _installer_kind()
-    binary_diagnostics = _binary_diagnostics(_update_command(installer, use_pypi=False), installer)
+    install_surface = build_guard_install_surface_payload()
+    installer = str(install_surface.get("installer") or _installer_kind())
+    binary_diagnostics = install_surface.get("binary_diagnostics")
+    if not isinstance(binary_diagnostics, dict):
+        binary_diagnostics = {}
     direct_url = _direct_url_payload()
     local_source_install = _local_source_install_payload(direct_url)
     version_check = _version_check_payload(current_version)
@@ -1194,5 +1205,4 @@ def build_guard_update_status_payload() -> dict[str, object]:
         "recovery_reinstall_command": recovery_reinstall_command,
     }
 
-
-__all__ = ["build_guard_update_status_payload", "run_guard_update"]
+__all__ = ["build_guard_install_surface_payload", "build_guard_update_status_payload", "run_guard_update"]

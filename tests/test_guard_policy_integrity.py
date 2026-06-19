@@ -1548,7 +1548,7 @@ def test_build_trust_doctor_payload_detects_editable_install(tmp_path: Path, mon
     monkeypatch.setattr(trust_dispatch_module.importlib.metadata, "distribution", lambda _name: _FakeDistribution())
     monkeypatch.setattr(
         trust_dispatch_module,
-        "build_guard_update_status_payload",
+        "build_guard_install_surface_payload",
         lambda: {
             "installer": "pipx",
             "binary_diagnostics": {
@@ -1588,7 +1588,7 @@ def test_build_trust_doctor_payload_tolerates_distribution_path_error(
     monkeypatch.setattr(trust_dispatch_module.importlib.metadata, "distribution", lambda _name: _FakeDistribution())
     monkeypatch.setattr(
         trust_dispatch_module,
-        "build_guard_update_status_payload",
+        "build_guard_install_surface_payload",
         lambda: {
             "installer": "pipx",
             "binary_diagnostics": {
@@ -1607,6 +1607,44 @@ def test_build_trust_doctor_payload_tolerates_distribution_path_error(
     assert payload["official_install"]["active_command_status"] == "path_mismatch"
     assert payload["official_install"]["active_command_verified"] is False
     assert any("command -v hol-guard" in action for action in payload["recommended_actions"])
+
+
+def test_build_trust_doctor_payload_reports_missing_command_path_help(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+
+    class _FakeDistribution:
+        version = "9.9.9"
+
+        def read_text(self, _filename: str) -> str | None:
+            return None
+
+        def locate_file(self, _path: str) -> Path:
+            return Path("/mock-home/.local/pipx/venvs/hol-guard/lib/python3.12/site-packages")
+
+    monkeypatch.setattr(trust_dispatch_module.importlib.metadata, "distribution", lambda _name: _FakeDistribution())
+    monkeypatch.setattr(
+        trust_dispatch_module,
+        "build_guard_install_surface_payload",
+        lambda: {
+            "installer": "pipx",
+            "binary_diagnostics": {
+                "resolved_hol_guard": None,
+                "expected_script_dir": None,
+                "path_status": "not_on_path",
+            },
+        },
+    )
+
+    payload = trust_dispatch_module.build_trust_doctor_payload(store)
+
+    assert payload["official_install"]["active_command_status"] == "not_on_path"
+    assert payload["official_install"]["active_command_verified"] is False
+    assert any("not on PATH" in action for action in payload["recommended_actions"])
+    assert not any("command -v hol-guard" in action for action in payload["recommended_actions"])
 
 
 def test_build_trust_doctor_payload_verifies_official_pipx_command_path(
@@ -1628,7 +1666,7 @@ def test_build_trust_doctor_payload_verifies_official_pipx_command_path(
     monkeypatch.setattr(trust_dispatch_module.importlib.metadata, "distribution", lambda _name: _FakeDistribution())
     monkeypatch.setattr(
         trust_dispatch_module,
-        "build_guard_update_status_payload",
+        "build_guard_install_surface_payload",
         lambda: {
             "installer": "pipx",
             "binary_diagnostics": {

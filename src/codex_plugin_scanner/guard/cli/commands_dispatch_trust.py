@@ -17,7 +17,7 @@ from ..local_trust_controller import macos_native_backend_supported, resolve_pas
 from ..policy_integrity import is_remote_policy_source
 from ..store import GuardStore
 from .commands_support_interaction import _emit
-from .update_commands import build_guard_update_status_payload
+from .update_commands import build_guard_install_surface_payload
 
 
 def _now() -> str:
@@ -87,8 +87,8 @@ def _installed_trust_cli_payload() -> dict[str, object]:
     installation_mode = "unknown"
     editable_install = False
     official_install = False
-    update_status = build_guard_update_status_payload()
-    binary_diagnostics = update_status.get("binary_diagnostics")
+    install_surface = build_guard_install_surface_payload()
+    binary_diagnostics = install_surface.get("binary_diagnostics")
     if not isinstance(binary_diagnostics, dict):
         binary_diagnostics = {}
     try:
@@ -131,7 +131,7 @@ def _installed_trust_cli_payload() -> dict[str, object]:
         "official_install": official_install,
         "official_install_verified": official_install and active_command_status == "pipx_shim_detected",
         "editable_install": editable_install,
-        "installer": update_status.get("installer"),
+        "installer": install_surface.get("installer"),
         "active_command_path": binary_diagnostics.get("resolved_hol_guard"),
         "active_command_status": active_command_status,
         "active_command_verified": active_command_verified,
@@ -225,9 +225,15 @@ def build_trust_doctor_payload(store: GuardStore, *, backend: str = "auto") -> d
             "Use the official pipx install before relying on packaged update and daemon lifecycle checks."
         )
     if not bool(install_info.get("active_command_verified")):
-        payload["recommended_actions"].append(
-            "Run `command -v hol-guard` and `hol-guard --version` to confirm the active command matches this install."
-        )
+        if install_info.get("active_command_status") == "not_on_path":
+            payload["recommended_actions"].append(
+                "hol-guard is not on PATH. Reinstall it or add the install script directory to PATH."
+            )
+        else:
+            payload["recommended_actions"].append(
+                "Run `command -v hol-guard` and `hol-guard --version` "
+                "to confirm the active command matches this install."
+            )
     payload["approval_center"] = approval_center
     payload["approval_url_base"] = approval_center.get("approval_url_base")
     payload["passive_read_guarantee"] = _passive_read_guarantee()

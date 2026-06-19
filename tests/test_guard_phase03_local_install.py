@@ -133,7 +133,6 @@ def test_update_binary_diagnostics_treats_pipx_shim_as_healthy(monkeypatch: pyte
     assert payload["binary_diagnostics"]["path_status"] == "pipx_shim_detected"
     assert payload["binary_diagnostics"]["expected_script_dir"] is None
 
-
 def test_update_uses_real_pipx_binary_when_guard_package_shims_are_installed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -177,6 +176,25 @@ def test_update_uses_real_pipx_binary_when_guard_package_shims_are_installed(
     assert exit_code == 0
     assert payload["status"] == "updated"
     assert payload["command"] == ["pipx", "upgrade", "hol-guard"]
+
+
+def test_build_guard_install_surface_payload_stays_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(
+        update_commands.shutil,
+        "which",
+        lambda name: "/mock-home/.local/bin/hol-guard" if name == "hol-guard" else None,
+    )
+    monkeypatch.setattr(
+        update_commands,
+        "_version_check_payload",
+        lambda _current_version: (_ for _ in ()).throw(AssertionError("network version check should not run")),
+    )
+
+    payload = update_commands.build_guard_install_surface_payload()
+
+    assert payload["installer"] == "pipx"
+    assert payload["binary_diagnostics"]["path_status"] == "pipx_shim_detected"
 
 
 def test_version_check_reports_python_incompatible_latest_release(monkeypatch: pytest.MonkeyPatch) -> None:
