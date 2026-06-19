@@ -224,7 +224,8 @@ def emit_guard_payload(command: str, payload: PayloadDict, as_json: bool) -> Non
     """Render Guard payloads as JSON or human-friendly rich output."""
 
     if as_json:
-        sys.stdout.write(_safe_json_output_text(command, payload))
+        redacted_output = redact_text(_safe_json_output_text(command, payload))
+        sys.stdout.write(redacted_output.text)
         sys.stdout.write("\n")
         return
 
@@ -232,7 +233,8 @@ def emit_guard_payload(command: str, payload: PayloadDict, as_json: bool) -> Non
     if not _RICH_AVAILABLE:
         plain_renderer = _PLAIN_TEXT_RENDERERS.get(command)
         if plain_renderer is None:
-            sys.stdout.write(_safe_json_output_text(command, payload))
+            redacted_output = redact_text(_safe_json_output_text(command, payload))
+            sys.stdout.write(redacted_output.text)
         else:
             sys.stdout.write(plain_renderer(redacted_payload))
         sys.stdout.write("\n")
