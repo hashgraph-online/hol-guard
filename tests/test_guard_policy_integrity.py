@@ -1566,6 +1566,39 @@ def test_build_trust_doctor_payload_prefers_live_daemon_port_when_locator_is_sta
     assert any("refresh the local browser approval route" in action for action in payload["recommended_actions"])
 
 
+def test_build_trust_doctor_payload_tolerates_mixed_naive_and_aware_locator_timestamps(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    locator = ApprovalCenterLocator(
+        guard_home=home_dir,
+        daemon_url="http://127.0.0.1:5481",
+        approval_url_base="http://127.0.0.1:5481",
+        pid=1234,
+        started_at="2026-06-19T12:01:00",
+        state_path=home_dir / "guard-daemon-state.json",
+    )
+    monkeypatch.setattr(trust_dispatch_module, "read_approval_center_locator", lambda _home: locator)
+    monkeypatch.setattr(trust_dispatch_module, "load_guard_daemon_url", lambda _home: locator.daemon_url)
+    monkeypatch.setattr(
+        trust_dispatch_module,
+        "_load_state",
+        lambda _home: {
+            "pid": 1234,
+            "port": 5481,
+            "package_version": trust_dispatch_module.__version__,
+            "started_at": "2026-06-19T12:00:00+00:00",
+        },
+    )
+
+    payload = trust_dispatch_module.build_trust_doctor_payload(store)
+
+    assert payload["approval_center"]["snapshot_fresh"] is True
+    assert payload["approval_center"]["approval_url_base"] == "http://127.0.0.1:5481"
+
+
 def test_build_trust_doctor_payload_detects_editable_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)

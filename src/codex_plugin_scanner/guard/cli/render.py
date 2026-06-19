@@ -288,10 +288,7 @@ def _render_redacted_json_payload(redacted_payload: object) -> str:
 def _safe_json_output_text(command: str, payload: PayloadDict) -> str:
     json_payload = _json_payload_for_command(command, payload)
     sanitized_payload = _coerce_object_dict(_sanitize_payload_for_output(json_payload, command=command))
-    rendered = _render_redacted_json_payload(sanitized_payload)
-    if command.startswith("trust."):
-        return rendered
-    return redact_text(rendered).text
+    return _render_redacted_json_payload(sanitized_payload)
 
 
 def _plain_text_protect(payload: PayloadDict) -> str:

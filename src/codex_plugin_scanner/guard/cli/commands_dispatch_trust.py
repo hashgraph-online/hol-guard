@@ -66,7 +66,10 @@ def _approval_center_locator_is_fresh(
     locator_started_at_dt = _parse_iso8601(locator_started_at)
     if state_started_at is None or locator_started_at_dt is None:
         return True
-    return locator_started_at_dt >= state_started_at
+    try:
+        return locator_started_at_dt >= state_started_at
+    except TypeError:
+        return True
 
 
 def _sanitize_trust_text(value: str) -> str:
