@@ -13525,10 +13525,10 @@ function filterQueueByDateRange(items, range) {
     return true;
   });
 }
-const queueDateFormatter = new Intl.DateTimeFormat("en", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
+const queueDateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "2-digit",
+  day: "2-digit",
+  year: "2-digit",
   hour: "numeric",
   minute: "2-digit"
 });
@@ -20519,8 +20519,11 @@ function openPackageFirewallAuthorizeWindow(authorizeUrl) {
   }
   return false;
 }
-function openPackageFirewallAuthorizeFallback(_authorizeUrl, browserOpened) {
-  return browserOpened === true;
+function openPackageFirewallAuthorizeFallback(authorizeUrl, browserOpened) {
+  if (browserOpened === true) {
+    return true;
+  }
+  return openPackageFirewallAuthorizeWindow(authorizeUrl);
 }
 function FiShare2(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2", "strokeLinecap": "round", "strokeLinejoin": "round" }, "child": [{ "tag": "circle", "attr": { "cx": "18", "cy": "5", "r": "3" }, "child": [] }, { "tag": "circle", "attr": { "cx": "6", "cy": "12", "r": "3" }, "child": [] }, { "tag": "circle", "attr": { "cx": "18", "cy": "19", "r": "3" }, "child": [] }, { "tag": "line", "attr": { "x1": "8.59", "y1": "13.51", "x2": "15.42", "y2": "17.49" }, "child": [] }, { "tag": "line", "attr": { "x1": "15.41", "y1": "6.51", "x2": "8.59", "y2": "10.49" }, "child": [] }] })(props);
@@ -26274,9 +26277,10 @@ export {
   HiMiniClipboardDocument as b7,
   HiMiniUsers as b8,
   HiMiniFolder as b9,
-  HiMiniArrowUp as bA,
-  runAuditRemediation as bB,
-  HiMiniSignal as bC,
+  HiMiniArrowDown as bA,
+  HiMiniArrowUp as bB,
+  runAuditRemediation as bC,
+  HiMiniSignal as bD,
   HiMiniInformationCircle as ba,
   HiMiniIdentification as bb,
   policyActionLabel as bc,
@@ -26302,7 +26306,7 @@ export {
   HiMiniShieldExclamation as bw,
   HiMiniComputerDesktop as bx,
   HiMiniChevronLeft as by,
-  HiMiniArrowDown as bz,
+  HiMiniFunnel as bz,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,

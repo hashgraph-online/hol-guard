@@ -115,11 +115,11 @@ from ..local_supply_chain import (
     build_local_supply_chain_posture,
     build_supply_chain_explain_payload,
     build_supply_chain_status_payload,
-    sync_supply_chain_cloud_state,
     build_workspace_audit_payload,
     build_workspace_scan_payload,
     package_request_policy_hash,
     resolve_package_firewall_entitlement_with_refresh,
+    sync_supply_chain_cloud_state,
 )
 from ..mcp_tool_calls import (
     allow_tool_call,
