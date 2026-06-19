@@ -731,15 +731,27 @@ def _build_trust_doctor_panel(trust: dict[str, object]) -> Panel:
     body.add_row("Remembered rules", str(trust.get("remembered_rules") or "unknown"))
     body.add_row("Cloud policies", str(trust.get("cloud_policies") or "unknown"))
     body.add_row("Passive OS prompts", "blocked" if trust.get("passive_prompt_allowed") is False else "unknown")
+    passive_read_guarantee = trust.get("passive_read_guarantee")
+    if isinstance(passive_read_guarantee, str) and passive_read_guarantee.strip():
+        body.add_row("Prompt-free reads", passive_read_guarantee.strip())
     checks = trust.get("checks")
     if isinstance(checks, dict):
         body.add_row("Local rules protected", _bool_label(bool(checks.get("local_rules_protected"))))
         body.add_row("Passive no-UI check", _bool_label(bool(checks.get("passive_no_ui"))))
+    approval_center = trust.get("approval_center")
+    if isinstance(approval_center, dict):
+        body.add_row("Approval center", str(approval_center.get("approval_url_base") or "inactive"))
+        if approval_center.get("port") is not None:
+            body.add_row("Approval port", str(approval_center.get("port")))
+        detail = approval_center.get("detail")
+        if isinstance(detail, str) and detail.strip():
+            body.add_row("Approval route", textwrap.fill(detail.strip(), width=72))
     official_install = trust.get("official_install")
     if isinstance(official_install, dict):
         version = official_install.get("version") or "unknown"
         update_command = official_install.get("update_command") or "hol-guard update"
         body.add_row("Installed package", f"hol-guard {version}")
+        body.add_row("Install mode", str(official_install.get("installation_mode") or "unknown"))
         body.add_row("Update", str(update_command))
     summary = trust.get("summary")
     if isinstance(summary, str) and summary.strip():
@@ -754,6 +766,34 @@ def _build_trust_doctor_panel(trust: dict[str, object]) -> Panel:
 def _render_trust_doctor(console: Console, payload: dict[str, object]) -> None:
     console.print(_build_trust_doctor_panel(payload))
     console.print(_build_diagnostic_command_panel())
+
+
+def _render_trust_explain(console: Console, payload: dict[str, object]) -> None:
+    rule = payload.get("rule")
+    if not isinstance(rule, dict):
+        _render_fallback(console, payload)
+        return
+    body = Table.grid(padding=(0, 1))
+    body.add_row("Rule", str(payload.get("rule_id") or "unknown"))
+    body.add_row("Scope", str(rule.get("scope") or "unknown"))
+    body.add_row("Action", str(rule.get("action") or "unknown"))
+    body.add_row("Source", str(rule.get("source") or "unknown"))
+    body.add_row("Authority", str(payload.get("rule_status_label") or "unknown"))
+    integrity_status = rule.get("integrity_status")
+    if integrity_status is not None:
+        body.add_row("Integrity", str(integrity_status))
+    updated_at = rule.get("updated_at")
+    if updated_at is not None:
+        body.add_row("Updated", str(updated_at))
+    rule_status_reason = payload.get("rule_status_reason")
+    if isinstance(rule_status_reason, str) and rule_status_reason.strip():
+        body.add_row("Why", textwrap.fill(rule_status_reason.strip(), width=72))
+    trust_status = payload.get("trust_status")
+    if isinstance(trust_status, dict):
+        body.add_row("Runtime", str(trust_status.get("runtime_protection") or "unknown"))
+        body.add_row("Local trust", str(trust_status.get("remembered_rules") or "unknown"))
+        body.add_row("Cloud", str(trust_status.get("cloud_policies") or "unknown"))
+    console.print(Panel(body, title="Remembered rule authority", border_style="cyan"))
 
 
 def _render_run(console: Console, payload: dict[str, object]) -> None:
@@ -2634,6 +2674,7 @@ _RENDERERS: dict[str, Renderer] = {
     "detect": _render_detect,
     "doctor": _render_doctor,
     "trust.doctor": _render_trust_doctor,
+    "trust.explain": _render_trust_explain,
     "run": _render_run,
     "diff": _render_diff,
     "receipts": _render_receipts,

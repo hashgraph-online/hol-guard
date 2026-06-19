@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import argparse
 import importlib.metadata
+import json
 import sys
 from pathlib import Path
 from typing import TextIO
 
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
+from ..daemon.manager import _guard_daemon_url_port, load_guard_daemon_url, read_approval_center_locator
 from ..local_trust_contract import TrustStatus
+from ..policy_integrity import is_remote_policy_source
 from ..store import GuardStore, SystemKeyringSecretStore
 from .commands_support_interaction import _emit
 
@@ -53,7 +56,7 @@ def _unsupported_backend_payload(*, command: str, backend: str) -> dict[str, obj
         "passive_prompt_allowed": False,
         "one_time_approvals": "available",
         "durable_local_rules": "limited",
-        "cloud_policy_authority": "setup_unavailable",
+        "cloud_policy_status": "setup_unavailable",
         "error": (
             f"Backend {backend!r} is not available for passive {command}. "
             "Guard will not probe it in the background because that could open an OS credential prompt."
@@ -92,7 +95,7 @@ def _trust_status_payload(store: GuardStore, *, command: str, backend: str) -> d
         "passive_prompt_allowed": False,
         "one_time_approvals": "available",
         "durable_local_rules": "enforced" if remembered_rules == "enforced" else "limited",
-        "cloud_policy_authority": cloud_policies,
+        "cloud_policy_status": cloud_policies,
         "message": (
             "Guard is blocking risky actions. Broad remembered local rules are limited until local trust is protected."
             if remembered_rules != "enforced"
@@ -102,20 +105,88 @@ def _trust_status_payload(store: GuardStore, *, command: str, backend: str) -> d
 
 
 def _installed_trust_cli_payload() -> dict[str, object]:
+    version = None
+    installation_mode = "unknown"
+    editable_install = False
+    official_install = False
     try:
-        version = importlib.metadata.version("hol-guard")
+        distribution = importlib.metadata.distribution("hol-guard")
     except importlib.metadata.PackageNotFoundError:
-        version = None
+        distribution = None
+    if distribution is not None:
+        version = distribution.version
+        direct_url_text = distribution.read_text("direct_url.json")
+        if isinstance(direct_url_text, str) and direct_url_text.strip():
+            try:
+                direct_url_payload = json.loads(direct_url_text)
+            except json.JSONDecodeError:
+                direct_url_payload = None
+            dir_info = direct_url_payload.get("dir_info") if isinstance(direct_url_payload, dict) else None
+            editable_install = bool(isinstance(dir_info, dict) and dir_info.get("editable") is True)
+        try:
+            distribution_root = str(distribution.locate_file("")).replace("\\", "/")
+        except Exception:
+            distribution_root = ""
+        official_install = (
+            "pipx/venvs/hol-guard/" in distribution_root or "/venvs/hol-guard/" in distribution_root
+        ) and not editable_install
+        if official_install:
+            installation_mode = "official-pipx"
+        elif editable_install:
+            installation_mode = "editable"
+        else:
+            installation_mode = "packaged"
     return {
         "package": "hol-guard",
         "version": version,
+        "installation_mode": installation_mode,
+        "official_install": official_install,
+        "editable_install": editable_install,
         "update_command": "hol-guard update",
         "dry_run_command": "hol-guard update --dry-run --json",
     }
 
 
+def _approval_center_status_payload(guard_home: Path) -> dict[str, object]:
+    locator = read_approval_center_locator(guard_home)
+    if locator is not None:
+        return {
+            "active": True,
+            "approval_url_base": locator.approval_url_base,
+            "daemon_url": locator.daemon_url,
+            "port": (
+                _guard_daemon_url_port(locator.approval_url_base)
+                if isinstance(locator.approval_url_base, str) and locator.approval_url_base.strip()
+                else None
+            ),
+            "started_at": locator.started_at,
+            "pid": locator.pid,
+        }
+    daemon_url = load_guard_daemon_url(guard_home)
+    if isinstance(daemon_url, str) and daemon_url.strip():
+        return {
+            "active": True,
+            "approval_url_base": daemon_url,
+            "daemon_url": daemon_url,
+            "port": _guard_daemon_url_port(daemon_url),
+            "detail": "Guard daemon is healthy, but the browser approval locator has not been refreshed yet.",
+        }
+    return {
+        "active": False,
+        "detail": "No active Guard approval center daemon detected.",
+    }
+
+
+def _passive_read_guarantee() -> str:
+    if sys.platform == "darwin":
+        return "No passive macOS Keychain access"
+    return "No passive OS credential prompts"
+
+
 def build_trust_doctor_payload(store: GuardStore, *, backend: str = "auto") -> dict[str, object]:
     payload = _trust_status_payload(store, command="doctor", backend=backend)
+    approval_center = _approval_center_status_payload(store.guard_home)
+    install_info = _installed_trust_cli_payload()
     remembered_rules = str(payload.get("remembered_rules") or "unknown")
     runtime_protection = str(payload.get("runtime_protection") or "unknown")
     if runtime_protection != "protected":
@@ -134,7 +205,8 @@ def build_trust_doctor_payload(store: GuardStore, *, backend: str = "auto") -> d
         "one_time_approvals": payload.get("one_time_approvals") == "available",
         "passive_no_ui": payload.get("passive_prompt_allowed") is False,
         "local_rules_protected": remembered_rules == "enforced",
-        "cloud_policy_authority": payload.get("cloud_policy_authority") == "available",
+        "cloud_policy_available": payload.get("cloud_policy_status") == "available",
+        "approval_center_active": bool(approval_center.get("active")),
     }
     payload["recommended_actions"] = (
         [
@@ -148,8 +220,87 @@ def build_trust_doctor_payload(store: GuardStore, *, backend: str = "auto") -> d
             "Use Guard Cloud policies for team-wide exceptions.",
         ]
     )
-    payload["official_install"] = _installed_trust_cli_payload()
+    if not bool(approval_center.get("active")):
+        payload["recommended_actions"].append(
+            "Run `hol-guard dashboard` if browser approvals are unavailable and Guard needs a fresh local route."
+        )
+    if bool(install_info.get("editable_install")):
+        payload["recommended_actions"].append(
+            "Use the official pipx install before relying on packaged update and daemon lifecycle checks."
+        )
+    payload["approval_center"] = approval_center
+    payload["approval_url_base"] = approval_center.get("approval_url_base")
+    payload["passive_read_guarantee"] = _passive_read_guarantee()
+    payload["official_install"] = install_info
     return payload
+
+
+def _trust_rule_authority(
+    decision: dict[str, object],
+    *,
+    trust_status: dict[str, object],
+) -> tuple[str, str, str]:
+    source = str(decision.get("source") or "unknown")
+    if is_remote_policy_source(source):
+        return (
+            "guard_cloud",
+            "From Guard Cloud",
+            "This policy came from a validated Guard Cloud sync path and stays read-only on this device.",
+        )
+    integrity_status = str(decision.get("integrity_status") or "unknown")
+    remembered_rules = str(trust_status.get("remembered_rules") or "unknown")
+    if integrity_status == "valid" and remembered_rules == "enforced":
+        return (
+            "remembered_rule_protected",
+            "Remembered and protected",
+            "Local trust is protected, so this remembered rule can be enforced durably on this device.",
+        )
+    if integrity_status == "valid":
+        return (
+            "remembered_rule_limited",
+            "Remembered but limited",
+            "Local trust is not fully protected, so Guard limits broad remembered rules "
+            "and still prefers one-time approvals.",
+        )
+    integrity_message = decision.get("integrity_message")
+    return (
+        "remembered_rule_ignored",
+        "Remembered but ignored",
+        str(integrity_message or "Guard cannot trust this remembered rule after integrity verification."),
+    )
+
+
+def build_trust_explain_payload(store: GuardStore, *, rule_id: int, backend: str = "auto") -> dict[str, object]:
+    decision = store.get_policy_decision(rule_id)
+    if decision is None:
+        return {
+            "generated_at": _now(),
+            "command": "explain",
+            "rule_id": rule_id,
+            "error": f"Remembered rule {rule_id} was not found.",
+        }
+    trust_payload = _trust_status_payload(store, command="explain", backend=backend)
+    rule_status, rule_status_label, rule_status_reason = _trust_rule_authority(
+        decision,
+        trust_status=trust_payload,
+    )
+    safe_rule = {key: value for key, value in decision.items() if key not in {"integrity_key_id"}}
+    return {
+        "generated_at": _now(),
+        "command": "explain",
+        "rule_id": rule_id,
+        "rule": safe_rule,
+        "rule_status": rule_status,
+        "rule_status_label": rule_status_label,
+        "rule_status_reason": rule_status_reason,
+        "trust_status": {
+            "backend": trust_payload.get("backend"),
+            "runtime_protection": trust_payload.get("runtime_protection"),
+            "remembered_rules": trust_payload.get("remembered_rules"),
+            "cloud_policies": trust_payload.get("cloud_policies"),
+            "degraded_reasons": trust_payload.get("degraded_reasons"),
+        },
+    }
 
 
 def _macos_native_backend_supported(store: GuardStore) -> bool:
@@ -198,6 +349,22 @@ def _run_guard_trust_command(
         payload["trust_health"] = "protected" if payload["remembered_rules"] == "enforced" else "degraded_safe"
         _emit("trust.test", payload, getattr(args, "json", False))
         return 0
+    if trust_command == "explain":
+        rule_id = getattr(args, "rule", None)
+        if not isinstance(rule_id, int) or isinstance(rule_id, bool):
+            _emit(
+                "trust.explain",
+                {
+                    "generated_at": _now(),
+                    "command": "explain",
+                    "error": "Use `hol-guard guard trust explain --rule <decision_id>`.",
+                },
+                getattr(args, "json", False),
+            )
+            return 2
+        payload = build_trust_explain_payload(store, rule_id=rule_id, backend=backend)
+        _emit("trust.explain", payload, getattr(args, "json", False))
+        return 0 if "error" not in payload else 2
     if trust_command in {"setup", "reset"}:
         if backend == "degraded-safe":
             payload["error"] = (
@@ -254,7 +421,7 @@ def _run_guard_trust_command(
             "no_ui_passive": True,
             "one_time_approvals": "available",
             "durable_local_rules": ("enforced" if trust_status.get("remembered_rules") == "enforced" else "limited"),
-            "cloud_policy_authority": trust_status.get("cloud_policies") or "unknown",
+            "cloud_policy_status": trust_status.get("cloud_policies") or "unknown",
             "ok": bool(result.get("mode") == "protected") if trust_command == "setup" else True,
         }
         if trust_command == "setup":
@@ -284,4 +451,5 @@ def _run_guard_trust_command(
 __all__ = [
     "_run_guard_trust_command",
     "build_trust_doctor_payload",
+    "build_trust_explain_payload",
 ]
