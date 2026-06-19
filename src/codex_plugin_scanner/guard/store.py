@@ -4238,6 +4238,16 @@ class GuardStore:
                 items.append(payload)
             return items
 
+    def get_policy_decision(self, decision_id: int) -> dict[str, object] | None:
+        from .store_policy_decision import get_policy_decision_payload
+
+        return get_policy_decision_payload(
+            self,
+            decision_id=decision_id,
+            approval_gate_policy_source=_APPROVAL_GATE_POLICY_SOURCE,
+            now=_now(),
+        )
+
     @staticmethod
     def _policy_decision_dict_from_row(
         connection: sqlite3.Connection,
