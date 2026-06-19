@@ -553,7 +553,7 @@ def _finalize_evaluation(
             summary = f"{summary} Also flagged: {others}."
     harness_parts = [risk_summary]
     if reason_message:
-        harness_parts.append(f"Reason: {reason_message}.")
+        harness_parts.append(f"Reason: {_ensure_terminal_punctuation(reason_message)}")
     if fix_command:
         harness_parts.append(f"Fix: install `{fix_command}` or choose a team exception.")
     user_copy = _normalize_package_user_copy(
@@ -871,6 +871,13 @@ def _normalize_package_user_copy(user_copy: SupplyChainUserCopy, *, policy_actio
     if needs_local_review and _LOCAL_REVIEW_INSTRUCTION.lower() not in harness_message.lower():
         harness_message = f"{harness_message} {_LOCAL_REVIEW_INSTRUCTION}".strip()
     return replace(user_copy, dashboard_url=dashboard_url, harness_message=harness_message)
+
+
+def _ensure_terminal_punctuation(message: str) -> str:
+    trimmed = message.strip()
+    if trimmed.endswith((".", "!", "?")):
+        return trimmed
+    return f"{trimmed}."
 
 
 def _strip_review_evidence_tail(message: str) -> str:

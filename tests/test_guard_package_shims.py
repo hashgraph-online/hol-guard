@@ -1108,6 +1108,71 @@ def test_guard_protect_probe_skips_local_approval_queue_on_block(
     assert store.list_approval_requests(limit=None) == []
 
 
+def test_guard_protect_pnpm_install_alias_renders_wrapped_review_link_for_cloud_validation_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    (workspace_dir / "package.json").write_text(
+        json.dumps({"name": "demo", "dependencies": {"lodash": "^4.17.21"}}),
+        encoding="utf-8",
+    )
+    (workspace_dir / "pnpm-lock.yaml").write_text(
+        "\n".join(
+            [
+                "lockfileVersion: '9.0'",
+                "packages:",
+                "  lodash@4.17.21:",
+                "    resolution: {integrity: sha256-demo}",
+                "importers:",
+                "  .:",
+                "    dependencies:",
+                "      lodash: 4.17.21",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    server, thread, sync_url = _start_cloud_eval_server(
+        decision="allow",
+        package_name="lodash",
+        evaluate_status=400,
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    try:
+        _seed_bundle(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="lodash",
+            package_version="4.17.21",
+            action="allow",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "pnpm",
+                "i",
+            ]
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
+
+    output = capsys.readouterr().out
+
+    assert rc == 2
+    assert "approve or keep this blocked" in output
+    assert "http://127.0.0.1:5474/requests/" in output
+    assert "review.. Open HOL Guard" not in output
+
+
 def test_guard_protect_retry_runs_after_local_package_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
