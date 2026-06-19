@@ -345,9 +345,9 @@ def apply_approval_resolution(
     request_publisher = _string_or_none(request.get("publisher"))
     if scope == "publisher" and request_publisher is None:
         raise ValueError("no publisher scope")
-    resolved_workspace = resolve_request_workspace_scope(request, workspace) if scope == "workspace" else None
     if scope not in supported_request_scopes(request):
         raise ValueError("unsupported_request_scope")
+    resolved_workspace = resolve_request_workspace_scope(request, workspace) if scope == "workspace" else None
     workspace_artifact_id, workspace_artifact_hash = _workspace_policy_artifact_keys(request, scope)
     request_artifact_id = _string_or_none(request.get("artifact_id"))
     request_artifact_hash = _string_or_none(request.get("artifact_hash"))
