@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import argparse
 import importlib.metadata
+import sys
 from pathlib import Path
 from typing import TextIO
 
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
 from ..local_trust_contract import TrustStatus
-from ..store import GuardStore
+from ..store import GuardStore, SystemKeyringSecretStore
 from .commands_support_interaction import _emit
 
 
@@ -151,6 +152,15 @@ def build_trust_doctor_payload(store: GuardStore, *, backend: str = "auto") -> d
     return payload
 
 
+def _macos_native_backend_supported(store: GuardStore) -> bool:
+    secret_store = getattr(store, "_policy_integrity_secret_store", None)
+    return (
+        sys.platform == "darwin"
+        and isinstance(secret_store, SystemKeyringSecretStore)
+        and secret_store._supports_native_macos_security_reads()
+    )
+
+
 def _run_guard_trust_command(
     args: argparse.Namespace,
     *,
@@ -166,7 +176,7 @@ def _run_guard_trust_command(
     store = _require_guard_store(store)
     trust_command = getattr(args, "trust_command", None) or "status"
     backend = str(getattr(args, "backend", None) or "auto")
-    if backend == "macos-native" and trust_command in {"status", "doctor", "test"}:
+    if backend == "macos-native" and not _macos_native_backend_supported(store):
         payload = _unsupported_backend_payload(command=trust_command, backend=backend)
         _emit(f"trust.{trust_command}", payload, getattr(args, "json", False))
         return 2
@@ -189,19 +199,87 @@ def _run_guard_trust_command(
         _emit("trust.test", payload, getattr(args, "json", False))
         return 0
     if trust_command in {"setup", "reset"}:
-        if backend == "macos-native":
+        if backend == "degraded-safe":
             payload["error"] = (
-                f"macOS native trust {trust_command} is not enabled yet. Passive checks remain no-UI and degraded-safe."
+                "No explicit local trust backend is available for setup on this platform."
+                if trust_command == "setup"
+                else "No explicit local trust backend is active to reset."
+            )
+            payload["next_action"] = (
+                "Runtime protection remains active. Broad remembered local rules stay limited."
+                if trust_command == "setup"
+                else "Nothing changed."
+            )
+            _emit(f"trust.{trust_command}", payload, getattr(args, "json", False))
+            return 2
+        if sys.platform != "darwin":
+            payload["error"] = (
+                "No explicit local trust backend is available for setup on this platform."
+                if trust_command == "setup"
+                else "No explicit local trust backend is active to reset."
+            )
+            payload["next_action"] = (
+                "Guard already uses the default passive backend on this platform."
+                if trust_command == "setup"
+                else "Nothing changed."
+            )
+            _emit(f"trust.{trust_command}", payload, getattr(args, "json", False))
+            return 2
+        if not _macos_native_backend_supported(store):
+            payload["error"] = (
+                f"macOS native trust {trust_command} is unavailable. "
+                "Guard will not fall back to a prompt-capable backend."
             )
             payload["next_action"] = "Use one-time approvals or Guard Cloud policies until native setup is available."
-        elif trust_command == "setup":
-            payload["error"] = "No explicit local trust backend is available for setup on this platform."
-            payload["next_action"] = "Runtime protection remains active. Broad remembered local rules stay limited."
+            _emit(f"trust.{trust_command}", payload, getattr(args, "json", False))
+            return 2
+        result = (
+            store.setup_policy_integrity(now=_now())
+            if trust_command == "setup"
+            else store.reset_policy_integrity(now=_now())
+        )
+        trust_status = result.get("trust_status")
+        if not isinstance(trust_status, dict):
+            trust_status = TrustStatus.from_policy_integrity_state(result).to_dict()
+        payload = {
+            **payload,
+            **result,
+            "backend_requested": backend,
+            "backend": trust_status.get("backend") or result.get("backend") or "unknown",
+            "runtime_protection": trust_status.get("runtime_protection") or "unknown",
+            "remembered_rules": trust_status.get("remembered_rules") or "unknown",
+            "cloud_policies": trust_status.get("cloud_policies") or "unknown",
+            "setup_available": bool(trust_status.get("setup_available")),
+            "passive_prompt_allowed": False,
+            "no_ui_passive": True,
+            "one_time_approvals": "available",
+            "durable_local_rules": (
+                "enforced" if trust_status.get("remembered_rules") == "enforced" else "limited"
+            ),
+            "cloud_policy_authority": trust_status.get("cloud_policies") or "unknown",
+            "ok": bool(result.get("mode") == "protected") if trust_command == "setup" else True,
+        }
+        if trust_command == "setup":
+            payload["message"] = (
+                "Local trust is protected. Broad remembered local rules can be enforced."
+                if payload["ok"]
+                else "Local trust setup did not finish. Guard stayed in degraded-safe mode."
+            )
+            if not payload["ok"]:
+                payload["next_action"] = "Keep using one-time approvals, then run trust doctor for the degraded reason."
+                _emit("trust.setup", payload, getattr(args, "json", False))
+                return 2
         else:
-            payload["error"] = "No explicit local trust backend is active to reset."
-            payload["next_action"] = "Nothing changed."
+            payload["message"] = (
+                "Local trust material was removed. Runtime blocking stays active, "
+                "and broad remembered local rules are limited."
+            )
+            payload["next_action"] = (
+                "Run `hol-guard guard trust setup --backend macos-native --json` "
+                "to protect local rules again."
+            )
         _emit(f"trust.{trust_command}", payload, getattr(args, "json", False))
-        return 2
+        return 0
     _emit("trust", {"error": "Use: hol-guard guard trust status|doctor|test|setup|reset"}, getattr(args, "json", False))
     return 2
 

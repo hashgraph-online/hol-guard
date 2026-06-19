@@ -636,6 +636,8 @@ class SystemKeyringSecretStore:
     def _supports_native_macos_security_reads(cls) -> bool:
         if sys.platform != "darwin":
             return False
+        if cls._test_keyring_module() is not None:
+            return True
         loader_ref = cls._load_keyring_module
         loader_id = id(loader_ref)
         cached = cls._native_macos_security_reads_cache
@@ -731,14 +733,12 @@ class SystemKeyringSecretStore:
     def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float = 0.0) -> str | None:
         _ = timeout_seconds
         if sys.platform == "darwin":
-            if self.service_name == _POLICY_INTEGRITY_SERVICE_NAME:
-                # Passive Guard paths must never touch macOS Keychain. Even
-                # no-UI Security-framework reads can regress into OS prompts
-                # when the user keychain is missing, locked, or owned by
-                # another ACL.
-                return None
             if self._supports_native_macos_security_reads():
                 return self._get_secret_without_macos_ui(secret_id)
+            if self.service_name == _POLICY_INTEGRITY_SERVICE_NAME:
+                # Passive policy-integrity reads must fail closed when native
+                # no-UI access is unavailable.
+                return None
             if self._test_keyring_module() is not None:
                 return self.get_secret(secret_id)
             return None
@@ -1085,8 +1085,11 @@ def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
 
 def _build_policy_integrity_secret_store() -> SystemKeyringSecretStore | None:
     if sys.platform == "darwin":
-        # Policy integrity is passive hardening; it must never raise Keychain UI.
-        return None
+        if not SystemKeyringSecretStore._backend_is_available():
+            return None
+        if not SystemKeyringSecretStore._supports_native_macos_security_reads():
+            return None
+        return SystemKeyringSecretStore(service_name=_POLICY_INTEGRITY_SERVICE_NAME)
     if SystemKeyringSecretStore._backend_is_available():
         return SystemKeyringSecretStore(service_name=_POLICY_INTEGRITY_SERVICE_NAME)
     return None
@@ -4597,6 +4600,66 @@ class GuardStore:
             "local_rows_scanned": sum(counts.values()),
             "items": [item for item in items if item.get("integrity_status") != "valid"],
         }
+
+    def setup_policy_integrity(
+        self,
+        *,
+        harness: str | None = None,
+        now: str,
+    ) -> dict[str, object]:
+        next_control_state: dict[str, object] | None = None
+        with self._connect() as connection:
+            state = self._refresh_policy_integrity_state(
+                connection,
+                now=now,
+                create_key=True,
+                allow_cutover_resign=False,
+            )
+            key, key_id = self._policy_integrity_secret_material(create=True)
+            trusted_state = self._load_policy_integrity_control_state(create=True)
+            if (
+                state.get("mode") == "protected"
+                and key is not None
+                and key_id is not None
+                and trusted_state is not None
+            ):
+                local_ids = {
+                    int(row["decision_id"])
+                    for row in self._load_local_policy_rows(connection, harness=harness)
+                }
+                next_control_state = self._advance_policy_integrity_generation(
+                    connection,
+                    now=now,
+                    key=key,
+                    key_id=key_id,
+                    trusted_state=trusted_state,
+                    force_sign_decision_ids=local_ids,
+                    harness=harness,
+                )
+                connection.commit()
+        if next_control_state is not None:
+            self._finalize_policy_integrity_control_state(next_control_state)
+        return self.verify_policy_integrity(harness=harness)
+
+    def reset_policy_integrity(
+        self,
+        *,
+        harness: str | None = None,
+        now: str,
+    ) -> dict[str, object]:
+        secret_store = self._policy_integrity_secret_store
+        if secret_store is not None:
+            secret_store.delete_secret(self._policy_integrity_key_ref)
+            secret_store.delete_secret(self._policy_integrity_control_ref)
+        self._clear_policy_integrity_cache()
+        with self._connect() as connection:
+            self._refresh_policy_integrity_state(
+                connection,
+                now=now,
+                create_key=False,
+                allow_cutover_resign=False,
+            )
+        return self.verify_policy_integrity(harness=harness)
 
     def clear_policy_decisions(
         self,
