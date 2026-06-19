@@ -172,9 +172,7 @@ def test_system_keyring_timeout_skips_all_passive_macos_reads(monkeypatch: pytes
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "_supports_native_macos_security_reads",
-        classmethod(
-            lambda cls: (_ for _ in ()).throw(AssertionError("native macOS Security reads should not be probed"))
-        ),
+        classmethod(lambda cls: False),
     )
     monkeypatch.setattr(
         secret_store,
@@ -229,12 +227,17 @@ def test_system_keyring_timeout_blocks_non_policy_macos_prompt_fallback(
     assert secret_store.get_secret_with_timeout("oauth-token", timeout_seconds=1.0) is None
 
 
-def test_policy_integrity_store_is_disabled_on_macos_without_health_probe(
+def test_policy_integrity_store_uses_native_backend_on_macos_without_health_probe(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     module = _FakeSystemKeyringModule()
     monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_supports_native_macos_security_reads",
+        classmethod(lambda cls: True),
+    )
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "_macos_default_keychain_is_usable",
@@ -245,7 +248,7 @@ def test_policy_integrity_store_is_disabled_on_macos_without_health_probe(
 
     secret_store = guard_store_module._build_policy_integrity_secret_store()
 
-    assert secret_store is None
+    assert isinstance(secret_store, SystemKeyringSecretStore)
 
 
 @pytest.fixture(autouse=True)
