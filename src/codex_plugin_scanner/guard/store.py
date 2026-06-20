@@ -2000,7 +2000,7 @@ class GuardStore:
 
         prepared_state = compute_prepared_state(trusted_state_value)
         current_trusted_state = self._load_policy_integrity_control_state(create=False)
-        if current_trusted_state is None and prepared_state != trusted_state_value:
+        if current_trusted_state is None:
             self._startup_prefetched_policy_integrity_repair_failed = True
             return
         if current_trusted_state is not None and current_trusted_state != trusted_state_value:
