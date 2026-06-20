@@ -395,10 +395,6 @@ jobs:
             echo "ACTION_REPO_TOKEN must be configured to sync repository version files after publish." >&2
             exit 1
           fi
-          if [[ "$(gh api repos/${{ github.repository }} --jq .allow_auto_merge)" != "true" ]]; then
-            echo "Repository auto-merge must stay enabled so the version sync PR can merge after required checks." >&2
-            exit 1
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote set-url origin "https://x-access-token:${ACTION_REPO_TOKEN}@github.com/${{ github.repository }}.git"
@@ -437,5 +433,9 @@ jobs:
           if [[ -z "$pr_number" ]]; then
             echo "Failed to create or locate repository version sync PR." >&2
             exit 1
+          fi
+          if [[ "$(gh api repos/${{ github.repository }} --jq .allow_auto_merge)" != "true" ]]; then
+            echo "Repository auto-merge is disabled; leaving PR #${pr_number} open for manual merge after checks." >&2
+            exit 0
           fi
           gh pr merge "$pr_number" --repo ${{ github.repository }} --auto --squash --delete-branch --match-head-commit "$head_sha" --subject "chore(release): sync repository version to ${VERSION} [skip release publish]" --body ""
