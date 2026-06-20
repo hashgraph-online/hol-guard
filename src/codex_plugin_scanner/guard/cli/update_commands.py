@@ -168,7 +168,7 @@ def run_guard_update(
         if local_source_install is not None and not bool(local_source_install.get("path_exists")):
             payload["recovery_source_install"] = True
     version_check = _version_check_payload(current_version)
-    if _python_runtime_blocks_update(version_check):
+    if requested_wheel_path is None and _python_runtime_blocks_update(version_check):
         payload.update(
             {
                 "version_check": version_check,

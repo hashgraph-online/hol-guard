@@ -288,6 +288,43 @@ def test_update_blocks_python_incompatible_latest_release(monkeypatch: pytest.Mo
     assert "retry_command" not in payload
 
 
+def test_update_requested_local_wheel_bypasses_python_incompatible_latest_release(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    wheel = tmp_path / "hol_guard-2.0.790-py3-none-any.whl"
+    wheel.write_bytes(b"fake-wheel")
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.789")
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: "2.0.790")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.807")
+    monkeypatch.setattr(update_commands, "_latest_version_python_requirements", lambda latest: (">=3.10,<3.14",))
+    monkeypatch.setattr(update_commands, "_latest_compatible_release_version", lambda current, runtime: None)
+    monkeypatch.setattr(update_commands, "_runtime_python_version", lambda: "3.14.0")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    captured_commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured_commands.append(command)
+        return subprocess.CompletedProcess(command, 0, "reinstalled hol-guard 2.0.790", "")
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False, wheel=str(wheel))
+
+    assert exit_code == 0
+    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", "--force-reinstall", str(wheel)]]
+    assert payload["status"] == "updated"
+    assert payload["upgrade_source"] == "local_wheel"
+    assert payload["requested_wheel"] == str(wheel)
+    assert payload["version_check"]["latest_version"] == "2.0.807"
+    assert payload["version_check"]["status"] == "python_incompatible"
+    assert payload["version_check"]["required_python"] == ">=3.10,<3.14"
+    assert payload["version_check"]["runtime_python"] == "3.14.0"
+    assert "python_update_required" not in payload
+
+
 def test_update_skips_existing_local_source_install(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     source_dir = tmp_path / "src-install"
     source_dir.mkdir()
