@@ -6,13 +6,48 @@ from __future__ import annotations
 from .store_base import *
 
 
+def _facade_store_attr(name: str, fallback: object) -> object:
+    store_module = sys.modules.get("codex_plugin_scanner.guard.store")
+    if store_module is None:
+        return fallback
+    return getattr(store_module, name, fallback)
+
+
+def _set_private_mode_compat(path: Path, mode: int) -> None:
+    setter = _facade_store_attr("_set_private_mode", _set_private_mode)
+    if not callable(setter):
+        _set_private_mode(path, mode)
+        return
+    setter(path, mode)
+
+
+def _build_oauth_secret_store_compat(guard_home: Path) -> SecretStore:
+    builder = _facade_store_attr("_build_oauth_secret_store", _build_oauth_secret_store)
+    if not callable(builder):
+        return _build_oauth_secret_store(guard_home)
+    return cast(SecretStore, builder(guard_home))
+
+
+def _build_policy_integrity_secret_store_compat() -> SystemKeyringSecretStore | None:
+    builder = _facade_store_attr(
+        "_build_policy_integrity_secret_store",
+        _build_policy_integrity_secret_store,
+    )
+    if not callable(builder):
+        return _build_policy_integrity_secret_store()
+    secret_store = builder()
+    if secret_store is None or isinstance(secret_store, SystemKeyringSecretStore):
+        return secret_store
+    return cast(SystemKeyringSecretStore, secret_store)
+
+
 class StoreSecretPolicyIntegrityMixin:
     def __init__(self, guard_home: Path, *, guard_event_queue_limit: int = 1000) -> None:
         self.guard_home = guard_home
         self.guard_home.mkdir(parents=True, exist_ok=True)
-        _set_private_mode(self.guard_home, _GUARD_STORE_PRIVATE_DIR_MODE)
-        self._oauth_secret_store = _build_oauth_secret_store(self.guard_home)
-        self._policy_integrity_secret_store = _build_policy_integrity_secret_store()
+        _set_private_mode_compat(self.guard_home, _GUARD_STORE_PRIVATE_DIR_MODE)
+        self._oauth_secret_store = _build_oauth_secret_store_compat(self.guard_home)
+        self._policy_integrity_secret_store = _build_policy_integrity_secret_store_compat()
         self._cached_oauth_secret_payload: tuple[str, str, str] | None = None
         self._cached_policy_integrity_secret_material: tuple[str | None, float, tuple[bytes, str]] | None = None
         self._cached_policy_integrity_control_state: tuple[str | None, float, dict[str, object]] | None = None
@@ -712,7 +747,7 @@ class StoreSecretPolicyIntegrityMixin:
         return payload
 
     def _repair_store_permissions(self) -> None:
-        _set_private_mode(self.guard_home, _GUARD_STORE_PRIVATE_DIR_MODE)
+        _set_private_mode_compat(self.guard_home, _GUARD_STORE_PRIVATE_DIR_MODE)
         for candidate in (
             self.path,
             self.guard_home / "guard.db-journal",
@@ -720,4 +755,4 @@ class StoreSecretPolicyIntegrityMixin:
             self.guard_home / "guard.db-wal",
         ):
             if candidate.exists():
-                _set_private_mode(candidate, _GUARD_STORE_PRIVATE_FILE_MODE)
+                _set_private_mode_compat(candidate, _GUARD_STORE_PRIVATE_FILE_MODE)
