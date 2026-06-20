@@ -1846,6 +1846,11 @@ class GuardStore:
             trusted_state_value = cast(dict[str, object] | None, prefetched_trusted_state)
         else:
             trusted_state_value = self._load_policy_integrity_control_state(create=create_key)
+        if using_prefetched_trusted_state and getattr(
+            self, "_startup_prefetched_policy_integrity_repair_failed", False
+        ):
+            trusted_state_value = None
+            warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
         prefetched_secret_material = getattr(
             self,
             "_startup_prefetched_policy_integrity_secret_material",
@@ -1964,8 +1969,12 @@ class GuardStore:
                 prepared_state["cutover_complete"] = True
         finally:
             connection.close()
-        if prepared_state != trusted_state_value and self._store_policy_integrity_control_state(prepared_state):
+        if prepared_state == trusted_state_value:
+            return
+        if self._store_policy_integrity_control_state(prepared_state):
             self._startup_prefetched_policy_integrity_trusted_state = prepared_state
+            return
+        self._startup_prefetched_policy_integrity_repair_failed = True
 
     def _policy_integrity_result_for_row(
         self,
@@ -2528,6 +2537,7 @@ class GuardStore:
         self._startup_prefetched_policy_integrity_trusted_state = self._load_policy_integrity_control_state(
             create=False
         )
+        self._startup_prefetched_policy_integrity_repair_failed = False
         self._prepare_startup_prefetched_policy_integrity_state()
         try:
             with self._connect() as connection:
@@ -2535,6 +2545,7 @@ class GuardStore:
         finally:
             self._startup_prefetched_policy_integrity_secret_material = _POLICY_INTEGRITY_LOOKUP_UNSET
             self._startup_prefetched_policy_integrity_trusted_state = _POLICY_INTEGRITY_LOOKUP_UNSET
+            self._startup_prefetched_policy_integrity_repair_failed = False
 
     @staticmethod
     def _enable_wal_mode(connection: sqlite3.Connection) -> None:
