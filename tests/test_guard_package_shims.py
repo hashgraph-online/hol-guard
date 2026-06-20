@@ -471,13 +471,16 @@ def test_guard_store_init_does_not_hold_sqlite_writer_during_missing_policy_inte
     assert refresh_started_event.wait(timeout=5)
 
     fast_started = time.monotonic()
-    _run_guard_protect_command(str(home_dir), str(workspace_dir))
+    fast_results: Queue = Queue()
+    _run_guard_protect_command(str(home_dir), str(workspace_dir), result_queue=fast_results)
     fast_elapsed = time.monotonic() - fast_started
+    fast_result = fast_results.get(timeout=1)
 
     slow_process.join(timeout=20)
     assert slow_process.exitcode == 0
     slow_result = slow_results.get(timeout=1)
 
+    assert fast_result["returncode"] == 0
     assert slow_result["returncode"] == 0
     assert fast_elapsed < 3.0
 
