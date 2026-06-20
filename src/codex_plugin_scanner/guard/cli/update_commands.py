@@ -962,10 +962,20 @@ def _resolve_requested_wheel_path(wheel: str | None) -> tuple[Path | None, str |
     if not candidate.is_absolute():
         candidate = Path.cwd() / candidate
     candidate = candidate.resolve(strict=False)
+    if not candidate.exists():
+        if candidate.suffix.lower() == ".whl":
+            return None, f"HOL Guard wheel not found: {candidate}"
+        return None, f"Directory of wheels not found: {candidate}"
     if candidate.is_dir():
+        def _safe_mtime(path: Path) -> int:
+            try:
+                return path.stat().st_mtime_ns
+            except OSError:
+                return 0
+
         wheels = sorted(
             (path for path in candidate.glob("hol_guard-*.whl") if path.is_file()),
-            key=lambda path: (path.stat().st_mtime_ns, path.name),
+            key=lambda path: (_safe_mtime(path), path.name),
             reverse=True,
         )
         if not wheels:
@@ -973,8 +983,6 @@ def _resolve_requested_wheel_path(wheel: str | None) -> tuple[Path | None, str |
         return wheels[0], None
     if candidate.suffix.lower() != ".whl":
         return None, f"Expected a HOL Guard wheel file or a directory of wheels, got {candidate}."
-    if not candidate.is_file():
-        return None, f"HOL Guard wheel not found: {candidate}"
     return candidate, None
 
 

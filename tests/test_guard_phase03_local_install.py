@@ -532,6 +532,18 @@ def test_update_resolves_requested_wheel_from_directory(monkeypatch: pytest.Monk
     assert payload["message"] == "Review the planned local wheel install command before updating."
 
 
+def test_update_rejects_missing_wheel_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.344")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=True, wheel=str(tmp_path / "missing-dist"))
+
+    assert exit_code == 1
+    assert payload["status"] == "failed"
+    assert "Directory of wheels not found" in str(payload["error"])
+
+
 def test_update_marks_partial_pypi_repair_as_stale(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.345")
     monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: "2.0.400")
