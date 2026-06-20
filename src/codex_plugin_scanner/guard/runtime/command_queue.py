@@ -320,10 +320,7 @@ def _retry_pending_result(
         _save_state(store, state)
         return False
     if _pending_result_is_stale(job):
-        _LOGGER.warning(
-            "Guard command dropped stale pending result: job_id=%s",
-            job.get("id", "unknown"),
-        )
+        _LOGGER.warning("Guard command dropped stale pending result.")
         state.pop("pending_result", None)
         state.pop("active_job", None)
         state["state"] = "idle"
