@@ -288,6 +288,7 @@ def _execute_approval_operation(
         raise ValueError("remote_approval_replayed")
     envelope_decision = _optional_string(envelope.get("decision"))
     if envelope_decision not in {"allow_once", "block"}:
+        store.release_remote_once_receipt(receipt_id)
         raise ValueError("invalid_remote_approval_decision")
     resolution_action = "block" if envelope_decision == "block" else "allow"
     try:

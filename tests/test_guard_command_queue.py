@@ -1556,6 +1556,56 @@ def test_executor_uses_signed_remote_approval_decision_over_outer_payload(tmp_pa
     ]
 
 
+def test_executor_releases_remote_once_receipt_on_invalid_signed_decision(tmp_path: Path) -> None:
+    class ApprovalStore(FakeStore):
+        def __init__(self, guard_home: Path) -> None:
+            super().__init__(guard_home)
+            self.claimed_receipts: list[str] = []
+            self.released_receipts: list[str] = []
+            self.request_row = _approval_request_row("request-1")
+
+        def get_approval_request(self, request_id: str) -> dict[str, object] | None:
+            return self.request_row if request_id == "request-1" else None
+
+        def claim_remote_once_receipt(
+            self,
+            receipt_id: str,
+            *,
+            request_id: str,
+            claimed_at: str,
+        ) -> bool:
+            del request_id, claimed_at
+            self.claimed_receipts.append(receipt_id)
+            return True
+
+        def release_remote_once_receipt(self, receipt_id: str) -> None:
+            self.released_receipts.append(receipt_id)
+
+    store = ApprovalStore(tmp_path / "guard-home")
+    remote_approval = _signed_remote_approval(store, store.request_row)
+    remote_approval["decision"] = "future-decision"
+    remote_approval["payloadHash"] = payload_hash_for_remote_approval_envelope(remote_approval)
+    remote_approval["signature"] = sign_review_payload(remote_approval)
+
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {
+                "localRequestId": "request-1",
+                "action": "allow_once",
+                "remoteApproval": remote_approval,
+            },
+        },
+        context=_context(tmp_path),
+        store=store,  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert result["failureCode"] == "invalid_remote_approval_decision"
+    assert store.claimed_receipts == ["cloud-receipt-1"]
+    assert store.released_receipts == ["cloud-receipt-1"]
+
+
 def test_executor_syncs_policy_without_local_request_id(tmp_path: Path) -> None:
     class PolicyStore(FakeStore):
         def __init__(self, guard_home: Path) -> None:
