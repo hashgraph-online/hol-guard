@@ -2202,6 +2202,25 @@ class GuardStore:
             )
             """,
             """
+            create table if not exists guard_local_once_approvals (
+              approval_id text primary key,
+              request_id text not null,
+              harness text not null,
+              artifact_id text not null,
+              artifact_hash text not null,
+              workspace text,
+              publisher text,
+              action text not null,
+              created_at text not null,
+              expires_at text not null,
+              claimed_at text
+            )
+            """,
+            """
+            create index if not exists idx_guard_local_once_approvals_lookup
+            on guard_local_once_approvals (claimed_at, harness, artifact_id, artifact_hash, expires_at)
+            """,
+            """
             create table if not exists guard_cloud_events (
               event_id text primary key,
               idempotency_key text not null unique,
@@ -3248,6 +3267,35 @@ class GuardStore:
             state = self._refresh_policy_integrity_state(connection, now=current_time, create_key=True)
             trust_status = TrustStatus.from_policy_integrity_state(state).to_dict()
             key, key_id = self._policy_integrity_secret_material(create=True)
+            local_once_decision = None
+            local_once_hashes = tuple(
+                dict.fromkeys(hash_value for hash_value in (artifact_hash, runtime_exact_match_key) if hash_value)
+            )
+            for local_once_hash in local_once_hashes:
+                local_once_decision = self._claim_local_once_approval_locked(
+                    connection,
+                    harness=harness,
+                    artifact_id=artifact_id,
+                    artifact_hash=local_once_hash,
+                    workspace=workspace,
+                    publisher=publisher,
+                    now=current_time,
+                )
+                if local_once_decision is not None:
+                    break
+            if local_once_decision is not None:
+                selected_payload = local_once_decision
+                events.append(
+                    (
+                        "approval.local_once_applied",
+                        {
+                            "approval_id": local_once_decision.get("approval_id"),
+                            "request_id": local_once_decision.get("request_id"),
+                            "harness": harness,
+                            "artifact_id": artifact_id,
+                        },
+                    )
+                )
             rows = connection.execute(
                 """
                 select decision_id, harness, scope, artifact_id, action, artifact_hash, workspace, publisher, source,
@@ -3313,13 +3361,13 @@ class GuardStore:
                     current_time,
                 ),
             ).fetchall()
-            if not rows:
+            if not rows and selected_payload is None:
                 return {
                     "decision": None,
                     "ignored_local_integrity": None,
                     "trust_status": trust_status,
                 }
-            for candidate in rows:
+            for candidate in rows if selected_payload is None else ():
                 if _scoped_runtime_row_requires_exact_match(
                     scope=str(candidate["scope"]),
                     stored_artifact_id=(
@@ -4540,6 +4588,61 @@ class GuardStore:
             "items": invalid_items,
         }
 
+    def ensure_policy_integrity_ready_for_write(
+        self,
+        *,
+        harness: str | None = None,
+        approval_gate_grant: ApprovalGateGrant | None = None,
+        now: str | None = None,
+    ) -> dict[str, object]:
+        current_time = now or _now()
+        before = self.get_policy_integrity_status(harness=harness)
+        if _policy_integrity_ready_for_local_write(before):
+            before["autorepair"] = {"attempted": False, "cleared": 0}
+            return before
+
+        attempts: list[dict[str, object]] = []
+        try:
+            setup = self.setup_policy_integrity(harness=harness, now=current_time)
+            attempts.append({"step": "setup", "mode": setup.get("mode"), "counts": setup.get("counts")})
+            if _policy_integrity_ready_for_local_write(setup):
+                setup["autorepair"] = {"attempted": True, "cleared": 0, "steps": attempts}
+                self.add_event("policy_integrity.autorepaired", {"steps": attempts}, current_time)
+                return setup
+        except Exception as error:  # pragma: no cover - exercised through final degraded status assertions.
+            attempts.append({"step": "setup", "error": type(error).__name__})
+
+        try:
+            repair = self.repair_policy_integrity(
+                clear_invalid=True,
+                harness=harness,
+                approval_gate_grant=approval_gate_grant,
+                now=current_time,
+            )
+            attempts.append(
+                {
+                    "step": "clear_invalid",
+                    "cleared": repair.get("cleared"),
+                    "mode": repair.get("mode"),
+                    "counts": repair.get("counts"),
+                }
+            )
+            if _policy_integrity_ready_for_local_write(repair):
+                repair["autorepair"] = {
+                    "attempted": True,
+                    "cleared": repair.get("cleared", 0),
+                    "steps": attempts,
+                }
+                self.add_event("policy_integrity.autorepaired", {"steps": attempts}, current_time)
+                return repair
+        except Exception as error:
+            attempts.append({"step": "clear_invalid", "error": type(error).__name__})
+
+        final = self.get_policy_integrity_status(harness=harness)
+        final["autorepair"] = {"attempted": True, "cleared": 0, "steps": attempts}
+        self.add_event("policy_integrity.autorepair_failed", {"steps": attempts}, current_time)
+        return final
+
     def repair_policy_integrity(
         self,
         *,
@@ -5265,6 +5368,104 @@ class GuardStore:
                 """,
                 (event_name, json.dumps(payload), now),
             )
+
+    def record_local_once_approval(
+        self,
+        *,
+        request_id: str,
+        harness: str,
+        artifact_id: str | None,
+        artifact_hash: str | None,
+        workspace: str | None,
+        publisher: str | None,
+        action: str,
+        created_at: str,
+        expires_at: str,
+    ) -> str | None:
+        if not artifact_id or not artifact_hash:
+            return None
+        approval_id = uuid4().hex
+        workspace_key = _workspace_policy_key(workspace)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into guard_local_once_approvals (
+                  approval_id, request_id, harness, artifact_id, artifact_hash, workspace, publisher, action,
+                  created_at, expires_at, claimed_at
+                )
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null)
+                """,
+                (
+                    approval_id,
+                    request_id,
+                    harness,
+                    artifact_id,
+                    artifact_hash,
+                    workspace_key,
+                    publisher,
+                    action,
+                    created_at,
+                    expires_at,
+                ),
+            )
+        return approval_id
+
+    @staticmethod
+    def _claim_local_once_approval_locked(
+        connection: sqlite3.Connection,
+        *,
+        harness: str,
+        artifact_id: str | None,
+        artifact_hash: str | None,
+        workspace: str | None,
+        publisher: str | None,
+        now: str,
+    ) -> dict[str, object] | None:
+        if not artifact_id or not artifact_hash:
+            return None
+        workspace_key = _workspace_policy_key(workspace)
+        row = connection.execute(
+            """
+            select approval_id, request_id, harness, artifact_id, artifact_hash, workspace, publisher, action,
+                   created_at, expires_at
+            from guard_local_once_approvals
+            where claimed_at is null
+              and harness = ?
+              and artifact_id = ?
+              and artifact_hash = ?
+              and expires_at > ?
+              and (workspace is null or workspace = ?)
+              and (publisher is null or publisher = ?)
+            order by created_at desc
+            limit 1
+            """,
+            (harness, artifact_id, artifact_hash, now, workspace_key, publisher),
+        ).fetchone()
+        if row is None:
+            return None
+        claim_cursor = connection.execute(
+            "update guard_local_once_approvals set claimed_at = ? where approval_id = ? and claimed_at is null",
+            (now, str(row["approval_id"])),
+        )
+        if claim_cursor.rowcount != 1:
+            return None
+        return {
+            "action": str(row["action"]),
+            "approval_id": str(row["approval_id"]),
+            "artifact_hash": row["artifact_hash"],
+            "artifact_id": row["artifact_id"],
+            "decision_id": None,
+            "expires_at": row["expires_at"],
+            "harness": str(row["harness"]),
+            "owner": None,
+            "publisher": row["publisher"],
+            "reason": "approved once in review",
+            "request_id": str(row["request_id"]),
+            "scope": "artifact",
+            "source": "approval-gate-once",
+            "updated_at": str(row["created_at"]),
+            "workspace": row["workspace"],
+        }
 
     def claim_remote_once_receipt(
         self,
@@ -7013,6 +7214,13 @@ def _warn_only_policy_integrity_status(status: str, state: Mapping[str, object],
         "policy_integrity_control_unavailable",
     }
     return all(isinstance(reason, str) and reason in allowed_reasons for reason in reasons)
+
+
+def _policy_integrity_ready_for_local_write(payload: Mapping[str, object]) -> bool:
+    trust = payload.get("trust_status")
+    if not isinstance(trust, Mapping):
+        return False
+    return payload.get("mode") == "protected" and trust.get("remembered_rules") == "enforced"
 
 
 def _family_key_value(family_key: str) -> str:
