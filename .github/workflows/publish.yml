@@ -40,7 +40,6 @@ jobs:
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           uv-version: "0.9.26"
-        with:
           enable-cache: true
       - name: Install dependencies
         run: uv sync --frozen --extra dev --extra publish --extra cisco
