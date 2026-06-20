@@ -3999,6 +3999,26 @@ args = ["workspace-skill.js", "--changed"]
         assert output["status"] == "updated"
         assert any("Skipped local Guard repair during update" in note for note in output["notes"])
 
+    def test_guard_update_forwards_requested_wheel(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        captured_wheels: list[object] = []
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "run_guard_update",
+            lambda **kwargs: (
+                captured_wheels.append(kwargs.get("wheel")) or {"status": "planned", "message": "ok"},
+                0,
+            ),
+        )
+
+        rc = main(["guard", "update", "--home", str(home_dir), "--wheel", "dist", "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert captured_wheels == ["dist"]
+        assert output["status"] == "planned"
+
     def test_guard_update_repairs_stale_codex_native_hooks(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         _write_text(
