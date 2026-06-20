@@ -17,7 +17,7 @@ import sysconfig
 import urllib.error
 import urllib.request
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import ParseResult, urlparse
 
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
@@ -994,11 +994,9 @@ def _local_archive_update_hint(local_archive_install: dict[str, object]) -> str:
     return "hol-guard update --wheel <wheel-or-directory>"
 
 
-def _file_url_to_path(parsed: object) -> str:
-    if not hasattr(parsed, "path") or not hasattr(parsed, "netloc"):
-        return ""
-    path = urllib.request.url2pathname(str(getattr(parsed, "path") or ""))
-    netloc = str(getattr(parsed, "netloc") or "").strip()
+def _file_url_to_path(parsed: ParseResult) -> str:
+    path = urllib.request.url2pathname(parsed.path)
+    netloc = parsed.netloc.strip()
     if netloc and netloc.lower() != "localhost":
         if os.name == "nt":
             return urllib.request.url2pathname(f"//{netloc}{path}")
@@ -1340,7 +1338,8 @@ def build_guard_update_status_payload() -> dict[str, object]:
                 auto_updatable = False
                 blocked_reason = (
                     "This install was set up from a local wheel. "
-                    "Re-run `hol-guard update --wheel <wheel-or-directory>` or your usual local install command instead."
+                    "Re-run `hol-guard update --wheel <wheel-or-directory>` "
+                    "or your usual local install command instead."
                 )
                 recovery_reinstall_available = True
         elif local_source_install is not None and bool(local_source_install.get("path_exists")):
