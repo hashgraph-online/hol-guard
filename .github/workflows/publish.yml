@@ -428,12 +428,12 @@ jobs:
           git commit -m "chore(release): sync repository version to ${VERSION} [skip release publish]"
           git push --force-with-lease --set-upstream origin "$branch"
           head_sha="$(git rev-parse HEAD)"
-          pr_number="$(gh pr view "$branch" --repo ${{ github.repository }} --json number --jq .number 2>/dev/null || true)"
+          pr_number="$(gh pr list --repo ${{ github.repository }} --base main --head "$branch" --state open --json number --jq '.[0].number // empty')"
           if [[ -n "$pr_number" ]]; then
             gh pr edit "$pr_number" --repo ${{ github.repository }} --title "$title" --body-file "$body_file"
           else
             pr_url="$(gh pr create --repo ${{ github.repository }} --base main --head "$branch" --title "$title" --body-file "$body_file")"
-            pr_number="${pr_url##*/}"
+            pr_number="$(gh pr list --repo ${{ github.repository }} --base main --head "$branch" --state open --json number --jq '.[0].number // empty')"
           fi
           if [[ -z "$pr_number" ]]; then
             echo "Failed to create or locate repository version sync PR." >&2
