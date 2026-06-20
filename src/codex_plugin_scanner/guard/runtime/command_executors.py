@@ -6,6 +6,7 @@ import tempfile
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TypeGuard
 
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
@@ -22,7 +23,7 @@ from ..local_supply_chain import (
     resolve_supply_chain_audit_workspace_dir,
     sync_supply_chain_cloud_state,
 )
-from ..models import DecisionScope, PolicyDecision
+from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, DecisionScope, GuardAction, PolicyDecision
 from ..package_shim_status import record_package_shim_audit_result
 from ..review_contracts import (
     GuardReviewContractError,
@@ -328,7 +329,8 @@ def _execute_policy_sync(
         last_policy_version=_stored_review_memory_policy_version(store),
     )
     registry = _stored_review_memory_registry(store)
-    for revoked_rule_id in bundle.get("revocations", []):
+    revocations = bundle.get("revocations")
+    for revoked_rule_id in revocations if isinstance(revocations, list) else []:
         revoked_key = _optional_string(revoked_rule_id)
         if revoked_key is not None:
             registry.pop(revoked_key, None)
@@ -400,6 +402,14 @@ def _local_policy_scope(scope: str | None) -> DecisionScope:
     if scope == "item":
         return "artifact"
     return "artifact"
+
+
+def _is_decision_scope(value: object) -> TypeGuard[DecisionScope]:
+    return isinstance(value, str) and value in DECISION_SCOPE_VALUES
+
+
+def _is_guard_action(value: object) -> TypeGuard[GuardAction]:
+    return isinstance(value, str) and value in GUARD_ACTION_VALUES
 
 
 def _local_request_snapshot_items(store: GuardStore) -> list[dict[str, object]]:
@@ -506,11 +516,13 @@ def _existing_non_review_remote_policies(store: GuardStore) -> list[PolicyDecisi
         harness = _optional_string(item.get("harness"))
         if scope is None or action is None or harness is None:
             continue
+        if not _is_decision_scope(scope) or not _is_guard_action(action):
+            continue
         decisions.append(
             PolicyDecision(
                 harness=harness,
-                scope=scope,  # type: ignore[arg-type]
-                action=action,  # type: ignore[arg-type]
+                scope=scope,
+                action=action,
                 artifact_id=_optional_string(item.get("artifact_id")),
                 artifact_hash=_optional_string(item.get("artifact_hash")),
                 workspace=_optional_string(item.get("workspace")),
@@ -533,10 +545,12 @@ def _decision_from_registry_entry(entry: dict[str, object]) -> PolicyDecision:
     action = _optional_string(decision.get("action"))
     if harness is None or scope is None or action is None:
         raise ValueError("invalid_decision_memory_registry")
+    if not _is_decision_scope(scope) or not _is_guard_action(action):
+        raise ValueError("invalid_decision_memory_registry")
     return PolicyDecision(
         harness=harness,
-        scope=scope,  # type: ignore[arg-type]
-        action=action,  # type: ignore[arg-type]
+        scope=scope,
+        action=action,
         artifact_id=_optional_string(decision.get("artifact_id")),
         artifact_hash=_optional_string(decision.get("artifact_hash")),
         workspace=_optional_string(decision.get("workspace")),
@@ -559,6 +573,8 @@ def _decision_from_memory_rule(
     scope_value = _optional_string(rule.get("scope"))
     if harness is None or artifact_id is None or action is None or scope_value is None:
         raise GuardReviewContractError("invalid_decision_memory_rule")
+    if not _is_guard_action(action):
+        raise GuardReviewContractError("invalid_decision_memory_rule")
     if action == "allow" and scope_value not in {"artifact", "workspace"}:
         raise GuardReviewContractError("decision_memory_allow_scope_unsupported")
     scope = _local_policy_scope(scope_value)
@@ -574,7 +590,7 @@ def _decision_from_memory_rule(
     return PolicyDecision(
         harness=harness,
         scope=scope,
-        action=action,  # type: ignore[arg-type]
+        action=action,
         artifact_id=artifact_id,
         artifact_hash=_optional_string(rule.get("artifactHash")),
         workspace=workspace if scope == "workspace" else None,

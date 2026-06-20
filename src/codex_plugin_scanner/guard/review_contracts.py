@@ -316,7 +316,7 @@ def build_local_review_request_claim(
         last_seen_at,
     }:
         raise GuardReviewContractError("invalid_request_row")
-    claim = {
+    claim: dict[str, object] = {
         "contractVersion": _LOCAL_REVIEW_REQUEST_CONTRACT_VERSION,
         "actionEnvelopeHash": _action_envelope_hash(request_row),
         "actionIdentity": _non_empty_string(request_row.get("action_identity")) or local_request_id,
