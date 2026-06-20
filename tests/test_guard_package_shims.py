@@ -313,8 +313,8 @@ def _run_guard_protect_command(
     home_dir: str,
     workspace_dir: str,
     *,
-    delay_policy_integrity_seconds: float = 0.0,
-    ready_event: Event | None = None,
+    delay_retry_policy_integrity_seconds: float = 0.0,
+    refresh_started_event: Event | None = None,
     result_queue: Queue | None = None,
 ) -> None:
     from contextlib import redirect_stderr, redirect_stdout
@@ -322,16 +322,58 @@ def _run_guard_protect_command(
     from codex_plugin_scanner.cli import main as guard_main
     from codex_plugin_scanner.guard.store import GuardStore
 
-    if delay_policy_integrity_seconds > 0:
-        original = GuardStore._policy_integrity_secret_material
+    if delay_retry_policy_integrity_seconds > 0:
+        secret_lookup_count = 0
+        control_lookup_count = 0
+        original_secret_lookup = GuardStore._policy_integrity_secret_material
+        original_control_lookup = GuardStore._load_policy_integrity_control_state
+        original_refresh = GuardStore._refresh_policy_integrity_state
 
-        def delayed(self, *, create: bool):
-            if ready_event is not None and not ready_event.is_set():
-                ready_event.set()
-            time.sleep(delay_policy_integrity_seconds)
-            return original(self, create=create)
+        def delayed_secret_lookup(self, *, create: bool):
+            nonlocal secret_lookup_count
+            if create:
+                return original_secret_lookup(self, create=create)
+            secret_lookup_count += 1
+            if secret_lookup_count == 1:
+                return None, None
+            time.sleep(delay_retry_policy_integrity_seconds)
+            return None, None
 
-        GuardStore._policy_integrity_secret_material = delayed
+        def delayed_control_lookup(self, *, create: bool):
+            nonlocal control_lookup_count
+            if create:
+                return original_control_lookup(self, create=create)
+            control_lookup_count += 1
+            if control_lookup_count == 1:
+                return None
+            time.sleep(delay_retry_policy_integrity_seconds)
+            return None
+
+        def refresh_with_signal(
+            self,
+            connection,
+            *,
+            now: str,
+            create_key: bool,
+            secret_material=None,
+            trusted_state=guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET,
+            allow_cutover_resign: bool = True,
+        ):
+            if refresh_started_event is not None and not refresh_started_event.is_set():
+                refresh_started_event.set()
+            return original_refresh(
+                self,
+                connection,
+                now=now,
+                create_key=create_key,
+                secret_material=secret_material,
+                trusted_state=trusted_state,
+                allow_cutover_resign=allow_cutover_resign,
+            )
+
+        GuardStore._policy_integrity_secret_material = delayed_secret_lookup
+        GuardStore._load_policy_integrity_control_state = delayed_control_lookup
+        GuardStore._refresh_policy_integrity_state = refresh_with_signal
 
     stdout = StringIO()
     stderr = StringIO()
@@ -411,24 +453,24 @@ def test_enable_wal_mode_uses_bounded_busy_timeout(monkeypatch: pytest.MonkeyPat
     assert sleep_calls == [guard_store_module._SQLITE_LOCK_RETRY_DELAY_SECONDS]
 
 
-def test_guard_store_init_does_not_hold_sqlite_writer_during_policy_integrity_lookup(tmp_path: Path) -> None:
+def test_guard_store_init_does_not_hold_sqlite_writer_during_missing_policy_integrity_retry(tmp_path: Path) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     home_dir.mkdir(parents=True, exist_ok=True)
     workspace_dir.mkdir(parents=True, exist_ok=True)
-    ready_event = Event()
+    refresh_started_event = Event()
     slow_results: Queue = Queue()
     slow_process = Process(
         target=_run_guard_protect_command,
         args=(str(home_dir), str(workspace_dir)),
         kwargs={
-            "delay_policy_integrity_seconds": 4.0,
-            "ready_event": ready_event,
+            "delay_retry_policy_integrity_seconds": 4.0,
+            "refresh_started_event": refresh_started_event,
             "result_queue": slow_results,
         },
     )
     slow_process.start()
-    assert ready_event.wait(timeout=5)
+    assert refresh_started_event.wait(timeout=5)
 
     fast_started = time.monotonic()
     _run_guard_protect_command(str(home_dir), str(workspace_dir))

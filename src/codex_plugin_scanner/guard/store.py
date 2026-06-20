@@ -271,6 +271,7 @@ _REMOTE_POLICY_SOURCE_PARAMS = tuple(sorted(REMOTE_POLICY_SOURCES))
 _REMOTE_POLICY_SOURCE_PLACEHOLDERS = "(" + ",".join("?" for _ in _REMOTE_POLICY_SOURCE_PARAMS) + ")"
 _POLICY_SCOPES = frozenset({"artifact", "workspace", "publisher", "harness", "global"})
 _SLOW_STORE_WARNING_ENV = "HOL_GUARD_WARN_SLOW_STORE"
+_POLICY_INTEGRITY_LOOKUP_UNSET = object()
 _SQLITE_LOCK_RETRY_ATTEMPTS = 5
 _SQLITE_LOCK_RETRY_DELAY_SECONDS = 0.1
 _SECRET_FINGERPRINT_PREFIX = "scrypt$"
@@ -1743,11 +1744,15 @@ class GuardStore:
         now: str,
         create_key: bool,
         secret_material: tuple[bytes | None, str | None] | None = None,
+        trusted_state: dict[str, object] | None | object = _POLICY_INTEGRITY_LOOKUP_UNSET,
         allow_cutover_resign: bool = True,
     ) -> dict[str, object]:
         existing = self._load_policy_integrity_state(connection) or {}
         warnings = self._policy_integrity_path_warnings()
-        trusted_state = self._load_policy_integrity_control_state(create=create_key)
+        if trusted_state is _POLICY_INTEGRITY_LOOKUP_UNSET:
+            trusted_state_value = self._load_policy_integrity_control_state(create=create_key)
+        else:
+            trusted_state_value = cast(dict[str, object] | None, trusted_state)
         raw_key, key_id = (
             secret_material
             if secret_material is not None
@@ -1757,40 +1762,42 @@ class GuardStore:
             warnings.append(POLICY_INTEGRITY_REASON_SYSTEM_KEYRING_UNAVAILABLE)
         elif raw_key is None or key_id is None:
             warnings.append(POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE)
-        if trusted_state is None:
+        if trusted_state_value is None:
             warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
-        if not warnings and trusted_state is not None and raw_key is not None and key_id is not None:
+        if not warnings and trusted_state_value is not None and raw_key is not None and key_id is not None:
             try:
-                trusted_state = self._reconcile_policy_integrity_pending_generation(
+                trusted_state_value = self._reconcile_policy_integrity_pending_generation(
                     connection,
                     key=raw_key,
                     key_id=key_id,
-                    trusted_state=trusted_state,
+                    trusted_state=trusted_state_value,
                 )
             except RuntimeError:
                 warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
         has_only_signed_rows = self._count_legacy_local_policy_rows(connection) == 0
         if (
             not warnings
-            and trusted_state is not None
-            and not bool(trusted_state.get("cutover_complete"))
+            and trusted_state_value is not None
+            and not bool(trusted_state_value.get("cutover_complete"))
             and has_only_signed_rows
         ):
-            next_trusted_state = dict(trusted_state)
+            next_trusted_state = dict(trusted_state_value)
             next_trusted_state["cutover_complete"] = True
             if not self._store_policy_integrity_control_state(next_trusted_state):
                 warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
             else:
-                trusted_state = next_trusted_state
+                trusted_state_value = next_trusted_state
         mode = POLICY_INTEGRITY_MODE_PROTECTED if not warnings else POLICY_INTEGRITY_MODE_DEGRADED
-        cutover_complete = bool(trusted_state.get("cutover_complete")) if trusted_state is not None else False
+        cutover_complete = (
+            bool(trusted_state_value.get("cutover_complete")) if trusted_state_value is not None else False
+        )
         enforcement = POLICY_INTEGRITY_ENFORCEMENT_ENFORCE
         payload: dict[str, object] = {
             "backend": self._policy_integrity_backend_name(),
             "cutover_complete": cutover_complete,
             "degraded_reasons": list(dict.fromkeys(warnings)),
             "enforcement": enforcement,
-            "generation": trusted_state.get("generation") if trusted_state is not None else None,
+            "generation": trusted_state_value.get("generation") if trusted_state_value is not None else None,
             "key_id": key_id,
             "mode": mode,
         }
@@ -2336,10 +2343,16 @@ class GuardStore:
         # process initializes GuardStore on startup. Fetching these values while
         # the initialization transaction is open turns a slow keyring call into a
         # cross-process database writer stall.
-        self._policy_integrity_secret_material(create=False)
-        self._load_policy_integrity_control_state(create=False)
+        prefetched_secret_material = self._policy_integrity_secret_material(create=False)
+        prefetched_trusted_state = self._load_policy_integrity_control_state(create=False)
         with self._connect() as connection:
-            self._refresh_policy_integrity_state(connection, now=_now(), create_key=False)
+            self._refresh_policy_integrity_state(
+                connection,
+                now=_now(),
+                create_key=False,
+                secret_material=prefetched_secret_material,
+                trusted_state=prefetched_trusted_state,
+            )
 
     @staticmethod
     def _enable_wal_mode(connection: sqlite3.Connection) -> None:
