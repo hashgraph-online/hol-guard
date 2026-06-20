@@ -383,19 +383,21 @@ jobs:
           python3 scripts/sync_repo_version.py --version "$VERSION"
       - name: Open repository version sync PR
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTION_REPO_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           if git diff --quiet -- pyproject.toml src/codex_plugin_scanner/version.py uv.lock; then
             echo "Repository version already synced."
             exit 0
           fi
-          if [[ "$(gh api repos/${{ github.repository }} --jq .allow_auto_merge)" != "true" ]]; then
-            echo "Repository auto-merge is disabled; enable it so release version sync PRs can merge after checks." >&2
+          if [[ -z "$ACTION_REPO_TOKEN" ]]; then
+            echo "ACTION_REPO_TOKEN must be configured to sync repository version files after publish." >&2
             exit 1
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${ACTION_REPO_TOKEN}@github.com/${{ github.repository }}.git"
           branch="release/sync-repository-version-v${VERSION}"
           head_ref="${{ github.repository_owner }}:${branch}"
           title="chore(release): sync repository version to ${VERSION}"
@@ -411,6 +413,13 @@ jobs:
           EOF
           git checkout -B "$branch"
           git add pyproject.toml src/codex_plugin_scanner/version.py uv.lock
+          expected_files="$(printf '%s\n' pyproject.toml src/codex_plugin_scanner/version.py uv.lock | sort)"
+          changed_files="$(git diff --cached --name-only | sort)"
+          if [[ "$changed_files" != "$expected_files" ]]; then
+            echo "Unexpected files staged for repository version sync:" >&2
+            printf '%s\n' "$changed_files" >&2
+            exit 1
+          fi
           git commit -m "chore(release): sync repository version to ${VERSION} [skip release publish]"
           git push --force-with-lease --set-upstream origin "$branch"
           head_sha="$(git rev-parse HEAD)"
@@ -425,4 +434,4 @@ jobs:
             echo "Failed to create or locate repository version sync PR." >&2
             exit 1
           fi
-          gh pr merge "$pr_number" --repo ${{ github.repository }} --auto --squash --delete-branch --match-head-commit "$head_sha" --subject "chore(release): sync repository version to ${VERSION} [skip release publish]" --body ""
+          gh pr merge "$pr_number" --repo ${{ github.repository }} --admin --squash --delete-branch --match-head-commit "$head_sha" --subject "chore(release): sync repository version to ${VERSION} [skip release publish]" --body ""
