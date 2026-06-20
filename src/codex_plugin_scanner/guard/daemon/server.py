@@ -2077,6 +2077,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError:
             self._write_json({"error": "unknown_harness"}, status=404)
             return
+        try:
+            require_high_risk(
+                self.server.store.guard_home,  # type: ignore[attr-defined]
+                purpose="policy_write",
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+            )
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
         policy_memory = self._policy_memory_payload(payload.get("policy_memory"))
         policy_bundle = self._policy_memory_payload(payload.get("policy_bundle") or payload.get("policyBundle"))
         validated_policy_bundle: dict[str, object] | None = None
