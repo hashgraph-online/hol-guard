@@ -44,6 +44,7 @@ from .local_trust_contract import (
 from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
 from .policy_authority import validate_policy_write_authority
 from .policy_integrity import (
+    POLICY_INTEGRITY_VERSION,
     REMOTE_POLICY_SOURCES,
     PolicyIntegrityVerificationResult,
     is_remote_policy_source,
@@ -1748,6 +1749,8 @@ class GuardStore:
         newest_generation: int | None = None
         for row in GuardStore._load_local_policy_rows(connection):
             row_payload = _row_mapping(row)
+            if _mapping_int(row_payload, "integrity_version") != POLICY_INTEGRITY_VERSION:
+                continue
             row_generation = _mapping_int(row_payload, "integrity_generation")
             if row_generation is None or (trusted_generation is not None and row_generation <= trusted_generation):
                 continue
@@ -1826,15 +1829,12 @@ class GuardStore:
                 pending_generation = refreshed_trusted_state.get("pending_generation")
                 if isinstance(pending_generation, int) and pending_generation <= newer_authenticated_generation:
                     refreshed_trusted_state["pending_generation"] = None
-                trusted_state_value = refreshed_trusted_state
-                trusted_generation = newer_authenticated_generation
-        if (
-            not warnings
-            and trusted_state_value is not None
-            and raw_key is not None
-            and key_id is not None
-            and not using_prefetched_trusted_state
-        ):
+                if not self._store_policy_integrity_control_state(refreshed_trusted_state):
+                    warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
+                else:
+                    trusted_state_value = refreshed_trusted_state
+                    trusted_generation = newer_authenticated_generation
+        if not warnings and trusted_state_value is not None and raw_key is not None and key_id is not None:
             try:
                 trusted_state_value = self._reconcile_policy_integrity_pending_generation(
                     connection,
@@ -1850,7 +1850,6 @@ class GuardStore:
             and trusted_state_value is not None
             and not bool(trusted_state_value.get("cutover_complete"))
             and has_only_signed_rows
-            and not using_prefetched_trusted_state
         ):
             next_trusted_state = dict(trusted_state_value)
             next_trusted_state["cutover_complete"] = True

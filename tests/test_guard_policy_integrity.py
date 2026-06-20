@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
+import hmac
 import json
 import pickle
 import sqlite3
@@ -16,6 +18,7 @@ import pytest
 
 from codex_plugin_scanner.cli import _resolve_legacy_args, main
 from codex_plugin_scanner.guard import local_trust_contract as local_trust_contract_module
+from codex_plugin_scanner.guard import policy_integrity as policy_integrity_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.cli import commands_dispatch_trust as trust_dispatch_module
 from codex_plugin_scanner.guard.daemon.manager import ApprovalCenterLocator
@@ -1301,6 +1304,57 @@ def test_startup_refresh_does_not_promote_unverified_policy_integrity_generation
     assert state_payload["generation"] == 1
 
 
+def test_startup_refresh_does_not_promote_legacy_row_generation(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:baseline", artifact_hash="hash-baseline"),
+        "2026-06-14T00:00:00Z",
+    )
+
+    prefetched_secret = store._policy_integrity_secret_material(create=False)
+    prefetched_control = dict(_policy_integrity_control_payload(store))
+    raw_key, key_id = prefetched_secret
+    assert raw_key is not None
+    assert key_id is not None
+
+    legacy_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:baseline"))
+    legacy_row["integrity_version"] = 1
+    legacy_row["integrity_generation"] = 999
+    legacy_payload = policy_integrity_module.canonical_policy_payload(legacy_row, integrity_version=1)
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        connection.execute(
+            """
+            update policy_decisions
+            set integrity_version = ?,
+                integrity_generation = ?,
+                payload_hash = ?,
+                payload_mac = ?,
+                integrity_key_id = ?
+            where artifact_id = ?
+            """,
+            (
+                1,
+                999,
+                hashlib.sha256(legacy_payload).hexdigest(),
+                hmac.new(raw_key, legacy_payload, hashlib.sha256).hexdigest(),
+                key_id,
+                "codex:project:baseline",
+            ),
+        )
+
+    store._startup_prefetched_policy_integrity_secret_material = prefetched_secret
+    store._startup_prefetched_policy_integrity_trusted_state = prefetched_control
+    try:
+        with store._connect() as connection:
+            store._refresh_policy_integrity_state(connection, now="2026-06-14T00:01:00Z", create_key=False)
+    finally:
+        store._startup_prefetched_policy_integrity_secret_material = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+        store._startup_prefetched_policy_integrity_trusted_state = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+
+    state_payload = _policy_integrity_state_payload(store.guard_home)
+    assert state_payload["generation"] == 1
+
+
 def test_startup_refresh_repairs_stale_sync_state_generation_from_control_state(tmp_path: Path) -> None:
     store = _store(tmp_path)
     store.upsert_policy(
@@ -1329,6 +1383,69 @@ def test_startup_refresh_repairs_stale_sync_state_generation_from_control_state(
 
     state_payload = _policy_integrity_state_payload(store.guard_home)
     assert state_payload["generation"] == 1
+
+
+def test_startup_refresh_persists_pending_generation_repair(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:baseline", artifact_hash="hash-baseline"),
+        "2026-06-14T00:00:00Z",
+    )
+    monkeypatch.setattr(store, "_finalize_policy_integrity_control_state", lambda payload: None)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:pending", artifact_hash="hash-pending"),
+        "2026-06-14T00:01:00Z",
+    )
+
+    prefetched_secret = store._policy_integrity_secret_material(create=False)
+    prefetched_control = dict(_policy_integrity_control_payload(store))
+    assert prefetched_control["pending_generation"] == 2
+
+    store._startup_prefetched_policy_integrity_secret_material = prefetched_secret
+    store._startup_prefetched_policy_integrity_trusted_state = prefetched_control
+    try:
+        with store._connect() as connection:
+            store._refresh_policy_integrity_state(connection, now="2026-06-14T00:02:00Z", create_key=False)
+    finally:
+        store._startup_prefetched_policy_integrity_secret_material = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+        store._startup_prefetched_policy_integrity_trusted_state = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+
+    recovered_control = _policy_integrity_control_payload(store)
+    state_payload = _policy_integrity_state_payload(store.guard_home)
+    assert recovered_control["generation"] == 2
+    assert recovered_control["pending_generation"] is None
+    assert state_payload["generation"] == 2
+
+
+def test_startup_refresh_persists_cutover_completion(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:baseline", artifact_hash="hash-baseline"),
+        "2026-06-14T00:00:00Z",
+    )
+
+    stale_control = dict(_policy_integrity_control_payload(store))
+    stale_control["cutover_complete"] = False
+    assert store._store_policy_integrity_control_state(stale_control)
+
+    prefetched_secret = store._policy_integrity_secret_material(create=False)
+    prefetched_control = dict(_policy_integrity_control_payload(store))
+    store._startup_prefetched_policy_integrity_secret_material = prefetched_secret
+    store._startup_prefetched_policy_integrity_trusted_state = prefetched_control
+    try:
+        with store._connect() as connection:
+            store._refresh_policy_integrity_state(connection, now="2026-06-14T00:01:00Z", create_key=False)
+    finally:
+        store._startup_prefetched_policy_integrity_secret_material = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+        store._startup_prefetched_policy_integrity_trusted_state = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+
+    recovered_control = _policy_integrity_control_payload(store)
+    state_payload = _policy_integrity_state_payload(store.guard_home)
+    assert recovered_control["cutover_complete"] is True
+    assert state_payload["cutover_complete"] is True
 
 
 def test_signed_rollback_snapshot_is_detected_and_repair_advances_generation(tmp_path: Path) -> None:
