@@ -107,17 +107,15 @@ def _looks_env_assignment(token: str) -> bool:
         return False
     if name.endswith("+"):
         name = name[:-1]
-    return bool(name) and (name[0].isalpha() or name[0] == "_") and all(
-        character.isalnum() or character == "_" for character in name[1:]
+    return (
+        bool(name)
+        and (name[0].isalpha() or name[0] == "_")
+        and all(character.isalnum() or character == "_" for character in name[1:])
     )
 
 
 def _is_python_interpreter(command_name: str) -> bool:
-    return (
-        command_name in {"python", "py"}
-        or command_name.startswith("python")
-        or command_name.startswith("py3")
-    )
+    return command_name in {"python", "py"} or command_name.startswith("python") or command_name.startswith("py3")
 
 
 def _python_module_args_mutate_approvals(args: list[str]) -> bool:
