@@ -107,6 +107,7 @@ def _run_guard_update_command(
         store=store,
         workspace=str(workspace) if workspace else None,
         now=_now(),
+        wheel=getattr(args, "wheel", None),
     )
     if update_store_error is not None:
         notes_value = payload.get("notes")

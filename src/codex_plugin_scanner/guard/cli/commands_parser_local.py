@@ -102,6 +102,10 @@ def _configure_guard_local_parsers(
     )
     _add_guard_common_args(update_parser)
     update_parser.add_argument("--dry-run", action="store_true")
+    update_parser.add_argument(
+        "--wheel",
+        help="Install a local HOL Guard wheel file, or the newest matching hol_guard-*.whl from a directory",
+    )
     update_parser.add_argument("--json", action="store_true")
 
     uninstall_parser = guard_subparsers.add_parser(

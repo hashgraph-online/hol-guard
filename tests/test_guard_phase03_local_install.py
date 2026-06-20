@@ -452,7 +452,7 @@ def test_update_skips_pypi_recovery_when_missing_local_source_is_newer_than_pypi
     assert payload.get("upgrade_source") is None
 
 
-def test_update_does_not_skip_local_wheel_install(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_update_skips_existing_local_wheel_install(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     wheel = tmp_path / "hol-guard.whl"
     wheel.write_bytes(b"fake-wheel")
     monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.345")
@@ -470,8 +470,66 @@ def test_update_does_not_skip_local_wheel_install(monkeypatch: pytest.MonkeyPatc
     payload, exit_code = update_commands.run_guard_update(dry_run=True)
 
     assert exit_code == 0
+    assert payload["status"] == "skipped"
+    assert payload["archive_install"]["archive_type"] == "wheel"
+    assert payload["archive_install"]["path_exists"] is True
+    assert "disabled for local wheel installs" in str(payload["error"])
+
+
+def test_update_installs_requested_local_wheel_with_pipx(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    wheel = tmp_path / "hol_guard-2.0.345-py3-none-any.whl"
+    wheel.write_bytes(b"fake-wheel")
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.344")
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: "2.0.345")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.345")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    captured_commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured_commands.append(command)
+        return subprocess.CompletedProcess(command, 0, "reinstalled hol-guard 2.0.345", "")
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False, wheel=str(wheel))
+
+    assert exit_code == 0
+    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", "--force-reinstall", str(wheel)]]
+    assert payload["upgrade_source"] == "local_wheel"
+    assert payload["requested_wheel"] == str(wheel)
+    assert payload["resulting_version"] == "2.0.345"
+
+
+def test_update_resolves_requested_wheel_from_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir()
+    older_wheel = dist_dir / "hol_guard-2.0.344-py3-none-any.whl"
+    older_wheel.write_bytes(b"older-wheel")
+    newer_wheel = dist_dir / "hol_guard-2.0.345-py3-none-any.whl"
+    newer_wheel.write_bytes(b"newer-wheel")
+    os.utime(older_wheel, (100, 100))
+    os.utime(newer_wheel, (200, 200))
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.344")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.345")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=True, wheel=str(dist_dir))
+
+    assert exit_code == 0
     assert payload["status"] == "planned"
-    assert payload.get("source_install") is None
+    assert payload["requested_wheel"] == str(newer_wheel)
+    assert payload["command"] == [
+        "pipx",
+        "runpip",
+        "hol-guard",
+        "install",
+        "--force-reinstall",
+        str(newer_wheel),
+    ]
+    assert payload["message"] == "Review the planned local wheel install command before updating."
 
 
 def test_update_marks_partial_pypi_repair_as_stale(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -93,23 +93,36 @@ def run_guard_update(
     workspace: str | None = None,
     now: str | None = None,
     force_pypi_reinstall: bool = False,
+    wheel: str | None = None,
 ) -> tuple[dict[str, object], int]:
     current_version = _current_version()
     installer = _installer_kind()
     direct_url = _direct_url_payload()
     local_source_install = _local_source_install_payload(direct_url)
+    local_archive_install = _local_archive_install_payload(direct_url)
     vcs_install = _vcs_install_payload(direct_url)
     payload: dict[str, object] = {
         "current_version": current_version,
         "installer": installer,
         "dry_run": dry_run,
     }
+    requested_wheel_path, requested_wheel_error = _resolve_requested_wheel_path(wheel)
+    if requested_wheel_error is not None:
+        payload["status"] = "failed"
+        payload["changed"] = False
+        payload["error"] = requested_wheel_error
+        payload["message"] = "HOL Guard update failed before the installer started."
+        return payload, 1
+    if requested_wheel_path is not None:
+        payload["requested_wheel"] = str(requested_wheel_path)
     if direct_url is not None:
         payload["direct_url"] = direct_url
         is_editable = bool(_read_direct_url_dir_info(direct_url).get("editable"))
         payload["editable_install"] = is_editable
         if local_source_install is not None:
             payload["source_install"] = local_source_install
+        if local_archive_install is not None:
+            payload["archive_install"] = local_archive_install
         if vcs_install is not None:
             payload["vcs_install"] = vcs_install
         if is_editable:
@@ -123,11 +136,25 @@ def run_guard_update(
             local_source_install is not None
             and bool(local_source_install.get("path_exists"))
             and not force_pypi_reinstall
+            and requested_wheel_path is None
         ):
             payload["status"] = "skipped"
             payload["changed"] = False
             payload["error"] = (
                 "Automatic update is disabled for local source installs. Re-run your local install workflow instead."
+            )
+            return payload, 0
+        if (
+            local_archive_install is not None
+            and bool(local_archive_install.get("path_exists"))
+            and not force_pypi_reinstall
+            and requested_wheel_path is None
+        ):
+            payload["status"] = "skipped"
+            payload["changed"] = False
+            payload["error"] = (
+                "Automatic update is disabled for local wheel installs. "
+                f"Re-run `{_local_archive_update_hint(local_archive_install)}` or your local install workflow instead."
             )
             return payload, 0
         if local_source_install is not None and not bool(local_source_install.get("path_exists")):
@@ -150,7 +177,7 @@ def run_guard_update(
         vcs_install=vcs_install,
         local_source_install=local_source_install,
     )
-    command = _update_command(installer, use_pypi=use_pypi)
+    command = _update_command(installer, use_pypi=use_pypi, wheel_path=requested_wheel_path)
     execution_command = _execution_update_command(command, installer=installer, context=context)
     if force_pypi_reinstall:
         payload["recovery_reinstall"] = True
@@ -162,12 +189,18 @@ def run_guard_update(
             "version_check": version_check,
         }
     )
-    if use_pypi:
+    if requested_wheel_path is not None:
+        payload["upgrade_source"] = "local_wheel"
+    elif use_pypi:
         payload["upgrade_source"] = "pypi"
     if dry_run:
         payload["status"] = "planned"
         payload["changed"] = False
-        payload["message"] = _planned_update_message(version_check=version_check, use_pypi=use_pypi)
+        payload["message"] = _planned_update_message(
+            version_check=version_check,
+            use_pypi=use_pypi,
+            wheel_path=requested_wheel_path,
+        )
         return payload, 0
     active_command = execution_command
     active_display_command = command
@@ -226,7 +259,12 @@ def run_guard_update(
                 return payload, 1
         payload["status"] = _success_status(payload)
         payload["changed"] = _version_changed(current_version, resulting_version) or payload["status"] == "updated"
-        if not attempted_force_retry and not force_pypi_reinstall and payload.get("status") == "stale":
+        if (
+            not attempted_force_retry
+            and not force_pypi_reinstall
+            and requested_wheel_path is None
+            and payload.get("status") == "stale"
+        ):
             target_version = None
             active_version_check = payload.get("version_check")
             if isinstance(active_version_check, dict):
@@ -511,7 +549,14 @@ def _success_message(
     return "HOL Guard update completed successfully."
 
 
-def _planned_update_message(*, version_check: dict[str, object], use_pypi: bool) -> str:
+def _planned_update_message(
+    *,
+    version_check: dict[str, object],
+    use_pypi: bool,
+    wheel_path: Path | None = None,
+) -> str:
+    if wheel_path is not None:
+        return "Review the planned local wheel install command before updating."
     if use_pypi:
         if version_check.get("update_available") is True:
             latest_version = version_check.get("latest_version")
@@ -788,7 +833,20 @@ def _dependency_conflict_message(installer_output: str) -> str | None:
     )
 
 
-def _update_command(installer: str, *, use_pypi: bool = False, target_version: str | None = None) -> list[str]:
+def _update_command(
+    installer: str,
+    *,
+    use_pypi: bool = False,
+    target_version: str | None = None,
+    wheel_path: Path | None = None,
+) -> list[str]:
+    if wheel_path is not None:
+        wheel = str(wheel_path)
+        if installer == "uv":
+            return ["uv", "tool", "install", "--force", wheel]
+        if installer == "pipx":
+            return ["pipx", "runpip", "hol-guard", "install", "--force-reinstall", wheel]
+        return [sys.executable, "-m", "pip", "install", "--force-reinstall", wheel]
     package = _hol_guard_package_spec(target_version)
     if use_pypi:
         if installer == "uv":
@@ -841,6 +899,35 @@ def _vcs_install_payload(direct_url: dict[str, object] | None) -> dict[str, obje
     return payload
 
 
+def _local_archive_install_payload(direct_url: dict[str, object] | None) -> dict[str, object] | None:
+    if not isinstance(direct_url, dict):
+        return None
+    if isinstance(direct_url.get("vcs_info"), dict):
+        return None
+    if not isinstance(direct_url.get("archive_info"), dict):
+        return None
+    raw_url = direct_url.get("url")
+    if not isinstance(raw_url, str) or not raw_url.strip():
+        return None
+    parsed = urlparse(raw_url)
+    if parsed.scheme != "file":
+        return None
+    raw_path = urllib.request.url2pathname(parsed.path)
+    if not raw_path:
+        return None
+    archive_path = Path(raw_path).expanduser()
+    if not archive_path.is_absolute():
+        archive_path = Path.cwd() / archive_path
+    archive_type = "wheel" if archive_path.suffix.lower() == ".whl" else "archive"
+    return {
+        "kind": "local_archive",
+        "archive_type": archive_type,
+        "url": raw_url,
+        "path": str(archive_path.resolve(strict=False)),
+        "path_exists": archive_path.exists(),
+    }
+
+
 def _local_source_install_payload(direct_url: dict[str, object] | None) -> dict[str, object] | None:
     if not isinstance(direct_url, dict):
         return None
@@ -866,6 +953,36 @@ def _local_source_install_payload(direct_url: dict[str, object] | None) -> dict[
         "path": str(source_path.resolve(strict=False)),
         "path_exists": source_path.exists(),
     }
+
+
+def _resolve_requested_wheel_path(wheel: str | None) -> tuple[Path | None, str | None]:
+    if not isinstance(wheel, str) or not wheel.strip():
+        return None, None
+    candidate = Path(wheel).expanduser()
+    if not candidate.is_absolute():
+        candidate = Path.cwd() / candidate
+    candidate = candidate.resolve(strict=False)
+    if candidate.is_dir():
+        wheels = sorted(
+            (path for path in candidate.glob("hol_guard-*.whl") if path.is_file()),
+            key=lambda path: (path.stat().st_mtime_ns, path.name),
+            reverse=True,
+        )
+        if not wheels:
+            return None, f"No HOL Guard wheels found in {candidate}."
+        return wheels[0], None
+    if candidate.suffix.lower() != ".whl":
+        return None, f"Expected a HOL Guard wheel file or a directory of wheels, got {candidate}."
+    if not candidate.is_file():
+        return None, f"HOL Guard wheel not found: {candidate}"
+    return candidate, None
+
+
+def _local_archive_update_hint(local_archive_install: dict[str, object]) -> str:
+    archive_path = local_archive_install.get("path")
+    if isinstance(archive_path, str) and archive_path.strip():
+        return _shell_command(["hol-guard", "update", "--wheel", archive_path.strip()])
+    return "hol-guard update --wheel <wheel-or-directory>"
 
 
 def _direct_url_payload() -> dict[str, object] | None:
@@ -1169,6 +1286,7 @@ def build_guard_update_status_payload() -> dict[str, object]:
         binary_diagnostics = {}
     direct_url = _direct_url_payload()
     local_source_install = _local_source_install_payload(direct_url)
+    local_archive_install = _local_archive_install_payload(direct_url)
     version_check = _version_check_payload(current_version)
     auto_updatable = True
     blocked_reason: str | None = None
@@ -1183,6 +1301,13 @@ def build_guard_update_status_payload() -> dict[str, object]:
             blocked_reason = (
                 "This install was set up from local source code. Re-run your usual local install command instead."
             )
+        elif local_archive_install is not None and bool(local_archive_install.get("path_exists")):
+            auto_updatable = False
+            blocked_reason = (
+                "This install was set up from a local wheel. "
+                "Re-run `hol-guard update --wheel <wheel-or-directory>` or your usual local install command instead."
+            )
+            recovery_reinstall_available = True
         elif local_source_install is not None and bool(local_source_install.get("path_exists")):
             auto_updatable = False
             blocked_reason = (
