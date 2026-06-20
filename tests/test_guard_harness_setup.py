@@ -30,6 +30,7 @@ SUPPORTED_HARNESSES = (
     "openclaw",
     "kimi",
     "grok",
+    "pi",
 )
 
 

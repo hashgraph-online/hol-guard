@@ -38,7 +38,8 @@
         "cursor",
         "gemini",
         "hermes",
-        "openclaw"
+        "openclaw",
+        "pi"
     ],
     "supported_harnesses": [
         "codex",
@@ -52,6 +53,7 @@
         "antigravity",
         "kimi",
         "grok",
+        "pi",
         "zcode"
     ],
     "action_categories": [

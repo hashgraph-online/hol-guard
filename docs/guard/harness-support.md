@@ -90,6 +90,11 @@ Current Guard support in this repo:
   - blocks by returning exit code `2` and Grok-native stdout JSON `{"decision":"deny","reason":"..."}` with approval-center copy in stderr
   - surfaces `--always-approve`, `bypassPermissions`, and sandbox `off` as degraded protection states when detected in Grok config
   - fails open if a hook crashes or times out, so Grok keeps working when Guard is unreachable
+- `pi`
+  - detects `~/.pi/agent/settings.json`, project `.pi/settings.json`, and Pi resource roots for packages, extensions, skills, prompts, and themes
+  - installs a Guard-managed Pi extension in `~/.pi/agent/extensions/hol-guard.ts` that screens `input` and `tool_call` events by calling `hol-guard hook --harness pi`
+  - blocks by returning Pi-native stdout JSON `{"decision":"deny","reason":"..."}` and surfaces the reason inline through Pi's extension UI
+  - keeps Pi package install and update flows out of band, so Guard observes configured package surfaces plus the runtime prompt and tool events the managed extension forwards
 - `zcode`
   - detects `~/.zcode/cli/config.json`, configured MCP servers, enabled plugins, the plugin cache under `~/.zcode/cli/plugins/cache/`, plugin manifests and provenance seeds, plugin hooks, skills, commands, and marketplace manifests, plus a project `.zcode/cli/config.json` when present
   - detects a running ZCode app through its non-secret process identity signals when no config file exists yet
@@ -156,4 +161,5 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 | `antigravity` | `antigravity` | ❌ | ✅ | ❌ | mcp_tool, prompt |
 | `kimi` | `kimi`, `kimi-code`, `kimi-cli` | ❌ | ✅ | ❌ | shell, prompt |
 | `grok` | `grok`, `grok-build`, `grok-build-cli`, `xai-grok` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read |
+| `pi` | `pi`, `pi-agent`, `pi-coding-agent` | ✅ | ✅ | ❌ | shell, prompt, mcp_tool, file_read |
 | `zcode` | `zcode`, `zai`, `z-code`, `zai-zcode` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read |

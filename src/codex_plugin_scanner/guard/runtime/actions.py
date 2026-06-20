@@ -448,6 +448,23 @@ def normalize_zcode_hook_payload(
     )
 
 
+def normalize_pi_payload(
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    """Normalize a Pi extension event payload into a typed action envelope."""
+
+    return _normalize_action_payload(
+        payload,
+        harness="pi",
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+
+
 def normalize_harness_payload(
     harness: str,
     event_name: str,
@@ -470,6 +487,7 @@ def normalize_harness_payload(
         "openclaw": normalize_openclaw_payload,
         "cursor": normalize_cursor_hook_payload,
         "grok": normalize_grok_hook_payload,
+        "pi": normalize_pi_payload,
         "zcode": normalize_zcode_hook_payload,
         "zai": normalize_zcode_hook_payload,
     }

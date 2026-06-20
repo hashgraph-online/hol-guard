@@ -129,6 +129,14 @@ def _finalize_runtime_artifact_hook(
                 reason=native_block_reason,
                 output_stream=output_stream,
             )
+        elif _canonical_harness_name(args.harness) == "pi":
+            from ..adapters.pi_hooks import emit_pi_hook_response
+
+            emit_pi_hook_response(
+                policy_action=policy_action,
+                reason=native_block_reason,
+                output_stream=output_stream,
+            )
         elif _canonical_harness_name(args.harness) == "zcode":
             from ..adapters.zcode_hooks import emit_zcode_hook_response
 
@@ -192,6 +200,21 @@ def _finalize_runtime_artifact_hook(
             from ..adapters.grok_hooks import emit_grok_hook_response
 
             emit_grok_hook_response(
+                policy_action=policy_action,
+                reason=runtime_reason,
+                output_stream=output_stream,
+            )
+            _record_harness_usage_for_hook(
+                store=store,
+                action_envelope=action_envelope,
+                payload=payload,
+                policy_action=policy_action,
+            )
+            return 0 if policy_action not in {"block", "sandbox-required", "require-reapproval"} else 2
+        if canonical_harness == "pi":
+            from ..adapters.pi_hooks import emit_pi_hook_response
+
+            emit_pi_hook_response(
                 policy_action=policy_action,
                 reason=runtime_reason,
                 output_stream=output_stream,
