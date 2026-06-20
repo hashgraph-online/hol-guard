@@ -2,56 +2,29 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available
-
-_PI_DIR = ".pi"
-_PI_AGENT_DIR = ".pi/agent"
-_PI_SETTINGS_FILE = "settings.json"
-_PI_MANAGED_EXTENSION_NAME = "hol-guard.ts"
-_EXTENSION_SUFFIXES = (".ts", ".js", ".mts", ".cts", ".mjs", ".cjs")
-_THEME_SUFFIXES = (".json", ".js", ".ts", ".yaml", ".yml")
-
-
-def _append_found_path(found_paths: list[str], path: Path) -> None:
-    candidate = str(path)
-    if candidate not in found_paths:
-        found_paths.append(candidate)
-
-
-def _json_payload(path: Path) -> dict[str, object]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
-def _artifact(
-    *,
-    artifact_id: str,
-    name: str,
-    artifact_type: str,
-    scope: str,
-    path: Path,
-    metadata: dict[str, object] | None = None,
-    publisher: str | None = None,
-) -> GuardArtifact:
-    return GuardArtifact(
-        artifact_id=artifact_id,
-        name=name,
-        harness="pi",
-        artifact_type=artifact_type,
-        source_scope=scope,
-        config_path=str(path),
-        publisher=publisher,
-        metadata=metadata or {},
-    )
+from .pi_support import (
+    EXTENSION_SUFFIXES,
+    PI_AGENT_DIR,
+    PI_DIR,
+    PI_MANAGED_EXTENSION_NAME,
+    PI_SETTINGS_FILE,
+    THEME_SUFFIXES,
+    append_artifact,
+    append_found_path,
+    artifact,
+    disable_managed_extension,
+    enable_managed_extension,
+    json_payload,
+    managed_extension_source,
+    resolve_configured_paths,
+    stable_suffix,
+)
 
 
 class PiHarnessAdapter(HarnessAdapter):
@@ -70,19 +43,13 @@ class PiHarnessAdapter(HarnessAdapter):
 
     @staticmethod
     def _global_root(context: HarnessContext) -> Path:
-        return context.home_dir / _PI_AGENT_DIR
+        return context.home_dir / PI_AGENT_DIR
 
     @staticmethod
     def _project_root(context: HarnessContext) -> Path | None:
         if context.workspace_dir is None:
             return None
-        return context.workspace_dir / _PI_DIR
-
-    @staticmethod
-    def _scope_for(context: HarnessContext, path: Path) -> str:
-        if context.workspace_dir is not None and path.is_relative_to(context.workspace_dir):
-            return "project"
-        return "global"
+        return context.workspace_dir / PI_DIR
 
     @staticmethod
     def _relative_label(root: Path, path: Path) -> str:
@@ -91,25 +58,67 @@ class PiHarnessAdapter(HarnessAdapter):
     def policy_path(self, context: HarnessContext) -> Path:
         project_root = self._project_root(context)
         if project_root is not None:
-            return project_root / _PI_SETTINGS_FILE
-        return self._global_root(context) / _PI_SETTINGS_FILE
+            return project_root / PI_SETTINGS_FILE
+        return self._global_root(context) / PI_SETTINGS_FILE
 
     def _managed_extension_path(self, context: HarnessContext) -> Path:
-        return self._global_root(context) / "extensions" / _PI_MANAGED_EXTENSION_NAME
+        return self._global_root(context) / "extensions" / PI_MANAGED_EXTENSION_NAME
+
+    def _managed_settings_path(self, context: HarnessContext) -> Path:
+        return self._global_root(context) / PI_SETTINGS_FILE
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
         artifacts: list[GuardArtifact] = []
         found_paths: list[str] = []
+        seen_keys: set[str] = set()
         roots = [(self._global_root(context), "global")]
         project_root = self._project_root(context)
         if project_root is not None:
             roots.append((project_root, "project"))
         for root, scope in roots:
-            self._append_settings_artifacts(context, artifacts, found_paths, root / _PI_SETTINGS_FILE, scope)
-            self._append_extension_artifacts(artifacts, found_paths, root / "extensions", scope)
-            self._append_skill_artifacts(artifacts, found_paths, root / "skills", scope)
-            self._append_prompt_artifacts(artifacts, found_paths, root / "prompts", scope)
-            self._append_theme_artifacts(artifacts, found_paths, root / "themes", scope)
+            self._append_settings_artifacts(
+                artifacts,
+                found_paths,
+                seen_keys,
+                settings_path=root / PI_SETTINGS_FILE,
+                scope=scope,
+                extension_root=root / "extensions",
+                skill_root=root / "skills",
+                prompt_root=root / "prompts",
+                theme_root=root / "themes",
+            )
+            self._append_extension_artifacts(
+                artifacts,
+                found_paths,
+                seen_keys,
+                extension_root=root / "extensions",
+                scope=scope,
+                id_root=root / "extensions",
+            )
+            self._append_skill_artifacts(
+                artifacts,
+                found_paths,
+                seen_keys,
+                skill_root=root / "skills",
+                scope=scope,
+                id_root=root / "skills",
+            )
+            self._append_prompt_artifacts(
+                artifacts,
+                found_paths,
+                seen_keys,
+                prompt_root=root / "prompts",
+                scope=scope,
+                id_root=root / "prompts",
+            )
+            self._append_theme_artifacts(
+                artifacts,
+                found_paths,
+                seen_keys,
+                theme_root=root / "themes",
+                scope=scope,
+                id_root=root / "themes",
+            )
         detection = HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or _command_available(self.executable),
@@ -126,132 +135,344 @@ class PiHarnessAdapter(HarnessAdapter):
 
     def _append_settings_artifacts(
         self,
-        context: HarnessContext,
         artifacts: list[GuardArtifact],
         found_paths: list[str],
+        seen_keys: set[str],
+        *,
         settings_path: Path,
         scope: str,
+        extension_root: Path,
+        skill_root: Path,
+        prompt_root: Path,
+        theme_root: Path,
     ) -> None:
-        payload = _json_payload(settings_path)
-        if not payload:
+        if not settings_path.is_file():
             return
-        _append_found_path(found_paths, settings_path)
-        for key, artifact_type in (
-            ("packages", "package"),
-            ("extensions", "extension"),
-            ("skills", "skill"),
-            ("prompts", "prompt"),
-            ("themes", "theme"),
-        ):
-            values = payload.get(key)
-            if not isinstance(values, list):
+        append_found_path(found_paths, settings_path)
+        payload = json_payload(settings_path)
+        self._append_package_setting_artifacts(artifacts, seen_keys, settings_path, payload, scope)
+        self._append_configured_resource_setting_artifacts(
+            artifacts,
+            found_paths,
+            seen_keys,
+            settings_path=settings_path,
+            payload=payload,
+            scope=scope,
+            key="extensions",
+            artifact_type="extension",
+            default_root=extension_root,
+        )
+        self._append_configured_resource_setting_artifacts(
+            artifacts,
+            found_paths,
+            seen_keys,
+            settings_path=settings_path,
+            payload=payload,
+            scope=scope,
+            key="skills",
+            artifact_type="skill",
+            default_root=skill_root,
+        )
+        self._append_configured_resource_setting_artifacts(
+            artifacts,
+            found_paths,
+            seen_keys,
+            settings_path=settings_path,
+            payload=payload,
+            scope=scope,
+            key="prompts",
+            artifact_type="prompt",
+            default_root=prompt_root,
+        )
+        self._append_configured_resource_setting_artifacts(
+            artifacts,
+            found_paths,
+            seen_keys,
+            settings_path=settings_path,
+            payload=payload,
+            scope=scope,
+            key="themes",
+            artifact_type="theme",
+            default_root=theme_root,
+        )
+
+    def _append_package_setting_artifacts(
+        self,
+        artifacts: list[GuardArtifact],
+        seen_keys: set[str],
+        settings_path: Path,
+        payload: dict[str, object],
+        scope: str,
+    ) -> None:
+        values = payload.get("packages")
+        if not isinstance(values, list):
+            return
+        for value in values:
+            if not isinstance(value, str) or not value.strip():
                 continue
-            for index, value in enumerate(values):
-                if not isinstance(value, str) or not value.strip():
-                    continue
-                artifacts.append(
-                    _artifact(
-                        artifact_id=f"pi:{scope}:{artifact_type}:{index}",
+            artifact_id = f"pi:{scope}:package:{stable_suffix(value)}"
+            append_artifact(
+                artifacts,
+                seen_keys,
+                artifact(
+                    artifact_id=artifact_id,
+                    name=value,
+                    artifact_type="package",
+                    scope=scope,
+                    path=settings_path,
+                    metadata={"source": "settings.json", "key": "packages", "value": value},
+                ),
+                dedupe_key=artifact_id,
+            )
+
+    def _append_configured_resource_setting_artifacts(
+        self,
+        artifacts: list[GuardArtifact],
+        found_paths: list[str],
+        seen_keys: set[str],
+        *,
+        settings_path: Path,
+        payload: dict[str, object],
+        scope: str,
+        key: str,
+        artifact_type: str,
+        default_root: Path,
+    ) -> None:
+        values = payload.get(key)
+        if not isinstance(values, list):
+            return
+        for value in values:
+            if not isinstance(value, str) or not value.strip():
+                continue
+            matches = resolve_configured_paths(settings_path, value)
+            if not matches:
+                artifact_id = f"pi:{scope}:{artifact_type}:configured:{stable_suffix(value)}"
+                append_artifact(
+                    artifacts,
+                    seen_keys,
+                    artifact(
+                        artifact_id=artifact_id,
                         name=value,
                         artifact_type=artifact_type,
                         scope=scope,
                         path=settings_path,
                         metadata={"source": "settings.json", "key": key, "value": value},
-                    )
+                    ),
+                    dedupe_key=artifact_id,
                 )
-        del context
+                continue
+            for match in matches:
+                if match.is_relative_to(default_root):
+                    id_root = default_root
+                else:
+                    id_root = match if match.is_dir() else match.parent
+                if artifact_type == "extension":
+                    if match.is_dir():
+                        self._append_extension_artifacts(
+                            artifacts,
+                            found_paths,
+                            seen_keys,
+                            extension_root=match,
+                            scope=scope,
+                            id_root=id_root,
+                        )
+                    elif match.suffix in EXTENSION_SUFFIXES:
+                        self._append_extension_file(artifacts, found_paths, seen_keys, match, scope, id_root)
+                elif artifact_type == "skill":
+                    if match.is_dir():
+                        self._append_skill_artifacts(
+                            artifacts,
+                            found_paths,
+                            seen_keys,
+                            skill_root=match,
+                            scope=scope,
+                            id_root=id_root,
+                        )
+                    elif match.name == "SKILL.md":
+                        self._append_skill_file(artifacts, found_paths, seen_keys, match, scope, id_root)
+                elif artifact_type == "prompt":
+                    if match.is_dir():
+                        self._append_prompt_artifacts(
+                            artifacts,
+                            found_paths,
+                            seen_keys,
+                            prompt_root=match,
+                            scope=scope,
+                            id_root=id_root,
+                        )
+                    elif match.suffix == ".md":
+                        self._append_prompt_file(artifacts, found_paths, seen_keys, match, scope, id_root)
+                elif artifact_type == "theme":
+                    if match.is_dir():
+                        self._append_theme_artifacts(
+                            artifacts,
+                            found_paths,
+                            seen_keys,
+                            theme_root=match,
+                            scope=scope,
+                            id_root=id_root,
+                        )
+                    elif match.suffix in THEME_SUFFIXES:
+                        self._append_theme_file(artifacts, found_paths, seen_keys, match, scope, id_root)
 
     def _append_extension_artifacts(
         self,
         artifacts: list[GuardArtifact],
         found_paths: list[str],
+        seen_keys: set[str],
+        *,
         extension_root: Path,
         scope: str,
+        id_root: Path,
     ) -> None:
         if not extension_root.is_dir():
             return
         for path in sorted(extension_root.rglob("*")):
-            if not path.is_file() or path.suffix not in _EXTENSION_SUFFIXES:
-                continue
-            relative = self._relative_label(extension_root, path)
-            _append_found_path(found_paths, path)
-            artifacts.append(
-                _artifact(
-                    artifact_id=f"pi:{scope}:extension:{relative}",
-                    name=relative,
-                    artifact_type="extension",
-                    scope=scope,
-                    path=path,
-                )
-            )
+            if path.is_file() and path.suffix in EXTENSION_SUFFIXES:
+                self._append_extension_file(artifacts, found_paths, seen_keys, path, scope, id_root)
+
+    def _append_extension_file(
+        self,
+        artifacts: list[GuardArtifact],
+        found_paths: list[str],
+        seen_keys: set[str],
+        path: Path,
+        scope: str,
+        id_root: Path,
+    ) -> None:
+        append_found_path(found_paths, path)
+        relative = self._relative_label(id_root, path)
+        append_artifact(
+            artifacts,
+            seen_keys,
+            artifact(
+                artifact_id=f"pi:{scope}:extension:{relative}",
+                name=relative,
+                artifact_type="extension",
+                scope=scope,
+                path=path,
+            ),
+            dedupe_key=f"extension:{path.resolve()}",
+        )
 
     def _append_skill_artifacts(
         self,
         artifacts: list[GuardArtifact],
         found_paths: list[str],
+        seen_keys: set[str],
+        *,
         skill_root: Path,
         scope: str,
+        id_root: Path,
     ) -> None:
         if not skill_root.is_dir():
             return
         for skill_path in sorted(skill_root.rglob("SKILL.md")):
-            _append_found_path(found_paths, skill_path)
-            relative = f"skills/{skill_path.parent.relative_to(skill_root).as_posix()}"
-            artifacts.append(
-                _artifact(
-                    artifact_id=f"pi:{scope}:skill:{relative}",
-                    name=relative,
-                    artifact_type="skill",
-                    scope=scope,
-                    path=skill_path,
-                )
-            )
+            self._append_skill_file(artifacts, found_paths, seen_keys, skill_path, scope, id_root)
+
+    def _append_skill_file(
+        self,
+        artifacts: list[GuardArtifact],
+        found_paths: list[str],
+        seen_keys: set[str],
+        path: Path,
+        scope: str,
+        id_root: Path,
+    ) -> None:
+        append_found_path(found_paths, path)
+        relative_parent = path.parent.relative_to(id_root).as_posix()
+        relative = "skills" if relative_parent == "." else f"skills/{relative_parent}"
+        append_artifact(
+            artifacts,
+            seen_keys,
+            artifact(
+                artifact_id=f"pi:{scope}:skill:{relative}",
+                name=relative,
+                artifact_type="skill",
+                scope=scope,
+                path=path,
+            ),
+            dedupe_key=f"skill:{path.resolve()}",
+        )
 
     def _append_prompt_artifacts(
         self,
         artifacts: list[GuardArtifact],
         found_paths: list[str],
+        seen_keys: set[str],
+        *,
         prompt_root: Path,
         scope: str,
+        id_root: Path,
     ) -> None:
         if not prompt_root.is_dir():
             return
         for prompt_path in sorted(prompt_root.rglob("*.md")):
-            _append_found_path(found_paths, prompt_path)
-            relative = self._relative_label(prompt_root, prompt_path)
-            artifacts.append(
-                _artifact(
-                    artifact_id=f"pi:{scope}:prompt:{relative}",
-                    name=relative,
-                    artifact_type="prompt",
-                    scope=scope,
-                    path=prompt_path,
-                )
-            )
+            self._append_prompt_file(artifacts, found_paths, seen_keys, prompt_path, scope, id_root)
+
+    def _append_prompt_file(
+        self,
+        artifacts: list[GuardArtifact],
+        found_paths: list[str],
+        seen_keys: set[str],
+        path: Path,
+        scope: str,
+        id_root: Path,
+    ) -> None:
+        append_found_path(found_paths, path)
+        relative = self._relative_label(id_root, path)
+        append_artifact(
+            artifacts,
+            seen_keys,
+            artifact(
+                artifact_id=f"pi:{scope}:prompt:{relative}",
+                name=relative,
+                artifact_type="prompt",
+                scope=scope,
+                path=path,
+            ),
+            dedupe_key=f"prompt:{path.resolve()}",
+        )
 
     def _append_theme_artifacts(
         self,
         artifacts: list[GuardArtifact],
         found_paths: list[str],
+        seen_keys: set[str],
+        *,
         theme_root: Path,
         scope: str,
+        id_root: Path,
     ) -> None:
         if not theme_root.is_dir():
             return
         for theme_path in sorted(theme_root.rglob("*")):
-            if not theme_path.is_file() or theme_path.suffix not in _THEME_SUFFIXES:
-                continue
-            _append_found_path(found_paths, theme_path)
-            relative = self._relative_label(theme_root, theme_path)
-            artifacts.append(
-                _artifact(
-                    artifact_id=f"pi:{scope}:theme:{relative}",
-                    name=relative,
-                    artifact_type="theme",
-                    scope=scope,
-                    path=theme_path,
-                )
-            )
+            if theme_path.is_file() and theme_path.suffix in THEME_SUFFIXES:
+                self._append_theme_file(artifacts, found_paths, seen_keys, theme_path, scope, id_root)
+
+    def _append_theme_file(
+        self,
+        artifacts: list[GuardArtifact],
+        found_paths: list[str],
+        seen_keys: set[str],
+        path: Path,
+        scope: str,
+        id_root: Path,
+    ) -> None:
+        append_found_path(found_paths, path)
+        relative = self._relative_label(id_root, path)
+        append_artifact(
+            artifacts,
+            seen_keys,
+            artifact(
+                artifact_id=f"pi:{scope}:theme:{relative}",
+                name=relative,
+                artifact_type="theme",
+                scope=scope,
+                path=path,
+            ),
+            dedupe_key=f"theme:{path.resolve()}",
+        )
 
     def install(self, context: HarnessContext) -> dict[str, object]:
         shim_manifest = install_guard_shim(
@@ -262,7 +483,11 @@ class PiHarnessAdapter(HarnessAdapter):
         )
         extension_path = self._managed_extension_path(context)
         extension_path.parent.mkdir(parents=True, exist_ok=True)
-        extension_path.write_text(self._managed_extension_source(context), encoding="utf-8")
+        extension_path.write_text(
+            managed_extension_source(guard_home=context.guard_home, home_dir=context.home_dir),
+            encoding="utf-8",
+        )
+        enable_managed_extension(settings_path=self._managed_settings_path(context), extension_path=extension_path)
         raw_notes = shim_manifest.get("notes")
         shim_notes = (
             [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
@@ -286,6 +511,7 @@ class PiHarnessAdapter(HarnessAdapter):
             display_name="pi",
         )
         extension_path = self._managed_extension_path(context)
+        disable_managed_extension(settings_path=self._managed_settings_path(context), extension_path=extension_path)
         if extension_path.exists():
             extension_path.unlink()
         raw_notes = shim_manifest.get("notes")
@@ -302,73 +528,6 @@ class PiHarnessAdapter(HarnessAdapter):
                 *shim_notes,
             ],
         }
-
-    def _managed_extension_source(self, context: HarnessContext) -> str:
-        guard_args = ["guard", "hook", "--guard-home", str(context.guard_home), "--harness", "pi"]
-        guard_args_json = json.dumps(guard_args)
-        return (
-            'import { spawnSync } from "node:child_process";\n'
-            'import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";\n'
-            "\n"
-            f"const GUARD_ARGS = {guard_args_json};\n"
-            "\n"
-            "type GuardResponse = { decision?: string; reason?: string };\n"
-            "\n"
-            "function runGuard(payload: Record<string, unknown>): GuardResponse {\n"
-            "  const args = [...GUARD_ARGS];\n"
-            "  const workspace = process.cwd();\n"
-            '  if (workspace) args.push("--workspace", workspace);\n'
-            '  const result = spawnSync("hol-guard", args, {\n'
-            "    input: `${JSON.stringify(payload)}\\n`,\n"
-            '    encoding: "utf-8",\n'
-            "  });\n"
-            '  if (result.error) return { decision: "allow" };\n'
-            '  const lines = (result.stdout ?? "").split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);\n'
-            "  const lastLine = lines.length > 0 ? lines[lines.length - 1] : null;\n"
-            "  if (lastLine) {\n"
-            "    try {\n"
-            "      const parsed = JSON.parse(lastLine) as GuardResponse;\n"
-            '      if (parsed && typeof parsed === "object") return parsed;\n'
-            "    } catch {}\n"
-            "  }\n"
-            "  if ((result.status ?? 0) !== 0) {\n"
-            "    return {\n"
-            '      decision: "deny",\n'
-            '      reason: (result.stderr ?? "").trim() || "Blocked by HOL Guard.",\n'
-            "    };\n"
-            "  }\n"
-            '  return { decision: "allow" };\n'
-            "}\n"
-            "\n"
-            "export default function (pi: ExtensionAPI) {\n"
-            '  pi.on("input", async (event, ctx) => {\n'
-            '    if (event.source === "extension") return { action: "continue" };\n'
-            '    const response = runGuard({ hook_event_name: "UserPromptSubmit", prompt: event.text });\n'
-            '    if (response.decision === "deny") {\n'
-            '      ctx.ui.notify(response.reason ?? "Blocked by HOL Guard.", "warning");\n'
-            '      return { action: "handled" };\n'
-            "    }\n"
-            '    return { action: "continue" };\n'
-            "  });\n"
-            '  pi.on("tool_call", async (event, ctx) => {\n'
-            "    const toolInput =\n"
-            "      (event as { input?: Record<string, unknown> }).input ??\n"
-            "      (event as { toolInput?: Record<string, unknown> }).toolInput ??\n"
-            "      (event as { arguments?: Record<string, unknown> }).arguments ??\n"
-            "      {};\n"
-            "    const response = runGuard({\n"
-            '      hook_event_name: "PreToolUse",\n'
-            "      tool_name: event.toolName,\n"
-            "      tool_input: toolInput,\n"
-            "    });\n"
-            '    if (response.decision === "deny") {\n'
-            '      ctx.ui.notify(response.reason ?? "Blocked by HOL Guard.", "warning");\n'
-            '      return { block: true, reason: response.reason ?? "Blocked by HOL Guard." };\n'
-            "    }\n"
-            "    return undefined;\n"
-            "  });\n"
-            "}\n"
-        )
 
 
 __all__ = ["PiHarnessAdapter"]
