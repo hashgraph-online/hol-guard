@@ -1769,9 +1769,9 @@ class GuardStore:
                 continue
             if trusted_generation is None or row_generation > trusted_generation:
                 newer_generations.add(row_generation)
-        if current_valid > 0 or not newer_generations:
+        if current_valid > 0 or len(newer_generations) != 1:
             return None
-        return max(newer_generations)
+        return next(iter(newer_generations))
 
     def _resolved_policy_integrity_pending_generation(
         self,
