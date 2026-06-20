@@ -420,7 +420,7 @@ jobs:
           git checkout -B "$branch"
           git add pyproject.toml src/codex_plugin_scanner/version.py uv.lock
           changed_files="$(git diff --cached --name-only)"
-          unexpected_files="$(printf '%s\n' "$changed_files" | rg -vx 'pyproject.toml|src/codex_plugin_scanner/version.py|uv.lock' || true)"
+          unexpected_files="$(printf '%s\n' "$changed_files" | grep -Ev '^(pyproject.toml|src/codex_plugin_scanner/version.py|uv.lock)$' || true)"
           if [[ -n "$unexpected_files" ]]; then
             echo "Unexpected files staged for repository version sync:" >&2
             printf '%s\n' "$unexpected_files" >&2
@@ -433,8 +433,8 @@ jobs:
           if [[ -n "$pr_number" ]]; then
             gh pr edit "$pr_number" --repo ${{ github.repository }} --title "$title" --body-file "$body_file"
           else
-            gh pr create --repo ${{ github.repository }} --base main --head "$head_ref" --title "$title" --body-file "$body_file"
-            pr_number="$(gh pr list --repo ${{ github.repository }} --base main --head "$head_ref" --state open --json number --jq '.[0].number // empty')"
+            pr_url="$(gh pr create --repo ${{ github.repository }} --base main --head "$branch" --title "$title" --body-file "$body_file")"
+            pr_number="${pr_url##*/}"
           fi
           if [[ -z "$pr_number" ]]; then
             echo "Failed to create or locate repository version sync PR." >&2
