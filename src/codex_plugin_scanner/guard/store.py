@@ -3946,6 +3946,25 @@ class GuardStore:
                 resolved_at=resolved_at,
             )
 
+    def resolve_request_with_signed_remote_result(
+        self,
+        request_id: str,
+        *,
+        resolution_action: str,
+        resolution_scope: str,
+        reason: str | None,
+        resolved_at: str,
+    ) -> dict[str, object]:
+        with self._connect() as connection:
+            return persist_queue_resolution(
+                connection,
+                request_id,
+                resolution_action=resolution_action,
+                resolution_scope=resolution_scope,
+                reason=reason,
+                resolved_at=resolved_at,
+            )
+
     def resolve_matching_approval_requests(
         self,
         *,
