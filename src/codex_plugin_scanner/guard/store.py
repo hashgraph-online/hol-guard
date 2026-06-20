@@ -1738,20 +1738,31 @@ class GuardStore:
         return next_state
 
     @staticmethod
-    def _max_local_policy_generation(connection: sqlite3.Connection) -> int | None:
-        row = connection.execute(
-            f"""
-            select max(integrity_generation) as generation
-            from policy_decisions
-            where source not in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}
-              and integrity_generation is not null
-            """,
-            _REMOTE_POLICY_SOURCE_PARAMS,
-        ).fetchone()
-        if row is None:
-            return None
-        generation = row["generation"]
-        return int(generation) if generation is not None else None
+    def _newer_authenticated_policy_integrity_generation(
+        connection: sqlite3.Connection,
+        *,
+        key: bytes,
+        key_id: str,
+        trusted_generation: int | None,
+    ) -> int | None:
+        newest_generation: int | None = None
+        for row in GuardStore._load_local_policy_rows(connection):
+            row_payload = _row_mapping(row)
+            row_generation = _mapping_int(row_payload, "integrity_generation")
+            if row_generation is None or (trusted_generation is not None and row_generation <= trusted_generation):
+                continue
+            result = verify_local_policy_row(
+                row_payload,
+                key=key,
+                key_id=key_id,
+                degraded_mode=False,
+                trusted_generation=row_generation,
+            )
+            if result.status != "valid":
+                continue
+            if newest_generation is None or row_generation > newest_generation:
+                newest_generation = row_generation
+        return newest_generation
 
     def _refresh_policy_integrity_state(
         self,
@@ -1793,21 +1804,30 @@ class GuardStore:
             warnings.append(POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE)
         if trusted_state_value is None:
             warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
-        latest_local_generation = self._max_local_policy_generation(connection)
         trusted_generation = (
             _mapping_int(trusted_state_value, "generation") if trusted_state_value is not None else None
         )
         if (
-            trusted_state_value is not None
-            and latest_local_generation is not None
-            and (trusted_generation is None or latest_local_generation > trusted_generation)
+            not warnings
+            and trusted_state_value is not None
+            and raw_key is not None
+            and key_id is not None
+            and using_prefetched_trusted_state
         ):
-            refreshed_trusted_state = dict(trusted_state_value)
-            refreshed_trusted_state["generation"] = latest_local_generation
-            pending_generation = refreshed_trusted_state.get("pending_generation")
-            if isinstance(pending_generation, int) and pending_generation <= latest_local_generation:
-                refreshed_trusted_state["pending_generation"] = None
-            trusted_state_value = refreshed_trusted_state
+            newer_authenticated_generation = self._newer_authenticated_policy_integrity_generation(
+                connection,
+                key=raw_key,
+                key_id=key_id,
+                trusted_generation=trusted_generation,
+            )
+            if newer_authenticated_generation is not None:
+                refreshed_trusted_state = dict(trusted_state_value)
+                refreshed_trusted_state["generation"] = newer_authenticated_generation
+                pending_generation = refreshed_trusted_state.get("pending_generation")
+                if isinstance(pending_generation, int) and pending_generation <= newer_authenticated_generation:
+                    refreshed_trusted_state["pending_generation"] = None
+                trusted_state_value = refreshed_trusted_state
+                trusted_generation = newer_authenticated_generation
         if (
             not warnings
             and trusted_state_value is not None
@@ -1852,12 +1872,6 @@ class GuardStore:
             "key_id": key_id,
             "mode": mode,
         }
-        existing_generation = _mapping_int(existing, "generation")
-        payload_generation = _mapping_int(payload, "generation")
-        if existing_generation is not None and (payload_generation is None or existing_generation > payload_generation):
-            payload["generation"] = existing_generation
-            if bool(existing.get("cutover_complete")):
-                payload["cutover_complete"] = True
         if payload != existing:
             self._store_policy_integrity_state(connection, payload, now=now)
         return payload
