@@ -1737,6 +1737,22 @@ class GuardStore:
             raise RuntimeError("Guard could not persist the policy integrity control state.")
         return next_state
 
+    @staticmethod
+    def _max_local_policy_generation(connection: sqlite3.Connection) -> int | None:
+        row = connection.execute(
+            f"""
+            select max(integrity_generation) as generation
+            from policy_decisions
+            where source not in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}
+              and integrity_generation is not null
+            """,
+            _REMOTE_POLICY_SOURCE_PARAMS,
+        ).fetchone()
+        if row is None:
+            return None
+        generation = row["generation"]
+        return int(generation) if generation is not None else None
+
     def _refresh_policy_integrity_state(
         self,
         connection: sqlite3.Connection,
@@ -1758,15 +1774,6 @@ class GuardStore:
             trusted_state_value = cast(dict[str, object] | None, prefetched_trusted_state)
         else:
             trusted_state_value = self._load_policy_integrity_control_state(create=create_key)
-        if using_prefetched_trusted_state and trusted_state_value is not None:
-            current_trusted_state = self._load_policy_integrity_control_state(create=False)
-            if current_trusted_state is not None:
-                current_generation = _mapping_int(current_trusted_state, "generation")
-                prefetched_generation = _mapping_int(trusted_state_value, "generation")
-                if prefetched_generation is None or (
-                    current_generation is not None and current_generation > prefetched_generation
-                ):
-                    trusted_state_value = current_trusted_state
         prefetched_secret_material = getattr(
             self,
             "_startup_prefetched_policy_integrity_secret_material",
@@ -1786,6 +1793,23 @@ class GuardStore:
             warnings.append(POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE)
         if trusted_state_value is None:
             warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
+        latest_local_generation = self._max_local_policy_generation(connection)
+        trusted_generation = (
+            _mapping_int(trusted_state_value, "generation")
+            if trusted_state_value is not None
+            else None
+        )
+        if (
+            trusted_state_value is not None
+            and latest_local_generation is not None
+            and (trusted_generation is None or latest_local_generation > trusted_generation)
+        ):
+            refreshed_trusted_state = dict(trusted_state_value)
+            refreshed_trusted_state["generation"] = latest_local_generation
+            pending_generation = refreshed_trusted_state.get("pending_generation")
+            if isinstance(pending_generation, int) and pending_generation <= latest_local_generation:
+                refreshed_trusted_state["pending_generation"] = None
+            trusted_state_value = refreshed_trusted_state
         if (
             not warnings
             and trusted_state_value is not None
