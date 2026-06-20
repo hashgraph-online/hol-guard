@@ -1152,8 +1152,6 @@ def receipt_index_statements() -> list[str]:
     ]
 
 
-
-
 def _path_within_workspace(config_path: str, workspace: str) -> bool:
     normalized_config = _normalized_workspace_path(config_path)
     normalized_workspace = _normalized_workspace_path(workspace)
@@ -1384,8 +1382,4 @@ def _transport_value(value: object) -> TransportKind:
     return "local"
 
 
-__all__ = tuple(
-    name
-    for name in globals()
-    if not (name.startswith("__") and name.endswith("__"))
-)
+__all__ = tuple(name for name in globals() if not (name.startswith("__") and name.endswith("__")))

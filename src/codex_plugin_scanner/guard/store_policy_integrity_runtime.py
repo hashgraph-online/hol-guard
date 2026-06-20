@@ -9,9 +9,7 @@ from .store_base import *
 def _set_private_mode_compat(path: Path, mode: int) -> None:
     store_module = sys.modules.get("codex_plugin_scanner.guard.store")
     setter = (
-        getattr(store_module, "_set_private_mode", _set_private_mode)
-        if store_module is not None
-        else _set_private_mode
+        getattr(store_module, "_set_private_mode", _set_private_mode) if store_module is not None else _set_private_mode
     )
     setter(path, mode)
 
