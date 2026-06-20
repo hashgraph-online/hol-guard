@@ -1767,6 +1767,64 @@ class GuardStore:
                 newest_generation = row_generation
         return newest_generation
 
+    def _resolved_policy_integrity_pending_generation(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        key: bytes,
+        key_id: str,
+        trusted_state: dict[str, object],
+    ) -> dict[str, object]:
+        current_generation = _mapping_int(trusted_state, "generation")
+        if current_generation is None:
+            raise RuntimeError("Guard policy integrity control state is invalid.")
+        pending_generation = trusted_state.get("pending_generation")
+        if not isinstance(pending_generation, int) or pending_generation <= current_generation:
+            return trusted_state
+        rows = self._load_local_policy_rows(connection)
+        next_state: dict[str, object]
+        if not rows:
+            next_state = {
+                "cutover_complete": True,
+                "generation": pending_generation,
+                "pending_generation": None,
+                "version": _POLICY_INTEGRITY_CONTROL_VERSION,
+            }
+        else:
+            pending_valid = 0
+            current_valid = 0
+            for row in rows:
+                pending_result = verify_local_policy_row(
+                    _row_mapping(row),
+                    key=key,
+                    key_id=key_id,
+                    degraded_mode=False,
+                    trusted_generation=pending_generation,
+                )
+                if pending_result.status == "valid":
+                    pending_valid += 1
+                    continue
+                current_result = verify_local_policy_row(
+                    _row_mapping(row),
+                    key=key,
+                    key_id=key_id,
+                    degraded_mode=False,
+                    trusted_generation=current_generation,
+                )
+                if current_result.status == "valid":
+                    current_valid += 1
+            if pending_valid > 0 or current_valid == 0:
+                next_state = {
+                    "cutover_complete": True,
+                    "generation": pending_generation,
+                    "pending_generation": None,
+                    "version": _POLICY_INTEGRITY_CONTROL_VERSION,
+                }
+            else:
+                next_state = dict(trusted_state)
+                next_state["pending_generation"] = None
+        return next_state
+
     def _refresh_policy_integrity_state(
         self,
         connection: sqlite3.Connection,
@@ -1807,34 +1865,13 @@ class GuardStore:
             warnings.append(POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE)
         if trusted_state_value is None:
             warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
-        trusted_generation = (
-            _mapping_int(trusted_state_value, "generation") if trusted_state_value is not None else None
-        )
         if (
             not warnings
             and trusted_state_value is not None
             and raw_key is not None
             and key_id is not None
-            and using_prefetched_trusted_state
+            and not using_prefetched_trusted_state
         ):
-            newer_authenticated_generation = self._newer_authenticated_policy_integrity_generation(
-                connection,
-                key=raw_key,
-                key_id=key_id,
-                trusted_generation=trusted_generation,
-            )
-            if newer_authenticated_generation is not None:
-                refreshed_trusted_state = dict(trusted_state_value)
-                refreshed_trusted_state["generation"] = newer_authenticated_generation
-                pending_generation = refreshed_trusted_state.get("pending_generation")
-                if isinstance(pending_generation, int) and pending_generation <= newer_authenticated_generation:
-                    refreshed_trusted_state["pending_generation"] = None
-                if not self._store_policy_integrity_control_state(refreshed_trusted_state):
-                    warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
-                else:
-                    trusted_state_value = refreshed_trusted_state
-                    trusted_generation = newer_authenticated_generation
-        if not warnings and trusted_state_value is not None and raw_key is not None and key_id is not None:
             try:
                 trusted_state_value = self._reconcile_policy_integrity_pending_generation(
                     connection,
@@ -1850,6 +1887,7 @@ class GuardStore:
             and trusted_state_value is not None
             and not bool(trusted_state_value.get("cutover_complete"))
             and has_only_signed_rows
+            and not using_prefetched_trusted_state
         ):
             next_trusted_state = dict(trusted_state_value)
             next_trusted_state["cutover_complete"] = True
@@ -1874,6 +1912,60 @@ class GuardStore:
         if payload != existing:
             self._store_policy_integrity_state(connection, payload, now=now)
         return payload
+
+    def _prepare_startup_prefetched_policy_integrity_state(self) -> None:
+        prefetched_trusted_state = getattr(
+            self,
+            "_startup_prefetched_policy_integrity_trusted_state",
+            _POLICY_INTEGRITY_LOOKUP_UNSET,
+        )
+        prefetched_secret_material = getattr(
+            self,
+            "_startup_prefetched_policy_integrity_secret_material",
+            _POLICY_INTEGRITY_LOOKUP_UNSET,
+        )
+        if (
+            prefetched_trusted_state is _POLICY_INTEGRITY_LOOKUP_UNSET
+            or prefetched_secret_material is _POLICY_INTEGRITY_LOOKUP_UNSET
+        ):
+            return
+        trusted_state_value = cast(dict[str, object] | None, prefetched_trusted_state)
+        if trusted_state_value is None:
+            return
+        raw_key, key_id = cast(tuple[bytes | None, str | None], prefetched_secret_material)
+        if raw_key is None or key_id is None:
+            return
+        prepared_state = dict(trusted_state_value)
+        connection = sqlite3.connect(self.path, timeout=SQLITE_CONNECT_TIMEOUT_SECONDS)
+        connection.row_factory = sqlite3.Row
+        try:
+            connection.execute(f"pragma busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+            newer_authenticated_generation = self._newer_authenticated_policy_integrity_generation(
+                connection,
+                key=raw_key,
+                key_id=key_id,
+                trusted_generation=_mapping_int(prepared_state, "generation"),
+            )
+            if newer_authenticated_generation is not None:
+                prepared_state["generation"] = newer_authenticated_generation
+                pending_generation = prepared_state.get("pending_generation")
+                if isinstance(pending_generation, int) and pending_generation <= newer_authenticated_generation:
+                    prepared_state["pending_generation"] = None
+            prepared_state = self._resolved_policy_integrity_pending_generation(
+                connection,
+                key=raw_key,
+                key_id=key_id,
+                trusted_state=prepared_state,
+            )
+            if (
+                not bool(prepared_state.get("cutover_complete"))
+                and self._count_legacy_local_policy_rows(connection) == 0
+            ):
+                prepared_state["cutover_complete"] = True
+        finally:
+            connection.close()
+        if prepared_state != trusted_state_value and self._store_policy_integrity_control_state(prepared_state):
+            self._startup_prefetched_policy_integrity_trusted_state = prepared_state
 
     def _policy_integrity_result_for_row(
         self,
@@ -2436,6 +2528,7 @@ class GuardStore:
         self._startup_prefetched_policy_integrity_trusted_state = self._load_policy_integrity_control_state(
             create=False
         )
+        self._prepare_startup_prefetched_policy_integrity_state()
         try:
             with self._connect() as connection:
                 self._refresh_policy_integrity_state(connection, now=_now(), create_key=False)
