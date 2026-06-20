@@ -5,14 +5,25 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
+    import tomli as tomllib
+
 PYPROJECT_RELATIVE_PATH = Path("pyproject.toml")
 MODULE_RELATIVE_PATH = Path("src/codex_plugin_scanner/version.py")
-SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
-PYPROJECT_VERSION_PATTERN = re.compile(r'(?m)^version = "[^"]+"$')
-MODULE_VERSION_PATTERN = re.compile(r'(?m)^__version__ = "[^"]+"$')
+VERSION_TOKEN_PATTERN = re.compile(r"^[0-9][0-9A-Za-z.+_-]*$")
+PYPROJECT_VERSION_LINE_PATTERN = re.compile(
+    r'^(?P<prefix>\s*version\s*=\s*["\'])(?P<version>[^"\']+)(?P<suffix>["\']\s*)$'
+)
+MODULE_VERSION_LINE_PATTERN = re.compile(
+    r'^(?P<prefix>\s*__version__\s*=\s*["\'])(?P<version>[^"\']+)(?P<suffix>["\']\s*)$',
+    re.MULTILINE,
+)
 
 
 @dataclass(frozen=True)
@@ -25,8 +36,8 @@ def _default_repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _validate_semver(version: str) -> str:
-    if not SEMVER_PATTERN.fullmatch(version):
+def _validate_version_token(version: str) -> str:
+    if not VERSION_TOKEN_PATTERN.fullmatch(version):
         raise ValueError(f"Unsupported version format: {version}")
     return version
 
@@ -35,23 +46,29 @@ def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _read_pyproject_version(path: Path) -> str:
+    project = tomllib.loads(_read_text(path)).get("project")
+    if not isinstance(project, dict):
+        raise ValueError(f"Could not find [project] table in {path}")
+    version = project.get("version")
+    if not isinstance(version, str):
+        raise ValueError(f"Could not find [project].version in {path}")
+    return version
+
+
 def _extract_version(path: Path, pattern: re.Pattern[str], label: str) -> str:
     match = pattern.search(_read_text(path))
     if match is None:
         raise ValueError(f"Could not find {label} version in {path}")
-    return match.group(0).split('"')[1]
+    return match.group("version")
 
 
 def read_repo_version_state(repo_root: Path) -> RepoVersionState:
     return RepoVersionState(
-        pyproject=_extract_version(
-            repo_root / PYPROJECT_RELATIVE_PATH,
-            PYPROJECT_VERSION_PATTERN,
-            "pyproject",
-        ),
+        pyproject=_read_pyproject_version(repo_root / PYPROJECT_RELATIVE_PATH),
         module=_extract_version(
             repo_root / MODULE_RELATIVE_PATH,
-            MODULE_VERSION_PATTERN,
+            MODULE_VERSION_LINE_PATTERN,
             "module",
         ),
     )
@@ -59,7 +76,7 @@ def read_repo_version_state(repo_root: Path) -> RepoVersionState:
 
 def assert_repo_version(repo_root: Path, expected_version: str | None = None) -> str:
     if expected_version is not None:
-        _validate_semver(expected_version)
+        _validate_version_token(expected_version)
     state = read_repo_version_state(repo_root)
     if state.pyproject != state.module:
         raise ValueError(
@@ -75,11 +92,62 @@ def assert_repo_version(repo_root: Path, expected_version: str | None = None) ->
     return state.pyproject
 
 
-def _replace_single_line(path: Path, pattern: re.Pattern[str], replacement: str) -> bool:
+def _replace_matching_line(line: str, pattern: re.Pattern[str], version: str) -> str:
+    line_body = line.rstrip("\r\n")
+    line_ending = line[len(line_body) :]
+    match = pattern.match(line_body)
+    if match is None:
+        return line
+    return f'{match.group("prefix")}{version}{match.group("suffix")}{line_ending}'
+
+
+def _replace_project_version(path: Path, version: str) -> bool:
     text = _read_text(path)
-    updated_text, count = pattern.subn(replacement, text, count=1)
-    if count != 1:
-        raise ValueError(f"Could not update version line in {path}")
+    lines = text.splitlines(keepends=True)
+    in_project_table = False
+    project_version_index: int | None = None
+
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == "[project]":
+            in_project_table = True
+            continue
+        if in_project_table and stripped.startswith("[") and stripped.endswith("]"):
+            break
+        if not in_project_table:
+            continue
+        replaced_line = _replace_matching_line(line, PYPROJECT_VERSION_LINE_PATTERN, version)
+        if replaced_line != line:
+            lines[index] = replaced_line
+            project_version_index = index
+            break
+
+    if project_version_index is None:
+        raise ValueError(f"Could not update [project].version in {path}")
+
+    updated_text = "".join(lines)
+    if updated_text == text:
+        return False
+    path.write_text(updated_text, encoding="utf-8")
+    return True
+
+
+def _replace_module_version(path: Path, version: str) -> bool:
+    text = _read_text(path)
+    lines = text.splitlines(keepends=True)
+    module_version_index: int | None = None
+
+    for index, line in enumerate(lines):
+        replaced_line = _replace_matching_line(line, MODULE_VERSION_LINE_PATTERN, version)
+        if replaced_line != line:
+            lines[index] = replaced_line
+            module_version_index = index
+            break
+
+    if module_version_index is None:
+        raise ValueError(f"Could not update module version line in {path}")
+
+    updated_text = "".join(lines)
     if updated_text == text:
         return False
     path.write_text(updated_text, encoding="utf-8")
@@ -87,16 +155,14 @@ def _replace_single_line(path: Path, pattern: re.Pattern[str], replacement: str)
 
 
 def sync_repo_version(repo_root: Path, version: str) -> bool:
-    normalized_version = _validate_semver(version)
-    pyproject_changed = _replace_single_line(
+    normalized_version = _validate_version_token(version)
+    pyproject_changed = _replace_project_version(
         repo_root / PYPROJECT_RELATIVE_PATH,
-        PYPROJECT_VERSION_PATTERN,
-        f'version = "{normalized_version}"',
+        normalized_version,
     )
-    module_changed = _replace_single_line(
+    module_changed = _replace_module_version(
         repo_root / MODULE_RELATIVE_PATH,
-        MODULE_VERSION_PATTERN,
-        f'__version__ = "{normalized_version}"',
+        normalized_version,
     )
     assert_repo_version(repo_root, normalized_version)
     return pyproject_changed or module_changed
@@ -127,13 +193,17 @@ def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
     repo_root = args.repo_root.resolve()
-    if args.version is not None:
-        sync_repo_version(repo_root, args.version)
-        print(_validate_semver(args.version))
+    try:
+        if args.version is not None:
+            sync_repo_version(repo_root, args.version)
+            print(_validate_version_token(args.version))
+            return 0
+        current_version = assert_repo_version(repo_root)
+        print(current_version)
         return 0
-    current_version = assert_repo_version(repo_root)
-    print(current_version)
-    return 0
+    except ValueError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

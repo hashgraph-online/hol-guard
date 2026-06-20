@@ -1,8 +1,8 @@
 """Tests for repository version synchronization."""
 
+import sys
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
-import sys
 
 import pytest
 
@@ -17,7 +17,7 @@ SCRIPT_SPEC.loader.exec_module(SYNC_REPO_VERSION)
 
 
 def _write_repo_files(tmp_path: Path, *, pyproject_version: str, module_version: str) -> None:
-    (tmp_path / "src" / "codex_plugin_scanner").mkdir(parents=True)
+    (tmp_path / "src" / "codex_plugin_scanner").mkdir(parents=True, exist_ok=True)
     (tmp_path / "pyproject.toml").write_text(
         '\n'.join(
             [
@@ -60,8 +60,53 @@ def test_assert_repo_version_detects_mismatch(tmp_path: Path) -> None:
         SYNC_REPO_VERSION.assert_repo_version(tmp_path)
 
 
-def test_sync_repo_version_rejects_non_semver(tmp_path: Path) -> None:
+def test_sync_repo_version_accepts_prerelease_versions(tmp_path: Path) -> None:
+    _write_repo_files(tmp_path, pyproject_version="2.0.844", module_version="2.0.844")
+
+    SYNC_REPO_VERSION.sync_repo_version(tmp_path, "2.0.845rc1")
+
+    state = SYNC_REPO_VERSION.read_repo_version_state(tmp_path)
+    assert state.pyproject == "2.0.845rc1"
+    assert state.module == "2.0.845rc1"
+
+
+def test_sync_repo_version_rejects_invalid_version_tokens(tmp_path: Path) -> None:
     _write_repo_files(tmp_path, pyproject_version="2.0.844", module_version="2.0.844")
 
     with pytest.raises(ValueError, match="Unsupported version format"):
-        SYNC_REPO_VERSION.sync_repo_version(tmp_path, "2.0.845rc1")
+        SYNC_REPO_VERSION.sync_repo_version(tmp_path, "2.0.845 rc1")
+
+
+def test_sync_repo_version_targets_project_version_only(tmp_path: Path) -> None:
+    (tmp_path / "src" / "codex_plugin_scanner").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "pyproject.toml").write_text(
+        '\n'.join(
+            [
+                "[tool.demo]",
+                'version = "0.1.0"',
+                "",
+                "[project]",
+                'name = "hol-guard"',
+                'version = "2.0.844"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "src" / "codex_plugin_scanner" / "version.py").write_text(
+        '\n'.join(
+            [
+                '"""Single source of truth for tool version."""',
+                "",
+                '__version__ = "2.0.844"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    SYNC_REPO_VERSION.sync_repo_version(tmp_path, "2.0.845")
+
+    pyproject_text = (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'version = "0.1.0"' in pyproject_text
+    assert pyproject_text.count('version = "2.0.845"') == 1
