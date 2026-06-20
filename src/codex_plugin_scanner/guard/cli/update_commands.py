@@ -146,6 +146,7 @@ def run_guard_update(
             return payload, 0
         if (
             local_archive_install is not None
+            and str(local_archive_install.get("archive_type") or "") == "wheel"
             and bool(local_archive_install.get("path_exists"))
             and not force_pypi_reinstall
             and requested_wheel_path is None
@@ -912,7 +913,7 @@ def _local_archive_install_payload(direct_url: dict[str, object] | None) -> dict
     parsed = urlparse(raw_url)
     if parsed.scheme != "file":
         return None
-    raw_path = urllib.request.url2pathname(parsed.path)
+    raw_path = _file_url_to_path(parsed)
     if not raw_path:
         return None
     archive_path = Path(raw_path).expanduser()
@@ -941,7 +942,7 @@ def _local_source_install_payload(direct_url: dict[str, object] | None) -> dict[
     parsed = urlparse(raw_url)
     if parsed.scheme != "file":
         return None
-    raw_path = urllib.request.url2pathname(parsed.path)
+    raw_path = _file_url_to_path(parsed)
     if not raw_path:
         return None
     source_path = Path(raw_path).expanduser()
@@ -975,7 +976,7 @@ def _resolve_requested_wheel_path(wheel: str | None) -> tuple[Path | None, str |
 
         wheels = sorted(
             (path for path in candidate.glob("hol_guard-*.whl") if path.is_file()),
-            key=lambda path: (_safe_mtime(path), path.name),
+            key=lambda path: (_parsed_hol_guard_wheel_version(path), _safe_mtime(path), path.name),
             reverse=True,
         )
         if not wheels:
@@ -991,6 +992,31 @@ def _local_archive_update_hint(local_archive_install: dict[str, object]) -> str:
     if isinstance(archive_path, str) and archive_path.strip():
         return _shell_command(["hol-guard", "update", "--wheel", archive_path.strip()])
     return "hol-guard update --wheel <wheel-or-directory>"
+
+
+def _file_url_to_path(parsed: object) -> str:
+    if not hasattr(parsed, "path") or not hasattr(parsed, "netloc"):
+        return ""
+    path = urllib.request.url2pathname(str(getattr(parsed, "path") or ""))
+    netloc = str(getattr(parsed, "netloc") or "").strip()
+    if netloc and netloc.lower() != "localhost":
+        if os.name == "nt":
+            return urllib.request.url2pathname(f"//{netloc}{path}")
+        return f"//{netloc}{path}"
+    return path
+
+
+def _parsed_hol_guard_wheel_version(path: Path) -> Version:
+    filename = path.name
+    if not filename.endswith(".whl"):
+        return Version("0")
+    parts = filename[:-4].split("-")
+    if len(parts) < 5 or parts[0] != "hol_guard":
+        return Version("0")
+    try:
+        return Version(parts[1])
+    except InvalidVersion:
+        return Version("0")
 
 
 def _direct_url_payload() -> dict[str, object] | None:
@@ -1310,12 +1336,13 @@ def build_guard_update_status_payload() -> dict[str, object]:
                 "This install was set up from local source code. Re-run your usual local install command instead."
             )
         elif local_archive_install is not None and bool(local_archive_install.get("path_exists")):
-            auto_updatable = False
-            blocked_reason = (
-                "This install was set up from a local wheel. "
-                "Re-run `hol-guard update --wheel <wheel-or-directory>` or your usual local install command instead."
-            )
-            recovery_reinstall_available = True
+            if str(local_archive_install.get("archive_type") or "") == "wheel":
+                auto_updatable = False
+                blocked_reason = (
+                    "This install was set up from a local wheel. "
+                    "Re-run `hol-guard update --wheel <wheel-or-directory>` or your usual local install command instead."
+                )
+                recovery_reinstall_available = True
         elif local_source_install is not None and bool(local_source_install.get("path_exists")):
             auto_updatable = False
             blocked_reason = (
