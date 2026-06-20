@@ -1746,13 +1746,14 @@ class GuardStore:
         key_id: str,
         trusted_generation: int | None,
     ) -> int | None:
-        newest_generation: int | None = None
+        current_valid = 0
+        newer_generations: set[int] = set()
         for row in GuardStore._load_local_policy_rows(connection):
             row_payload = _row_mapping(row)
             if _mapping_int(row_payload, "integrity_version") != POLICY_INTEGRITY_VERSION:
                 continue
             row_generation = _mapping_int(row_payload, "integrity_generation")
-            if row_generation is None or (trusted_generation is not None and row_generation <= trusted_generation):
+            if row_generation is None:
                 continue
             result = verify_local_policy_row(
                 row_payload,
@@ -1763,9 +1764,14 @@ class GuardStore:
             )
             if result.status != "valid":
                 continue
-            if newest_generation is None or row_generation > newest_generation:
-                newest_generation = row_generation
-        return newest_generation
+            if trusted_generation is not None and row_generation == trusted_generation:
+                current_valid += 1
+                continue
+            if trusted_generation is None or row_generation > trusted_generation:
+                newer_generations.add(row_generation)
+        if current_valid > 0 or not newer_generations:
+            return None
+        return max(newer_generations)
 
     def _resolved_policy_integrity_pending_generation(
         self,
@@ -1813,16 +1819,18 @@ class GuardStore:
                 )
                 if current_result.status == "valid":
                     current_valid += 1
-            if pending_valid > 0 or current_valid == 0:
+            if pending_valid > 0 and current_valid == 0:
                 next_state = {
                     "cutover_complete": True,
                     "generation": pending_generation,
                     "pending_generation": None,
                     "version": _POLICY_INTEGRITY_CONTROL_VERSION,
                 }
-            else:
+            elif current_valid > 0 and pending_valid == 0:
                 next_state = dict(trusted_state)
                 next_state["pending_generation"] = None
+            else:
+                next_state = dict(trusted_state)
         return next_state
 
     def _refresh_policy_integrity_state(
