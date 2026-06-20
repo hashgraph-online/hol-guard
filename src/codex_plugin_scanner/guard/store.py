@@ -1795,9 +1795,7 @@ class GuardStore:
             warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
         latest_local_generation = self._max_local_policy_generation(connection)
         trusted_generation = (
-            _mapping_int(trusted_state_value, "generation")
-            if trusted_state_value is not None
-            else None
+            _mapping_int(trusted_state_value, "generation") if trusted_state_value is not None else None
         )
         if (
             trusted_state_value is not None
