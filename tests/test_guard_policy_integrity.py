@@ -1220,6 +1220,38 @@ def test_pending_generation_recovers_when_post_commit_control_write_is_skipped(
     assert recovered_control["pending_generation"] is None
 
 
+def test_startup_refresh_does_not_overwrite_newer_policy_integrity_generation(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:baseline", artifact_hash="hash-baseline"),
+        "2026-06-14T00:00:00Z",
+    )
+    prefetched_secret = store._policy_integrity_secret_material(create=False)
+    prefetched_control = dict(_policy_integrity_control_payload(store))
+
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:current", artifact_hash="hash-current"),
+        "2026-06-14T00:01:00Z",
+    )
+
+    store._startup_prefetched_policy_integrity_secret_material = prefetched_secret
+    store._startup_prefetched_policy_integrity_trusted_state = prefetched_control
+    try:
+        with store._connect() as connection:
+            store._refresh_policy_integrity_state(connection, now="2026-06-14T00:02:00Z", create_key=False)
+    finally:
+        store._startup_prefetched_policy_integrity_secret_material = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+        store._startup_prefetched_policy_integrity_trusted_state = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+
+    state_payload = _policy_integrity_state_payload(store.guard_home)
+    current_policy = next(
+        item for item in store.list_policy_decisions() if item["artifact_id"] == "codex:project:current"
+    )
+
+    assert state_payload["generation"] == 2
+    assert current_policy["integrity_status"] == "valid"
+
+
 def test_signed_rollback_snapshot_is_detected_and_repair_advances_generation(tmp_path: Path) -> None:
     store = _store(tmp_path)
     store.upsert_policy(
