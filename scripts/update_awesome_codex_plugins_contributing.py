@@ -21,6 +21,7 @@ RUN_LOCAL_PATTERN = re.compile(
     r"(\n\n### Required in Your Plugin Repo)",
     re.DOTALL,
 )
+VERSION_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z._-]*")
 
 
 def _build_step2_body(scanner_version: str, scanner_sha256: str) -> str:
@@ -33,8 +34,9 @@ def _build_step2_body(scanner_version: str, scanner_sha256: str) -> str:
         f"Expected reviewed wheel SHA256: `{scanner_sha256}`\n\n"
         "If you want to verify the exact wheel before install:\n\n"
         "```bash\n"
+        "rm -rf .hol-plugin-scanner-dist\n"
         f'python3 -m pip download --only-binary=:all: --no-deps --dest .hol-plugin-scanner-dist "plugin-scanner=={scanner_version}"\n'
-        "python3 -m pip hash .hol-plugin-scanner-dist/plugin_scanner-*.whl\n"
+        "python3 -m pip hash .hol-plugin-scanner-dist/*.whl\n"
         "```\n\n"
         "You need a score of **80/130** or higher with **no critical or high severity findings**. Save the output to include in your PR description."
     )
@@ -66,9 +68,9 @@ def _replace_once(
     def _replacement(match: re.Match[str]) -> str:
         return f"{match.group(1)}{replacement_body}{match.group(2)}"
 
-    updated, count = pattern.subn(_replacement, content, count=1)
+    updated, count = pattern.subn(_replacement, content)
     if count != 1:
-        raise ValueError(f"Could not locate {section_name} in CONTRIBUTING.md")
+        raise ValueError(f"Expected exactly 1 occurrence of {section_name} in CONTRIBUTING.md, found {count}")
     return updated
 
 
@@ -86,8 +88,8 @@ def main() -> int:
     scanner_version = args.scanner_version.strip()
     scanner_sha256 = args.scanner_sha256.strip().lower()
 
-    if not scanner_version:
-        raise ValueError("scanner version must not be empty")
+    if not re.fullmatch(VERSION_PATTERN, scanner_version):
+        raise ValueError("scanner version must contain only letters, numbers, dots, underscores, or dashes")
     if not re.fullmatch(r"[0-9a-f]{64}", scanner_sha256):
         raise ValueError("scanner sha256 must be a 64-character lowercase hex digest")
 
