@@ -660,12 +660,59 @@ def test_update_rejects_missing_wheel_directory(monkeypatch: pytest.MonkeyPatch,
     assert "Directory of wheels not found" in str(payload["error"])
 
 
+def test_update_rejects_unreadable_wheel_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir()
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.344")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    original_iterdir = Path.iterdir
+
+    def fake_iterdir(self: Path):
+        if self == dist_dir:
+            raise PermissionError("permission denied")
+        return original_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", fake_iterdir)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=True, wheel=str(dist_dir))
+
+    assert exit_code == 1
+    assert payload["status"] == "failed"
+    assert "Could not read HOL Guard wheel directory" in str(payload["error"])
+    assert "permission denied" in str(payload["error"]).lower()
+
+
 def test_update_rejects_non_hol_guard_wheel(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     wheel = tmp_path / "some_dependency-1.0.0-py3-none-any.whl"
     wheel.write_bytes(b"not-hol-guard")
     monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.344")
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
     monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=True, wheel=str(wheel))
+
+    assert exit_code == 1
+    assert payload["status"] == "failed"
+    assert "Expected a HOL Guard wheel file" in str(payload["error"])
+
+
+def test_update_rejects_non_regular_hol_guard_wheel_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    wheel = tmp_path / "hol_guard-2.0.345-py3-none-any.whl"
+    wheel.write_bytes(b"not-a-regular-wheel")
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.344")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    original_is_file = Path.is_file
+
+    def fake_is_file(self: Path) -> bool:
+        if self == wheel:
+            return False
+        return original_is_file(self)
+
+    monkeypatch.setattr(Path, "is_file", fake_is_file)
 
     payload, exit_code = update_commands.run_guard_update(dry_run=True, wheel=str(wheel))
 

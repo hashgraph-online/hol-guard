@@ -1000,8 +1000,16 @@ def _resolve_requested_wheel_path(wheel: str | None) -> tuple[Path | None, str |
             except OSError:
                 return 0
 
+        try:
+            directory_entries = list(candidate.iterdir())
+        except OSError as error:
+            return None, (
+                f"Could not read HOL Guard wheel directory {candidate}: "
+                f"{redact_sensitive_text(str(error))}"
+            )
+
         wheels: list[Path] = []
-        for path in candidate.iterdir():
+        for path in directory_entries:
             if not path.is_file():
                 continue
             if _parsed_hol_guard_wheel_version(path) is None:
@@ -1020,6 +1028,8 @@ def _resolve_requested_wheel_path(wheel: str | None) -> tuple[Path | None, str |
         return wheels[0], None
     if candidate.suffix.lower() != ".whl":
         return None, f"Expected a HOL Guard wheel file or a directory of wheels, got {candidate}."
+    if not candidate.is_file():
+        return None, f"Expected a HOL Guard wheel file, got {candidate}."
     if _parsed_hol_guard_wheel_version(candidate) is None:
         return None, f"Expected a HOL Guard wheel file, got {candidate}."
     return candidate, None
