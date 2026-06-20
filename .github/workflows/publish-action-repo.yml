@@ -40,9 +40,14 @@ jobs:
       - name: Validate publication credentials
         env:
           ACTION_REPO_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+          AWESOME_CODEX_PLUGINS_TOKEN: ${{ secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
         run: |
           if [ -z "$ACTION_REPO_TOKEN" ]; then
             echo "ACTION_REPO_TOKEN must be configured to publish the GitHub Action repository." >&2
+            exit 1
+          fi
+          if [ -z "$AWESOME_CODEX_PLUGINS_TOKEN" ]; then
+            echo "AWESOME_CODEX_PLUGINS_TOKEN must be configured to sync the awesome-codex-plugins submission guide." >&2
             exit 1
           fi
 
@@ -207,20 +212,16 @@ jobs:
 
       - name: Clone awesome-codex-plugins repository
         env:
-          ACTION_REPO_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
           AWESOME_CODEX_PLUGINS_TOKEN: ${{ secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
-        run: |
-          SYNC_TOKEN="${AWESOME_CODEX_PLUGINS_TOKEN:-$ACTION_REPO_TOKEN}"
-          GH_TOKEN="$SYNC_TOKEN" gh repo clone "$AWESOME_CODEX_PLUGINS_REPOSITORY" awesome-codex-plugins-repo -- --depth 1
+          GH_TOKEN: ${{ secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
+        run: gh repo clone "$AWESOME_CODEX_PLUGINS_REPOSITORY" awesome-codex-plugins-repo -- --depth 1
 
       - name: Configure authenticated awesome-codex-plugins remote
         working-directory: awesome-codex-plugins-repo
         env:
-          ACTION_REPO_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
           AWESOME_CODEX_PLUGINS_TOKEN: ${{ secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
         run: |
-          SYNC_TOKEN="${AWESOME_CODEX_PLUGINS_TOKEN:-$ACTION_REPO_TOKEN}"
-          git remote set-url origin "https://x-access-token:${SYNC_TOKEN}@github.com/${AWESOME_CODEX_PLUGINS_REPOSITORY}.git"
+          git remote set-url origin "https://x-access-token:${AWESOME_CODEX_PLUGINS_TOKEN}@github.com/${AWESOME_CODEX_PLUGINS_REPOSITORY}.git"
 
       - name: Sync awesome-codex-plugins contribution guide
         working-directory: awesome-codex-plugins-repo
@@ -255,4 +256,16 @@ jobs:
       - name: Push awesome-codex-plugins contribution guide
         if: steps.awesome_diff.outputs.changed == 'true'
         working-directory: awesome-codex-plugins-repo
-        run: git push origin HEAD:main
+        run: |
+          for attempt in 1 2 3; do
+            git fetch --depth 50 origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Could not push the awesome-codex-plugins contribution guide after ${attempt} attempts." >&2
+              exit 1
+            fi
+            sleep 5
+          done
