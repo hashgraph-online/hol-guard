@@ -24,6 +24,54 @@ from codex_plugin_scanner.guard.store import (
 from codex_plugin_scanner.guard.store_evidence import EvidenceRecord
 
 
+def test_store_star_import_includes_guard_store() -> None:
+    namespace: dict[str, object] = {}
+
+    exec("from codex_plugin_scanner.guard.store import *", namespace)
+
+    assert namespace["GuardStore"] is GuardStore
+
+
+def test_guard_store_constructor_uses_facade_patched_helpers(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    permission_calls: list[tuple[str, int]] = []
+    oauth_builder_calls: list[str] = []
+    policy_builder_calls: list[str] = []
+
+    def _fake_set_private_mode(path, mode: int) -> None:
+        permission_calls.append((str(path), mode))
+
+    def _fake_oauth_secret_store(path):
+        oauth_builder_calls.append(str(path))
+        return EncryptedFileSecretStore(path)
+
+    def _fake_policy_integrity_secret_store():
+        policy_builder_calls.append("policy")
+        return None
+
+    monkeypatch.setattr(guard_store_module, "_set_private_mode", _fake_set_private_mode)
+    monkeypatch.setattr(guard_store_module, "_build_oauth_secret_store", _fake_oauth_secret_store)
+    monkeypatch.setattr(
+        guard_store_module,
+        "_build_policy_integrity_secret_store",
+        _fake_policy_integrity_secret_store,
+    )
+
+    store = GuardStore(guard_home)
+
+    assert permission_calls
+    assert oauth_builder_calls == [str(guard_home)]
+    assert policy_builder_calls == ["policy"]
+
+    permission_calls.clear()
+    store._repair_store_permissions()
+
+    assert any(path == str(guard_home) for path, _mode in permission_calls)
+
+
 class _FakeSystemKeyringModule:
     def __init__(self) -> None:
         self._secrets: dict[tuple[str, str], str] = {}
