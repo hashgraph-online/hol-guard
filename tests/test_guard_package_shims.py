@@ -6,10 +6,13 @@ import base64
 import hashlib
 import json
 import os
+import sqlite3
 import subprocess
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from http.server import HTTPServer
+from multiprocessing import Process
 from pathlib import Path
 
 import pytest
@@ -284,6 +287,20 @@ def _install_single_manager_shim(
     return Path(str(payload["shim_dir"])) / manager
 
 
+def _hold_guard_db_writer_lock(database_path: str, hold_seconds: int) -> None:
+    connection = sqlite3.connect(database_path, timeout=1)
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
+            ("lock-test", "{}", "2026-06-20T00:00:00Z"),
+        )
+        time.sleep(hold_seconds)
+        connection.rollback()
+    finally:
+        connection.close()
+
+
 def _write_npm_ci_workspace(workspace_dir: Path, *, package_name: str, package_version: str) -> None:
     (workspace_dir / "package.json").write_text(
         json.dumps(
@@ -449,6 +466,45 @@ def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path
     assert result.returncode == 0
     assert marker_payload["argv"][1:] == ["install", "minimist@1.2.9"]
     assert marker_payload["cwd"] == str(workspace_dir)
+
+
+def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    marker_path = tmp_path / "bun-after-lock.json"
+    write_fake_manager_script(fake_bin=fake_bin, manager="bun", marker_path=marker_path, exit_code=0)
+    shim_path = _install_single_manager_shim(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        manager="bun",
+        capsys=capsys,
+    )
+    lock_process = Process(target=_hold_guard_db_writer_lock, args=(str(home_dir / "guard.db"), 13))
+    lock_process.start()
+    time.sleep(1)
+    env = dict(os.environ)
+    env["HOME"] = str(home_dir)
+    env["PATH"] = f"{shim_path.parent}{os.pathsep}{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+
+    try:
+        result = subprocess.run(
+            [str(shim_path), "install", "-g", "@oh-my-pi/pi-coding-agent"],
+            cwd=workspace_dir,
+            env=env,
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=60,
+        )
+    finally:
+        lock_process.join(timeout=20)
+
+    assert result.returncode == 0
+    assert marker_path.exists()
+    assert "database is locked" not in result.stderr
 
 
 @pytest.mark.parametrize(

@@ -271,6 +271,7 @@ _REMOTE_POLICY_SOURCE_PLACEHOLDERS = "(" + ",".join("?" for _ in _REMOTE_POLICY_
 _POLICY_SCOPES = frozenset({"artifact", "workspace", "publisher", "harness", "global"})
 _SLOW_STORE_WARNING_ENV = "HOL_GUARD_WARN_SLOW_STORE"
 _SQLITE_CONNECT_TIMEOUT_SECONDS = 30.0
+_SQLITE_BUSY_TIMEOUT_MS = int(_SQLITE_CONNECT_TIMEOUT_SECONDS * 1000)
 _SQLITE_LOCK_RETRY_ATTEMPTS = 5
 _SQLITE_LOCK_RETRY_DELAY_SECONDS = 0.1
 _SECRET_FINGERPRINT_PREFIX = "scrypt$"
@@ -1874,7 +1875,7 @@ class GuardStore:
         connection.row_factory = sqlite3.Row
         start = time.monotonic()
         try:
-            connection.execute("pragma busy_timeout=10000")
+            connection.execute(f"pragma busy_timeout={_SQLITE_BUSY_TIMEOUT_MS}")
             yield connection
             connection.commit()
         finally:
