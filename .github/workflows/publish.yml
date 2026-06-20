@@ -427,7 +427,23 @@ jobs:
             exit 1
           fi
           git commit -m "chore(release): sync repository version to ${VERSION} [skip release publish]"
-          git push --force-with-lease --set-upstream origin "$branch"
+          lease_ref="refs/heads/$branch"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            if ! git fetch --no-tags origin "+$lease_ref:refs/remotes/origin/$branch"; then
+              if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+                exit 1
+              fi
+            fi
+          fi
+          expected_remote=""
+          if remote_head="$(git ls-remote --exit-code --heads origin "$branch" | awk '{print $1}')" && [[ -n "$remote_head" ]]; then
+            expected_remote="$remote_head"
+          fi
+          if [[ -n "$expected_remote" ]]; then
+            git push --force-with-lease="$lease_ref:$expected_remote" --set-upstream origin "$branch"
+          else
+            git push --force-with-lease="$lease_ref:" --set-upstream origin "$branch"
+          fi
           head_sha="$(git rev-parse HEAD)"
           pr_number="$(gh pr list --repo ${{ github.repository }} --base main --head "$head_ref" --state open --json number --jq '.[0].number // empty')"
           if [[ -n "$pr_number" ]]; then
