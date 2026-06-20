@@ -47,9 +47,11 @@ For a local wheel build, install into the pipx-managed `hol-guard` environment. 
 
 ```bash
 python3 -m build --wheel
-pipx runpip hol-guard install --force-reinstall dist/hol_guard-<version>-py3-none-any.whl
+hol-guard update --wheel dist
 hol-guard --version
 ```
+
+`hol-guard update --wheel` accepts either a specific `.whl` file or a directory and picks the newest matching `hol_guard-*.whl`.
 
 To force a specific release, use Python package specifier syntax:
 

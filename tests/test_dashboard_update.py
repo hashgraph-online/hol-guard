@@ -541,6 +541,100 @@ def test_status_payload_hides_recovery_for_editable_install(
     assert payload["recovery_reinstall_command"] is None
 
 
+def test_status_payload_hides_auto_update_for_local_wheel_install(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._current_version",
+        lambda: "1.0.0",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._installer_kind",
+        lambda: "pipx",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._direct_url_payload",
+        lambda: {"url": "file:///home/me/dist/hol_guard-1.0.0-py3-none-any.whl", "archive_info": {"hash": "sha256:abc"}},
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._local_source_install_payload",
+        lambda direct_url: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._local_archive_install_payload",
+        lambda direct_url: {
+            "kind": "local_archive",
+            "archive_type": "wheel",
+            "url": "file:///home/me/dist/hol_guard-1.0.0-py3-none-any.whl",
+            "path": "/home/me/dist/hol_guard-1.0.0-py3-none-any.whl",
+            "path_exists": True,
+        },
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._version_check_payload",
+        lambda current_version: {
+            "source": "pypi",
+            "status": "current",
+            "current_version": current_version,
+            "latest_version": current_version,
+            "update_available": False,
+        },
+    )
+
+    payload = build_guard_update_status_payload()
+
+    assert payload["auto_updatable"] is False
+    assert payload["recovery_reinstall_available"] is True
+    assert "local wheel" in str(payload["blocked_reason"])
+
+
+def test_status_payload_hides_auto_update_for_missing_local_wheel_install(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._current_version",
+        lambda: "1.0.0",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._installer_kind",
+        lambda: "pipx",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._direct_url_payload",
+        lambda: {"url": "file:///home/me/dist/hol_guard-1.0.0-py3-none-any.whl", "archive_info": {"hash": "sha256:abc"}},
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._local_source_install_payload",
+        lambda direct_url: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._local_archive_install_payload",
+        lambda direct_url: {
+            "kind": "local_archive",
+            "archive_type": "wheel",
+            "url": "file:///home/me/dist/hol_guard-1.0.0-py3-none-any.whl",
+            "path": "/home/me/dist/hol_guard-1.0.0-py3-none-any.whl",
+            "path_exists": False,
+        },
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._version_check_payload",
+        lambda current_version: {
+            "source": "pypi",
+            "status": "stale",
+            "current_version": current_version,
+            "latest_version": "1.0.1",
+            "update_available": True,
+        },
+    )
+
+    payload = build_guard_update_status_payload()
+
+    assert payload["auto_updatable"] is False
+    assert payload["recovery_reinstall_available"] is True
+    assert "source file is no longer available" in str(payload["blocked_reason"])
+
+
 def test_daemon_update_schedules_recovery_reinstall_for_local_folder(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
