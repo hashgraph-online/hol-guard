@@ -125,7 +125,7 @@ def run_guard_update(
             payload["archive_install"] = local_archive_install
         if vcs_install is not None:
             payload["vcs_install"] = vcs_install
-        if is_editable:
+        if is_editable and requested_wheel_path is None:
             payload["status"] = "skipped"
             payload["changed"] = False
             payload["error"] = (
@@ -147,16 +147,22 @@ def run_guard_update(
         if (
             local_archive_install is not None
             and str(local_archive_install.get("archive_type") or "") == "wheel"
-            and bool(local_archive_install.get("path_exists"))
             and not force_pypi_reinstall
             and requested_wheel_path is None
         ):
             payload["status"] = "skipped"
             payload["changed"] = False
-            payload["error"] = (
-                "Automatic update is disabled for local wheel installs. "
-                f"Re-run `{_local_archive_update_hint(local_archive_install)}` or your local install workflow instead."
-            )
+            if bool(local_archive_install.get("path_exists")):
+                payload["error"] = (
+                    "Automatic update is disabled for local wheel installs. "
+                    f"Re-run `{_local_archive_update_hint(local_archive_install)}` or your local install workflow instead."
+                )
+            else:
+                payload["error"] = (
+                    "Automatic update is disabled for local wheel installs when the original wheel file is gone. "
+                    "Pass a new wheel with `hol-guard update --wheel <wheel-or-directory>` "
+                    "or re-run your local install workflow instead."
+                )
             return payload, 0
         if local_source_install is not None and not bool(local_source_install.get("path_exists")):
             payload["recovery_source_install"] = True
@@ -974,9 +980,17 @@ def _resolve_requested_wheel_path(wheel: str | None) -> tuple[Path | None, str |
             except OSError:
                 return 0
 
+        def _wheel_sort_key(path: Path) -> tuple[Version, int, str]:
+            version = _parsed_hol_guard_wheel_version(path) or Version("0")
+            return version, _safe_mtime(path), path.name
+
         wheels = sorted(
-            (path for path in candidate.glob("hol_guard-*.whl") if path.is_file()),
-            key=lambda path: (_parsed_hol_guard_wheel_version(path), _safe_mtime(path), path.name),
+            (
+                path
+                for path in candidate.glob("hol_guard-*.whl")
+                if path.is_file() and _parsed_hol_guard_wheel_version(path) is not None
+            ),
+            key=_wheel_sort_key,
             reverse=True,
         )
         if not wheels:
@@ -984,6 +998,8 @@ def _resolve_requested_wheel_path(wheel: str | None) -> tuple[Path | None, str |
         return wheels[0], None
     if candidate.suffix.lower() != ".whl":
         return None, f"Expected a HOL Guard wheel file or a directory of wheels, got {candidate}."
+    if _parsed_hol_guard_wheel_version(candidate) is None:
+        return None, f"Expected a HOL Guard wheel file, got {candidate}."
     return candidate, None
 
 
@@ -1004,17 +1020,17 @@ def _file_url_to_path(parsed: ParseResult) -> str:
     return path
 
 
-def _parsed_hol_guard_wheel_version(path: Path) -> Version:
+def _parsed_hol_guard_wheel_version(path: Path) -> Version | None:
     filename = path.name
     if not filename.endswith(".whl"):
-        return Version("0")
+        return None
     parts = filename[:-4].split("-")
     if len(parts) < 5 or parts[0] != "hol_guard":
-        return Version("0")
+        return None
     try:
         return Version(parts[1])
     except InvalidVersion:
-        return Version("0")
+        return None
 
 
 def _direct_url_payload() -> dict[str, object] | None:
@@ -1333,15 +1349,21 @@ def build_guard_update_status_payload() -> dict[str, object]:
             blocked_reason = (
                 "This install was set up from local source code. Re-run your usual local install command instead."
             )
-        elif local_archive_install is not None and bool(local_archive_install.get("path_exists")):
-            if str(local_archive_install.get("archive_type") or "") == "wheel":
-                auto_updatable = False
+        elif local_archive_install is not None and str(local_archive_install.get("archive_type") or "") == "wheel":
+            auto_updatable = False
+            if bool(local_archive_install.get("path_exists")):
                 blocked_reason = (
                     "This install was set up from a local wheel. "
                     "Re-run `hol-guard update --wheel <wheel-or-directory>` "
                     "or your usual local install command instead."
                 )
-                recovery_reinstall_available = True
+            else:
+                blocked_reason = (
+                    "This install was set up from a local wheel whose source file is no longer available. "
+                    "Pass a new wheel with `hol-guard update --wheel <wheel-or-directory>` "
+                    "or re-run your usual local install command instead."
+                )
+            recovery_reinstall_available = True
         elif local_source_install is not None and bool(local_source_install.get("path_exists")):
             auto_updatable = False
             blocked_reason = (
