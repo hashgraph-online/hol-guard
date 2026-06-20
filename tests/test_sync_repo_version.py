@@ -155,3 +155,27 @@ def test_sync_repo_version_preserves_lockfile_markers(tmp_path: Path) -> None:
     lockfile_text = (tmp_path / "uv.lock").read_text(encoding="utf-8")
     assert 'marker = "python_full_version < \'3.14\'"' in lockfile_text
     assert 'marker = "python_full_version >= \'3.11\' and python_full_version < \'3.14\'"' in lockfile_text
+
+
+def test_sync_repo_version_avoids_partial_writes_when_lockfile_is_invalid(tmp_path: Path) -> None:
+    _write_repo_files(tmp_path, pyproject_version="2.0.844", module_version="2.0.844")
+    (tmp_path / "uv.lock").write_text(
+        '\n'.join(
+            [
+                "[[package]]",
+                'name = "hol-guard"',
+                'version = "2.0.844"',
+                'source = { editable = "./elsewhere" }',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Could not find editable hol-guard package version"):
+        SYNC_REPO_VERSION.sync_repo_version(tmp_path, "2.0.845")
+
+    assert 'version = "2.0.844"' in (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
+    assert '__version__ = "2.0.844"' in (tmp_path / "src" / "codex_plugin_scanner" / "version.py").read_text(
+        encoding="utf-8"
+    )
