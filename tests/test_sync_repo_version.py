@@ -91,6 +91,17 @@ def test_sync_repo_version_accepts_prerelease_versions(tmp_path: Path) -> None:
     assert state.module == "2.0.845rc1"
 
 
+def test_sync_repo_version_accepts_epoch_and_local_versions(tmp_path: Path) -> None:
+    _write_repo_files(tmp_path, pyproject_version="2.0.844", module_version="2.0.844")
+
+    SYNC_REPO_VERSION.sync_repo_version(tmp_path, "1!2.0.845+abc")
+
+    state = SYNC_REPO_VERSION.read_repo_version_state(tmp_path)
+    assert state.pyproject == "1!2.0.845+abc"
+    assert state.module == "1!2.0.845+abc"
+    assert state.lockfile == "1!2.0.845+abc"
+
+
 def test_sync_repo_version_rejects_invalid_version_tokens(tmp_path: Path) -> None:
     _write_repo_files(tmp_path, pyproject_version="2.0.844", module_version="2.0.844")
 
@@ -155,6 +166,26 @@ def test_sync_repo_version_preserves_lockfile_markers(tmp_path: Path) -> None:
     lockfile_text = (tmp_path / "uv.lock").read_text(encoding="utf-8")
     assert 'marker = "python_full_version < \'3.14\'"' in lockfile_text
     assert 'marker = "python_full_version >= \'3.11\' and python_full_version < \'3.14\'"' in lockfile_text
+
+
+def test_sync_repo_version_preserves_inline_version_comments(tmp_path: Path) -> None:
+    _write_repo_files(tmp_path, pyproject_version="2.0.844", module_version="2.0.844")
+    (tmp_path / "pyproject.toml").write_text(
+        '\n'.join(
+            [
+                "[project]",
+                'name = "hol-guard"',
+                'version = "2.0.844"  # current release',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    SYNC_REPO_VERSION.sync_repo_version(tmp_path, "2.0.845")
+
+    pyproject_text = (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'version = "2.0.845"  # current release' in pyproject_text
 
 
 def test_sync_repo_version_avoids_partial_writes_when_lockfile_is_invalid(tmp_path: Path) -> None:
