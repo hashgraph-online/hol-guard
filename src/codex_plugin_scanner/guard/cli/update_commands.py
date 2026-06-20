@@ -994,6 +994,7 @@ def _resolve_requested_wheel_path(wheel: str | None) -> tuple[Path | None, str |
             return None, f"HOL Guard wheel not found: {candidate}"
         return None, f"Directory of wheels not found: {candidate}"
     if candidate.is_dir():
+
         def _safe_mtime(path: Path) -> int:
             try:
                 return path.stat().st_mtime_ns
@@ -1003,10 +1004,7 @@ def _resolve_requested_wheel_path(wheel: str | None) -> tuple[Path | None, str |
         try:
             directory_entries = list(candidate.iterdir())
         except OSError as error:
-            return None, (
-                f"Could not read HOL Guard wheel directory {candidate}: "
-                f"{redact_sensitive_text(str(error))}"
-            )
+            return None, (f"Could not read HOL Guard wheel directory {candidate}: {redact_sensitive_text(str(error))}")
 
         wheels: list[Path] = []
         for path in directory_entries:
