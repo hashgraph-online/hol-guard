@@ -6,24 +6,34 @@ from __future__ import annotations
 from .store_base import *
 
 
-def _backfill_approval_queue_columns_compat(connection: sqlite3.Connection) -> None:
+def _facade_store_attr(name: str, fallback: object) -> object:
     store_module = sys.modules.get("codex_plugin_scanner.guard.store")
-    backfill = (
-        getattr(store_module, "backfill_approval_queue_columns", backfill_approval_queue_columns)
-        if store_module is not None
-        else backfill_approval_queue_columns
-    )
+    if store_module is None:
+        return fallback
+    return getattr(store_module, name, fallback)
+
+
+def _backfill_approval_queue_columns_compat(connection: sqlite3.Connection) -> None:
+    backfill = _facade_store_attr("backfill_approval_queue_columns", backfill_approval_queue_columns)
     backfill(connection)
 
 
 def _slow_query_threshold_ms_compat() -> int:
-    store_module = sys.modules.get("codex_plugin_scanner.guard.store")
-    value = (
-        getattr(store_module, "_SLOW_QUERY_THRESHOLD_MS", _SLOW_QUERY_THRESHOLD_MS)
-        if store_module is not None
-        else _SLOW_QUERY_THRESHOLD_MS
-    )
+    value = _facade_store_attr("_SLOW_QUERY_THRESHOLD_MS", _SLOW_QUERY_THRESHOLD_MS)
     return value if isinstance(value, int) and not isinstance(value, bool) else _SLOW_QUERY_THRESHOLD_MS
+
+
+def _sqlite_lock_retry_delay_seconds_compat() -> float:
+    value = _facade_store_attr("_SQLITE_LOCK_RETRY_DELAY_SECONDS", _SQLITE_LOCK_RETRY_DELAY_SECONDS)
+    return (
+        value if isinstance(value, (int, float)) and not isinstance(value, bool) else _SQLITE_LOCK_RETRY_DELAY_SECONDS
+    )
+
+
+def _sleep_compat(seconds: float) -> None:
+    time_module = _facade_store_attr("time", time)
+    sleep = getattr(time_module, "sleep", time.sleep)
+    sleep(seconds)
 
 
 class StoreConnectionSchemaMixin:
@@ -525,7 +535,7 @@ class StoreConnectionSchemaMixin:
                 except sqlite3.OperationalError as exc:
                     if "database is locked" not in str(exc).lower() or attempt == _SQLITE_LOCK_RETRY_ATTEMPTS - 1:
                         raise
-                    time.sleep(_SQLITE_LOCK_RETRY_DELAY_SECONDS)
+                    _sleep_compat(_sqlite_lock_retry_delay_seconds_compat())
         finally:
             connection.execute(f"pragma busy_timeout={original_busy_timeout_ms}")
 
