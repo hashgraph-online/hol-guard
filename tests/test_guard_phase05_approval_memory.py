@@ -662,7 +662,11 @@ def test_gr114_gr115_bulk_resolves_safe_duplicate_groups_for_allow_and_block(tmp
     assert store.get_approval_request(risky_id)["dedupe_count"] == 2
 
 
-def test_gr116_workspace_policy_uses_stable_non_path_fingerprint(tmp_path: Path) -> None:
+def test_gr116_workspace_policy_uses_stable_non_path_fingerprint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _trust_local_policy_rows(monkeypatch)
     store = _store(tmp_path)
     workspace = str(tmp_path / "private" / "repo")
     store.upsert_policy(
@@ -688,7 +692,12 @@ def test_gr116_workspace_policy_uses_stable_non_path_fingerprint(tmp_path: Path)
 
 
 @pytest.mark.parametrize("scope", ["harness", "global"])
-def test_gr117_broad_runtime_scope_applies_only_same_exact_action(tmp_path: Path, scope: str) -> None:
+def test_gr117_broad_runtime_scope_applies_only_same_exact_action(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    scope: str,
+) -> None:
+    _trust_local_policy_rows(monkeypatch)
     store = _store(tmp_path)
     shell_request = _request("req-shell", artifact_id="codex:project:tool-action:shell", command="cat ~/.npmrc")
     other_shell_request = _request(
