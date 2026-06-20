@@ -19,6 +19,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
 PYPROJECT_RELATIVE_PATH = Path("pyproject.toml")
 MODULE_RELATIVE_PATH = Path("src/codex_plugin_scanner/version.py")
 LOCKFILE_RELATIVE_PATH = Path("uv.lock")
+TOML_TABLE_HEADER_PATTERN = re.compile(r"^\[[A-Za-z0-9_.-]+\]$")
 PYPROJECT_VERSION_LINE_PATTERN = re.compile(
     r'^(?P<prefix>\s*version\s*=\s*["\'])(?P<version>[^"\']+)(?P<suffix>["\'](?:\s+#.*)?\s*)$'
 )
@@ -119,7 +120,7 @@ def _replace_project_version(path: Path, version: str) -> tuple[str, bool]:
         if stripped == "[project]":
             in_project_table = True
             continue
-        if in_project_table and stripped.startswith("[") and stripped.endswith("]"):
+        if in_project_table and TOML_TABLE_HEADER_PATTERN.fullmatch(stripped):
             break
         if not in_project_table:
             continue

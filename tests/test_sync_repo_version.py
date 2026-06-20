@@ -188,6 +188,29 @@ def test_sync_repo_version_preserves_inline_version_comments(tmp_path: Path) -> 
     assert 'version = "2.0.845"  # current release' in pyproject_text
 
 
+def test_sync_repo_version_handles_multiline_arrays_before_version(tmp_path: Path) -> None:
+    _write_repo_files(tmp_path, pyproject_version="2.0.844", module_version="2.0.844")
+    (tmp_path / "pyproject.toml").write_text(
+        '\n'.join(
+            [
+                "[project]",
+                'name = "hol-guard"',
+                "authors = [",
+                '  { name = "HOL", email = "support@hol.org" },',
+                "]",
+                'version = "2.0.844"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    SYNC_REPO_VERSION.sync_repo_version(tmp_path, "2.0.845")
+
+    pyproject_text = (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'version = "2.0.845"' in pyproject_text
+
+
 def test_sync_repo_version_avoids_partial_writes_when_lockfile_is_invalid(tmp_path: Path) -> None:
     _write_repo_files(tmp_path, pyproject_version="2.0.844", module_version="2.0.844")
     (tmp_path / "uv.lock").write_text(
