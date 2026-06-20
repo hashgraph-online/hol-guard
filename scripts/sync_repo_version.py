@@ -9,6 +9,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from packaging.version import InvalidVersion, Version
+
 try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
@@ -17,12 +19,11 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
 PYPROJECT_RELATIVE_PATH = Path("pyproject.toml")
 MODULE_RELATIVE_PATH = Path("src/codex_plugin_scanner/version.py")
 LOCKFILE_RELATIVE_PATH = Path("uv.lock")
-VERSION_TOKEN_PATTERN = re.compile(r"^\d+(?:\.\d+)*(?:(?:a|b|rc)\d+)?(?:\.post\d+)?(?:\.dev\d+)?$")
 PYPROJECT_VERSION_LINE_PATTERN = re.compile(
-    r'^(?P<prefix>\s*version\s*=\s*["\'])(?P<version>[^"\']+)(?P<suffix>["\']\s*)$'
+    r'^(?P<prefix>\s*version\s*=\s*["\'])(?P<version>[^"\']+)(?P<suffix>["\'](?:\s+#.*)?\s*)$'
 )
 MODULE_VERSION_LINE_PATTERN = re.compile(
-    r'^(?P<prefix>\s*__version__\s*=\s*["\'])(?P<version>[^"\']+)(?P<suffix>["\']\s*)$',
+    r'^(?P<prefix>\s*__version__\s*=\s*["\'])(?P<version>[^"\']+)(?P<suffix>["\'](?:\s+#.*)?\s*)$',
     re.MULTILINE,
 )
 
@@ -39,7 +40,9 @@ def _default_repo_root() -> Path:
 
 
 def _validate_version_token(version: str) -> str:
-    if not VERSION_TOKEN_PATTERN.fullmatch(version):
+    try:
+        Version(version)
+    except InvalidVersion:
         raise ValueError(f"Unsupported version format: {version}")
     return version
 
