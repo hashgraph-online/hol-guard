@@ -445,6 +445,14 @@ def _success_status(payload: dict[str, object]) -> str:
             and current_version != resulting_version
         ):
             return "updated"
+        if (
+            current_version
+            and resulting_version
+            and current_version != "unknown"
+            and resulting_version != "unknown"
+            and current_version == resulting_version
+        ):
+            return "current"
         output_text = str(payload.get("stdout") or "").lower()
         if any(hint in output_text for hint in _ALREADY_CURRENT_HINTS):
             return "current"
