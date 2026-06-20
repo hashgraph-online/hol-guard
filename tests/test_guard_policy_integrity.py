@@ -1434,19 +1434,48 @@ def test_startup_refresh_keeps_pending_generation_when_legacy_rows_remain(
         _decision(artifact_id="codex:project:legacy", artifact_hash="hash-legacy"),
         "2026-06-14T00:00:00Z",
     )
-    _strip_policy_integrity(store.guard_home, artifact_id="codex:project:legacy")
     monkeypatch.setattr(store, "_finalize_policy_integrity_control_state", lambda payload: None)
     store.upsert_policy(
         _decision(artifact_id="codex:project:pending", artifact_hash="hash-pending"),
         "2026-06-14T00:01:00Z",
     )
+    raw_key, key_id = store._policy_integrity_secret_material(create=False)
+    assert raw_key is not None
+    assert key_id is not None
+    legacy_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:legacy"))
+    legacy_row["integrity_version"] = 1
+    legacy_payload = policy_integrity_module.canonical_policy_payload(legacy_row, integrity_version=1)
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        connection.execute(
+            """
+            update policy_decisions
+            set integrity_version = ?,
+                payload_hash = ?,
+                payload_mac = ?,
+                integrity_key_id = ?,
+                signed_at = ?
+            where artifact_id = ?
+            """,
+            (
+                1,
+                hashlib.sha256(legacy_payload).hexdigest(),
+                hmac.new(raw_key, legacy_payload, hashlib.sha256).hexdigest(),
+                key_id,
+                legacy_row["signed_at"],
+                "codex:project:legacy",
+            ),
+        )
     stale_control = dict(_policy_integrity_control_payload(store))
+    stale_control["generation"] = 1
+    stale_control["pending_generation"] = 2
     stale_control["cutover_complete"] = False
     assert store._store_policy_integrity_control_state(stale_control)
+    assert _policy_integrity_control_payload(store)["generation"] == 1
 
     store._startup_prefetched_policy_integrity_secret_material = store._policy_integrity_secret_material(create=False)
     store._startup_prefetched_policy_integrity_trusted_state = dict(_policy_integrity_control_payload(store))
     store._prepare_startup_prefetched_policy_integrity_state()
+    assert store._startup_prefetched_policy_integrity_trusted_state["generation"] == 1
 
     try:
         with store._connect() as connection:

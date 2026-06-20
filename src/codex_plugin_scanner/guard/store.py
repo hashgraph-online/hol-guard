@@ -1577,6 +1577,7 @@ class GuardStore:
             where source not in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}
               and (
                 integrity_version is null
+                or integrity_version != {POLICY_INTEGRITY_VERSION}
                 or payload_hash is null
                 or payload_mac is null
                 or integrity_key_id is null
@@ -1850,6 +1851,8 @@ class GuardStore:
         key_id: str,
         trusted_state: dict[str, object],
     ) -> dict[str, object]:
+        if self._count_legacy_local_policy_rows(connection) > 0:
+            return dict(trusted_state)
         prepared_state = dict(trusted_state)
         pending_generation = prepared_state.get("pending_generation")
         if not isinstance(pending_generation, int):
