@@ -32,6 +32,11 @@ from .false_positive_rules import (
 from .secret_sensitivity import SecretPathMatch as SensitivePathMatch
 from .secret_sensitivity import classify_secret_path
 from .sed_scripts import sed_script_is_bounded_print
+from .self_approval import (
+    SELF_APPROVAL_ACTION_CLASS,
+    SELF_APPROVAL_REASON,
+    is_guard_approval_mutation_command,
+)
 from .shell_command_wrappers import normalize_transparent_shell_command
 
 _FILE_READ_TOOL_NAMES = frozenset(
@@ -859,6 +864,14 @@ def _destructive_shell_tool_action_request(
 ) -> ToolActionRequestMatch | None:
     if normalized_tool_name not in _SHELL_TOOL_NAMES:
         return None
+    if is_guard_approval_mutation_command(command_text):
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class=SELF_APPROVAL_ACTION_CLASS,
+            reason=SELF_APPROVAL_REASON,
+        )
     if _contains_encoded_or_encrypted_shell_command(command_text, cwd=cwd, home_dir=home_dir):
         return ToolActionRequestMatch(
             tool_name=tool_name,

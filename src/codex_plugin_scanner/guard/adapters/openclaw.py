@@ -220,9 +220,7 @@ class OpenClawHarnessAdapter(HarnessAdapter):
         return {
             "tier": "approval-center",
             "summary": "Guard keeps OpenClaw approvals in the local approval center without forcing a browser open.",
-            "fallback_hint": (
-                "Resolve pending OpenClaw requests from the Guard approval center or `hol-guard approvals`."
-            ),
+            "fallback_hint": "Resolve pending OpenClaw requests from the Guard approval center.",
             "prompt_channel": "native-fallback",
             "auto_open_browser": False,
         }

@@ -26,6 +26,7 @@ concurrency:
 jobs:
   build:
     name: Build + Verify
+    if: github.event_name != 'push' || github.ref != 'refs/heads/main' || !contains(github.event.head_commit.message, '[skip release publish]')
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -48,7 +49,7 @@ jobs:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BASE_VERSION=$(python3 -c "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); print(p['project']['version'])")
+          BASE_VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           VERSION="$BASE_VERSION"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
@@ -91,8 +92,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          sed -i "1,/^version = /{s/^version = .*/version = \"$VERSION\"/}" pyproject.toml
-          sed -i "1,/^__version__ = /{s/^__version__ = .*/__version__ = \"$VERSION\"/}" src/codex_plugin_scanner/version.py
+          uv run --no-sync python scripts/sync_repo_version.py --version "$VERSION"
       - name: Build Guard package (hol-guard)
         run: |
           cp pyproject.toml pyproject.toml.bak
@@ -315,12 +315,17 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - name: Install packaging
+        run: |
+          python3 -m pip install packaging
       - name: Stamp package version
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          sed -i "1,/^version = /{s/^version = .*/version = \"$VERSION\"/}" pyproject.toml
-          sed -i "1,/^__version__ = /{s/^__version__ = .*/__version__ = \"$VERSION\"/}" src/codex_plugin_scanner/version.py
+          python3 scripts/sync_repo_version.py --version "$VERSION"
       - name: Prepare image tags
         id: tags
         env:
@@ -348,3 +353,89 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ needs.build.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
+
+  sync-repository-version:
+    name: Sync repository version
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip release publish]') && needs.build.result == 'success' && needs.publish-pypi.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.release.result) && contains(fromJSON('["success","skipped"]'), needs.publish-container.result)
+    needs: [build, publish-pypi, release, publish-container]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Prepare main branch
+        run: |
+          git checkout -B main origin/main
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - name: Install packaging
+        run: |
+          python3 -m pip install packaging
+      - name: Sync repository version files
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          python3 scripts/sync_repo_version.py --version "$VERSION"
+      - name: Open repository version sync PR
+        env:
+          ACTION_REPO_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          if git diff --quiet -- pyproject.toml src/codex_plugin_scanner/version.py uv.lock; then
+            echo "Repository version already synced."
+            exit 0
+          fi
+          if [[ -z "$ACTION_REPO_TOKEN" ]]; then
+            echo "ACTION_REPO_TOKEN must be configured to sync repository version files after publish." >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${ACTION_REPO_TOKEN}@github.com/${{ github.repository }}.git"
+          branch="release/sync-repository-version-v${VERSION}"
+          head_ref="${{ github.repository_owner }}:${branch}"
+          title="chore(release): sync repository version to ${VERSION} [skip release publish]"
+          body_file="$(mktemp)"
+          trap 'rm -f "$body_file"' EXIT
+          cat > "$body_file" <<EOF
+          ## Summary
+          - sync repository version files to ${VERSION} after publish
+          - keep repo-visible version metadata aligned with the released package artifacts
+
+          ## Testing
+          - \`python3 scripts/sync_repo_version.py --version "${VERSION}"\`
+          EOF
+          git checkout -B "$branch"
+          git add pyproject.toml src/codex_plugin_scanner/version.py uv.lock
+          changed_files="$(git diff --cached --name-only)"
+          unexpected_files="$(printf '%s\n' "$changed_files" | rg -vx 'pyproject.toml|src/codex_plugin_scanner/version.py|uv.lock' || true)"
+          if [[ -n "$unexpected_files" ]]; then
+            echo "Unexpected files staged for repository version sync:" >&2
+            printf '%s\n' "$unexpected_files" >&2
+            exit 1
+          fi
+          git commit -m "chore(release): sync repository version to ${VERSION} [skip release publish]"
+          git push --force-with-lease --set-upstream origin "$branch"
+          head_sha="$(git rev-parse HEAD)"
+          pr_number="$(gh pr list --repo ${{ github.repository }} --base main --head "$head_ref" --state open --json number --jq '.[0].number // empty')"
+          if [[ -n "$pr_number" ]]; then
+            gh pr edit "$pr_number" --repo ${{ github.repository }} --title "$title" --body-file "$body_file"
+          else
+            gh pr create --repo ${{ github.repository }} --base main --head "$head_ref" --title "$title" --body-file "$body_file"
+            pr_number="$(gh pr list --repo ${{ github.repository }} --base main --head "$head_ref" --state open --json number --jq '.[0].number // empty')"
+          fi
+          if [[ -z "$pr_number" ]]; then
+            echo "Failed to create or locate repository version sync PR." >&2
+            exit 1
+          fi
+          if [[ "$(gh api repos/${{ github.repository }} --jq .allow_auto_merge)" != "true" ]]; then
+            echo "Repository auto-merge is disabled; leaving PR #${pr_number} open for manual merge after checks." >&2
+            exit 1
+          fi
+          gh pr merge "$pr_number" --repo ${{ github.repository }} --auto --squash --delete-branch --match-head-commit "$head_sha" --subject "chore(release): sync repository version to ${VERSION} [skip release publish]" --body ""

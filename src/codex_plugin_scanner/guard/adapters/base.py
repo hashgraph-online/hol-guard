@@ -105,7 +105,7 @@ class HarnessAdapter:
     legacy_launcher_names: tuple[str, ...] = ()
     approval_tier = "approval-center"
     approval_summary = "Guard pauses the launch and routes approval through the local approval center."
-    fallback_hint = "Use `hol-guard approvals` if you want to resolve it from the terminal."
+    fallback_hint = "Use the Guard approval center or native harness prompt to resolve pending requests."
     approval_prompt_channel = "browser"
     approval_auto_open_browser = True
 

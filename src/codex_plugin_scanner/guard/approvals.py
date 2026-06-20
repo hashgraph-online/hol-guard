@@ -378,17 +378,41 @@ def apply_approval_resolution(
         now=resolved_at,
     )
     persisted_rule = persist_policy is True or (persist_policy is None and scope != "artifact")
+    local_once_fallback = False
     if persisted_rule:
+        store.ensure_policy_integrity_ready_for_write(
+            harness=decision.harness if decision.harness != "*" else None,
+            approval_gate_grant=resolved_gate_grant,
+            now=resolved_at,
+        )
         store.upsert_policy(decision, resolved_at, approval_gate_grant=resolved_gate_grant)
+        if action == "allow" and _should_record_local_once_replay(request):
+            local_once_fallback = _record_local_once_approval(
+                store,
+                request_id=request_id,
+                decision=decision,
+                harness=str(request["harness"]),
+                created_at=resolved_at,
+            )
     elif persist_policy is None and scope == "artifact":
+        once_decision = replace(
+            decision,
+            expires_at=_approval_once_policy_expires_at(resolved_at),
+        )
         store.upsert_policy(
-            replace(
-                decision,
-                expires_at=_approval_once_policy_expires_at(resolved_at),
-            ),
+            once_decision,
             resolved_at,
             approval_gate_grant=resolved_gate_grant,
         )
+        if action == "allow" and _should_record_local_once_replay(request):
+            local_once_fallback = _record_local_once_approval(
+                store,
+                request_id=request_id,
+                decision=once_decision,
+                harness=str(request["harness"]),
+                created_at=resolved_at,
+            )
+
     resolution_harness = None if scope == "global" else str(request["harness"])
     if return_queue_result:
         result = store.resolve_request_with_queue_result(
@@ -431,6 +455,7 @@ def apply_approval_resolution(
             scope,
             resolved_at,
             persisted_rule=persisted_rule,
+            local_once_fallback=local_once_fallback,
         )
         return result
     resolved_ids: list[str] = []
@@ -470,6 +495,7 @@ def apply_approval_resolution(
         scope,
         resolved_at,
         persisted_rule=persisted_rule,
+        local_once_fallback=local_once_fallback,
     )
     return updated
 
@@ -591,15 +617,27 @@ def _record_resolution_event(
     resolved_at: str,
     *,
     persisted_rule: bool,
+    local_once_fallback: bool = False,
 ) -> None:
     store.add_event(
         "approval.resolved",
-        {"request_id": request_id, "action": action, "scope": scope, "persisted_rule": persisted_rule},
+        {
+            "request_id": request_id,
+            "action": action,
+            "scope": scope,
+            "persisted_rule": persisted_rule,
+            "local_once_fallback": local_once_fallback,
+        },
         resolved_at,
     )
     store.add_event(
         "rule.remembered.local" if persisted_rule else "approval.once",
-        {"request_id": request_id, "action": action, "scope": scope},
+        {
+            "request_id": request_id,
+            "action": action,
+            "scope": scope,
+            "local_once_fallback": local_once_fallback,
+        },
         resolved_at,
     )
 
@@ -1012,6 +1050,41 @@ def _now() -> str:
 def _approval_once_policy_expires_at(resolved_at: str) -> str:
     parsed = datetime.fromisoformat(resolved_at.replace("Z", "+00:00"))
     return (parsed + _APPROVAL_ONCE_POLICY_TTL).isoformat()
+
+
+def _should_record_local_once_replay(request: Mapping[str, object]) -> bool:
+    artifact_type = request.get("artifact_type")
+    if artifact_type == "package_request":
+        return True
+    artifact_id = request.get("artifact_id")
+    if isinstance(artifact_id, str) and ":package-request:" in artifact_id:
+        return True
+    launch_target = request.get("launch_target")
+    if not isinstance(launch_target, str):
+        return False
+    return launch_target.startswith(("npm ", "npx ", "pnpm ", "yarn ", "bun "))
+
+
+def _record_local_once_approval(
+    store: GuardStore,
+    *,
+    request_id: str,
+    decision: PolicyDecision,
+    harness: str,
+    created_at: str,
+) -> bool:
+    approval_id = store.record_local_once_approval(
+        request_id=request_id,
+        harness=harness,
+        artifact_id=decision.artifact_id,
+        artifact_hash=decision.artifact_hash,
+        workspace=decision.workspace,
+        publisher=decision.publisher,
+        action=decision.action,
+        created_at=created_at,
+        expires_at=decision.expires_at or _approval_once_policy_expires_at(created_at),
+    )
+    return approval_id is not None
 
 
 def _build_runtime_cloud_context(
