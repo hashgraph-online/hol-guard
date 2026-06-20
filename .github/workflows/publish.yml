@@ -405,7 +405,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote set-url origin "https://x-access-token:${ACTION_REPO_TOKEN}@github.com/${{ github.repository }}.git"
           branch="release/sync-repository-version-v${VERSION}"
-          head_ref="${{ github.repository_owner }}:${branch}"
           title="chore(release): sync repository version to ${VERSION} [skip release publish]"
           body_file="$(mktemp)"
           trap 'rm -f "$body_file"' EXIT
@@ -420,7 +419,7 @@ jobs:
           git checkout -B "$branch"
           git add pyproject.toml src/codex_plugin_scanner/version.py uv.lock
           changed_files="$(git diff --cached --name-only)"
-          unexpected_files="$(printf '%s\n' "$changed_files" | rg -vx 'pyproject.toml|src/codex_plugin_scanner/version.py|uv.lock' || true)"
+          unexpected_files="$(printf '%s\n' "$changed_files" | grep -Ev '^(pyproject.toml|src/codex_plugin_scanner/version.py|uv.lock)$' || true)"
           if [[ -n "$unexpected_files" ]]; then
             echo "Unexpected files staged for repository version sync:" >&2
             printf '%s\n' "$unexpected_files" >&2
@@ -429,12 +428,12 @@ jobs:
           git commit -m "chore(release): sync repository version to ${VERSION} [skip release publish]"
           git push --force-with-lease --set-upstream origin "$branch"
           head_sha="$(git rev-parse HEAD)"
-          pr_number="$(gh pr list --repo ${{ github.repository }} --base main --head "$head_ref" --state open --json number --jq '.[0].number // empty')"
+          pr_number="$(gh pr view "$branch" --repo ${{ github.repository }} --json number --jq .number 2>/dev/null || true)"
           if [[ -n "$pr_number" ]]; then
             gh pr edit "$pr_number" --repo ${{ github.repository }} --title "$title" --body-file "$body_file"
           else
-            gh pr create --repo ${{ github.repository }} --base main --head "$head_ref" --title "$title" --body-file "$body_file"
-            pr_number="$(gh pr list --repo ${{ github.repository }} --base main --head "$head_ref" --state open --json number --jq '.[0].number // empty')"
+            pr_url="$(gh pr create --repo ${{ github.repository }} --base main --head "$branch" --title "$title" --body-file "$body_file")"
+            pr_number="${pr_url##*/}"
           fi
           if [[ -z "$pr_number" ]]; then
             echo "Failed to create or locate repository version sync PR." >&2
