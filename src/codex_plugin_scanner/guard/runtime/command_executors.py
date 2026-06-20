@@ -286,7 +286,10 @@ def _execute_approval_operation(
         claimed_at=generated_at,
     ):
         raise ValueError("remote_approval_replayed")
-    resolution_action = "allow" if action == "allow_once" else "block"
+    envelope_decision = _optional_string(envelope.get("decision"))
+    if envelope_decision not in {"allow_once", "block"}:
+        raise ValueError("invalid_remote_approval_decision")
+    resolution_action = "block" if envelope_decision == "block" else "allow"
     try:
         result = store.resolve_request_with_signed_remote_result(
             local_request_id,
