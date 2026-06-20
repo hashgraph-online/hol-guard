@@ -155,7 +155,8 @@ def run_guard_update(
             if bool(local_archive_install.get("path_exists")):
                 payload["error"] = (
                     "Automatic update is disabled for local wheel installs. "
-                    f"Re-run `{_local_archive_update_hint(local_archive_install)}` or your local install workflow instead."
+                    f"Re-run `{_local_archive_update_hint(local_archive_install)}` "
+                    "or your local install workflow instead."
                 )
             else:
                 payload["error"] = (
@@ -433,6 +434,23 @@ def _output_lines(value: str) -> list[str]:
 
 
 def _success_status(payload: dict[str, object]) -> str:
+    if str(payload.get("upgrade_source") or "") == "local_wheel":
+        current_version = str(payload.get("current_version") or "").strip()
+        resulting_version = str(payload.get("resulting_version") or "").strip()
+        if (
+            current_version
+            and resulting_version
+            and current_version != "unknown"
+            and resulting_version != "unknown"
+            and current_version != resulting_version
+        ):
+            return "updated"
+        output_text = str(payload.get("stdout") or "").lower()
+        if any(hint in output_text for hint in _ALREADY_CURRENT_HINTS):
+            return "current"
+        if "requirement already satisfied: hol-guard" in output_text or "hol-guard is already installed" in output_text:
+            return "current"
+        return "updated"
     if _is_stale_install(payload):
         return "stale"
     current_version = str(payload.get("current_version") or "").strip()
@@ -499,6 +517,8 @@ def _merge_version_checks(
 
 
 def _stale_retry_command(payload: dict[str, object]) -> str:
+    if str(payload.get("upgrade_source") or "") == "local_wheel":
+        return ""
     version_check = payload.get("version_check")
     target_version: str | None = None
     if isinstance(version_check, dict):
