@@ -2981,6 +2981,21 @@ def test_tool_action_request_classifier_blocks_runner_wrapped_guard_approval_mut
     assert request.action_class == "Guard approval self-authorization command"
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "poetry -C project run hol-guard approvals approve req-123",
+        "nix develop --command 'hol-guard approvals approve req-123'",
+        "py -m codex_plugin_scanner.cli guard approvals approve req-123",
+    ],
+)
+def test_tool_action_request_classifier_blocks_wrapped_guard_approval_variants(command: str):
+    request = extract_sensitive_tool_action_request("bash", {"command": command})
+
+    assert request is not None
+    assert request.action_class == "Guard approval self-authorization command"
+
+
 def test_tool_action_request_classifier_allows_guard_approval_read_only_commands():
     assert (
         extract_sensitive_tool_action_request(

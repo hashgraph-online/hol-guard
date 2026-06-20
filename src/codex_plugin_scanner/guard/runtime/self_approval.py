@@ -113,7 +113,11 @@ def _looks_env_assignment(token: str) -> bool:
 
 
 def _is_python_interpreter(command_name: str) -> bool:
-    return command_name == "python" or command_name.startswith("python")
+    return (
+        command_name in {"python", "py"}
+        or command_name.startswith("python")
+        or command_name.startswith("py3")
+    )
 
 
 def _python_module_args_mutate_approvals(args: list[str]) -> bool:
@@ -144,7 +148,9 @@ def _runner_wrapper_tail(command_name: str, args: list[str]) -> list[str] | None
     if command_name not in _RUN_WRAPPERS:
         return None
     if command_name == "uv":
-        return _tail_after_subcommand(args, {"run", "tool"})
+        if args and args[0] == "tool":
+            return _tail_after_subcommand(args[1:], {"run"})
+        return _tail_after_subcommand(args, {"run"})
     if command_name == "uvx":
         return args
     if command_name in {"pipx", "poetry", "hatch"}:
@@ -158,23 +164,26 @@ def _runner_wrapper_tail(command_name: str, args: list[str]) -> list[str] | None
 
 def _tail_after_subcommand(args: list[str], subcommands: set[str]) -> list[str] | None:
     for index, token in enumerate(args):
+        if token == "--":
+            break
         if token in subcommands:
             tail = args[index + 1 :]
             if tail and tail[0] == "--":
                 tail = tail[1:]
             return tail
-        if token == "--":
-            continue
-        if token.startswith("-"):
-            continue
-        return None
     return None
 
 
 def _tail_after_flag(args: list[str], flag: str) -> list[str] | None:
     for index, token in enumerate(args):
         if token == flag:
-            return args[index + 1 :]
+            remaining = args[index + 1 :]
+            if not remaining:
+                return []
+            try:
+                return shlex.split(" ".join(remaining))
+            except ValueError:
+                return remaining
         if token.startswith(f"{flag}="):
             try:
                 return shlex.split(token.split("=", 1)[1])
