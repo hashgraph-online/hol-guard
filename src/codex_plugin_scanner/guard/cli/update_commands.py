@@ -945,14 +945,19 @@ def _local_archive_install_payload(direct_url: dict[str, object] | None) -> dict
     archive_path = Path(raw_path).expanduser()
     if not archive_path.is_absolute():
         archive_path = Path.cwd() / archive_path
+    resolved_archive_path, path_resolution_error = _safe_resolve_path(archive_path)
+    archive_path_value = resolved_archive_path or archive_path
     archive_type = "wheel" if archive_path.suffix.lower() == ".whl" else "archive"
-    return {
+    payload: dict[str, object] = {
         "kind": "local_archive",
         "archive_type": archive_type,
         "url": raw_url,
-        "path": str(archive_path.resolve(strict=False)),
-        "path_exists": archive_path.exists(),
+        "path": str(archive_path_value),
+        "path_exists": _safe_path_exists(archive_path_value),
     }
+    if path_resolution_error is not None:
+        payload["path_resolution_error"] = path_resolution_error
+    return payload
 
 
 def _local_source_install_payload(direct_url: dict[str, object] | None) -> dict[str, object] | None:
@@ -974,12 +979,17 @@ def _local_source_install_payload(direct_url: dict[str, object] | None) -> dict[
     source_path = Path(raw_path).expanduser()
     if not source_path.is_absolute():
         source_path = Path.cwd() / source_path
-    return {
+    resolved_source_path, path_resolution_error = _safe_resolve_path(source_path)
+    source_path_value = resolved_source_path or source_path
+    payload: dict[str, object] = {
         "kind": "local_path",
         "url": raw_url,
-        "path": str(source_path.resolve(strict=False)),
-        "path_exists": source_path.exists(),
+        "path": str(source_path_value),
+        "path_exists": _safe_path_exists(source_path_value),
     }
+    if path_resolution_error is not None:
+        payload["path_resolution_error"] = path_resolution_error
+    return payload
 
 
 def _resolve_requested_wheel_path(wheel: str | None) -> tuple[Path | None, str | None]:
@@ -988,7 +998,10 @@ def _resolve_requested_wheel_path(wheel: str | None) -> tuple[Path | None, str |
     candidate = Path(wheel).expanduser()
     if not candidate.is_absolute():
         candidate = Path.cwd() / candidate
-    candidate = candidate.resolve(strict=False)
+    resolved_candidate, path_resolution_error = _safe_resolve_path(candidate)
+    if path_resolution_error is not None or resolved_candidate is None:
+        return None, f"Could not resolve HOL Guard wheel path {candidate}: {path_resolution_error or 'unknown error'}"
+    candidate = resolved_candidate
     if not candidate.exists():
         if candidate.suffix.lower() == ".whl":
             return None, f"HOL Guard wheel not found: {candidate}"
@@ -1048,6 +1061,20 @@ def _file_url_to_path(parsed: ParseResult) -> str:
             return urllib.request.url2pathname(f"//{netloc}{path}")
         return f"//{netloc}{path}"
     return path
+
+
+def _safe_resolve_path(path: Path) -> tuple[Path | None, str | None]:
+    try:
+        return path.resolve(strict=False), None
+    except (OSError, RuntimeError) as error:
+        return None, redact_sensitive_text(str(error))
+
+
+def _safe_path_exists(path: Path) -> bool:
+    try:
+        return path.exists()
+    except (OSError, RuntimeError):
+        return False
 
 
 def _parsed_hol_guard_wheel_version(path: Path) -> Version | None:

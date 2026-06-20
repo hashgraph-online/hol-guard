@@ -133,6 +133,7 @@ def test_update_binary_diagnostics_treats_pipx_shim_as_healthy(monkeypatch: pyte
     assert payload["binary_diagnostics"]["path_status"] == "pipx_shim_detected"
     assert payload["binary_diagnostics"]["expected_script_dir"] is None
 
+
 def test_update_uses_real_pipx_binary_when_guard_package_shims_are_installed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -660,6 +661,32 @@ def test_update_rejects_missing_wheel_directory(monkeypatch: pytest.MonkeyPatch,
     assert "Directory of wheels not found" in str(payload["error"])
 
 
+def test_update_rejects_unresolvable_requested_wheel_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    wheel = tmp_path / "hol_guard-2.0.345-py3-none-any.whl"
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.344")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    original_resolve = Path.resolve
+
+    def fake_resolve(self: Path, strict: bool = False) -> Path:
+        if self == wheel:
+            raise RuntimeError("symlink loop from test wheel")
+        return original_resolve(self, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", fake_resolve)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=True, wheel=str(wheel))
+
+    assert exit_code == 1
+    assert payload["status"] == "failed"
+    assert "Could not resolve HOL Guard wheel path" in str(payload["error"])
+    assert "symlink loop" in str(payload["error"]).lower()
+
+
 def test_update_rejects_unreadable_wheel_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     dist_dir = tmp_path / "dist"
     dist_dir.mkdir()
@@ -803,6 +830,53 @@ def test_update_skips_missing_local_wheel_until_new_wheel_is_supplied(
     assert payload["status"] == "skipped"
     assert "original wheel file is gone" in str(payload["error"])
     assert "hol-guard update --wheel <wheel-or-directory>" in str(payload["error"])
+
+
+def test_update_status_handles_unresolvable_local_wheel_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    wheel = tmp_path / "hol_guard-2.0.345-py3-none-any.whl"
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.345")
+    monkeypatch.setattr(
+        update_commands,
+        "build_guard_install_surface_payload",
+        lambda: {"installer": "pipx", "binary_diagnostics": {}},
+    )
+    monkeypatch.setattr(
+        update_commands,
+        "_version_check_payload",
+        lambda current_version: {
+            "source": "pypi",
+            "status": "current",
+            "current_version": current_version,
+            "latest_version": current_version,
+            "update_available": False,
+        },
+    )
+    monkeypatch.setattr(
+        update_commands,
+        "_direct_url_payload",
+        lambda: {
+            "url": wheel.as_uri(),
+            "archive_info": {"hash": "sha256:abc"},
+        },
+    )
+
+    original_resolve = Path.resolve
+
+    def fake_resolve(self: Path, strict: bool = False) -> Path:
+        if self == wheel:
+            raise RuntimeError("symlink loop from test wheel")
+        return original_resolve(self, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", fake_resolve)
+
+    payload = update_commands.build_guard_update_status_payload()
+
+    assert payload["auto_updatable"] is False
+    assert payload["recovery_reinstall_available"] is True
+    assert "local wheel whose source file is no longer available" in str(payload["blocked_reason"])
 
 
 def test_local_archive_install_payload_preserves_file_url_authority() -> None:
