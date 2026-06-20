@@ -375,13 +375,13 @@ jobs:
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          if git diff --quiet -- pyproject.toml src/codex_plugin_scanner/version.py; then
+          if git diff --quiet -- pyproject.toml src/codex_plugin_scanner/version.py uv.lock; then
             echo "Repository version already synced."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pyproject.toml src/codex_plugin_scanner/version.py
+          git add pyproject.toml src/codex_plugin_scanner/version.py uv.lock
           git commit -m "chore(release): sync repository version to ${VERSION} [skip release publish]"
           git pull --rebase origin main
           git push origin HEAD:main

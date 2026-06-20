@@ -29,6 +29,26 @@ def _write_repo_files(tmp_path: Path, *, pyproject_version: str, module_version:
         ),
         encoding="utf-8",
     )
+    (tmp_path / "uv.lock").write_text(
+        '\n'.join(
+            [
+                "[[package]]",
+                'name = "hol-guard"',
+                f'version = "{pyproject_version}"',
+                'source = { editable = "." }',
+                "dependencies = [",
+                '    { name = "cisco-ai-skill-scanner", marker = "python_full_version < \'3.14\'" },',
+                "]",
+                "",
+                "[package.optional-dependencies]",
+                "cisco = [",
+                '    { name = "litellm", marker = "python_full_version >= \'3.11\' and python_full_version < \'3.14\'" },',
+                "]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
     (tmp_path / "src" / "codex_plugin_scanner" / "version.py").write_text(
         '\n'.join(
             [
@@ -51,6 +71,7 @@ def test_sync_repo_version_updates_both_files(tmp_path: Path) -> None:
     state = SYNC_REPO_VERSION.read_repo_version_state(tmp_path)
     assert state.pyproject == "2.0.844"
     assert state.module == "2.0.844"
+    assert state.lockfile == "2.0.844"
 
 
 def test_assert_repo_version_detects_mismatch(tmp_path: Path) -> None:
@@ -104,9 +125,33 @@ def test_sync_repo_version_targets_project_version_only(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
+    (tmp_path / "uv.lock").write_text(
+        '\n'.join(
+            [
+                "[[package]]",
+                'name = "hol-guard"',
+                'version = "2.0.844"',
+                'source = { editable = "." }',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
     SYNC_REPO_VERSION.sync_repo_version(tmp_path, "2.0.845")
 
     pyproject_text = (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
+    lockfile_text = (tmp_path / "uv.lock").read_text(encoding="utf-8")
     assert 'version = "0.1.0"' in pyproject_text
     assert pyproject_text.count('version = "2.0.845"') == 1
+    assert lockfile_text.count('version = "2.0.845"') == 1
+
+
+def test_sync_repo_version_preserves_lockfile_markers(tmp_path: Path) -> None:
+    _write_repo_files(tmp_path, pyproject_version="2.0.844", module_version="2.0.844")
+
+    SYNC_REPO_VERSION.sync_repo_version(tmp_path, "2.0.845")
+
+    lockfile_text = (tmp_path / "uv.lock").read_text(encoding="utf-8")
+    assert 'marker = "python_full_version < \'3.14\'"' in lockfile_text
+    assert 'marker = "python_full_version >= \'3.11\' and python_full_version < \'3.14\'"' in lockfile_text
