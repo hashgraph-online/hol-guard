@@ -356,7 +356,6 @@ def _run_guard_protect_command(
             now: str,
             create_key: bool,
             secret_material=None,
-            trusted_state=guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET,
             allow_cutover_resign: bool = True,
         ):
             if refresh_started_event is not None and not refresh_started_event.is_set():
@@ -367,7 +366,6 @@ def _run_guard_protect_command(
                 now=now,
                 create_key=create_key,
                 secret_material=secret_material,
-                trusted_state=trusted_state,
                 allow_cutover_resign=allow_cutover_resign,
             )
 

@@ -1744,18 +1744,40 @@ class GuardStore:
         now: str,
         create_key: bool,
         secret_material: tuple[bytes | None, str | None] | None = None,
-        trusted_state: dict[str, object] | None | object = _POLICY_INTEGRITY_LOOKUP_UNSET,
         allow_cutover_resign: bool = True,
     ) -> dict[str, object]:
         existing = self._load_policy_integrity_state(connection) or {}
         warnings = self._policy_integrity_path_warnings()
-        if trusted_state is _POLICY_INTEGRITY_LOOKUP_UNSET:
-            trusted_state_value = self._load_policy_integrity_control_state(create=create_key)
+        prefetched_trusted_state = getattr(
+            self,
+            "_startup_prefetched_policy_integrity_trusted_state",
+            _POLICY_INTEGRITY_LOOKUP_UNSET,
+        )
+        using_prefetched_trusted_state = prefetched_trusted_state is not _POLICY_INTEGRITY_LOOKUP_UNSET
+        if using_prefetched_trusted_state:
+            trusted_state_value = cast(dict[str, object] | None, prefetched_trusted_state)
         else:
-            trusted_state_value = cast(dict[str, object] | None, trusted_state)
+            trusted_state_value = self._load_policy_integrity_control_state(create=create_key)
+        if using_prefetched_trusted_state and trusted_state_value is not None:
+            current_trusted_state = self._load_policy_integrity_control_state(create=False)
+            if current_trusted_state is not None:
+                current_generation = _mapping_int(current_trusted_state, "generation")
+                prefetched_generation = _mapping_int(trusted_state_value, "generation")
+                if prefetched_generation is None or (
+                    current_generation is not None and current_generation > prefetched_generation
+                ):
+                    trusted_state_value = current_trusted_state
+        prefetched_secret_material = getattr(
+            self,
+            "_startup_prefetched_policy_integrity_secret_material",
+            _POLICY_INTEGRITY_LOOKUP_UNSET,
+        )
+        using_prefetched_secret_material = prefetched_secret_material is not _POLICY_INTEGRITY_LOOKUP_UNSET
         raw_key, key_id = (
             secret_material
             if secret_material is not None
+            else cast(tuple[bytes | None, str | None], prefetched_secret_material)
+            if using_prefetched_secret_material
             else self._policy_integrity_secret_material(create=create_key)
         )
         if self._policy_integrity_secret_store is None:
@@ -1764,7 +1786,13 @@ class GuardStore:
             warnings.append(POLICY_INTEGRITY_REASON_KEY_UNAVAILABLE)
         if trusted_state_value is None:
             warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
-        if not warnings and trusted_state_value is not None and raw_key is not None and key_id is not None:
+        if (
+            not warnings
+            and trusted_state_value is not None
+            and raw_key is not None
+            and key_id is not None
+            and not using_prefetched_trusted_state
+        ):
             try:
                 trusted_state_value = self._reconcile_policy_integrity_pending_generation(
                     connection,
@@ -1780,6 +1808,7 @@ class GuardStore:
             and trusted_state_value is not None
             and not bool(trusted_state_value.get("cutover_complete"))
             and has_only_signed_rows
+            and not using_prefetched_trusted_state
         ):
             next_trusted_state = dict(trusted_state_value)
             next_trusted_state["cutover_complete"] = True
@@ -1801,6 +1830,12 @@ class GuardStore:
             "key_id": key_id,
             "mode": mode,
         }
+        existing_generation = _mapping_int(existing, "generation")
+        payload_generation = _mapping_int(payload, "generation")
+        if existing_generation is not None and (payload_generation is None or existing_generation > payload_generation):
+            payload["generation"] = existing_generation
+            if bool(existing.get("cutover_complete")):
+                payload["cutover_complete"] = True
         if payload != existing:
             self._store_policy_integrity_state(connection, payload, now=now)
         return payload
@@ -2343,16 +2378,16 @@ class GuardStore:
         # process initializes GuardStore on startup. Fetching these values while
         # the initialization transaction is open turns a slow keyring call into a
         # cross-process database writer stall.
-        prefetched_secret_material = self._policy_integrity_secret_material(create=False)
-        prefetched_trusted_state = self._load_policy_integrity_control_state(create=False)
-        with self._connect() as connection:
-            self._refresh_policy_integrity_state(
-                connection,
-                now=_now(),
-                create_key=False,
-                secret_material=prefetched_secret_material,
-                trusted_state=prefetched_trusted_state,
-            )
+        self._startup_prefetched_policy_integrity_secret_material = self._policy_integrity_secret_material(create=False)
+        self._startup_prefetched_policy_integrity_trusted_state = self._load_policy_integrity_control_state(
+            create=False
+        )
+        try:
+            with self._connect() as connection:
+                self._refresh_policy_integrity_state(connection, now=_now(), create_key=False)
+        finally:
+            self._startup_prefetched_policy_integrity_secret_material = _POLICY_INTEGRITY_LOOKUP_UNSET
+            self._startup_prefetched_policy_integrity_trusted_state = _POLICY_INTEGRITY_LOOKUP_UNSET
 
     @staticmethod
     def _enable_wal_mode(connection: sqlite3.Connection) -> None:
