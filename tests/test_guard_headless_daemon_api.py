@@ -14,11 +14,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
-from codex_plugin_scanner.guard import review_contracts as review_contracts_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
@@ -29,10 +26,6 @@ from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_tok
 from codex_plugin_scanner.guard.daemon.server import _headless_action_error_payload
 from codex_plugin_scanner.guard.local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
-from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
-    policy_bundle_keyring_payload,
-    policy_bundle_verification_key_from_public_key,
-)
 from codex_plugin_scanner.guard.review_contracts import (
     build_local_review_request_claim,
     guard_review_oauth_metadata,
@@ -45,19 +38,13 @@ from codex_plugin_scanner.guard.runtime.runner import (
 )
 from codex_plugin_scanner.guard.shims import install_package_shims
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.test_guard_supply_chain_evaluator import WORKSPACE_ID, _bundle_response, _package
-
-_REVIEW_SIGNING_KEY_ID = "guard-review-test-key"
-_REVIEW_PRIVATE_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-_REVIEW_PUBLIC_KEY_PEM = (
-    _REVIEW_PRIVATE_KEY.public_key()
-    .public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    )
-    .decode("utf-8")
-    .strip()
+from tests.guard_review_signing_helpers import (
+    REVIEW_SIGNING_KEY_ID,
+    review_trusted_keyring_payload,
+    review_verification_keys,
+    sign_review_payload,
 )
+from tests.test_guard_supply_chain_evaluator import WORKSPACE_ID, _bundle_response, _package
 
 
 @pytest.fixture(autouse=True)
@@ -102,7 +89,7 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
     }
     store.set_sync_payload(
         "policy_bundle_keyring",
-        _review_trusted_keyring_payload(workspace_id=workspace_id),
+        review_trusted_keyring_payload(workspace_id=workspace_id),
         now,
     )
 
@@ -254,42 +241,6 @@ def _dashboard_token_for(store: GuardStore) -> str:
     return _dashboard_token(auth_token)
 
 
-def _review_verification_keys() -> list[dict[str, object]]:
-    return [
-        policy_bundle_verification_key_from_public_key(
-            key_id=_REVIEW_SIGNING_KEY_ID,
-            public_key_pem=_REVIEW_PUBLIC_KEY_PEM,
-        ).to_dict()
-    ]
-
-
-def _review_trusted_keyring_payload(
-    *,
-    workspace_id: str | None = "workspace-1",
-) -> dict[str, object]:
-    return policy_bundle_keyring_payload(
-        tuple(
-            policy_bundle_verification_key_from_public_key(
-                key_id=item["keyId"],
-                public_key_pem=str(item["publicKeyPem"]),
-                state=str(item["state"]),
-                valid_until=str(item["validUntil"]) if item["validUntil"] is not None else None,
-            )
-            for item in _review_verification_keys()
-        ),
-        workspace_id=workspace_id,
-    )
-
-
-def _sign_review_payload(payload: dict[str, object]) -> str:
-    signature = _REVIEW_PRIVATE_KEY.sign(
-        review_contracts_module._canonical_signed_payload(payload).encode("utf-8"),
-        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.DIGEST_LENGTH),
-        hashes.SHA256(),
-    )
-    return base64.b64encode(signature).decode("ascii")
-
-
 def _signed_remote_approval_for_request(
     store: GuardStore,
     request_id: str,
@@ -322,7 +273,7 @@ def _signed_remote_approval_for_request(
         "expiresAt": expires_at.isoformat(),
         "harnessId": claim["harnessId"],
         "issuedAt": issued_at.isoformat(),
-        "keyId": _REVIEW_SIGNING_KEY_ID,
+        "keyId": REVIEW_SIGNING_KEY_ID,
         "localRequestId": claim["localRequestId"],
         "machineId": machine_id or claim["machineId"],
         "machineInstallationId": machine_installation_id or claim["machineInstallationId"],
@@ -337,12 +288,12 @@ def _signed_remote_approval_for_request(
         "scope": "artifact",
         "sourceClaimHash": claim["claimHash"],
         "stepUpChallengeId": None,
-        "verificationKeys": _review_verification_keys(),
+        "verificationKeys": review_verification_keys(),
         "signatureAlgorithm": "rsa-pss-sha256",
         "workspaceId": workspace_id or claim["workspaceId"],
     }
     envelope["payloadHash"] = payload_hash_for_remote_approval_envelope(envelope)
-    envelope["signature"] = _sign_review_payload(envelope)
+    envelope["signature"] = sign_review_payload(envelope)
     return envelope
 
 
@@ -2656,7 +2607,7 @@ def test_headless_remote_once_rejects_stale_requests_and_replays(tmp_path: Path)
         stale_remote_approval["payloadHash"] = payload_hash_for_remote_approval_envelope(
             stale_remote_approval
         )
-        stale_remote_approval["signature"] = _sign_review_payload(stale_remote_approval)
+        stale_remote_approval["signature"] = sign_review_payload(stale_remote_approval)
         stale_status, stale_payload = _read_json_response(
             _request(
                 daemon.port,
