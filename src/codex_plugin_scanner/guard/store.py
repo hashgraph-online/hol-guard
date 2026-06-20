@@ -53,6 +53,7 @@ from .policy_integrity import (
 from .runtime.actions import GuardActionEnvelope
 from .runtime.scanner_cache import scanner_cache_key
 from .schemas.guard_event_v1 import GuardEventV1
+from .sqlite_tuning import SQLITE_BUSY_TIMEOUT_MS, SQLITE_CONNECT_TIMEOUT_SECONDS, SQLITE_WAL_BUSY_TIMEOUT_MS
 from .store_approvals import (
     _json_object,
     _json_object_list,
@@ -270,7 +271,6 @@ _REMOTE_POLICY_SOURCE_PARAMS = tuple(sorted(REMOTE_POLICY_SOURCES))
 _REMOTE_POLICY_SOURCE_PLACEHOLDERS = "(" + ",".join("?" for _ in _REMOTE_POLICY_SOURCE_PARAMS) + ")"
 _POLICY_SCOPES = frozenset({"artifact", "workspace", "publisher", "harness", "global"})
 _SLOW_STORE_WARNING_ENV = "HOL_GUARD_WARN_SLOW_STORE"
-_SQLITE_CONNECT_TIMEOUT_SECONDS = 30.0
 _SQLITE_LOCK_RETRY_ATTEMPTS = 5
 _SQLITE_LOCK_RETRY_DELAY_SECONDS = 0.1
 _SECRET_FINGERPRINT_PREFIX = "scrypt$"
@@ -1870,11 +1870,11 @@ class GuardStore:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.path, timeout=_SQLITE_CONNECT_TIMEOUT_SECONDS)
+        connection = sqlite3.connect(self.path, timeout=SQLITE_CONNECT_TIMEOUT_SECONDS)
         connection.row_factory = sqlite3.Row
         start = time.monotonic()
         try:
-            connection.execute("pragma busy_timeout=10000")
+            connection.execute(f"pragma busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
             yield connection
             connection.commit()
         finally:
@@ -2335,14 +2335,21 @@ class GuardStore:
 
     @staticmethod
     def _enable_wal_mode(connection: sqlite3.Connection) -> None:
-        for attempt in range(_SQLITE_LOCK_RETRY_ATTEMPTS):
-            try:
-                connection.execute("pragma journal_mode=WAL")
-                return
-            except sqlite3.OperationalError as exc:
-                if "database is locked" not in str(exc).lower() or attempt == _SQLITE_LOCK_RETRY_ATTEMPTS - 1:
-                    raise
-                time.sleep(_SQLITE_LOCK_RETRY_DELAY_SECONDS)
+        original_busy_timeout_row = connection.execute("pragma busy_timeout").fetchone()
+        original_busy_timeout_ms = int(original_busy_timeout_row[0]) if original_busy_timeout_row else 0
+        wal_busy_timeout_ms = min(original_busy_timeout_ms, SQLITE_WAL_BUSY_TIMEOUT_MS)
+        connection.execute(f"pragma busy_timeout={wal_busy_timeout_ms}")
+        try:
+            for attempt in range(_SQLITE_LOCK_RETRY_ATTEMPTS):
+                try:
+                    connection.execute("pragma journal_mode=WAL")
+                    return
+                except sqlite3.OperationalError as exc:
+                    if "database is locked" not in str(exc).lower() or attempt == _SQLITE_LOCK_RETRY_ATTEMPTS - 1:
+                        raise
+                    time.sleep(_SQLITE_LOCK_RETRY_DELAY_SECONDS)
+        finally:
+            connection.execute(f"pragma busy_timeout={original_busy_timeout_ms}")
 
     @staticmethod
     def _ensure_policy_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:

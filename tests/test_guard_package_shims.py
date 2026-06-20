@@ -6,10 +6,13 @@ import base64
 import hashlib
 import json
 import os
+import sqlite3
 import subprocess
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from http.server import HTTPServer
+from multiprocessing import Event, Process
 from pathlib import Path
 
 import pytest
@@ -19,6 +22,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import shims as guard_shims_module
+from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
@@ -284,6 +288,71 @@ def _install_single_manager_shim(
     return Path(str(payload["shim_dir"])) / manager
 
 
+def _hold_guard_db_writer_lock(
+    database_path: str,
+    hold_seconds: int,
+    ready_event: Event | None = None,
+) -> None:
+    connection = sqlite3.connect(database_path, timeout=1)
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
+            ("lock-test", "{}", "2026-06-20T00:00:00Z"),
+        )
+        if ready_event is not None:
+            ready_event.set()
+        time.sleep(hold_seconds)
+        connection.rollback()
+    finally:
+        connection.close()
+
+
+def test_enable_wal_mode_uses_bounded_busy_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    sleep_calls: list[float] = []
+
+    class _Cursor:
+        def __init__(self, row):
+            self._row = row
+
+        def fetchone(self):
+            return self._row
+
+    class _Connection:
+        def __init__(self) -> None:
+            self.busy_timeout_ms = guard_store_module.SQLITE_BUSY_TIMEOUT_MS
+            self.wal_attempts = 0
+            self.commands: list[str] = []
+
+        def execute(self, sql: str):
+            self.commands.append(sql)
+            if sql == "pragma busy_timeout":
+                return _Cursor((self.busy_timeout_ms,))
+            if sql.startswith("pragma busy_timeout="):
+                self.busy_timeout_ms = int(sql.split("=", 1)[1])
+                return _Cursor(None)
+            if sql == "pragma journal_mode=WAL":
+                self.wal_attempts += 1
+                if self.wal_attempts < 2:
+                    raise sqlite3.OperationalError("database is locked")
+                return _Cursor(("wal",))
+            raise AssertionError(f"unexpected SQL: {sql}")
+
+    monkeypatch.setattr(guard_store_module.time, "sleep", lambda seconds: sleep_calls.append(seconds))
+    connection = _Connection()
+
+    guard_store_module.GuardStore._enable_wal_mode(connection)
+
+    assert connection.wal_attempts == 2
+    assert connection.commands[:2] == [
+        "pragma busy_timeout",
+        f"pragma busy_timeout={guard_store_module.SQLITE_WAL_BUSY_TIMEOUT_MS}",
+    ]
+    assert connection.commands[-1] == f"pragma busy_timeout={guard_store_module.SQLITE_BUSY_TIMEOUT_MS}"
+    assert connection.busy_timeout_ms == guard_store_module.SQLITE_BUSY_TIMEOUT_MS
+    assert sleep_calls == [guard_store_module._SQLITE_LOCK_RETRY_DELAY_SECONDS]
+
+
 def _write_npm_ci_workspace(workspace_dir: Path, *, package_name: str, package_version: str) -> None:
     (workspace_dir / "package.json").write_text(
         json.dumps(
@@ -449,6 +518,46 @@ def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path
     assert result.returncode == 0
     assert marker_payload["argv"][1:] == ["install", "minimist@1.2.9"]
     assert marker_payload["cwd"] == str(workspace_dir)
+
+
+def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    marker_path = tmp_path / "bun-after-lock.json"
+    write_fake_manager_script(fake_bin=fake_bin, manager="bun", marker_path=marker_path, exit_code=0)
+    shim_path = _install_single_manager_shim(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        manager="bun",
+        capsys=capsys,
+    )
+    ready_event = Event()
+    lock_process = Process(target=_hold_guard_db_writer_lock, args=(str(home_dir / "guard.db"), 13, ready_event))
+    lock_process.start()
+    assert ready_event.wait(timeout=5)
+    env = dict(os.environ)
+    env["HOME"] = str(home_dir)
+    env["PATH"] = f"{shim_path.parent}{os.pathsep}{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+
+    try:
+        result = subprocess.run(
+            [str(shim_path), "install", "-g", "@oh-my-pi/pi-coding-agent"],
+            cwd=workspace_dir,
+            env=env,
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=60,
+        )
+    finally:
+        lock_process.join(timeout=20)
+
+    assert result.returncode == 0
+    assert marker_path.exists()
+    assert "database is locked" not in result.stderr
 
 
 @pytest.mark.parametrize(
