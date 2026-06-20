@@ -34,6 +34,7 @@ from codex_plugin_scanner.guard.local_trust_contract import (
     POLICY_INTEGRITY_REASON_BACKEND_PERMISSION_DENIED,
     POLICY_INTEGRITY_REASON_BACKEND_TIMEOUT,
     POLICY_INTEGRITY_REASON_BACKEND_UNAVAILABLE,
+    POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE,
     TrustBackendCorruptResultError,
     TrustBackendProcessFailedError,
     TrustBackendUnavailableError,
@@ -1454,6 +1455,42 @@ def test_startup_refresh_does_not_write_control_state_inside_refresh(
     finally:
         store._startup_prefetched_policy_integrity_secret_material = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
         store._startup_prefetched_policy_integrity_trusted_state = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+
+
+def test_startup_refresh_degrades_when_prefetched_repair_cannot_persist(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:baseline", artifact_hash="hash-baseline"),
+        "2026-06-14T00:00:00Z",
+    )
+    monkeypatch.setattr(store, "_finalize_policy_integrity_control_state", lambda payload: None)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:pending", artifact_hash="hash-pending"),
+        "2026-06-14T00:01:00Z",
+    )
+
+    store._startup_prefetched_policy_integrity_secret_material = store._policy_integrity_secret_material(create=False)
+    store._startup_prefetched_policy_integrity_trusted_state = dict(_policy_integrity_control_payload(store))
+    original_store = store._store_policy_integrity_control_state
+    monkeypatch.setattr(store, "_store_policy_integrity_control_state", lambda payload: False)
+    store._prepare_startup_prefetched_policy_integrity_state()
+    monkeypatch.setattr(store, "_store_policy_integrity_control_state", original_store)
+
+    try:
+        with store._connect() as connection:
+            payload = store._refresh_policy_integrity_state(connection, now="2026-06-14T00:02:00Z", create_key=False)
+    finally:
+        store._startup_prefetched_policy_integrity_secret_material = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+        store._startup_prefetched_policy_integrity_trusted_state = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+        store._startup_prefetched_policy_integrity_repair_failed = False
+
+    state_payload = _policy_integrity_state_payload(store.guard_home)
+    assert payload["mode"] == POLICY_INTEGRITY_MODE_DEGRADED
+    assert POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE in payload["degraded_reasons"]
+    assert state_payload["generation"] is None
 
 
 def test_startup_refresh_persists_cutover_completion(tmp_path: Path) -> None:
