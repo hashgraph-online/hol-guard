@@ -1677,6 +1677,45 @@ def test_startup_refresh_degrades_when_freshness_control_read_fails(
     assert state_payload["generation"] is None
 
 
+def test_startup_refresh_keeps_valid_prefetch_when_freshness_read_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:baseline", artifact_hash="hash-baseline"),
+        "2026-06-14T00:00:00Z",
+    )
+
+    prefetched_secret = store._policy_integrity_secret_material(create=False)
+    prefetched_control = dict(_policy_integrity_control_payload(store))
+    store._startup_prefetched_policy_integrity_secret_material = prefetched_secret
+    store._startup_prefetched_policy_integrity_trusted_state = dict(prefetched_control)
+    original_lookup = store._load_policy_integrity_control_state
+    calls = {"count": 0}
+
+    def flaky_lookup(*, create: bool) -> dict[str, object] | None:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return None
+        return original_lookup(create=create)
+
+    monkeypatch.setattr(store, "_load_policy_integrity_control_state", flaky_lookup)
+    try:
+        store._prepare_startup_prefetched_policy_integrity_state()
+        with store._connect() as connection:
+            payload = store._refresh_policy_integrity_state(connection, now="2026-06-14T00:01:00Z", create_key=False)
+    finally:
+        store._startup_prefetched_policy_integrity_secret_material = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+        store._startup_prefetched_policy_integrity_trusted_state = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+        store._startup_prefetched_policy_integrity_repair_failed = False
+        store._load_policy_integrity_control_state = original_lookup
+
+    state_payload = _policy_integrity_state_payload(store.guard_home)
+    assert payload["mode"] == POLICY_INTEGRITY_MODE_PROTECTED
+    assert state_payload["generation"] == 1
+
+
 def test_startup_refresh_leaves_mixed_newer_generations_unresolved(tmp_path: Path) -> None:
     store = _store(tmp_path)
     store.upsert_policy(

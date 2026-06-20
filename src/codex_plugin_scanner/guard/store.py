@@ -1868,6 +1868,27 @@ class GuardStore:
             prepared_state["cutover_complete"] = True
         return prepared_state
 
+    def _prefetched_startup_state_still_matches_local_rows(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        key: bytes,
+        key_id: str,
+        trusted_state: dict[str, object],
+    ) -> bool:
+        trusted_generation = _mapping_int(trusted_state, "generation")
+        for row in self._load_local_policy_rows(connection):
+            result = verify_local_policy_row(
+                _row_mapping(row),
+                key=key,
+                key_id=key_id,
+                degraded_mode=False,
+                trusted_generation=trusted_generation,
+            )
+            if result.status != "valid":
+                return False
+        return True
+
     def _refresh_policy_integrity_state(
         self,
         connection: sqlite3.Connection,
@@ -2001,6 +2022,21 @@ class GuardStore:
         prepared_state = compute_prepared_state(trusted_state_value)
         current_trusted_state = self._load_policy_integrity_control_state(create=False)
         if current_trusted_state is None:
+            connection = sqlite3.connect(self.path, timeout=SQLITE_CONNECT_TIMEOUT_SECONDS)
+            connection.row_factory = sqlite3.Row
+            try:
+                connection.execute(f"pragma busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+                still_matches = self._prefetched_startup_state_still_matches_local_rows(
+                    connection,
+                    key=raw_key,
+                    key_id=key_id,
+                    trusted_state=trusted_state_value,
+                )
+            finally:
+                connection.close()
+            if prepared_state == trusted_state_value and still_matches:
+                self._startup_prefetched_policy_integrity_trusted_state = trusted_state_value
+                return
             self._startup_prefetched_policy_integrity_repair_failed = True
             return
         if current_trusted_state is not None and current_trusted_state != trusted_state_value:
