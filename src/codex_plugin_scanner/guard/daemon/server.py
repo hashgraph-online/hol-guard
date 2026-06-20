@@ -121,6 +121,12 @@ from ..policy_bundle_trusted_keys import (
     validate_synced_policy_bundle,
 )
 from ..receipts.manager import build_receipt
+from ..review_contracts import (
+    GuardReviewContractError,
+    guard_review_oauth_metadata,
+    validate_remote_approval_request_binding,
+    validated_remote_approval_envelope,
+)
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncNotAvailableError,
@@ -2071,6 +2077,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError:
             self._write_json({"error": "unknown_harness"}, status=404)
             return
+        try:
+            require_high_risk(
+                self.server.store.guard_home,  # type: ignore[attr-defined]
+                purpose="policy_write",
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+            )
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
         policy_memory = self._policy_memory_payload(payload.get("policy_memory"))
         policy_bundle = self._policy_memory_payload(payload.get("policy_bundle") or payload.get("policyBundle"))
         validated_policy_bundle: dict[str, object] | None = None
@@ -2078,6 +2093,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         applied_bundle_version: str | None = None
         if not policy_memory and not policy_bundle:
             self._write_json({"error": "missing_policy_memory"}, status=400)
+            return
+        if policy_memory:
+            self._write_json({"error": "unsupported_policy_memory_contract"}, status=400)
             return
         if policy_bundle:
             validated_policy_bundle, rejection_reason, trusted_policy_bundle_keys = validate_synced_policy_bundle(
@@ -2160,84 +2178,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             applied_bundle_hash = str(validated_policy_bundle["bundleHash"])
             applied_bundle_version = str(validated_policy_bundle["bundleVersion"])
-        if not policy_memory:
-            self._write_json(
-                {
-                    "bundle_hash": applied_bundle_hash,
-                    "bundle_version": applied_bundle_version,
-                    "harness": adapter.harness,
-                    "operation": "policy_sync",
-                    "status": "completed",
-                }
-            )
-            return
-        scope = self._optional_string(policy_memory.get("scope"))
-        action = self._optional_string(policy_memory.get("action"))
-        if scope is None or action is None:
-            self._write_json({"error": "missing_policy_fields"}, status=400)
-            return
-        if scope not in DECISION_SCOPE_VALUES or action not in GUARD_ACTION_VALUES:
-            self._write_json({"error": "unsupported_policy_value"}, status=400)
-            return
-        if scope == "global" and action == "allow":
-            self._write_json({"error": "broad_allow_requires_narrow_scope"}, status=400)
-            return
-        artifact_id = self._optional_string(policy_memory.get("artifact_id"))
-        workspace = self._optional_string(policy_memory.get("workspace"))
-        publisher = self._optional_string(policy_memory.get("publisher"))
-        if not self._scope_target_is_valid(
-            scope,
-            artifact_id=artifact_id,
-            workspace=workspace,
-            publisher=publisher,
-        ):
-            self._write_json({"error": "missing_scope_target"}, status=400)
-            return
-        expires_at = _normalized_iso_timestamp_string(policy_memory.get("expires_at"))
-        if policy_memory.get("expires_at") is not None and expires_at is None:
-            self._write_json({"error": "invalid_policy_expiry"}, status=400)
-            return
-        decision = PolicyDecision(
-            harness=adapter.harness,
-            scope=scope,  # type: ignore[arg-type]
-            action=action,  # type: ignore[arg-type]
-            artifact_id=artifact_id,
-            artifact_hash=self._optional_string(policy_memory.get("artifact_hash")),
-            workspace=workspace,
-            publisher=publisher,
-            reason=self._optional_string(policy_memory.get("reason")) or "Guard Cloud policy memory sync",
-            source="cloud-sync",
-            expires_at=expires_at,
-        )
-        try:
-            approval_gate_grant = require_high_risk(
-                self.server.store.guard_home,  # type: ignore[attr-defined]
-                purpose="headless_policy_sync",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-            self.server.store.upsert_policy(  # type: ignore[attr-defined]
-                decision,
-                _now(),
-                approval_gate_grant=approval_gate_grant,
-                remote_write_authorized=True,
-            )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        receipt = self._record_headless_receipt(
-            harness=adapter.harness,
-            operation="policy_sync",
-            payload=payload,
-            result={"decision": decision.to_dict()},
-            workspace_id=decision.workspace,
-        )
         self._write_json(
             {
                 "bundle_hash": applied_bundle_hash,
                 "bundle_version": applied_bundle_version,
                 "harness": adapter.harness,
                 "operation": "policy_sync",
-                "receipt": receipt,
                 "status": "completed",
             }
         )
@@ -2252,11 +2198,27 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError:
             self._write_json({"error": "unknown_harness"}, status=404)
             return
-        remote_once = self._policy_memory_payload(payload.get("remote_once") or payload.get("remoteOnce"))
-        request_id = self._coalesce_string(remote_once, "request_id", "requestId")
-        request_last_seen_at = self._coalesce_string(remote_once, "request_last_seen_at", "requestLastSeenAt")
-        receipt_id = self._coalesce_string(remote_once, "receipt_id", "receiptId")
-        if request_id is None or request_last_seen_at is None or receipt_id is None:
+        remote_approval = self._policy_memory_payload(
+            payload.get("remoteApproval")
+            or payload.get("remote_approval")
+            or payload.get("remote_once")
+            or payload.get("remoteOnce")
+        )
+        if not remote_approval:
+            self._write_json({"error": "missing_remote_approval"}, status=400)
+            return
+        try:
+            envelope = validated_remote_approval_envelope(
+                remote_approval,
+                store=self.server.store,  # type: ignore[attr-defined]
+            )
+            oauth = guard_review_oauth_metadata(self.server.store)  # type: ignore[attr-defined]
+        except GuardReviewContractError as error:
+            self._write_json({"error": str(error)}, status=400)
+            return
+        request_id = self._coalesce_string(envelope, "localRequestId", "requestId")
+        receipt_id = self._coalesce_string(envelope, "receiptId")
+        if request_id is None or receipt_id is None:
             self._write_json({"error": "missing_remote_once_fields"}, status=400)
             return
         if self._remote_once_receipt_replayed(receipt_id):
@@ -2271,8 +2233,34 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if request_policy_action not in {"review", "require-reapproval"} or request_recommended_scope != "artifact":
             self._write_json({"error": "remote_once_not_permitted"}, status=409)
             return
-        if self._optional_string(request_row.get("last_seen_at")) != request_last_seen_at:
-            self._write_json({"error": "remote_once_request_stale"}, status=409)
+        try:
+            validate_remote_approval_request_binding(
+                envelope=envelope,
+                request_row=request_row,
+                oauth=oauth,
+                store=self.server.store,  # type: ignore[attr-defined]
+            )
+        except GuardReviewContractError as error:
+            error_code = str(error)
+            if error_code in {
+                "remote_approval_request_id_mismatch",
+                "remote_approval_approval_id_mismatch",
+                "remote_approval_harness_mismatch",
+                "remote_approval_action_hash_mismatch",
+                "remote_approval_claim_hash_mismatch",
+                "remote_approval_policy_version_mismatch",
+            }:
+                self._write_json({"error": "remote_once_request_stale"}, status=409)
+                return
+            if error_code in {
+                "remote_approval_workspace_mismatch",
+                "remote_approval_installation_mismatch",
+                "remote_approval_machine_mismatch",
+                "remote_approval_device_mismatch",
+            }:
+                self._write_json({"error": "remote_once_wrong_target"}, status=409)
+                return
+            self._write_json({"error": error_code}, status=400)
             return
         if not self.server.store.claim_remote_once_receipt(  # type: ignore[attr-defined]
             receipt_id,
@@ -2281,34 +2269,20 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         ):
             self._write_json({"error": "remote_once_replayed"}, status=409)
             return
+        resolution_action = "block" if self._optional_string(envelope.get("decision")) == "block" else "allow"
         try:
-            result = apply_approval_resolution(
-                store=self.server.store,  # type: ignore[attr-defined]
-                request_id=request_id,
-                action="allow",
-                scope="artifact",
-                workspace=self._optional_string(request_row.get("workspace")),
-                reason=self._optional_string(remote_once.get("reason")) or "Guard Cloud remote once approval",
-                return_queue_result=True,
-                resolve_scope_matches=False,
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-                persist_policy=False,
+            result = self.server.store.resolve_request_with_signed_remote_result(  # type: ignore[attr-defined]
+                request_id,
+                resolution_action=resolution_action,
+                resolution_scope="artifact",
+                reason="Guard Cloud signed remote approval",
+                resolved_at=_now(),
             )
-        except ApprovalRequestNotFoundError:
+        except Exception:
             self.server.store.release_remote_once_receipt(receipt_id)  # type: ignore[attr-defined]
-            self._write_json({"error": "remote_once_request_expired"}, status=409)
-            return
-        except ApprovalRequestAlreadyResolvedError:
-            self.server.store.release_remote_once_receipt(receipt_id)  # type: ignore[attr-defined]
-            self._write_json({"error": "remote_once_request_expired"}, status=409)
-            return
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        except ValueError as error:
-            self._write_json({"error": str(error)}, status=400)
-            return
+            raise
         if result.get("resolved") is not True:
+            self.server.store.release_remote_once_receipt(receipt_id)  # type: ignore[attr-defined]
             self._write_json({"error": "remote_once_apply_failed"}, status=409)
             return
         resolved_request_value = result.get("resolved_request")
