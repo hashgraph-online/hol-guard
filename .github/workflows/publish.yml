@@ -318,14 +318,15 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - name: Install packaging
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - name: Sync locked release tooling
         run: |
-          python3 -m pip install packaging
+          uv sync --frozen
       - name: Stamp package version
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          python3 scripts/sync_repo_version.py --version "$VERSION"
+          uv run --no-sync python scripts/sync_repo_version.py --version "$VERSION"
       - name: Prepare image tags
         id: tags
         env:
@@ -367,20 +368,22 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          persist-credentials: false
       - name: Prepare main branch
         run: |
           git checkout -B main origin/main
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - name: Install packaging
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - name: Sync locked release tooling
         run: |
-          python3 -m pip install packaging
+          uv sync --frozen
       - name: Sync repository version files
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          python3 scripts/sync_repo_version.py --version "$VERSION"
+          uv run --no-sync python scripts/sync_repo_version.py --version "$VERSION"
       - name: Open repository version sync PR
         env:
           ACTION_REPO_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
@@ -409,7 +412,7 @@ jobs:
           - keep repo-visible version metadata aligned with the released package artifacts
 
           ## Testing
-          - \`python3 scripts/sync_repo_version.py --version "${VERSION}"\`
+          - \`uv run --no-sync python scripts/sync_repo_version.py --version "${VERSION}"\`
           EOF
           git checkout -B "$branch"
           git add pyproject.toml src/codex_plugin_scanner/version.py uv.lock
