@@ -1748,13 +1748,15 @@ class GuardStore:
     ) -> int | None:
         current_valid = 0
         newer_generations: set[int] = set()
-        for row in GuardStore._load_local_policy_rows(connection):
+        rows = GuardStore._load_local_policy_rows(connection)
+        validated_rows = 0
+        for row in rows:
             row_payload = _row_mapping(row)
             if _mapping_int(row_payload, "integrity_version") != POLICY_INTEGRITY_VERSION:
-                continue
+                return None
             row_generation = _mapping_int(row_payload, "integrity_generation")
             if row_generation is None:
-                continue
+                return None
             result = verify_local_policy_row(
                 row_payload,
                 key=key,
@@ -1763,13 +1765,16 @@ class GuardStore:
                 trusted_generation=row_generation,
             )
             if result.status != "valid":
-                continue
+                return None
+            validated_rows += 1
             if trusted_generation is not None and row_generation == trusted_generation:
                 current_valid += 1
                 continue
             if trusted_generation is None or row_generation > trusted_generation:
                 newer_generations.add(row_generation)
-        if current_valid > 0 or len(newer_generations) != 1:
+                continue
+            return None
+        if current_valid > 0 or len(newer_generations) != 1 or validated_rows != len(rows):
             return None
         return next(iter(newer_generations))
 
