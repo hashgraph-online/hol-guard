@@ -1,5 +1,7 @@
 """GuardStore domain mixin extracted from store.py."""
 
+# pyright: reportAttributeAccessIssue=false, reportUndefinedVariable=false
+
 from __future__ import annotations
 
 # ruff: noqa: F403,F405
@@ -15,6 +17,9 @@ def _facade_store_attr(name: str, fallback: object) -> object:
 
 def _backfill_approval_queue_columns_compat(connection: sqlite3.Connection) -> None:
     backfill = _facade_store_attr("backfill_approval_queue_columns", backfill_approval_queue_columns)
+    if not callable(backfill):
+        backfill_approval_queue_columns(connection)
+        return
     backfill(connection)
 
 

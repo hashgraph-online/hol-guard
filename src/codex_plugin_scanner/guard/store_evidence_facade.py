@@ -1,5 +1,7 @@
 """GuardStore domain mixin extracted from store.py."""
 
+# pyright: reportAttributeAccessIssue=false, reportUndefinedVariable=false
+
 from __future__ import annotations
 
 # ruff: noqa: F403,F405
