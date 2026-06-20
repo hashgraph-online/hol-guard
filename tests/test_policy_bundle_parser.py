@@ -465,3 +465,113 @@ def test_hgc075_updates_last_known_good_on_valid_replacement(tmp_path: Path) -> 
 
     assert store.get_sync_payload("policy_bundle") == replacement_validated
     assert store.get_sync_payload("policy_bundle_last_good") == replacement_validated
+
+
+def _sample_rule(rule_id: str, action: str, ecosystems: list[str], matcher_families: list[str] | None = None) -> dict[str, object]:
+    return {
+        "ruleId": rule_id,
+        "action": action,
+        "reason": f"Reason for {rule_id}.",
+        "matcherFamilies": matcher_families or ["package-request"],
+        "scope": {
+            "agents": [],
+            "devices": [],
+            "ecosystems": ecosystems,
+            "environments": ["development"],
+            "harnesses": ["codex"],
+            "locations": [],
+        },
+    }
+
+
+def _bundle_with_rules(rules: list[dict[str, object]]) -> dict[str, object]:
+    bundle = _sample_policy_bundle()
+    bundle["rules"] = rules
+    bundle["bundleHash"] = computed_policy_bundle_hash(bundle)
+    return bundle
+
+
+def test_hgps046_multi_rule_bundle_validates() -> None:
+    rules = [
+        _sample_rule("pkg-block", "block", ["npm"]),
+        _sample_rule("mcp-allow", "allow", [], ["mcp"]),
+        _sample_rule("tool-review", "review", ["python"], ["tool-action"]),
+    ]
+    bundle = _bundle_with_rules(rules)
+    payload, reason = validated_policy_bundle_payload(bundle)
+    assert payload is not None, reason
+    assert len(payload["rules"]) == 3
+    assert {rule["ruleId"] for rule in payload["rules"]} == {"pkg-block", "mcp-allow", "tool-review"}
+
+
+def test_hgps048_multi_rule_bundle_rejects_malformed_entry() -> None:
+    rules = [
+        _sample_rule("pkg-block", "block", ["npm"]),
+        {"ruleId": "bad-rule", "action": "not-an-action", "reason": "Bad action.", "matcherFamilies": ["package-request"]},
+    ]
+    bundle = _bundle_with_rules(rules)
+    payload, reason = validated_policy_bundle_payload(bundle)
+    assert payload is None
+    assert reason == "invalid_rules"
+
+
+def test_hgps50_sync_acknowledgement_counts_preserved() -> None:
+    rules = [_sample_rule("pkg-block", "block", ["npm"])]
+    acknowledgements = [
+        {"deviceId": "device-a", "status": "synced"},
+        {"deviceId": "device-b", "status": "pending"},
+        {"deviceId": "device-c", "status": "failed"},
+        {"deviceId": "device-d", "status": "offline"},
+    ]
+    bundle = _bundle_with_rules(rules)
+    bundle["acknowledgements"] = acknowledgements
+    bundle["bundleHash"] = computed_policy_bundle_hash(bundle)
+    payload, reason = validated_policy_bundle_payload(bundle)
+    assert payload is not None, reason
+    acks = payload["acknowledgements"]
+    assert len(acks) == 4
+    statuses = {ack["deviceId"]: ack["status"] for ack in acks}
+    assert statuses["device-a"] == "synced"
+    assert statuses["device-b"] == "pending"
+    assert statuses["device-c"] == "failed"
+    assert statuses["device-d"] == "offline"
+    assert sum(1 for ack in acks if ack["status"] == "synced") == 1
+    assert sum(1 for ack in acks if ack["status"] == "pending") == 1
+    assert sum(1 for ack in acks if ack["status"] == "failed") == 1
+
+
+def test_hgps047_runtime_sync_persists_multi_rule_bundle(tmp_path: Path) -> None:
+    store = _guard_store(tmp_path)
+    now = "2026-04-19T00:00:10+00:00"
+    rules = [
+        _sample_rule("mcp-allow", "allow", [], ["mcp"]),
+        _sample_rule("pkg-block", "block", ["npm"]),
+    ]
+    acknowledgements = [
+        {"deviceId": "agent-1", "status": "synced"},
+        {"deviceId": "agent-2", "status": "synced"},
+        {"deviceId": "agent-3", "status": "pending"},
+        {"deviceId": "agent-4", "status": "failed"},
+    ]
+    bundle = _bundle_with_rules(rules)
+    bundle["acknowledgements"] = acknowledgements
+    validated_bundle, reason = validated_policy_bundle_payload(bundle)
+
+    assert reason is None
+    assert validated_bundle is not None
+    assert len(validated_bundle["rules"]) == 2
+
+    store.set_sync_payload("policy_bundle", validated_bundle, now)
+    reopened = GuardStore(tmp_path / "guard-home")
+    persisted = reopened.get_sync_payload("policy_bundle")
+
+    assert isinstance(persisted, dict)
+    assert persisted["bundleVersion"] == validated_bundle["bundleVersion"]
+    persisted_rules = persisted["rules"]
+    assert isinstance(persisted_rules, list)
+    assert len(persisted_rules) == 2
+    persisted_acks = persisted["acknowledgements"]
+    assert isinstance(persisted_acks, list)
+    assert sum(1 for ack in persisted_acks if ack["status"] == "synced") == 2
+    assert sum(1 for ack in persisted_acks if ack["status"] == "pending") == 1
+    assert sum(1 for ack in persisted_acks if ack["status"] == "failed") == 1
