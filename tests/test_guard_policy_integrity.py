@@ -1481,6 +1481,44 @@ def test_startup_refresh_leaves_mixed_pending_generations_unresolved(
     assert state_payload["generation"] == 1
 
 
+def test_startup_refresh_leaves_invalid_pending_generations_unresolved(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:baseline", artifact_hash="hash-baseline"),
+        "2026-06-14T00:00:00Z",
+    )
+    monkeypatch.setattr(store, "_finalize_policy_integrity_control_state", lambda payload: None)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:pending", artifact_hash="hash-pending"),
+        "2026-06-14T00:01:00Z",
+    )
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        connection.execute(
+            "update policy_decisions set payload_mac = ? where artifact_id = ?",
+            ("deadbeef", "codex:project:baseline"),
+        )
+
+    store._startup_prefetched_policy_integrity_secret_material = store._policy_integrity_secret_material(create=False)
+    store._startup_prefetched_policy_integrity_trusted_state = dict(_policy_integrity_control_payload(store))
+    store._prepare_startup_prefetched_policy_integrity_state()
+
+    try:
+        with store._connect() as connection:
+            store._refresh_policy_integrity_state(connection, now="2026-06-14T00:02:00Z", create_key=False)
+    finally:
+        store._startup_prefetched_policy_integrity_secret_material = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+        store._startup_prefetched_policy_integrity_trusted_state = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+
+    recovered_control = _policy_integrity_control_payload(store)
+    state_payload = _policy_integrity_state_payload(store.guard_home)
+    assert recovered_control["generation"] == 1
+    assert recovered_control["pending_generation"] == 2
+    assert state_payload["generation"] == 1
+
+
 def test_startup_refresh_does_not_write_control_state_inside_refresh(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1547,6 +1585,49 @@ def test_startup_refresh_degrades_when_prefetched_repair_cannot_persist(
     assert payload["mode"] == POLICY_INTEGRITY_MODE_DEGRADED
     assert POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE in payload["degraded_reasons"]
     assert state_payload["generation"] is None
+
+
+def test_startup_refresh_uses_newer_control_state_before_persisting(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:baseline", artifact_hash="hash-baseline"),
+        "2026-06-14T00:00:00Z",
+    )
+    prefetched_secret = store._policy_integrity_secret_material(create=False)
+    prefetched_control = dict(_policy_integrity_control_payload(store))
+
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:current", artifact_hash="hash-current"),
+        "2026-06-14T00:01:00Z",
+    )
+    current_control = dict(_policy_integrity_control_payload(store))
+    assert current_control["generation"] == 2
+
+    store._startup_prefetched_policy_integrity_secret_material = prefetched_secret
+    store._startup_prefetched_policy_integrity_trusted_state = prefetched_control
+    original_lookup = store._load_policy_integrity_control_state
+    calls = {"count": 0}
+
+    def lookup_current(*, create: bool) -> dict[str, object] | None:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return current_control
+        return original_lookup(create=create)
+
+    monkeypatch.setattr(store, "_load_policy_integrity_control_state", lookup_current)
+    try:
+        store._prepare_startup_prefetched_policy_integrity_state()
+    finally:
+        store._startup_prefetched_policy_integrity_secret_material = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+        store._startup_prefetched_policy_integrity_trusted_state = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+        store._load_policy_integrity_control_state = original_lookup
+
+    repaired_control = _policy_integrity_control_payload(store)
+    assert repaired_control["generation"] == 2
+    assert repaired_control["pending_generation"] is None
 
 
 def test_startup_refresh_persists_cutover_completion(tmp_path: Path) -> None:

@@ -1819,19 +1819,49 @@ class GuardStore:
                 )
                 if current_result.status == "valid":
                     current_valid += 1
-            if pending_valid > 0 and current_valid == 0:
+                    continue
+            if pending_valid == len(rows):
                 next_state = {
                     "cutover_complete": True,
                     "generation": pending_generation,
                     "pending_generation": None,
                     "version": _POLICY_INTEGRITY_CONTROL_VERSION,
                 }
-            elif current_valid > 0 and pending_valid == 0:
+            elif current_valid == len(rows):
                 next_state = dict(trusted_state)
                 next_state["pending_generation"] = None
             else:
                 next_state = dict(trusted_state)
         return next_state
+
+    def _prepared_startup_policy_integrity_state(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        key: bytes,
+        key_id: str,
+        trusted_state: dict[str, object],
+    ) -> dict[str, object]:
+        prepared_state = dict(trusted_state)
+        pending_generation = prepared_state.get("pending_generation")
+        if not isinstance(pending_generation, int):
+            newer_authenticated_generation = self._newer_authenticated_policy_integrity_generation(
+                connection,
+                key=key,
+                key_id=key_id,
+                trusted_generation=_mapping_int(prepared_state, "generation"),
+            )
+            if newer_authenticated_generation is not None:
+                prepared_state["generation"] = newer_authenticated_generation
+        prepared_state = self._resolved_policy_integrity_pending_generation(
+            connection,
+            key=key,
+            key_id=key_id,
+            trusted_state=prepared_state,
+        )
+        if not bool(prepared_state.get("cutover_complete")) and self._count_legacy_local_policy_rows(connection) == 0:
+            prepared_state["cutover_complete"] = True
+        return prepared_state
 
     def _refresh_policy_integrity_state(
         self,
@@ -1948,36 +1978,28 @@ class GuardStore:
         raw_key, key_id = cast(tuple[bytes | None, str | None], prefetched_secret_material)
         if raw_key is None or key_id is None:
             return
-        prepared_state = dict(trusted_state_value)
-        connection = sqlite3.connect(self.path, timeout=SQLITE_CONNECT_TIMEOUT_SECONDS)
-        connection.row_factory = sqlite3.Row
-        try:
-            connection.execute(f"pragma busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
-            newer_authenticated_generation = self._newer_authenticated_policy_integrity_generation(
-                connection,
-                key=raw_key,
-                key_id=key_id,
-                trusted_generation=_mapping_int(prepared_state, "generation"),
-            )
-            if newer_authenticated_generation is not None:
-                prepared_state["generation"] = newer_authenticated_generation
-                pending_generation = prepared_state.get("pending_generation")
-                if isinstance(pending_generation, int) and pending_generation <= newer_authenticated_generation:
-                    prepared_state["pending_generation"] = None
-            prepared_state = self._resolved_policy_integrity_pending_generation(
-                connection,
-                key=raw_key,
-                key_id=key_id,
-                trusted_state=prepared_state,
-            )
-            if (
-                not bool(prepared_state.get("cutover_complete"))
-                and self._count_legacy_local_policy_rows(connection) == 0
-            ):
-                prepared_state["cutover_complete"] = True
-        finally:
-            connection.close()
+
+        def compute_prepared_state(base_state: dict[str, object]) -> dict[str, object]:
+            connection = sqlite3.connect(self.path, timeout=SQLITE_CONNECT_TIMEOUT_SECONDS)
+            connection.row_factory = sqlite3.Row
+            try:
+                connection.execute(f"pragma busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+                return self._prepared_startup_policy_integrity_state(
+                    connection,
+                    key=raw_key,
+                    key_id=key_id,
+                    trusted_state=base_state,
+                )
+            finally:
+                connection.close()
+
+        prepared_state = compute_prepared_state(trusted_state_value)
+        current_trusted_state = self._load_policy_integrity_control_state(create=False)
+        if current_trusted_state is not None and current_trusted_state != trusted_state_value:
+            trusted_state_value = dict(current_trusted_state)
+            prepared_state = compute_prepared_state(trusted_state_value)
         if prepared_state == trusted_state_value:
+            self._startup_prefetched_policy_integrity_trusted_state = trusted_state_value
             return
         if self._store_policy_integrity_control_state(prepared_state):
             self._startup_prefetched_policy_integrity_trusted_state = prepared_state
