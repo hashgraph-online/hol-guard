@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-import base64
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard import review_contracts as review_contracts_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
@@ -19,10 +15,6 @@ from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon.command_queue_worker import (
     CommandQueueWorker,
     start_command_queue_worker,
-)
-from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
-    policy_bundle_keyring_payload,
-    policy_bundle_verification_key_from_public_key,
 )
 from codex_plugin_scanner.guard.review_contracts import (
     build_local_review_request_claim,
@@ -33,17 +25,11 @@ from codex_plugin_scanner.guard.review_contracts import (
 from codex_plugin_scanner.guard.runtime import command_executors, command_queue
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
-
-_REVIEW_SIGNING_KEY_ID = "guard-review-test-key"
-_REVIEW_PRIVATE_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-_REVIEW_PUBLIC_KEY_PEM = (
-    _REVIEW_PRIVATE_KEY.public_key()
-    .public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    )
-    .decode("utf-8")
-    .strip()
+from tests.guard_review_signing_helpers import (
+    REVIEW_SIGNING_KEY_ID,
+    review_trusted_keyring_payload,
+    review_verification_keys,
+    sign_review_payload,
 )
 
 
@@ -56,7 +42,7 @@ class FakeStore:
     def __init__(self, guard_home: Path) -> None:
         self.guard_home = guard_home
         self.payloads: dict[str, dict[str, object] | list[object]] = {
-            "policy_bundle_keyring": _review_trusted_keyring_payload(),
+            "policy_bundle_keyring": review_trusted_keyring_payload(),
         }
 
     def get_sync_payload(self, key: str) -> dict[str, object] | list[object] | None:
@@ -132,42 +118,6 @@ class FakeStore:
         return []
 
 
-def _review_verification_keys() -> list[dict[str, object]]:
-    return [
-        policy_bundle_verification_key_from_public_key(
-            key_id=_REVIEW_SIGNING_KEY_ID,
-            public_key_pem=_REVIEW_PUBLIC_KEY_PEM,
-        ).to_dict()
-    ]
-
-
-def _review_trusted_keyring_payload(
-    *,
-    workspace_id: str | None = "workspace-1",
-) -> dict[str, object]:
-    return policy_bundle_keyring_payload(
-        tuple(
-            policy_bundle_verification_key_from_public_key(
-                key_id=item["keyId"],
-                public_key_pem=str(item["publicKeyPem"]),
-                state=str(item["state"]),
-                valid_until=str(item["validUntil"]) if item["validUntil"] is not None else None,
-            )
-            for item in _review_verification_keys()
-        ),
-        workspace_id=workspace_id,
-    )
-
-
-def _sign_review_payload(payload: dict[str, object]) -> str:
-    signature = _REVIEW_PRIVATE_KEY.sign(
-        review_contracts_module._canonical_signed_payload(payload).encode("utf-8"),
-        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.DIGEST_LENGTH),
-        hashes.SHA256(),
-    )
-    return base64.b64encode(signature).decode("ascii")
-
-
 def _approval_request_row(
     request_id: str,
     *,
@@ -228,7 +178,7 @@ def _signed_remote_approval(
         "nonce": f"{claim['nonce']}:{receipt_id}",
         "policyVersion": claim["policyVersion"],
         "projectIdentity": claim["projectIdentity"],
-        "keyId": _REVIEW_SIGNING_KEY_ID,
+        "keyId": REVIEW_SIGNING_KEY_ID,
         "receiptId": receipt_id,
         "reviewerRole": "workspace-owner",
         "reviewerUserId": "user-1",
@@ -238,11 +188,11 @@ def _signed_remote_approval(
         "sourceClaimHash": claim["claimHash"],
         "stepUpChallengeId": None,
         "workspaceId": claim["workspaceId"],
-        "verificationKeys": _review_verification_keys(),
+        "verificationKeys": review_verification_keys(),
         "signatureAlgorithm": "rsa-pss-sha256",
     }
     envelope["payloadHash"] = payload_hash_for_remote_approval_envelope(envelope)
-    envelope["signature"] = _sign_review_payload(envelope)
+    envelope["signature"] = sign_review_payload(envelope)
     return envelope
 
 
@@ -267,7 +217,7 @@ def _signed_decision_memory_bundle(
         "contractVersion": "guard.decision-memory-bundle.v1",
         "expiresAt": expires_at.isoformat(),
         "issuedAt": issued_at.isoformat(),
-        "issuerKeyId": _REVIEW_SIGNING_KEY_ID,
+        "issuerKeyId": REVIEW_SIGNING_KEY_ID,
         "memoryRules": [
             {
                 "action": action,
@@ -298,14 +248,14 @@ def _signed_decision_memory_bundle(
             "sourceReceiptHashes": ["c" * 64],
             "sourceReceiptIds": ["receipt-1"],
         },
-        "verificationKeys": _review_verification_keys(),
+        "verificationKeys": review_verification_keys(),
         "signatureAlgorithm": "rsa-pss-sha256",
         "workspaceId": oauth.workspace_id,
     }
     payload_hash = payload_hash_for_decision_memory_bundle(bundle)
     bundle["bundleHash"] = payload_hash
     bundle["payloadHash"] = payload_hash
-    bundle["signature"] = _sign_review_payload(bundle)
+    bundle["signature"] = sign_review_payload(bundle)
     return bundle
 
 
