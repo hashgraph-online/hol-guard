@@ -433,7 +433,7 @@ jobs:
           if [[ -n "$pr_number" ]]; then
             gh pr edit "$pr_number" --repo ${{ github.repository }} --title "$title" --body-file "$body_file"
           else
-            pr_url="$(gh pr create --repo ${{ github.repository }} --base main --head "$head_ref" --title "$title" --body-file "$body_file")"
+            pr_url="$(gh pr create --repo ${{ github.repository }} --base main --head "$branch" --title "$title" --body-file "$body_file")"
             pr_number="${pr_url##*/}"
           fi
           if [[ -z "$pr_number" ]]; then
