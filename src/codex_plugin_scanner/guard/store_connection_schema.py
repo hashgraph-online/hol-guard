@@ -16,6 +16,16 @@ def _backfill_approval_queue_columns_compat(connection: sqlite3.Connection) -> N
     backfill(connection)
 
 
+def _slow_query_threshold_ms_compat() -> int:
+    store_module = sys.modules.get("codex_plugin_scanner.guard.store")
+    value = (
+        getattr(store_module, "_SLOW_QUERY_THRESHOLD_MS", _SLOW_QUERY_THRESHOLD_MS)
+        if store_module is not None
+        else _SLOW_QUERY_THRESHOLD_MS
+    )
+    return value if isinstance(value, int) and not isinstance(value, bool) else _SLOW_QUERY_THRESHOLD_MS
+
+
 class StoreConnectionSchemaMixin:
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -30,7 +40,7 @@ class StoreConnectionSchemaMixin:
             connection.close()
             elapsed_ms = (time.monotonic() - start) * 1000
             self._repair_store_permissions()
-            if elapsed_ms >= _SLOW_QUERY_THRESHOLD_MS:
+            if elapsed_ms >= _slow_query_threshold_ms_compat():
                 log = _store_logger.warning if _should_warn_on_slow_store_transactions() else _store_logger.debug
                 log(
                     "Guard store slow transaction (%.0fms); consider indexing hot query paths.",
