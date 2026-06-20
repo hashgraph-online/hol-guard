@@ -1169,6 +1169,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "keyring" },
     { name = "packaging" },
+    { name = "requests" },
     { name = "rich" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
@@ -1208,6 +1209,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.3" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.3" },
+    { name = "requests", specifier = ">=2.32,<3" },
     { name = "rich", specifier = ">=14.0,<15" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.15" },
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
