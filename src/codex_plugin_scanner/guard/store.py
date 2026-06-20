@@ -272,6 +272,7 @@ _POLICY_SCOPES = frozenset({"artifact", "workspace", "publisher", "harness", "gl
 _SLOW_STORE_WARNING_ENV = "HOL_GUARD_WARN_SLOW_STORE"
 _SQLITE_CONNECT_TIMEOUT_SECONDS = 30.0
 _SQLITE_BUSY_TIMEOUT_MS = int(_SQLITE_CONNECT_TIMEOUT_SECONDS * 1000)
+_SQLITE_WAL_BUSY_TIMEOUT_MS = 1000
 _SQLITE_LOCK_RETRY_ATTEMPTS = 5
 _SQLITE_LOCK_RETRY_DELAY_SECONDS = 0.1
 _SECRET_FINGERPRINT_PREFIX = "scrypt$"
@@ -2336,14 +2337,21 @@ class GuardStore:
 
     @staticmethod
     def _enable_wal_mode(connection: sqlite3.Connection) -> None:
-        for attempt in range(_SQLITE_LOCK_RETRY_ATTEMPTS):
-            try:
-                connection.execute("pragma journal_mode=WAL")
-                return
-            except sqlite3.OperationalError as exc:
-                if "database is locked" not in str(exc).lower() or attempt == _SQLITE_LOCK_RETRY_ATTEMPTS - 1:
-                    raise
-                time.sleep(_SQLITE_LOCK_RETRY_DELAY_SECONDS)
+        original_busy_timeout_row = connection.execute("pragma busy_timeout").fetchone()
+        original_busy_timeout_ms = int(original_busy_timeout_row[0]) if original_busy_timeout_row else 0
+        wal_busy_timeout_ms = min(original_busy_timeout_ms, _SQLITE_WAL_BUSY_TIMEOUT_MS)
+        connection.execute(f"pragma busy_timeout={wal_busy_timeout_ms}")
+        try:
+            for attempt in range(_SQLITE_LOCK_RETRY_ATTEMPTS):
+                try:
+                    connection.execute("pragma journal_mode=WAL")
+                    return
+                except sqlite3.OperationalError as exc:
+                    if "database is locked" not in str(exc).lower() or attempt == _SQLITE_LOCK_RETRY_ATTEMPTS - 1:
+                        raise
+                    time.sleep(_SQLITE_LOCK_RETRY_DELAY_SECONDS)
+        finally:
+            connection.execute(f"pragma busy_timeout={original_busy_timeout_ms}")
 
     @staticmethod
     def _ensure_policy_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:

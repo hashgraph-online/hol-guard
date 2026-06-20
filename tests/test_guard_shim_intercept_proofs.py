@@ -163,6 +163,40 @@ def test_package_shim_intercept_probe_marks_hung_manager_as_probe_failed(
     ]
 
 
+def test_package_shim_intercept_probe_timeout_covers_store_busy_wait(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True)
+    context = _harness_context(tmp_path, workspace_dir=workspace_dir)
+    install_package_shims(context, managers=("npm",))
+    shim_dir = context.guard_home / "package-shims" / "bin"
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir(parents=True)
+    write_fake_manager_script(
+        fake_bin=fake_bin,
+        manager="npm",
+        marker_path=tmp_path / "npm-never-runs.json",
+        exit_code=0,
+    )
+    monkeypatch.setenv("PATH", os.pathsep.join([str(shim_dir), str(fake_bin)]))
+    captured_timeout: dict[str, int] = {}
+
+    def raise_timeout(*_args, **kwargs):
+        captured_timeout["value"] = kwargs["timeout"]
+        raise subprocess.TimeoutExpired(cmd=["npm"], timeout=kwargs["timeout"])
+
+    monkeypatch.setattr(shims_module.subprocess, "run", raise_timeout)
+
+    result = probe_package_shim_intercepts(context, managers=("npm",), workspace_dir=workspace_dir)
+
+    assert result["intercept_proved"] is False
+    assert result["manager_results"][0]["skipped_reason"] == "probe_failed"
+    assert captured_timeout["value"] == shims_module._PACKAGE_SHIM_PROBE_TIMEOUT_SECONDS
+    assert captured_timeout["value"] > 15
+
+
 def test_package_shim_intercept_probe_omits_manager_stdout_secrets(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

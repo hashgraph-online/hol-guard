@@ -12,7 +12,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from http.server import HTTPServer
-from multiprocessing import Process
+from multiprocessing import Event, Process
 from pathlib import Path
 
 import pytest
@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import shims as guard_shims_module
+from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
@@ -287,7 +288,11 @@ def _install_single_manager_shim(
     return Path(str(payload["shim_dir"])) / manager
 
 
-def _hold_guard_db_writer_lock(database_path: str, hold_seconds: int) -> None:
+def _hold_guard_db_writer_lock(
+    database_path: str,
+    hold_seconds: int,
+    ready_event: Event | None = None,
+) -> None:
     connection = sqlite3.connect(database_path, timeout=1)
     try:
         connection.execute("BEGIN IMMEDIATE")
@@ -295,10 +300,57 @@ def _hold_guard_db_writer_lock(database_path: str, hold_seconds: int) -> None:
             "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
             ("lock-test", "{}", "2026-06-20T00:00:00Z"),
         )
+        if ready_event is not None:
+            ready_event.set()
         time.sleep(hold_seconds)
         connection.rollback()
     finally:
         connection.close()
+
+
+def test_enable_wal_mode_uses_bounded_busy_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    sleep_calls: list[float] = []
+
+    class _Cursor:
+        def __init__(self, row):
+            self._row = row
+
+        def fetchone(self):
+            return self._row
+
+    class _Connection:
+        def __init__(self) -> None:
+            self.busy_timeout_ms = guard_store_module._SQLITE_BUSY_TIMEOUT_MS
+            self.wal_attempts = 0
+            self.commands: list[str] = []
+
+        def execute(self, sql: str):
+            self.commands.append(sql)
+            if sql == "pragma busy_timeout":
+                return _Cursor((self.busy_timeout_ms,))
+            if sql.startswith("pragma busy_timeout="):
+                self.busy_timeout_ms = int(sql.split("=", 1)[1])
+                return _Cursor(None)
+            if sql == "pragma journal_mode=WAL":
+                self.wal_attempts += 1
+                if self.wal_attempts < 2:
+                    raise sqlite3.OperationalError("database is locked")
+                return _Cursor(("wal",))
+            raise AssertionError(f"unexpected SQL: {sql}")
+
+    monkeypatch.setattr(guard_store_module.time, "sleep", lambda seconds: sleep_calls.append(seconds))
+    connection = _Connection()
+
+    guard_store_module.GuardStore._enable_wal_mode(connection)
+
+    assert connection.wal_attempts == 2
+    assert connection.commands[:2] == [
+        "pragma busy_timeout",
+        f"pragma busy_timeout={guard_store_module._SQLITE_WAL_BUSY_TIMEOUT_MS}",
+    ]
+    assert connection.commands[-1] == f"pragma busy_timeout={guard_store_module._SQLITE_BUSY_TIMEOUT_MS}"
+    assert connection.busy_timeout_ms == guard_store_module._SQLITE_BUSY_TIMEOUT_MS
+    assert sleep_calls == [guard_store_module._SQLITE_LOCK_RETRY_DELAY_SECONDS]
 
 
 def _write_npm_ci_workspace(workspace_dir: Path, *, package_name: str, package_version: str) -> None:
@@ -482,9 +534,10 @@ def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Pa
         manager="bun",
         capsys=capsys,
     )
-    lock_process = Process(target=_hold_guard_db_writer_lock, args=(str(home_dir / "guard.db"), 13))
+    ready_event = Event()
+    lock_process = Process(target=_hold_guard_db_writer_lock, args=(str(home_dir / "guard.db"), 13, ready_event))
     lock_process.start()
-    time.sleep(1)
+    assert ready_event.wait(timeout=5)
     env = dict(os.environ)
     env["HOME"] = str(home_dir)
     env["PATH"] = f"{shim_path.parent}{os.pathsep}{fake_bin}{os.pathsep}{env.get('PATH', '')}"
