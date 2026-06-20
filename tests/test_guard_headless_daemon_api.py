@@ -71,11 +71,6 @@ def _default_store_platform(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-@pytest.fixture(autouse=True)
-def _default_store_platform(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(guard_store_module.sys, "platform", "linux")
-
-
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
     """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
 
