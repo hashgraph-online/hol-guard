@@ -412,7 +412,7 @@ jobs:
           - keep repo-visible version metadata aligned with the released package artifacts
 
           ## Testing
-          - \`uv run --no-sync python scripts/sync_repo_version.py --version "${VERSION}"\`
+          - \`uv sync --frozen && uv run --no-sync python scripts/sync_repo_version.py --version "${VERSION}"\`
           EOF
           git checkout -B "$branch"
           git add pyproject.toml src/codex_plugin_scanner/version.py uv.lock
