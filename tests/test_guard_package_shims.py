@@ -320,7 +320,7 @@ def test_enable_wal_mode_uses_bounded_busy_timeout(monkeypatch: pytest.MonkeyPat
 
     class _Connection:
         def __init__(self) -> None:
-            self.busy_timeout_ms = guard_store_module._SQLITE_BUSY_TIMEOUT_MS
+            self.busy_timeout_ms = guard_store_module.SQLITE_BUSY_TIMEOUT_MS
             self.wal_attempts = 0
             self.commands: list[str] = []
 
@@ -346,10 +346,10 @@ def test_enable_wal_mode_uses_bounded_busy_timeout(monkeypatch: pytest.MonkeyPat
     assert connection.wal_attempts == 2
     assert connection.commands[:2] == [
         "pragma busy_timeout",
-        f"pragma busy_timeout={guard_store_module._SQLITE_WAL_BUSY_TIMEOUT_MS}",
+        f"pragma busy_timeout={guard_store_module.SQLITE_WAL_BUSY_TIMEOUT_MS}",
     ]
-    assert connection.commands[-1] == f"pragma busy_timeout={guard_store_module._SQLITE_BUSY_TIMEOUT_MS}"
-    assert connection.busy_timeout_ms == guard_store_module._SQLITE_BUSY_TIMEOUT_MS
+    assert connection.commands[-1] == f"pragma busy_timeout={guard_store_module.SQLITE_BUSY_TIMEOUT_MS}"
+    assert connection.busy_timeout_ms == guard_store_module.SQLITE_BUSY_TIMEOUT_MS
     assert sleep_calls == [guard_store_module._SQLITE_LOCK_RETRY_DELAY_SECONDS]
 
 

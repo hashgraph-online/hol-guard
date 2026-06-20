@@ -22,8 +22,8 @@ from .shim_probe import (
     parse_protect_json_stdout,
     protect_evaluator_evidence,
 )
+from .sqlite_tuning import SQLITE_CONNECT_TIMEOUT_SECONDS
 from .stable_digest import stable_digest_hex
-from .store import _SQLITE_CONNECT_TIMEOUT_SECONDS
 
 
 class HarnessContextLike(Protocol):
@@ -62,7 +62,7 @@ _PACKAGE_SHIM_COMMANDS = {
 _PACKAGE_SHIM_MANIFEST = "manifest.json"
 _GUARD_PROFILE_MARKER = "# HOL Guard harness launchers"
 _PACKAGE_PROFILE_MARKER = "# HOL Guard package manager shims"
-_PACKAGE_SHIM_PROBE_TIMEOUT_SECONDS = int(_SQLITE_CONNECT_TIMEOUT_SECONDS) + 5
+_PACKAGE_SHIM_PROBE_TIMEOUT_SECONDS = int(SQLITE_CONNECT_TIMEOUT_SECONDS) + 5
 # Path fragments that indicate a shim dir lives in an ephemeral location (a test
 # temp dir, the system temp root, etc.). Such paths must never be written into a
 # long-lived shell profile: they vanish and leave broken PATH entries behind.
