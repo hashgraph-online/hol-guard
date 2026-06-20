@@ -32,6 +32,7 @@ jobs:
       contents: read
     env:
       ACTION_REPOSITORY: hashgraph-online/ai-plugin-scanner-action
+      AWESOME_CODEX_PLUGINS_REPOSITORY: hashgraph-online/awesome-codex-plugins
       SOURCE_REF: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       SOURCE_REPOSITORY: ${{ github.repository }}
       SOURCE_SERVER_URL: ${{ github.server_url }}
@@ -39,9 +40,14 @@ jobs:
       - name: Validate publication credentials
         env:
           ACTION_REPO_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+          AWESOME_CODEX_PLUGINS_TOKEN: ${{ secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
         run: |
           if [ -z "$ACTION_REPO_TOKEN" ]; then
             echo "ACTION_REPO_TOKEN must be configured to publish the GitHub Action repository." >&2
+            exit 1
+          fi
+          if [ -z "$AWESOME_CODEX_PLUGINS_TOKEN" ]; then
+            echo "AWESOME_CODEX_PLUGINS_TOKEN must be configured to sync the awesome-codex-plugins submission guide." >&2
             exit 1
           fi
 
@@ -203,3 +209,63 @@ jobs:
             --title "$TAG" \
             --generate-notes \
             --notes "Published automatically from ${SOURCE_SERVER_URL}/${SOURCE_REPOSITORY}/tree/${SOURCE_REF} with plugin-scanner ${{ steps.scanner_version.outputs.version }}."
+
+      - name: Clone awesome-codex-plugins repository
+        env:
+          AWESOME_CODEX_PLUGINS_TOKEN: ${{ secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
+          GH_TOKEN: ${{ secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
+        run: gh repo clone "$AWESOME_CODEX_PLUGINS_REPOSITORY" awesome-codex-plugins-repo -- --depth 1
+
+      - name: Configure authenticated awesome-codex-plugins remote
+        working-directory: awesome-codex-plugins-repo
+        env:
+          AWESOME_CODEX_PLUGINS_TOKEN: ${{ secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
+        run: |
+          git remote set-url origin "https://x-access-token:${AWESOME_CODEX_PLUGINS_TOKEN}@github.com/${AWESOME_CODEX_PLUGINS_REPOSITORY}.git"
+
+      - name: Sync awesome-codex-plugins contribution guide
+        working-directory: awesome-codex-plugins-repo
+        env:
+          SCANNER_SHA256: ${{ steps.scanner_sha256.outputs.sha256 }}
+          SCANNER_VERSION: ${{ steps.scanner_version.outputs.version }}
+        run: |
+          python3 "${GITHUB_WORKSPACE}/scripts/update_awesome_codex_plugins_contributing.py" \
+            --path CONTRIBUTING.md \
+            --scanner-version "$SCANNER_VERSION" \
+            --scanner-sha256 "$SCANNER_SHA256"
+
+      - name: Detect awesome-codex-plugins contribution guide changes
+        id: awesome_diff
+        working-directory: awesome-codex-plugins-repo
+        run: |
+          if [ -n "$(git status --short -- CONTRIBUTING.md)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit awesome-codex-plugins contribution guide
+        if: steps.awesome_diff.outputs.changed == 'true'
+        working-directory: awesome-codex-plugins-repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CONTRIBUTING.md
+          git commit -m "docs: refresh plugin scanner submission guide (${{ steps.scanner_version.outputs.version }})"
+
+      - name: Push awesome-codex-plugins contribution guide
+        if: steps.awesome_diff.outputs.changed == 'true'
+        working-directory: awesome-codex-plugins-repo
+        run: |
+          for attempt in 1 2 3; do
+            git fetch --depth 50 origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Could not push the awesome-codex-plugins contribution guide after ${attempt} attempts." >&2
+              exit 1
+            fi
+            sleep 5
+          done
