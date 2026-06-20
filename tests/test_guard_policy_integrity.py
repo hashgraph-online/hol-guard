@@ -1244,29 +1244,19 @@ def test_startup_refresh_does_not_overwrite_newer_policy_integrity_generation(
     monkeypatch.setattr(
         store,
         "_load_policy_integrity_control_state",
-        lambda *, create: (_ for _ in ()).throw(
-            AssertionError("startup refresh should not re-read control state")
-        ),
+        lambda *, create: (_ for _ in ()).throw(AssertionError("startup refresh should not re-read control state")),
     )
     monkeypatch.setattr(
         store,
         "_policy_integrity_secret_material",
-        lambda *, create: (_ for _ in ()).throw(
-            AssertionError("startup refresh should not re-read secret material")
-        ),
+        lambda *, create: (_ for _ in ()).throw(AssertionError("startup refresh should not re-read secret material")),
     )
     try:
         with store._connect() as connection:
-            store._refresh_policy_integrity_state(
-                connection, now="2026-06-14T00:02:00Z", create_key=False
-            )
+            store._refresh_policy_integrity_state(connection, now="2026-06-14T00:02:00Z", create_key=False)
     finally:
-        store._startup_prefetched_policy_integrity_secret_material = (
-            guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
-        )
-        store._startup_prefetched_policy_integrity_trusted_state = (
-            guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
-        )
+        store._startup_prefetched_policy_integrity_secret_material = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+        store._startup_prefetched_policy_integrity_trusted_state = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
         store._load_policy_integrity_control_state = original_control_lookup
         store._policy_integrity_secret_material = original_secret_lookup
 
@@ -1277,6 +1267,68 @@ def test_startup_refresh_does_not_overwrite_newer_policy_integrity_generation(
 
     assert state_payload["generation"] == 2
     assert current_policy["integrity_status"] == "valid"
+
+
+def test_startup_refresh_does_not_promote_unverified_policy_integrity_generation(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:baseline", artifact_hash="hash-baseline"),
+        "2026-06-14T00:00:00Z",
+    )
+
+    prefetched_secret = store._policy_integrity_secret_material(create=False)
+    prefetched_control = dict(_policy_integrity_control_payload(store))
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        connection.execute(
+            """
+            update policy_decisions
+            set integrity_generation = ?
+            where artifact_id = ?
+            """,
+            (999, "codex:project:baseline"),
+        )
+
+    store._startup_prefetched_policy_integrity_secret_material = prefetched_secret
+    store._startup_prefetched_policy_integrity_trusted_state = prefetched_control
+    try:
+        with store._connect() as connection:
+            store._refresh_policy_integrity_state(connection, now="2026-06-14T00:01:00Z", create_key=False)
+    finally:
+        store._startup_prefetched_policy_integrity_secret_material = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+        store._startup_prefetched_policy_integrity_trusted_state = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+
+    state_payload = _policy_integrity_state_payload(store.guard_home)
+    assert state_payload["generation"] == 1
+
+
+def test_startup_refresh_repairs_stale_sync_state_generation_from_control_state(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:baseline", artifact_hash="hash-baseline"),
+        "2026-06-14T00:00:00Z",
+    )
+
+    tampered_state = dict(_policy_integrity_state_payload(store.guard_home))
+    tampered_state["generation"] = 999
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        connection.execute(
+            """
+            update sync_state
+            set payload_json = ?,
+                updated_at = ?
+            where state_key = 'policy_integrity'
+            """,
+            (
+                json.dumps(tampered_state, sort_keys=True, separators=(",", ":")),
+                "2026-06-14T00:00:30Z",
+            ),
+        )
+
+    with store._connect() as connection:
+        store._refresh_policy_integrity_state(connection, now="2026-06-14T00:01:00Z", create_key=False)
+
+    state_payload = _policy_integrity_state_payload(store.guard_home)
+    assert state_payload["generation"] == 1
 
 
 def test_signed_rollback_snapshot_is_detected_and_repair_advances_generation(tmp_path: Path) -> None:
