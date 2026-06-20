@@ -356,7 +356,7 @@ jobs:
 
   sync-repository-version:
     name: Sync repository version
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip release publish]') && needs.build.result == 'success' && needs.publish-pypi.result == 'success'
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip release publish]') && needs.build.result == 'success' && needs.publish-pypi.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.release.result) && contains(fromJSON('["success","skipped"]'), needs.publish-container.result)
     needs: [build, publish-pypi, release, publish-container]
     runs-on: ubuntu-latest
     permissions:
