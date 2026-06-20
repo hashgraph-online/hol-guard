@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import urllib.parse
 import webbrowser
 from datetime import datetime, timezone
@@ -14,6 +15,7 @@ from ..approvals import apply_approval_resolution, build_runtime_snapshot
 from ..codex_resume import retry_request_resume
 from ..config import load_guard_config
 from ..daemon import load_guard_daemon_url
+from ..runtime.self_approval import SELF_APPROVAL_REASON, approval_resolution_invoked_from_agent
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from .approval_gate_prompt import approval_gate_cli_payload, prompt_for_approval_gate
@@ -221,6 +223,14 @@ def run_approval_command(
             "cooldown_active": gate.cooldown_active,
             "cooldown_expires_at": gate.cooldown_expires_at,
             "exit_code": 0,
+        }
+    if command in {"approve", "deny"} and approval_resolution_invoked_from_agent(os.environ):
+        return {
+            "resolved": False,
+            "error": "approval_cli_blocked_in_agent_context",
+            "message": SELF_APPROVAL_REASON,
+            "next_action": "Open the original Guard request in the local approval center or native harness prompt.",
+            "exit_code": 4,
         }
     try:
         gate_input = (

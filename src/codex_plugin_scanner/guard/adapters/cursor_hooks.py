@@ -1025,7 +1025,7 @@ def main() -> int:
                     "permission": "deny",
                     "user_message": (
                         f"HOL Guard hook timed out after {GUARD_HOOK_TIMEOUT_SECONDS}s. "
-                        "Run `hol-guard status`, approve pending requests, then retry."
+                        "Open the Guard approval center or native Cursor prompt, resolve pending requests, then retry."
                     ),
                 }
             )

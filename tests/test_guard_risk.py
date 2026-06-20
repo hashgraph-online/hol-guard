@@ -2950,6 +2950,57 @@ def test_tool_action_request_classifier_does_not_promote_echoed_interpreter_text
     assert request is None
 
 
+def test_tool_action_request_classifier_blocks_guard_approval_self_authorization():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "cd app && hol-guard approvals approve req-123 --scope global"},
+    )
+
+    assert request is not None
+    assert request.action_class == "Guard approval self-authorization command"
+    assert "AI agents" in request.reason
+
+
+def test_tool_action_request_classifier_blocks_python_module_guard_approval_mutation():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -m codex_plugin_scanner.cli guard approvals deny req-123"},
+    )
+
+    assert request is not None
+    assert request.action_class == "Guard approval self-authorization command"
+
+
+def test_tool_action_request_classifier_blocks_runner_wrapped_guard_approval_mutation():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "uv run hol-guard approvals approve req-123"},
+    )
+
+    assert request is not None
+    assert request.action_class == "Guard approval self-authorization command"
+
+
+def test_tool_action_request_classifier_allows_guard_approval_read_only_commands():
+    assert (
+        extract_sensitive_tool_action_request(
+            "bash",
+            {"command": "hol-guard approvals open req-123 && hol-guard --version"},
+        )
+        is None
+    )
+
+
+def test_tool_action_request_classifier_does_not_block_quoted_guard_approval_text():
+    assert (
+        extract_sensitive_tool_action_request(
+            "bash",
+            {"command": "printf '%s\\n' 'hol-guard approvals approve req-123'"},
+        )
+        is None
+    )
+
+
 def test_explicitly_benign_tool_action_request_requires_all_command_variants_to_be_benign():
     assert not is_explicitly_benign_tool_action_request(
         "bash",

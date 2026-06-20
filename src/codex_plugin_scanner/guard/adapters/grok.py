@@ -66,7 +66,7 @@ class GrokHarnessAdapter(HarnessAdapter):
     )
     fallback_hint = (
         "Grok receives plain-language allow or deny responses from Guard hooks. "
-        "Use `hol-guard approvals` if you want to resolve pending requests from the terminal."
+        "Use the Guard approval center when native prompting is unavailable."
     )
 
     @staticmethod

@@ -542,6 +542,32 @@ def test_approval_gate_cli_noninteractive_fails_closed(tmp_path: Path, monkeypat
     assert store.get_approval_request("req-cli")["status"] == "pending"
 
 
+def test_approval_cli_refuses_agent_managed_self_authorization(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    _add_request(store, "req-agent-cli")
+    monkeypatch.setenv("HOL_GUARD_HOOK_ARGV", "codex-pretool")
+
+    payload = run_approval_command(
+        SimpleNamespace(
+            approvals_command="approve",
+            request_id="req-agent-cli",
+            approval_action="allow",
+            scope="artifact",
+            reason=None,
+        ),
+        store=store,
+        workspace=None,
+    )
+
+    assert payload["resolved"] is False
+    assert payload["error"] == "approval_cli_blocked_in_agent_context"
+    assert payload["exit_code"] == 4
+    assert store.get_approval_request("req-agent-cli")["status"] == "pending"
+
+
 def test_approval_gate_cli_noninteractive_uses_active_cooldown(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

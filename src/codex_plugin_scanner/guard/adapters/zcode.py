@@ -70,7 +70,7 @@ class ZCodeHarnessAdapter(HarnessAdapter):
     )
     fallback_hint = (
         "ZCode gets preflight approval through Guard until it exposes a richer native approval surface. "
-        "Use `hol-guard approvals` to resolve pending requests from the terminal."
+        "Use the Guard approval center when native prompting is unavailable."
     )
 
     @staticmethod
