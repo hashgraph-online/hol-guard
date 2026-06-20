@@ -361,6 +361,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -380,17 +381,48 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           python3 scripts/sync_repo_version.py --version "$VERSION"
-      - name: Commit repository version
+      - name: Open repository version sync PR
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           if git diff --quiet -- pyproject.toml src/codex_plugin_scanner/version.py uv.lock; then
             echo "Repository version already synced."
             exit 0
           fi
+          if [[ "$(gh api repos/${{ github.repository }} --jq .allow_auto_merge)" != "true" ]]; then
+            echo "Repository auto-merge is disabled; enable it so release version sync PRs can merge after checks." >&2
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          branch="release/sync-repository-version-v${VERSION}"
+          head_ref="${{ github.repository_owner }}:${branch}"
+          title="chore(release): sync repository version to ${VERSION}"
+          body_file="$(mktemp)"
+          trap 'rm -f "$body_file"' EXIT
+          cat > "$body_file" <<EOF
+          ## Summary
+          - sync repository version files to ${VERSION} after publish
+          - keep repo-visible version metadata aligned with the released package artifacts
+
+          ## Testing
+          - \`python3 scripts/sync_repo_version.py --version "${VERSION}"\`
+          EOF
+          git checkout -B "$branch"
           git add pyproject.toml src/codex_plugin_scanner/version.py uv.lock
           git commit -m "chore(release): sync repository version to ${VERSION} [skip release publish]"
-          git pull --rebase origin main
-          git push origin HEAD:main
+          git push --force-with-lease --set-upstream origin "$branch"
+          head_sha="$(git rev-parse HEAD)"
+          pr_number="$(gh pr list --repo ${{ github.repository }} --base main --head "$head_ref" --state open --json number --jq '.[0].number // empty')"
+          if [[ -n "$pr_number" ]]; then
+            gh pr edit "$pr_number" --repo ${{ github.repository }} --title "$title" --body-file "$body_file"
+          else
+            gh pr create --repo ${{ github.repository }} --base main --head "$head_ref" --title "$title" --body-file "$body_file"
+            pr_number="$(gh pr list --repo ${{ github.repository }} --base main --head "$head_ref" --state open --json number --jq '.[0].number // empty')"
+          fi
+          if [[ -z "$pr_number" ]]; then
+            echo "Failed to create or locate repository version sync PR." >&2
+            exit 1
+          fi
+          gh pr merge "$pr_number" --repo ${{ github.repository }} --auto --squash --delete-branch --match-head-commit "$head_sha" --subject "chore(release): sync repository version to ${VERSION} [skip release publish]" --body ""
