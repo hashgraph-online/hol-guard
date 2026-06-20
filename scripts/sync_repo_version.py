@@ -105,7 +105,7 @@ def _replace_matching_line(line: str, pattern: re.Pattern[str], version: str) ->
     return f'{match.group("prefix")}{version}{match.group("suffix")}{line_ending}'
 
 
-def _replace_project_version(path: Path, version: str) -> bool:
+def _replace_project_version(path: Path, version: str) -> tuple[str, bool]:
     text = _read_text(path)
     lines = text.splitlines(keepends=True)
     in_project_table = False
@@ -130,13 +130,10 @@ def _replace_project_version(path: Path, version: str) -> bool:
         raise ValueError(f"Could not update [project].version in {path}")
 
     updated_text = "".join(lines)
-    if updated_text == text:
-        return False
-    path.write_text(updated_text, encoding="utf-8")
-    return True
+    return updated_text, updated_text != text
 
 
-def _replace_module_version(path: Path, version: str) -> bool:
+def _replace_module_version(path: Path, version: str) -> tuple[str, bool]:
     text = _read_text(path)
     lines = text.splitlines(keepends=True)
     module_version_index: int | None = None
@@ -152,14 +149,10 @@ def _replace_module_version(path: Path, version: str) -> bool:
         raise ValueError(f"Could not update module version line in {path}")
 
     updated_text = "".join(lines)
-    if updated_text == text:
-        return False
-    path.write_text(updated_text, encoding="utf-8")
-    return True
+    return updated_text, updated_text != text
 
 
-def _find_lockfile_version_index(path: Path) -> int:
-    lines = _read_text(path).splitlines(keepends=True)
+def _find_lockfile_version_index(lines: list[str], path: Path) -> int:
     in_package_block = False
     package_name_matches = False
     editable_source_matches = False
@@ -193,7 +186,7 @@ def _find_lockfile_version_index(path: Path) -> int:
 
 def _read_lockfile_version(path: Path) -> str:
     lines = _read_text(path).splitlines(keepends=True)
-    version_index = _find_lockfile_version_index(path)
+    version_index = _find_lockfile_version_index(lines, path)
     version_line = lines[version_index].rstrip("\r\n")
     match = PYPROJECT_VERSION_LINE_PATTERN.match(version_line)
     if match is None:
@@ -201,31 +194,33 @@ def _read_lockfile_version(path: Path) -> str:
     return match.group("version")
 
 
-def _replace_lockfile_version(path: Path, version: str) -> bool:
+def _replace_lockfile_version(path: Path, version: str) -> tuple[str, bool]:
     lines = _read_text(path).splitlines(keepends=True)
-    version_index = _find_lockfile_version_index(path)
+    version_index = _find_lockfile_version_index(lines, path)
     replaced_line = _replace_matching_line(lines[version_index], PYPROJECT_VERSION_LINE_PATTERN, version)
     if replaced_line == lines[version_index]:
-        return False
+        return "".join(lines), False
     lines[version_index] = replaced_line
-    path.write_text("".join(lines), encoding="utf-8")
-    return True
+    return "".join(lines), True
 
 
 def sync_repo_version(repo_root: Path, version: str) -> bool:
     normalized_version = _validate_version_token(version)
-    pyproject_changed = _replace_project_version(
-        repo_root / PYPROJECT_RELATIVE_PATH,
-        normalized_version,
-    )
-    module_changed = _replace_module_version(
-        repo_root / MODULE_RELATIVE_PATH,
-        normalized_version,
-    )
-    lockfile_changed = _replace_lockfile_version(
-        repo_root / LOCKFILE_RELATIVE_PATH,
-        normalized_version,
-    )
+    pyproject_path = repo_root / PYPROJECT_RELATIVE_PATH
+    module_path = repo_root / MODULE_RELATIVE_PATH
+    lockfile_path = repo_root / LOCKFILE_RELATIVE_PATH
+
+    pyproject_text, pyproject_changed = _replace_project_version(pyproject_path, normalized_version)
+    module_text, module_changed = _replace_module_version(module_path, normalized_version)
+    lockfile_text, lockfile_changed = _replace_lockfile_version(lockfile_path, normalized_version)
+
+    if pyproject_changed:
+        pyproject_path.write_text(pyproject_text, encoding="utf-8")
+    if module_changed:
+        module_path.write_text(module_text, encoding="utf-8")
+    if lockfile_changed:
+        lockfile_path.write_text(lockfile_text, encoding="utf-8")
+
     assert_repo_version(repo_root, normalized_version)
     return pyproject_changed or module_changed or lockfile_changed
 
