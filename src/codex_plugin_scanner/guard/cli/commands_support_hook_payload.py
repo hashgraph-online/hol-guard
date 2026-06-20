@@ -397,7 +397,7 @@ def _load_hook_payload(
     return _normalize_hook_payload(payload, harness=harness) if isinstance(payload, dict) else {}
 
 _ACTION_ENVELOPE_HARNESSES = frozenset(
-    {"codex", "claude-code", "opencode", "copilot", "gemini", "hermes", "openclaw", "cursor", "grok", "zcode"}
+    {"codex", "claude-code", "opencode", "copilot", "gemini", "hermes", "openclaw", "cursor", "grok", "pi", "zcode"}
 )
 
 def _hook_action_envelope(

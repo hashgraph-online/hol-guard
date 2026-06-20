@@ -47,6 +47,7 @@ CANONICAL_HARNESS_VALUES = (
     "gemini",
     "hermes",
     "openclaw",
+    "pi",
 )
 SUPPORTED_HARNESS_VALUES = tuple(contract.harness for contract in HARNESS_CONTRACTS)
 ACTION_CATEGORY_VALUES: tuple[ActionCategory, ...] = (

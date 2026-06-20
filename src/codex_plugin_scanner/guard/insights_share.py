@@ -21,6 +21,7 @@ _HARNESS_LABELS: dict[str, str] = {
     "gemini-cli": "Gemini CLI",
     "hermes": "Hermes",
     "opencode": "OpenCode",
+    "pi": "Pi",
     "windsurf": "Windsurf",
 }
 
