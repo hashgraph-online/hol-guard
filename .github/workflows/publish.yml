@@ -49,7 +49,7 @@ jobs:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BASE_VERSION=$(python3 scripts/sync_repo_version.py --check)
+          BASE_VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           VERSION="$BASE_VERSION"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
@@ -92,7 +92,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          python3 scripts/sync_repo_version.py --version "$VERSION"
+          uv run --no-sync python scripts/sync_repo_version.py --version "$VERSION"
       - name: Build Guard package (hol-guard)
         run: |
           cp pyproject.toml pyproject.toml.bak
@@ -315,6 +315,12 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - name: Install packaging
+        run: |
+          python3 -m pip install packaging
       - name: Stamp package version
         env:
           VERSION: ${{ needs.build.outputs.version }}
