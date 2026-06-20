@@ -96,6 +96,19 @@ class TestPiDetect:
         assert str(ctx.home_dir / ".pi" / "agent" / "settings.json") in result.config_paths
         assert result.installed is True
 
+    def test_detects_omp_settings_and_extensions(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        _write_json(
+            ctx.home_dir / ".omp" / "agent" / "settings.json",
+            {"extensions": ["/opt/omp/extensions/custom.ts"]},
+        )
+        _write_text(ctx.home_dir / ".omp" / "agent" / "extensions" / "omp-ext.ts", "export default function () {}\n")
+
+        result = get_adapter("pi").detect(ctx)
+
+        assert str(ctx.home_dir / ".omp" / "agent" / "settings.json") in result.config_paths
+        assert "pi:global:extension:omp-ext.ts" in {artifact.artifact_id for artifact in result.artifacts}
+
     def test_detect_expands_configured_extension_glob(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
         assert ctx.workspace_dir is not None
@@ -139,6 +152,8 @@ class TestPiInstall:
         extension_path = Path(str(manifest["config_path"]))
         assert extension_path.is_file()
         settings_path = ctx.home_dir / ".pi" / "agent" / "settings.json"
+        omp_extension_path = ctx.home_dir / ".omp" / "agent" / "extensions" / "hol-guard.ts"
+        omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"
         text = extension_path.read_text(encoding="utf-8")
         assert 'pi.on("tool_call"' in text
         assert 'pi.on("input"' in text
@@ -147,6 +162,8 @@ class TestPiInstall:
         assert "ctx.cwd" in text
         assert "timeout: GUARD_TIMEOUT_MS" in text
         assert str(extension_path) in json.loads(settings_path.read_text(encoding="utf-8"))["extensions"]
+        assert omp_extension_path.is_file()
+        assert str(omp_extension_path) in json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"]
 
     def test_uninstall_removes_managed_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
@@ -162,12 +179,16 @@ class TestPiInstall:
         manifest = adapter.install(ctx)
         extension_path = Path(str(manifest["config_path"]))
         settings_path = ctx.home_dir / ".pi" / "agent" / "settings.json"
+        omp_extension_path = ctx.home_dir / ".omp" / "agent" / "extensions" / "hol-guard.ts"
+        omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"
 
         uninstall_manifest = adapter.uninstall(ctx)
 
         assert uninstall_manifest["active"] is False
         assert not extension_path.exists()
+        assert not omp_extension_path.exists()
         assert json.loads(settings_path.read_text(encoding="utf-8"))["extensions"] == []
+        assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == []
 
 
 class TestPiRuntime:

@@ -11,6 +11,8 @@ from ..models import GuardArtifact
 
 PI_DIR = ".pi"
 PI_AGENT_DIR = ".pi/agent"
+OMP_DIR = ".omp"
+OMP_AGENT_DIR = ".omp/agent"
 PI_SETTINGS_FILE = "settings.json"
 PI_MANAGED_EXTENSION_NAME = "hol-guard.ts"
 EXTENSION_SUFFIXES = (".ts", ".js", ".mts", ".cts", ".mjs", ".cjs")
@@ -161,7 +163,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path) -> str:
         '    const response = runGuard({ hook_event_name: "UserPromptSubmit", prompt: event.text }, ctx.cwd);\n'
         '    if (response.decision === "deny") {\n'
         '      ctx.ui.notify(response.reason ?? "Blocked by HOL Guard.", "warning");\n'
-        '      return { action: "handled" };\n'
+        '      return { action: "handled", handled: true };\n'
         "    }\n"
         '    return { action: "continue" };\n'
         "  });\n"

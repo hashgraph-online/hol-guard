@@ -10,6 +10,8 @@ from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available
 from .pi_support import (
     EXTENSION_SUFFIXES,
+    OMP_AGENT_DIR,
+    OMP_DIR,
     PI_AGENT_DIR,
     PI_DIR,
     PI_MANAGED_EXTENSION_NAME,
@@ -46,10 +48,20 @@ class PiHarnessAdapter(HarnessAdapter):
         return context.home_dir / PI_AGENT_DIR
 
     @staticmethod
+    def _omp_global_root(context: HarnessContext) -> Path:
+        return context.home_dir / OMP_AGENT_DIR
+
+    @staticmethod
     def _project_root(context: HarnessContext) -> Path | None:
         if context.workspace_dir is None:
             return None
         return context.workspace_dir / PI_DIR
+
+    @staticmethod
+    def _omp_project_root(context: HarnessContext) -> Path | None:
+        if context.workspace_dir is None:
+            return None
+        return context.workspace_dir / OMP_DIR
 
     @staticmethod
     def _relative_label(root: Path, path: Path) -> str:
@@ -67,14 +79,26 @@ class PiHarnessAdapter(HarnessAdapter):
     def _managed_settings_path(self, context: HarnessContext) -> Path:
         return self._global_root(context) / PI_SETTINGS_FILE
 
+    def _managed_omp_extension_path(self, context: HarnessContext) -> Path:
+        return self._omp_global_root(context) / "extensions" / PI_MANAGED_EXTENSION_NAME
+
+    def _managed_omp_settings_path(self, context: HarnessContext) -> Path:
+        return self._omp_global_root(context) / PI_SETTINGS_FILE
+
     def detect(self, context: HarnessContext) -> HarnessDetection:
         artifacts: list[GuardArtifact] = []
         found_paths: list[str] = []
         seen_keys: set[str] = set()
-        roots = [(self._global_root(context), "global")]
+        roots = [
+            (self._global_root(context), "global"),
+            (self._omp_global_root(context), "global"),
+        ]
         project_root = self._project_root(context)
         if project_root is not None:
             roots.append((project_root, "project"))
+        omp_project_root = self._omp_project_root(context)
+        if omp_project_root is not None:
+            roots.append((omp_project_root, "project"))
         for root, scope in roots:
             self._append_settings_artifacts(
                 artifacts,
@@ -488,6 +512,16 @@ class PiHarnessAdapter(HarnessAdapter):
             encoding="utf-8",
         )
         enable_managed_extension(settings_path=self._managed_settings_path(context), extension_path=extension_path)
+        omp_extension_path = self._managed_omp_extension_path(context)
+        omp_extension_path.parent.mkdir(parents=True, exist_ok=True)
+        omp_extension_path.write_text(
+            managed_extension_source(guard_home=context.guard_home, home_dir=context.home_dir),
+            encoding="utf-8",
+        )
+        enable_managed_extension(
+            settings_path=self._managed_omp_settings_path(context),
+            extension_path=omp_extension_path,
+        )
         raw_notes = shim_manifest.get("notes")
         shim_notes = (
             [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
@@ -514,6 +548,13 @@ class PiHarnessAdapter(HarnessAdapter):
         disable_managed_extension(settings_path=self._managed_settings_path(context), extension_path=extension_path)
         if extension_path.exists():
             extension_path.unlink()
+        omp_extension_path = self._managed_omp_extension_path(context)
+        disable_managed_extension(
+            settings_path=self._managed_omp_settings_path(context),
+            extension_path=omp_extension_path,
+        )
+        if omp_extension_path.exists():
+            omp_extension_path.unlink()
         raw_notes = shim_manifest.get("notes")
         shim_notes = (
             [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
