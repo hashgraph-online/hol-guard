@@ -2331,6 +2331,14 @@ class GuardStore:
                 self._record_schema_version(connection, version=2)
             self._enable_wal_mode(connection)
             self._repair_store_permissions()
+        # Prime policy-integrity secrets outside the SQLite transaction. On some
+        # systems the credential-store lookup can block, and every Guard CLI
+        # process initializes GuardStore on startup. Fetching these values while
+        # the initialization transaction is open turns a slow keyring call into a
+        # cross-process database writer stall.
+        self._policy_integrity_secret_material(create=False)
+        self._load_policy_integrity_control_state(create=False)
+        with self._connect() as connection:
             self._refresh_policy_integrity_state(connection, now=_now(), create_key=False)
 
     @staticmethod
