@@ -26,7 +26,6 @@ from .policy_bundle_trusted_keys import (
 _LOCAL_REVIEW_REQUEST_CONTRACT_VERSION = "guard.local-review-request.v1"
 _REMOTE_APPROVAL_CONTRACT_VERSION = "guard.remote-approval.v1"
 _DECISION_MEMORY_BUNDLE_CONTRACT_VERSION = "guard.decision-memory-bundle.v1"
-_DECISION_MEMORY_ACK_CONTRACT_VERSION = "guard.decision-memory-ack.v1"
 _REMOTE_APPROVAL_REQUIRED_SCOPE = "artifact"
 _REMOTE_APPROVAL_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
 _DECISION_MEMORY_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
@@ -51,19 +50,27 @@ class GuardReviewOAuthMetadata:
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
 def _stable_serialize(value: object) -> str:
     if isinstance(value, list):
         return f"[{','.join(_stable_serialize(item) for item in value)}]"
     if isinstance(value, dict):
-        return "{" + ",".join(
-            f"{json.dumps(key, separators=(',', ':'), ensure_ascii=False)}:{_stable_serialize(value[key])}"
-            for key in sorted(value)
-        ) + "}"
+        return (
+            "{"
+            + ",".join(
+                f"{json.dumps(key, separators=(',', ':'), ensure_ascii=False)}:{_stable_serialize(value[key])}"
+                for key in sorted(value)
+            )
+            + "}"
+        )
     return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
 
 
 def _sha256_hex(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
 def _non_empty_string(value: object) -> str | None:
     return value if isinstance(value, str) and value.strip() else None
 
@@ -268,6 +275,8 @@ def _policy_version(request_row: dict[str, object]) -> str:
         request_row.get("created_at")
     )
     return f"request:{last_seen_at or request_row['request_id']}"
+
+
 def _claim_expiry(request_row: dict[str, object]) -> str:
     created_at = _parse_iso_timestamp(request_row.get("created_at"), field_name="created_at")
     last_seen_at = _parse_iso_timestamp(
@@ -336,6 +345,8 @@ def build_local_review_request_claim(
 
 def compute_local_review_request_claim_hash(claim: dict[str, object]) -> str:
     return _sha256_hex(_stable_serialize(_strip_keys(claim, _CLAIM_HASH_KEYS)))
+
+
 def validate_local_review_request_claim(claim: dict[str, object]) -> dict[str, object]:
     if claim.get("contractVersion") != _LOCAL_REVIEW_REQUEST_CONTRACT_VERSION:
         raise GuardReviewContractError("unsupported_claim_contract_version")
@@ -347,6 +358,8 @@ def validate_local_review_request_claim(claim: dict[str, object]) -> dict[str, o
 
 def payload_hash_for_remote_approval_envelope(envelope: dict[str, object]) -> str:
     return _sha256_hex(_canonical_signed_payload(envelope))
+
+
 def validated_remote_approval_envelope(envelope: dict[str, object], *, store) -> dict[str, object]:
     if envelope.get("contractVersion") != _REMOTE_APPROVAL_CONTRACT_VERSION:
         raise GuardReviewContractError("unsupported_remote_approval_contract")
@@ -395,6 +408,8 @@ def validate_remote_approval_request_binding(
     expected_claim = build_local_review_request_claim(request_row=request_row, oauth=oauth, store=store)
     if _non_empty_string(envelope.get("sourceClaimHash")) != _non_empty_string(expected_claim.get("claimHash")):
         raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
+
+
 def payload_hash_for_decision_memory_bundle(bundle: dict[str, object]) -> str:
     return _sha256_hex(_canonical_signed_payload(bundle))
 
@@ -436,6 +451,8 @@ def _policy_version_is_stale(current: str, previous: str) -> bool:
     if current_key is not None and previous_key is not None:
         return current_key <= previous_key
     return current <= previous
+
+
 def validate_decision_memory_bundle_target(
     *,
     bundle: dict[str, object],
@@ -467,27 +484,3 @@ def validate_decision_memory_bundle_target(
             and oauth.installation_id not in {str(item) for item in machine_ids}
         ):
             raise GuardReviewContractError("decision_memory_machine_mismatch")
-def build_decision_memory_ack(
-    *,
-    bundle: dict[str, object],
-    oauth: GuardReviewOAuthMetadata,
-    status: str,
-    applied_rule_count: int,
-    reason: str | None = None,
-    rejected_rule_ids: list[str] | None = None,
-) -> dict[str, object]:
-    return {
-        "acknowledgedAt": _now().isoformat(),
-        "appliedRuleCount": max(0, applied_rule_count),
-        "bundleHash": _non_empty_string(bundle.get("bundleHash")),
-        "bundleVersion": _non_empty_string(bundle.get("bundleVersion")),
-        "contractVersion": _DECISION_MEMORY_ACK_CONTRACT_VERSION,
-        "deviceId": oauth.device_id,
-        "machineId": oauth.machine_id,
-        "machineInstallationId": oauth.installation_id,
-        "policyVersion": _non_empty_string(bundle.get("policyVersion")),
-        "reason": reason,
-        "rejectedRuleIds": rejected_rule_ids or [],
-        "status": status,
-        "workspaceId": oauth.workspace_id,
-    }

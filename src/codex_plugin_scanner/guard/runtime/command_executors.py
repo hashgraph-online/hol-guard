@@ -27,7 +27,6 @@ from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, DecisionScope, 
 from ..package_shim_status import record_package_shim_audit_result
 from ..review_contracts import (
     GuardReviewContractError,
-    build_decision_memory_ack,
     build_local_review_request_claim,
     guard_review_oauth_metadata,
     validate_decision_memory_bundle_target,
@@ -35,6 +34,7 @@ from ..review_contracts import (
     validated_decision_memory_bundle,
     validated_remote_approval_envelope,
 )
+from ..review_memory_ack import build_decision_memory_ack
 from ..shims import (
     activate_package_shims,
     package_shim_status,
