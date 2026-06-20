@@ -1425,6 +1425,44 @@ def test_startup_refresh_persists_pending_generation_repair(
     assert state_payload["generation"] == 2
 
 
+def test_startup_refresh_keeps_pending_generation_when_legacy_rows_remain(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:legacy", artifact_hash="hash-legacy"),
+        "2026-06-14T00:00:00Z",
+    )
+    _strip_policy_integrity(store.guard_home, artifact_id="codex:project:legacy")
+    monkeypatch.setattr(store, "_finalize_policy_integrity_control_state", lambda payload: None)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:pending", artifact_hash="hash-pending"),
+        "2026-06-14T00:01:00Z",
+    )
+    stale_control = dict(_policy_integrity_control_payload(store))
+    stale_control["cutover_complete"] = False
+    assert store._store_policy_integrity_control_state(stale_control)
+
+    store._startup_prefetched_policy_integrity_secret_material = store._policy_integrity_secret_material(create=False)
+    store._startup_prefetched_policy_integrity_trusted_state = dict(_policy_integrity_control_payload(store))
+    store._prepare_startup_prefetched_policy_integrity_state()
+
+    try:
+        with store._connect() as connection:
+            store._refresh_policy_integrity_state(connection, now="2026-06-14T00:02:00Z", create_key=False)
+    finally:
+        store._startup_prefetched_policy_integrity_secret_material = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+        store._startup_prefetched_policy_integrity_trusted_state = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+
+    recovered_control = _policy_integrity_control_payload(store)
+    state_payload = _policy_integrity_state_payload(store.guard_home)
+    assert recovered_control["generation"] == 1
+    assert recovered_control["pending_generation"] == 2
+    assert recovered_control["cutover_complete"] is False
+    assert state_payload["generation"] == 1
+
+
 def test_startup_refresh_leaves_mixed_pending_generations_unresolved(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -1705,8 +1705,11 @@ class GuardStore:
             pending_valid = 0
             current_valid = 0
             for row in rows:
+                row_payload = _row_mapping(row)
+                if _mapping_int(row_payload, "integrity_version") != POLICY_INTEGRITY_VERSION:
+                    return dict(trusted_state)
                 pending_result = verify_local_policy_row(
-                    _row_mapping(row),
+                    row_payload,
                     key=key,
                     key_id=key_id,
                     degraded_mode=False,
@@ -1716,7 +1719,7 @@ class GuardStore:
                     pending_valid += 1
                     continue
                 current_result = verify_local_policy_row(
-                    _row_mapping(row),
+                    row_payload,
                     key=key,
                     key_id=key_id,
                     degraded_mode=False,
