@@ -1220,7 +1220,10 @@ def test_pending_generation_recovers_when_post_commit_control_write_is_skipped(
     assert recovered_control["pending_generation"] is None
 
 
-def test_startup_refresh_does_not_overwrite_newer_policy_integrity_generation(tmp_path: Path) -> None:
+def test_startup_refresh_does_not_overwrite_newer_policy_integrity_generation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     store = _store(tmp_path)
     store.upsert_policy(
         _decision(artifact_id="codex:project:baseline", artifact_hash="hash-baseline"),
@@ -1236,12 +1239,36 @@ def test_startup_refresh_does_not_overwrite_newer_policy_integrity_generation(tm
 
     store._startup_prefetched_policy_integrity_secret_material = prefetched_secret
     store._startup_prefetched_policy_integrity_trusted_state = prefetched_control
+    original_control_lookup = store._load_policy_integrity_control_state
+    original_secret_lookup = store._policy_integrity_secret_material
+    monkeypatch.setattr(
+        store,
+        "_load_policy_integrity_control_state",
+        lambda *, create: (_ for _ in ()).throw(
+            AssertionError("startup refresh should not re-read control state")
+        ),
+    )
+    monkeypatch.setattr(
+        store,
+        "_policy_integrity_secret_material",
+        lambda *, create: (_ for _ in ()).throw(
+            AssertionError("startup refresh should not re-read secret material")
+        ),
+    )
     try:
         with store._connect() as connection:
-            store._refresh_policy_integrity_state(connection, now="2026-06-14T00:02:00Z", create_key=False)
+            store._refresh_policy_integrity_state(
+                connection, now="2026-06-14T00:02:00Z", create_key=False
+            )
     finally:
-        store._startup_prefetched_policy_integrity_secret_material = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
-        store._startup_prefetched_policy_integrity_trusted_state = guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+        store._startup_prefetched_policy_integrity_secret_material = (
+            guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+        )
+        store._startup_prefetched_policy_integrity_trusted_state = (
+            guard_store_module._POLICY_INTEGRITY_LOOKUP_UNSET
+        )
+        store._load_policy_integrity_control_state = original_control_lookup
+        store._policy_integrity_secret_material = original_secret_lookup
 
     state_payload = _policy_integrity_state_payload(store.guard_home)
     current_policy = next(
