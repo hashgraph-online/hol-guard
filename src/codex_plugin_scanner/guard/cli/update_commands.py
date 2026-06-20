@@ -1000,17 +1000,19 @@ def _resolve_requested_wheel_path(wheel: str | None) -> tuple[Path | None, str |
             except OSError:
                 return 0
 
-        def _wheel_sort_key(path: Path) -> tuple[Version, int, str]:
-            version = _parsed_hol_guard_wheel_version(path) or Version("0")
-            return version, _safe_mtime(path), path.name
-
-        wheels = sorted(
-            (
-                path
-                for path in candidate.glob("hol_guard-*.whl")
-                if path.is_file() and _parsed_hol_guard_wheel_version(path) is not None
+        wheels: list[Path] = []
+        for path in candidate.iterdir():
+            if not path.is_file():
+                continue
+            if _parsed_hol_guard_wheel_version(path) is None:
+                continue
+            wheels.append(path)
+        wheels.sort(
+            key=lambda path: (
+                _parsed_hol_guard_wheel_version(path) or Version("0"),
+                _safe_mtime(path),
+                path.name.lower(),
             ),
-            key=_wheel_sort_key,
             reverse=True,
         )
         if not wheels:
@@ -1042,10 +1044,11 @@ def _file_url_to_path(parsed: ParseResult) -> str:
 
 def _parsed_hol_guard_wheel_version(path: Path) -> Version | None:
     filename = path.name
-    if not filename.endswith(".whl"):
+    suffix = path.suffix
+    if suffix.lower() != ".whl":
         return None
-    parts = filename[:-4].split("-")
-    if len(parts) < 5 or parts[0] != "hol_guard":
+    parts = filename[: -len(suffix)].split("-")
+    if len(parts) < 5 or parts[0].lower() != "hol_guard":
         return None
     try:
         return Version(parts[1])

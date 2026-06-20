@@ -637,6 +637,40 @@ def test_update_rejects_non_hol_guard_wheel(monkeypatch: pytest.MonkeyPatch, tmp
     assert "Expected a HOL Guard wheel file" in str(payload["error"])
 
 
+def test_update_accepts_uppercase_hol_guard_wheel(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    wheel = tmp_path / "hol_guard-2.0.345-py3-none-any.WHL"
+    wheel.write_bytes(b"uppercase-wheel")
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.344")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.345")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=True, wheel=str(wheel))
+
+    assert exit_code == 0
+    assert payload["status"] == "planned"
+    assert payload["requested_wheel"] == str(wheel)
+
+
+def test_update_resolves_uppercase_hol_guard_wheel_from_directory(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir()
+    wheel = dist_dir / "hol_guard-2.0.345-py3-none-any.WHL"
+    wheel.write_bytes(b"uppercase-wheel")
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.344")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.345")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=True, wheel=str(dist_dir))
+
+    assert exit_code == 0
+    assert payload["requested_wheel"] == str(wheel)
+
+
 def test_update_does_not_skip_existing_local_non_wheel_archive(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
