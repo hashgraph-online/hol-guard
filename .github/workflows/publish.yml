@@ -400,7 +400,7 @@ jobs:
           git remote set-url origin "https://x-access-token:${ACTION_REPO_TOKEN}@github.com/${{ github.repository }}.git"
           branch="release/sync-repository-version-v${VERSION}"
           head_ref="${{ github.repository_owner }}:${branch}"
-          title="chore(release): sync repository version to ${VERSION}"
+          title="chore(release): sync repository version to ${VERSION} [skip release publish]"
           body_file="$(mktemp)"
           trap 'rm -f "$body_file"' EXIT
           cat > "$body_file" <<EOF
@@ -436,6 +436,6 @@ jobs:
           fi
           if [[ "$(gh api repos/${{ github.repository }} --jq .allow_auto_merge)" != "true" ]]; then
             echo "Repository auto-merge is disabled; leaving PR #${pr_number} open for manual merge after checks." >&2
-            exit 0
+            exit 1
           fi
           gh pr merge "$pr_number" --repo ${{ github.repository }} --auto --squash --delete-branch --match-head-commit "$head_sha" --subject "chore(release): sync repository version to ${VERSION} [skip release publish]" --body ""
