@@ -263,6 +263,30 @@ def _copilot_mcp_tool_token(value: str) -> str:
     token = re.sub(r"[^a-z0-9]+", "_", value.strip().lower())
     return token.strip("_")
 
+
+def _validated_pi_runtime_policy_override(
+    home_dir: Path,
+    workspace: Path | None,
+    payload: dict[str, object] | None,
+) -> Path | None:
+    raw_config_path = payload.get("config_path") if isinstance(payload, dict) else None
+    if not isinstance(raw_config_path, str) or not raw_config_path.strip():
+        return None
+    candidate = Path(raw_config_path).expanduser()
+    allowed_paths = {
+        home_dir / ".pi" / "agent" / "settings.json",
+        home_dir / ".omp" / "agent" / "settings.json",
+    }
+    if workspace is not None:
+        allowed_paths.update(
+            {
+                workspace / ".pi" / "settings.json",
+                workspace / ".omp" / "settings.json",
+            }
+        )
+    return candidate if candidate in allowed_paths else None
+
+
 def _runtime_policy_path(
     harness: str,
     home_dir: Path,
@@ -270,9 +294,6 @@ def _runtime_policy_path(
     *,
     payload: dict[str, object] | None = None,
 ) -> Path:
-    raw_config_path = payload.get("config_path") if isinstance(payload, dict) else None
-    if isinstance(raw_config_path, str) and raw_config_path.strip():
-        return Path(raw_config_path).expanduser()
     if harness == "hermes":
         return home_dir / ".hermes" / "config.yaml"
     if harness == "cursor":
@@ -288,6 +309,9 @@ def _runtime_policy_path(
             return workspace / ".codex" / "config.toml"
         return home_dir / ".codex" / "config.toml"
     if harness == "pi":
+        override_path = _validated_pi_runtime_policy_override(home_dir, workspace, payload)
+        if override_path is not None:
+            return override_path
         if workspace is not None:
             return workspace / ".pi" / "settings.json"
         return home_dir / ".pi" / "agent" / "settings.json"

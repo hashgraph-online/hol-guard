@@ -62,6 +62,7 @@ class TestPiAdapterIdentity:
         assert contract is not None
         assert contract.harness == "pi"
         assert contract.smoke_command == "hol-guard install pi --dry-run"
+        assert "tool_result" in contract.event_surfaces
 
 
 class TestPiDetect:
