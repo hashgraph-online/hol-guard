@@ -244,15 +244,22 @@ class TestPiInstall:
         assert "const GUARD_MAX_SERIALIZED_PAYLOAD_CHARS =" in text
         assert "function truncateText(" in text
         assert "function boundValue(" in text
+        assert "if (value === undefined) return { value: undefined, truncated: false };" in text
         assert "typeof value === 'bigint'" in text
         assert "value.toString()" in text
         assert "new WeakSet<object>()" in text
         assert "[deep object omitted by HOL Guard]" in text
         assert "const boundedContent = boundValue(event.content);" in text
-        assert "const boundedStdout = boundValue(contentText(event.content));" in text
-        assert "boundedToolInput.truncated || boundedContent.truncated || boundedStdout.truncated" in text
+        assert "boundedToolInput.truncated || boundedContent.truncated" in text
+        assert "const blockedToolResults = new Map<string, string>();" in text
+        assert 'pi.on("message_end"' in text
+        assert 'pi.on("context"' in text
+        assert "blockedToolResults.set(event.toolCallId, reason);" in text
         assert "HOL Guard blocked oversized Pi tool output before review" in text
+        assert "return blockedToolResult(reason, event.details);" in text
         assert "tool_response: limitedContent" in text
+        assert "stdout: toolOutput" not in text
+        assert "contentText(event.content)" not in text
 
     def test_uninstall_removes_managed_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)

@@ -154,9 +154,10 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "      ? { value, truncated: false }\n"
         "      : { value: truncateText(value), truncated: true };\n"
         "  }\n"
+        "  if (value === undefined) return { value: undefined, truncated: false };\n"
         "  if (typeof value === 'bigint') return { value: value.toString(), truncated: false };\n"
         "  if (\n"
-        "    value == null ||\n"
+        "    value === null ||\n"
         "    typeof value === 'number' ||\n"
         "    typeof value === 'boolean'\n"
         "  ) {\n"
@@ -169,7 +170,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  if (seen.has(objectValue)) {\n"
         "    return { value: '[cycle omitted by HOL Guard]', truncated: true };\n"
         "  }\n"
-        "  if (depth >= GUARD_MAX_DEPTH) {\n"
+        "  if (depth > GUARD_MAX_DEPTH) {\n"
         "    return { value: '[deep object omitted by HOL Guard]', truncated: true };\n"
         "  }\n"
         "  seen.add(objectValue);\n"
@@ -187,10 +188,17 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "      return { value: nextItems, truncated: childTruncated };\n"
         "    }\n"
         "    const record = value as Record<string, unknown>;\n"
-        "    const entries = Object.entries(record);\n"
         "    const nextRecord: Record<string, unknown> = {};\n"
-        "    let truncated = entries.length > GUARD_OBJECT_KEY_LIMIT;\n"
-        "    for (const [key, entryValue] of entries.slice(0, GUARD_OBJECT_KEY_LIMIT)) {\n"
+        "    let truncated = false;\n"
+        "    let keyCount = 0;\n"
+        "    for (const key in record) {\n"
+        "      if (!Object.prototype.hasOwnProperty.call(record, key)) continue;\n"
+        "      if (keyCount >= GUARD_OBJECT_KEY_LIMIT) {\n"
+        "        truncated = true;\n"
+        "        break;\n"
+        "      }\n"
+        "      keyCount += 1;\n"
+        "      const entryValue = record[key];\n"
         "      const next = boundValue(entryValue, depth + 1, seen);\n"
         "      nextRecord[key] = next.value;\n"
         "      truncated = truncated || next.truncated;\n"
@@ -256,21 +264,16 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         '  return { decision: "allow" };\n'
         "}\n"
         "\n"
-        "function contentText(content: unknown): string {\n"
-        '  if (typeof content === "string") return content;\n'
-        '  if (!Array.isArray(content)) return "";\n'
-        "  return content\n"
-        "    .map((item) => {\n"
-        '      if (!item || typeof item !== "object") return "";\n'
-        "      const type = (item as { type?: unknown }).type;\n"
-        "      const text = (item as { text?: unknown }).text;\n"
-        '      return type === "text" && typeof text === "string" ? text : "";\n'
-        "    })\n"
-        "    .filter(Boolean)\n"
-        '    .join("\\n");\n'
+        "function blockedToolResult(reason: string, details: unknown) {\n"
+        "  return {\n"
+        '    content: [{ type: "text", text: reason }],\n'
+        "    details,\n"
+        "    isError: true,\n"
+        "  };\n"
         "}\n"
         "\n"
         "export default function (pi: ExtensionAPI) {\n"
+        "  const blockedToolResults = new Map<string, string>();\n"
         '  pi.on("input", async (event, ctx) => {\n'
         '    if (event.source === "extension") return { action: "continue" };\n'
         "    const response = runGuard(\n"
@@ -304,6 +307,34 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    }\n"
         "    return undefined;\n"
         "  });\n"
+        '  pi.on("message_end", async (event) => {\n'
+        '    if (event.message.role !== "toolResult") return;\n'
+        "    const reason = blockedToolResults.get(event.message.toolCallId);\n"
+        "    if (!reason) return;\n"
+        "    return {\n"
+        "      message: {\n"
+        "        ...event.message,\n"
+        '        content: [{ type: "text", text: reason }],\n'
+        "        isError: true,\n"
+        "      },\n"
+        "    };\n"
+        "  });\n"
+        '  pi.on("context", async (event) => {\n'
+        "    if (blockedToolResults.size === 0) return;\n"
+        "    let changed = false;\n"
+        "    const messages = event.messages.map((message) => {\n"
+        '      if (message.role !== "toolResult") return message;\n'
+        "      const reason = blockedToolResults.get(message.toolCallId);\n"
+        "      if (!reason) return message;\n"
+        "      changed = true;\n"
+        "      return {\n"
+        "        ...message,\n"
+        '        content: [{ type: "text", text: reason }],\n'
+        "        isError: true,\n"
+        "      };\n"
+        "    });\n"
+        "    return changed ? { messages } : undefined;\n"
+        "  });\n"
         '  pi.on("tool_result", async (event, ctx) => {\n'
         "    const boundedToolInput = boundValue(\n"
         "      (event as { input?: Record<string, unknown> }).input ??\n"
@@ -312,20 +343,15 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "      {},\n"
         "    );\n"
         "    const boundedContent = boundValue(event.content);\n"
-        "    const boundedStdout = boundValue(contentText(event.content));\n"
-        "    if (boundedToolInput.truncated || boundedContent.truncated || boundedStdout.truncated) {\n"
+        "    if (boundedToolInput.truncated || boundedContent.truncated) {\n"
         '      const reason = "HOL Guard blocked oversized Pi tool output before review because "\n'
         '        + "the result exceeded the safe hook limit.";\n'
+        "      blockedToolResults.set(event.toolCallId, reason);\n"
         '      ctx.ui.notify(reason, "warning");\n'
-        "      return {\n"
-        '        content: [{ type: "text", text: reason }],\n'
-        "        details: event.details,\n"
-        "        isError: true,\n"
-        "      };\n"
+        "      return blockedToolResult(reason, event.details);\n"
         "    }\n"
         "    const toolInput =\n"
         "      boundedToolInput.value as Record<string, unknown>;\n"
-        "    const toolOutput = boundedStdout.value as string;\n"
         "    const limitedContent = boundedContent.value;\n"
         "    const response = runGuard(\n"
         "      {\n"
@@ -334,19 +360,15 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "        tool_name: event.toolName,\n"
         "        tool_input: toolInput,\n"
         "        tool_response: limitedContent,\n"
-        "        stdout: toolOutput,\n"
         "        is_error: event.isError === true,\n"
         "      },\n"
         "      ctx.cwd,\n"
         "    );\n"
         '    if (response.decision === "deny") {\n'
         '      const reason = response.reason ?? "Blocked by HOL Guard.";\n'
+        "      blockedToolResults.set(event.toolCallId, reason);\n"
         '      ctx.ui.notify(reason, "warning");\n'
-        "      return {\n"
-        '        content: [{ type: "text", text: reason }],\n'
-        "        details: event.details,\n"
-        "        isError: true,\n"
-        "      };\n"
+        "      return blockedToolResult(reason, event.details);\n"
         "    }\n"
         "    return undefined;\n"
         "  });\n"
