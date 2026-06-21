@@ -192,7 +192,7 @@ class TestPiInstall:
         assert 'pi.on("tool_result"' in text
         assert 'pi.on("input"' in text
         assert 'hook_event_name: "PostToolUse"' in text
-        assert "tool_response: event.content" in text
+        assert "tool_response: limitedContent" in text
         assert "const GUARD_CONFIG_PATH =" in text
         assert "config_path: GUARD_CONFIG_PATH" in text
         assert '"--harness", "pi"' in text
@@ -202,6 +202,57 @@ class TestPiInstall:
         assert str(extension_path) in json.loads(settings_path.read_text(encoding="utf-8"))["extensions"]
         assert omp_extension_path.is_file()
         assert str(omp_extension_path) in json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"]
+
+    def test_install_writes_managed_extension_that_denies_on_hook_errors(self, tmp_path: Path, monkeypatch) -> None:
+        ctx = _ctx(tmp_path)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
+            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
+        )
+
+        manifest = get_adapter("pi").install(ctx)
+
+        text = Path(str(manifest["config_path"])).read_text(encoding="utf-8")
+        assert "serializedPayload = JSON.stringify(payload);" in text
+        assert "serializedPayload.length > GUARD_MAX_SERIALIZED_PAYLOAD_CHARS" in text
+        assert "if (result.error) {" in text
+        assert "const resultError =" in text
+        assert "const errorCode =" in text
+        assert 'decision: "deny"' in text
+        assert "errorCode === 'ETIMEDOUT'" in text
+        assert "HOL Guard Pi hook timed out after" in text
+        assert "HOL Guard Pi hook failed before completing review" in text
+
+    def test_install_writes_managed_extension_that_truncates_post_tool_payloads(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        ctx = _ctx(tmp_path)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
+            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
+        )
+
+        manifest = get_adapter("pi").install(ctx)
+
+        text = Path(str(manifest["config_path"])).read_text(encoding="utf-8")
+        assert "const GUARD_TEXT_LIMIT_CHARS =" in text
+        assert "const GUARD_CONTENT_ITEM_LIMIT =" in text
+        assert "const GUARD_OBJECT_KEY_LIMIT =" in text
+        assert "const GUARD_MAX_DEPTH =" in text
+        assert "const GUARD_MAX_SERIALIZED_PAYLOAD_CHARS =" in text
+        assert "function truncateText(" in text
+        assert "function boundValue(" in text
+        assert "typeof value === 'bigint'" in text
+        assert "value.toString()" in text
+        assert "new WeakSet<object>()" in text
+        assert "[deep object omitted by HOL Guard]" in text
+        assert "const boundedContent = boundValue(event.content);" in text
+        assert "const boundedStdout = boundValue(contentText(event.content));" in text
+        assert "boundedToolInput.truncated || boundedContent.truncated || boundedStdout.truncated" in text
+        assert "HOL Guard blocked oversized Pi tool output before review" in text
+        assert "tool_response: limitedContent" in text
 
     def test_uninstall_removes_managed_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)

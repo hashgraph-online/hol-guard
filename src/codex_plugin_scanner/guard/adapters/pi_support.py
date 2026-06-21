@@ -19,6 +19,11 @@ EXTENSION_SUFFIXES = (".ts", ".js", ".mts", ".cts", ".mjs", ".cjs")
 THEME_SUFFIXES = (".json", ".js", ".ts", ".yaml", ".yml")
 REMOTE_RESOURCE_PREFIXES = ("npm:", "git:", "http://", "https://", "ssh://")
 GUARD_HOOK_TIMEOUT_MS = 10_000
+GUARD_HOOK_TEXT_LIMIT_CHARS = 12_000
+GUARD_HOOK_CONTENT_ITEM_LIMIT = 24
+GUARD_HOOK_OBJECT_KEY_LIMIT = 24
+GUARD_HOOK_MAX_DEPTH = 24
+GUARD_HOOK_MAX_SERIALIZED_PAYLOAD_CHARS = 24_000
 
 
 def append_found_path(found_paths: list[str], path: Path) -> None:
@@ -129,19 +134,111 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         f"const GUARD_ARGS = {guard_args_json};\n"
         f"const GUARD_CONFIG_PATH = {config_path_json};\n"
         f"const GUARD_TIMEOUT_MS = {GUARD_HOOK_TIMEOUT_MS};\n"
+        f"const GUARD_TEXT_LIMIT_CHARS = {GUARD_HOOK_TEXT_LIMIT_CHARS};\n"
+        f"const GUARD_CONTENT_ITEM_LIMIT = {GUARD_HOOK_CONTENT_ITEM_LIMIT};\n"
+        f"const GUARD_OBJECT_KEY_LIMIT = {GUARD_HOOK_OBJECT_KEY_LIMIT};\n"
+        f"const GUARD_MAX_DEPTH = {GUARD_HOOK_MAX_DEPTH};\n"
+        f"const GUARD_MAX_SERIALIZED_PAYLOAD_CHARS = {GUARD_HOOK_MAX_SERIALIZED_PAYLOAD_CHARS};\n"
         "\n"
         "type GuardResponse = { decision?: string; reason?: string };\n"
+        "type BoundedValue = { value: unknown; truncated: boolean };\n"
+        "\n"
+        "function truncateText(value: string, limit = GUARD_TEXT_LIMIT_CHARS): string {\n"
+        "  if (value.length <= limit) return value;\n"
+        "  return `${value.slice(0, Math.max(limit, 0))}\\n...[truncated by HOL Guard]...`;\n"
+        "}\n"
+        "\n"
+        "function boundValue(value: unknown, depth = 0, seen = new WeakSet<object>()): BoundedValue {\n"
+        "  if (typeof value === 'string') {\n"
+        "    return value.length <= GUARD_TEXT_LIMIT_CHARS\n"
+        "      ? { value, truncated: false }\n"
+        "      : { value: truncateText(value), truncated: true };\n"
+        "  }\n"
+        "  if (typeof value === 'bigint') return { value: value.toString(), truncated: false };\n"
+        "  if (\n"
+        "    value == null ||\n"
+        "    typeof value === 'number' ||\n"
+        "    typeof value === 'boolean'\n"
+        "  ) {\n"
+        "    return { value, truncated: false };\n"
+        "  }\n"
+        "  if (typeof value !== 'object') {\n"
+        "    return { value: String(value), truncated: true };\n"
+        "  }\n"
+        "  const objectValue = value as object;\n"
+        "  if (seen.has(objectValue)) {\n"
+        "    return { value: '[cycle omitted by HOL Guard]', truncated: true };\n"
+        "  }\n"
+        "  if (depth >= GUARD_MAX_DEPTH) {\n"
+        "    return { value: '[deep object omitted by HOL Guard]', truncated: true };\n"
+        "  }\n"
+        "  seen.add(objectValue);\n"
+        "  try {\n"
+        "    if (Array.isArray(value)) {\n"
+        "      const truncated = value.length > GUARD_CONTENT_ITEM_LIMIT;\n"
+        "      const items = value.slice(0, GUARD_CONTENT_ITEM_LIMIT);\n"
+        "      const nextItems: unknown[] = [];\n"
+        "      let childTruncated = truncated;\n"
+        "      for (const item of items) {\n"
+        "        const next = boundValue(item, depth + 1, seen);\n"
+        "        nextItems.push(next.value);\n"
+        "        childTruncated = childTruncated || next.truncated;\n"
+        "      }\n"
+        "      return { value: nextItems, truncated: childTruncated };\n"
+        "    }\n"
+        "    const record = value as Record<string, unknown>;\n"
+        "    const entries = Object.entries(record);\n"
+        "    const nextRecord: Record<string, unknown> = {};\n"
+        "    let truncated = entries.length > GUARD_OBJECT_KEY_LIMIT;\n"
+        "    for (const [key, entryValue] of entries.slice(0, GUARD_OBJECT_KEY_LIMIT)) {\n"
+        "      const next = boundValue(entryValue, depth + 1, seen);\n"
+        "      nextRecord[key] = next.value;\n"
+        "      truncated = truncated || next.truncated;\n"
+        "    }\n"
+        "    return { value: nextRecord, truncated };\n"
+        "  } finally {\n"
+        "    seen.delete(objectValue);\n"
+        "  }\n"
+        "}\n"
         "\n"
         "function runGuard(payload: Record<string, unknown>, cwd?: string): GuardResponse {\n"
         "  const args = [...GUARD_ARGS];\n"
         '  const workspace = typeof cwd === "string" && cwd ? cwd : process.cwd();\n'
         '  if (workspace) args.push("--workspace", workspace);\n'
+        "  let serializedPayload = '';\n"
+        "  try {\n"
+        "    serializedPayload = JSON.stringify(payload);\n"
+        "  } catch (error) {\n"
+        "    return {\n"
+        '      decision: "deny",\n'
+        '      reason: `HOL Guard could not serialize Pi hook payload: ${\n'
+        '        error instanceof Error ? error.message : String(error)\n'
+        "      }`,\n"
+        "    };\n"
+        "  }\n"
+        "  if (serializedPayload.length > GUARD_MAX_SERIALIZED_PAYLOAD_CHARS) {\n"
+        "    return {\n"
+        '      decision: "deny",\n'
+        '      reason: "HOL Guard blocked this Pi hook payload before review because it exceeded "\n'
+        '        + "the safe size limit.",\n'
+        "    };\n"
+        "  }\n"
         '  const result = spawnSync("hol-guard", args, {\n'
-        "    input: `${JSON.stringify(payload)}\\n`,\n"
+        "    input: `${serializedPayload}\\n`,\n"
         '    encoding: "utf-8",\n'
         "    timeout: GUARD_TIMEOUT_MS,\n"
         "  });\n"
-        '  if (result.error) return { decision: "allow" };\n'
+        "  if (result.error) {\n"
+        "    const resultError = result.error as (Error & { code?: unknown }) | undefined;\n"
+        "    const errorMessage = resultError instanceof Error ? resultError.message : String(result.error);\n"
+        "    const errorCode = typeof resultError?.code === 'string' ? resultError.code : '';\n"
+        "    return {\n"
+        '      decision: "deny",\n'
+        "      reason: errorCode === 'ETIMEDOUT' || result.error?.name === 'TimeoutError'\n"
+        '        ? `HOL Guard Pi hook timed out after ${GUARD_TIMEOUT_MS}ms while reviewing this action.`\n'
+        '        : `HOL Guard Pi hook failed before completing review: ${errorMessage}`,\n'
+        "    };\n"
+        "  }\n"
         '  const lines = (result.stdout ?? "").split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);\n'
         "  const lastLine = lines.length > 0 ? lines[lines.length - 1] : null;\n"
         "  if (lastLine) {\n"
@@ -208,19 +305,35 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    return undefined;\n"
         "  });\n"
         '  pi.on("tool_result", async (event, ctx) => {\n'
-        "    const toolOutput = contentText(event.content);\n"
-        "    const toolInput =\n"
+        "    const boundedToolInput = boundValue(\n"
         "      (event as { input?: Record<string, unknown> }).input ??\n"
         "      (event as { toolInput?: Record<string, unknown> }).toolInput ??\n"
         "      (event as { arguments?: Record<string, unknown> }).arguments ??\n"
-        "      {};\n"
+        "      {},\n"
+        "    );\n"
+        "    const boundedContent = boundValue(event.content);\n"
+        "    const boundedStdout = boundValue(contentText(event.content));\n"
+        "    if (boundedToolInput.truncated || boundedContent.truncated || boundedStdout.truncated) {\n"
+        '      const reason = "HOL Guard blocked oversized Pi tool output before review because "\n'
+        '        + "the result exceeded the safe hook limit.";\n'
+        '      ctx.ui.notify(reason, "warning");\n'
+        "      return {\n"
+        '        content: [{ type: "text", text: reason }],\n'
+        "        details: event.details,\n"
+        "        isError: true,\n"
+        "      };\n"
+        "    }\n"
+        "    const toolInput =\n"
+        "      boundedToolInput.value as Record<string, unknown>;\n"
+        "    const toolOutput = boundedStdout.value as string;\n"
+        "    const limitedContent = boundedContent.value;\n"
         "    const response = runGuard(\n"
         "      {\n"
         '        hook_event_name: "PostToolUse",\n'
         "        config_path: GUARD_CONFIG_PATH,\n"
         "        tool_name: event.toolName,\n"
         "        tool_input: toolInput,\n"
-        "        tool_response: event.content,\n"
+        "        tool_response: limitedContent,\n"
         "        stdout: toolOutput,\n"
         "        is_error: event.isError === true,\n"
         "      },\n"
