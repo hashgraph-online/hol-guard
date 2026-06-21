@@ -33,6 +33,28 @@ function updateStatusLabel(status: GuardUpdateStatus | null | undefined): string
   return `Version ${status.current_version}`;
 }
 
+function shouldPromptRecoveryReinstall(status: GuardUpdateStatus | null | undefined): boolean {
+  return (
+    status?.recovery_reinstall_available === true &&
+    status?.auto_updatable !== true &&
+    status?.version_check?.update_available === true
+  );
+}
+
+function recoveryReinstallHelpCopy(status: GuardUpdateStatus | null | undefined): string | null {
+  if (!shouldPromptRecoveryReinstall(status)) {
+    return null;
+  }
+  const blockedReason = status?.blocked_reason ?? "";
+  if (blockedReason.includes("local wheel whose source file is no longer available")) {
+    return "This install came from a local wheel whose source file is no longer available, so automatic updates are off. Reinstall from PyPI to switch it back to a normal package; Guard restarts briefly and saved approvals stay.";
+  }
+  if (blockedReason.includes("local wheel")) {
+    return "This install came from a local wheel, so automatic updates are off. Reinstall from PyPI to switch it back to a normal package; Guard restarts briefly and saved approvals stay.";
+  }
+  return "This install came from a local folder, so automatic updates are off. Reinstall from PyPI to switch it back to a normal package; Guard restarts briefly and saved approvals stay.";
+}
+
 function updateHelpCopy(status: GuardUpdateStatus | null | undefined, phase: GuardUpdatePhase): string | null {
   if (phase === "updating") {
     return "Guard is installing the update. The dashboard will pause briefly and reopen when ready.";
@@ -55,9 +77,8 @@ function updateHelpCopy(status: GuardUpdateStatus | null | undefined, phase: Gua
   if (status?.update_available) {
     return "This restarts Guard for a moment. Open approvals will stay saved.";
   }
-  // Recovery case gets calmer copy that frames the fix instead of the dead end.
   if (status && !status.auto_updatable && status.recovery_reinstall_available) {
-    return "This install came from a local folder, so automatic updates are off. Reinstall from PyPI to switch it back to a normal package; Guard restarts briefly and saved approvals stay.";
+    return recoveryReinstallHelpCopy(status);
   }
   if (status && !status.auto_updatable && status.blocked_reason) {
     return status.blocked_reason;
@@ -75,11 +96,7 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
     props.updateStatus.update_suppressed !== true &&
     phase !== "updating" &&
     phase !== "reconnecting";
-  const showReinstallButton =
-    props.updateStatus?.recovery_reinstall_available === true &&
-    props.updateStatus.auto_updatable !== true &&
-    phase !== "updating" &&
-    phase !== "reconnecting";
+  const showReinstallButton = shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
   const busy = phase === "updating" || phase === "reconnecting";
 
   return (
