@@ -316,8 +316,8 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  } catch (error) {\n"
         "    return {\n"
         '      decision: "deny",\n'
-        '      reason: `HOL Guard could not serialize Pi hook payload: ${\n'
-        '        error instanceof Error ? error.message : String(error)\n'
+        "      reason: `HOL Guard could not serialize Pi hook payload: ${\n"
+        "        error instanceof Error ? error.message : String(error)\n"
         "      }`,\n"
         "    };\n"
         "  }\n"
@@ -359,8 +359,8 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    return {\n"
         '      decision: "deny",\n'
         "      reason: errorCode === 'ETIMEDOUT' || result.error?.name === 'TimeoutError'\n"
-        '        ? `HOL Guard Pi hook timed out after ${GUARD_TIMEOUT_MS}ms while reviewing this action.`\n'
-        '        : `HOL Guard Pi hook failed before completing review: ${errorMessage}`,\n'
+        "        ? `HOL Guard Pi hook timed out after ${GUARD_TIMEOUT_MS}ms while reviewing this action.`\n"
+        "        : `HOL Guard Pi hook failed before completing review: ${errorMessage}`,\n"
         "    };\n"
         "  }\n"
         '  const lines = (result.stdout ?? "").split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);\n'
