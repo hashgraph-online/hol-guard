@@ -90,11 +90,11 @@ class TestNoHardcodedSecrets:
     def test_detects_provider_specific_tokens_in_text_svg_and_lock_files(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
-            github_token = "github_" + "pat_" + "abcdefghijklmnopqrstuvwxyz0123456789_ABCD"
-            openai_token = "sk-" + "proj-" + "abcdefghijklmnopqrstuvwxyz0123456789ABCD"
-            slack_app_token = "xapp-" + "1-" + "abcdefghijklmnopqrstuvwxyz0123456789"
-            slack_user_token = "xoxe-" + "1-" + "abcdefghijklmnopqrstuvwxyz0123456789"
-            slack_config_token = "xoxr-" + "1-" + "abcdefghijklmnopqrstuvwxyz0123456789"
+            github_token = "".join(("github_", "pat_", "abcdefghij", "klmnopqrst", "uvwxyz0123", "456789_ABCD"))
+            openai_token = "".join(("sk-", "proj-", "abcdefghij", "klmnopqrst", "uvwxyz0123", "456789ABCD"))
+            slack_app_token = "".join(("xapp-", "1-", "abcdefghij", "klmnopqrst", "uvwxyz0123456789"))
+            slack_user_token = "".join(("xoxe-", "1-", "abcdefghij", "klmnopqrst", "uvwxyz0123456789"))
+            slack_config_token = "".join(("xoxr-", "1-", "abcdefghij", "klmnopqrst", "uvwxyz0123456789"))
             (root / "logo.svg").write_text(
                 f"<svg><!-- {github_token} --></svg>",
                 encoding="utf-8",
@@ -113,6 +113,93 @@ class TestNoHardcodedSecrets:
             assert result.points == 0
             assert "logo.svg" in result.message
             assert "deps.lock" in result.message
+
+    def test_ignores_placeholder_credentials_in_documentation(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "README.md").write_text(
+                'export JIRA_API_TOKEN="your-api-token"\n'
+                'const apiKey = "sk-proj-xxxxx"\n'
+                'export NUTRIENT_API_KEY="pdf_live_..."\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is True
+
+    def test_detects_real_looking_generic_secret_in_documentation(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            jira_token = "".join(("A1b2C3d4", "E5f6G7h8", "I9j0K1l2"))
+            (root / "README.md").write_text(
+                f'export JIRA_API_TOKEN="{jira_token}"\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert result.findings[0].file_path == "README.md"
+            assert result.findings[0].line_number == 1
+
+    def test_ignores_synthetic_secret_sequences_in_test_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            tests_dir = root / "tests"
+            tests_dir.mkdir()
+            aws_token = "".join(("AKIA", "ABCDEFGH", "IJKLMNOP"))
+            openai_token = "".join(("sk-proj-", "abcdefghij", "1234567890"))
+            github_token = "".join(("ghp_", "abcdefghij", "klmnopqrst", "uvwxyz", "ABCDEFGHIJ"))
+            (tests_dir / "secret_examples.test.js").write_text(
+                f'const aws = "{aws_token}";\n'
+                f'const openai = "{openai_token}";\n'
+                f'const github = "{github_token}";\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is True
+
+    def test_detects_real_provider_secret_in_documentation(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            openai_token = "".join(("sk-proj-", "A1b2C3d4", "E5f6G7h8", "I9j0K1l2"))
+            (root / "README.md").write_text(
+                f'const apiKey = "{openai_token}";\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert result.findings[0].line_number == 1
+
+    def test_ignores_truncated_private_key_example_but_detects_full_block(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            pem_header = "-----BEGIN " + "RSA PRIVATE KEY-----"
+            pem_footer = "-----END " + "RSA PRIVATE KEY-----"
+            (root / "README.md").write_text(
+                "Example:\n"
+                f"{pem_header}\n"
+                "MIIE...\n",
+                encoding="utf-8",
+            )
+            assert check_no_hardcoded_secrets(root).passed is True
+
+            (root / "README.md").write_text(
+                f"{pem_header}\n"
+                "MIIEpAIBAAKCAQEA1234567890abcdefghijklmnopqrstuv==\n"
+                f"{pem_footer}\n",
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert result.findings[0].line_number == 1
 
 
 class TestNoDangerousMcp:

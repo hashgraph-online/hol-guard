@@ -5,37 +5,97 @@ from __future__ import annotations
 import ipaddress
 import json
 import re
+from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 from urllib.parse import urlparse
 
 from ..models import CheckResult, Finding, Severity
 from ..path_support import resolves_within_root
 
+
+@dataclass(frozen=True, slots=True)
+class SecretPattern:
+    pattern: re.Pattern[str]
+    kind: str = "provider"
+    value_group: int = 0
+
+
 # Patterns for hardcoded secrets
-SECRET_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"AKIA[0-9A-Z]{16}"),  # AWS access key
-    re.compile(r"aws_secret_access_key\s*[=:]\s*[\"']?[A-Za-z0-9/+=]{40}", re.I),
-    re.compile(r"-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----"),
-    re.compile(r"password\s*[=:]\s*[\"'][^\s\"']{8,}", re.I),
-    re.compile(r"secret\s*[=:]\s*[\"'][^\s\"']{8,}", re.I),
-    re.compile(r"token\s*[=:]\s*[\"'][^\s\"']{8,}", re.I),
-    re.compile(r"api_?key\s*[=:]\s*[\"'][^\s\"']{8,}", re.I),
-    re.compile(r"API_KEY\s*[=:]\s*[\"'][^\s\"']{8,}"),
-    re.compile(r"PRIVATE_KEY\s*[=:]\s*[\"'][^\s\"']{8,}"),
-    re.compile(r"ghp_[A-Za-z0-9]{36}"),  # GitHub PAT
-    re.compile(r"gho_[A-Za-z0-9]{36}"),  # GitHub OAuth
-    re.compile(r"ghu_[A-Za-z0-9]{36}"),  # GitHub user token
-    re.compile(r"ghs_[A-Za-z0-9]{36}"),  # GitHub app token
-    re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),  # GitHub fine-grained PAT
-    re.compile(r"glpat-[A-Za-z0-9\-]{20}"),  # GitLab PAT
-    re.compile(r"xox[bpas]-[A-Za-z0-9\-]{10,}"),  # Slack tokens
-    re.compile(r"xoxe-[A-Za-z0-9\-]{10,}"),  # Slack user tokens
-    re.compile(r"xoxr-[A-Za-z0-9\-]{10,}"),  # Slack configuration tokens
-    re.compile(r"xapp-[A-Za-z0-9\-]{10,}"),  # Slack app-level tokens
-    re.compile(r"sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}"),  # OpenAI / Anthropic keys
-]
+SECRET_PATTERNS: tuple[SecretPattern, ...] = (
+    SecretPattern(re.compile(r"AKIA[0-9A-Z]{16}")),
+    SecretPattern(re.compile(r"aws_secret_access_key\s*[=:]\s*[\"']?([A-Za-z0-9/+=]{40})", re.I), value_group=1),
+    SecretPattern(
+        re.compile(
+            r"-----BEGIN (?P<label>(?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY)-----"
+            r"[\s\S]{32,}?"
+            r"-----END (?P=label)-----"
+        ),
+        kind="private_key",
+    ),
+    SecretPattern(re.compile(r"password\s*[=:]\s*[\"']([^\s\"']{8,})", re.I), kind="generic", value_group=1),
+    SecretPattern(re.compile(r"secret\s*[=:]\s*[\"']([^\s\"']{8,})", re.I), kind="generic", value_group=1),
+    SecretPattern(re.compile(r"token\s*[=:]\s*[\"']([^\s\"']{8,})", re.I), kind="generic", value_group=1),
+    SecretPattern(re.compile(r"api_?key\s*[=:]\s*[\"']([^\s\"']{8,})", re.I), kind="generic", value_group=1),
+    SecretPattern(re.compile(r"API_KEY\s*[=:]\s*[\"']([^\s\"']{8,})"), kind="generic", value_group=1),
+    SecretPattern(re.compile(r"PRIVATE_KEY\s*[=:]\s*[\"']([^\s\"']{8,})"), kind="generic", value_group=1),
+    SecretPattern(re.compile(r"ghp_[A-Za-z0-9]{36}")),
+    SecretPattern(re.compile(r"gho_[A-Za-z0-9]{36}")),
+    SecretPattern(re.compile(r"ghu_[A-Za-z0-9]{36}")),
+    SecretPattern(re.compile(r"ghs_[A-Za-z0-9]{36}")),
+    SecretPattern(re.compile(r"github_pat_[A-Za-z0-9_]{20,}")),
+    SecretPattern(re.compile(r"glpat-[A-Za-z0-9\-]{20}")),
+    SecretPattern(re.compile(r"xox[bpas]-[A-Za-z0-9\-]{10,}")),
+    SecretPattern(re.compile(r"xoxe-[A-Za-z0-9\-]{10,}")),
+    SecretPattern(re.compile(r"xoxr-[A-Za-z0-9\-]{10,}")),
+    SecretPattern(re.compile(r"xapp-[A-Za-z0-9\-]{10,}")),
+    SecretPattern(re.compile(r"sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}")),
+)
 
 EXCLUDED_DIRS = {"node_modules", ".git", "dist", ".next", "coverage", ".turbo", "__pycache__", ".venv", "venv"}
+
+DOCUMENTATION_EXTS = {".md", ".mdx", ".markdown", ".rst", ".adoc", ".asciidoc"}
+EXAMPLE_PATH_HINTS = {
+    "docs",
+    "doc",
+    "skills",
+    "skill",
+    "prompts",
+    "prompt",
+    "instructions",
+    "instruction",
+    "examples",
+    "example",
+    "samples",
+    "sample",
+    "guides",
+    "guide",
+    "tutorials",
+    "tutorial",
+    "rules",
+    "tests",
+    "test",
+    "__tests__",
+    "fixtures",
+    "fixture",
+}
+TEST_FILE_RE = re.compile(r"(^test_.*|.*(?:\.test|\.spec)\.[^.]+$|.*_test\.[^.]+$)", re.I)
+PLACEHOLDER_MARKERS = (
+    "example",
+    "sample",
+    "placeholder",
+    "dummy",
+    "redacted",
+    "changeme",
+    "replace",
+    "set-at-runtime",
+    "set_at_runtime",
+    "fake",
+    "mock",
+    "demo",
+    "not-real",
+    "not_real",
+)
 
 BINARY_EXTS = {
     ".png",
@@ -96,6 +156,109 @@ def _scan_all_files(plugin_dir: Path) -> list[Path]:
             continue
         files.append(p)
     return files
+
+
+def _is_example_surface(relative_path: Path) -> bool:
+    path_parts = {part.lower() for part in relative_path.parts}
+    return (
+        relative_path.suffix.lower() in DOCUMENTATION_EXTS
+        or bool(path_parts & EXAMPLE_PATH_HINTS)
+        or bool(TEST_FILE_RE.search(relative_path.name))
+    )
+
+
+def _extract_secret_candidate(detector: SecretPattern, match: re.Match[str]) -> str:
+    return match.group(detector.value_group).strip()
+
+
+def _normalize_secret_candidate(value: str) -> str:
+    normalized = value.strip().strip("\"'`")
+    if normalized.lower().startswith("bearer "):
+        normalized = normalized[7:].strip()
+    return normalized
+
+
+def _looks_like_placeholder_secret(value: str) -> bool:
+    normalized = _normalize_secret_candidate(value)
+    lowered = normalized.lower()
+    if not normalized:
+        return True
+    if normalized.startswith(("${", "{{", "<", "[")):
+        return True
+    if "..." in normalized or "…" in normalized:
+        return True
+    if lowered.startswith(("your-", "your_", "your")):
+        return True
+    if lowered.endswith(("-here", "_here")):
+        return True
+    if any(marker in lowered for marker in PLACEHOLDER_MARKERS):
+        return True
+    if re.fullmatch(r"[A-Z][A-Z0-9_]{6,}", normalized):
+        return True
+    return bool(re.search(r"(?i)(?:^|[-_])(x{4,}|\*{3,})(?:[-_]|$)", normalized))
+
+
+def _longest_ascending_run(value: str) -> int:
+    if not value:
+        return 0
+    longest = 1
+    current = 1
+    for previous, token in pairwise(value):
+        if ord(token) == ord(previous) + 1:
+            current += 1
+            longest = max(longest, current)
+        else:
+            current = 1
+    return longest
+
+
+def _looks_like_synthetic_sequence(value: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]", "", _normalize_secret_candidate(value).lower())
+    return len(normalized) >= 8 and _longest_ascending_run(normalized) >= 8
+
+
+def _looks_like_high_entropy_generic_secret(value: str) -> bool:
+    normalized = _normalize_secret_candidate(value)
+    collapsed = re.sub(r"[^A-Za-z0-9]", "", normalized)
+    if len(collapsed) < 20 or _looks_like_synthetic_sequence(collapsed):
+        return False
+    unique_chars = len(set(collapsed.lower()))
+    if len(collapsed) >= 32 and unique_chars >= 12:
+        return True
+    character_classes = sum(
+        (
+            any(char.islower() for char in normalized),
+            any(char.isupper() for char in normalized),
+            any(char.isdigit() for char in normalized),
+            any(not char.isalnum() for char in normalized),
+        )
+    )
+    return character_classes >= 2 and unique_chars >= 10
+
+
+def _should_skip_secret_match(relative_path: Path, detector: SecretPattern, match: re.Match[str]) -> bool:
+    candidate = _extract_secret_candidate(detector, match)
+    if detector.kind != "private_key" and _looks_like_placeholder_secret(candidate):
+        return True
+    if not _is_example_surface(relative_path):
+        return False
+    if detector.kind == "private_key":
+        return _looks_like_placeholder_secret(candidate)
+    if detector.kind == "generic":
+        return _looks_like_synthetic_sequence(candidate) or not _looks_like_high_entropy_generic_secret(candidate)
+    return _looks_like_synthetic_sequence(candidate)
+
+
+def _first_hardcoded_secret_line(relative_path: Path, content: str) -> int | None:
+    first_line: int | None = None
+    for detector in SECRET_PATTERNS:
+        for match in detector.pattern.finditer(content):
+            if _should_skip_secret_match(relative_path, detector, match):
+                continue
+            line_number = content.count("\n", 0, match.start()) + 1
+            if first_line is None or line_number < first_line:
+                first_line = line_number
+    return first_line
 
 
 def _has_canonical_apache_license_reference(content: str) -> bool:
@@ -173,21 +336,21 @@ def check_license(plugin_dir: Path) -> CheckResult:
 
 
 def check_no_hardcoded_secrets(plugin_dir: Path) -> CheckResult:
-    findings: list[str] = []
+    findings: list[tuple[str, int]] = []
     for fpath in _scan_all_files(plugin_dir):
         try:
             content = fpath.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        for pattern in SECRET_PATTERNS:
-            if pattern.search(content):
-                findings.append(str(fpath.relative_to(plugin_dir)))
-                break
+        relative_path = fpath.relative_to(plugin_dir)
+        line_number = _first_hardcoded_secret_line(relative_path, content)
+        if line_number is not None:
+            findings.append((relative_path.as_posix(), line_number))
     if not findings:
         return CheckResult(
             name="No hardcoded secrets", passed=True, points=7, max_points=7, message="No hardcoded secrets detected"
         )
-    shown = findings[:5]
+    shown = [path for path, _line_number in findings[:5]]
     suffix = f" and {len(findings) - 5} more" if len(findings) > 5 else ""
     return CheckResult(
         name="No hardcoded secrets",
@@ -204,8 +367,9 @@ def check_no_hardcoded_secrets(plugin_dir: Path) -> CheckResult:
                 description=f"Potential secret material was detected in {path}.",
                 remediation="Remove the secret from source control and load it securely at runtime.",
                 file_path=path,
+                line_number=line_number,
             )
-            for path in findings
+            for path, line_number in findings
         ),
     )
 
