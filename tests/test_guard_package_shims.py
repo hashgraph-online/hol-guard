@@ -12,7 +12,8 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from http.server import HTTPServer
-from multiprocessing import Event, Process
+from io import StringIO
+from multiprocessing import Event, Process, Queue
 from pathlib import Path
 
 import pytest
@@ -308,6 +309,103 @@ def _hold_guard_db_writer_lock(
         connection.close()
 
 
+def _run_guard_protect_command(
+    home_dir: str,
+    workspace_dir: str,
+    *,
+    delay_retry_policy_integrity_seconds: float = 0.0,
+    refresh_started_event: Event | None = None,
+    result_queue: Queue | None = None,
+) -> None:
+    from contextlib import redirect_stderr, redirect_stdout
+
+    from codex_plugin_scanner.cli import main as guard_main
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    if delay_retry_policy_integrity_seconds > 0:
+        secret_lookup_count = 0
+        control_lookup_count = 0
+        original_secret_lookup = GuardStore._policy_integrity_secret_material
+        original_control_lookup = GuardStore._load_policy_integrity_control_state
+        original_refresh = GuardStore._refresh_policy_integrity_state
+
+        def delayed_secret_lookup(self, *, create: bool):
+            nonlocal secret_lookup_count
+            if create:
+                return original_secret_lookup(self, create=create)
+            secret_lookup_count += 1
+            if secret_lookup_count == 1:
+                return None, None
+            time.sleep(delay_retry_policy_integrity_seconds)
+            return None, None
+
+        def delayed_control_lookup(self, *, create: bool):
+            nonlocal control_lookup_count
+            if create:
+                return original_control_lookup(self, create=create)
+            control_lookup_count += 1
+            if control_lookup_count == 1:
+                return None
+            time.sleep(delay_retry_policy_integrity_seconds)
+            return None
+
+        def refresh_with_signal(
+            self,
+            connection,
+            *,
+            now: str,
+            create_key: bool,
+            secret_material=None,
+            allow_cutover_resign: bool = True,
+        ):
+            if refresh_started_event is not None and not refresh_started_event.is_set():
+                refresh_started_event.set()
+            return original_refresh(
+                self,
+                connection,
+                now=now,
+                create_key=create_key,
+                secret_material=secret_material,
+                allow_cutover_resign=allow_cutover_resign,
+            )
+
+        GuardStore._policy_integrity_secret_material = delayed_secret_lookup
+        GuardStore._load_policy_integrity_control_state = delayed_control_lookup
+        GuardStore._refresh_policy_integrity_state = refresh_with_signal
+
+    stdout = StringIO()
+    stderr = StringIO()
+    started = time.monotonic()
+    with redirect_stdout(stdout), redirect_stderr(stderr):
+        return_code = guard_main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                home_dir,
+                "--guard-home",
+                home_dir,
+                "--workspace",
+                workspace_dir,
+                "--dry-run",
+                "--json",
+                "bun",
+                "install",
+                "-g",
+                "@oh-my-pi/pi-coding-agent",
+            ]
+        )
+    if result_queue is not None:
+        result_queue.put(
+            {
+                "returncode": return_code,
+                "elapsed": time.monotonic() - started,
+                "stdout": stdout.getvalue(),
+                "stderr": stderr.getvalue(),
+            }
+        )
+
+
 def test_enable_wal_mode_uses_bounded_busy_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     sleep_calls: list[float] = []
 
@@ -351,6 +449,40 @@ def test_enable_wal_mode_uses_bounded_busy_timeout(monkeypatch: pytest.MonkeyPat
     assert connection.commands[-1] == f"pragma busy_timeout={guard_store_module.SQLITE_BUSY_TIMEOUT_MS}"
     assert connection.busy_timeout_ms == guard_store_module.SQLITE_BUSY_TIMEOUT_MS
     assert sleep_calls == [guard_store_module._SQLITE_LOCK_RETRY_DELAY_SECONDS]
+
+
+def test_guard_store_init_does_not_hold_sqlite_writer_during_missing_policy_integrity_retry(tmp_path: Path) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    home_dir.mkdir(parents=True, exist_ok=True)
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    refresh_started_event = Event()
+    slow_results: Queue = Queue()
+    slow_process = Process(
+        target=_run_guard_protect_command,
+        args=(str(home_dir), str(workspace_dir)),
+        kwargs={
+            "delay_retry_policy_integrity_seconds": 4.0,
+            "refresh_started_event": refresh_started_event,
+            "result_queue": slow_results,
+        },
+    )
+    slow_process.start()
+    assert refresh_started_event.wait(timeout=5)
+
+    fast_started = time.monotonic()
+    fast_results: Queue = Queue()
+    _run_guard_protect_command(str(home_dir), str(workspace_dir), result_queue=fast_results)
+    fast_elapsed = time.monotonic() - fast_started
+    fast_result = fast_results.get(timeout=1)
+
+    slow_process.join(timeout=20)
+    assert slow_process.exitcode == 0
+    slow_result = slow_results.get(timeout=1)
+
+    assert fast_result["returncode"] == 0
+    assert slow_result["returncode"] == 0
+    assert fast_elapsed < 3.0
 
 
 def _write_npm_ci_workspace(workspace_dir: Path, *, package_name: str, package_version: str) -> None:

@@ -19,7 +19,10 @@ from .store_oauth import StoreOAuthConnectMixin
 from .store_policy import StorePolicyMixin
 from .store_policy_integrity_runtime import StorePolicyIntegrityAdminMixin
 from .store_receipts import StoreReceiptsRuntimeMixin
-from .store_secret_policy_integrity import StoreSecretPolicyIntegrityMixin
+from .store_secret_policy_integrity import (
+    StoreSecretPolicyIntegrityMixin,
+    _POLICY_INTEGRITY_LOOKUP_UNSET,
+)
 from .store_sessions import StoreSessionsMixin
 
 

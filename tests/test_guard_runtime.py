@@ -10597,17 +10597,17 @@ def test_guard_hook_does_not_override_cloud_allow_with_remembered_rule_review_co
     )
     store.replace_remote_policies(
         [
-                PolicyDecision(
-                    harness="codex",
-                    scope="harness",
-                    action="allow",
-                    artifact_id=artifact.artifact_id,
-                    artifact_hash=_runtime_scoped_exact_match_key(artifact.artifact_id),
-                    workspace=None,
-                    publisher=None,
-                    reason="cloud allow",
-                    source="cloud-sync",
-                )
+            PolicyDecision(
+                harness="codex",
+                scope="harness",
+                action="allow",
+                artifact_id=artifact.artifact_id,
+                artifact_hash=_runtime_scoped_exact_match_key(artifact.artifact_id),
+                workspace=None,
+                publisher=None,
+                reason="cloud allow",
+                source="cloud-sync",
+            )
         ],
         "2026-06-19T00:01:00Z",
         remote_write_authorized=True,
