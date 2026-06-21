@@ -1488,7 +1488,7 @@ def test_startup_refresh_keeps_pending_generation_when_legacy_rows_remain(
     state_payload = _policy_integrity_state_payload(store.guard_home)
     assert recovered_control["generation"] == 1
     assert recovered_control["pending_generation"] == 2
-    assert recovered_control["cutover_complete"] is True
+    assert recovered_control["cutover_complete"] is False
     assert state_payload["generation"] == 1
 
 
@@ -1577,7 +1577,7 @@ def test_startup_refresh_clears_stale_pending_generation_when_legacy_rows_remain
     state_payload = _policy_integrity_state_payload(store.guard_home)
     assert recovered_control["generation"] == 1
     assert recovered_control["pending_generation"] is None
-    assert recovered_control["cutover_complete"] is True
+    assert recovered_control["cutover_complete"] is False
     assert state_payload["generation"] == 1
 
 
@@ -1658,7 +1658,7 @@ def test_refresh_clears_stale_pending_generation_when_legacy_rows_remain(
     state_payload = _policy_integrity_state_payload(store.guard_home)
     assert recovered_control["generation"] == 1
     assert recovered_control["pending_generation"] is None
-    assert recovered_control["cutover_complete"] is True
+    assert recovered_control["cutover_complete"] is False
     assert state_payload["generation"] == 1
 
 
@@ -1708,7 +1708,7 @@ def test_refresh_keeps_pending_generation_when_only_signed_v1_rows_remain(tmp_pa
     state_payload = _policy_integrity_state_payload(store.guard_home)
     assert recovered_control["generation"] == 1
     assert recovered_control["pending_generation"] == 2
-    assert recovered_control["cutover_complete"] is True
+    assert recovered_control["cutover_complete"] is False
     assert state_payload["generation"] == 1
 
 
