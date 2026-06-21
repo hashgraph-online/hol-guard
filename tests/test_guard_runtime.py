@@ -7706,12 +7706,22 @@ def test_runtime_policy_path_prefers_pi_workspace_settings(tmp_path):
     assert _runtime_policy_path("pi", home_dir, workspace_dir) == workspace_dir / ".pi" / "settings.json"
 
 
-def test_runtime_policy_path_uses_omp_settings_when_pi_settings_are_absent(tmp_path):
+def test_runtime_policy_path_defaults_to_pi_workspace_settings_without_payload_override(tmp_path):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _write_json(workspace_dir / ".omp" / "settings.json", {"extensions": []})
 
-    assert _runtime_policy_path("pi", home_dir, workspace_dir) == workspace_dir / ".omp" / "settings.json"
+    assert _runtime_policy_path("pi", home_dir, workspace_dir) == workspace_dir / ".pi" / "settings.json"
+
+
+def test_runtime_policy_path_honors_payload_config_path_for_pi(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    config_path = workspace_dir / ".omp" / "settings.json"
+    _write_json(workspace_dir / ".pi" / "settings.json", {"extensions": []})
+    _write_json(config_path, {"extensions": []})
+
+    assert _runtime_policy_path("pi", home_dir, workspace_dir, payload={"config_path": str(config_path)}) == config_path
 
 
 def test_guard_hook_emits_copilot_native_deny_for_risky_mcp_pre_tool_use(

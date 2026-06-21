@@ -116,16 +116,18 @@ def disable_managed_extension(*, settings_path: Path, extension_path: Path) -> N
     settings_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
-def managed_extension_source(*, guard_home: Path, home_dir: Path) -> str:
+def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path: Path) -> str:
     guard_args = ["guard", "hook", "--guard-home", str(guard_home), "--harness", "pi"]
     if home_dir.resolve() != Path.home().resolve():
         guard_args.extend(["--home", str(home_dir)])
     guard_args_json = json.dumps(guard_args)
+    config_path_json = json.dumps(str(settings_path))
     return (
         'import { spawnSync } from "node:child_process";\n'
         'import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";\n'
         "\n"
         f"const GUARD_ARGS = {guard_args_json};\n"
+        f"const GUARD_CONFIG_PATH = {config_path_json};\n"
         f"const GUARD_TIMEOUT_MS = {GUARD_HOOK_TIMEOUT_MS};\n"
         "\n"
         "type GuardResponse = { decision?: string; reason?: string };\n"
@@ -174,7 +176,10 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path) -> str:
         "export default function (pi: ExtensionAPI) {\n"
         '  pi.on("input", async (event, ctx) => {\n'
         '    if (event.source === "extension") return { action: "continue" };\n'
-        '    const response = runGuard({ hook_event_name: "UserPromptSubmit", prompt: event.text }, ctx.cwd);\n'
+        "    const response = runGuard(\n"
+        '      { hook_event_name: "UserPromptSubmit", prompt: event.text, config_path: GUARD_CONFIG_PATH },\n'
+        "      ctx.cwd,\n"
+        "    );\n"
         '    if (response.decision === "deny") {\n'
         '      ctx.ui.notify(response.reason ?? "Blocked by HOL Guard.", "warning");\n'
         '      return { action: "handled", handled: true };\n'
@@ -190,6 +195,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path) -> str:
         "    const response = runGuard(\n"
         "      {\n"
         '        hook_event_name: "PreToolUse",\n'
+        "        config_path: GUARD_CONFIG_PATH,\n"
         "        tool_name: event.toolName,\n"
         "        tool_input: toolInput,\n"
         "      },\n"
@@ -211,6 +217,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path) -> str:
         "    const response = runGuard(\n"
         "      {\n"
         '        hook_event_name: "PostToolUse",\n'
+        "        config_path: GUARD_CONFIG_PATH,\n"
         "        tool_name: event.toolName,\n"
         "        tool_input: toolInput,\n"
         "        tool_response: event.content,\n"

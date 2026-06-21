@@ -192,6 +192,8 @@ class TestPiInstall:
         assert 'pi.on("input"' in text
         assert 'hook_event_name: "PostToolUse"' in text
         assert "tool_response: event.content" in text
+        assert "const GUARD_CONFIG_PATH =" in text
+        assert "config_path: GUARD_CONFIG_PATH" in text
         assert '"--harness", "pi"' in text
         assert '"--home"' in text
         assert "ctx.cwd" in text

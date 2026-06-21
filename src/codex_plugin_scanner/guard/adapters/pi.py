@@ -525,14 +525,22 @@ class PiHarnessAdapter(HarnessAdapter):
         extension_path = self._managed_extension_path(context)
         extension_path.parent.mkdir(parents=True, exist_ok=True)
         extension_path.write_text(
-            managed_extension_source(guard_home=context.guard_home, home_dir=context.home_dir),
+            managed_extension_source(
+                guard_home=context.guard_home,
+                home_dir=context.home_dir,
+                settings_path=self._managed_settings_path(context),
+            ),
             encoding="utf-8",
         )
         enable_managed_extension(settings_path=self._managed_settings_path(context), extension_path=extension_path)
         omp_extension_path = self._managed_omp_extension_path(context)
         omp_extension_path.parent.mkdir(parents=True, exist_ok=True)
         omp_extension_path.write_text(
-            managed_extension_source(guard_home=context.guard_home, home_dir=context.home_dir),
+            managed_extension_source(
+                guard_home=context.guard_home,
+                home_dir=context.home_dir,
+                settings_path=self._managed_omp_settings_path(context),
+            ),
             encoding="utf-8",
         )
         enable_managed_extension(

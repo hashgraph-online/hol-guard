@@ -173,7 +173,7 @@ def _hook_runtime_artifact(
         output_artifact = _codex_post_tool_output_artifact(
             harness=harness,
             payload=payload,
-            config_path=str(_runtime_policy_path(harness, home_dir, workspace)),
+            config_path=str(_runtime_policy_path(harness, home_dir, workspace, payload=payload)),
             source_scope=_coalesce_string(payload.get("source_scope"), "project"),
             cwd=workspace,
             home_dir=home_dir,
@@ -185,7 +185,7 @@ def _hook_runtime_artifact(
     if event_name == "UserPromptSubmit":
         prompt_text = payload.get("prompt")
         if isinstance(prompt_text, str) and prompt_text.strip():
-            config_path = str(_runtime_policy_path(harness, home_dir, workspace))
+            config_path = str(_runtime_policy_path(harness, home_dir, workspace, payload=payload))
             prompt_detection = HarnessDetection(
                 harness=harness,
                 installed=True,
@@ -232,7 +232,7 @@ def _hook_runtime_artifact(
             else None
         )
     source_scope = _coalesce_string(payload.get("source_scope"), "project")
-    config_path = str(_runtime_policy_path(harness, home_dir, workspace))
+    config_path = str(_runtime_policy_path(harness, home_dir, workspace, payload=payload))
     if request is not None:
         return build_file_read_request_artifact(
             harness=harness,

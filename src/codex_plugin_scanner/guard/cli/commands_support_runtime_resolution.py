@@ -263,7 +263,16 @@ def _copilot_mcp_tool_token(value: str) -> str:
     token = re.sub(r"[^a-z0-9]+", "_", value.strip().lower())
     return token.strip("_")
 
-def _runtime_policy_path(harness: str, home_dir: Path, workspace: Path | None) -> Path:
+def _runtime_policy_path(
+    harness: str,
+    home_dir: Path,
+    workspace: Path | None,
+    *,
+    payload: dict[str, object] | None = None,
+) -> Path:
+    raw_config_path = payload.get("config_path") if isinstance(payload, dict) else None
+    if isinstance(raw_config_path, str) and raw_config_path.strip():
+        return Path(raw_config_path).expanduser()
     if harness == "hermes":
         return home_dir / ".hermes" / "config.yaml"
     if harness == "cursor":
@@ -279,23 +288,6 @@ def _runtime_policy_path(harness: str, home_dir: Path, workspace: Path | None) -
             return workspace / ".codex" / "config.toml"
         return home_dir / ".codex" / "config.toml"
     if harness == "pi":
-        candidates: list[Path] = []
-        if workspace is not None:
-            candidates.extend(
-                (
-                    workspace / ".pi" / "settings.json",
-                    workspace / ".omp" / "settings.json",
-                )
-            )
-        candidates.extend(
-            (
-                home_dir / ".pi" / "agent" / "settings.json",
-                home_dir / ".omp" / "agent" / "settings.json",
-            )
-        )
-        for candidate in candidates:
-            if candidate.is_file():
-                return candidate
         if workspace is not None:
             return workspace / ".pi" / "settings.json"
         return home_dir / ".pi" / "agent" / "settings.json"
