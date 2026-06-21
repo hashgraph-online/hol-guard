@@ -33,6 +33,7 @@ from codex_plugin_scanner.guard.cli import render as guard_render_module
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
     _codex_post_tool_output_artifact,
 )
+from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import _runtime_policy_path
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
@@ -7695,6 +7696,57 @@ def test_copilot_runtime_tool_call_prefers_ide_workspace_config_when_workspace_i
     assert artifact is not None
     runtime_artifact, _artifact_hash, _arguments = artifact
     assert runtime_artifact.config_path == str(workspace_dir / ".vscode" / "mcp.json")
+
+
+def test_runtime_policy_path_prefers_pi_workspace_settings(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_json(workspace_dir / ".pi" / "settings.json", {"extensions": []})
+
+    assert _runtime_policy_path("pi", home_dir, workspace_dir) == workspace_dir / ".pi" / "settings.json"
+
+
+def test_runtime_policy_path_defaults_to_pi_workspace_settings_without_payload_override(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_json(workspace_dir / ".omp" / "settings.json", {"extensions": []})
+
+    assert _runtime_policy_path("pi", home_dir, workspace_dir) == workspace_dir / ".pi" / "settings.json"
+
+
+def test_runtime_policy_path_honors_payload_config_path_for_pi(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    config_path = workspace_dir / ".omp" / "settings.json"
+    _write_json(workspace_dir / ".pi" / "settings.json", {"extensions": []})
+    _write_json(config_path, {"extensions": []})
+
+    assert _runtime_policy_path("pi", home_dir, workspace_dir, payload={"config_path": str(config_path)}) == config_path
+
+
+def test_runtime_policy_path_ignores_forged_payload_config_path_for_pi(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    forged_path = workspace_dir / ".cursor" / "mcp.json"
+    _write_json(workspace_dir / ".pi" / "settings.json", {"extensions": []})
+    _write_json(forged_path, {"servers": {}})
+
+    assert _runtime_policy_path("pi", home_dir, workspace_dir, payload={"config_path": str(forged_path)}) == (
+        workspace_dir / ".pi" / "settings.json"
+    )
+
+
+def test_runtime_policy_path_ignores_payload_config_path_for_other_harnesses(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_json(workspace_dir / ".omp" / "settings.json", {"extensions": []})
+
+    assert _runtime_policy_path(
+        "codex",
+        home_dir,
+        workspace_dir,
+        payload={"config_path": str(workspace_dir / ".omp" / "settings.json")},
+    ) == (workspace_dir / ".codex" / "config.toml")
 
 
 def test_guard_hook_emits_copilot_native_deny_for_risky_mcp_pre_tool_use(

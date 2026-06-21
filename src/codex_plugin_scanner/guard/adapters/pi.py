@@ -7,7 +7,7 @@ from pathlib import Path
 from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
-from .base import HarnessAdapter, HarnessContext, _command_available
+from .base import HarnessAdapter, HarnessContext, _resolve_command
 from .pi_support import (
     EXTENSION_SUFFIXES,
     OMP_AGENT_DIR,
@@ -66,6 +66,22 @@ class PiHarnessAdapter(HarnessAdapter):
     @staticmethod
     def _relative_label(root: Path, path: Path) -> str:
         return path.relative_to(root).as_posix()
+
+    def resolved_executable(self, context: HarnessContext) -> str | None:
+        return _resolve_command("pi", self.executable_candidates(context)) or _resolve_command(
+            "omp",
+            self.executable_candidates(context),
+        )
+
+    def diagnostic_warnings(
+        self,
+        detection: HarnessDetection,
+        runtime_probe: dict[str, object] | None,
+    ) -> list[str]:
+        return [
+            warning.replace("the pi command", "the pi or omp command").replace("pi diagnostics", "pi/omp diagnostics")
+            for warning in super().diagnostic_warnings(detection, runtime_probe)
+        ]
 
     def policy_path(self, context: HarnessContext) -> Path:
         project_root = self._project_root(context)
@@ -143,10 +159,11 @@ class PiHarnessAdapter(HarnessAdapter):
                 scope=scope,
                 id_root=root / "themes",
             )
+        command_available = self.resolved_executable(context) is not None
         detection = HarnessDetection(
             harness=self.harness,
-            installed=bool(found_paths) or _command_available(self.executable),
-            command_available=_command_available(self.executable),
+            installed=bool(found_paths) or command_available,
+            command_available=command_available,
             config_paths=tuple(found_paths),
             artifacts=tuple(artifacts),
             warnings=(),
@@ -508,14 +525,22 @@ class PiHarnessAdapter(HarnessAdapter):
         extension_path = self._managed_extension_path(context)
         extension_path.parent.mkdir(parents=True, exist_ok=True)
         extension_path.write_text(
-            managed_extension_source(guard_home=context.guard_home, home_dir=context.home_dir),
+            managed_extension_source(
+                guard_home=context.guard_home,
+                home_dir=context.home_dir,
+                settings_path=self._managed_settings_path(context),
+            ),
             encoding="utf-8",
         )
         enable_managed_extension(settings_path=self._managed_settings_path(context), extension_path=extension_path)
         omp_extension_path = self._managed_omp_extension_path(context)
         omp_extension_path.parent.mkdir(parents=True, exist_ok=True)
         omp_extension_path.write_text(
-            managed_extension_source(guard_home=context.guard_home, home_dir=context.home_dir),
+            managed_extension_source(
+                guard_home=context.guard_home,
+                home_dir=context.home_dir,
+                settings_path=self._managed_omp_settings_path(context),
+            ),
             encoding="utf-8",
         )
         enable_managed_extension(
