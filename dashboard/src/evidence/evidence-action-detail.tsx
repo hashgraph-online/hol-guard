@@ -16,10 +16,11 @@ import { useState } from "react";
 import type { GuardReceipt } from "../guard-types";
 import { isRiskSignalEvidence } from "../guard-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
-import { plainEnglishDescription, resolveActionTitle, resolveActionType, resolveActionSubtitle, resolveActionDetail } from "./plain-english";
+import { plainEnglishDescription, resolveActionTitle, resolveActionType, resolveActionDetail } from "./plain-english";
 import { detectCategory, getCategoryInfo } from "./categories";
 import { SectionLabel } from "../approval-center-primitives";
 import { DecisionBadge } from "./decision-badge";
+import { LoggedActionPanel } from "../logged-action-panel";
 
 interface EvidenceActionDetailProps {
   receipt: GuardReceipt | null;
@@ -295,7 +296,6 @@ export function EvidenceActionDetail({
   const description = plainEnglishDescription(receipt);
   const actionTitle = resolveActionTitle(receipt);
   const actionType = resolveActionType(receipt);
-  const actionSubtitle = resolveActionSubtitle(receipt);
   const actionDetail = resolveActionDetail(receipt);
   const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
   const primarySignal = signals[0];
@@ -354,11 +354,16 @@ export function EvidenceActionDetail({
         <p className="text-sm text-brand-dark leading-relaxed">{description}</p>
 
         {actionDetail && (
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+          <div className="space-y-2">
             <SectionLabel>{actionType}</SectionLabel>
-            <p className="mt-1 text-xs font-mono text-brand-dark break-all whitespace-pre-line leading-relaxed">
-              {actionDetail}
-            </p>
+            <LoggedActionPanel
+              key={receipt.receipt_id}
+              label={actionType}
+              text={actionDetail}
+              copyAriaLabel={`Copy full ${actionType.toLowerCase()} to clipboard`}
+              expandAriaLabel={`Expand full ${actionType.toLowerCase()}`}
+              collapseAriaLabel={`Collapse full ${actionType.toLowerCase()}`}
+            />
           </div>
         )}
 

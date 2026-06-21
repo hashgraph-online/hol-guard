@@ -1027,6 +1027,10 @@
     max-height: calc(var(--spacing) * 4);
   }
 
+  .max-h-40 {
+    max-height: calc(var(--spacing) * 40);
+  }
+
   .max-h-\[85vh\] {
     max-height: 85vh;
   }
@@ -3283,6 +3287,11 @@
     background-image: linear-gradient(var(--tw-gradient-stops));
   }
 
+  .bg-gradient-to-t {
+    --tw-gradient-position: to top in oklab;
+    background-image: linear-gradient(var(--tw-gradient-stops));
+  }
+
   .bg-\[radial-gradient\(circle_at_top_left\,rgba\(85\,153\,254\,0\.12\)\,transparent_32\%\)\,linear-gradient\(135deg\,\#ffffff_0\%\,\#ffffff_58\%\,rgba\(72\,223\,123\,0\.10\)_100\%\)\] {
     background-image: radial-gradient(circle at 0 0, #5599fe1f, #0000 32%), linear-gradient(135deg, #fff 0% 58%, #48df7b1a 100%);
   }
@@ -3293,6 +3302,11 @@
 
   .bg-\[radial-gradient\(circle_at_top_left\,rgba\(85\,153\,254\,0\.12\)\,transparent_32\%\)\,linear-gradient\(135deg\,\#ffffff_0\%\,\#ffffff_58\%\,rgba\(245\,158\,11\,0\.08\)_100\%\)\] {
     background-image: radial-gradient(circle at 0 0, #5599fe1f, #0000 32%), linear-gradient(135deg, #fff 0% 58%, #f59e0b14 100%);
+  }
+
+  .from-\[\#0f172a\] {
+    --tw-gradient-from: #0f172a;
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
   .from-brand-blue {
@@ -3486,6 +3500,11 @@
   }
 
   .to-brand-green\/\[0\.06\] {
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  .to-transparent {
+    --tw-gradient-to: transparent;
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
@@ -3953,10 +3972,6 @@
     white-space: nowrap;
   }
 
-  .whitespace-pre-line {
-    white-space: pre-line;
-  }
-
   .whitespace-pre-wrap {
     white-space: pre-wrap;
   }
@@ -4264,16 +4279,6 @@
   @supports (color: color-mix(in lab, red, red)) {
     .text-white\/60 {
       color: color-mix(in oklab, var(--color-white) 60%, transparent);
-    }
-  }
-
-  .text-white\/65 {
-    color: #ffffffa6;
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .text-white\/65 {
-      color: color-mix(in oklab, var(--color-white) 65%, transparent);
     }
   }
 
