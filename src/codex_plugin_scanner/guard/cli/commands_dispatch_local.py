@@ -132,7 +132,7 @@ def _run_guard_protect_command(
     config = _require_guard_config(config)
     if guard_home is None:
         raise RuntimeError("Guard home is required")
-    _refresh_cloud_policy_bundle(store)
+    _refresh_cloud_policy_bundle(store, bundle_only=True)
     protect_command = list(getattr(args, "protect_command", []) or [])
     if len(protect_command) == 0:
         payload = build_supply_chain_status_payload(store=store, config=config, now=_now())

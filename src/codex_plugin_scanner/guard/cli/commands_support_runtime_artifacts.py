@@ -240,12 +240,14 @@ def _hook_runtime_artifact(
             config_path=config_path,
             source_scope=source_scope,
         )
-    package_intent = extract_package_intent_request(
-        payload.get("tool_name"),
-        payload.get("tool_input", payload.get("arguments")),
-        action_envelope_command=action_envelope.command if action_envelope is not None else None,
-        workspace=workspace,
-    )
+    package_intent = None
+    if not _post_tool_package_request_was_already_evaluated(payload=payload, action_envelope=action_envelope):
+        package_intent = extract_package_intent_request(
+            payload.get("tool_name"),
+            payload.get("tool_input", payload.get("arguments")),
+            action_envelope_command=action_envelope.command if action_envelope is not None else None,
+            workspace=workspace,
+        )
     if package_intent is not None:
         return build_package_request_artifact(
             harness=harness,
@@ -452,6 +454,21 @@ def _codex_post_tool_output_artifact(
         config_path=config_path,
         metadata=metadata,
     )
+
+
+def _post_tool_package_request_was_already_evaluated(
+    *,
+    payload: Mapping[str, object],
+    action_envelope: GuardActionEnvelope | None,
+) -> bool:
+    event_name = _hook_event_name(dict(payload))
+    if event_name != "PostToolUse":
+        return False
+    pre_execution_result = _coalesce_string(
+        payload.get("pre_execution_result"),
+        action_envelope.pre_execution_result if action_envelope is not None else None,
+    )
+    return pre_execution_result is not None
 
 
 def _codex_text_contains_sensitive_path_token(text: str, *, cwd: Path | None) -> bool:

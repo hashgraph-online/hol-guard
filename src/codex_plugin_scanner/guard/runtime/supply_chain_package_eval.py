@@ -85,6 +85,7 @@ _TARBALL_SCAN_TIMEOUT_SECONDS = 2
 _TARBALL_SCAN_MAX_BYTES = 6 * 1024 * 1024
 _TARBALL_SCAN_MAX_FILES = 500
 _TARBALL_SCAN_MAX_PACKAGE_JSON_BYTES = 256 * 1024
+_CLOUD_VALIDATION_ERROR_CACHE_TTL_SECONDS = 15 * 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,7 +237,10 @@ def evaluate_package_request_artifact(
         )
         if isinstance(cached, dict):
             cached_workspace_fingerprint = _optional_string(cached.get("workspace_fingerprint"))
-            if cached_workspace_fingerprint == workspace_fingerprint:
+            if cached_workspace_fingerprint == workspace_fingerprint and _cached_supply_chain_eval_is_reusable(
+                cached,
+                now_timestamp=now_timestamp,
+            ):
                 cached_result = PackageRequestEvaluation.from_cache_dict(
                     cached,
                     package_intent_hash=package_intent_hash,
@@ -318,6 +322,14 @@ def evaluate_package_request_artifact(
                     package_intent_hash=package_intent_hash,
                     workspace_fingerprint=workspace_fingerprint,
                 )
+        _cache_reusable_cloud_validation_error(
+            store=store,
+            workspace_id=workspace_id,
+            bundle_meta=bundle_meta,
+            package_intent_hash=package_intent_hash,
+            evaluation=upgraded,
+            now=now_value,
+        )
         _persist_evidence(store=store, artifact=artifact, evaluation=upgraded, now=now_value)
         return upgraded
     if (
@@ -477,6 +489,59 @@ def _empty_package_material_result(
         draft,
         package_intent_hash=package_intent_hash,
         workspace_fingerprint=workspace_fingerprint,
+    )
+
+
+def _cached_supply_chain_eval_is_reusable(
+    cached: dict[str, object],
+    *,
+    now_timestamp: float | None,
+) -> bool:
+    if not _cached_eval_has_reason_code(cached, "cloud_validation_error"):
+        return True
+    if now_timestamp is None:
+        return False
+    updated_at = _optional_string(cached.get("updated_at"))
+    if updated_at is None:
+        return False
+    try:
+        cached_at = _parse_evaluation_timestamp(updated_at)
+    except ValueError:
+        return False
+    if cached_at is None:
+        return False
+    return (now_timestamp - cached_at) <= _CLOUD_VALIDATION_ERROR_CACHE_TTL_SECONDS
+
+
+def _cached_eval_has_reason_code(cached: dict[str, object], code: str) -> bool:
+    return any(
+        isinstance(reason, dict) and str(reason.get("code") or "") == code
+        for reason in _dict_items(cached.get("reasons"))
+    )
+
+
+def _cache_reusable_cloud_validation_error(
+    *,
+    store: GuardStore,
+    workspace_id: str | None,
+    bundle_meta: dict[str, str] | None,
+    package_intent_hash: str,
+    evaluation: PackageRequestEvaluation,
+    now: str,
+) -> None:
+    if workspace_id is None or bundle_meta is None:
+        return
+    if not any(str(reason.get("code") or "") == "cloud_validation_error" for reason in evaluation.reasons):
+        return
+    store.cache_supply_chain_evaluation(
+        workspace_id=workspace_id,
+        package_intent_hash=package_intent_hash,
+        feed_snapshot_hash=bundle_meta["feed_snapshot_hash"],
+        policy_hash=bundle_meta["policy_hash"],
+        scoring_version=bundle_meta["scoring_version"],
+        bundle_version=bundle_meta["bundle_version"],
+        decision=evaluation.to_cache_dict(),
+        now=now,
     )
 
 
