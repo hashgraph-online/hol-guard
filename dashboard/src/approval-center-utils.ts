@@ -79,14 +79,12 @@ export function buildRetryAfterApprovalCopy(item: GuardApprovalRequest, action: 
 }
 
 export function resolveEnvelopeDisplayText(envelope: GuardActionEnvelope): string | null {
-  if (envelope.action_type === "shell_command" && envelope.command !== null) {
+  if (envelope.action_type === "shell_command" && envelope.command !== null && envelope.command.length > 0) {
     return envelope.command;
   }
-  if (
-    envelope.action_type === "prompt" &&
-    (envelope.prompt_excerpt !== null || (envelope.prompt_text ?? null) !== null)
-  ) {
-    return envelope.prompt_text ?? envelope.prompt_excerpt;
+  const promptText = envelope.prompt_text ?? envelope.prompt_excerpt;
+  if (envelope.action_type === "prompt" && promptText !== null && promptText.length > 0) {
+    return promptText;
   }
   if (envelope.action_type === "mcp_tool" && envelope.mcp_server !== null && envelope.mcp_tool !== null) {
     return `${envelope.mcp_server} / ${envelope.mcp_tool}`;
@@ -98,6 +96,43 @@ export function resolveEnvelopeDisplayText(envelope: GuardActionEnvelope): strin
     return envelope.target_paths[0];
   }
   return envelope.action_type === "harness_start" ? null : envelope.action_type;
+}
+
+export function resolveActionEnvelopeDetailText(
+  envelope: GuardActionEnvelope,
+  options: { mcpInputMaxLength?: number | null } = {}
+): string | null {
+  if (envelope.action_type === "shell_command") {
+    return envelope.command !== null && envelope.command.length > 0 ? envelope.command : null;
+  }
+  const promptText = envelope.prompt_text ?? envelope.prompt_excerpt;
+  if (envelope.action_type === "prompt") {
+    return promptText !== null && promptText.length > 0 ? promptText : null;
+  }
+  if (
+    (envelope.action_type === "file_read" || envelope.action_type === "file_write") &&
+    envelope.target_paths.length > 0
+  ) {
+    return envelope.target_paths.join("\n");
+  }
+  if (envelope.action_type === "network_request" && envelope.network_hosts.length > 0) {
+    return envelope.network_hosts.join("\n");
+  }
+  if (envelope.action_type === "mcp_tool") {
+    const baseText =
+      resolveEnvelopeDisplayText(envelope) ?? envelope.mcp_tool ?? envelope.tool_name ?? envelope.action_type;
+    const inputSummary = serializeMcpInput(envelope.raw_payload_redacted, options.mcpInputMaxLength ?? null);
+    return inputSummary === null ? baseText : `${baseText}\n\nInput:\n${inputSummary}`;
+  }
+  if (envelope.action_type === "package_script") {
+    if (envelope.package_manager && envelope.package_name) {
+      return `${envelope.package_manager} install ${envelope.package_name}`;
+    }
+    if (envelope.package_name) {
+      return envelope.package_name;
+    }
+  }
+  return resolveEnvelopeDisplayText(envelope);
 }
 
 export function humanizeList(values: string[]): string {
@@ -479,13 +514,18 @@ function stripDuplicateReviewContextPrefix(value: string): string | null {
 }
 
 export function primaryReviewActionToggleLabel(isVisible: boolean): string {
-  return isVisible ? "Hide" : "Show";
+  return isVisible ? "Collapse" : "Expand";
 }
 
 export function resolveStoppedCommandText(item: GuardApprovalRequest): string {
   if (item.action_envelope_json) {
-    const envelopeText = resolveEnvelopeDisplayText(item.action_envelope_json);
-    if (envelopeText !== null) {
+    const envelope = item.action_envelope_json;
+    const envelopeText = resolveEnvelopeDisplayText(envelope);
+    const shouldFallbackFromGenericActionType =
+      envelopeText !== null &&
+      (envelope.action_type === "shell_command" || envelope.action_type === "prompt") &&
+      envelopeText === envelope.action_type;
+    if (envelopeText !== null && !shouldFallbackFromGenericActionType) {
       return envelopeText;
     }
   }
@@ -503,20 +543,17 @@ export function resolveStoppedCommandText(item: GuardApprovalRequest): string {
 }
 
 function resolvePrimaryReviewText(item: GuardApprovalRequest): string {
-  const baseText = resolveStoppedCommandText(item);
   const envelope = item.action_envelope_json;
-  if (envelope?.action_type !== "mcp_tool") {
-    return baseText;
+  if (envelope) {
+    const envelopeText = resolveActionEnvelopeDetailText(envelope, { mcpInputMaxLength: null });
+    if (envelopeText !== null) {
+      return envelopeText;
+    }
   }
-
-  const inputSummary = serializeMcpInput(envelope.raw_payload_redacted);
-  if (inputSummary === null) {
-    return baseText;
-  }
-  return `${baseText}\n\nInput:\n${inputSummary}`;
+  return resolveStoppedCommandText(item);
 }
 
-function serializeMcpInput(payload: Record<string, unknown>): string | null {
+function serializeMcpInput(payload: Record<string, unknown>, maxLength: number | null = null): string | null {
   const input = payload.arguments ?? payload.input ?? payload.params ?? null;
   if (input === null || input === undefined) {
     return null;
@@ -527,7 +564,10 @@ function serializeMcpInput(payload: Record<string, unknown>): string | null {
     if (serialized === undefined || serialized.trim().length === 0 || serialized === "{}") {
       return null;
     }
-    return serialized.length > 4000 ? `${serialized.slice(0, 4000)}...` : serialized;
+    if (maxLength !== null && serialized.length > maxLength) {
+      return `${serialized.slice(0, maxLength)}...`;
+    }
+    return serialized;
   } catch {
     return null;
   }

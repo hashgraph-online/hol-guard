@@ -4,7 +4,7 @@ import type {
   GuardActionEnvelope,
 } from "../guard-types";
 import { isRiskSignalEvidence } from "../guard-types";
-import { harnessDisplayName } from "../approval-center-utils";
+import { harnessDisplayName, resolveActionEnvelopeDetailText } from "../approval-center-utils";
 import { detectCategory, type ReceiptCategory } from "./categories";
 
 function getArtifactType(receipt: GuardReceipt): string {
@@ -186,35 +186,7 @@ export function resolveActionSubtitle(receipt: GuardReceipt): string | null {
 export function resolveActionDetail(receipt: GuardReceipt): string | null {
   const envelope = getEnvelope(receipt);
   if (!envelope) return null;
-
-  const type = resolveActionType(receipt);
-
-  if (type === "Shell command" && envelope.command) {
-    return envelope.command;
-  }
-  if ((type === "File read" || type === "File write") && envelope.target_paths && envelope.target_paths.length > 0) {
-    return envelope.target_paths.join("\n");
-  }
-  if (type === "Prompt" && (envelope.prompt_text || envelope.prompt_excerpt)) {
-    return (envelope.prompt_text || envelope.prompt_excerpt) as string;
-  }
-  if (type === "Network request" && envelope.network_hosts && envelope.network_hosts.length > 0) {
-    return envelope.network_hosts.join("\n");
-  }
-  if (type === "Tool call") {
-    const server = envelope.mcp_server ?? envelope.tool_name;
-    const tool = envelope.mcp_tool;
-    if (server && tool) return `${server} → ${tool}`;
-    if (tool) return tool;
-    if (server) return server;
-  }
-  if (type === "Package") {
-    const pm = envelope.package_manager;
-    const name = envelope.package_name;
-    if (pm && name) return `${pm} install ${name}`;
-    if (name) return name;
-  }
-  return null;
+  return resolveActionEnvelopeDetailText(envelope, { mcpInputMaxLength: null });
 }
 
 function formatSubtitle(subtitle: string): string {
