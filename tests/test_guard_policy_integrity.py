@@ -10,7 +10,7 @@ import json
 import pickle
 import sqlite3
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import cast
 
@@ -20,6 +20,7 @@ from codex_plugin_scanner.cli import _resolve_legacy_args, main
 from codex_plugin_scanner.guard import local_trust_contract as local_trust_contract_module
 from codex_plugin_scanner.guard import policy_integrity as policy_integrity_module
 from codex_plugin_scanner.guard import store as guard_store_module
+from codex_plugin_scanner.guard import store_policy_integrity_runtime as policy_integrity_runtime_module
 from codex_plugin_scanner.guard.cli import commands_dispatch_trust as trust_dispatch_module
 from codex_plugin_scanner.guard.daemon.manager import ApprovalCenterLocator
 from codex_plugin_scanner.guard.local_trust_contract import (
@@ -967,6 +968,220 @@ def test_policy_integrity_status_skips_item_context_expansion(
     status = store.get_policy_integrity_status()
 
     assert status["local_rows_scanned"] == 1
+
+
+def test_ensure_policy_integrity_ready_for_write_skips_item_context_expansion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:approval-memory", artifact_hash="hash-approval-memory"),
+        "2026-06-14T00:00:00Z",
+    )
+    _rotate_policy_integrity_key(store, raw_key=b"2" * 32)
+    monkeypatch.setattr(
+        store,
+        "_policy_decision_dict_from_row",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("approval self-heal should not build per-row item payloads")
+        ),
+    )
+
+    payload = store.ensure_policy_integrity_ready_for_write(now="2026-06-14T00:05:00Z")
+
+    assert payload["mode"] == "protected"
+    assert payload["counts"]["valid"] == 1
+    assert payload["autorepair"]["attempted"] is True
+    assert payload["autorepair"]["steps"][0]["step"] == "setup"
+    assert (
+        store.resolve_policy(
+            "codex",
+            "codex:project:approval-memory",
+            "hash-approval-memory",
+            now="2026-06-14T00:06:00Z",
+        )
+        == "allow"
+    )
+
+
+def test_setup_policy_integrity_repairs_all_harnesses_when_called_with_scope(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:codex", artifact_hash="hash-codex"),
+        "2026-06-14T00:00:00Z",
+    )
+    store.upsert_policy(
+        replace(
+            _decision(artifact_id="cursor:project:cursor", artifact_hash="hash-cursor"),
+            harness="cursor",
+        ),
+        "2026-06-14T00:00:00Z",
+    )
+    _rotate_policy_integrity_key(store, raw_key=b"2" * 32)
+
+    payload = store.setup_policy_integrity(harness="codex", now="2026-06-14T00:05:00Z", include_items=False)
+    global_status = store.get_policy_integrity_status()
+
+    assert payload["counts"]["valid"] == 1
+    assert global_status["counts"]["valid"] == 2
+    assert store.resolve_policy("codex", "codex:project:codex", "hash-codex", now="2026-06-14T00:06:00Z") == "allow"
+    assert store.resolve_policy("cursor", "cursor:project:cursor", "hash-cursor", now="2026-06-14T00:06:00Z") == "allow"
+
+
+def test_ensure_policy_integrity_ready_for_write_clears_tampered_rows_without_item_expansion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:tampered-repair", artifact_hash="hash-tampered-repair"),
+        "2026-06-14T00:00:00Z",
+    )
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        connection.execute(
+            "update policy_decisions set payload_mac = ? where artifact_id = ?",
+            ("deadbeef", "codex:project:tampered-repair"),
+        )
+    monkeypatch.setattr(policy_integrity_runtime_module, "require_policy_clear", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        store,
+        "_policy_decision_dict_from_row",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("approval repair should not build per-row item payloads")
+        ),
+    )
+
+    payload = store.ensure_policy_integrity_ready_for_write(now="2026-06-14T00:05:00Z")
+
+    assert payload["counts"]["valid"] == 0
+    assert payload["local_rows_scanned"] == 0
+    assert payload["cleared"] == 1
+    assert payload["autorepair"]["steps"][0]["step"] == "clear_invalid"
+    assert (
+        store.resolve_policy(
+            "codex",
+            "codex:project:tampered-repair",
+            "hash-tampered-repair",
+            now="2026-06-14T00:06:00Z",
+        )
+        is None
+    )
+
+
+def test_ensure_policy_integrity_ready_for_write_preserves_unknown_key_rows_while_clearing_tampered_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:unknown-key", artifact_hash="hash-unknown-key"),
+        "2026-06-14T00:00:00Z",
+    )
+    _rotate_policy_integrity_key(store, raw_key=b"2" * 32)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:tampered-mixed", artifact_hash="hash-tampered-mixed"),
+        "2026-06-14T00:01:00Z",
+    )
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        connection.execute(
+            "update policy_decisions set payload_mac = ? where artifact_id = ?",
+            ("deadbeef", "codex:project:tampered-mixed"),
+        )
+    monkeypatch.setattr(policy_integrity_runtime_module, "require_policy_clear", lambda *args, **kwargs: None)
+
+    payload = store.ensure_policy_integrity_ready_for_write(now="2026-06-14T00:05:00Z")
+
+    assert payload["counts"]["valid"] == 1
+    assert payload["cleared"] == 1
+    assert (
+        store.resolve_policy(
+            "codex",
+            "codex:project:unknown-key",
+            "hash-unknown-key",
+            now="2026-06-14T00:06:00Z",
+        )
+        == "allow"
+    )
+    assert (
+        store.resolve_policy(
+            "codex",
+            "codex:project:tampered-mixed",
+            "hash-tampered-mixed",
+            now="2026-06-14T00:06:00Z",
+        )
+        is None
+    )
+
+
+def test_ensure_policy_integrity_ready_for_write_repairs_only_requested_harness(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:tampered-local", artifact_hash="hash-tampered-local"),
+        "2026-06-14T00:00:00Z",
+    )
+    store.upsert_policy(
+        replace(
+            _decision(artifact_id="cursor:project:tampered-foreign", artifact_hash="hash-tampered-foreign"),
+            harness="cursor",
+        ),
+        "2026-06-14T00:00:00Z",
+    )
+    with sqlite3.connect(store.guard_home / "guard.db") as connection:
+        connection.execute(
+            "update policy_decisions set payload_mac = ? where artifact_id in (?, ?)",
+            ("deadbeef", "codex:project:tampered-local", "cursor:project:tampered-foreign"),
+        )
+    monkeypatch.setattr(policy_integrity_runtime_module, "require_policy_clear", lambda *args, **kwargs: None)
+
+    payload = store.ensure_policy_integrity_ready_for_write(harness="codex", now="2026-06-14T00:05:00Z")
+
+    assert payload["cleared"] == 1
+    assert (
+        store.resolve_policy(
+            "codex",
+            "codex:project:tampered-local",
+            "hash-tampered-local",
+            now="2026-06-14T00:06:00Z",
+        )
+        is None
+    )
+    foreign_rows = [
+        item
+        for item in store.list_policy_decisions(harness="cursor")
+        if item.get("artifact_id") == "cursor:project:tampered-foreign"
+    ]
+    assert len(foreign_rows) == 1
+    assert foreign_rows[0]["integrity_status"] == "tampered"
+
+
+def test_repair_policy_integrity_uses_reconciled_generation_before_fast_scan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:baseline", artifact_hash="hash-baseline"),
+        "2026-06-14T00:00:00Z",
+    )
+    monkeypatch.setattr(store, "_finalize_policy_integrity_control_state", lambda payload: None)
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:pending", artifact_hash="hash-pending"),
+        "2026-06-14T00:01:00Z",
+    )
+    monkeypatch.setattr(policy_integrity_runtime_module, "require_policy_clear", lambda *args, **kwargs: None)
+
+    payload = store.repair_policy_integrity(clear_invalid=True, now="2026-06-14T00:02:00Z", include_items=False)
+
+    assert payload["counts"]["valid"] == 2
+    assert payload["cleared"] == 0
+    assert (
+        store.resolve_policy("codex", "codex:project:baseline", "hash-baseline", now="2026-06-14T00:03:00Z") == "allow"
+    )
+    assert store.resolve_policy("codex", "codex:project:pending", "hash-pending", now="2026-06-14T00:03:00Z") == "allow"
 
 
 def test_tampered_signed_row_is_ignored_and_event_emitted(tmp_path: Path) -> None:

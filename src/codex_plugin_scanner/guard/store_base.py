@@ -1320,7 +1320,29 @@ def _policy_integrity_ready_for_local_write(payload: Mapping[str, object]) -> bo
     trust = payload.get("trust_status")
     if not isinstance(trust, Mapping):
         return False
-    return payload.get("mode") == "protected" and trust.get("remembered_rules") == "enforced"
+    counts = payload.get("counts")
+    if not isinstance(counts, Mapping):
+        return False
+    invalid_rows = 0
+    for status in _POLICY_INTEGRITY_STATUSES:
+        if status == "valid":
+            continue
+        count = counts.get(status)
+        if isinstance(count, int) and count > 0:
+            invalid_rows += count
+    return payload.get("mode") == "protected" and trust.get("remembered_rules") == "enforced" and invalid_rows == 0
+
+
+def _policy_integrity_setup_safe_for_local_write(payload: Mapping[str, object]) -> bool:
+    counts = payload.get("counts")
+    if not isinstance(counts, Mapping):
+        return False
+    eligible_invalid_rows = 0
+    for status in _POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES:
+        count = counts.get(status)
+        if isinstance(count, int) and count > 0:
+            eligible_invalid_rows += count
+    return eligible_invalid_rows > 0
 
 
 def _family_key_value(family_key: str) -> str:

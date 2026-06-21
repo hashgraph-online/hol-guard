@@ -17,6 +17,29 @@ def _set_private_mode_compat(path: Path, mode: int) -> None:
 
 
 class StorePolicyIntegrityAdminMixin:
+    @staticmethod
+    def _policy_integrity_summary_payload(
+        *,
+        generated_at: str,
+        harness: str | None,
+        state: Mapping[str, object],
+        counts: Mapping[str, int],
+    ) -> dict[str, object]:
+        return {
+            "generated_at": generated_at,
+            "harness": harness,
+            "backend": state.get("backend"),
+            "cutover_complete": state.get("cutover_complete"),
+            "mode": state.get("mode"),
+            "enforcement": state.get("enforcement"),
+            "generation": state.get("generation"),
+            "key_id": state.get("key_id"),
+            "degraded_reasons": state.get("degraded_reasons", []),
+            "trust_status": TrustStatus.from_policy_integrity_state(dict(state)).to_dict(),
+            "counts": dict(counts),
+            "local_rows_scanned": sum(counts.values()),
+        }
+
     def list_policy_decisions(self, harness: str | None = None) -> list[dict[str, object]]:
         query = """
             select decision_id, harness, scope, artifact_id, artifact_hash, workspace, publisher,
@@ -212,20 +235,12 @@ class StorePolicyIntegrityAdminMixin:
                 create_key=False,
                 include_items=False,
             )
-        return {
-            "generated_at": now,
-            "harness": harness,
-            "backend": state.get("backend"),
-            "cutover_complete": state.get("cutover_complete"),
-            "mode": state.get("mode"),
-            "enforcement": state.get("enforcement"),
-            "generation": state.get("generation"),
-            "key_id": state.get("key_id"),
-            "degraded_reasons": state.get("degraded_reasons", []),
-            "trust_status": TrustStatus.from_policy_integrity_state(state).to_dict(),
-            "counts": counts,
-            "local_rows_scanned": sum(counts.values()),
-        }
+        return self._policy_integrity_summary_payload(
+            generated_at=now,
+            harness=harness,
+            state=state,
+            counts=counts,
+        )
 
     def get_cached_policy_trust_status(self) -> dict[str, object]:
         with self._connect() as connection:
@@ -273,15 +288,16 @@ class StorePolicyIntegrityAdminMixin:
             return before
 
         attempts: list[dict[str, object]] = []
-        try:
-            setup = self.setup_policy_integrity(harness=harness, now=current_time)
-            attempts.append({"step": "setup", "mode": setup.get("mode"), "counts": setup.get("counts")})
-            if _policy_integrity_ready_for_local_write(setup):
-                setup["autorepair"] = {"attempted": True, "cleared": 0, "steps": attempts}
-                self.add_event("policy_integrity.autorepaired", {"steps": attempts}, current_time)
-                return setup
-        except Exception as error:  # pragma: no cover - exercised through final degraded status assertions.
-            attempts.append({"step": "setup", "error": type(error).__name__})
+        if _policy_integrity_setup_safe_for_local_write(before):
+            try:
+                setup = self.setup_policy_integrity(harness=harness, now=current_time, include_items=False)
+                attempts.append({"step": "setup", "mode": setup.get("mode"), "counts": setup.get("counts")})
+                if _policy_integrity_ready_for_local_write(setup):
+                    setup["autorepair"] = {"attempted": True, "cleared": 0, "steps": attempts}
+                    self.add_event("policy_integrity.autorepaired", {"steps": attempts}, current_time)
+                    return setup
+            except Exception as error:  # pragma: no cover - exercised through final degraded status assertions.
+                attempts.append({"step": "setup", "error": type(error).__name__})
 
         try:
             repair = self.repair_policy_integrity(
@@ -289,6 +305,7 @@ class StorePolicyIntegrityAdminMixin:
                 harness=harness,
                 approval_gate_grant=approval_gate_grant,
                 now=current_time,
+                include_items=False,
             )
             attempts.append(
                 {
@@ -321,25 +338,28 @@ class StorePolicyIntegrityAdminMixin:
         harness: str | None = None,
         approval_gate_grant: ApprovalGateGrant | None = None,
         now: str | None = None,
+        include_items: bool = True,
     ) -> dict[str, object]:
         current_time = now or _now()
         if clear_invalid:
             require_policy_clear(self.guard_home, approval_gate_grant=approval_gate_grant, now=current_time)
         next_control_state: dict[str, object] | None = None
         with self._connect() as connection:
-            state, _counts, items = self._policy_integrity_scan(
-                connection,
-                now=current_time,
-                harness=harness,
-                create_key=True,
-                include_items=True,
-            )
-            invalid_ids = [
-                decision_id
-                for item in items
-                if item.get("integrity_status") != "valid"
-                and (decision_id := _int_value(item.get("decision_id"))) is not None
-            ]
+            state = self._refresh_policy_integrity_state(connection, now=current_time, create_key=True)
+            state = self._load_policy_integrity_state(connection) or state
+            key, key_id = self._policy_integrity_secret_material(create=True)
+            trusted_generation = _mapping_int(state, "generation")
+            invalid_ids: list[int] = []
+            for row in self._load_local_policy_rows(connection, harness=harness):
+                integrity_result = self._policy_integrity_result_for_row(
+                    row,
+                    mode=str(state.get("mode") or "degraded"),
+                    key=key,
+                    key_id=key_id,
+                    trusted_generation=trusted_generation,
+                )
+                if integrity_result.status != "valid" and (decision_id := _int_value(row["decision_id"])) is not None:
+                    invalid_ids.append(decision_id)
             cleared = 0
             if clear_invalid and invalid_ids:
                 for chunk in _chunks(invalid_ids, _SQLITE_ID_BATCH_SIZE):
@@ -350,7 +370,6 @@ class StorePolicyIntegrityAdminMixin:
                     )
                     cleared += int(cursor.rowcount if cursor.rowcount is not None else 0)
                 if cleared > 0 and state.get("mode") == "protected":
-                    key, key_id = self._policy_integrity_secret_material(create=True)
                     trusted_state = self._load_policy_integrity_control_state(create=True)
                     if key is not None and key_id is not None and trusted_state is not None:
                         next_control_state = self._advance_policy_integrity_generation(
@@ -368,24 +387,19 @@ class StorePolicyIntegrityAdminMixin:
                 now=current_time,
                 harness=harness,
                 create_key=True,
-                include_items=True,
+                include_items=include_items,
             )
+            invalid_items = [item for item in remaining_items if item.get("integrity_status") != "valid"]
         return {
-            "generated_at": current_time,
-            "harness": harness,
-            "backend": state.get("backend"),
-            "cutover_complete": state.get("cutover_complete"),
-            "mode": state.get("mode"),
-            "enforcement": state.get("enforcement"),
-            "generation": state.get("generation"),
-            "key_id": state.get("key_id"),
-            "degraded_reasons": state.get("degraded_reasons", []),
-            "trust_status": TrustStatus.from_policy_integrity_state(state).to_dict(),
-            "counts": counts,
-            "local_rows_scanned": sum(counts.values()),
+            **self._policy_integrity_summary_payload(
+                generated_at=current_time,
+                harness=harness,
+                state=state,
+                counts=counts,
+            ),
             "cleared": cleared,
             "clear_invalid": clear_invalid,
-            "items": [item for item in remaining_items if item.get("integrity_status") != "valid"],
+            **({"items": invalid_items} if include_items else {}),
         }
 
     def migrate_local_policy_integrity(
@@ -503,6 +517,7 @@ class StorePolicyIntegrityAdminMixin:
         *,
         harness: str | None = None,
         now: str,
+        include_items: bool = True,
     ) -> dict[str, object]:
         next_control_state: dict[str, object] | None = None
         with self._connect() as connection:
@@ -522,8 +537,18 @@ class StorePolicyIntegrityAdminMixin:
             ):
                 connection.rollback()
             else:
-                local_ids = {
-                    int(row["decision_id"]) for row in self._load_local_policy_rows(connection, harness=harness)
+                trusted_generation = _mapping_int(state, "generation")
+                force_sign_ids = {
+                    int(row["decision_id"])
+                    for row in self._load_local_policy_rows(connection)
+                    if self._policy_integrity_result_for_row(
+                        row,
+                        mode=str(state.get("mode") or "degraded"),
+                        key=key,
+                        key_id=key_id,
+                        trusted_generation=trusted_generation,
+                    ).status
+                    in _POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES
                 }
                 next_control_state = self._advance_policy_integrity_generation(
                     connection,
@@ -531,13 +556,14 @@ class StorePolicyIntegrityAdminMixin:
                     key=key,
                     key_id=key_id,
                     trusted_state=trusted_state,
-                    force_sign_decision_ids=local_ids,
-                    harness=harness,
+                    force_sign_decision_ids=force_sign_ids,
                 )
                 connection.commit()
         if next_control_state is not None:
             self._finalize_policy_integrity_control_state(next_control_state)
-        return self.verify_policy_integrity(harness=harness)
+        if include_items:
+            return self.verify_policy_integrity(harness=harness)
+        return self.get_policy_integrity_status(harness=harness)
 
     def reset_policy_integrity(
         self,

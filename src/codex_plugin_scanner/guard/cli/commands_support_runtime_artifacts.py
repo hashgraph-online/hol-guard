@@ -339,7 +339,7 @@ def _codex_post_tool_output_artifact(
     canonical_harness = _canonical_harness_name(harness)
     harness_label = "Pi" if canonical_harness == "pi" else "Codex"
     response_text = _collect_codex_tool_response_text(payload.get("tool_response"))
-    stdout_text = _coalesce_string(payload.get("stdout"))
+    stdout_text = _optional_string(payload.get("stdout"))
     if stdout_text:
         response_text = f"{response_text}\n{stdout_text}".strip() if response_text else stdout_text
     tool_name = _coalesce_string(payload.get("tool_name"), "Bash")
