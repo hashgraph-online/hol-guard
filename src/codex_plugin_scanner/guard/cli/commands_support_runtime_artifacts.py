@@ -465,6 +465,8 @@ def _post_tool_package_request_was_already_evaluated(
     if event_name != "PostToolUse":
         return False
     pre_execution_result = _optional_string(payload.get("pre_execution_result"))
+    if pre_execution_result is None:
+        pre_execution_result = _optional_string(payload.get("preExecutionResult"))
     if pre_execution_result is None and action_envelope is not None:
         pre_execution_result = _optional_string(action_envelope.pre_execution_result)
     return pre_execution_result is not None

@@ -15566,6 +15566,43 @@ def test_codex_post_tool_output_does_not_requeue_package_request_after_pretool_b
     assert artifact is None
 
 
+def test_codex_post_tool_output_does_not_requeue_package_request_after_camelcase_pretool_block(tmp_path):
+    home_dir = tmp_path / "home"
+    guard_home = home_dir / ".hol-guard"
+    workspace_dir = tmp_path / "workspace"
+    guard_home.mkdir(parents=True, exist_ok=True)
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    payload = guard_commands_module._normalize_hook_payload(
+        {
+            "hookEventName": "PostToolUse",
+            "toolName": "Bash",
+            "toolInput": {"command": "npm install -g @getpaseo/cli"},
+            "tool_response": {
+                "stdout": (
+                    "HOL Guard blocked `@getpaseo/cli` before install.\n"
+                    "Open HOL Guard to approve or keep this blocked.\n"
+                )
+            },
+            "sourceScope": "project",
+            "preExecutionResult": "block",
+        },
+        harness="codex",
+    )
+
+    artifact = guard_commands_module._hook_runtime_artifact(
+        harness="codex",
+        payload=payload,
+        action_envelope=None,
+        data_flow_signals=(),
+        home_dir=home_dir,
+        guard_home=guard_home,
+        workspace=workspace_dir,
+    )
+
+    assert payload["pre_execution_result"] == "block"
+    assert artifact is None
+
+
 def test_guard_hook_codex_post_tool_use_blocks_focused_pytest_medium_secret_output(
     tmp_path,
     capsys,
