@@ -278,6 +278,27 @@ def _runtime_policy_path(harness: str, home_dir: Path, workspace: Path | None) -
         if workspace is not None:
             return workspace / ".codex" / "config.toml"
         return home_dir / ".codex" / "config.toml"
+    if harness == "pi":
+        candidates: list[Path] = []
+        if workspace is not None:
+            candidates.extend(
+                (
+                    workspace / ".pi" / "settings.json",
+                    workspace / ".omp" / "settings.json",
+                )
+            )
+        candidates.extend(
+            (
+                home_dir / ".pi" / "agent" / "settings.json",
+                home_dir / ".omp" / "agent" / "settings.json",
+            )
+        )
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+        if workspace is not None:
+            return workspace / ".pi" / "settings.json"
+        return home_dir / ".pi" / "agent" / "settings.json"
     if harness == "copilot":
         if workspace is not None:
             return workspace / ".github" / "hooks" / "hol-guard-copilot.json"
