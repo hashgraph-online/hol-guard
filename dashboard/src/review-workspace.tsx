@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   HiMiniCheckCircle,
   HiMiniNoSymbol,
@@ -12,7 +12,6 @@ import {
   HiMiniChevronUp,
   HiMiniArrowTopRightOnSquare,
   HiMiniClock,
-  HiMiniClipboard,
   HiMiniClipboardDocumentCheck,
   HiMiniCodeBracket,
   HiMiniCommandLine,
@@ -37,13 +36,10 @@ import {
 import {
   buildRetryAfterApprovalCopy,
   buildPrimaryReviewAction,
-  primaryReviewActionToggleLabel,
   resolveSecondaryRiskSummary,
   hasReviewEvidence,
   harnessDisplayName,
-  resolveDecisionV2Title,
   displayArtifactName,
-  resolveEnvelopeDisplayText,
   formatRelativeTime,
   buildCodexResumeUx,
 } from "./approval-center-utils";
@@ -88,6 +84,7 @@ import { plainEnglishRequestTitle, whyPaused } from "./evidence/plain-english";
 import { requiresApprovalPasswordPrompt, type BulkGateCredentials } from "./approval-gate-utils";
 import { ApprovalPasswordModal } from "./approval-center-review-cards";
 import { guardAwareHref } from "./guard-api";
+import { LoggedActionPanel } from "./logged-action-panel";
 import {
   QueueBulkDrawer,
   QueueBulkGatePrompt,
@@ -1585,13 +1582,6 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
 
 function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
   const action = buildPrimaryReviewAction(item);
-  const [isVisible, setIsVisible] = useState(true);
-  useEffect(() => {
-    setIsVisible(true);
-  }, [item.request_id]);
-  const handleToggleVisibility = useCallback(() => {
-    setIsVisible((visible) => !visible);
-  }, []);
 
   return (
     <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -1608,94 +1598,16 @@ function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
           {action.label}
         </span>
       </div>
-      <div className="mt-3 overflow-hidden rounded-xl bg-[#0f172a]">
-        <div className="flex min-h-11 flex-wrap items-center gap-1.5 border-b border-white/10 px-3 py-2 sm:flex-nowrap">
-          <span className="h-2.5 w-2.5 rounded-full bg-brand-purple" />
-          <span className="h-2.5 w-2.5 rounded-full bg-brand-blue" />
-          <span className="h-2.5 w-2.5 rounded-full bg-brand-green" />
-          <span className="ml-2 min-w-0 flex-1 truncate font-mono text-[10px] uppercase tracking-[0.2em] text-white/45">
-            {action.label}
-          </span>
-          <span className="ml-auto flex shrink-0 items-center gap-1.5">
-            {isVisible && <CopyButton text={action.text} />}
-            <ReviewCommandButton
-              onClick={handleToggleVisibility}
-              label={primaryReviewActionToggleLabel(isVisible)}
-              ariaLabel={isVisible ? "Hide stopped action" : "Show stopped action"}
-              expanded={isVisible}
-              icon={
-                isVisible ? (
-                  <HiMiniChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
-                ) : (
-                  <HiMiniChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-                )
-              }
-            />
-          </span>
-        </div>
-        {isVisible ? (
-          <pre className="max-h-[min(34rem,48vh)] overflow-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-[13px] leading-6 text-white/90 [scrollbar-gutter:stable] sm:text-sm">
-            {action.text}
-          </pre>
-        ) : (
-          <div className="px-3 py-4 text-sm text-white/65">
-            Stopped action hidden. Show it before approving if you need to re-check the exact request.
-          </div>
-        )}
+      <div className="mt-3">
+        <LoggedActionPanel
+          label={action.label}
+          text={action.text}
+          copyAriaLabel="Copy full stopped action to clipboard"
+          expandAriaLabel="Expand full stopped action"
+          collapseAriaLabel="Collapse full stopped action"
+        />
       </div>
     </div>
-  );
-}
-
-function ReviewCommandButton({
-  label,
-  icon,
-  onClick,
-  ariaLabel,
-  expanded,
-}: {
-  label: string;
-  icon: ReactNode;
-  onClick: () => void;
-  ariaLabel: string;
-  expanded?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={ariaLabel}
-      aria-expanded={expanded}
-      className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-white/15 bg-white/[0.08] px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-white/70 transition-colors hover:border-white/25 hover:bg-white/15 hover:text-white focus-visible:outline-white/50"
-    >
-      {icon}
-      <span className="hidden sm:inline">{label}</span>
-    </button>
-  );
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = useCallback(() => {
-    void navigator.clipboard?.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }, [text]);
-
-  return (
-    <ReviewCommandButton
-      label={copied ? "Copied" : "Copy"}
-      ariaLabel="Copy to clipboard"
-      onClick={handleCopy}
-      icon={
-        copied ? (
-          <HiMiniClipboardDocumentCheck className="h-3.5 w-3.5" aria-hidden="true" />
-        ) : (
-          <HiMiniClipboard className="h-3.5 w-3.5" aria-hidden="true" />
-        )
-      }
-    />
   );
 }
 

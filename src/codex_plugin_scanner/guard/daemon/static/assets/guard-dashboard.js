@@ -14015,6 +14015,37 @@ function resolveEnvelopeDisplayText(envelope) {
   }
   return envelope.action_type === "harness_start" ? null : envelope.action_type;
 }
+function resolveActionEnvelopeDetailText(envelope, options = {}) {
+  if (envelope.action_type === "shell_command" && envelope.command !== null) {
+    return envelope.command;
+  }
+  if (envelope.action_type === "prompt" && (envelope.prompt_excerpt !== null || (envelope.prompt_text ?? null) !== null)) {
+    return envelope.prompt_text ?? envelope.prompt_excerpt;
+  }
+  if ((envelope.action_type === "file_read" || envelope.action_type === "file_write") && envelope.target_paths.length > 0) {
+    return envelope.target_paths.join("\n");
+  }
+  if (envelope.action_type === "network_request" && envelope.network_hosts.length > 0) {
+    return envelope.network_hosts.join("\n");
+  }
+  if (envelope.action_type === "mcp_tool") {
+    const baseText = resolveEnvelopeDisplayText(envelope) ?? envelope.mcp_tool ?? envelope.tool_name ?? envelope.action_type;
+    const inputSummary = serializeMcpInput(envelope.raw_payload_redacted, options.mcpInputMaxLength ?? null);
+    return inputSummary === null ? baseText : `${baseText}
+
+Input:
+${inputSummary}`;
+  }
+  if (envelope.action_type === "package_script") {
+    if (envelope.package_manager && envelope.package_name) {
+      return `${envelope.package_manager} install ${envelope.package_name}`;
+    }
+    if (envelope.package_name) {
+      return envelope.package_name;
+    }
+  }
+  return resolveEnvelopeDisplayText(envelope);
+}
 function humanizeList(values) {
   if (values.length === 0) {
     return "nothing tracked yet";
@@ -14219,9 +14250,6 @@ function stripDuplicateReviewContextPrefix(value) {
   );
   return stripped === value ? null : stripped;
 }
-function primaryReviewActionToggleLabel(isVisible) {
-  return isVisible ? "Hide" : "Show";
-}
 function resolveStoppedCommandText(item) {
   if (item.action_envelope_json) {
     const envelopeText = resolveEnvelopeDisplayText(item.action_envelope_json);
@@ -14242,21 +14270,16 @@ function resolveStoppedCommandText(item) {
   return item.artifact_name.trim() || item.artifact_id;
 }
 function resolvePrimaryReviewText(item) {
-  const baseText = resolveStoppedCommandText(item);
   const envelope = item.action_envelope_json;
-  if (envelope?.action_type !== "mcp_tool") {
-    return baseText;
+  if (envelope) {
+    const envelopeText = resolveActionEnvelopeDetailText(envelope, { mcpInputMaxLength: null });
+    if (envelopeText !== null) {
+      return envelopeText;
+    }
   }
-  const inputSummary = serializeMcpInput(envelope.raw_payload_redacted);
-  if (inputSummary === null) {
-    return baseText;
-  }
-  return `${baseText}
-
-Input:
-${inputSummary}`;
+  return resolveStoppedCommandText(item);
 }
-function serializeMcpInput(payload) {
+function serializeMcpInput(payload, maxLength = null) {
   const input = payload.arguments ?? payload.input ?? payload.params ?? null;
   if (input === null || input === void 0) {
     return null;
@@ -14266,7 +14289,10 @@ function serializeMcpInput(payload) {
     if (serialized === void 0 || serialized.trim().length === 0 || serialized === "{}") {
       return null;
     }
-    return serialized.length > 4e3 ? `${serialized.slice(0, 4e3)}...` : serialized;
+    if (maxLength !== null && serialized.length > maxLength) {
+      return `${serialized.slice(0, maxLength)}...`;
+    }
+    return serialized;
   } catch {
     return null;
   }
@@ -18383,33 +18409,7 @@ function resolveActionSubtitle(receipt) {
 function resolveActionDetail(receipt) {
   const envelope = getEnvelope(receipt);
   if (!envelope) return null;
-  const type = resolveActionType(receipt);
-  if (type === "Shell command" && envelope.command) {
-    return envelope.command;
-  }
-  if ((type === "File read" || type === "File write") && envelope.target_paths && envelope.target_paths.length > 0) {
-    return envelope.target_paths.join("\n");
-  }
-  if (type === "Prompt" && (envelope.prompt_text || envelope.prompt_excerpt)) {
-    return envelope.prompt_text || envelope.prompt_excerpt;
-  }
-  if (type === "Network request" && envelope.network_hosts && envelope.network_hosts.length > 0) {
-    return envelope.network_hosts.join("\n");
-  }
-  if (type === "Tool call") {
-    const server = envelope.mcp_server ?? envelope.tool_name;
-    const tool = envelope.mcp_tool;
-    if (server && tool) return `${server} → ${tool}`;
-    if (tool) return tool;
-    if (server) return server;
-  }
-  if (type === "Package") {
-    const pm = envelope.package_manager;
-    const name = envelope.package_name;
-    if (pm && name) return `${pm} install ${name}`;
-    if (name) return name;
-  }
-  return null;
+  return resolveActionEnvelopeDetailText(envelope, { mcpInputMaxLength: null });
 }
 function formatSubtitle(subtitle) {
   if (subtitle.endsWith(".") || subtitle.endsWith("?") || subtitle.endsWith("!")) return subtitle + " ";
@@ -18791,6 +18791,117 @@ function ActionRow({
     }
   );
 }
+function useCopyFeedbackTimeout(resetMs) {
+  const [copied, setCopied] = reactExports.useState(false);
+  const resetTimeoutRef = reactExports.useRef(null);
+  const clearResetTimeout = reactExports.useCallback(() => {
+    if (resetTimeoutRef.current !== null) {
+      clearTimeout(resetTimeoutRef.current);
+      resetTimeoutRef.current = null;
+    }
+  }, []);
+  reactExports.useEffect(() => {
+    return () => {
+      clearResetTimeout();
+    };
+  }, [clearResetTimeout]);
+  const flashCopied = reactExports.useCallback(() => {
+    clearResetTimeout();
+    setCopied(true);
+    resetTimeoutRef.current = setTimeout(() => {
+      resetTimeoutRef.current = null;
+      setCopied(false);
+    }, resetMs);
+  }, [clearResetTimeout, resetMs]);
+  const resetCopied = reactExports.useCallback(() => {
+    clearResetTimeout();
+    setCopied(false);
+  }, [clearResetTimeout]);
+  return { copied, flashCopied, resetCopied };
+}
+const EXPAND_CHAR_THRESHOLD = 180;
+const EXPAND_LINE_THRESHOLD = 4;
+function shouldOfferLoggedActionExpand(text) {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) {
+    return false;
+  }
+  if (trimmed.length > EXPAND_CHAR_THRESHOLD) {
+    return true;
+  }
+  return trimmed.split(/\r?\n/).length > EXPAND_LINE_THRESHOLD;
+}
+function LoggedActionPanel(props) {
+  const canExpand = reactExports.useMemo(() => shouldOfferLoggedActionExpand(props.text), [props.text]);
+  const [expanded, setExpanded] = reactExports.useState(!canExpand);
+  const { copied, flashCopied, resetCopied } = useCopyFeedbackTimeout(2e3);
+  reactExports.useEffect(() => {
+    setExpanded(!canExpand);
+    resetCopied();
+  }, [canExpand, props.text, resetCopied]);
+  const handleCopy = reactExports.useCallback(async () => {
+    if (!navigator.clipboard?.writeText) {
+      resetCopied();
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(props.text);
+      flashCopied();
+    } catch {
+      resetCopied();
+    }
+  }, [flashCopied, props.text, resetCopied]);
+  const handleToggleExpanded = reactExports.useCallback(() => {
+    setExpanded((value) => !value);
+  }, []);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overflow-hidden rounded-xl bg-[#0f172a]", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-11 flex-wrap items-center gap-1.5 border-b border-white/10 px-3 py-2 sm:flex-nowrap", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-purple" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-blue" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-green" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-2 min-w-0 flex-1 truncate font-mono text-[10px] uppercase tracking-[0.2em] text-white/45", children: props.label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "ml-auto flex shrink-0 items-center gap-1.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: handleCopy,
+            "aria-label": props.copyAriaLabel ?? `Copy full ${props.label.toLowerCase()} to clipboard`,
+            className: "inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-white/15 bg-white/[0.08] px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-white/70 transition-colors hover:border-white/25 hover:bg-white/15 hover:text-white focus-visible:outline-white/50",
+            children: [
+              copied ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: copied ? "Copied" : "Copy" })
+            ]
+          }
+        ),
+        canExpand ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: handleToggleExpanded,
+            "aria-label": expanded ? props.collapseAriaLabel ?? `Collapse full ${props.label.toLowerCase()}` : props.expandAriaLabel ?? `Expand full ${props.label.toLowerCase()}`,
+            "aria-expanded": expanded,
+            className: "inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-white/15 bg-white/[0.08] px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-white/70 transition-colors hover:border-white/25 hover:bg-white/15 hover:text-white focus-visible:outline-white/50",
+            children: [
+              expanded ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: expanded ? "Collapse" : "Expand" })
+            ]
+          }
+        ) : null
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "pre",
+        {
+          className: `whitespace-pre-wrap break-words px-3 py-3 font-mono text-[13px] leading-6 text-white/90 sm:text-sm ${expanded ? "max-h-[min(34rem,48vh)] overflow-auto [scrollbar-gutter:stable]" : "max-h-40 overflow-hidden"}`,
+          children: props.text
+        }
+      ),
+      canExpand && !expanded ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-[#0f172a] to-transparent" }) : null
+    ] })
+  ] });
+}
 function SeverityIcon({ severity }) {
   if (severity === "critical" || severity === "high") {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-4 w-4 text-amber-500", "aria-hidden": "true" });
@@ -19008,7 +19119,7 @@ function EvidenceActionDetail({
   const description = plainEnglishDescription(receipt);
   const actionTitle = resolveActionTitle(receipt);
   const actionType = resolveActionType(receipt);
-  resolveActionSubtitle(receipt);
+  const actionSubtitle = resolveActionSubtitle(receipt);
   const actionDetail = resolveActionDetail(receipt);
   const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
   const primarySignal = signals[0];
@@ -19059,9 +19170,18 @@ function EvidenceActionDetail({
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: formatRelativeTime(receipt.timestamp) })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark leading-relaxed", children: description }),
-          actionDetail && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: actionType }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs font-mono text-brand-dark break-all whitespace-pre-line leading-relaxed", children: actionDetail })
+          actionDetail && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: actionSubtitle ?? actionType }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              LoggedActionPanel,
+              {
+                label: actionType,
+                text: actionDetail,
+                copyAriaLabel: `Copy full ${actionType.toLowerCase()} to clipboard`,
+                expandAriaLabel: `Expand full ${actionType.toLowerCase()}`,
+                collapseAriaLabel: `Collapse full ${actionType.toLowerCase()}`
+              }
+            )
           ] }),
           primarySignal && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-3 py-3", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
@@ -20549,34 +20669,6 @@ function FiCopy(props) {
 }
 function FiCheck(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2", "strokeLinecap": "round", "strokeLinejoin": "round" }, "child": [{ "tag": "polyline", "attr": { "points": "20 6 9 17 4 12" }, "child": [] }] })(props);
-}
-function useCopyFeedbackTimeout(resetMs) {
-  const [copied, setCopied] = reactExports.useState(false);
-  const resetTimeoutRef = reactExports.useRef(null);
-  const clearResetTimeout = reactExports.useCallback(() => {
-    if (resetTimeoutRef.current !== null) {
-      clearTimeout(resetTimeoutRef.current);
-      resetTimeoutRef.current = null;
-    }
-  }, []);
-  reactExports.useEffect(() => {
-    return () => {
-      clearResetTimeout();
-    };
-  }, [clearResetTimeout]);
-  const flashCopied = reactExports.useCallback(() => {
-    clearResetTimeout();
-    setCopied(true);
-    resetTimeoutRef.current = setTimeout(() => {
-      resetTimeoutRef.current = null;
-      setCopied(false);
-    }, resetMs);
-  }, [clearResetTimeout, resetMs]);
-  const resetCopied = reactExports.useCallback(() => {
-    clearResetTimeout();
-    setCopied(false);
-  }, [clearResetTimeout]);
-  return { copied, flashCopied, resetCopied };
 }
 function EvidenceInsightsShareSheet({ publicUrl, onClose }) {
   const { copied, flashCopied, resetCopied } = useCopyFeedbackTimeout(2e3);
@@ -25077,13 +25169,6 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
 }
 function PrimaryActionCard({ item }) {
   const action = buildPrimaryReviewAction(item);
-  const [isVisible, setIsVisible] = reactExports.useState(true);
-  reactExports.useEffect(() => {
-    setIsVisible(true);
-  }, [item.request_id]);
-  const handleToggleVisibility = reactExports.useCallback(() => {
-    setIsVisible((visible) => !visible);
-  }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -25092,69 +25177,17 @@ function PrimaryActionCard({ item }) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue", children: action.label })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 overflow-hidden rounded-xl bg-[#0f172a]", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-11 flex-wrap items-center gap-1.5 border-b border-white/10 px-3 py-2 sm:flex-nowrap", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-purple" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-blue" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-green" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-2 min-w-0 flex-1 truncate font-mono text-[10px] uppercase tracking-[0.2em] text-white/45", children: action.label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "ml-auto flex shrink-0 items-center gap-1.5", children: [
-          isVisible && /* @__PURE__ */ jsxRuntimeExports.jsx(CopyButton, { text: action.text }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            ReviewCommandButton,
-            {
-              onClick: handleToggleVisibility,
-              label: primaryReviewActionToggleLabel(isVisible),
-              ariaLabel: isVisible ? "Hide stopped action" : "Show stopped action",
-              expanded: isVisible,
-              icon: isVisible ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
-            }
-          )
-        ] })
-      ] }),
-      isVisible ? /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "max-h-[min(34rem,48vh)] overflow-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-[13px] leading-6 text-white/90 [scrollbar-gutter:stable] sm:text-sm", children: action.text }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-3 py-4 text-sm text-white/65", children: "Stopped action hidden. Show it before approving if you need to re-check the exact request." })
-    ] })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      LoggedActionPanel,
+      {
+        label: action.label,
+        text: action.text,
+        copyAriaLabel: "Copy full stopped action to clipboard",
+        expandAriaLabel: "Expand full stopped action",
+        collapseAriaLabel: "Collapse full stopped action"
+      }
+    ) })
   ] });
-}
-function ReviewCommandButton({
-  label,
-  icon,
-  onClick,
-  ariaLabel,
-  expanded
-}) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "button",
-    {
-      type: "button",
-      onClick,
-      "aria-label": ariaLabel,
-      "aria-expanded": expanded,
-      className: "inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-white/15 bg-white/[0.08] px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-white/70 transition-colors hover:border-white/25 hover:bg-white/15 hover:text-white focus-visible:outline-white/50",
-      children: [
-        icon,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: label })
-      ]
-    }
-  );
-}
-function CopyButton({ text }) {
-  const [copied, setCopied] = reactExports.useState(false);
-  const handleCopy = reactExports.useCallback(() => {
-    void navigator.clipboard?.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2e3);
-    });
-  }, [text]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    ReviewCommandButton,
-    {
-      label: copied ? "Copied" : "Copy",
-      ariaLabel: "Copy to clipboard",
-      onClick: handleCopy,
-      icon: copied ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
-    }
-  );
 }
 function buildWhatWouldHappen(item) {
   const type = item.artifact_type;

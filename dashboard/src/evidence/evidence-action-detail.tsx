@@ -20,6 +20,7 @@ import { plainEnglishDescription, resolveActionTitle, resolveActionType, resolve
 import { detectCategory, getCategoryInfo } from "./categories";
 import { SectionLabel } from "../approval-center-primitives";
 import { DecisionBadge } from "./decision-badge";
+import { LoggedActionPanel } from "../logged-action-panel";
 
 interface EvidenceActionDetailProps {
   receipt: GuardReceipt | null;
@@ -354,11 +355,15 @@ export function EvidenceActionDetail({
         <p className="text-sm text-brand-dark leading-relaxed">{description}</p>
 
         {actionDetail && (
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-            <SectionLabel>{actionType}</SectionLabel>
-            <p className="mt-1 text-xs font-mono text-brand-dark break-all whitespace-pre-line leading-relaxed">
-              {actionDetail}
-            </p>
+          <div className="space-y-2">
+            <SectionLabel>{actionSubtitle ?? actionType}</SectionLabel>
+            <LoggedActionPanel
+              label={actionType}
+              text={actionDetail}
+              copyAriaLabel={`Copy full ${actionType.toLowerCase()} to clipboard`}
+              expandAriaLabel={`Expand full ${actionType.toLowerCase()}`}
+              collapseAriaLabel={`Collapse full ${actionType.toLowerCase()}`}
+            />
           </div>
         )}
 

@@ -468,12 +468,12 @@ assert(
 );
 
 assert(
-  primaryReviewActionToggleLabel(true) === "Hide",
-  "GR211-01: primary review card can hide the stopped prompt or command"
+  primaryReviewActionToggleLabel(true) === "Collapse",
+  "GR211-01: primary review card can collapse expanded stopped content"
 );
 assert(
-  primaryReviewActionToggleLabel(false) === "Show",
-  "GR211-02: primary review card can restore the stopped prompt or command"
+  primaryReviewActionToggleLabel(false) === "Expand",
+  "GR211-02: primary review card can expand collapsed stopped content"
 );
 
 const PRIMARY_PROMPT_ACTION = buildPrimaryReviewAction({
@@ -793,6 +793,28 @@ assert(
 assert(
   PRIMARY_MCP_ACTION.text.includes('"target": "dangerous-marker.json"'),
   "GR211-09: primary review card exposes redacted MCP arguments without opening technical details"
+);
+
+const LONG_MCP_INPUT_TEXT = `${"0123456789abcdef".repeat(320)}-keep-the-entire-input`;
+const PRIMARY_MCP_ACTION_FULL_INPUT = buildPrimaryReviewAction({
+  ...BASE_REQUEST,
+  request_id: "ph09-primary-mcp-full-input",
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "mcp_tool",
+    command: null,
+    mcp_server: "danger_lab",
+    mcp_tool: "dangerous_delete",
+    raw_payload_redacted: {
+      arguments: {
+        payload: LONG_MCP_INPUT_TEXT,
+      },
+    },
+  },
+});
+assert(
+  PRIMARY_MCP_ACTION_FULL_INPUT.text.includes(LONG_MCP_INPUT_TEXT),
+  "GR211-10: primary review copy preserves the full MCP input instead of truncating it"
 );
 
 const RESOLVED_ITEM: GuardApprovalRequest = {
