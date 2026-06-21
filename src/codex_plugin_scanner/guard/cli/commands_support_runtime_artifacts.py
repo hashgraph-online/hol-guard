@@ -169,10 +169,11 @@ def _hook_runtime_artifact(
 ) -> GuardArtifact | None:
     harness = _canonical_harness_name(harness)
     event_name = _hook_event_name(payload)
-    if harness == "codex" and event_name == "PostToolUse":
+    if harness in {"codex", "pi"} and event_name == "PostToolUse":
         output_artifact = _codex_post_tool_output_artifact(
+            harness=harness,
             payload=payload,
-            config_path=str(_runtime_policy_path(harness, home_dir, workspace)),
+            config_path=str(_runtime_policy_path(harness, home_dir, workspace, payload=payload)),
             source_scope=_coalesce_string(payload.get("source_scope"), "project"),
             cwd=workspace,
             home_dir=home_dir,
@@ -184,7 +185,7 @@ def _hook_runtime_artifact(
     if event_name == "UserPromptSubmit":
         prompt_text = payload.get("prompt")
         if isinstance(prompt_text, str) and prompt_text.strip():
-            config_path = str(_runtime_policy_path(harness, home_dir, workspace))
+            config_path = str(_runtime_policy_path(harness, home_dir, workspace, payload=payload))
             prompt_detection = HarnessDetection(
                 harness=harness,
                 installed=True,
@@ -231,7 +232,7 @@ def _hook_runtime_artifact(
             else None
         )
     source_scope = _coalesce_string(payload.get("source_scope"), "project")
-    config_path = str(_runtime_policy_path(harness, home_dir, workspace))
+    config_path = str(_runtime_policy_path(harness, home_dir, workspace, payload=payload))
     if request is not None:
         return build_file_read_request_artifact(
             harness=harness,
@@ -328,20 +329,34 @@ _CODEX_PROMPT_FILE_FINGERPRINT_LENGTH = 24
 
 def _codex_post_tool_output_artifact(
     *,
+    harness: str = "codex",
     payload: dict[str, object],
     config_path: str,
     source_scope: str,
     cwd: Path | None,
     home_dir: Path | None = None,
 ) -> GuardArtifact | None:
+    canonical_harness = _canonical_harness_name(harness)
+    harness_label = "Pi" if canonical_harness == "pi" else "Codex"
     response_text = _collect_codex_tool_response_text(payload.get("tool_response"))
+    stdout_text = _coalesce_string(payload.get("stdout"))
+    if stdout_text:
+        response_text = f"{response_text}\n{stdout_text}".strip() if response_text else stdout_text
     tool_name = _coalesce_string(payload.get("tool_name"), "Bash")
     command_text = _codex_post_tool_command_text(payload)
     if not command_text:
         command_text = tool_name
     local_source_matches = _codex_sensitive_local_source_matches(command_text, cwd=cwd)
-    references_local_content = bool(local_source_matches) or _codex_command_may_read_local_content(
-        command_text, cwd=cwd
+    sensitive_file_request = extract_sensitive_file_read_request(
+        payload.get("tool_name"),
+        payload.get("tool_input", payload.get("arguments")),
+        cwd=cwd,
+        home_dir=home_dir,
+    )
+    references_local_content = (
+        bool(local_source_matches)
+        or sensitive_file_request is not None
+        or _codex_command_may_read_local_content(command_text, cwd=cwd)
     )
     content_matches = classify_secret_content(response_text)
     if not content_matches and references_local_content:
@@ -387,7 +402,14 @@ def _codex_post_tool_output_artifact(
         if local_secret_source is not None:
             source_signal = f"command references local secrets from {local_secret_source}"
         runtime_request_signals.append(source_signal)
+    local_secret_source = _codex_local_secret_source_label(
+        local_source_matches,
+        command_text=command_text,
+    )
+    if local_secret_source is None and sensitive_file_request is not None:
+        local_secret_source = sensitive_file_request.path_match.family
     request_summary = _codex_tool_output_request_summary(
+        harness_label=harness_label,
         tool_name=tool_name,
         command_text=command_text,
         local_secret_source=local_secret_source,
@@ -396,6 +418,7 @@ def _codex_post_tool_output_artifact(
     )
     runtime_request_summary = _codex_tool_output_runtime_summary(
         local_secret_source,
+        harness_label=harness_label,
         focused_pytest=focused_pytest,
         merged_output_capture=merged_output_capture,
     )
@@ -411,6 +434,7 @@ def _codex_post_tool_output_artifact(
         "runtime_request_summary": runtime_request_summary,
         "runtime_request_reason": _codex_tool_output_runtime_reason(
             local_secret_source,
+            harness_label=harness_label,
             focused_pytest=focused_pytest,
             merged_output_capture=merged_output_capture,
         ),
@@ -420,9 +444,9 @@ def _codex_post_tool_output_artifact(
     if local_secret_source is not None:
         metadata["secret_source_family"] = local_secret_source
     return GuardArtifact(
-        artifact_id=f"codex:{source_scope}:tool-output:{fingerprint}",
+        artifact_id=f"{canonical_harness}:{source_scope}:tool-output:{fingerprint}",
         name=f"{tool_name} credential-looking output",
-        harness="codex",
+        harness=canonical_harness,
         artifact_type="tool_action_request",
         source_scope=source_scope,
         config_path=config_path,
