@@ -1504,8 +1504,15 @@ def test_guard_protect_pnpm_install_alias_renders_wrapped_review_link_for_cloud_
 def test_guard_protect_retry_runs_after_local_package_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    install_fake_system_keyring,
     capsys,
 ) -> None:
+    install_fake_system_keyring()
+    monkeypatch.setattr(
+        guard_store_module.GuardStore,
+        "_assert_oauth_secret_persisted",
+        lambda self, secret_id, value: None,
+    )
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
@@ -1572,6 +1579,92 @@ def test_guard_protect_retry_runs_after_local_package_approval(
     assert retry_payload["executed"] is True
     assert retry_payload["verdict"]["action"] == "allow"
     assert marker_path.exists()
+
+
+def test_guard_protect_retry_after_local_package_approval_reuses_recent_cloud_validation_error_cache(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    install_fake_system_keyring,
+    capsys,
+) -> None:
+    install_fake_system_keyring()
+    monkeypatch.setattr(
+        guard_store_module.GuardStore,
+        "_assert_oauth_secret_persisted",
+        lambda self, secret_id, value: None,
+    )
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    marker_path = tmp_path / "npm-approved-cache-marker.json"
+    write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    server, thread, sync_url = _start_cloud_eval_server(
+        decision="allow",
+        package_name="minimist",
+        evaluate_status=400,
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    try:
+        _seed_bundle(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="minimist",
+            package_version="1.2.8",
+            action="block",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "--dry-run",
+                "npm",
+                "install",
+                "minimist@1.2.8",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+        assert rc == 2
+
+        store = GuardStore(home_dir)
+        apply_approval_resolution(
+            store=store,
+            request_id=str(payload["primary_approval_request_id"]),
+            action="allow",
+            scope="artifact",
+            workspace=None,
+            reason="reviewed",
+        )
+
+        _stop_cloud_eval_server(server, thread)
+        server = None
+        thread = None
+
+        original_path = os.environ.get("PATH", "")
+        monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
+        retry_payload, retry_exit_code = build_protect_payload(
+            command=["npm", "install", "minimist@1.2.8"],
+            store=store,
+            workspace_dir=workspace_dir,
+            dry_run=False,
+            now="2026-05-19T00:05:00Z",
+        )
+    finally:
+        if server is not None and thread is not None:
+            _stop_cloud_eval_server(server, thread)
+
+    assert retry_exit_code == 0
+    assert retry_payload["executed"] is True
+    assert retry_payload["verdict"]["action"] == "allow"
+    assert marker_path.exists()
+    assert store.list_approval_requests(status="pending", limit=None) == []
 
 
 def test_guard_protect_denied_retry_does_not_requeue_local_package_approval(
