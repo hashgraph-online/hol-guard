@@ -1,4 +1,8 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
 import { buildGuardDaemonCandidatePorts, normalizeGuardUpdateStatus, updateReconnectSucceeded } from "./guard-api";
+import { GuardUpdatePanel } from "./guard-update-panel";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -53,6 +57,95 @@ assert(recovery.recovery_reinstall_available === true, "recovery_reinstall_avail
 assert(
   recovery.recovery_reinstall_command === "pipx install --force hol-guard",
   "recovery_reinstall_command should pass through",
+);
+
+const currentLocalWheelMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    updateStatus: normalizeGuardUpdateStatus({
+      current_version: "2.0.855",
+      latest_version: "2.0.855",
+      auto_updatable: false,
+      update_available: false,
+      version_check: {
+        source: "pypi",
+        status: "current",
+        current_version: "2.0.855",
+        latest_version: "2.0.855",
+        update_available: false,
+      },
+      blocked_reason:
+        "This install was set up from a local wheel. Re-run `hol-guard update --wheel <wheel-or-directory>` or your usual local install command instead.",
+      recovery_reinstall_available: true,
+    }),
+    onReinstallGuard: () => undefined,
+  }),
+);
+
+assert(
+  !currentLocalWheelMarkup.includes("Reinstall from PyPI"),
+  "current local wheel installs should not keep showing the PyPI recovery CTA",
+);
+assert(
+  !currentLocalWheelMarkup.includes("automatic updates are off"),
+  "current local wheel installs should not keep showing the recovery warning",
+);
+
+const staleLocalWheelMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    updateStatus: normalizeGuardUpdateStatus({
+      current_version: "2.0.855",
+      latest_version: "2.0.856",
+      auto_updatable: false,
+      update_available: false,
+      version_check: {
+        source: "pypi",
+        status: "stale",
+        current_version: "2.0.855",
+        latest_version: "2.0.856",
+        update_available: true,
+      },
+      blocked_reason:
+        "This install was set up from a local wheel. Re-run `hol-guard update --wheel <wheel-or-directory>` or your usual local install command instead.",
+      recovery_reinstall_available: true,
+    }),
+    onReinstallGuard: () => undefined,
+  }),
+);
+
+assert(
+  staleLocalWheelMarkup.includes("This install came from a local wheel"),
+  "stale local wheel installs should explain the real install source",
+);
+assert(
+  staleLocalWheelMarkup.includes("Reinstall from PyPI"),
+  "stale local wheel installs should keep the PyPI recovery CTA",
+);
+
+const staleLocalFolderMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    updateStatus: normalizeGuardUpdateStatus({
+      current_version: "2.0.855",
+      latest_version: "2.0.856",
+      auto_updatable: false,
+      update_available: false,
+      version_check: {
+        source: "pypi",
+        status: "stale",
+        current_version: "2.0.855",
+        latest_version: "2.0.856",
+        update_available: true,
+      },
+      blocked_reason:
+        "This install was set up from a local folder. Re-run your usual local install command instead.",
+      recovery_reinstall_available: true,
+    }),
+    onReinstallGuard: () => undefined,
+  }),
+);
+
+assert(
+  staleLocalFolderMarkup.includes("This install came from a local folder"),
+  "stale local folder installs should keep the folder-specific recovery copy",
 );
 
 const noRecovery = normalizeGuardUpdateStatus({
