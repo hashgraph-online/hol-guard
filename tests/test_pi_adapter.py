@@ -278,6 +278,28 @@ class TestPiRuntime:
         assert artifact.artifact_id.startswith("pi:")
         assert artifact.metadata["guard_default_action"] == "require-reapproval"
 
+    def test_pi_stdout_only_post_tool_output_creates_runtime_artifact(self, tmp_path: Path) -> None:
+        secret_path = tmp_path / ".npmrc"
+        secret_line = "//registry.npmjs.org/:_authToken=npm_abcdefghijklmnopqrstuvwxyz012345\n"
+        secret_path.write_text(secret_line, encoding="utf-8")
+
+        artifact = _codex_post_tool_output_artifact(
+            harness="pi",
+            payload={
+                "tool_name": "read",
+                "tool_input": {"filePath": str(secret_path)},
+                "stdout": secret_line.strip(),
+            },
+            config_path="~/.pi/agent/settings.json",
+            source_scope="project",
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+
+        assert artifact is not None
+        assert artifact.harness == "pi"
+        assert artifact.artifact_id.startswith("pi:")
+
     def test_pi_block_emits_native_json_and_stderr(self, tmp_path: Path) -> None:
         store = GuardStore(tmp_path / ".hol-guard")
         config = GuardConfig(guard_home=tmp_path / ".hol-guard", workspace=tmp_path)
