@@ -318,12 +318,16 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
     ),
     HarnessProtectionContract(
         harness="pi",
-        install_aliases=("pi", "omp", "pi-agent", "pi-coding-agent"),
+        install_aliases=("pi", "pi-agent", "pi-coding-agent"),
         config_paths=(
             "~/.pi/agent/settings.json",
             ".pi/settings.json",
             "~/.pi/agent/extensions/*.ts",
             ".pi/extensions/*.ts",
+            "~/.omp/agent/settings.json",
+            ".omp/settings.json",
+            "~/.omp/agent/extensions/*.ts",
+            ".omp/extensions/*.ts",
         ),
         event_surfaces=("shell", "prompt", "mcp_tool", "file_read"),
         native_approval=True,

@@ -158,16 +158,17 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path) -> str:
         "}\n"
         "\n"
         "function contentText(content: unknown): string {\n"
-        "  if (!Array.isArray(content)) return \"\";\n"
+        '  if (typeof content === "string") return content;\n'
+        '  if (!Array.isArray(content)) return "";\n'
         "  return content\n"
         "    .map((item) => {\n"
-        "      if (!item || typeof item !== \"object\") return \"\";\n"
+        '      if (!item || typeof item !== "object") return "";\n'
         "      const type = (item as { type?: unknown }).type;\n"
         "      const text = (item as { text?: unknown }).text;\n"
-        "      return type === \"text\" && typeof text === \"string\" ? text : \"\";\n"
+        '      return type === "text" && typeof text === "string" ? text : "";\n'
         "    })\n"
         "    .filter(Boolean)\n"
-        "    .join(\"\\n\");\n"
+        '    .join("\\n");\n'
         "}\n"
         "\n"
         "export default function (pi: ExtensionAPI) {\n"
@@ -202,11 +203,16 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path) -> str:
         "  });\n"
         '  pi.on("tool_result", async (event, ctx) => {\n'
         "    const toolOutput = contentText(event.content);\n"
+        "    const toolInput =\n"
+        "      (event as { input?: Record<string, unknown> }).input ??\n"
+        "      (event as { toolInput?: Record<string, unknown> }).toolInput ??\n"
+        "      (event as { arguments?: Record<string, unknown> }).arguments ??\n"
+        "      {};\n"
         "    const response = runGuard(\n"
         "      {\n"
         '        hook_event_name: "PostToolUse",\n'
         "        tool_name: event.toolName,\n"
-        "        tool_input: event.input,\n"
+        "        tool_input: toolInput,\n"
         "        tool_response: event.content,\n"
         "        stdout: toolOutput,\n"
         "        is_error: event.isError === true,\n"
@@ -217,7 +223,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path) -> str:
         '      const reason = response.reason ?? "Blocked by HOL Guard.";\n'
         '      ctx.ui.notify(reason, "warning");\n'
         "      return {\n"
-        "        content: [{ type: \"text\", text: reason }],\n"
+        '        content: [{ type: "text", text: reason }],\n'
         "        details: event.details,\n"
         "        isError: true,\n"
         "      };\n"

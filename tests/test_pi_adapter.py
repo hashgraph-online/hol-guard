@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
 from codex_plugin_scanner.guard.adapters.pi_support import stable_suffix
 from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload
+from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from codex_plugin_scanner.guard.store import GuardStore
@@ -45,7 +46,7 @@ class TestPiAdapterIdentity:
         assert adapter.harness == "pi"
 
     def test_aliases_resolve_to_pi(self) -> None:
-        for alias in ("pi", "omp", "pi-agent", "pi-coding-agent"):
+        for alias in ("pi", "pi-agent", "pi-coding-agent"):
             assert get_adapter(alias).harness == "pi"
 
     def test_pi_is_registered(self) -> None:
@@ -70,6 +71,20 @@ class TestPiDetect:
 
         assert result.installed is True
         assert result.command_available is True
+
+    def test_detect_omp_warning_mentions_pi_or_omp(self, tmp_path: Path, monkeypatch) -> None:
+        ctx = _ctx(tmp_path)
+        _write_json(ctx.home_dir / ".omp" / "agent" / "settings.json", {"extensions": []})
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.pi._resolve_command",
+            lambda command, candidates=(): None,
+        )
+
+        adapter = get_adapter("pi")
+        result = adapter.detect(ctx)
+        warnings = adapter.diagnostic_warnings(result, runtime_probe=None)
+
+        assert any("pi or omp command" in warning for warning in warnings)
 
     def test_detects_settings_extensions_skills_prompts_themes_and_packages(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
@@ -238,6 +253,30 @@ class TestPiRuntime:
         assert envelope.action_type == "file_read"
         assert envelope.raw_payload_redacted["stdout"] == "[redacted]"
         assert "tool_response" in envelope.raw_payload_redacted
+
+    def test_pi_post_tool_output_creates_runtime_artifact(self, tmp_path: Path) -> None:
+        secret_path = tmp_path / ".npmrc"
+        secret_line = "//registry.npmjs.org/:_authToken=npm_abcdefghijklmnopqrstuvwxyz012345\n"
+        secret_path.write_text(secret_line, encoding="utf-8")
+
+        artifact = _codex_post_tool_output_artifact(
+            harness="pi",
+            payload={
+                "tool_name": "read",
+                "tool_input": {"filePath": str(secret_path)},
+                "tool_response": [{"type": "text", "text": secret_line.strip()}],
+                "stdout": secret_line.strip(),
+            },
+            config_path="~/.pi/agent/settings.json",
+            source_scope="project",
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+
+        assert artifact is not None
+        assert artifact.harness == "pi"
+        assert artifact.artifact_id.startswith("pi:")
+        assert artifact.metadata["guard_default_action"] == "require-reapproval"
 
     def test_pi_block_emits_native_json_and_stderr(self, tmp_path: Path) -> None:
         store = GuardStore(tmp_path / ".hol-guard")

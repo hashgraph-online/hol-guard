@@ -33,7 +33,7 @@ class PiHarnessAdapter(HarnessAdapter):
     """Discover Pi settings, packages, extensions, skills, prompts, and themes."""
 
     harness = "pi"
-    aliases = ("pi", "omp", "pi-agent", "pi-coding-agent")
+    aliases = ("pi", "pi-agent", "pi-coding-agent")
     executable = "pi"
     launcher_name = "pi"
     approval_tier = "approval-center"
@@ -72,6 +72,16 @@ class PiHarnessAdapter(HarnessAdapter):
             "omp",
             self.executable_candidates(context),
         )
+
+    def diagnostic_warnings(
+        self,
+        detection: HarnessDetection,
+        runtime_probe: dict[str, object] | None,
+    ) -> list[str]:
+        return [
+            warning.replace("the pi command", "the pi or omp command").replace("pi diagnostics", "pi/omp diagnostics")
+            for warning in super().diagnostic_warnings(detection, runtime_probe)
+        ]
 
     def policy_path(self, context: HarnessContext) -> Path:
         project_root = self._project_root(context)
