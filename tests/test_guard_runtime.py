@@ -9308,6 +9308,41 @@ def test_hook_runtime_artifact_routes_package_installs_to_package_request(tmp_pa
     )
 
 
+def test_hook_runtime_artifact_routes_post_tool_package_installs_without_pretool_decision(tmp_path):
+    home_dir = tmp_path / "home"
+    guard_home = home_dir / ".hol-guard"
+    workspace_dir = tmp_path / "workspace"
+    guard_home.mkdir(parents=True, exist_ok=True)
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    payload = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "npm install react@18.3.0"},
+        "source_scope": "project",
+    }
+    action = guard_commands_module._hook_action_envelope(
+        harness="codex",
+        payload=payload,
+        home_dir=home_dir,
+        workspace=workspace_dir,
+    )
+    artifact = guard_commands_module._hook_runtime_artifact(
+        harness="codex",
+        payload=payload,
+        action_envelope=action,
+        home_dir=home_dir,
+        guard_home=guard_home,
+        workspace=workspace_dir,
+    )
+
+    assert action is not None
+    assert action.pre_execution_result is None
+    assert artifact is not None
+    assert artifact.artifact_type == "package_request"
+    assert artifact.metadata["package_manager"] == "npm"
+
+
 def test_runtime_capabilities_summary_uses_package_request_label() -> None:
     artifact = GuardArtifact(
         artifact_id="codex:test:package-request",
