@@ -7,7 +7,7 @@ from pathlib import Path
 from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
-from .base import HarnessAdapter, HarnessContext, _command_available
+from .base import HarnessAdapter, HarnessContext, _resolve_command
 from .pi_support import (
     EXTENSION_SUFFIXES,
     OMP_AGENT_DIR,
@@ -33,7 +33,7 @@ class PiHarnessAdapter(HarnessAdapter):
     """Discover Pi settings, packages, extensions, skills, prompts, and themes."""
 
     harness = "pi"
-    aliases = ("pi", "pi-agent", "pi-coding-agent")
+    aliases = ("pi", "omp", "pi-agent", "pi-coding-agent")
     executable = "pi"
     launcher_name = "pi"
     approval_tier = "approval-center"
@@ -66,6 +66,12 @@ class PiHarnessAdapter(HarnessAdapter):
     @staticmethod
     def _relative_label(root: Path, path: Path) -> str:
         return path.relative_to(root).as_posix()
+
+    def resolved_executable(self, context: HarnessContext) -> str | None:
+        return _resolve_command("pi", self.executable_candidates(context)) or _resolve_command(
+            "omp",
+            self.executable_candidates(context),
+        )
 
     def policy_path(self, context: HarnessContext) -> Path:
         project_root = self._project_root(context)
@@ -143,10 +149,11 @@ class PiHarnessAdapter(HarnessAdapter):
                 scope=scope,
                 id_root=root / "themes",
             )
+        command_available = self.resolved_executable(context) is not None
         detection = HarnessDetection(
             harness=self.harness,
-            installed=bool(found_paths) or _command_available(self.executable),
-            command_available=_command_available(self.executable),
+            installed=bool(found_paths) or command_available,
+            command_available=command_available,
             config_paths=tuple(found_paths),
             artifacts=tuple(artifacts),
             warnings=(),

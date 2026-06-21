@@ -318,7 +318,7 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
     ),
     HarnessProtectionContract(
         harness="pi",
-        install_aliases=("pi", "pi-agent", "pi-coding-agent"),
+        install_aliases=("pi", "omp", "pi-agent", "pi-coding-agent"),
         config_paths=(
             "~/.pi/agent/settings.json",
             ".pi/settings.json",

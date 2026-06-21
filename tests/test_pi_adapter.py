@@ -45,7 +45,7 @@ class TestPiAdapterIdentity:
         assert adapter.harness == "pi"
 
     def test_aliases_resolve_to_pi(self) -> None:
-        for alias in ("pi", "pi-agent", "pi-coding-agent"):
+        for alias in ("pi", "omp", "pi-agent", "pi-coding-agent"):
             assert get_adapter(alias).harness == "pi"
 
     def test_pi_is_registered(self) -> None:
@@ -59,6 +59,18 @@ class TestPiAdapterIdentity:
 
 
 class TestPiDetect:
+    def test_detect_marks_omp_cli_as_available(self, tmp_path: Path, monkeypatch) -> None:
+        ctx = _ctx(tmp_path)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.pi._resolve_command",
+            lambda command, candidates=(): "/opt/homebrew/bin/omp" if command == "omp" else None,
+        )
+
+        result = get_adapter("pi").detect(ctx)
+
+        assert result.installed is True
+        assert result.command_available is True
+
     def test_detects_settings_extensions_skills_prompts_themes_and_packages(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
         assert ctx.workspace_dir is not None
@@ -156,7 +168,10 @@ class TestPiInstall:
         omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"
         text = extension_path.read_text(encoding="utf-8")
         assert 'pi.on("tool_call"' in text
+        assert 'pi.on("tool_result"' in text
         assert 'pi.on("input"' in text
+        assert 'hook_event_name: "PostToolUse"' in text
+        assert "tool_response: event.content" in text
         assert '"--harness", "pi"' in text
         assert '"--home"' in text
         assert "ctx.cwd" in text
@@ -203,6 +218,26 @@ class TestPiRuntime:
 
         assert envelope.harness == "pi"
         assert envelope.action_type == "shell_command"
+
+    def test_pi_post_tool_payload_normalizes_like_other_harnesses(self, tmp_path: Path) -> None:
+        envelope = normalize_harness_payload(
+            "pi",
+            "PostToolUse",
+            {
+                "tool_name": "read",
+                "tool_input": {"filePath": "notes.txt"},
+                "tool_response": [{"type": "text", "text": "TOKEN=secret"}],
+                "stdout": "TOKEN=secret",
+            },
+            workspace=tmp_path,
+            home_dir=tmp_path,
+        )
+
+        assert envelope.harness == "pi"
+        assert envelope.event_name == "PostToolUse"
+        assert envelope.action_type == "file_read"
+        assert envelope.raw_payload_redacted["stdout"] == "[redacted]"
+        assert "tool_response" in envelope.raw_payload_redacted
 
     def test_pi_block_emits_native_json_and_stderr(self, tmp_path: Path) -> None:
         store = GuardStore(tmp_path / ".hol-guard")
