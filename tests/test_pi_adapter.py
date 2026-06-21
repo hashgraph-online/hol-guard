@@ -13,6 +13,11 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
 from codex_plugin_scanner.guard.adapters.pi_support import stable_suffix
 from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload
+from codex_plugin_scanner.guard.cli.commands_support_codex_tool_output_messages import (
+    _codex_tool_output_request_summary,
+    _codex_tool_output_runtime_reason,
+    _codex_tool_output_runtime_summary,
+)
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
@@ -299,6 +304,46 @@ class TestPiRuntime:
         assert artifact is not None
         assert artifact.harness == "pi"
         assert artifact.artifact_id.startswith("pi:")
+
+    def test_pi_focused_pytest_messages_label_pi_runtime(self) -> None:
+        assert _codex_tool_output_request_summary(
+            harness_label="Pi",
+            tool_name="Bash",
+            command_text=(
+                "python3 -m pytest "
+                "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+                "test_release_checklist_references_smoke_evidence -q 2>&1"
+            ),
+            local_secret_source=None,
+            focused_pytest=True,
+            merged_output_capture=True,
+        ) == (
+            "Pi tool `Bash` ran focused pytest, merged stderr into stdout while running "
+            "`python3 -m pytest "
+            "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+            "test_release_checklist_references_smoke_evidence -q 2>&1`, and the captured output "
+            "looked credential-like."
+        )
+        assert _codex_tool_output_runtime_summary(
+            None,
+            harness_label="Pi",
+            focused_pytest=True,
+            merged_output_capture=True,
+        ) == (
+            "Focused pytest merged stderr into stdout and emitted credential-looking output before "
+            "it reached Pi. Pytest can execute repository-controlled code, so this could be a real "
+            "local secret."
+        )
+        assert _codex_tool_output_runtime_reason(
+            None,
+            harness_label="Pi",
+            focused_pytest=True,
+            merged_output_capture=True,
+        ) == (
+            "Guard stopped this pytest output because pytest executes repository-controlled code, "
+            "and merging stderr into stdout can forward real local secrets to Pi. If you only need "
+            "the exit status, rerun without `2>&1` or keep stderr out of model-visible output."
+        )
 
     def test_pi_block_emits_native_json_and_stderr(self, tmp_path: Path) -> None:
         store = GuardStore(tmp_path / ".hol-guard")

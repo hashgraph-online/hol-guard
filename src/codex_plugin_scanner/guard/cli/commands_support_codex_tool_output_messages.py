@@ -47,11 +47,11 @@ def _codex_tool_output_runtime_summary(
     if focused_pytest and merged_output_capture:
         return (
             "Focused pytest merged stderr into stdout and emitted credential-looking output before it reached "
-            "Codex. Pytest can execute repository-controlled code, so this could be a real local secret."
+            f"{harness_label}. Pytest can execute repository-controlled code, so this could be a real local secret."
         )
     if focused_pytest:
         return (
-            "Focused pytest emitted credential-looking output before it reached Codex. "
+            f"Focused pytest emitted credential-looking output before it reached {harness_label}. "
             "Pytest can execute repository-controlled code, so this could be a real local secret."
         )
     if merged_output_capture:
@@ -75,7 +75,8 @@ def _codex_tool_output_runtime_reason(
     if focused_pytest and merged_output_capture:
         return (
             "Guard stopped this pytest output because pytest executes repository-controlled code, and merging stderr "
-            "into stdout can forward real local secrets to Codex. If you only need the exit status, rerun without "
+            f"into stdout can forward real local secrets to {harness_label}. "
+            "If you only need the exit status, rerun without "
             "`2>&1` or keep stderr out of model-visible output."
         )
     if focused_pytest:
