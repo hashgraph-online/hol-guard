@@ -478,6 +478,7 @@ class StoreSecretPolicyIntegrityMixin:
             where source not in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}
               and (
                 integrity_version is null
+                or integrity_version != {POLICY_INTEGRITY_VERSION}
                 or payload_hash is null
                 or payload_mac is null
                 or integrity_key_id is null
