@@ -1600,6 +1600,7 @@ function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
       </div>
       <div className="mt-3">
         <LoggedActionPanel
+          key={item.request_id}
           label={action.label}
           text={action.text}
           copyAriaLabel="Copy full stopped action to clipboard"

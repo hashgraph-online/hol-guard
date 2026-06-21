@@ -68,6 +68,19 @@ assert(
   "GR232: resolveActionDetail preserves the full logged command text for Evidence copy"
 );
 
+const emptyCommandReceipt = makeReceipt("detail-empty-command", {
+  artifact_type: "command",
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    command: "",
+  },
+});
+
+assert(
+  resolveActionDetail(emptyCommandReceipt) === null,
+  "GR232: resolveActionDetail ignores empty shell commands instead of surfacing blank content"
+);
+
 const evidenceDetailMarkup = renderToStaticMarkup(
   createElement(EvidenceActionDetail, { receipt: longEvidenceReceipt, onClose: () => undefined }),
 );
@@ -145,6 +158,16 @@ assert(
 assert(
   loggedPanelSource.includes("navigator.clipboard.writeText(props.text)"),
   "GR232: logged action panel copies the full logged text to the clipboard"
+);
+
+assert(
+  loggedPanelSource.includes("}, [props.text, resetCopied]);"),
+  "GR233: logged action panel resets copy state on text changes without coupling expansion state to props.text"
+);
+
+assert(
+  !loggedPanelSource.includes("}, [canExpand, props.text, resetCopied]);"),
+  "GR233: logged action panel no longer resets expansion state on every text change"
 );
 
 assert(

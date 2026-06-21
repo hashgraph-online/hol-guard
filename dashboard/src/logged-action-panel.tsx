@@ -34,9 +34,14 @@ export function LoggedActionPanel(props: {
   const { copied, flashCopied, resetCopied } = useCopyFeedbackTimeout(2000);
 
   useEffect(() => {
-    setExpanded(!canExpand);
     resetCopied();
-  }, [canExpand, props.text, resetCopied]);
+  }, [props.text, resetCopied]);
+
+  useEffect(() => {
+    if (!canExpand) {
+      setExpanded(true);
+    }
+  }, [canExpand]);
 
   const handleCopy = useCallback(async () => {
     if (!navigator.clipboard?.writeText) {

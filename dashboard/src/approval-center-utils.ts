@@ -79,14 +79,12 @@ export function buildRetryAfterApprovalCopy(item: GuardApprovalRequest, action: 
 }
 
 export function resolveEnvelopeDisplayText(envelope: GuardActionEnvelope): string | null {
-  if (envelope.action_type === "shell_command" && envelope.command !== null) {
+  if (envelope.action_type === "shell_command" && envelope.command !== null && envelope.command.length > 0) {
     return envelope.command;
   }
-  if (
-    envelope.action_type === "prompt" &&
-    (envelope.prompt_excerpt !== null || (envelope.prompt_text ?? null) !== null)
-  ) {
-    return envelope.prompt_text ?? envelope.prompt_excerpt;
+  const promptText = envelope.prompt_text ?? envelope.prompt_excerpt;
+  if (envelope.action_type === "prompt" && promptText !== null && promptText.length > 0) {
+    return promptText;
   }
   if (envelope.action_type === "mcp_tool" && envelope.mcp_server !== null && envelope.mcp_tool !== null) {
     return `${envelope.mcp_server} / ${envelope.mcp_tool}`;
@@ -104,14 +102,12 @@ export function resolveActionEnvelopeDetailText(
   envelope: GuardActionEnvelope,
   options: { mcpInputMaxLength?: number | null } = {}
 ): string | null {
-  if (envelope.action_type === "shell_command" && envelope.command !== null) {
-    return envelope.command;
+  if (envelope.action_type === "shell_command") {
+    return envelope.command !== null && envelope.command.length > 0 ? envelope.command : null;
   }
-  if (
-    envelope.action_type === "prompt" &&
-    (envelope.prompt_excerpt !== null || (envelope.prompt_text ?? null) !== null)
-  ) {
-    return envelope.prompt_text ?? envelope.prompt_excerpt;
+  const promptText = envelope.prompt_text ?? envelope.prompt_excerpt;
+  if (envelope.action_type === "prompt") {
+    return promptText !== null && promptText.length > 0 ? promptText : null;
   }
   if (
     (envelope.action_type === "file_read" || envelope.action_type === "file_write") &&
@@ -523,8 +519,13 @@ export function primaryReviewActionToggleLabel(isVisible: boolean): string {
 
 export function resolveStoppedCommandText(item: GuardApprovalRequest): string {
   if (item.action_envelope_json) {
-    const envelopeText = resolveEnvelopeDisplayText(item.action_envelope_json);
-    if (envelopeText !== null) {
+    const envelope = item.action_envelope_json;
+    const envelopeText = resolveEnvelopeDisplayText(envelope);
+    const shouldFallbackFromGenericActionType =
+      envelopeText !== null &&
+      (envelope.action_type === "shell_command" || envelope.action_type === "prompt") &&
+      envelopeText === envelope.action_type;
+    if (envelopeText !== null && !shouldFallbackFromGenericActionType) {
       return envelopeText;
     }
   }

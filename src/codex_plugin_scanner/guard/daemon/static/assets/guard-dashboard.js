@@ -13998,11 +13998,12 @@ function buildRetryAfterApprovalCopy(item, action) {
   return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
 }
 function resolveEnvelopeDisplayText(envelope) {
-  if (envelope.action_type === "shell_command" && envelope.command !== null) {
+  if (envelope.action_type === "shell_command" && envelope.command !== null && envelope.command.length > 0) {
     return envelope.command;
   }
-  if (envelope.action_type === "prompt" && (envelope.prompt_excerpt !== null || (envelope.prompt_text ?? null) !== null)) {
-    return envelope.prompt_text ?? envelope.prompt_excerpt;
+  const promptText = envelope.prompt_text ?? envelope.prompt_excerpt;
+  if (envelope.action_type === "prompt" && promptText !== null && promptText.length > 0) {
+    return promptText;
   }
   if (envelope.action_type === "mcp_tool" && envelope.mcp_server !== null && envelope.mcp_tool !== null) {
     return `${envelope.mcp_server} / ${envelope.mcp_tool}`;
@@ -14016,11 +14017,12 @@ function resolveEnvelopeDisplayText(envelope) {
   return envelope.action_type === "harness_start" ? null : envelope.action_type;
 }
 function resolveActionEnvelopeDetailText(envelope, options = {}) {
-  if (envelope.action_type === "shell_command" && envelope.command !== null) {
-    return envelope.command;
+  if (envelope.action_type === "shell_command") {
+    return envelope.command !== null && envelope.command.length > 0 ? envelope.command : null;
   }
-  if (envelope.action_type === "prompt" && (envelope.prompt_excerpt !== null || (envelope.prompt_text ?? null) !== null)) {
-    return envelope.prompt_text ?? envelope.prompt_excerpt;
+  const promptText = envelope.prompt_text ?? envelope.prompt_excerpt;
+  if (envelope.action_type === "prompt") {
+    return promptText !== null && promptText.length > 0 ? promptText : null;
   }
   if ((envelope.action_type === "file_read" || envelope.action_type === "file_write") && envelope.target_paths.length > 0) {
     return envelope.target_paths.join("\n");
@@ -14252,8 +14254,10 @@ function stripDuplicateReviewContextPrefix(value) {
 }
 function resolveStoppedCommandText(item) {
   if (item.action_envelope_json) {
-    const envelopeText = resolveEnvelopeDisplayText(item.action_envelope_json);
-    if (envelopeText !== null) {
+    const envelope = item.action_envelope_json;
+    const envelopeText = resolveEnvelopeDisplayText(envelope);
+    const shouldFallbackFromGenericActionType = envelopeText !== null && (envelope.action_type === "shell_command" || envelope.action_type === "prompt") && envelopeText === envelope.action_type;
+    if (envelopeText !== null && !shouldFallbackFromGenericActionType) {
       return envelopeText;
     }
   }
@@ -18836,9 +18840,13 @@ function LoggedActionPanel(props) {
   const [expanded, setExpanded] = reactExports.useState(!canExpand);
   const { copied, flashCopied, resetCopied } = useCopyFeedbackTimeout(2e3);
   reactExports.useEffect(() => {
-    setExpanded(!canExpand);
     resetCopied();
-  }, [canExpand, props.text, resetCopied]);
+  }, [props.text, resetCopied]);
+  reactExports.useEffect(() => {
+    if (!canExpand) {
+      setExpanded(true);
+    }
+  }, [canExpand]);
   const handleCopy = reactExports.useCallback(async () => {
     if (!navigator.clipboard?.writeText) {
       resetCopied();
@@ -19119,7 +19127,6 @@ function EvidenceActionDetail({
   const description = plainEnglishDescription(receipt);
   const actionTitle = resolveActionTitle(receipt);
   const actionType = resolveActionType(receipt);
-  const actionSubtitle = resolveActionSubtitle(receipt);
   const actionDetail = resolveActionDetail(receipt);
   const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
   const primarySignal = signals[0];
@@ -19171,7 +19178,7 @@ function EvidenceActionDetail({
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark leading-relaxed", children: description }),
           actionDetail && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: actionSubtitle ?? actionType }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: actionType }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               LoggedActionPanel,
               {
@@ -19180,7 +19187,8 @@ function EvidenceActionDetail({
                 copyAriaLabel: `Copy full ${actionType.toLowerCase()} to clipboard`,
                 expandAriaLabel: `Expand full ${actionType.toLowerCase()}`,
                 collapseAriaLabel: `Collapse full ${actionType.toLowerCase()}`
-              }
+              },
+              receipt.receipt_id
             )
           ] }),
           primarySignal && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-3 py-3", children: [
@@ -25185,7 +25193,8 @@ function PrimaryActionCard({ item }) {
         copyAriaLabel: "Copy full stopped action to clipboard",
         expandAriaLabel: "Expand full stopped action",
         collapseAriaLabel: "Collapse full stopped action"
-      }
+      },
+      item.request_id
     ) })
   ] });
 }

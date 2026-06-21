@@ -16,7 +16,7 @@ import { useState } from "react";
 import type { GuardReceipt } from "../guard-types";
 import { isRiskSignalEvidence } from "../guard-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
-import { plainEnglishDescription, resolveActionTitle, resolveActionType, resolveActionSubtitle, resolveActionDetail } from "./plain-english";
+import { plainEnglishDescription, resolveActionTitle, resolveActionType, resolveActionDetail } from "./plain-english";
 import { detectCategory, getCategoryInfo } from "./categories";
 import { SectionLabel } from "../approval-center-primitives";
 import { DecisionBadge } from "./decision-badge";
@@ -296,7 +296,6 @@ export function EvidenceActionDetail({
   const description = plainEnglishDescription(receipt);
   const actionTitle = resolveActionTitle(receipt);
   const actionType = resolveActionType(receipt);
-  const actionSubtitle = resolveActionSubtitle(receipt);
   const actionDetail = resolveActionDetail(receipt);
   const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
   const primarySignal = signals[0];
@@ -356,8 +355,9 @@ export function EvidenceActionDetail({
 
         {actionDetail && (
           <div className="space-y-2">
-            <SectionLabel>{actionSubtitle ?? actionType}</SectionLabel>
+            <SectionLabel>{actionType}</SectionLabel>
             <LoggedActionPanel
+              key={receipt.receipt_id}
               label={actionType}
               text={actionDetail}
               copyAriaLabel={`Copy full ${actionType.toLowerCase()} to clipboard`}

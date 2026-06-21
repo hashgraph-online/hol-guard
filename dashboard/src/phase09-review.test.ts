@@ -770,6 +770,17 @@ assert(
   "GR211-15: primary review card exposes shell command without opening technical details"
 );
 
+const EMPTY_COMMAND_WITH_LAUNCH_TARGET = {
+  ...BASE_REQUEST,
+  request_id: "ph09-empty-command",
+  launch_target: "python -m hol_guard.resume",
+  action_envelope_json: { ...BASE_ENVELOPE, command: "" },
+};
+assert(
+  resolveStoppedCommandText(EMPTY_COMMAND_WITH_LAUNCH_TARGET) === "python -m hol_guard.resume",
+  "GR211-16: empty shell command falls back to the launch target instead of rendering a blank panel"
+);
+
 const PRIMARY_MCP_ACTION = buildPrimaryReviewAction({
   ...BASE_REQUEST,
   request_id: "ph09-primary-mcp",
