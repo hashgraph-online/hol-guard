@@ -609,18 +609,20 @@ class StoreSecretPolicyIntegrityMixin:
             )
             if has_legacy_rows:
                 next_state = dict(trusted_state)
-                if pending_candidates == 0 or current_valid == len(rows):
+                if pending_candidates > 0 and current_valid == len(rows):
                     next_state["pending_generation"] = None
-            elif pending_valid > 0 or current_valid == 0:
+            elif pending_valid == len(rows):
                 next_state = {
                     "cutover_complete": True,
                     "generation": pending_generation,
                     "pending_generation": None,
                     "version": _POLICY_INTEGRITY_CONTROL_VERSION,
                 }
-            else:
+            elif current_valid == len(rows):
                 next_state = dict(trusted_state)
                 next_state["pending_generation"] = None
+            else:
+                next_state = dict(trusted_state)
         if not self._store_policy_integrity_control_state(next_state):
             raise RuntimeError("Guard could not persist the policy integrity control state.")
         return next_state
@@ -752,7 +754,7 @@ class StoreSecretPolicyIntegrityMixin:
             )
             if has_legacy_rows:
                 next_state = dict(trusted_state)
-                if pending_candidates == 0 or current_valid == len(rows):
+                if pending_candidates > 0 and current_valid == len(rows):
                     next_state["pending_generation"] = None
             elif pending_valid == len(rows):
                 next_state = {
