@@ -152,9 +152,10 @@ class TestNoHardcodedSecrets:
             openai_token = "".join(("sk-proj-", "abcdefghij", "1234567890"))
             github_token = "".join(("ghp_", "abcdefghij", "klmnopqrst", "uvwxyz", "ABCDEFGHIJ"))
             (tests_dir / "secret_examples.test.js").write_text(
-                f'const aws = "{aws_token}";\n'
-                f'const openai = "{openai_token}";\n'
-                f'const github = "{github_token}";\n',
+                "if (await test('detectSecrets finds provider tokens', async () => {\n"
+                f"  const findings = detectSecrets('{aws_token} {openai_token} {github_token}');\n"
+                "  assert.ok(findings.length > 0);\n"
+                "})) passed += 1;\n",
                 encoding="utf-8",
             )
 
@@ -193,6 +194,54 @@ class TestNoHardcodedSecrets:
                 f"{pem_header}\n"
                 "MIIEpAIBAAKCAQEA1234567890abcdefghijklmnopqrstuv==\n"
                 f"{pem_footer}\n",
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert result.findings[0].line_number == 1
+
+    def test_detects_short_real_secret_in_documentation(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "README.md").write_text('token = "realpass123"\n', encoding="utf-8")
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert result.findings[0].line_number == 1
+
+    def test_detects_placeholder_like_secret_in_source_code(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            src_dir = root / "src"
+            src_dir.mkdir()
+            (src_dir / "app.py").write_text('token = "prod-demo-A1b2C3d4"\n', encoding="utf-8")
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert result.findings[0].file_path == "src/app.py"
+
+    def test_detects_plain_provider_token_examples_without_illustrative_context(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            github_token = "".join(("ghp_", "abcdefghij", "klmnopqrst", "uvwxyz", "ABCDEFGHIJ"))
+            (root / "README.md").write_text(f"{github_token}\n", encoding="utf-8")
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert result.findings[0].file_path == "README.md"
+
+    def test_detects_truncated_private_key_with_real_body(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            pem_header = "-----BEGIN " + "RSA PRIVATE KEY-----"
+            (root / "README.md").write_text(
+                f"{pem_header}\n"
+                "MIIEpAIBAAKCAQEA1234567890abcdefghijklmnopqrstuv==\n",
                 encoding="utf-8",
             )
 

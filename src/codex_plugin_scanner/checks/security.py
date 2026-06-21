@@ -81,21 +81,37 @@ EXAMPLE_PATH_HINTS = {
 }
 TEST_FILE_RE = re.compile(r"(^test_.*|.*(?:\.test|\.spec)\.[^.]+$|.*_test\.[^.]+$)", re.I)
 PLACEHOLDER_MARKERS = (
-    "example",
-    "sample",
-    "placeholder",
-    "dummy",
     "redacted",
     "changeme",
-    "replace",
     "set-at-runtime",
     "set_at_runtime",
-    "fake",
-    "mock",
-    "demo",
-    "not-real",
-    "not_real",
 )
+EXAMPLE_GENERIC_VALUES = {
+    "admin123",
+    "adminpass123",
+    "mypassword123",
+    "password123",
+    "secret-value",
+    "secure123",
+    "securep@ss1",
+    "testpass123",
+}
+ILLUSTRATIVE_PATH_HINTS = {"commands", "examples", "prompts", "rules", "skills"}
+ILLUSTRATIVE_CONTEXT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\b(?:assert|fixture|mock|pytest|test\(|writeandstage|detectsecrets)\b", re.I),
+    re.compile(r"\b(?:example|sample|demo|bad|wrong|good|correct|never|always)\b", re.I),
+    re.compile(r"hardcoded secret|in source code|environment variable|env var|set via|\.env", re.I),
+)
+PROVIDER_PREFIX_PATTERNS: tuple[tuple[re.Pattern[str], int], ...] = (
+    (re.compile(r"^AKIA(?P<payload>[0-9A-Z]+)$"), 16),
+    (re.compile(r"^(?:ghp_|gho_|ghu_|ghs_)(?P<payload>[A-Za-z0-9]+)$"), 36),
+    (re.compile(r"^github_pat_(?P<payload>[A-Za-z0-9_]+)$"), 20),
+    (re.compile(r"^glpat-(?P<payload>[A-Za-z0-9\-]+)$"), 20),
+    (re.compile(r"^(?:xox[bpas]-|xoxe-|xoxr-|xapp-)(?P<payload>[A-Za-z0-9\-]+)$"), 10),
+    (re.compile(r"^sk-(?:proj-|ant-)?(?P<payload>[A-Za-z0-9_-]+)$"), 20),
+)
+PRIVATE_KEY_HEADER_RE = re.compile(r"-----BEGIN (?P<label>(?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY)-----")
+PRIVATE_KEY_FOOTER_TEMPLATE = "-----END {label}-----"
 
 BINARY_EXTS = {
     ".png",
@@ -187,75 +203,175 @@ def _looks_like_placeholder_secret(value: str) -> bool:
         return True
     if "..." in normalized or "…" in normalized:
         return True
-    if lowered.startswith(("your-", "your_", "your")):
+    if lowered.startswith(("your-", "your_", "your", "example-", "sample-", "demo-")):
         return True
-    if lowered.endswith(("-here", "_here")):
+    if lowered.endswith(("-here", "_here", "example", "sample")):
         return True
-    if any(marker in lowered for marker in PLACEHOLDER_MARKERS):
-        return True
-    if re.fullmatch(r"[A-Z][A-Z0-9_]{6,}", normalized):
+    if lowered in PLACEHOLDER_MARKERS:
         return True
     return bool(re.search(r"(?i)(?:^|[-_])(x{4,}|\*{3,})(?:[-_]|$)", normalized))
 
 
-def _longest_ascending_run(value: str) -> int:
+def _normalized_alnum(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", _normalize_secret_candidate(value).lower())
+
+
+def _ascending_run_stats(value: str) -> tuple[int, int]:
     if not value:
-        return 0
+        return 0, 0
     longest = 1
     current = 1
+    coverage = 0
     for previous, token in pairwise(value):
         if ord(token) == ord(previous) + 1:
             current += 1
             longest = max(longest, current)
         else:
+            if current >= 4:
+                coverage += current
             current = 1
-    return longest
+    if current >= 4:
+        coverage += current
+    return longest, coverage
 
 
-def _looks_like_synthetic_sequence(value: str) -> bool:
-    normalized = re.sub(r"[^a-z0-9]", "", _normalize_secret_candidate(value).lower())
-    return len(normalized) >= 8 and _longest_ascending_run(normalized) >= 8
-
-
-def _looks_like_high_entropy_generic_secret(value: str) -> bool:
+def _provider_payload(value: str) -> tuple[str, int] | None:
     normalized = _normalize_secret_candidate(value)
-    collapsed = re.sub(r"[^A-Za-z0-9]", "", normalized)
-    if len(collapsed) < 20 or _looks_like_synthetic_sequence(collapsed):
+    for pattern, minimum_length in PROVIDER_PREFIX_PATTERNS:
+        match = pattern.fullmatch(normalized)
+        if match:
+            return match.group("payload"), minimum_length
+    return None
+
+
+def _looks_like_synthetic_provider_candidate(value: str) -> bool:
+    provider_payload = _provider_payload(value)
+    if provider_payload is None:
         return False
-    unique_chars = len(set(collapsed.lower()))
-    if len(collapsed) >= 32 and unique_chars >= 12:
+    payload, _minimum_length = provider_payload
+    normalized = _normalized_alnum(payload)
+    if len(normalized) < 8:
+        return False
+    longest_run, coverage = _ascending_run_stats(normalized)
+    return longest_run >= 8 and coverage / len(normalized) >= 0.6
+
+
+def _looks_like_incomplete_provider_candidate(value: str) -> bool:
+    provider_payload = _provider_payload(value)
+    if provider_payload is None:
+        return False
+    payload, minimum_length = provider_payload
+    normalized = _normalized_alnum(payload)
+    return len(normalized) < minimum_length
+
+
+def _looks_like_example_generic_secret(value: str) -> bool:
+    normalized = _normalize_secret_candidate(value).lower()
+    return normalized in EXAMPLE_GENERIC_VALUES
+
+
+def _line_number_for_offset(content: str, offset: int) -> int:
+    return content.count("\n", 0, offset) + 1
+
+
+def _has_illustrative_context(relative_path: Path, content: str, offset: int) -> bool:
+    if {part.lower() for part in relative_path.parts} & ILLUSTRATIVE_PATH_HINTS:
         return True
-    character_classes = sum(
-        (
-            any(char.islower() for char in normalized),
-            any(char.isupper() for char in normalized),
-            any(char.isdigit() for char in normalized),
-            any(not char.isalnum() for char in normalized),
-        )
-    )
-    return character_classes >= 2 and unique_chars >= 10
+    lines = content.splitlines()
+    line_number = _line_number_for_offset(content, offset)
+    start = max(0, line_number - 3)
+    end = min(len(lines), line_number + 2)
+    context = "\n".join(lines[start:end])
+    return any(pattern.search(context) for pattern in ILLUSTRATIVE_CONTEXT_PATTERNS)
 
 
-def _should_skip_secret_match(relative_path: Path, detector: SecretPattern, match: re.Match[str]) -> bool:
+def _private_key_looks_like_placeholder(body_lines: list[str]) -> bool:
+    body_text = "\n".join(body_lines)
+    if _looks_like_placeholder_secret(body_text):
+        return True
+    placeholder_lines = {"mii...", "[redacted]", "redacted", "secret-key-material"}
+    lowered_lines = [line.lower() for line in body_lines]
+    return any(line in placeholder_lines or "redacted" in line for line in lowered_lines)
+
+
+def _extract_inline_private_key_body(line: str, header: str) -> list[str]:
+    header_index = line.find(header)
+    if header_index == -1:
+        return []
+    tail = line[header_index + len(header) :]
+    if "\\n" not in tail:
+        return []
+    body_lines: list[str] = []
+    for fragment in tail.split("\\n")[1:]:
+        cleaned = fragment.strip().strip("\"'`),;}]")
+        if cleaned:
+            body_lines.append(cleaned)
+    return body_lines
+
+
+def _first_private_key_line(relative_path: Path, content: str) -> int | None:
+    lines = content.splitlines()
+    example_surface = _is_example_surface(relative_path)
+    for match in PRIVATE_KEY_HEADER_RE.finditer(content):
+        line_number = _line_number_for_offset(content, match.start())
+        label = match.group("label")
+        footer = PRIVATE_KEY_FOOTER_TEMPLATE.format(label=label)
+        header = match.group(0)
+        body_lines = _extract_inline_private_key_body(lines[line_number - 1], header)
+        has_footer = False
+        for candidate_line in lines[line_number:]:
+            stripped = candidate_line.strip()
+            if not stripped:
+                if body_lines:
+                    break
+                continue
+            if stripped == footer:
+                has_footer = True
+                break
+            if stripped.startswith("-----END ") or stripped.startswith("-----BEGIN ") or stripped == "```":
+                break
+            body_lines.append(stripped)
+        if not body_lines:
+            continue
+        body_text = "".join(body_lines)
+        if example_surface and _private_key_looks_like_placeholder(body_lines):
+            continue
+        if len(body_text) >= 32:
+            return line_number
+        if has_footer:
+            return line_number
+    return None
+
+
+def _should_skip_secret_match(relative_path: Path, content: str, detector: SecretPattern, match: re.Match[str]) -> bool:
     candidate = _extract_secret_candidate(detector, match)
-    if detector.kind != "private_key" and _looks_like_placeholder_secret(candidate):
-        return True
     if not _is_example_surface(relative_path):
         return False
-    if detector.kind == "private_key":
-        return _looks_like_placeholder_secret(candidate)
-    if detector.kind == "generic":
-        return _looks_like_synthetic_sequence(candidate) or not _looks_like_high_entropy_generic_secret(candidate)
-    return _looks_like_synthetic_sequence(candidate)
+    if _looks_like_placeholder_secret(candidate):
+        return True
+    effective_kind = detector.kind
+    if effective_kind == "generic" and _provider_payload(candidate) is not None:
+        effective_kind = "provider"
+    if effective_kind == "generic":
+        return _looks_like_example_generic_secret(candidate)
+    if effective_kind == "provider":
+        if not _has_illustrative_context(relative_path, content, match.start()):
+            return False
+        return _looks_like_synthetic_provider_candidate(candidate) or _looks_like_incomplete_provider_candidate(
+            candidate
+        )
+    return False
 
 
 def _first_hardcoded_secret_line(relative_path: Path, content: str) -> int | None:
-    first_line: int | None = None
+    first_line = _first_private_key_line(relative_path, content)
     for detector in SECRET_PATTERNS:
+        if detector.kind == "private_key":
+            continue
         for match in detector.pattern.finditer(content):
-            if _should_skip_secret_match(relative_path, detector, match):
+            if _should_skip_secret_match(relative_path, content, detector, match):
                 continue
-            line_number = content.count("\n", 0, match.start()) + 1
+            line_number = _line_number_for_offset(content, match.start())
             if first_line is None or line_number < first_line:
                 first_line = line_number
     return first_line
