@@ -43,6 +43,14 @@ def _sleep_compat(seconds: float) -> None:
 
 
 class StoreConnectionSchemaMixin:
+    _startup_prefetched_policy_integrity_secret_material: object | tuple[bytes | None, str | None] = (
+        _POLICY_INTEGRITY_LOOKUP_UNSET
+    )
+    _startup_prefetched_policy_integrity_trusted_state: object | dict[str, object] | None = (
+        _POLICY_INTEGRITY_LOOKUP_UNSET
+    )
+    _startup_prefetched_policy_integrity_repair_failed = False
+
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.path, timeout=SQLITE_CONNECT_TIMEOUT_SECONDS)
@@ -528,9 +536,7 @@ class StoreConnectionSchemaMixin:
         # Prime policy-integrity secrets outside the SQLite transaction. Some
         # credential-store lookups can block long enough to stall other Guard
         # processes if initialization still holds the writer lock.
-        self._startup_prefetched_policy_integrity_secret_material = self._policy_integrity_secret_material(
-            create=False
-        )
+        self._startup_prefetched_policy_integrity_secret_material = self._policy_integrity_secret_material(create=False)
         self._startup_prefetched_policy_integrity_trusted_state = self._load_policy_integrity_control_state(
             create=False
         )

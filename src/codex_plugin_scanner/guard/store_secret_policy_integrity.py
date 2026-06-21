@@ -4,9 +4,10 @@
 
 from __future__ import annotations
 
+from .policy_integrity import POLICY_INTEGRITY_VERSION
+
 # ruff: noqa: F403,F405
 from .store_base import *
-from .policy_integrity import POLICY_INTEGRITY_VERSION
 
 
 def _facade_store_attr(name: str, fallback: object) -> object:
@@ -57,6 +58,13 @@ class StoreSecretPolicyIntegrityMixin:
         self._cached_oauth_secret_payload: tuple[str, str, str] | None = None
         self._cached_policy_integrity_secret_material: tuple[str | None, float, tuple[bytes, str]] | None = None
         self._cached_policy_integrity_control_state: tuple[str | None, float, dict[str, object]] | None = None
+        self._startup_prefetched_policy_integrity_secret_material: object | tuple[bytes | None, str | None] = (
+            _POLICY_INTEGRITY_LOOKUP_UNSET
+        )
+        self._startup_prefetched_policy_integrity_trusted_state: object | dict[str, object] | None = (
+            _POLICY_INTEGRITY_LOOKUP_UNSET
+        )
+        self._startup_prefetched_policy_integrity_repair_failed = False
         self._policy_integrity_key_ref = self._build_scoped_secret_ref(_POLICY_INTEGRITY_KEY_REF)
         self._policy_integrity_control_ref = self._build_scoped_secret_ref(_POLICY_INTEGRITY_CONTROL_REF)
         self._oauth_local_credentials_ref = self._build_scoped_secret_ref(_OAUTH_LOCAL_CREDENTIALS_REF)
