@@ -16979,7 +16979,7 @@ function updateStatusLabel(status) {
   return `Version ${status.current_version}`;
 }
 function shouldPromptRecoveryReinstall(status) {
-  return status?.recovery_reinstall_available === true && status.auto_updatable !== true && status.version_check.update_available === true;
+  return status?.recovery_reinstall_available === true && status?.auto_updatable !== true && status?.version_check?.update_available === true;
 }
 function recoveryReinstallHelpCopy(status) {
   if (!shouldPromptRecoveryReinstall(status)) {

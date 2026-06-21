@@ -36,8 +36,8 @@ function updateStatusLabel(status: GuardUpdateStatus | null | undefined): string
 function shouldPromptRecoveryReinstall(status: GuardUpdateStatus | null | undefined): boolean {
   return (
     status?.recovery_reinstall_available === true &&
-    status.auto_updatable !== true &&
-    status.version_check.update_available === true
+    status?.auto_updatable !== true &&
+    status?.version_check?.update_available === true
   );
 }
 
