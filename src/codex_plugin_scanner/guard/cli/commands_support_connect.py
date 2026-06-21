@@ -147,13 +147,19 @@ _PERSISTED_POLICY_BUNDLE_REJECTION_REASONS = frozenset(
 )
 
 
-def _refresh_cloud_policy_bundle(store: GuardStore) -> None:
+def _refresh_cloud_policy_bundle(store: GuardStore, *, bundle_only: bool = False) -> None:
     if store.get_cloud_sync_profile() is None:
         return
     now = _now()
     try:
-        sync_receipts(store)
-        sync_supply_chain_cloud_state(store)
+        if bundle_only:
+            # Protect/install flows need the latest signed bundle only.
+            # Receipt uploads and workspace audit jobs can backlog into slow multi-request
+            # sync loops and should not block command protection on every invocation.
+            sync_supply_chain_bundle(store)
+        else:
+            sync_receipts(store)
+            sync_supply_chain_cloud_state(store)
     except GuardSyncAuthorizationExpiredError as error:
         message = str(error).strip()
         auth_expired_message = "Guard authorization expired. Run `hol-guard connect` to sign in again."

@@ -70,6 +70,10 @@ def _seed_guard_cloud(
         _mp.setattr(guard_runner_module, "_resolve_guard_sync_auth_context", _fake_resolve)
 
 
+def _disable_oauth_persistence_assert(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(GuardStore, "_assert_oauth_secret_persisted", lambda self, secret_id, value: None)
+
+
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
@@ -8703,9 +8707,10 @@ url = http://127.0.0.1:8787/guard-canary
         assert store.get_sync_payload("alert_preferences") == {}
         assert store.get_sync_payload("team_policy_pack") == {}
 
-    def test_guard_run_auto_syncs_cloud_policy_bundle(self, tmp_path, capsys):
+    def test_guard_run_auto_syncs_cloud_policy_bundle(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
+        _disable_oauth_persistence_assert(monkeypatch)
         _build_guard_fixture(home_dir, workspace_dir)
         _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
         _SyncRequestHandler.response_payload = {
@@ -9086,6 +9091,7 @@ url = http://127.0.0.1:8787/guard-canary
 
     def test_refresh_cloud_policy_bundle_records_auth_expired_reason(self, tmp_path, monkeypatch):
         home_dir = tmp_path / "home"
+        _disable_oauth_persistence_assert(monkeypatch)
         store = GuardStore(home_dir)
         _seed_guard_cloud(store)
 
@@ -9096,7 +9102,7 @@ url = http://127.0.0.1:8787/guard-canary
 
         monkeypatch.setattr(guard_commands_module, "_resolve_guard_sync_auth_context", _fail_auth)
 
-        guard_commands_module._refresh_cloud_policy_bundle(store)
+        guard_commands_module._refresh_cloud_policy_bundle(store, bundle_only=True)
 
         assert store.get_sync_payload("policy_bundle_last_error") == {
             "reason": "auth_expired",
@@ -9105,6 +9111,7 @@ url = http://127.0.0.1:8787/guard-canary
 
     def test_refresh_cloud_policy_bundle_preserves_bundle_rejection_reason(self, tmp_path, monkeypatch):
         home_dir = tmp_path / "home"
+        _disable_oauth_persistence_assert(monkeypatch)
         store = GuardStore(home_dir)
         _seed_guard_cloud(store)
 
@@ -9124,14 +9131,13 @@ url = http://127.0.0.1:8787/guard-canary
                 "sync_url": "https://hol.org/api/guard/receipts/sync",
             },
         )
-        monkeypatch.setattr(guard_commands_module, "sync_receipts", _bundle_rejected)
         monkeypatch.setattr(
             guard_commands_module,
-            "sync_supply_chain_cloud_state",
-            lambda _store, **_kwargs: {"synced_at": "2026-04-09T00:00:00Z"},
+            "sync_supply_chain_bundle",
+            _bundle_rejected,
         )
 
-        guard_commands_module._refresh_cloud_policy_bundle(store)
+        guard_commands_module._refresh_cloud_policy_bundle(store, bundle_only=True)
 
         assert store.get_sync_payload("policy_bundle_last_error") == {
             "reason": "bundle_version_downgrade",
@@ -9139,6 +9145,7 @@ url = http://127.0.0.1:8787/guard-canary
 
     def test_refresh_cloud_policy_bundle_preserves_bundle_hash_mismatch_reason(self, tmp_path, monkeypatch):
         home_dir = tmp_path / "home"
+        _disable_oauth_persistence_assert(monkeypatch)
         store = GuardStore(home_dir)
         _seed_guard_cloud(store)
 
@@ -9150,14 +9157,13 @@ url = http://127.0.0.1:8787/guard-canary
             )
             return {"synced": True}
 
-        monkeypatch.setattr(guard_commands_module, "sync_receipts", _bundle_rejected)
         monkeypatch.setattr(
             guard_commands_module,
-            "sync_supply_chain_cloud_state",
-            lambda _store, **_kwargs: {"synced_at": "2026-04-09T00:00:00Z"},
+            "sync_supply_chain_bundle",
+            _bundle_rejected,
         )
 
-        guard_commands_module._refresh_cloud_policy_bundle(store)
+        guard_commands_module._refresh_cloud_policy_bundle(store, bundle_only=True)
 
         assert store.get_sync_payload("policy_bundle_last_error") == {
             "reason": "bundle_hash_mismatch",
@@ -9165,6 +9171,7 @@ url = http://127.0.0.1:8787/guard-canary
 
     def test_refresh_cloud_policy_bundle_clears_non_bundle_errors_after_success(self, tmp_path, monkeypatch):
         home_dir = tmp_path / "home"
+        _disable_oauth_persistence_assert(monkeypatch)
         store = GuardStore(home_dir)
         _seed_guard_cloud(store)
         store.set_sync_payload(
@@ -9175,11 +9182,6 @@ url = http://127.0.0.1:8787/guard-canary
 
         monkeypatch.setattr(
             guard_commands_module,
-            "sync_receipts",
-            lambda _store, **_kwargs: {"synced": True},
-        )
-        monkeypatch.setattr(
-            guard_commands_module,
             "_resolve_guard_sync_auth_context",
             lambda _store: {
                 "access_token": "token",
@@ -9188,13 +9190,35 @@ url = http://127.0.0.1:8787/guard-canary
         )
         monkeypatch.setattr(
             guard_commands_module,
-            "sync_supply_chain_cloud_state",
+            "sync_supply_chain_bundle",
             lambda _store, **_kwargs: {"synced_at": "2026-04-09T00:00:00Z"},
         )
 
-        guard_commands_module._refresh_cloud_policy_bundle(store)
+        guard_commands_module._refresh_cloud_policy_bundle(store, bundle_only=True)
 
         assert store.get_sync_payload("policy_bundle_last_error") == {}
+
+    def test_refresh_cloud_policy_bundle_skips_receipt_sync_for_protect_latency(self, tmp_path, monkeypatch):
+        home_dir = tmp_path / "home"
+        _disable_oauth_persistence_assert(monkeypatch)
+        store = GuardStore(home_dir)
+        _seed_guard_cloud(store)
+
+        def _unexpected_receipt_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
+            raise AssertionError("sync_receipts should not run during protect-time bundle refresh")
+
+        def _unexpected_cloud_state_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
+            raise AssertionError("sync_supply_chain_cloud_state should not run during protect-time bundle refresh")
+
+        monkeypatch.setattr(guard_commands_module, "sync_receipts", _unexpected_receipt_sync)
+        monkeypatch.setattr(guard_commands_module, "sync_supply_chain_cloud_state", _unexpected_cloud_state_sync)
+        monkeypatch.setattr(
+            guard_commands_module,
+            "sync_supply_chain_bundle",
+            lambda _store, **_kwargs: {"synced_at": "2026-04-09T00:00:00Z"},
+        )
+
+        guard_commands_module._refresh_cloud_policy_bundle(store, bundle_only=True)
 
     def test_guard_sync_reports_remote_sync_errors_in_json_mode(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
