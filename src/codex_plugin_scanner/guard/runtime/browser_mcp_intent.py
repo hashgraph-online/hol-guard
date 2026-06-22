@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
-from typing import Literal, Mapping
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Literal
 from urllib.parse import urlparse, urlunparse
 
 from ..models import GuardArtifact
@@ -280,7 +281,6 @@ _VOLATILE_FIELDS: frozenset[str] = frozenset({
     "waitUntil",
     "duration",
     "requestId",
-    "waitUntil",
     "selector",
     "cursor",
     "offsetX",
@@ -292,14 +292,18 @@ _VOLATILE_FIELDS: frozenset[str] = frozenset({
 # ─── Sensitive surface detection patterns ─────────────────────────────────────
 
 _SENSITIVE_COOKIE_PATTERNS: tuple[str, ...] = ("cookie", "cookies")
-_SENSITIVE_STORAGE_PATTERNS: tuple[str, ...] = ("storage", "local_storage", "session_storage", "localstorage", "sessionstorage")
+_SENSITIVE_STORAGE_PATTERNS: tuple[str, ...] = (
+    "storage", "local_storage", "session_storage", "localstorage", "sessionstorage",
+)
 _SENSITIVE_AUTH_PATTERNS: tuple[str, ...] = ("auth_header", "authorization", "auth_token", "authtoken")
 _SENSITIVE_CDP_PATTERNS: tuple[str, ...] = ("cdp", "chrome_devtools_protocol", "raw_cdp")
 _SENSITIVE_SCRIPT_EVAL_PATTERNS: tuple[str, ...] = ("eval", "script", "javascript", "expression")
 _SENSITIVE_UPLOAD_PATTERNS: tuple[str, ...] = ("upload", "file_path", "filepath", "file_input")
 _SENSITIVE_DOWNLOAD_PATTERNS: tuple[str, ...] = ("download", "save_path", "savepath", "download_path", "downloadpath")
 _SENSITIVE_CLIPBOARD_PATTERNS: tuple[str, ...] = ("clipboard",)
-_SENSITIVE_PASSWORD_PATTERNS: tuple[str, ...] = ("password", "passwd", "secret", "credential", "api_key", "apikey", "access_token", "accesstoken")
+_SENSITIVE_PASSWORD_PATTERNS: tuple[str, ...] = (
+    "password", "passwd", "secret", "credential", "api_key", "apikey", "access_token", "accesstoken",
+)
 _SENSITIVE_INTERCEPT_PATTERNS: tuple[str, ...] = ("intercept", "mock_network", "route_intercept")
 
 # ─── URL extraction keys ──────────────────────────────────────────────────────
@@ -408,13 +412,14 @@ def is_browser_mcp_server(artifact: GuardArtifact) -> bool:
     # Check tool identity metadata for browser hints
     tool_identity = artifact.metadata.get("mcp_tool_identity")
     if isinstance(tool_identity, Mapping):
-        description = str(tool_identity.get("description_hash", ""))
-        # If the tool name itself contains browser markers
+        # If the tool name itself contains browser markers, still require
+        # some server-level signal to avoid false positives.
         tool_name = str(artifact.command or artifact.name).lower()
-        if any(marker in tool_name for marker in ("browser_", "navigate", "screenshot", "snapshot", "page")):
-            # Still require some server-level signal
-            if any(pattern in combined for pattern in ("browser", "chrome", "playwright", "devtools", "puppeteer")):
-                return True
+        if (
+            any(marker in tool_name for marker in ("browser_", "navigate", "screenshot", "snapshot", "page"))
+            and any(pattern in combined for pattern in ("browser", "chrome", "playwright", "devtools", "puppeteer"))
+        ):
+            return True
 
     return False
 
@@ -812,22 +817,22 @@ def _optional_str(value: object) -> str | None:
 
 
 __all__ = [
+    "_VOLATILE_FIELDS",
     "BrowserIntent",
-    "BrowserProfileMode",
     "BrowserMethod",
+    "BrowserProfileMode",
     "GuardBrowserAutomationIntentV1",
-    "is_browser_mcp_server",
-    "normalize_browser_mcp_intent",
-    "_extract_tool_operation",
+    "_classify_operation",
+    "_collect_volatile_fields",
+    "_detect_profile_mode",
+    "_detect_sensitive_surfaces",
     "_extract_mapping",
     "_extract_target_url",
-    "_normalize_target_origin",
-    "_normalize_target_domain",
+    "_extract_tool_operation",
     "_normalize_path_prefix",
+    "_normalize_target_domain",
+    "_normalize_target_origin",
     "_redacted_target_url",
-    "_classify_operation",
-    "_detect_sensitive_surfaces",
-    "_detect_profile_mode",
-    "_collect_volatile_fields",
-    "_VOLATILE_FIELDS",
+    "is_browser_mcp_server",
+    "normalize_browser_mcp_intent",
 ]

@@ -40,7 +40,12 @@ from .models import (
     PolicyDecision,
 )
 from .risk import artifact_risk_signals, artifact_risk_summary
-from .store import GuardStore, _runtime_scoped_exact_match_key, browser_mcp_exact_match_context, runtime_tool_action_exact_match_context
+from .store import (
+    GuardStore,
+    _runtime_scoped_exact_match_key,
+    browser_mcp_exact_match_context,
+    runtime_tool_action_exact_match_context,
+)
 
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
@@ -570,7 +575,11 @@ def _browser_mcp_exact_match_key(request: Mapping[str, object], scope: str) -> s
         mcp_server_identity_hash=_string_or_none(browser_intent.get("mcp_server_identity_hash")),
         mcp_tool_identity_hash=_string_or_none(browser_intent.get("mcp_tool_identity_hash")),
         mcp_schema_hash=_string_or_none(browser_intent.get("mcp_schema_hash")),
-        sensitive_surface_flags=browser_intent.get("sensitive_surface_flags") if isinstance(browser_intent.get("sensitive_surface_flags"), (list, tuple)) else None,
+        sensitive_surface_flags=(
+            browser_intent.get("sensitive_surface_flags")
+            if isinstance(browser_intent.get("sensitive_surface_flags"), (list, tuple))
+            else None
+        ),
     )
     return _runtime_scoped_exact_match_key(artifact_id, context) if context else None
 

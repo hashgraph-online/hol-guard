@@ -13,13 +13,13 @@ from .approval_gate import ApprovalGateGrant
 from .config import DEFAULT_SECURITY_LEVEL, GuardConfig, resolve_risk_action
 from .models import GUARD_ACTION_VALUES, GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
 from .receipts import build_receipt
+from .runtime.browser_mcp_intent import normalize_browser_mcp_intent
 from .runtime.mcp_protection import (
     McpServerIdentity,
     build_mcp_tool_identity,
     mcp_server_identity_metadata,
     mcp_tool_identity_metadata,
 )
-from .runtime.browser_mcp_intent import normalize_browser_mcp_intent
 from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall, scanner_evidence_for_mcp_skill_firewall
 from .store import GuardStore
 
@@ -198,7 +198,10 @@ def tool_call_risk_signals(artifact: GuardArtifact, arguments: object) -> tuple[
             "browser_privileged": f"privileged browser access to {target}",
             "browser_external_domain": f"first navigation to external domain {target}",
             "browser_shared_profile": "browser MCP uses a shared or remote-debugging profile",
-            "browser_sensitive_surface": f"browser action touches sensitive surfaces: {', '.join(browser_intent.sensitive_surface_flags)}",
+            "browser_sensitive_surface": (
+            "browser action touches sensitive surfaces: "
+            + ", ".join(browser_intent.sensitive_surface_flags)
+        ),
         })
     return tuple(signals_by_category[category] for category in tool_call_risk_categories(artifact, arguments))
 
@@ -252,11 +255,10 @@ def _tool_call_risk_category_set(artifact: GuardArtifact, arguments: object) -> 
             r"https?://",
             _token_pattern("curl", "wget", "fetch", "axios", "requests"),
         ),
-    ):
-        # Suppress outbound_network for browser navigation — the browser intent
-        # categories below capture the actual risk surface.
-        if not is_browser_navigation:
-            categories.add("outbound_network")
+    ) and not is_browser_navigation:
+        # Browser navigation intent suppresses generic outbound_network;
+        # browser-specific categories below capture the actual risk surface.
+        categories.add("outbound_network")
     if _matches_any(
         combined,
         (
