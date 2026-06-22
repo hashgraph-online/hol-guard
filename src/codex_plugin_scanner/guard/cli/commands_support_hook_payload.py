@@ -434,6 +434,7 @@ def _normalize_hook_payload(
         ("changedCapabilities", "changed_capabilities"),
         ("hookEventName", "hook_event_name"),
         ("hookName", "hook_name"),
+        ("preExecutionResult", "pre_execution_result"),
         ("policyAction", "policy_action"),
         ("sourceScope", "source_scope"),
         ("toolName", "tool_name"),
