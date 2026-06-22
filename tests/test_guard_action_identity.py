@@ -153,3 +153,158 @@ class TestMcpIdentityNormalization:
             "schema_hash": "hash-001",
         }
         assert normalize_mcp_identity(call) == normalize_mcp_identity(call)
+
+
+class TestBrowserMcpIdentityNormalization:
+    """HGBM049-HGBM051: Browser MCP identity normalizer."""
+
+    def test_drops_volatile_fields(self) -> None:
+        """HGBM050: Two calls with different timeout/page ID hash equal."""
+        from codex_plugin_scanner.guard.runtime.action_identity import (
+            normalize_browser_mcp_identity,
+        )
+
+        call_a = {
+            "server_id": "chrome-devtools-hash",
+            "tool_name": "navigate_page",
+            "intent": "browser.navigation",
+            "operation": "navigate_page",
+            "target_origin": "https://hol.org",
+            "target_path_prefix": "/guard/integrations/slack",
+            "profile_mode": "unknown",
+            "schema_hash": "abc123",
+            "sensitive_surface_flags": (),
+        }
+        call_b = dict(call_a)
+        call_b["timeout"] = 30000
+        call_b["pageId"] = "tab2"
+        assert normalize_browser_mcp_identity(call_a) == normalize_browser_mcp_identity(call_b)
+
+    def test_different_origin_hashes_differently(self) -> None:
+        """HGBM051: Different origin produces different identity."""
+        from codex_plugin_scanner.guard.runtime.action_identity import (
+            normalize_browser_mcp_identity,
+        )
+
+        call_a = {
+            "server_id": "chrome-devtools",
+            "tool_name": "navigate_page",
+            "intent": "browser.navigation",
+            "operation": "navigate_page",
+            "target_origin": "https://hol.org",
+            "target_path_prefix": "/guard",
+            "profile_mode": "unknown",
+            "schema_hash": "abc",
+            "sensitive_surface_flags": (),
+        }
+        call_b = dict(call_a)
+        call_b["target_origin"] = "https://example.com"
+        assert normalize_browser_mcp_identity(call_a) != normalize_browser_mcp_identity(call_b)
+
+    def test_different_intent_hashes_differently(self) -> None:
+        """HGBM051: Different intent on same URL produces different identity."""
+        from codex_plugin_scanner.guard.runtime.action_identity import (
+            normalize_browser_mcp_identity,
+        )
+
+        base = {
+            "server_id": "chrome-devtools",
+            "tool_name": "navigate_page",
+            "intent": "browser.navigation",
+            "operation": "navigate_page",
+            "target_origin": "https://hol.org",
+            "target_path_prefix": "/guard",
+            "profile_mode": "unknown",
+            "schema_hash": "abc",
+            "sensitive_surface_flags": (),
+        }
+        interact = dict(base)
+        interact["intent"] = "browser.interact"
+        interact["operation"] = "click"
+        assert normalize_browser_mcp_identity(base) != normalize_browser_mcp_identity(interact)
+
+    def test_different_path_prefix_hashes_differently(self) -> None:
+        """HGBM059: Path prefix /guard/* does not hash same as /account/*."""
+        from codex_plugin_scanner.guard.runtime.action_identity import (
+            normalize_browser_mcp_identity,
+        )
+
+        base = {
+            "server_id": "chrome-devtools",
+            "tool_name": "navigate_page",
+            "intent": "browser.navigation",
+            "operation": "navigate_page",
+            "target_origin": "https://hol.org",
+            "target_path_prefix": "/guard",
+            "profile_mode": "unknown",
+            "schema_hash": "abc",
+            "sensitive_surface_flags": (),
+        }
+        account = dict(base)
+        account["target_path_prefix"] = "/account"
+        assert normalize_browser_mcp_identity(base) != normalize_browser_mcp_identity(account)
+
+    def test_different_sensitive_flags_hashes_differently(self) -> None:
+        """HGBM051: Different sensitive surface flags produce different identity."""
+        from codex_plugin_scanner.guard.runtime.action_identity import (
+            normalize_browser_mcp_identity,
+        )
+
+        base = {
+            "server_id": "chrome-devtools",
+            "tool_name": "evaluate_script",
+            "intent": "browser.privileged",
+            "operation": "evaluate_script",
+            "target_origin": "https://hol.org",
+            "target_path_prefix": "/guard",
+            "profile_mode": "unknown",
+            "schema_hash": "abc",
+            "sensitive_surface_flags": ("script_eval",),
+        }
+        cookies = dict(base)
+        cookies["sensitive_surface_flags"] = ("cookies",)
+        assert normalize_browser_mcp_identity(base) != normalize_browser_mcp_identity(cookies)
+
+    def test_different_server_hashes_differently(self) -> None:
+        """HGBM058: Chrome DevTools approval does not cover Playwright MCP."""
+        from codex_plugin_scanner.guard.runtime.action_identity import (
+            normalize_browser_mcp_identity,
+        )
+
+        base = {
+            "server_id": "chrome-devtools-hash",
+            "tool_name": "navigate_page",
+            "intent": "browser.navigation",
+            "operation": "navigate_page",
+            "target_origin": "https://hol.org",
+            "target_path_prefix": "/guard",
+            "profile_mode": "unknown",
+            "schema_hash": "abc",
+            "sensitive_surface_flags": (),
+        }
+        playwright = dict(base)
+        playwright["server_id"] = "playwright-mcp-hash"
+        playwright["tool_name"] = "browser_navigate"
+        playwright["operation"] = "browser_navigate"
+        assert normalize_browser_mcp_identity(base) != normalize_browser_mcp_identity(playwright)
+
+    def test_localhost_not_global(self) -> None:
+        """HGBM060: Localhost workspace approval does not become global internet approval."""
+        from codex_plugin_scanner.guard.runtime.action_identity import (
+            normalize_browser_mcp_identity,
+        )
+
+        localhost = {
+            "server_id": "chrome-devtools",
+            "tool_name": "navigate_page",
+            "intent": "browser.navigation",
+            "operation": "navigate_page",
+            "target_origin": "http://127.0.0.1:3000",
+            "target_path_prefix": "/guard",
+            "profile_mode": "unknown",
+            "schema_hash": "abc",
+            "sensitive_surface_flags": (),
+        }
+        external = dict(localhost)
+        external["target_origin"] = "https://example.com"
+        assert normalize_browser_mcp_identity(localhost) != normalize_browser_mcp_identity(external)

@@ -28,6 +28,7 @@ from ..mcp_tool_calls import (
 )
 from ..models import GuardAction, HarnessDetection
 from ..policy.engine import build_decision_v2
+from ..runtime.browser_mcp_intent import normalize_browser_mcp_intent
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
 from ..runtime.signals import RiskSeverityLabel, RiskSignalV2
@@ -1119,6 +1120,69 @@ class RuntimeMcpGuardProxy:
                 output_stream.write(json.dumps(response) + "\n")
                 output_stream.flush()
 
+    def _build_artifact_payload(
+        self,
+        artifact: Any,
+        artifact_hash: str,
+        tool_name: str,
+        params: dict[str, Any],
+        signals: tuple[str, ...],
+        *,
+        policy_action: str = "require-reapproval",
+    ) -> dict[str, Any]:
+        """Build the artifact payload for approval center queueing.
+
+        Includes browser intent metadata when the MCP tool call is a browser
+        automation call (HGBM063-HGBM065).
+        """
+        arguments = params.get("arguments")
+        browser_intent = normalize_browser_mcp_intent(artifact, arguments)
+        changed_fields: list[str] = ["runtime_tool_call"]
+        launch_target = self._launch_target(tool_name, arguments)
+
+        if browser_intent is not None:
+            changed_fields.append("runtime_browser_tool_call")
+            # Build a safer browser-specific launch target label
+            target = browser_intent.target_domain or browser_intent.target_origin or "unknown"
+            launch_target = f"{browser_intent.mcp_server_name} {browser_intent.operation} {target}"
+            browser_intent_dict = {
+                "version": browser_intent.version,
+                "intent": browser_intent.intent,
+                "operation": browser_intent.operation,
+                "target_url": browser_intent.target_url,
+                "target_origin": browser_intent.target_origin,
+                "target_domain": browser_intent.target_domain,
+                "target_path_prefix": browser_intent.target_path_prefix,
+                "method": browser_intent.method,
+                "profile_mode": browser_intent.profile_mode,
+                "mcp_server_name": browser_intent.mcp_server_name,
+                "mcp_server_identity_hash": browser_intent.mcp_server_identity_hash,
+                "mcp_tool_name": browser_intent.mcp_tool_name,
+                "mcp_tool_identity_hash": browser_intent.mcp_tool_identity_hash,
+                "mcp_schema_hash": browser_intent.mcp_schema_hash,
+                "sensitive_surface_flags": list(browser_intent.sensitive_surface_flags),
+                "volatile_fields_dropped": list(browser_intent.volatile_fields_dropped),
+            }
+        else:
+            browser_intent_dict = None
+
+        payload: dict[str, Any] = {
+            "artifact_id": artifact.artifact_id,
+            "artifact_name": artifact.name,
+            "artifact_hash": artifact_hash,
+            "artifact_type": artifact.artifact_type,
+            "source_scope": artifact.source_scope,
+            "config_path": artifact.config_path,
+            "changed_fields": changed_fields,
+            "policy_action": policy_action,
+            "launch_target": launch_target,
+            "risk_summary": tool_call_risk_summary(artifact, arguments),
+            "risk_signals": list(signals),
+        }
+        if browser_intent_dict is not None:
+            payload["browser_intent"] = browser_intent_dict
+        return payload
+
     def _queue_approval_center_response(
         self,
         *,
@@ -1140,19 +1204,7 @@ class RuntimeMcpGuardProxy:
             ),
             evaluation={
                 "artifacts": [
-                    {
-                        "artifact_id": artifact.artifact_id,
-                        "artifact_name": artifact.name,
-                        "artifact_hash": artifact_hash,
-                        "artifact_type": artifact.artifact_type,
-                        "source_scope": artifact.source_scope,
-                        "config_path": artifact.config_path,
-                        "changed_fields": ["runtime_tool_call"],
-                        "policy_action": "require-reapproval",
-                        "launch_target": self._launch_target(tool_name, params.get("arguments")),
-                        "risk_summary": tool_call_risk_summary(artifact, params.get("arguments")),
-                        "risk_signals": list(signals),
-                    }
+                    self._build_artifact_payload(artifact, artifact_hash, tool_name, params, signals),
                 ]
             },
             store=self.store,
@@ -1227,6 +1279,30 @@ class RuntimeMcpGuardProxy:
             "risk_summary": risk_summary,
             "risk_signals": risk_signals,
         }
+        # Include browser intent metadata when present
+        browser_intent = normalize_browser_mcp_intent(artifact, params.get("arguments"))
+        if browser_intent is not None:
+            artifact_payload["changed_fields"].append("runtime_browser_tool_call")
+            target = browser_intent.target_domain or browser_intent.target_origin or "unknown"
+            artifact_payload["launch_target"] = f"{browser_intent.mcp_server_name} {browser_intent.operation} {target}"
+            artifact_payload["browser_intent"] = {
+                "version": browser_intent.version,
+                "intent": browser_intent.intent,
+                "operation": browser_intent.operation,
+                "target_url": browser_intent.target_url,
+                "target_origin": browser_intent.target_origin,
+                "target_domain": browser_intent.target_domain,
+                "target_path_prefix": browser_intent.target_path_prefix,
+                "method": browser_intent.method,
+                "profile_mode": browser_intent.profile_mode,
+                "mcp_server_name": browser_intent.mcp_server_name,
+                "mcp_server_identity_hash": browser_intent.mcp_server_identity_hash,
+                "mcp_tool_name": browser_intent.mcp_tool_name,
+                "mcp_tool_identity_hash": browser_intent.mcp_tool_identity_hash,
+                "mcp_schema_hash": browser_intent.mcp_schema_hash,
+                "sensitive_surface_flags": list(browser_intent.sensitive_surface_flags),
+                "volatile_fields_dropped": list(browser_intent.volatile_fields_dropped),
+            }
         if decision_v2_payload is not None:
             artifact_payload["decision_v2_json"] = decision_v2_payload
         if extra_fields:

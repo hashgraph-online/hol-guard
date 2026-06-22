@@ -40,7 +40,7 @@ from .models import (
     PolicyDecision,
 )
 from .risk import artifact_risk_signals, artifact_risk_summary
-from .store import GuardStore, _runtime_scoped_exact_match_key, runtime_tool_action_exact_match_context
+from .store import GuardStore, _runtime_scoped_exact_match_key, browser_mcp_exact_match_context, runtime_tool_action_exact_match_context
 
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
@@ -544,6 +544,35 @@ def _broad_runtime_exact_match_key(request: Mapping[str, object], scope: str) ->
     if not isinstance(artifact_id, str) or not artifact_id:
         return None
     return _runtime_scoped_exact_match_key(artifact_id)
+
+
+def _browser_mcp_exact_match_key(request: Mapping[str, object], scope: str) -> str | None:
+    """Build a browser MCP exact-match key for tool_call artifacts with browser intent.
+
+    Only activates for artifact_type == 'tool_call' when browser intent
+    metadata is present. Returns a runtime-exact key scoped to the browser
+    identity (intent, origin, path, profile, sensitive surfaces).
+    """
+    if scope != "artifact" or request.get("artifact_type") != "tool_call":
+        return None
+    browser_intent = request.get("browser_intent")
+    if not isinstance(browser_intent, Mapping):
+        return None
+    artifact_id = request.get("artifact_id")
+    if not isinstance(artifact_id, str) or not artifact_id:
+        return None
+    context = browser_mcp_exact_match_context(
+        intent=_string_or_none(browser_intent.get("intent")),
+        operation=_string_or_none(browser_intent.get("operation")),
+        target_origin=_string_or_none(browser_intent.get("target_origin")),
+        target_path_prefix=_string_or_none(browser_intent.get("target_path_prefix")),
+        profile_mode=_string_or_none(browser_intent.get("profile_mode")),
+        mcp_server_identity_hash=_string_or_none(browser_intent.get("mcp_server_identity_hash")),
+        mcp_tool_identity_hash=_string_or_none(browser_intent.get("mcp_tool_identity_hash")),
+        mcp_schema_hash=_string_or_none(browser_intent.get("mcp_schema_hash")),
+        sensitive_surface_flags=browser_intent.get("sensitive_surface_flags") if isinstance(browser_intent.get("sensitive_surface_flags"), (list, tuple)) else None,
+    )
+    return _runtime_scoped_exact_match_key(artifact_id, context) if context else None
 
 
 def _append_guard_token_to_url(url: str, auth_token: str) -> str:

@@ -39,9 +39,16 @@ _POLICY_BUNDLE_RULE_ACTIONS = frozenset({"allow", "block", "review", "ignore"})
 _POLICY_BUNDLE_ROLLOUT_STATES = frozenset(
     {"draft", "simulated", "pending_approval", "enforcing", "enforced", "rollback_available"}
 )
-_POLICY_BUNDLE_SCOPE_KEYS = frozenset({"agents", "devices", "ecosystems", "environments", "harnesses", "locations"})
+_POLICY_BUNDLE_SCOPE_KEYS = frozenset({
+    "agents", "devices", "ecosystems", "environments", "harnesses", "locations",
+    "browserIntent", "browserOperation", "browserProfile", "origin", "pathPrefix", "sensitiveSurface",
+})
+_VALID_BROWSER_INTENTS = frozenset({
+    "browser.navigation", "browser.inspect", "browser.interact", "browser.transfer", "browser.privileged",
+})
+_VALID_BROWSER_PROFILES = frozenset({"isolated", "dedicated", "shared", "remote-debugging", "unknown"})
 _POLICY_BUNDLE_RULE_MATCHER_FAMILIES = frozenset(
-    {"file-read", "mcp", "package-request", "prompt", "prompt-env-read", "tool-action"}
+    {"file-read", "mcp", "mcp-tool", "package-request", "prompt", "prompt-env-read", "tool-action"}
 )
 _POLICY_BUNDLE_DEFAULT_ENVIRONMENTS = frozenset({"development"})
 
@@ -115,9 +122,28 @@ def _policy_bundle_rule_is_valid(rule: object) -> bool:
     if audit_event_ids is not None and not _policy_bundle_string_list(audit_event_ids):
         return False
     scope = rule.get("scope")
-    return isinstance(scope, dict) and all(
-        _policy_bundle_string_list(scope.get(key)) for key in _POLICY_BUNDLE_SCOPE_KEYS
-    )
+    if not isinstance(scope, dict):
+        return False
+    # Validate that all present scope keys map to string lists
+    for key in _POLICY_BUNDLE_SCOPE_KEYS:
+        if key in scope and not _policy_bundle_string_list(scope.get(key)):
+            return False
+    # Validate browser scope enum values (HGBM073)
+    browser_intent = scope.get("browserIntent")
+    if browser_intent is not None:
+        if not _policy_bundle_string_list(browser_intent):
+            return False
+        for intent_value in browser_intent:
+            if intent_value not in _VALID_BROWSER_INTENTS:
+                return False
+    browser_profile = scope.get("browserProfile")
+    if browser_profile is not None:
+        if not _policy_bundle_string_list(browser_profile):
+            return False
+        for profile_value in browser_profile:
+            if profile_value not in _VALID_BROWSER_PROFILES:
+                return False
+    return True
 
 
 def _policy_bundle_acknowledgement_is_valid(acknowledgement: object) -> bool:

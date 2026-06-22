@@ -54,6 +54,7 @@ def approval_queue_identity_for_request(request: GuardApprovalRequest) -> tuple[
         workspace=request.workspace,
         artifact_id=request.artifact_id,
         action_identity=action_identity,
+        browser_intent=request.browser_intent,
     )
     return action_identity, queue_group_id
 
@@ -89,7 +90,13 @@ def _build_queue_group_id(
     workspace: str | None,
     artifact_id: str,
     action_identity: str,
+    browser_intent: dict[str, object] | None = None,
 ) -> str:
+    # Include browser intent identity in dedupe key when present
+    browser_identity_hash = None
+    if browser_intent is not None:
+        from .runtime.action_identity import normalize_browser_mcp_identity
+        browser_identity_hash = normalize_browser_mcp_identity(browser_intent)
     payload = json.dumps(
         {
             "version": _QUEUE_IDENTITY_VERSION,
@@ -97,6 +104,7 @@ def _build_queue_group_id(
             "workspace": workspace,
             "artifact_id": artifact_id,
             "action_identity": action_identity,
+            "browser_identity_hash": browser_identity_hash,
         },
         sort_keys=True,
         separators=(",", ":"),
