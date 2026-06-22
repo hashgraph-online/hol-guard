@@ -111,9 +111,7 @@ def _hash_payload(artifact: GuardArtifact) -> dict[str, object]:
         and isinstance(metadata.get("normalized_path"), str)
     ):
         metadata = {
-            key: value
-            for key, value in metadata.items()
-            if key not in _PROMPT_FILE_HASH_VOLATILE_METADATA_KEYS
+            key: value for key, value in metadata.items() if key not in _PROMPT_FILE_HASH_VOLATILE_METADATA_KEYS
         }
     payload["metadata"] = metadata
     payload["env_keys"] = metadata.get("env_keys", []) if isinstance(metadata, dict) else []
