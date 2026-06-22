@@ -49,6 +49,7 @@ from ..package_firewall_entitlement import (
     reconcile_connect_state_with_oauth_entitlement,
 )
 from ..policy_bundle_parser import (
+    POLICY_BUNDLE_BROWSER_SCOPE_KEYS,
     POLICY_BUNDLE_DEFAULT_ENVIRONMENTS,
     POLICY_BUNDLE_RULE_ACTIONS,
     POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
@@ -1021,6 +1022,18 @@ def _policy_bundle_rule_harnesses(rule: dict[str, object]) -> list[str]:
     if not normalized:
         return ["*"]
     return ["*" if value == "custom" else value for value in dict.fromkeys(normalized)]
+def _policy_bundle_rule_has_browser_scope(rule: dict[str, object]) -> bool:
+    """Check if a rule has any browser-specific scope keys.
+
+    Browser scope keys (browserIntent, origin, pathPrefix, browserProfile,
+    sensitiveSurface) cannot be safely represented as harness-scoped family
+    decisions because the runtime resolution would match all browser tool calls
+    in that family, ignoring the narrow constraints the rule author specified.
+    """
+    scope = rule.get("scope")
+    if not isinstance(scope, dict):
+        return False
+    return any(key in scope for key in POLICY_BUNDLE_BROWSER_SCOPE_KEYS)
 
 
 def _build_policy_bundle_decisions(
@@ -1040,6 +1053,8 @@ def _build_policy_bundle_decisions(
             continue
         action = item.get("action")
         if action == "ignore" or action not in POLICY_BUNDLE_RULE_ACTIONS:
+            continue
+        if _policy_bundle_rule_has_browser_scope(item):
             continue
         matcher_families = _policy_bundle_rule_matcher_families(item)
         if not matcher_families:
