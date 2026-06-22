@@ -497,11 +497,16 @@ def normalize_browser_mcp_intent(
         tool_hash = _optional_str(tool_identity.get("identity_hash"))
         schema_hash = _optional_str(tool_identity.get("schema_hash"))
 
+    raw_schema = artifact.metadata.get("tool_schema")
+    schema_arg: Mapping[str, object] = raw_schema if isinstance(raw_schema, dict) else {}
+    raw_desc = artifact.metadata.get("tool_description")
+    desc_arg: str = raw_desc if isinstance(raw_desc, str) else ""
+
     sensitive_flags = _detect_sensitive_surfaces(
         operation,
         mapping or {},
-        artifact.metadata.get("tool_schema") if isinstance(artifact.metadata.get("tool_schema"), dict) else {},
-        artifact.metadata.get("tool_description") if isinstance(artifact.metadata.get("tool_description"), str) else "",
+        schema_arg,
+        desc_arg,
     )
 
     volatile_dropped = _collect_volatile_fields(mapping) if mapping else ()
