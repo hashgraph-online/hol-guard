@@ -1022,18 +1022,30 @@ def _policy_bundle_rule_harnesses(rule: dict[str, object]) -> list[str]:
     if not normalized:
         return ["*"]
     return ["*" if value == "custom" else value for value in dict.fromkeys(normalized)]
+
+
 def _policy_bundle_rule_has_browser_scope(rule: dict[str, object]) -> bool:
-    """Check if a rule has any browser-specific scope keys.
+    """Check if a rule has any non-empty browser-specific scope constraints.
 
     Browser scope keys (browserIntent, origin, pathPrefix, browserProfile,
     sensitiveSurface) cannot be safely represented as harness-scoped family
     decisions because the runtime resolution would match all browser tool calls
     in that family, ignoring the narrow constraints the rule author specified.
+
+    The Guard Cloud bundle compiler may emit these fields at the top level of
+    the rule or nested under ``scope``. Empty lists are treated as no
+    constraint (matching how other scope keys behave).
     """
-    scope = rule.get("scope")
-    if not isinstance(scope, dict):
-        return False
-    return any(key in scope for key in POLICY_BUNDLE_BROWSER_SCOPE_KEYS)
+    for source in (rule, rule.get("scope")):
+        if not isinstance(source, dict):
+            continue
+        for key in POLICY_BUNDLE_BROWSER_SCOPE_KEYS:
+            value = source.get(key)
+            if isinstance(value, list) and value:
+                return True
+            if isinstance(value, str) and value.strip():
+                return True
+    return False
 
 
 def _build_policy_bundle_decisions(

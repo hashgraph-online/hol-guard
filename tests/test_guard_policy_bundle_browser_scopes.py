@@ -267,3 +267,36 @@ class TestBrowserScopeDecisionNarrowing:
         assert "origin" in POLICY_BUNDLE_BROWSER_SCOPE_KEYS
         assert "pathPrefix" in POLICY_BUNDLE_BROWSER_SCOPE_KEYS
         assert "sensitiveSurface" in POLICY_BUNDLE_BROWSER_SCOPE_KEYS
+
+    def test_empty_browser_scope_list_does_not_skip_rule(self) -> None:
+        """Empty browser scope lists are no-ops, not constraints."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["scope"]["browserIntent"] = []
+        rule["scope"]["origin"] = []
+        bundle = _valid_bundle_with_rules([rule])
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+        assert len(decisions) > 0
+
+    def test_top_level_browser_fields_skip_rule(self) -> None:
+        """Browser fields at the top level of the rule (not under scope) also skip."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["browserIntent"] = ["browser.navigation"]
+        rule["origin"] = ["http://127.0.0.1:3000"]
+        bundle = _valid_bundle_with_rules([rule])
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+        assert decisions == []
+
+    def test_empty_top_level_browser_fields_do_not_skip_rule(self) -> None:
+        """Empty top-level browser fields are no-ops, not constraints."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["browserIntent"] = []
+        rule["origin"] = []
+        bundle = _valid_bundle_with_rules([rule])
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+        assert len(decisions) > 0
