@@ -651,17 +651,17 @@ def _redacted_target_url(url: str | None) -> str | None:
         return url
 
     # Parse query params and redact sensitive ones
-    from urllib.parse import parse_qsl
+    from urllib.parse import parse_qsl, urlencode
 
     pairs = parse_qsl(parsed.query, keep_blank_values=True)
-    redacted_parts: list[str] = []
+    redacted_pairs: list[tuple[str, str]] = []
     for key, value in pairs:
         if _normalize_query_key(key) in _REDACT_QUERY_KEYS:
-            redacted_parts.append(f"{key}=[redacted]")
+            redacted_pairs.append((key, "[redacted]"))
         else:
-            redacted_parts.append(f"{key}={value}")
+            redacted_pairs.append((key, value))
 
-    redacted_query = "&".join(redacted_parts)
+    redacted_query = urlencode(redacted_pairs)
     return urlunparse(parsed._replace(query=redacted_query))
 
 
@@ -810,22 +810,21 @@ def _detect_profile_mode(
         if isinstance(meta_args, (list, tuple)):
             args.extend(str(a) for a in meta_args)
 
-    args_text = " ".join(args)
-
-    # Check isolated first (most specific)
-    if any(flag in args_text for flag in _ISOLATED_FLAGS):
+    # Check isolated first (most specific) — use startswith per arg
+    # to avoid false positives from substring matching.
+    if any(any(arg.startswith(flag) for arg in args) for flag in _ISOLATED_FLAGS):
         return "isolated"
 
     # Check remote debugging
-    if any(flag in args_text for flag in _REMOTE_DEBUG_FLAGS):
+    if any(any(arg.startswith(flag) for arg in args) for flag in _REMOTE_DEBUG_FLAGS):
         return "remote-debugging"
 
     # Check dedicated/persistent profile
-    if any(flag in args_text for flag in _PROFILE_DIR_FLAGS):
+    if any(any(arg.startswith(flag) for arg in args) for flag in _PROFILE_DIR_FLAGS):
         return "dedicated"
 
     # Check for shared profile indicators
-    if "--shared" in args_text or "--no-isolated" in args_text:
+    if any(arg.startswith("--shared") or arg.startswith("--no-isolated") for arg in args):
         return "shared"
 
     return "unknown"

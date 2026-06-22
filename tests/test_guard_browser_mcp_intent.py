@@ -478,7 +478,7 @@ class TestRedactedTargetUrl:
 
         result = _redacted_target_url("https://hol.org/callback?token=secret123")
         assert "secret123" not in result
-        assert "[redacted]" in result
+        assert "%5Bredacted%5D" in result or "[redacted]" in result
 
     def test_redacts_session(self) -> None:
         from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (

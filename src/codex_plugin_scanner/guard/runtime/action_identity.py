@@ -104,7 +104,7 @@ def normalize_browser_mcp_identity(call: dict[str, object]) -> str:
     target_path_prefix = str(call.get("target_path_prefix", ""))
     profile_mode = str(call.get("profile_mode", ""))
     schema_hash = str(call.get("schema_hash", call.get("mcp_schema_hash", "")))
-    sensitive_flags = call.get("sensitive_surface_flags", ())
+    sensitive_flags = call.get("sensitive_surface_flags") or ()
     if isinstance(sensitive_flags, (list, tuple)):
         sensitive_flags_str = ",".join(sorted(str(f) for f in sensitive_flags))
     else:

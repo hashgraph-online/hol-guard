@@ -362,6 +362,9 @@ def apply_approval_resolution(
     broad_runtime_exact_match_key = _broad_runtime_exact_match_key(request, scope)
     if broad_runtime_exact_match_key is not None:
         scoped_artifact_hash = broad_runtime_exact_match_key
+    browser_mcp_exact_key = _browser_mcp_exact_match_key(request, scope)
+    if browser_mcp_exact_key is not None:
+        scoped_artifact_hash = browser_mcp_exact_key
     decision = PolicyDecision(
         harness="*" if scope == "global" else str(request["harness"]),
         scope=scope,
