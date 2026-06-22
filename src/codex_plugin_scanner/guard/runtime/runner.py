@@ -49,6 +49,7 @@ from ..package_firewall_entitlement import (
     reconcile_connect_state_with_oauth_entitlement,
 )
 from ..policy_bundle_parser import (
+    POLICY_BUNDLE_BROWSER_SCOPE_KEYS,
     POLICY_BUNDLE_DEFAULT_ENVIRONMENTS,
     POLICY_BUNDLE_RULE_ACTIONS,
     POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
@@ -1023,6 +1024,30 @@ def _policy_bundle_rule_harnesses(rule: dict[str, object]) -> list[str]:
     return ["*" if value == "custom" else value for value in dict.fromkeys(normalized)]
 
 
+def _policy_bundle_rule_has_browser_scope(rule: dict[str, object]) -> bool:
+    """Check if a rule has any non-empty browser-specific scope constraints.
+
+    Browser scope keys (browserIntent, origin, pathPrefix, browserProfile,
+    sensitiveSurface) cannot be safely represented as harness-scoped family
+    decisions because the runtime resolution would match all browser tool calls
+    in that family, ignoring the narrow constraints the rule author specified.
+
+    The Guard Cloud bundle compiler may emit these fields at the top level of
+    the rule or nested under ``scope``. Empty lists are treated as no
+    constraint (matching how other scope keys behave).
+    """
+    for source in (rule, rule.get("scope")):
+        if not isinstance(source, dict):
+            continue
+        for key in POLICY_BUNDLE_BROWSER_SCOPE_KEYS:
+            value = source.get(key)
+            if isinstance(value, list) and value:
+                return True
+            if isinstance(value, str) and value.strip():
+                return True
+    return False
+
+
 def _build_policy_bundle_decisions(
     policy_bundle: dict[str, object],
     *,
@@ -1040,6 +1065,8 @@ def _build_policy_bundle_decisions(
             continue
         action = item.get("action")
         if action == "ignore" or action not in POLICY_BUNDLE_RULE_ACTIONS:
+            continue
+        if _policy_bundle_rule_has_browser_scope(item):
             continue
         matcher_families = _policy_bundle_rule_matcher_families(item)
         if not matcher_families:
