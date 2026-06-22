@@ -39,13 +39,31 @@ _POLICY_BUNDLE_RULE_ACTIONS = frozenset({"allow", "block", "review", "ignore"})
 _POLICY_BUNDLE_ROLLOUT_STATES = frozenset(
     {"draft", "simulated", "pending_approval", "enforcing", "enforced", "rollback_available"}
 )
-_POLICY_BUNDLE_SCOPE_KEYS = frozenset({
-    "agents", "devices", "ecosystems", "environments", "harnesses", "locations",
-    "browserIntent", "browserOperation", "browserProfile", "origin", "pathPrefix", "sensitiveSurface",
-})
-_VALID_BROWSER_INTENTS = frozenset({
-    "browser.navigation", "browser.inspect", "browser.interact", "browser.transfer", "browser.privileged",
-})
+_POLICY_BUNDLE_SCOPE_KEYS = frozenset(
+    {
+        "agents",
+        "devices",
+        "ecosystems",
+        "environments",
+        "harnesses",
+        "locations",
+        "browserIntent",
+        "browserOperation",
+        "browserProfile",
+        "origin",
+        "pathPrefix",
+        "sensitiveSurface",
+    }
+)
+_VALID_BROWSER_INTENTS = frozenset(
+    {
+        "browser.navigation",
+        "browser.inspect",
+        "browser.interact",
+        "browser.transfer",
+        "browser.privileged",
+    }
+)
 _VALID_BROWSER_PROFILES = frozenset({"isolated", "dedicated", "shared", "remote-debugging", "unknown"})
 _POLICY_BUNDLE_RULE_MATCHER_FAMILIES = frozenset(
     {"file-read", "mcp", "mcp-tool", "package-request", "prompt", "prompt-env-read", "tool-action"}

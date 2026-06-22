@@ -111,8 +111,8 @@ def normalize_browser_mcp_identity(call: dict[str, object]) -> str:
         sensitive_flags_str = str(sensitive_flags)
 
     identity_source = (
-        f"{server_id}:{tool_name}:{intent}:{operation}:" +
-        f"{target_origin}:{target_path_prefix}:{profile_mode}:" +
-        f"{schema_hash}:{sensitive_flags_str}"
+        f"{server_id}:{tool_name}:{intent}:{operation}:"
+        + f"{target_origin}:{target_path_prefix}:{profile_mode}:"
+        + f"{schema_hash}:{sensitive_flags_str}"
     )
     return hashlib.sha256(identity_source.encode("utf-8")).hexdigest()

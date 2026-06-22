@@ -52,148 +52,168 @@ BrowserMethod = Literal[
 # ─── Operation classification tables ──────────────────────────────────────────
 
 # Chrome DevTools MCP tool names by intent
-_CHROME_DEVTOOLS_NAVIGATION: frozenset[str] = frozenset({
-    "navigate_page",
-    "new_page",
-    "select_page",
-    "list_pages",
-    "close_page",
-    "wait_for",
-    "reload_page",
-    "go_back",
-    "go_forward",
-})
+_CHROME_DEVTOOLS_NAVIGATION: frozenset[str] = frozenset(
+    {
+        "navigate_page",
+        "new_page",
+        "select_page",
+        "list_pages",
+        "close_page",
+        "wait_for",
+        "reload_page",
+        "go_back",
+        "go_forward",
+    }
+)
 
-_CHROME_DEVTOOLS_INSPECT: frozenset[str] = frozenset({
-    "take_screenshot",
-    "take_snapshot",
-    "get_snapshot",
-    "accessibility_snapshot",
-    "read_console",
-    "get_console",
-    "read_network",
-    "get_network",
-    "performance_trace",
-    "get_performance",
-    "list_resources",
-    "get_dom",
-    "get_html",
-})
+_CHROME_DEVTOOLS_INSPECT: frozenset[str] = frozenset(
+    {
+        "take_screenshot",
+        "take_snapshot",
+        "get_snapshot",
+        "accessibility_snapshot",
+        "read_console",
+        "get_console",
+        "read_network",
+        "get_network",
+        "performance_trace",
+        "get_performance",
+        "list_resources",
+        "get_dom",
+        "get_html",
+    }
+)
 
-_CHROME_DEVTOOLS_INTERACT: frozenset[str] = frozenset({
-    "click",
-    "hover",
-    "press_key",
-    "type_text",
-    "fill_form",
-    "fill_input",
-    "select_dropdown",
-    "submit_form",
-    "handle_dialog",
-    "accept_dialog",
-    "dismiss_dialog",
-    "scroll",
-    "focus_element",
-})
+_CHROME_DEVTOOLS_INTERACT: frozenset[str] = frozenset(
+    {
+        "click",
+        "hover",
+        "press_key",
+        "type_text",
+        "fill_form",
+        "fill_input",
+        "select_dropdown",
+        "submit_form",
+        "handle_dialog",
+        "accept_dialog",
+        "dismiss_dialog",
+        "scroll",
+        "focus_element",
+    }
+)
 
-_CHROME_DEVTOOLS_TRANSFER: frozenset[str] = frozenset({
-    "upload_file",
-    "download_file",
-    "save_file",
-    "read_clipboard",
-    "write_clipboard",
-    "drag_drop_file",
-})
+_CHROME_DEVTOOLS_TRANSFER: frozenset[str] = frozenset(
+    {
+        "upload_file",
+        "download_file",
+        "save_file",
+        "read_clipboard",
+        "write_clipboard",
+        "drag_drop_file",
+    }
+)
 
-_CHROME_DEVTOOLS_PRIVILEGED: frozenset[str] = frozenset({
-    "evaluate_script",
-    "raw_cdp",
-    "read_cookies",
-    "get_cookies",
-    "set_cookies",
-    "read_storage",
-    "get_storage",
-    "set_storage",
-    "clear_storage",
-    "get_auth_headers",
-    "network_intercept",
-    "set_network_intercept",
-    "mock_network",
-    "manage_extension",
-    "manage_profile",
-    "manage_session",
-})
+_CHROME_DEVTOOLS_PRIVILEGED: frozenset[str] = frozenset(
+    {
+        "evaluate_script",
+        "raw_cdp",
+        "read_cookies",
+        "get_cookies",
+        "set_cookies",
+        "read_storage",
+        "get_storage",
+        "set_storage",
+        "clear_storage",
+        "get_auth_headers",
+        "network_intercept",
+        "set_network_intercept",
+        "mock_network",
+        "manage_extension",
+        "manage_profile",
+        "manage_session",
+    }
+)
 
 # Playwright MCP tool names (prefixed with browser_)
-_PLAYWRIGHT_NAVIGATION: frozenset[str] = frozenset({
-    "browser_navigate",
-    "browser_navigate_back",
-    "browser_navigate_forward",
-    "browser_reload",
-    "browser_new_page",
-    "browser_new_context",
-    "browser_close_page",
-    "browser_close_context",
-    "browser_close",
-    "browser_select_page",
-    "browser_list_pages",
-    "browser_wait_for_url",
-    "browser_wait_for_load_state",
-})
+_PLAYWRIGHT_NAVIGATION: frozenset[str] = frozenset(
+    {
+        "browser_navigate",
+        "browser_navigate_back",
+        "browser_navigate_forward",
+        "browser_reload",
+        "browser_new_page",
+        "browser_new_context",
+        "browser_close_page",
+        "browser_close_context",
+        "browser_close",
+        "browser_select_page",
+        "browser_list_pages",
+        "browser_wait_for_url",
+        "browser_wait_for_load_state",
+    }
+)
 
-_PLAYWRIGHT_INSPECT: frozenset[str] = frozenset({
-    "browser_snapshot",
-    "browser_screenshot",
-    "browser_accessibility_snapshot",
-    "browser_console_messages",
-    "browser_network_requests",
-    "browser_performance",
-    "browser_get_html",
-    "browser_get_dom",
-})
+_PLAYWRIGHT_INSPECT: frozenset[str] = frozenset(
+    {
+        "browser_snapshot",
+        "browser_screenshot",
+        "browser_accessibility_snapshot",
+        "browser_console_messages",
+        "browser_network_requests",
+        "browser_performance",
+        "browser_get_html",
+        "browser_get_dom",
+    }
+)
 
-_PLAYWRIGHT_INTERACT: frozenset[str] = frozenset({
-    "browser_click",
-    "browser_hover",
-    "browser_press_key",
-    "browser_type",
-    "browser_fill",
-    "browser_select_option",
-    "browser_submit_form",
-    "browser_dialog_accept",
-    "browser_dialog_dismiss",
-    "browser_scroll",
-    "browser_focus",
-    "browser_drag",
-    "browser_select_text",
-})
+_PLAYWRIGHT_INTERACT: frozenset[str] = frozenset(
+    {
+        "browser_click",
+        "browser_hover",
+        "browser_press_key",
+        "browser_type",
+        "browser_fill",
+        "browser_select_option",
+        "browser_submit_form",
+        "browser_dialog_accept",
+        "browser_dialog_dismiss",
+        "browser_scroll",
+        "browser_focus",
+        "browser_drag",
+        "browser_select_text",
+    }
+)
 
-_PLAYWRIGHT_TRANSFER: frozenset[str] = frozenset({
-    "browser_file_upload",
-    "browser_download",
-    "browser_clipboard_read",
-    "browser_clipboard_write",
-    "browser_drag_and_drop_file",
-    "browser_pdf_save",
-})
+_PLAYWRIGHT_TRANSFER: frozenset[str] = frozenset(
+    {
+        "browser_file_upload",
+        "browser_download",
+        "browser_clipboard_read",
+        "browser_clipboard_write",
+        "browser_drag_and_drop_file",
+        "browser_pdf_save",
+    }
+)
 
-_PLAYWRIGHT_PRIVILEGED: frozenset[str] = frozenset({
-    "browser_evaluate",
-    "browser_execute_script",
-    "browser_raw_cdp",
-    "browser_cookies_get",
-    "browser_cookies_set",
-    "browser_cookies_clear",
-    "browser_storage_get",
-    "browser_storage_set",
-    "browser_storage_clear",
-    "browser_auth_headers",
-    "browser_network_intercept",
-    "browser_route_intercept",
-    "browser_context_manage",
-    "browser_profile_manage",
-    "browser_session_manage",
-})
+_PLAYWRIGHT_PRIVILEGED: frozenset[str] = frozenset(
+    {
+        "browser_evaluate",
+        "browser_execute_script",
+        "browser_raw_cdp",
+        "browser_cookies_get",
+        "browser_cookies_set",
+        "browser_cookies_clear",
+        "browser_storage_get",
+        "browser_storage_set",
+        "browser_storage_clear",
+        "browser_auth_headers",
+        "browser_network_intercept",
+        "browser_route_intercept",
+        "browser_context_manage",
+        "browser_profile_manage",
+        "browser_session_manage",
+    }
+)
 
 # Generic browser tool name patterns (used only when server is browser-confirmed)
 _NAVIGATION_PATTERNS: tuple[str, ...] = (
@@ -270,30 +290,36 @@ _PRIVILEGED_PATTERNS: tuple[str, ...] = (
 
 # ─── Volatile fields ──────────────────────────────────────────────────────────
 
-_VOLATILE_FIELDS: frozenset[str] = frozenset({
-    "timeout",
-    "pageId",
-    "tabId",
-    "traceId",
-    "width",
-    "height",
-    "viewport",
-    "waitUntil",
-    "duration",
-    "requestId",
-    "selector",
-    "cursor",
-    "offsetX",
-    "offsetY",
-    "scrollX",
-    "scrollY",
-})
+_VOLATILE_FIELDS: frozenset[str] = frozenset(
+    {
+        "timeout",
+        "pageId",
+        "tabId",
+        "traceId",
+        "width",
+        "height",
+        "viewport",
+        "waitUntil",
+        "duration",
+        "requestId",
+        "selector",
+        "cursor",
+        "offsetX",
+        "offsetY",
+        "scrollX",
+        "scrollY",
+    }
+)
 
 # ─── Sensitive surface detection patterns ─────────────────────────────────────
 
 _SENSITIVE_COOKIE_PATTERNS: tuple[str, ...] = ("cookie", "cookies")
 _SENSITIVE_STORAGE_PATTERNS: tuple[str, ...] = (
-    "storage", "local_storage", "session_storage", "localstorage", "sessionstorage",
+    "storage",
+    "local_storage",
+    "session_storage",
+    "localstorage",
+    "sessionstorage",
 )
 _SENSITIVE_AUTH_PATTERNS: tuple[str, ...] = ("auth_header", "authorization", "auth_token", "authtoken")
 _SENSITIVE_CDP_PATTERNS: tuple[str, ...] = ("cdp", "chrome_devtools_protocol", "raw_cdp")
@@ -302,7 +328,14 @@ _SENSITIVE_UPLOAD_PATTERNS: tuple[str, ...] = ("upload", "file_path", "filepath"
 _SENSITIVE_DOWNLOAD_PATTERNS: tuple[str, ...] = ("download", "save_path", "savepath", "download_path", "downloadpath")
 _SENSITIVE_CLIPBOARD_PATTERNS: tuple[str, ...] = ("clipboard",)
 _SENSITIVE_PASSWORD_PATTERNS: tuple[str, ...] = (
-    "password", "passwd", "secret", "credential", "api_key", "apikey", "access_token", "accesstoken",
+    "password",
+    "passwd",
+    "secret",
+    "credential",
+    "api_key",
+    "apikey",
+    "access_token",
+    "accesstoken",
 )
 _SENSITIVE_INTERCEPT_PATTERNS: tuple[str, ...] = ("intercept", "mock_network", "route_intercept")
 
@@ -312,22 +345,24 @@ _URL_ARGUMENT_KEYS: tuple[str, ...] = ("url", "href", "target", "uri", "pageUrl"
 
 # ─── Redaction patterns for query values ──────────────────────────────────────
 
-_REDACT_QUERY_KEYS: frozenset[str] = frozenset({
-    "token",
-    "key",
-    "secret",
-    "session",
-    "code",
-    "access_token",
-    "refresh_token",
-    "auth",
-    "authorization",
-    "password",
-    "passwd",
-    "credential",
-    "api_key",
-    "apikey",
-})
+_REDACT_QUERY_KEYS: frozenset[str] = frozenset(
+    {
+        "token",
+        "key",
+        "secret",
+        "session",
+        "code",
+        "access_token",
+        "refresh_token",
+        "auth",
+        "authorization",
+        "password",
+        "passwd",
+        "credential",
+        "api_key",
+        "apikey",
+    }
+)
 
 # ─── Server name detection ────────────────────────────────────────────────────
 
@@ -415,9 +450,8 @@ def is_browser_mcp_server(artifact: GuardArtifact) -> bool:
         # If the tool name itself contains browser markers, still require
         # some server-level signal to avoid false positives.
         tool_name = str(artifact.command or artifact.name).lower()
-        if (
-            any(marker in tool_name for marker in ("browser_", "navigate", "screenshot", "snapshot", "page"))
-            and any(pattern in combined for pattern in ("browser", "chrome", "playwright", "devtools", "puppeteer"))
+        if any(marker in tool_name for marker in ("browser_", "navigate", "screenshot", "snapshot", "page")) and any(
+            pattern in combined for pattern in ("browser", "chrome", "playwright", "devtools", "puppeteer")
         ):
             return True
 
@@ -642,9 +676,13 @@ def _classify_operation(operation: str, server_name: str) -> BrowserIntent | Non
 
     is_chrome = bool(re.search(r"chrome[\-_\s]?devtools", server_lower, re.IGNORECASE))
     is_playwright = bool(re.search(r"@playwright/mcp|playwright", server_lower, re.IGNORECASE))
-    is_browser_server = is_chrome or is_playwright or bool(
-        re.search(r"browser[\-_\s]?(tools|mcp)", server_lower, re.IGNORECASE)
-        or re.search(r"puppeteer", server_lower, re.IGNORECASE)
+    is_browser_server = (
+        is_chrome
+        or is_playwright
+        or bool(
+            re.search(r"browser[\-_\s]?(tools|mcp)", server_lower, re.IGNORECASE)
+            or re.search(r"puppeteer", server_lower, re.IGNORECASE)
+        )
     )
 
     # Chrome DevTools explicit tables
@@ -792,10 +830,7 @@ def _collect_volatile_fields(mapping: Mapping[str, object] | None) -> tuple[str,
     """Collect volatile field names present in arguments."""
     if mapping is None:
         return ()
-    return tuple(
-        key for key in mapping
-        if isinstance(key, str) and key in _VOLATILE_FIELDS
-    )
+    return tuple(key for key in mapping if isinstance(key, str) and key in _VOLATILE_FIELDS)
 
 
 def _intent_to_method(intent: BrowserIntent) -> BrowserMethod:

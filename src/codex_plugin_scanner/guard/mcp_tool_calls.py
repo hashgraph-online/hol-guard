@@ -190,19 +190,20 @@ def tool_call_risk_signals(artifact: GuardArtifact, arguments: object) -> tuple[
     }
     if browser_intent is not None:
         target = browser_intent.target_domain or browser_intent.target_origin or "unknown target"
-        signals_by_category.update({
-            "browser_navigation": f"browser navigation to {target}",
-            "browser_inspection": f"browser inspection of {target}",
-            "browser_interaction": f"browser interaction on {target}",
-            "browser_transfer": f"browser file transfer involving {target}",
-            "browser_privileged": f"privileged browser access to {target}",
-            "browser_external_domain": f"first navigation to external domain {target}",
-            "browser_shared_profile": "browser MCP uses a shared or remote-debugging profile",
-            "browser_sensitive_surface": (
-            "browser action touches sensitive surfaces: "
-            + ", ".join(browser_intent.sensitive_surface_flags)
-        ),
-        })
+        signals_by_category.update(
+            {
+                "browser_navigation": f"browser navigation to {target}",
+                "browser_inspection": f"browser inspection of {target}",
+                "browser_interaction": f"browser interaction on {target}",
+                "browser_transfer": f"browser file transfer involving {target}",
+                "browser_privileged": f"privileged browser access to {target}",
+                "browser_external_domain": f"first navigation to external domain {target}",
+                "browser_shared_profile": "browser MCP uses a shared or remote-debugging profile",
+                "browser_sensitive_surface": (
+                    "browser action touches sensitive surfaces: " + ", ".join(browser_intent.sensitive_surface_flags)
+                ),
+            }
+        )
     return tuple(signals_by_category[category] for category in tool_call_risk_categories(artifact, arguments))
 
 
@@ -249,13 +250,16 @@ def _tool_call_risk_category_set(artifact: GuardArtifact, arguments: object) -> 
         categories.add("destructive_mutation")
     if len(tool_name_tokens.intersection({"shell", "bash", "exec", "execute", "command", "powershell"})) > 0:
         categories.add("command_execution")
-    if _matches_any(
-        combined,
-        (
-            r"https?://",
-            _token_pattern("curl", "wget", "fetch", "axios", "requests"),
-        ),
-    ) and not is_browser_navigation:
+    if (
+        _matches_any(
+            combined,
+            (
+                r"https?://",
+                _token_pattern("curl", "wget", "fetch", "axios", "requests"),
+            ),
+        )
+        and not is_browser_navigation
+    ):
         # Browser navigation intent suppresses generic outbound_network;
         # browser-specific categories below capture the actual risk surface.
         categories.add("outbound_network")
@@ -289,7 +293,9 @@ def _tool_call_risk_category_set(artifact: GuardArtifact, arguments: object) -> 
             categories.discard("outbound_network")
             # External domain = public and not localhost/loopback
             if browser_intent.target_domain and browser_intent.target_domain not in (
-                "localhost", "127.0.0.1", "::1",
+                "localhost",
+                "127.0.0.1",
+                "::1",
             ):
                 categories.add("browser_external_domain")
         elif browser_intent.intent == "browser.inspect":

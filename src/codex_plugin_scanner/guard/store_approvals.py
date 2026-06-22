@@ -96,6 +96,7 @@ def _build_queue_group_id(
     browser_identity_hash = None
     if browser_intent is not None:
         from .runtime.action_identity import normalize_browser_mcp_identity
+
         browser_identity_hash = normalize_browser_mcp_identity(browser_intent)
     payload = json.dumps(
         {
