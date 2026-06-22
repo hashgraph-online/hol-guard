@@ -551,6 +551,13 @@ def _broad_runtime_exact_match_key(request: Mapping[str, object], scope: str) ->
     return _runtime_scoped_exact_match_key(artifact_id)
 
 
+def _extract_surface_flags(browser_intent: Mapping[str, object]) -> list[str] | None:
+    raw = browser_intent.get("sensitive_surface_flags")
+    if isinstance(raw, (list, tuple)):
+        return [str(f) for f in raw]
+    return None
+
+
 def _browser_mcp_exact_match_key(request: Mapping[str, object], scope: str) -> str | None:
     """Build a browser MCP exact-match key for tool_call artifacts with browser intent.
 
@@ -575,9 +582,7 @@ def _browser_mcp_exact_match_key(request: Mapping[str, object], scope: str) -> s
         mcp_server_identity_hash=_string_or_none(browser_intent.get("mcp_server_identity_hash")),
         mcp_tool_identity_hash=_string_or_none(browser_intent.get("mcp_tool_identity_hash")),
         mcp_schema_hash=_string_or_none(browser_intent.get("mcp_schema_hash")),
-        sensitive_surface_flags=[str(f) for f in browser_intent.get("sensitive_surface_flags")]
-        if isinstance(browser_intent.get("sensitive_surface_flags"), (list, tuple))
-        else None,
+        sensitive_surface_flags=_extract_surface_flags(browser_intent),
     )
     return _runtime_scoped_exact_match_key(artifact_id, context) if context else None
 
