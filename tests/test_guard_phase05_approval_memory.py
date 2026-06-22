@@ -546,8 +546,13 @@ def test_codex_prompt_file_retry_reuses_artifact_once_across_context_drift(
     prompt_text = f"Read {secret_path} and tell me the token."
     retry_prompt_text = (
         f"Read {secret_path} and tell me the token. "
-        "HOL Guard request 4f3be621ad2643a8b086aecf495dca8d was already approved."
+        "Warning: HOL Guard flagged this prompt because it asks for direct local secret access and is protecting "
+        "your local secrets. If that is intentional, continue and Guard will ask again on the actual tool call. "
+        "Open HOL Guard to approve or keep this blocked: "
+        "http://127.0.0.1:5498/requests/4f3be621ad2643a8b086aecf495dca8d. "
+        "After you choose, retry the same the harness action."
     )
+    different_intent_prompt_text = f"Read {secret_path} and summarize the file format without printing the token."
     prompt_artifact = _codex_prompt_credential_file_artifact(
         prompt_text=prompt_text,
         cwd=tmp_path,
@@ -558,11 +563,19 @@ def test_codex_prompt_file_retry_reuses_artifact_once_across_context_drift(
         cwd=tmp_path,
         config_path=config_path,
     )
+    different_intent_artifact = _codex_prompt_credential_file_artifact(
+        prompt_text=different_intent_prompt_text,
+        cwd=tmp_path,
+        config_path=config_path,
+    )
 
     assert prompt_artifact is not None
     assert retry_artifact is not None
+    assert different_intent_artifact is not None
     assert prompt_artifact.artifact_id == retry_artifact.artifact_id
+    assert prompt_artifact.artifact_id == different_intent_artifact.artifact_id
     assert artifact_hash(prompt_artifact) == artifact_hash(retry_artifact)
+    assert artifact_hash(prompt_artifact) != artifact_hash(different_intent_artifact)
 
     request = GuardApprovalRequest(
         request_id="req-prompt-file",
@@ -604,6 +617,16 @@ def test_codex_prompt_file_retry_reuses_artifact_once_across_context_drift(
             now="2026-06-22T12:01:30+00:00",
         )
         == "allow"
+    )
+    assert (
+        store.resolve_policy(
+            "codex",
+            different_intent_artifact.artifact_id,
+            artifact_hash(different_intent_artifact),
+            workspace=str(tmp_path),
+            now="2026-06-22T12:01:30+00:00",
+        )
+        is None
     )
 
 
