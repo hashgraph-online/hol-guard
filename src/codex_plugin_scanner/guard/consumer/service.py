@@ -105,14 +105,17 @@ def _serialize_artifact(artifact: GuardArtifact) -> dict[str, object]:
 def _hash_payload(artifact: GuardArtifact) -> dict[str, object]:
     payload = artifact.to_dict()
     metadata = artifact.metadata
-    if artifact.artifact_type == "prompt_request" and isinstance(metadata.get("normalized_path"), str):
+    if (
+        isinstance(metadata, dict)
+        and artifact.artifact_type == "prompt_request"
+        and isinstance(metadata.get("normalized_path"), str)
+    ):
         metadata = {
             key: value
             for key, value in metadata.items()
             if key not in _PROMPT_FILE_HASH_VOLATILE_METADATA_KEYS
         }
     payload["metadata"] = metadata
-    metadata = payload.get("metadata")
     payload["env_keys"] = metadata.get("env_keys", []) if isinstance(metadata, dict) else []
     return payload
 
