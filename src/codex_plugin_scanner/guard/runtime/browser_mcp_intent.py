@@ -773,19 +773,32 @@ def _detect_sensitive_surfaces(
 
 
 def _extract_schema_keys(schema: Mapping[str, object]) -> list[str]:
-    """Extract property key names from a JSON schema."""
-    keys: list[str] = []
+    """Extract property key names from a JSON schema.
 
-    def _walk(obj: object) -> None:
+    Bounds recursion depth and tracks visited object ids to prevent
+    unbounded traversal on malicious or cyclic schema input.
+    """
+    keys: list[str] = []
+    _max_depth = 20
+
+    def _walk(obj: object, depth: int = 0, visited: set[int] | None = None) -> None:
+        if depth > _max_depth:
+            return
+        if visited is None:
+            visited = set()
+        obj_id = id(obj)
+        if obj_id in visited:
+            return
+        visited.add(obj_id)
         if isinstance(obj, Mapping):
             props = obj.get("properties")
             if isinstance(props, Mapping):
                 keys.extend(str(k) for k in props)
             for value in obj.values():
-                _walk(value)
+                _walk(value, depth + 1, visited)
         elif isinstance(obj, list):
             for item in obj:
-                _walk(item)
+                _walk(item, depth + 1, visited)
 
     _walk(schema)
     return keys
