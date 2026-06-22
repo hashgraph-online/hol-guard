@@ -408,6 +408,21 @@ _PROMPT_CONTENT_SCAN_SECRET_BASENAME_MARKERS = frozenset(
         "token",
     }
 )
+_CODEX_PROMPT_RETRY_BOILERPLATE_PATTERNS = (
+    re.compile(
+        r"Warning:\s*HOL Guard flagged this prompt because it asks for direct local secret access and is protecting "
+        r"your local secrets\. If that is intentional, continue and Guard will ask again on the actual tool call\. "
+        r"Open HOL Guard to approve or keep this blocked:\s*\S+\. After you choose, retry the same the harness action\.?",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"HOL Guard stopped this Codex prompt before Codex could open (?:a credential-looking local file|a sensitive "
+        r"local file)\. Codex does not expose native approval prompts for Read-tool file reads, so Guard blocks this "
+        r"request at prompt time\. Open HOL Guard to approve or keep this blocked:\s*\S+\. After you choose, retry "
+        r"the same Codex action\.?",
+        re.IGNORECASE,
+    ),
+)
 
 
 def _codex_prompt_credential_file_artifact(
@@ -448,6 +463,7 @@ def _codex_prompt_credential_file_artifact(
             ).encode("utf-8")
         ).hexdigest()[:_CODEX_PROMPT_FILE_FINGERPRINT_LENGTH]
         prompt_display = _codex_prompt_display_text(prompt_text, requested_path=requested_path)
+        prompt_intent_hash = hashlib.sha256(_codex_prompt_intent_text(prompt_text).encode("utf-8")).hexdigest()
         return GuardArtifact(
             artifact_id=f"codex:project:prompt-file:{fingerprint}",
             name=f"credential-looking local file {path.name}",
@@ -459,6 +475,7 @@ def _codex_prompt_credential_file_artifact(
                 "prompt_signals": ["requested file content contains credential-looking material"],
                 "prompt_summary": "Prompt asks Codex to read a credential-looking local file.",
                 "prompt_matched_text": requested_path,
+                "prompt_intent_hash": prompt_intent_hash,
                 "prompt_display_text": prompt_display,
                 "prompt_request_class": "secret_read",
                 "prompt_request_classes": ["secret_read"],
@@ -499,6 +516,13 @@ def _codex_prompt_display_text(prompt_text: str, *, requested_path: str | None =
     if requested_path is not None and requested_path.strip():
         path_suffix = f" for `{_sanitize_codex_display_text(requested_path.strip())}`"
     return f"Codex prompt{path_suffix}: {_truncate_codex_display_text(sanitized_prompt, limit=320)}"
+
+
+def _codex_prompt_intent_text(prompt_text: str) -> str:
+    normalized = _sanitize_codex_display_text(prompt_text)
+    for pattern in _CODEX_PROMPT_RETRY_BOILERPLATE_PATTERNS:
+        normalized = pattern.sub(" ", normalized)
+    return " ".join(normalized.split())
 
 
 def _sanitize_codex_display_text(value: str) -> str:

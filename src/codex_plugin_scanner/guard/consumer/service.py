@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
@@ -61,18 +60,6 @@ _PROMPT_FILE_HASH_VOLATILE_METADATA_KEYS = frozenset(
         "runtime_request_reason",
         "runtime_request_summary",
     }
-)
-_PROMPT_FILE_HASH_INTENT_KEYS = ("prompt_display_text", "request_summary", "runtime_request_summary")
-_PROMPT_FILE_RETRY_BOILERPLATE_PATTERNS = (
-    re.compile(
-        r"\s+warning:\s*hol guard flagged this prompt because.*$",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"\s+hol guard stopped this codex prompt before codex could open.*$",
-        re.IGNORECASE,
-    ),
-    re.compile(r"hol guard request [0-9a-f]{32} was already approved\.?", re.IGNORECASE),
 )
 
 
@@ -133,28 +120,14 @@ def _hash_payload(artifact: GuardArtifact) -> dict[str, object]:
             if isinstance(redacted_metadata, dict)
             else {}
         )
-        prompt_intent_text = _normalized_prompt_file_hash_intent(payload.get("metadata"))
-        if prompt_intent_text is not None:
-            metadata["prompt_intent_text"] = prompt_intent_text
+        prompt_intent_hash = (
+            redacted_metadata.get("prompt_intent_hash") if isinstance(redacted_metadata, dict) else None
+        )
+        if isinstance(prompt_intent_hash, str) and prompt_intent_hash.strip():
+            metadata["prompt_intent_hash"] = prompt_intent_hash.strip()
     payload["metadata"] = metadata
     payload["env_keys"] = metadata.get("env_keys", []) if isinstance(metadata, dict) else []
     return payload
-
-
-def _normalized_prompt_file_hash_intent(metadata: object) -> str | None:
-    if not isinstance(metadata, Mapping):
-        return None
-    for key in _PROMPT_FILE_HASH_INTENT_KEYS:
-        value = metadata.get(key)
-        if not isinstance(value, str) or not value.strip():
-            continue
-        normalized = value.strip()
-        for pattern in _PROMPT_FILE_RETRY_BOILERPLATE_PATTERNS:
-            normalized = pattern.sub("", normalized)
-        normalized = " ".join(normalized.split())
-        if normalized:
-            return normalized
-    return None
 
 
 def artifact_hash(artifact: GuardArtifact) -> str:
