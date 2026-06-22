@@ -85,3 +85,34 @@ def normalize_mcp_identity(call: dict[str, object]) -> str:
     )
     identity_source = f"{server_id}:{tool_name}:{stable_args}:{schema_hash}"
     return hashlib.sha256(identity_source.encode("utf-8")).hexdigest()
+
+
+def normalize_browser_mcp_identity(call: dict[str, object]) -> str:
+    """Return a stable identity hash for a browser MCP tool call.
+
+    Uses browser-aware fields: server identity, tool identity, intent,
+    operation, origin, path prefix, profile mode, sensitive flags, and
+    schema hash. Volatile fields (timeout, pageId, etc.) are dropped.
+
+    Returns a hex digest suitable for equality comparison.
+    """
+    server_id = str(call.get("server_id", call.get("server_identity_hash", "")))
+    tool_name = str(call.get("tool_name", call.get("operation", "")))
+    intent = str(call.get("intent", ""))
+    operation = str(call.get("operation", tool_name))
+    target_origin = str(call.get("target_origin", ""))
+    target_path_prefix = str(call.get("target_path_prefix", ""))
+    profile_mode = str(call.get("profile_mode", ""))
+    schema_hash = str(call.get("schema_hash", call.get("mcp_schema_hash", "")))
+    sensitive_flags = call.get("sensitive_surface_flags") or ()
+    if isinstance(sensitive_flags, (list, tuple)):
+        sensitive_flags_str = ",".join(sorted(str(f) for f in sensitive_flags))
+    else:
+        sensitive_flags_str = str(sensitive_flags)
+
+    identity_source = (
+        f"{server_id}:{tool_name}:{intent}:{operation}:"
+        + f"{target_origin}:{target_path_prefix}:{profile_mode}:"
+        + f"{schema_hash}:{sensitive_flags_str}"
+    )
+    return hashlib.sha256(identity_source.encode("utf-8")).hexdigest()

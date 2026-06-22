@@ -178,6 +178,7 @@ class GuardReceipt:
     approval_source: str | None = None
     approval_request_id: str | None = None
     scanner_evidence: tuple[dict[str, object], ...] = ()
+    browser_intent: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
@@ -223,6 +224,7 @@ class GuardApprovalRequest:
     dedupe_count: int = 1
     last_seen_at: str | None = None
     scanner_evidence: tuple[dict[str, object], ...] = ()
+    browser_intent: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
