@@ -51,6 +51,16 @@ _GUARD_VERDICT_ACTION_VALUES: tuple[GuardVerdictAction, ...] = (
     "sandbox_required",
 )
 _REVIEW_PRIORITY_VALUES: tuple[ReviewPriority, ...] = ("low", "medium", "high", "critical")
+_PROMPT_FILE_HASH_VOLATILE_METADATA_KEYS = frozenset(
+    {
+        "prompt_display_text",
+        "prompt_matched_text",
+        "prompt_signals",
+        "request_summary",
+        "runtime_request_reason",
+        "runtime_request_summary",
+    }
+)
 
 
 class ArtifactDiff(TypedDict):
@@ -94,8 +104,28 @@ def _serialize_artifact(artifact: GuardArtifact) -> dict[str, object]:
 
 def _hash_payload(artifact: GuardArtifact) -> dict[str, object]:
     payload = artifact.to_dict()
-    payload["metadata"] = artifact.metadata
-    metadata = payload.get("metadata")
+    metadata = artifact.metadata
+    if (
+        isinstance(metadata, dict)
+        and artifact.artifact_type == "prompt_request"
+        and isinstance(metadata.get("normalized_path"), str)
+    ):
+        redacted_metadata = payload.get("metadata")
+        metadata = (
+            {
+                key: value
+                for key, value in redacted_metadata.items()
+                if key not in _PROMPT_FILE_HASH_VOLATILE_METADATA_KEYS
+            }
+            if isinstance(redacted_metadata, dict)
+            else {}
+        )
+        prompt_intent_hash = (
+            redacted_metadata.get("prompt_intent_hash") if isinstance(redacted_metadata, dict) else None
+        )
+        if isinstance(prompt_intent_hash, str) and prompt_intent_hash.strip():
+            metadata["prompt_intent_hash"] = prompt_intent_hash.strip()
+    payload["metadata"] = metadata
     payload["env_keys"] = metadata.get("env_keys", []) if isinstance(metadata, dict) else []
     return payload
 
