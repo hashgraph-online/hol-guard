@@ -39,7 +39,17 @@ _POLICY_BUNDLE_RULE_ACTIONS = frozenset({"allow", "block", "review", "ignore"})
 _POLICY_BUNDLE_ROLLOUT_STATES = frozenset(
     {"draft", "simulated", "pending_approval", "enforcing", "enforced", "rollback_available"}
 )
-_POLICY_BUNDLE_SCOPE_KEYS = frozenset(
+_POLICY_BUNDLE_BROWSER_SCOPE_KEYS = frozenset(
+    {
+        "browserIntent",
+        "browserOperation",
+        "browserProfile",
+        "origin",
+        "pathPrefix",
+        "sensitiveSurface",
+    }
+)
+_POLICY_BUNDLE_SCOPE_KEYS = _POLICY_BUNDLE_BROWSER_SCOPE_KEYS | frozenset(
     {
         "agents",
         "devices",
@@ -47,12 +57,6 @@ _POLICY_BUNDLE_SCOPE_KEYS = frozenset(
         "environments",
         "harnesses",
         "locations",
-        "browserIntent",
-        "browserOperation",
-        "browserProfile",
-        "origin",
-        "pathPrefix",
-        "sensitiveSurface",
     }
 )
 _VALID_BROWSER_INTENTS = frozenset(
@@ -370,3 +374,4 @@ non_empty_string = _non_empty_string
 POLICY_BUNDLE_DEFAULT_ENVIRONMENTS = _POLICY_BUNDLE_DEFAULT_ENVIRONMENTS
 POLICY_BUNDLE_RULE_ACTIONS = _POLICY_BUNDLE_RULE_ACTIONS
 POLICY_BUNDLE_RULE_MATCHER_FAMILIES = _POLICY_BUNDLE_RULE_MATCHER_FAMILIES
+POLICY_BUNDLE_BROWSER_SCOPE_KEYS = _POLICY_BUNDLE_BROWSER_SCOPE_KEYS
