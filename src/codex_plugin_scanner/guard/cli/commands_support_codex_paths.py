@@ -412,7 +412,8 @@ _CODEX_PROMPT_RETRY_BOILERPLATE_PATTERNS = (
     re.compile(
         r"Warning:\s*HOL Guard flagged this prompt because it asks for direct local secret access and is protecting "
         r"your local secrets\. If that is intentional, continue and Guard will ask again on the actual tool call\. "
-        r"Open HOL Guard to approve or keep this blocked:\s*\S+\. After you choose, retry the same the harness action\.?",
+        r"Open HOL Guard to approve or keep this blocked:\s*\S+\. "
+        r"After you choose, retry the same the harness action\.?",
         re.IGNORECASE,
     ),
     re.compile(
