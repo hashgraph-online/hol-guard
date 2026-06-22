@@ -9,6 +9,7 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution, queue_blocked_approvals
+from codex_plugin_scanner.guard.cli.commands_support_codex_paths import _codex_prompt_credential_file_artifact
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, HarnessDetection, PolicyDecision
@@ -531,6 +532,79 @@ def test_gr101_gr102_resolved_allow_and_block_persist_exact_action_policy(
     assert store.resolve_policy("codex", allow_request.artifact_id, "hash-allow") == "allow"
     assert store.resolve_policy("codex", block_request.artifact_id, "hash-block") == "block"
     assert store.resolve_policy("codex", allow_request.artifact_id, "hash-changed") is None
+
+
+def test_codex_prompt_file_retry_reuses_artifact_once_across_context_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _trust_local_policy_rows(monkeypatch)
+    store = _store(tmp_path)
+    secret_path = tmp_path / ".auth-token"
+    secret_path.write_text('API_TOKEN="ABCDEFGHIJKLMNOPQRSTUVWX"\n', encoding="utf-8")
+    config_path = str(tmp_path / ".codex" / "config.toml")
+    prompt_text = f"Read {secret_path} and tell me the token."
+    retry_prompt_text = (
+        f"Read {secret_path} and tell me the token. "
+        "HOL Guard request 4f3be621ad2643a8b086aecf495dca8d was already approved."
+    )
+    prompt_artifact = _codex_prompt_credential_file_artifact(
+        prompt_text=prompt_text,
+        cwd=tmp_path,
+        config_path=config_path,
+    )
+    retry_artifact = _codex_prompt_credential_file_artifact(
+        prompt_text=retry_prompt_text,
+        cwd=tmp_path,
+        config_path=config_path,
+    )
+
+    assert prompt_artifact is not None
+    assert retry_artifact is not None
+    assert prompt_artifact.artifact_id == retry_artifact.artifact_id
+    assert artifact_hash(prompt_artifact) == artifact_hash(retry_artifact)
+
+    request = GuardApprovalRequest(
+        request_id="req-prompt-file",
+        harness="codex",
+        artifact_id=prompt_artifact.artifact_id,
+        artifact_name=prompt_artifact.name,
+        artifact_type="prompt_request",
+        artifact_hash=artifact_hash(prompt_artifact),
+        publisher=None,
+        policy_action="require-reapproval",
+        recommended_scope="artifact",
+        changed_fields=("prompt_request",),
+        source_scope=prompt_artifact.source_scope,
+        config_path=prompt_artifact.config_path,
+        workspace=str(tmp_path),
+        launch_target=str(secret_path),
+        review_command="hol-guard approvals approve req-prompt-file",
+        approval_url="http://127.0.0.1:5474/approvals/req-prompt-file",
+        action_envelope_json=None,
+    )
+    store.add_approval_request(request, "2026-06-22T12:00:00+00:00")
+
+    apply_approval_resolution(
+        store=store,
+        request_id=request.request_id,
+        action="allow",
+        scope="artifact",
+        workspace=request.workspace,
+        reason="approved prompt retry",
+        now="2026-06-22T12:01:00+00:00",
+    )
+
+    assert (
+        store.resolve_policy(
+            "codex",
+            retry_artifact.artifact_id,
+            artifact_hash(retry_artifact),
+            workspace=str(tmp_path),
+            now="2026-06-22T12:01:30+00:00",
+        )
+        == "allow"
+    )
 
 
 def test_gr106_gr110_queue_preserves_card_context_and_scanner_evidence(tmp_path: Path) -> None:
