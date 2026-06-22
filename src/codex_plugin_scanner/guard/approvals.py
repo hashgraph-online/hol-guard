@@ -575,7 +575,7 @@ def _browser_mcp_exact_match_key(request: Mapping[str, object], scope: str) -> s
         mcp_server_identity_hash=_string_or_none(browser_intent.get("mcp_server_identity_hash")),
         mcp_tool_identity_hash=_string_or_none(browser_intent.get("mcp_tool_identity_hash")),
         mcp_schema_hash=_string_or_none(browser_intent.get("mcp_schema_hash")),
-        sensitive_surface_flags=list(browser_intent.get("sensitive_surface_flags"))
+        sensitive_surface_flags=[str(f) for f in browser_intent.get("sensitive_surface_flags")]
         if isinstance(browser_intent.get("sensitive_surface_flags"), (list, tuple))
         else None,
     )
