@@ -681,7 +681,7 @@ def test_oauth_secret_store_rechecks_stale_macos_health_cache_for_login(tmp_path
     assert isinstance(secret_store.fallback, EncryptedFileSecretStore)
 
 
-def test_macos_oauth_write_rejects_unreadable_keychain_secret(
+def test_macos_oauth_write_accepts_encrypted_fallback_when_keychain_readback_fails(
     tmp_path,
     monkeypatch,
 ):
@@ -691,26 +691,28 @@ def test_macos_oauth_write_rejects_unreadable_keychain_secret(
     monkeypatch.setattr(SystemKeyringSecretStore, "get_secret_with_timeout", lambda *args, **kwargs: None)
     store = GuardStore(guard_home)
 
-    with pytest.raises(RuntimeError, match="persist local Guard Cloud authorization securely"):
-        store.set_oauth_local_credentials(
-            issuer="https://hol.org",
-            client_id="guard-local-daemon",
-            refresh_token="refresh-secret-value",
-            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
-            dpop_public_jwk={
-                "kty": "EC",
-                "crv": "P-256",
-                "x": "x-value",
-                "y": "y-value",
-                "alg": "ES256",
-                "use": "sig",
-            },
-            dpop_public_jwk_thumbprint="thumbprint-123",
-            now="2026-06-01T00:00:00+00:00",
-        )
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----[REDACTED:Private key block]\n",
+        dpop_public_jwk={
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "x-value",
+            "y": "y-value",
+            "alg": "ES256",
+            "use": "sig",
+        },
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
 
-    assert store.get_sync_payload(guard_store_module._OAUTH_LOCAL_CREDENTIALS_STATE_KEY) is None
-    assert store.get_oauth_local_credentials() is None
+    payload = store.get_sync_payload(guard_store_module._OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+    assert isinstance(payload, dict)
+    credentials = store.get_oauth_local_credentials()
+    assert credentials is not None
+    assert credentials["refresh_token"] == "refresh-secret-value"
 
 
 def test_oauth_health_uses_no_ui_primary_read_for_macos_keychain_only_store(tmp_path, monkeypatch):
