@@ -792,7 +792,7 @@ def _copy_guard_database(*, source: Path, destination: Path) -> None:
 def _prune_retired_guard_db_sync_state(database_path: Path) -> None:
     try:
         with sqlite3.connect(database_path) as connection:
-            connection.execute("delete from sync_state where state_key in ('credentials', 'oauth_local_credentials')")
+            connection.execute("delete from sync_state where state_key = 'credentials'")
     except sqlite3.Error:
         return
 

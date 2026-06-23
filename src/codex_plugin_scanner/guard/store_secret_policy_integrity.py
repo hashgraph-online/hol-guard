@@ -116,6 +116,10 @@ class StoreSecretPolicyIntegrityMixin:
                     return
                 if self._oauth_primary_direct_test_reads_are_safe() and primary.get_secret(secret_id) == value:
                     return
+                if isinstance(secret_store.fallback, EncryptedFileSecretStore):
+                    fallback_value = self._get_secret_from_store(secret_store.fallback, secret_id)
+                    if fallback_value == value:
+                        return
                 raise RuntimeError("Guard could not persist local Guard Cloud authorization securely.")
         if isinstance(secret_store, UnavailableSecretStore):
             raise RuntimeError(

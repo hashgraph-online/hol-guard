@@ -1565,6 +1565,38 @@ def test_get_oauth_local_credentials_backfills_encrypted_fallback_for_legacy_key
     assert headless_store.get_oauth_local_credentials(allow_primary=False) is not None
 
 
+def test_get_oauth_local_credentials_uses_encrypted_fallback_on_macos_when_primary_reads_are_blocked(
+    tmp_path,
+    monkeypatch,
+):
+    fake_keyring = _install_fake_system_keyring(monkeypatch)
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    monkeypatch.setattr(SystemKeyringSecretStore, "_macos_default_keychain_is_usable", classmethod(lambda cls: True))
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----[REDACTED:Private key block]\\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    assert isinstance(store._oauth_secret_store, FallbackSecretStore)
+    secret_id = store._oauth_local_credentials_ref
+    assert isinstance(store._oauth_secret_store.fallback.get_secret(secret_id), str)
+    fake_keyring.delete_password("hol-guard.oauth", secret_id)
+    monkeypatch.setattr(store._oauth_secret_store.primary, "get_secret_with_timeout", lambda *_args, **_kwargs: None)
+
+    credentials = store.get_oauth_local_credentials(allow_primary=False)
+
+    assert credentials is not None
+    assert credentials["workspace_id"] == "workspace-123"
+
+
 def test_get_oauth_local_credential_health_avoids_primary_keychain_reads(tmp_path, monkeypatch):
     _install_fake_system_keyring(monkeypatch)
     monkeypatch.setattr(guard_store_module.sys, "platform", "linux", raising=False)
