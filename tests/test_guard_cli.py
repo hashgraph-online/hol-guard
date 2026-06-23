@@ -9095,12 +9095,12 @@ url = http://127.0.0.1:8787/guard-canary
         store = GuardStore(home_dir)
         _seed_guard_cloud(store)
 
-        def _fail_auth(_store: GuardStore) -> dict[str, object]:
+        def _fail_auth(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
             raise guard_commands_module.GuardSyncAuthorizationExpiredError(
                 "Guard authorization expired. Run `hol-guard connect` to sign in again."
             )
 
-        monkeypatch.setattr(guard_commands_module, "_resolve_guard_sync_auth_context", _fail_auth)
+        monkeypatch.setattr(guard_commands_module, "sync_supply_chain_bundle", _fail_auth)
 
         guard_commands_module._refresh_cloud_policy_bundle(store, bundle_only=True)
 
