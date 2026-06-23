@@ -73,10 +73,10 @@ export function resolveActionTitle(receipt: GuardReceipt): string {
     return truncate(targetPath, 80);
   }
 
-  // Prompt: show excerpt
-  const promptExcerpt = envelope?.prompt_excerpt?.trim();
-  if (type === "Prompt" && promptExcerpt && promptExcerpt.length > 0) {
-    return truncate(promptExcerpt, 80);
+  // Prompt: show full text (prefer prompt_text, fall back to excerpt)
+  const promptText = (envelope?.prompt_text ?? envelope?.prompt_excerpt)?.trim();
+  if (type === "Prompt" && promptText && promptText.length > 0) {
+    return truncate(promptText, 80);
   }
 
   // Network: show host

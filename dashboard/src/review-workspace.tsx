@@ -954,7 +954,7 @@ function queueItemPreview(item: GuardApprovalRequest): string {
   return (
     envelope?.command ??
     envelope?.mcp_tool ??
-    envelope?.prompt_excerpt ??
+    (envelope?.prompt_text ?? envelope?.prompt_excerpt) ??
     envelope?.package_name ??
     displayArtifactName(item)
   );
