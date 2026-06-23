@@ -2043,7 +2043,7 @@ def _unknown_package_result(target: dict[str, object]) -> dict[str, object]:
                 "code": "unidentified_package",
                 "message": (
                     f"Guard could not resolve registry metadata for {target['name']} "
-                    f"in the {ecosystem} ecosystem; approval is required before install."
+                    f"in the {target['ecosystem']} ecosystem; approval is required before install."
                 ),
                 "severity": "medium",
                 "source": "guard-local",

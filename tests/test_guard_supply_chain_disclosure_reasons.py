@@ -221,6 +221,29 @@ def test_unidentified_package_reason_absent_for_unsupported_ecosystem(tmp_path: 
         for package in result.packages
         for reason in package["reasons"]
     )
+
+
+def test_unknown_package_result_directly_skips_unidentified_for_unsupported() -> None:
+    """Directly test _unknown_package_result does not emit unidentified_package for unsupported ecosystem."""
+    from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import _unknown_package_result
+
+    target = {"ecosystem": "unsupported", "name": "some-pkg", "namespace": None}
+    result = _unknown_package_result(target)
+    codes = [reason["code"] for reason in result["reasons"]]
+    assert "no_cached_match" in codes
+    assert "unidentified_package" not in codes
+
+
+def test_unknown_package_result_directly_skips_unidentified_for_system() -> None:
+    """Directly test _unknown_package_result does not emit unidentified_package for system ecosystem."""
+    from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import _unknown_package_result
+
+    target = {"ecosystem": "system", "name": "some-pkg", "namespace": None}
+    result = _unknown_package_result(target)
+    codes = [reason["code"] for reason in result["reasons"]]
+    assert "unidentified_package" not in codes
+
+
 def test_known_package_does_not_emit_unidentified_package(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
