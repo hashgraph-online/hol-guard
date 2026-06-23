@@ -409,6 +409,31 @@ def test_migrate_guard_home_state_preserves_oauth_local_credentials(tmp_path):
     assert canonical_store.get_cloud_workspace_id() == "workspace-123"
 
 
+def test_migrate_guard_home_state_replaces_retired_credentials_only_destination(tmp_path):
+    canonical_home = tmp_path / ".hol-guard"
+    legacy_home = tmp_path / ".config" / ".ai-plugin-scanner-guard"
+    canonical_store = GuardStore(canonical_home)
+    canonical_store.set_sync_payload(
+        "credentials",
+        {
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "access_token": "demo-token",
+        },
+        "2026-05-19T00:00:00Z",
+    )
+    legacy_store = GuardStore(legacy_home)
+    _seed_guard_cloud(legacy_store, workspace_id="workspace-123")
+
+    _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
+
+    migrated_store = GuardStore(canonical_home)
+    oauth_payload = migrated_store.get_sync_payload("oauth_local_credentials")
+
+    assert isinstance(oauth_payload, dict)
+    assert migrated_store.get_cloud_workspace_id() == "workspace-123"
+    assert migrated_store.get_sync_payload("credentials") is None
+
+
 def test_resolve_guard_home_does_not_migrate_retired_legacy_credentials(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     canonical_home = home_dir / ".hol-guard"
