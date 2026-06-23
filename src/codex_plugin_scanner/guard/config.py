@@ -33,6 +33,12 @@ NON_MIGRATED_GUARD_RUNTIME_FILES = frozenset(
         "guard.db-wal",
     }
 )
+GUARD_HOME_METADATA_FILES = frozenset(
+    {
+        "oauth-keychain-access.json",
+        "system-keyring-availability.json",
+    }
+)
 GUARD_DB_BACKUP_TIMEOUT_SECONDS = 5.0
 GUARD_DB_BACKUP_SLEEP_SECONDS = 0.05
 WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
@@ -837,7 +843,7 @@ def _guard_home_has_state(path: Path) -> bool:
     entries = list(path.iterdir())
     if not entries:
         return False
-    if any(entry.name != "guard.db" for entry in entries):
+    if any(entry.name not in {"guard.db", *GUARD_HOME_METADATA_FILES} for entry in entries):
         return True
     database_path = path / "guard.db"
     if not database_path.is_file():
@@ -882,7 +888,7 @@ def _guard_home_has_sync_credentials(path: Path) -> bool:
                 """
                 select 1
                 from sync_state
-                where state_key in ('credentials', 'oauth_local_credentials')
+                where state_key = 'oauth_local_credentials'
                 limit 1
                 """
             ).fetchone()
