@@ -1117,6 +1117,11 @@ def test_command_queue_loop_retries_revoked_oauth_auth_and_records_reconnect_sta
     assert waits == [1, 2, 4]
 
 
+def test_command_queue_retry_wait_clamps_zero_poll_interval_and_large_backoff_exponent() -> None:
+    assert command_queue._retry_wait_seconds(0.0, 8.0, 1) == 0.1
+    assert command_queue._retry_wait_seconds(1.0, 8.0, 10_000) == 8.0
+
+
 def test_commands_status_outputs_command_queue_state(tmp_path: Path, capsys, monkeypatch) -> None:
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)

@@ -40,6 +40,7 @@ COMMAND_QUEUE_ERROR_BACKOFF_ENV = "GUARD_CLOUD_COMMAND_QUEUE_ERROR_BACKOFF_SECON
 _DEFAULT_LEASE_WAIT_MS = 25_000
 _DEFAULT_POLL_INTERVAL_SECONDS = 2.0
 _DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
+_MIN_RETRY_WAIT_SECONDS = 0.1
 _REQUEST_TIMEOUT_SECONDS = 35
 _RETRY_TIMEOUT_SECONDS = 60
 _LOGGER = logging.getLogger(__name__)
@@ -131,6 +132,17 @@ def _load_state(store: GuardStore) -> dict[str, object]:
 
 def _save_state(store: GuardStore, payload: dict[str, object]) -> None:
     store.set_sync_payload(COMMAND_QUEUE_STATE_KEY, payload, _now())
+
+
+def _retry_wait_seconds(
+    poll_interval: float,
+    error_backoff: float,
+    error_streak: int,
+) -> float:
+    retry_base = max(poll_interval, _MIN_RETRY_WAIT_SECONDS)
+    retry_cap = max(error_backoff, _MIN_RETRY_WAIT_SECONDS)
+    retry_exponent = min(max(0, error_streak - 1), 30)
+    return min(retry_cap, retry_base * (2**retry_exponent))
 
 
 def _parse_iso8601_timestamp(value: object) -> datetime | None:
@@ -443,7 +455,7 @@ def command_queue_loop(
             error_streak = 0
             if status.get("last_poll_was_empty") is True:
                 empty_streak += 1
-                wait_seconds = min(error_backoff, poll_interval * (2 ** max(0, empty_streak - 1)))
+                wait_seconds = _retry_wait_seconds(poll_interval, error_backoff, empty_streak)
             else:
                 empty_streak = 0
         except GuardSyncAuthorizationExpiredError as error:
@@ -458,7 +470,7 @@ def command_queue_loop(
                     "last_poll_at": _now(),
                 },
             )
-            wait_seconds = min(error_backoff, poll_interval * (2 ** max(0, error_streak - 1)))
+            wait_seconds = _retry_wait_seconds(poll_interval, error_backoff, error_streak)
         except GuardSyncNotConfiguredError as error:
             empty_streak = 0
             error_streak += 1
@@ -471,7 +483,7 @@ def command_queue_loop(
                     "last_poll_at": _now(),
                 },
             )
-            wait_seconds = min(error_backoff, poll_interval * (2 ** max(0, error_streak - 1)))
+            wait_seconds = _retry_wait_seconds(poll_interval, error_backoff, error_streak)
         except Exception as error:
             empty_streak = 0
             error_streak += 1
@@ -484,7 +496,7 @@ def command_queue_loop(
                     "last_poll_at": _now(),
                 },
             )
-            wait_seconds = min(error_backoff, poll_interval * (2 ** max(0, error_streak - 1)))
+            wait_seconds = _retry_wait_seconds(poll_interval, error_backoff, error_streak)
         if stop_event.wait(wait_seconds):
             return
 
