@@ -178,7 +178,102 @@ def test_unknown_package_disclosure_reason(tmp_path: Path, monkeypatch: pytest.M
     )
 
     assert any(reason["code"] == "no_cached_match" for package in result.packages for reason in package["reasons"])
+    assert any(
+        reason["code"] == "unidentified_package"
+        for package in result.packages
+        for reason in package["reasons"]
+    )
 
+
+def test_unidentified_package_reason_fires_for_supported_ecosystem(tmp_path: Path) -> None:
+    """A supported-ecosystem package with no registry match emits unidentified_package."""
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("unresolved-npm-pkg@1.0.0"),
+        store=GuardStore(tmp_path / "home"),
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+    assert result.decision == "monitor"
+    assert len(result.packages) == 1
+    codes = [reason["code"] for reason in result.packages[0]["reasons"]]
+    assert "no_cached_match" in codes
+    assert "unidentified_package" in codes
+    unidentified = next(r for r in result.packages[0]["reasons"] if r["code"] == "unidentified_package")
+    assert unidentified["severity"] == "medium"
+
+
+def test_unidentified_package_reason_absent_for_unsupported_ecosystem(tmp_path: Path) -> None:
+    """Unsupported-ecosystem packages get unsupported_ecosystem codes, not unidentified_package."""
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    artifact = artifact_from_command_fixture(
+        "helm install ingress ingress-nginx/ingress-nginx",
+        workspace=workspace_dir,
+    )
+    result = evaluate_package_request_artifact(
+        artifact=artifact,
+        store=GuardStore(tmp_path / "home"),
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+    assert all(
+        reason["code"] != "unidentified_package"
+        for package in result.packages
+        for reason in package["reasons"]
+    )
+
+
+def test_unknown_package_result_directly_skips_unidentified_for_unsupported() -> None:
+    """Directly test _unknown_package_result does not emit unidentified_package for unsupported ecosystem."""
+    from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import _unknown_package_result
+
+    target = {"ecosystem": "unsupported", "name": "some-pkg", "namespace": None}
+    result = _unknown_package_result(target)
+    codes = [reason["code"] for reason in result["reasons"]]
+    assert "no_cached_match" in codes
+    assert "unidentified_package" not in codes
+
+
+def test_unknown_package_result_directly_skips_unidentified_for_system() -> None:
+    """Directly test _unknown_package_result does not emit unidentified_package for system ecosystem."""
+    from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import _unknown_package_result
+
+    target = {"ecosystem": "system", "name": "some-pkg", "namespace": None}
+    result = _unknown_package_result(target)
+    codes = [reason["code"] for reason in result["reasons"]]
+    assert "unidentified_package" not in codes
+
+
+def test_known_package_does_not_emit_unidentified_package(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A package with a bundle match should not emit unidentified_package."""
+    monkeypatch.setattr(GuardStore, "_assert_oauth_secret_persisted", lambda self, secret_id, value: None)
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+    bundle_response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="left-pad",
+                version="1.0.0",
+                default_action="monitor",
+            )
+        ]
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, bundle_response, "2026-05-19T00:00:00Z")
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("left-pad@1.0.0"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+    assert all(
+        reason["code"] != "unidentified_package"
+        for package in result.packages
+        for reason in package["reasons"]
+    )
 
 def test_policy_version_hash_consistency_between_cloud_request_and_local_evaluation(
     tmp_path: Path,
