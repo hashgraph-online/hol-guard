@@ -2027,6 +2027,28 @@ def _package_from_cloud_result(item: dict[str, object]) -> dict[str, object]:
 
 
 def _unknown_package_result(target: dict[str, object]) -> dict[str, object]:
+    ecosystem = _optional_string(target.get("ecosystem")) or "npm"
+    is_supported = ecosystem not in {"unsupported", "system"}
+    reasons: list[dict[str, object]] = [
+        {
+            "code": "no_cached_match",
+            "message": "Guard recorded this package request and will keep watching for new intelligence.",
+            "severity": "unknown",
+            "source": "guard-local",
+        },
+    ]
+    if is_supported:
+        reasons.append(
+            {
+                "code": "unidentified_package",
+                "message": (
+                    f"Guard could not resolve registry metadata for {target['name']} "
+                    f"in the {ecosystem} ecosystem; approval is required before install."
+                ),
+                "severity": "medium",
+                "source": "guard-local",
+            }
+        )
     return {
         "decision": "monitor",
         "ecosystem": target["ecosystem"],
@@ -2041,14 +2063,7 @@ def _unknown_package_result(target: dict[str, object]) -> dict[str, object]:
         "packageManager": _optional_string(target.get("package_manager")) or "npm",
         "redactedCommand": _optional_string(target.get("redacted_command")),
         "alias": _optional_string(target.get("alias")),
-        "reasons": (
-            {
-                "code": "no_cached_match",
-                "message": "Guard recorded this package request and will keep watching for new intelligence.",
-                "severity": "unknown",
-                "source": "guard-local",
-            },
-        ),
+        "reasons": tuple(reasons),
     }
 
 
