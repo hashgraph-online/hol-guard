@@ -421,6 +421,21 @@ const mcpItem: GuardApprovalRequest = {
 const mcpResults = searchQueue([BASE_REQUEST, shellItem, mcpItem], "filesystem");
 assert(mcpResults.length === 1, "T-QS-37: searchQueue matches MCP server name");
 assert(mcpResults[0].request_id === "req-mcp", "T-QS-38: searchQueue returns correct item for MCP server search");
+const longPromptItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-long-prompt",
+  action_envelope_json: {
+    ...shellEnvelope,
+    action_type: "prompt",
+    command: null,
+    prompt_excerpt: "Short excerpt that is truncated",
+    prompt_text: "The full prompt contains unique searchable text like zigzag-xylophone that is not in the excerpt",
+  },
+};
+
+const promptTextResults = searchQueue([BASE_REQUEST, longPromptItem], "zigzag-xylophone");
+assert(promptTextResults.length === 1, "T-QS-38a: searchQueue matches full prompt_text not just prompt_excerpt");
+assert(promptTextResults[0].request_id === "req-long-prompt", "T-QS-38b: searchQueue returns correct item for prompt_text search");
 
 assert(
   resolveStaleRequestRecovery("req-1", [BASE_REQUEST, req2]) === "req-1",
