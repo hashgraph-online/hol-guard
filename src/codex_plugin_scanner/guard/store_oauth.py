@@ -421,7 +421,8 @@ class StoreOAuthConnectMixin:
             fallback_secret_json,
             secret_hash,
         )
-        if fallback_secret_payload is not None and (not skip_fallback_first or not allow_primary):
+        prefer_primary_over_fallback = skip_fallback_first and allow_primary
+        if fallback_secret_payload is not None and not prefer_primary_over_fallback:
             self._remember_oauth_secret_payload(secret_ref, secret_hash, fallback_secret_json)
             return fallback_secret_payload
         if not allow_primary:
