@@ -394,6 +394,21 @@ def test_migrate_guard_home_state_copies_guard_db_with_sqlite_backup(tmp_path):
     assert row == ("legacy",)
 
 
+def test_migrate_guard_home_state_preserves_oauth_local_credentials(tmp_path):
+    canonical_home = tmp_path / ".hol-guard"
+    legacy_home = tmp_path / ".config" / ".ai-plugin-scanner-guard"
+    legacy_store = GuardStore(legacy_home)
+    _seed_guard_cloud(legacy_store, workspace_id="workspace-123")
+
+    _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
+
+    canonical_store = GuardStore(canonical_home)
+    oauth_payload = canonical_store.get_sync_payload("oauth_local_credentials")
+
+    assert isinstance(oauth_payload, dict)
+    assert canonical_store.get_cloud_workspace_id() == "workspace-123"
+
+
 def test_resolve_guard_home_does_not_migrate_retired_legacy_credentials(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     canonical_home = home_dir / ".hol-guard"
