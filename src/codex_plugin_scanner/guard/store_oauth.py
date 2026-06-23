@@ -417,14 +417,14 @@ class StoreOAuthConnectMixin:
             and isinstance(self._oauth_secret_store, FallbackSecretStore)
             and isinstance(self._oauth_secret_store.primary, SystemKeyringSecretStore)
         )
-        if not skip_fallback_first:
-            fallback_secret_payload = self._load_validated_oauth_fallback_secret_payload(
-                fallback_secret_json,
-                secret_hash,
-            )
-            if fallback_secret_payload is not None:
-                self._remember_oauth_secret_payload(secret_ref, secret_hash, fallback_secret_json)
-                return fallback_secret_payload
+        fallback_secret_payload = self._load_validated_oauth_fallback_secret_payload(
+            fallback_secret_json,
+            secret_hash,
+        )
+        prefer_primary_over_fallback = skip_fallback_first and allow_primary
+        if fallback_secret_payload is not None and not prefer_primary_over_fallback:
+            self._remember_oauth_secret_payload(secret_ref, secret_hash, fallback_secret_json)
+            return fallback_secret_payload
         if not allow_primary:
             return None
         for candidate in self._get_secret_candidates(
