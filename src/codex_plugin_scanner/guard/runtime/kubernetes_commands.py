@@ -6,12 +6,47 @@ import re
 import shlex
 from pathlib import Path
 
-from .data_flow import extract_command_segments, extract_command_substitutions
+from .data_flow import extract_command_segments, extract_command_substitutions, extract_input_redirects
 
 _SENSITIVE_ENV_NAME_PATTERN = re.compile(
     r"(?i)(?:^|[_-])(?:api[_-]?key|auth|credential|credentials|key|password|private[_-]?key|secret|token)(?:[_-]|$)"
 )
+_ENV_EXPANSION_PATTERN = re.compile(
+    r"(?<!\\)\$(?:\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)[^}]*\}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))"
+)
 _ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
+_OUTPUT_REDIRECT_TOKENS = frozenset({">", "1>", "2>", ">>", "1>>", "2>>"})
+_WRAPPER_COMMANDS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
+_WRAPPER_OPTIONS_WITH_VALUES = {
+    "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
+    "nice": frozenset({"-n", "--adjustment"}),
+    "stdbuf": frozenset({"-i", "--input", "-o", "--output", "-e", "--error"}),
+    "sudo": frozenset(
+        {
+            "-C",
+            "-D",
+            "-R",
+            "-T",
+            "-g",
+            "-h",
+            "-p",
+            "-r",
+            "-t",
+            "-u",
+            "--chdir",
+            "--chroot",
+            "--close-from",
+            "--command-timeout",
+            "--group",
+            "--host",
+            "--prompt",
+            "--role",
+            "--type",
+            "--user",
+        }
+    ),
+    "time": frozenset({"-f", "--format", "-o", "--output"}),
+}
 _KUBECTL_OPTIONS_WITH_VALUES = frozenset(
     {
         "--as",
@@ -47,47 +82,35 @@ _KUBECTL_OPTIONS_WITH_VALUES = frozenset(
     }
 )
 _KUBECTL_VALUE_PREFIXES = tuple(f"{flag}=" for flag in _KUBECTL_OPTIONS_WITH_VALUES if flag.startswith("--"))
-_WRAPPER_COMMANDS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
-_WRAPPER_OPTIONS_WITH_VALUES = {
-    "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
-    "nice": frozenset({"-n", "--adjustment"}),
-    "stdbuf": frozenset({"-i", "--input", "-o", "--output", "-e", "--error"}),
-    "sudo": frozenset(
-        {
-            "-C",
-            "-D",
-            "-R",
-            "-T",
-            "-g",
-            "-h",
-            "-p",
-            "-r",
-            "-t",
-            "-u",
-            "--chdir",
-            "--chroot",
-            "--close-from",
-            "--command-timeout",
-            "--group",
-            "--host",
-            "--prompt",
-            "--role",
-            "--type",
-            "--user",
-        }
-    ),
-    "time": frozenset({"-f", "--format", "-o", "--output"}),
-}
-_SHELL_EXECUTABLES = frozenset({"ash", "bash", "dash", "sh", "zsh"})
+_EXEC_OPTIONS_WITH_VALUES = frozenset(
+    {
+        "--container",
+        "--namespace",
+        "--pod-running-timeout",
+        "--profile",
+        "--profile-output",
+        "--request-timeout",
+        "-c",
+        "-n",
+    }
+)
+_EXEC_BOOLEAN_OPTIONS = frozenset({"--quiet", "--stdin", "--tty", "-i", "-q", "-t"})
+_EXEC_BOOLEAN_SHORT_CLUSTER = frozenset({"i", "q", "t"})
+_CP_OPTIONS_WITH_VALUES = frozenset({"--container", "--namespace", "--retries", "-c", "-n"})
+_CP_BOOLEAN_OPTIONS = frozenset({"--no-preserve"})
+_SHELL_EXECUTABLES = frozenset({"ash", "bash", "dash", "ksh", "sh", "zsh"})
+_WRITE_ONLY_REMOTE_COMMANDS = frozenset(
+    {"chmod", "chown", "echo", "install", "mkdir", "printf", "rm", "rmdir", "tee", "touch", "truncate"}
+)
 _SERVICE_ACCOUNT_PATH_MARKERS = (
     "/var/run/secrets/kubernetes.io/serviceaccount",
     "/run/secrets/kubernetes.io/serviceaccount",
 )
 _SECRET_VOLUME_PATH_MARKERS = (
-    "/etc/secrets/",
-    "/etc/secret/",
-    "/var/run/secrets/",
-    "/run/secrets/",
+    "/etc/secrets",
+    "/etc/secret",
+    "/var/run/secrets",
+    "/run/secrets",
 )
 
 
@@ -199,8 +222,7 @@ def _kubectl_resource_is_secret(tokens: tuple[str, ...], index: int) -> bool:
 
 
 def _kubectl_exec_secret_source(tokens: tuple[str, ...]) -> str | None:
-    delimiter_index = _exec_delimiter_index(tokens)
-    remote_tokens = tokens[delimiter_index + 1 :] if delimiter_index is not None else ()
+    remote_tokens = _kubectl_exec_remote_tokens(tokens)
     if not remote_tokens:
         return None
     if _remote_command_reads_pod_environment(remote_tokens):
@@ -210,53 +232,160 @@ def _kubectl_exec_secret_source(tokens: tuple[str, ...]) -> str | None:
     return None
 
 
-def _exec_delimiter_index(tokens: tuple[str, ...]) -> int | None:
-    for index, token in enumerate(tokens):
+def _kubectl_exec_remote_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    resource_seen = False
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
         if token == "--":
-            return index
+            return tokens[index + 1 :]
+        option_consumed = _exec_option_tokens_consumed(tokens, index)
+        if option_consumed is not None:
+            index += option_consumed
+            continue
+        if not resource_seen:
+            resource_seen = True
+            index += 1
+            continue
+        return tokens[index:]
+    return ()
+
+
+def _exec_option_tokens_consumed(tokens: tuple[str, ...], index: int) -> int | None:
+    token = tokens[index]
+    if token in _EXEC_OPTIONS_WITH_VALUES and index + 1 < len(tokens):
+        return 2
+    if any(token.startswith(f"{flag}=") for flag in _EXEC_OPTIONS_WITH_VALUES if flag.startswith("--")):
+        return 1
+    if token in _EXEC_BOOLEAN_OPTIONS:
+        return 1
+    if token.startswith(("-c", "-n")) and len(token) > 2:
+        return 1
+    if token.startswith("-") and not token.startswith("--") and set(token[1:]).issubset(_EXEC_BOOLEAN_SHORT_CLUSTER):
+        return 1
     return None
 
 
 def _remote_command_reads_pod_environment(tokens: tuple[str, ...], *, depth: int = 0) -> bool:
-    if depth > 3:
+    if depth > 3 or not tokens:
         return False
-    if not tokens:
-        return False
+    unwrapped_index = _unwrap_command_start(tokens)
+    if 0 < unwrapped_index < len(tokens):
+        return _remote_command_reads_pod_environment(tokens[unwrapped_index:], depth=depth + 1)
     command_name = Path(tokens[0]).name.lower()
     if command_name == "printenv":
-        args = _tokens_before_pipe(tokens[1:])
-        env_names = tuple(token for token in args if not token.startswith("-"))
+        env_names = tuple(token for token in _tokens_before_pipe(tokens[1:]) if not token.startswith("-"))
         return not env_names or any(_is_sensitive_env_name(name) for name in env_names)
     if command_name == "env":
-        args = _tokens_before_pipe(tokens[1:])
-        env_names = tuple(token for token in args if not token.startswith("-") and not _ASSIGNMENT_PATTERN.match(token))
+        env_names = tuple(
+            token
+            for token in _tokens_before_pipe(tokens[1:])
+            if not token.startswith("-") and not _ASSIGNMENT_PATTERN.match(token)
+        )
         return not env_names
     if command_name in _SHELL_EXECUTABLES:
         script = _shell_c_script(tokens[1:])
         if script is None:
             return False
+        if _script_reads_sensitive_env(script):
+            return True
         for candidate in _command_candidates(script):
             candidate_tokens = _shell_tokens(candidate)
             if _remote_command_reads_pod_environment(candidate_tokens, depth=depth + 1):
                 return True
-            if _remote_command_reads_secret_volume(candidate_tokens):
+            if _remote_command_reads_secret_volume(candidate_tokens, depth=depth + 1):
                 return True
     return False
 
 
-def _remote_command_reads_secret_volume(tokens: tuple[str, ...]) -> bool:
-    joined = " ".join(tokens)
-    lowered = joined.lower()
-    if any(marker in lowered for marker in _SERVICE_ACCOUNT_PATH_MARKERS):
+def _remote_command_reads_secret_volume(tokens: tuple[str, ...], *, depth: int = 0) -> bool:
+    if depth > 3 or not tokens:
+        return False
+    unwrapped_index = _unwrap_command_start(tokens)
+    if 0 < unwrapped_index < len(tokens):
+        return _remote_command_reads_secret_volume(tokens[unwrapped_index:], depth=depth + 1)
+    command_name = Path(tokens[0]).name.lower()
+    if command_name in _SHELL_EXECUTABLES:
+        script = _shell_c_script(tokens[1:])
+        if script is None:
+            return False
+        for candidate in _command_candidates(script):
+            if _remote_command_reads_secret_volume(_shell_tokens(candidate), depth=depth + 1):
+                return True
+        return False
+    if _command_input_redirects_secret_volume(" ".join(tokens)):
         return True
-    return any(marker in lowered for marker in _SECRET_VOLUME_PATH_MARKERS) and any(
-        Path(token).name.lower() in {"cat", "cp", "head", "less", "more", "sed", "tail"}
-        for token in tokens
-    )
+    if command_name == "cp":
+        return _remote_copy_source_reads_secret_volume(tokens[1:])
+    source_arguments = _secret_volume_source_arguments(tokens)
+    if not source_arguments:
+        return False
+    return command_name not in _WRITE_ONLY_REMOTE_COMMANDS
 
 
 def _kubectl_cp_reads_secret_volume(tokens: tuple[str, ...]) -> bool:
-    return any(any(marker in token.lower() for marker in _SECRET_VOLUME_PATH_MARKERS) for token in tokens)
+    operands = _kubectl_cp_operands(tokens)
+    if len(operands) < 2:
+        return False
+    remote_source = _remote_cp_path(operands[0])
+    return remote_source is not None and _is_secret_volume_path(remote_source)
+
+
+def _kubectl_cp_operands(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    operands: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token in _CP_OPTIONS_WITH_VALUES and index + 1 < len(tokens):
+            index += 2
+            continue
+        if any(token.startswith(f"{flag}=") for flag in _CP_OPTIONS_WITH_VALUES if flag.startswith("--")):
+            index += 1
+            continue
+        if token in _CP_BOOLEAN_OPTIONS:
+            index += 1
+            continue
+        if token.startswith(("-c", "-n")) and len(token) > 2:
+            index += 1
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        operands.append(token)
+        index += 1
+    return tuple(operands)
+
+
+def _remote_copy_source_reads_secret_volume(tokens: tuple[str, ...]) -> bool:
+    operands = tuple(token for token in tokens if token and not token.startswith("-"))
+    if len(operands) < 2:
+        return False
+    return _is_secret_volume_path(operands[0]) and not _is_output_redirect_target(operands[0], previous_token=None)
+
+
+def _secret_volume_source_arguments(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    sources: list[str] = []
+    previous_token: str | None = None
+    for token in tokens[1:]:
+        if _ASSIGNMENT_PATTERN.match(token):
+            previous_token = token
+            continue
+        if token in _OUTPUT_REDIRECT_TOKENS:
+            previous_token = token
+            continue
+        if token.startswith("-"):
+            previous_token = token
+            continue
+        normalized_token = _strip_redirect_prefix(token)
+        if not _is_secret_volume_path(normalized_token):
+            previous_token = token
+            continue
+        if _is_output_redirect_target(token, previous_token=previous_token):
+            previous_token = token
+            continue
+        sources.append(normalized_token)
+        previous_token = token
+    return tuple(dict.fromkeys(sources))
 
 
 def _tokens_before_pipe(tokens: tuple[str, ...]) -> tuple[str, ...]:
@@ -275,6 +404,44 @@ def _shell_c_script(tokens: tuple[str, ...]) -> str | None:
             return tokens[index + 1]
         index += 1
     return None
+
+
+def _script_reads_sensitive_env(script: str) -> bool:
+    return any(
+        _is_sensitive_env_name(match.group("braced") or match.group("plain") or "")
+        for match in _ENV_EXPANSION_PATTERN.finditer(script)
+    )
+
+
+def _command_input_redirects_secret_volume(command_text: str) -> bool:
+    return any(_is_secret_volume_path(target) for target in extract_input_redirects(command_text))
+
+
+def _remote_cp_path(value: str) -> str | None:
+    if "://" in value:
+        return None
+    prefix, separator, path = value.partition(":")
+    if not separator or not prefix or not path:
+        return None
+    return path
+
+
+def _strip_redirect_prefix(token: str) -> str:
+    for prefix in (">>", "1>>", "2>>", ">", "1>", "2>", "<", "0<"):
+        if token.startswith(prefix):
+            return token[len(prefix) :]
+    return token
+
+
+def _is_output_redirect_target(token: str, *, previous_token: str | None) -> bool:
+    return token.startswith((">", "1>", "2>", ">>", "1>>", "2>>")) or previous_token in _OUTPUT_REDIRECT_TOKENS
+
+
+def _is_secret_volume_path(path: str) -> bool:
+    lowered = path.strip().strip("'\"").lower()
+    if not lowered:
+        return False
+    return any(marker in lowered for marker in (*_SERVICE_ACCOUNT_PATH_MARKERS, *_SECRET_VOLUME_PATH_MARKERS))
 
 
 def _is_sensitive_env_name(name: str) -> bool:

@@ -431,7 +431,13 @@ def _codex_post_tool_output_artifact(
         "tool_name": tool_name,
         "command_text": command_text,
         "action_class": (
-            "credential exfiltration shell command" if references_local_content else "credential-looking tool output"
+            (
+                "Kubernetes secret read command"
+                if kubernetes_secret_source is not None
+                else "credential exfiltration shell command"
+            )
+            if references_local_content
+            else "credential-looking tool output"
         ),
         "guard_default_action": runtime_default_action,
         "request_summary": request_summary,
