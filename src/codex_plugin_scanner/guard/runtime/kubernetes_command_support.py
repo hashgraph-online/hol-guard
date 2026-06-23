@@ -12,6 +12,7 @@ _ENV_EXPANSION_PATTERN = re.compile(
 )
 _INTERPRETER_ENV_LOOKUP_PATTERNS = (
     re.compile(r"os\.environ\s*\[\s*['\"](?P<name>[^'\"]+)['\"]\s*\]", re.IGNORECASE),
+    re.compile(r"os\.environ\s*\[\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\]", re.IGNORECASE),
     re.compile(r"os\.getenv\(\s*['\"](?P<name>[^'\"]+)['\"]", re.IGNORECASE),
     re.compile(r"process\.env(?:\.\s*(?P<dot>[A-Za-z_][A-Za-z0-9_]*)|\[\s*['\"](?P<bracket>[^'\"]+)['\"]\s*\])"),
     re.compile(r"ENV\[\s*['\"](?P<name>[^'\"]+)['\"]\s*\]"),
@@ -34,7 +35,10 @@ def interpreter_reads_sensitive_env(command_name: str, args: tuple[str, ...]) ->
     if not _is_inline_interpreter_command(command_name):
         return False
     script = _interpreter_inline_script(args)
-    return script_reads_sensitive_env(script) if script is not None else False
+    if script is not None:
+        return script_reads_sensitive_env(script)
+    joined = " ".join(args)
+    return "-" in args and "<<" in joined and script_reads_sensitive_env(joined)
 
 
 def is_output_redirect_target(token: str, *, previous_token: str | None) -> bool:
@@ -42,10 +46,11 @@ def is_output_redirect_target(token: str, *, previous_token: str | None) -> bool
 
 
 def is_secret_volume_path(path: str) -> bool:
-    lowered = path.strip().strip("'\"").lower()
-    if not lowered:
-        return False
-    return any(marker in lowered for marker in (*_SERVICE_ACCOUNT_PATH_MARKERS, *_SECRET_VOLUME_PATH_MARKERS))
+    return any(
+        candidate == marker or candidate.startswith(f"{marker}/")
+        for candidate in _path_candidates(path)
+        for marker in (*_SERVICE_ACCOUNT_PATH_MARKERS, *_SECRET_VOLUME_PATH_MARKERS)
+    )
 
 
 def is_sensitive_env_name(name: str) -> bool:
@@ -89,6 +94,19 @@ def strip_redirect_prefix(token: str) -> str:
         if token.startswith(prefix):
             return token[len(prefix) :]
     return token
+
+
+def _path_candidates(path: str) -> tuple[str, ...]:
+    normalized = path.strip().strip("'\"").lower()
+    if not normalized:
+        return ()
+    candidates = [normalized]
+    if "=" in normalized and not normalized.startswith("="):
+        _key, _separator, value = normalized.partition("=")
+        value = value.strip().strip("'\"")
+        if value:
+            candidates.append(value)
+    return tuple(dict.fromkeys(candidates))
 
 
 def _interpreter_inline_script(args: tuple[str, ...]) -> str | None:

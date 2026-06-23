@@ -103,9 +103,15 @@ _EXEC_BOOLEAN_OPTIONS = frozenset({"--quiet", "--stdin", "--tty", "-T", "-i", "-
 _EXEC_BOOLEAN_SHORT_CLUSTER = frozenset({"i", "q", "t"})
 _CP_OPTIONS_WITH_VALUES = frozenset({"--container", "--namespace", "--retries", "-c", "-n"})
 _CP_BOOLEAN_OPTIONS = frozenset({"--no-preserve"})
+_REMOTE_CP_OPTIONS_WITH_VALUES = frozenset({"--target-directory", "-t"})
 _SHELL_EXECUTABLES = frozenset({"ash", "bash", "dash", "ksh", "sh", "zsh"})
 _WRITE_ONLY_REMOTE_COMMANDS = frozenset(
     {"chmod", "chown", "echo", "install", "mkdir", "printf", "rm", "rmdir", "tee", "touch", "truncate"}
+)
+_INTERPRETER_HEREDOC_PATTERN = re.compile(
+    r"(?is)\b(?:kubectl|oc)\b.*?\b(?:exec|rsh)\b.*?"
+    r"\b(?:python(?:\d+(?:\.\d+)*)?|node|perl|php|ruby)\b[^\n]*?\s-\s*<<-?\s*(['\"]?)(?P<tag>[^\s'\"`;&|<>]+)\1\s*\n"
+    r"(?P<body>.*?)\n(?P=tag)(?=$|\s)"
 )
 
 
@@ -129,6 +135,8 @@ def _command_candidates(command: str, *, depth: int = 0) -> tuple[str, ...]:
 
 
 def _kubernetes_secret_read_source_for_candidate(command: str) -> str | None:
+    if (source := _interpreter_heredoc_secret_source(command)) is not None:
+        return source
     for segment in extract_command_segments(command):
         tokens = _shell_tokens(segment)
         if not tokens:
@@ -144,6 +152,14 @@ def _shell_tokens(command: str) -> tuple[str, ...]:
         return tuple(shlex.split(command))
     except ValueError:
         return tuple(command.split())
+
+
+def _interpreter_heredoc_secret_source(command: str) -> str | None:
+    match = _INTERPRETER_HEREDOC_PATTERN.search(command)
+    if match is None:
+        return None
+    body = str(match.group("body") or "")
+    return "Kubernetes pod environment" if script_reads_sensitive_env(body) else None
 
 
 def _kubectl_secret_read_source_from_tokens(tokens: tuple[str, ...]) -> str | None:
@@ -174,6 +190,8 @@ def _unwrap_command_start(tokens: tuple[str, ...]) -> int:
             continue
         command_name = Path(token).name.lower()
         if command_name not in _WRAPPER_COMMANDS:
+            return index
+        if command_name == "env" and not _env_looks_like_wrapper(tokens[index + 1 :]):
             return index
         index += 1
         while index < len(tokens):
@@ -363,19 +381,19 @@ def _kubectl_cp_operands(tokens: tuple[str, ...]) -> tuple[str, ...]:
 
 
 def _remote_copy_source_reads_secret_volume(tokens: tuple[str, ...]) -> bool:
-    operands = tuple(token for token in tokens if token and not token.startswith("-"))
-    if len(operands) < 2:
+    source_operands = _remote_cp_operands(tokens)
+    if not source_operands:
         return False
-    return is_secret_volume_path(operands[0]) and not is_output_redirect_target(operands[0], previous_token=None)
+    return any(
+        is_secret_volume_path(operand) and not is_output_redirect_target(operand, previous_token=None)
+        for operand in source_operands
+    )
 
 
 def _secret_volume_source_arguments(tokens: tuple[str, ...]) -> tuple[str, ...]:
     sources: list[str] = []
     previous_token: str | None = None
     for token in tokens[1:]:
-        if _ASSIGNMENT_PATTERN.match(token):
-            previous_token = token
-            continue
         if token in _OUTPUT_REDIRECT_TOKENS:
             previous_token = token
             continue
@@ -398,6 +416,49 @@ def _tokens_before_pipe(tokens: tuple[str, ...]) -> tuple[str, ...]:
     if "|" not in tokens:
         return tokens
     return tokens[: tokens.index("|")]
+
+
+def _env_looks_like_wrapper(tokens: tuple[str, ...]) -> bool:
+    index = 0
+    saw_wrapper_syntax = False
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--":
+            return saw_wrapper_syntax and index + 1 < len(tokens)
+        if _ASSIGNMENT_PATTERN.match(token):
+            saw_wrapper_syntax = True
+            index += 1
+            continue
+        if token.startswith("-"):
+            saw_wrapper_syntax = True
+            index += _option_tokens_consumed("env", token)
+            continue
+        return saw_wrapper_syntax
+    return False
+
+
+def _remote_cp_operands(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    operands: list[str] = []
+    has_target_directory = False
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token in _REMOTE_CP_OPTIONS_WITH_VALUES and index + 1 < len(tokens):
+            has_target_directory = has_target_directory or token in {"--target-directory", "-t"}
+            index += 2
+            continue
+        if any(token.startswith(f"{flag}=") for flag in _REMOTE_CP_OPTIONS_WITH_VALUES if flag.startswith("--")):
+            has_target_directory = has_target_directory or token.startswith("--target-directory=")
+            index += 1
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        operands.append(token)
+        index += 1
+    if has_target_directory:
+        return tuple(operands)
+    return tuple(operands[:-1]) if len(operands) >= 2 else ()
 
 
 def _shell_c_script(tokens: tuple[str, ...]) -> str | None:

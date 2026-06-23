@@ -80,10 +80,20 @@ def test_kubectl_exec_shell_expansion_secret_reads_are_detected(tmp_path: Path) 
     assert kubernetes_secret_read_source("oc rsh registry-frontend printenv GUARD_GITHUB_APP_PRIVATE_KEY") == (
         "Kubernetes pod environment"
     )
+    assert kubernetes_secret_read_source(
+        'kubectl exec registry-frontend -- bash -c "env | grep GUARD_GITHUB_APP_PRIVATE_KEY"'
+    ) == ("Kubernetes pod environment")
     python_env_command = (
         "kubectl exec registry-frontend -- python -c 'import os; print(os.environ[\"GUARD_GITHUB_APP_PRIVATE_KEY\"])'"
     )
     assert kubernetes_secret_read_source(python_env_command) == "Kubernetes pod environment"
+    python_stdin_command = (
+        "kubectl exec registry-frontend -- python - <<'PY'\n"
+        "import os\n"
+        'print(os.environ["GUARD_GITHUB_APP_PRIVATE_KEY"])\n'
+        "PY"
+    )
+    assert kubernetes_secret_read_source(python_stdin_command) == "Kubernetes pod environment"
 
 
 def test_kubectl_exec_secret_volume_readers_are_detected() -> None:
@@ -92,6 +102,8 @@ def test_kubectl_exec_secret_volume_readers_are_detected() -> None:
         "kubectl exec registry-frontend -- awk '{print}' /etc/secrets/token",
         "kubectl exec registry-frontend -- base64 /etc/secrets/token",
         "kubectl exec registry-frontend -- tar cf - /etc/secrets",
+        "kubectl exec registry-frontend -- dd if=/etc/secrets/token of=/tmp/x",
+        "kubectl exec registry-frontend -- cp --target-directory /tmp /etc/secrets/token",
     )
 
     for command in commands:
@@ -99,6 +111,7 @@ def test_kubectl_exec_secret_volume_readers_are_detected() -> None:
     assert kubernetes_secret_read_source('kubectl exec registry-frontend -- sh -c "cat /etc/secrets/token"') == (
         "Kubernetes secret volume"
     )
+    assert kubernetes_secret_read_source("kubectl exec registry-frontend -- cat /etc/secrets-backup/token") is None
 
 
 def test_kubectl_cp_only_flags_remote_secret_volume_sources() -> None:
