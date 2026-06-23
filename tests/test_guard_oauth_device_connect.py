@@ -56,6 +56,10 @@ def _install_fake_system_keyring(monkeypatch) -> _FakeSystemKeyringModule:
     return module
 
 
+def _disable_oauth_persistence_assert(monkeypatch) -> None:
+    monkeypatch.setattr(GuardStore, "_assert_oauth_secret_persisted", lambda self, secret_id, value: None)
+
+
 class _Args:
     guard_command = "login"
     token = None
@@ -404,8 +408,11 @@ def test_headless_connect_ci_safe_uses_explicit_label_and_restricted_scopes(tmp_
 
 def test_disconnect_revokes_cloud_grant_with_runtime_access_token_and_clears_local_oauth_credentials(
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
     guard_home = tmp_path / "guard-home"
+    _install_fake_system_keyring(monkeypatch)
+    _disable_oauth_persistence_assert(monkeypatch)
     store = GuardStore(guard_home)
     dpop_key_material = generate_dpop_key_pair()
     store.set_oauth_local_credentials(
@@ -502,8 +509,13 @@ def test_disconnect_revokes_cloud_grant_with_runtime_access_token_and_clears_loc
     assert "refresh-123" not in str(requests[1]["body"])
 
 
-def test_disconnect_keeps_local_oauth_credentials_when_self_revoke_fails(tmp_path: Path) -> None:
+def test_disconnect_keeps_local_oauth_credentials_when_self_revoke_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     guard_home = tmp_path / "guard-home"
+    _install_fake_system_keyring(monkeypatch)
+    _disable_oauth_persistence_assert(monkeypatch)
     store = GuardStore(guard_home)
     dpop_key_material = generate_dpop_key_pair()
     store.set_oauth_local_credentials(
@@ -577,6 +589,241 @@ def test_disconnect_keeps_local_oauth_credentials_when_self_revoke_fails(tmp_pat
     credentials = store.get_oauth_local_credentials()
     assert credentials is not None
     assert credentials["refresh_token"] == "refresh-rotated"
+
+
+def test_disconnect_clears_local_oauth_credentials_when_refresh_grant_is_already_expired(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    _install_fake_system_keyring(monkeypatch)
+    _disable_oauth_persistence_assert(monkeypatch)
+    store = GuardStore(guard_home)
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-123",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        runtime_id="hol-guard",
+        runtime_label="HOL Guard CLI",
+        now="2026-06-01T12:00:00+00:00",
+    )
+    requests: list[str] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        requests.append(request.full_url)
+        raise urllib.error.HTTPError(
+            request.full_url,
+            400,
+            "invalid_grant",
+            hdrs={"Content-Type": "application/json"},
+            fp=io.BytesIO(
+                json.dumps(
+                    {
+                        "error": "invalid_grant",
+                        "error_description": "The grant is missing, expired, or already consumed.",
+                    }
+                ).encode("utf-8")
+            ),
+        )
+
+    payload = connect_flow.run_guard_disconnect_command(
+        store=store,
+        revoke_cloud_grant=True,
+        urlopen=fake_urlopen,
+        now="2026-06-01T12:05:00+00:00",
+    )
+
+    assert payload == {
+        "status": "disconnected",
+        "cloud_grant_revoked": False,
+        "cloud_grant_status": "already_inactive",
+        "detail": "Guard Cloud grant was already expired. Cleared local sign-in on this machine.",
+        "reconnect_command": "hol-guard connect",
+    }
+    assert requests == ["https://hol.org/api/guard/oauth/token"]
+    assert store.get_oauth_local_credentials() is None
+
+
+def test_disconnect_keeps_local_oauth_credentials_when_refresh_error_is_not_invalid_grant(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    _install_fake_system_keyring(monkeypatch)
+    _disable_oauth_persistence_assert(monkeypatch)
+    store = GuardStore(guard_home)
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-123",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        runtime_id="hol-guard",
+        runtime_label="HOL Guard CLI",
+        now="2026-06-01T12:00:00+00:00",
+    )
+    requests: list[str] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        requests.append(request.full_url)
+        raise urllib.error.HTTPError(
+            request.full_url,
+            400,
+            "invalid_grant_type",
+            hdrs={"Content-Type": "application/json"},
+            fp=io.BytesIO(
+                json.dumps(
+                    {
+                        "error": "invalid_grant_type",
+                        "error_description": "unsupported refresh flow",
+                    }
+                ).encode("utf-8")
+            ),
+        )
+
+    with pytest.raises(RuntimeError, match="Guard OAuth token exchange failed: unsupported refresh flow"):
+        connect_flow.run_guard_disconnect_command(
+            store=store,
+            revoke_cloud_grant=True,
+            urlopen=fake_urlopen,
+            now="2026-06-01T12:05:00+00:00",
+        )
+
+    assert requests == ["https://hol.org/api/guard/oauth/token"]
+    credentials = store.get_oauth_local_credentials()
+    assert credentials is not None
+    assert credentials["refresh_token"] == "refresh-123"
+
+
+def test_disconnect_keeps_local_oauth_credentials_when_invalid_grant_comes_from_server_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    _install_fake_system_keyring(monkeypatch)
+    _disable_oauth_persistence_assert(monkeypatch)
+    store = GuardStore(guard_home)
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-123",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        runtime_id="hol-guard",
+        runtime_label="HOL Guard CLI",
+        now="2026-06-01T12:00:00+00:00",
+    )
+    requests: list[str] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        requests.append(request.full_url)
+        raise urllib.error.HTTPError(
+            request.full_url,
+            500,
+            "server_error",
+            hdrs={"Content-Type": "application/json"},
+            fp=io.BytesIO(
+                json.dumps(
+                    {
+                        "error": "invalid_grant",
+                        "error_description": "temporary upstream mismatch",
+                    }
+                ).encode("utf-8")
+            ),
+        )
+
+    with pytest.raises(RuntimeError, match="Guard OAuth token exchange failed: temporary upstream mismatch"):
+        connect_flow.run_guard_disconnect_command(
+            store=store,
+            revoke_cloud_grant=True,
+            urlopen=fake_urlopen,
+            now="2026-06-01T12:05:00+00:00",
+        )
+
+    assert requests == ["https://hol.org/api/guard/oauth/token"]
+    credentials = store.get_oauth_local_credentials()
+    assert credentials is not None
+    assert credentials["refresh_token"] == "refresh-123"
+
+
+def test_disconnect_keeps_local_oauth_credentials_when_description_matches_but_oauth_error_does_not(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    _install_fake_system_keyring(monkeypatch)
+    _disable_oauth_persistence_assert(monkeypatch)
+    store = GuardStore(guard_home)
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-123",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        runtime_id="hol-guard",
+        runtime_label="HOL Guard CLI",
+        now="2026-06-01T12:00:00+00:00",
+    )
+    requests: list[str] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        requests.append(request.full_url)
+        raise urllib.error.HTTPError(
+            request.full_url,
+            400,
+            "invalid_request",
+            hdrs={"Content-Type": "application/json"},
+            fp=io.BytesIO(
+                json.dumps(
+                    {
+                        "error": "invalid_request",
+                        "error_description": "The grant is missing, expired, or already consumed.",
+                    }
+                ).encode("utf-8")
+            ),
+        )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Guard OAuth token exchange failed: The grant is missing, expired, or already consumed.",
+    ):
+        connect_flow.run_guard_disconnect_command(
+            store=store,
+            revoke_cloud_grant=True,
+            urlopen=fake_urlopen,
+            now="2026-06-01T12:05:00+00:00",
+        )
+
+    assert requests == ["https://hol.org/api/guard/oauth/token"]
+    credentials = store.get_oauth_local_credentials()
+    assert credentials is not None
+    assert credentials["refresh_token"] == "refresh-123"
 
 
 def test_headless_connect_polls_until_success_and_persists_oauth_credentials(tmp_path: Path) -> None:
