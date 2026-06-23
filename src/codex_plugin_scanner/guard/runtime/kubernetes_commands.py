@@ -14,6 +14,13 @@ _SENSITIVE_ENV_NAME_PATTERN = re.compile(
 _ENV_EXPANSION_PATTERN = re.compile(
     r"(?<!\\)\$(?:\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)[^}]*\}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))"
 )
+_INTERPRETER_ENV_LOOKUP_PATTERNS = (
+    re.compile(r"os\.environ\s*\[\s*['\"](?P<name>[^'\"]+)['\"]\s*\]", re.IGNORECASE),
+    re.compile(r"os\.getenv\(\s*['\"](?P<name>[^'\"]+)['\"]", re.IGNORECASE),
+    re.compile(r"process\.env(?:\.\s*(?P<dot>[A-Za-z_][A-Za-z0-9_]*)|\[\s*['\"](?P<bracket>[^'\"]+)['\"]\s*\])"),
+    re.compile(r"ENV\[\s*['\"](?P<name>[^'\"]+)['\"]\s*\]"),
+    re.compile(r"System\.getenv\(\s*['\"](?P<name>[^'\"]+)['\"]\s*\)", re.IGNORECASE),
+)
 _ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _OUTPUT_REDIRECT_TOKENS = frozenset({">", "1>", "2>", ">>", "1>>", "2>>"})
 _WRAPPER_COMMANDS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
@@ -90,11 +97,12 @@ _EXEC_OPTIONS_WITH_VALUES = frozenset(
         "--profile",
         "--profile-output",
         "--request-timeout",
+        "--shell",
         "-c",
         "-n",
     }
 )
-_EXEC_BOOLEAN_OPTIONS = frozenset({"--quiet", "--stdin", "--tty", "-i", "-q", "-t"})
+_EXEC_BOOLEAN_OPTIONS = frozenset({"--quiet", "--stdin", "--tty", "-T", "-i", "-q", "-t"})
 _EXEC_BOOLEAN_SHORT_CLUSTER = frozenset({"i", "q", "t"})
 _CP_OPTIONS_WITH_VALUES = frozenset({"--container", "--namespace", "--retries", "-c", "-n"})
 _CP_BOOLEAN_OPTIONS = frozenset({"--no-preserve"})
@@ -159,9 +167,11 @@ def _kubectl_secret_read_source_from_tokens(tokens: tuple[str, ...]) -> str | No
     if subcommand_index >= len(tokens):
         return None
     subcommand = tokens[subcommand_index].lower()
+    if subcommand == "get" and _kubectl_get_raw_secret_path(tokens, subcommand_index + 1):
+        return "Kubernetes Secret resource"
     if subcommand in {"get", "describe", "edit"} and _kubectl_resource_is_secret(tokens, subcommand_index + 1):
         return "Kubernetes Secret resource"
-    if subcommand == "exec":
+    if subcommand in {"exec", "rsh"}:
         return _kubectl_exec_secret_source(tokens[subcommand_index + 1 :])
     if subcommand == "cp" and _kubectl_cp_reads_secret_volume(tokens[subcommand_index + 1 :]):
         return "Kubernetes secret volume"
@@ -217,18 +227,28 @@ def _kubectl_resource_is_secret(tokens: tuple[str, ...], index: int) -> bool:
     index = _skip_kubectl_options(tokens, index)
     if index >= len(tokens):
         return False
-    resource = tokens[index].lower().split("/", 1)[0]
-    return resource in {"secret", "secrets"}
+    return _resource_token_includes_secret(tokens[index])
+
+
+def _kubectl_get_raw_secret_path(tokens: tuple[str, ...], index: int) -> bool:
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--raw" and index + 1 < len(tokens):
+            return _raw_secret_api_path(tokens[index + 1])
+        if token.startswith("--raw="):
+            return _raw_secret_api_path(token.split("=", 1)[1])
+        index += 1
+    return False
 
 
 def _kubectl_exec_secret_source(tokens: tuple[str, ...]) -> str | None:
     remote_tokens = _kubectl_exec_remote_tokens(tokens)
     if not remote_tokens:
         return None
-    if _remote_command_reads_pod_environment(remote_tokens):
-        return "Kubernetes pod environment"
     if _remote_command_reads_secret_volume(remote_tokens):
         return "Kubernetes secret volume"
+    if _remote_command_reads_pod_environment(remote_tokens):
+        return "Kubernetes pod environment"
     return None
 
 
@@ -293,9 +313,8 @@ def _remote_command_reads_pod_environment(tokens: tuple[str, ...], *, depth: int
             candidate_tokens = _shell_tokens(candidate)
             if _remote_command_reads_pod_environment(candidate_tokens, depth=depth + 1):
                 return True
-            if _remote_command_reads_secret_volume(candidate_tokens, depth=depth + 1):
-                return True
-    return False
+        return False
+    return _interpreter_reads_sensitive_env(command_name, tokens[1:])
 
 
 def _remote_command_reads_secret_volume(tokens: tuple[str, ...], *, depth: int = 0) -> bool:
@@ -407,10 +426,24 @@ def _shell_c_script(tokens: tuple[str, ...]) -> str | None:
 
 
 def _script_reads_sensitive_env(script: str) -> bool:
-    return any(
+    if any(
         _is_sensitive_env_name(match.group("braced") or match.group("plain") or "")
         for match in _ENV_EXPANSION_PATTERN.finditer(script)
-    )
+    ):
+        return True
+    for pattern in _INTERPRETER_ENV_LOOKUP_PATTERNS:
+        for match in pattern.finditer(script):
+            names = [group for group in match.groupdict().values() if group]
+            if any(_is_sensitive_env_name(name) for name in names):
+                return True
+    return False
+
+
+def _interpreter_reads_sensitive_env(command_name: str, args: tuple[str, ...]) -> bool:
+    if not _is_inline_interpreter_command(command_name):
+        return False
+    script = _interpreter_inline_script(args)
+    return _script_reads_sensitive_env(script) if script is not None else False
 
 
 def _command_input_redirects_secret_volume(command_text: str) -> bool:
@@ -442,6 +475,42 @@ def _is_secret_volume_path(path: str) -> bool:
     if not lowered:
         return False
     return any(marker in lowered for marker in (*_SERVICE_ACCOUNT_PATH_MARKERS, *_SECRET_VOLUME_PATH_MARKERS))
+
+
+def _resource_token_includes_secret(token: str) -> bool:
+    for item in token.lower().split(","):
+        resource = item.split("/", 1)[0].split(".", 1)[0]
+        if resource in {"secret", "secrets"}:
+            return True
+    return False
+
+
+def _raw_secret_api_path(path: str) -> bool:
+    normalized = path.strip().strip("'\"").lower()
+    return (
+        "/secret/" in normalized
+        or "/secrets/" in normalized
+        or normalized.endswith("/secret")
+        or normalized.endswith("/secrets")
+    )
+
+
+def _is_inline_interpreter_command(command_name: str) -> bool:
+    return command_name.startswith("python") or command_name in {"node", "perl", "php", "ruby"}
+
+
+def _interpreter_inline_script(args: tuple[str, ...]) -> str | None:
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token in {"-c", "-e"} and index + 1 < len(args):
+            return args[index + 1]
+        if token.startswith("-c") and len(token) > 2:
+            return token[2:]
+        if token.startswith("-e") and len(token) > 2:
+            return token[2:]
+        index += 1
+    return None
 
 
 def _is_sensitive_env_name(name: str) -> bool:

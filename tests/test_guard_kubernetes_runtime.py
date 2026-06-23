@@ -55,6 +55,12 @@ def test_kubectl_secret_reads_are_detected_in_command_substitutions(tmp_path: Pa
     assert request is not None
     assert request.action_class == "Kubernetes secret read command"
     assert kubernetes_secret_read_source("kubectl get secret registry-frontend -o yaml") == "Kubernetes Secret resource"
+    assert kubernetes_secret_read_source("kubectl get po,secret -A -o yaml") == "Kubernetes Secret resource"
+    assert kubernetes_secret_read_source("kubectl get secrets.v1 -A -o yaml") == "Kubernetes Secret resource"
+    assert (
+        kubernetes_secret_read_source("kubectl get --raw /api/v1/namespaces/default/secrets/registry-frontend")
+        == "Kubernetes Secret resource"
+    )
     assert kubernetes_secret_read_source("kubectl get pods -n registry-broker") is None
 
 
@@ -71,6 +77,13 @@ def test_kubectl_exec_shell_expansion_secret_reads_are_detected(tmp_path: Path) 
     assert request is not None
     assert request.action_class == "Kubernetes secret read command"
     assert kubernetes_secret_read_source(command) == "Kubernetes pod environment"
+    assert kubernetes_secret_read_source("oc rsh registry-frontend printenv GUARD_GITHUB_APP_PRIVATE_KEY") == (
+        "Kubernetes pod environment"
+    )
+    python_env_command = (
+        "kubectl exec registry-frontend -- python -c 'import os; print(os.environ[\"GUARD_GITHUB_APP_PRIVATE_KEY\"])'"
+    )
+    assert kubernetes_secret_read_source(python_env_command) == "Kubernetes pod environment"
 
 
 def test_kubectl_exec_secret_volume_readers_are_detected() -> None:
@@ -83,6 +96,9 @@ def test_kubectl_exec_secret_volume_readers_are_detected() -> None:
 
     for command in commands:
         assert kubernetes_secret_read_source(command) == "Kubernetes secret volume"
+    assert kubernetes_secret_read_source('kubectl exec registry-frontend -- sh -c "cat /etc/secrets/token"') == (
+        "Kubernetes secret volume"
+    )
 
 
 def test_kubectl_cp_only_flags_remote_secret_volume_sources() -> None:
@@ -152,3 +168,23 @@ def test_pi_post_tool_output_labels_kubernetes_secret_source(tmp_path: Path) -> 
     assert artifact.metadata["action_class"] == "Kubernetes secret read command"
     assert artifact.metadata["guard_default_action"] == "require-reapproval"
     assert artifact.metadata["secret_source_family"] == "Kubernetes pod environment"
+
+
+def test_pi_post_tool_output_preserves_kubernetes_secret_volume_source(tmp_path: Path) -> None:
+    command = 'kubectl exec registry-frontend -- sh -c "cat /etc/secrets/token"'
+    artifact = _codex_post_tool_output_artifact(
+        harness="pi",
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+        },
+        config_path="~/.pi/agent/settings.json",
+        source_scope="project",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert artifact is not None
+    assert artifact.metadata["action_class"] == "Kubernetes secret read command"
+    assert artifact.metadata["secret_source_family"] == "Kubernetes secret volume"
