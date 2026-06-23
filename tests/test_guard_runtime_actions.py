@@ -51,6 +51,7 @@ def test_guard_action_envelope_round_trips_to_dict() -> None:
         "tool_name": "Bash",
         "command": "printf ok",
         "prompt_excerpt": None,
+        "prompt_text": None,
         "target_paths": ["package.json"],
         "network_hosts": ["example.com"],
         "mcp_server": None,
@@ -63,6 +64,37 @@ def test_guard_action_envelope_round_trips_to_dict() -> None:
         "script_name": None,
         "raw_payload_redacted": {"tool_name": "Bash"},
     }
+    assert restored == envelope
+
+
+def test_guard_action_envelope_persists_full_prompt_text() -> None:
+    """prompt_text must be persisted in to_dict so the UI can show the full prompt."""
+    long_prompt = "A" * 500
+    envelope = GuardActionEnvelope(
+        schema_version=1,
+        action_id="action-prompt",
+        harness="codex",
+        event_name="UserPromptSubmit",
+        action_type="prompt",
+        workspace=None,
+        workspace_hash=None,
+        tool_name=None,
+        command=None,
+        prompt_excerpt=long_prompt[:240],
+        prompt_text=long_prompt,
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+    payload = envelope.to_dict()
+    restored = GuardActionEnvelope.from_dict(payload)
+    assert payload["prompt_text"] == long_prompt
+    assert payload["prompt_excerpt"] == long_prompt[:240]
     assert restored == envelope
 
 

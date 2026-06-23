@@ -748,7 +748,7 @@ function queueCategoryText(item: GuardApprovalRequest): string {
     envelope?.action_type ?? "",
     envelope?.command ?? "",
     envelope?.tool_name ?? "",
-    envelope?.prompt_excerpt ?? "",
+    (envelope?.prompt_text ?? envelope?.prompt_excerpt) ?? "",
     envelope?.mcp_server ?? "",
     envelope?.mcp_tool ?? "",
     envelope?.package_manager ?? "",
@@ -1125,7 +1125,7 @@ export function searchQueue(items: GuardApprovalRequest[], term: string): GuardA
       item.launch_summary ?? "",
       item.why_now ?? "",
       envelope?.command ?? "",
-      envelope?.prompt_excerpt ?? "",
+      (envelope?.prompt_text ?? envelope?.prompt_excerpt) ?? "",
       envelope?.mcp_server ?? "",
       envelope?.mcp_tool ?? "",
       envelope?.package_name ?? "",
@@ -1170,7 +1170,7 @@ export function buildNextUpChipText(item: GuardApprovalRequest): string {
   const preview =
     envelope?.command?.slice(0, 40) ??
     envelope?.mcp_tool ??
-    envelope?.prompt_excerpt?.slice(0, 40) ??
+    (envelope?.prompt_text ?? envelope?.prompt_excerpt)?.slice(0, 40) ??
     item.artifact_type;
   return `${item.harness} — ${preview}`;
 }
