@@ -1075,23 +1075,21 @@ def test_command_queue_loop_backs_off_after_errors(tmp_path: Path, monkeypatch) 
     assert waits == [1, 2, 4]
 
 
-def test_command_queue_loop_stops_on_revoked_oauth_auth_and_records_reconnect_state(
+def test_command_queue_loop_retries_revoked_oauth_auth_and_records_reconnect_state(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     store = _oauth_store(tmp_path)
 
-    class FailIfWaitCalled:
-        def __init__(self) -> None:
-            self.wait_called = False
+    waits: list[float] = []
 
+    class StopAfterThreeWaits:
         def is_set(self) -> bool:
             return False
 
         def wait(self, seconds: float) -> bool:
-            del seconds
-            self.wait_called = True
-            return True
+            waits.append(seconds)
+            return len(waits) >= 3
 
     def fake_refresh(
         *,
@@ -1105,8 +1103,10 @@ def test_command_queue_loop_stops_on_revoked_oauth_auth_and_records_reconnect_st
             "Guard authorization expired. Run `hol-guard connect` to sign in again."
         )
 
-    stop_event = FailIfWaitCalled()
+    stop_event = StopAfterThreeWaits()
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, "1")
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_POLL_INTERVAL_ENV, "1")
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ERROR_BACKOFF_ENV, "8")
     monkeypatch.setattr(guard_runner_module, "_refresh_guard_oauth_access_token", fake_refresh)
 
     command_queue.command_queue_loop(store, _context(tmp_path), stop_event=stop_event)
@@ -1114,7 +1114,7 @@ def test_command_queue_loop_stops_on_revoked_oauth_auth_and_records_reconnect_st
     status = command_queue.command_queue_status(store)
     assert status["state"] == "auth_expired"
     assert "hol-guard connect" in str(status["last_error"])
-    assert stop_event.wait_called is False
+    assert waits == [1, 2, 4]
 
 
 def test_commands_status_outputs_command_queue_state(tmp_path: Path, capsys, monkeypatch) -> None:
