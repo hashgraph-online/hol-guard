@@ -1702,3 +1702,119 @@ def test_executor_rejects_overbroad_signed_allow_memory_rules(tmp_path: Path) ->
     assert result["data"]["decisionMemoryAck"]["rejectedRuleIds"] == ["review-memory:receipt-team"]
     assert store.policies == [([], "2026-06-13T00:00:00+00:00", True)]
     assert store.get_sync_payload("guard_review_memory_policy_version") is None
+
+def test_executor_rejects_tampered_decision_memory_bundle_hash(tmp_path: Path) -> None:
+    store = _oauth_store(tmp_path)
+    bundle = _signed_decision_memory_bundle(store)
+    bundle["bundleHash"] = "sha256:tampered"
+    bundle["payloadHash"] = "sha256:tampered"
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {
+                "action": "policy_sync",
+                "decisionMemoryBundle": bundle,
+            },
+        },
+        context=_context(tmp_path),
+        store=store,
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+    assert "failureCode" in result
+    assert "hash" in result["failureCode"]
+
+
+def test_executor_rejects_expired_decision_memory_bundle(tmp_path: Path) -> None:
+    store = _oauth_store(tmp_path)
+    bundle = _signed_decision_memory_bundle(store)
+    expired = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    bundle["expiresAt"] = expired
+    for rule in bundle.get("memoryRules", []):
+        rule["expiresAt"] = expired
+    bundle["payloadHash"] = payload_hash_for_decision_memory_bundle(bundle)
+    bundle["bundleHash"] = bundle["payloadHash"]
+    bundle["signature"] = sign_review_payload(bundle)
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {
+                "action": "policy_sync",
+                "decisionMemoryBundle": bundle,
+            },
+        },
+        context=_context(tmp_path),
+        store=store,
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+    assert "failureCode" in result
+    assert "expired" in result["failureCode"]
+
+
+def test_executor_rejects_decision_memory_bundle_wrong_workspace(tmp_path: Path) -> None:
+    store = _oauth_store(tmp_path)
+    bundle = _signed_decision_memory_bundle(store)
+    bundle["workspaceId"] = "workspace-other"
+    for rule in bundle.get("memoryRules", []):
+        rule["target"]["workspaceIds"] = ["workspace-other"]
+    bundle["payloadHash"] = payload_hash_for_decision_memory_bundle(bundle)
+    bundle["bundleHash"] = bundle["payloadHash"]
+    bundle["signature"] = sign_review_payload(bundle)
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {
+                "action": "policy_sync",
+                "decisionMemoryBundle": bundle,
+            },
+        },
+        context=_context(tmp_path),
+        store=store,
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+    assert "failureCode" in result
+
+
+def test_executor_rejects_decision_memory_bundle_wrong_machine_target(tmp_path: Path) -> None:
+    store = _oauth_store(tmp_path)
+    bundle = _signed_decision_memory_bundle(store)
+    for rule in bundle.get("memoryRules", []):
+        rule["target"]["machineIds"] = ["machine-other"]
+    bundle["payloadHash"] = payload_hash_for_decision_memory_bundle(bundle)
+    bundle["bundleHash"] = bundle["payloadHash"]
+    bundle["signature"] = sign_review_payload(bundle)
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {
+                "action": "policy_sync",
+                "decisionMemoryBundle": bundle,
+            },
+        },
+        context=_context(tmp_path),
+        store=store,
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+    assert "failureCode" in result
+
+
+def test_executor_rejects_loose_policy_memory_payload(tmp_path: Path) -> None:
+    store = _oauth_store(tmp_path)
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {
+                "action": "policy_sync",
+                "policyMemory": {
+                    "action": "allow",
+                    "artifactId": "plugin:hol/deploy",
+                    "scope": "workspace",
+                    "reason": "Should be rejected - no signed bundle",
+                },
+            },
+        },
+        context=_context(tmp_path),
+        store=store,
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+    assert "failureCode" in result
+    assert "missing" in result["failureCode"]
