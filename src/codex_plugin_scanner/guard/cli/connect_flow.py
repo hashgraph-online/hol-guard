@@ -762,15 +762,55 @@ def refresh_guard_access_token(
                 dpop_nonce = challenge_nonce
                 nonce_retry_count += 1
                 continue
-            message = (
-                str(payload.get("error_description") or payload.get("error") or error.reason)
-                if isinstance(payload, dict)
-                else str(error.reason)
-            )
-            raise RuntimeError(f"Guard OAuth token exchange failed: {message}") from error
+            raise _guard_oauth_token_exchange_error_from_http_error(error, payload) from error
         if not isinstance(payload, dict):
             raise RuntimeError("Guard OAuth token exchange failed: invalid response.")
         return _parse_guard_token_exchange_payload(payload)
+
+
+class GuardOAuthTokenExchangeError(RuntimeError):
+    def __init__(
+        self,
+        *,
+        oauth_error: str | None,
+        oauth_error_description: str | None,
+        status_code: int | None,
+        reason: str | None,
+    ) -> None:
+        self.oauth_error = oauth_error
+        self.oauth_error_description = oauth_error_description
+        self.status_code = status_code
+        self.reason = reason
+        message = oauth_error_description or oauth_error or reason or "token exchange failed."
+        super().__init__(f"Guard OAuth token exchange failed: {message}")
+
+
+def _guard_oauth_token_exchange_error_from_http_error(
+    error: urllib.error.HTTPError,
+    payload: object,
+) -> GuardOAuthTokenExchangeError:
+    oauth_error = payload.get("error") if isinstance(payload, dict) else None
+    oauth_error_description = payload.get("error_description") if isinstance(payload, dict) else None
+    return GuardOAuthTokenExchangeError(
+        oauth_error=str(oauth_error).strip() if isinstance(oauth_error, str) and oauth_error.strip() else None,
+        oauth_error_description=(
+            str(oauth_error_description).strip()
+            if isinstance(oauth_error_description, str) and oauth_error_description.strip()
+            else None
+        ),
+        status_code=error.code,
+        reason=str(error.reason).strip() if str(error.reason).strip() else None,
+    )
+
+
+def _oauth_refresh_error_means_grant_inactive(error: Exception) -> bool:
+    if isinstance(error, GuardOAuthTokenExchangeError):
+        oauth_error = (error.oauth_error or "").strip().lower()
+        if error.status_code not in {400, 401, 403}:
+            return False
+        return oauth_error == "invalid_grant"
+    message = str(error).strip().lower()
+    return "missing, expired, or already consumed" in message
 
 
 def revoke_guard_self_oauth_grant(
@@ -923,14 +963,26 @@ def run_guard_disconnect_command(
     oauth_client = resolve_guard_oauth_client_config(issuer)
     exchange_now = datetime.fromisoformat(now) if isinstance(now, str) else datetime.now(timezone.utc)
     timestamp = now or exchange_now.isoformat()
-    token_result = refresh_guard_access_token(
-        token_endpoint=oauth_client.token_endpoint,
-        client_id=client_id,
-        refresh_token=refresh_token,
-        dpop_key_material=dpop_key_material,
-        urlopen=urlopen,
-        now=exchange_now,
-    )
+    try:
+        token_result = refresh_guard_access_token(
+            token_endpoint=oauth_client.token_endpoint,
+            client_id=client_id,
+            refresh_token=refresh_token,
+            dpop_key_material=dpop_key_material,
+            urlopen=urlopen,
+            now=exchange_now,
+        )
+    except RuntimeError as error:
+        if not _oauth_refresh_error_means_grant_inactive(error):
+            raise
+        store.clear_oauth_local_credentials()
+        return {
+            "status": "disconnected",
+            "cloud_grant_revoked": False,
+            "cloud_grant_status": "already_inactive",
+            "detail": "Guard Cloud grant was already expired. Cleared local sign-in on this machine.",
+            "reconnect_command": CONNECT_COMMAND,
+        }
     rotated_refresh_token = token_result.refresh_token
     if rotated_refresh_token and rotated_refresh_token != refresh_token:
         _persist_oauth_local_credentials(
