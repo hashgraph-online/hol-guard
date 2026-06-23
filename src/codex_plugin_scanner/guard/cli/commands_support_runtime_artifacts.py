@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from .commands_support_runtime_resolution import _canonical_harness_name, _runtime_policy_path
 
 
+from ..runtime.kubernetes_commands import kubernetes_secret_read_source
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from .commands_support_codex_commands import (
@@ -349,6 +350,7 @@ def _codex_post_tool_output_artifact(
     if not command_text:
         command_text = tool_name
     local_source_matches = _codex_sensitive_local_source_matches(command_text, cwd=cwd)
+    kubernetes_secret_source = kubernetes_secret_read_source(command_text)
     sensitive_file_request = extract_sensitive_file_read_request(
         payload.get("tool_name"),
         payload.get("tool_input", payload.get("arguments")),
@@ -357,6 +359,7 @@ def _codex_post_tool_output_artifact(
     )
     references_local_content = (
         bool(local_source_matches)
+        or kubernetes_secret_source is not None
         or sensitive_file_request is not None
         or _codex_command_may_read_local_content(command_text, cwd=cwd)
     )
@@ -393,7 +396,7 @@ def _codex_post_tool_output_artifact(
             sort_keys=True,
         ).encode("utf-8")
     ).hexdigest()
-    local_secret_source = _codex_local_secret_source_label(
+    local_secret_source = kubernetes_secret_source or _codex_local_secret_source_label(
         local_source_matches,
         command_text=command_text,
     )
@@ -404,7 +407,7 @@ def _codex_post_tool_output_artifact(
         if local_secret_source is not None:
             source_signal = f"command references local secrets from {local_secret_source}"
         runtime_request_signals.append(source_signal)
-    local_secret_source = _codex_local_secret_source_label(
+    local_secret_source = kubernetes_secret_source or _codex_local_secret_source_label(
         local_source_matches,
         command_text=command_text,
     )
