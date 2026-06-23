@@ -65,6 +65,9 @@ def test_kubectl_secret_reads_are_detected_in_command_substitutions(tmp_path: Pa
         kubernetes_secret_read_source("kubectl get --raw '/api/v1/namespaces/default/secrets?limit=1'")
         == "Kubernetes Secret resource"
     )
+    assert kubernetes_secret_read_source("kubectl get --raw /api/v1/namespaces/default/secrets#x") == (
+        "Kubernetes Secret resource"
+    )
     assert kubernetes_secret_read_source("kubectl get pods -n registry-broker") is None
 
 
@@ -113,6 +116,8 @@ def test_kubectl_exec_secret_volume_readers_are_detected() -> None:
         "kubectl exec registry-frontend -- tar cf - /etc/secrets",
         "kubectl exec registry-frontend -- dd if=/etc/secrets/token of=/tmp/x",
         "kubectl exec registry-frontend -- cp --target-directory /tmp /etc/secrets/token",
+        "kubectl exec registry-frontend -- grep --file=/etc/secrets/token /tmp/file",
+        "kubectl exec registry-frontend -- cat /mnt/secrets-store/token",
     )
 
     for command in commands:

@@ -28,8 +28,11 @@ _SERVICE_ACCOUNT_PATH_MARKERS = (
 _SECRET_VOLUME_PATH_MARKERS = (
     "/etc/secrets",
     "/etc/secret",
+    "/mnt/secrets-store",
     "/var/run/secrets",
+    "/var/run/secrets-store",
     "/run/secrets",
+    "/run/secrets-store",
 )
 _KUBERNETES_REMOTE_PREFIX = r"(?is)\b(?:kubectl|oc)\b[^\n;&|]*\b(?:exec|rsh)\b[^\n;&|]*"
 _KUBERNETES_INTERPRETER_HEREDOC_PATTERN = re.compile(
@@ -93,7 +96,7 @@ def is_sensitive_env_name(name: str) -> bool:
 
 def raw_secret_api_path(path: str) -> bool:
     normalized = path.strip().strip("'\"").lower()
-    base_path = normalized.split("?", 1)[0]
+    base_path = normalized.split("#", 1)[0].split("?", 1)[0]
     return (
         "/secret/" in base_path
         or "/secrets/" in base_path
@@ -122,6 +125,13 @@ def script_reads_sensitive_env(script: str) -> bool:
             if any(is_sensitive_env_name(name) for name in names):
                 return True
     return False
+
+
+def secret_volume_argument_value(token: str) -> str:
+    normalized_token = strip_redirect_prefix(token)
+    if normalized_token.startswith("-") and "=" in normalized_token:
+        return normalized_token.split("=", 1)[1]
+    return normalized_token
 
 
 def strip_redirect_prefix(token: str) -> str:
@@ -179,5 +189,6 @@ __all__ = [
     "raw_secret_api_path",
     "resource_token_includes_secret",
     "script_reads_sensitive_env",
+    "secret_volume_argument_value",
     "strip_redirect_prefix",
 ]

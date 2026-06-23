@@ -16,7 +16,7 @@ from .kubernetes_command_support import (
     raw_secret_api_path,
     resource_token_includes_secret,
     script_reads_sensitive_env,
-    strip_redirect_prefix,
+    secret_volume_argument_value,
 )
 
 _ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
@@ -391,10 +391,10 @@ def _secret_volume_source_arguments(tokens: tuple[str, ...]) -> tuple[str, ...]:
         if token in _OUTPUT_REDIRECT_TOKENS:
             previous_token = token
             continue
-        if token.startswith("-"):
+        normalized_token = secret_volume_argument_value(token)
+        if token.startswith("-") and "=" not in token:
             previous_token = token
             continue
-        normalized_token = strip_redirect_prefix(token)
         if not is_secret_volume_path(normalized_token):
             previous_token = token
             continue
