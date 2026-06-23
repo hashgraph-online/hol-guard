@@ -1122,6 +1122,36 @@ def test_command_queue_retry_wait_clamps_zero_poll_interval_and_large_backoff_ex
     assert command_queue._retry_wait_seconds(1.0, 8.0, 10_000) == 8.0
 
 
+def test_poll_once_keeps_auth_expired_state_when_auth_refresh_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    store = _oauth_store(tmp_path)
+    existing_error = "Guard authorization expired. Run `hol-guard connect` to sign in again."
+    store.set_sync_payload(
+        command_queue.COMMAND_QUEUE_STATE_KEY,
+        {
+            "state": "auth_expired",
+            "last_error": existing_error,
+            "last_poll_at": "2026-06-23T10:00:00+00:00",
+        },
+        "2026-06-23T10:00:00+00:00",
+    )
+
+    def fake_auth_context(current_store, *, allow_primary_repair: bool = True):
+        del current_store, allow_primary_repair
+        raise guard_runner_module.GuardSyncAuthorizationExpiredError(existing_error)
+
+    monkeypatch.setattr(command_queue, "_resolve_guard_sync_auth_context", fake_auth_context)
+
+    with pytest.raises(guard_runner_module.GuardSyncAuthorizationExpiredError, match="hol-guard connect"):
+        command_queue.poll_command_queue_once(store, _context(tmp_path))
+
+    status = command_queue.command_queue_status(store)
+    assert status["state"] == "auth_expired"
+    assert status["last_error"] == existing_error
+
+
 def test_commands_status_outputs_command_queue_state(tmp_path: Path, capsys, monkeypatch) -> None:
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
