@@ -447,6 +447,8 @@ def command_queue_loop(
             else:
                 empty_streak = 0
         except GuardSyncAuthorizationExpiredError as error:
+            empty_streak = 0
+            error_streak += 1
             _save_state(
                 store,
                 {
@@ -456,7 +458,7 @@ def command_queue_loop(
                     "last_poll_at": _now(),
                 },
             )
-            return
+            wait_seconds = min(error_backoff, poll_interval * (2 ** max(0, error_streak - 1)))
         except GuardSyncNotConfiguredError as error:
             empty_streak = 0
             error_streak += 1
