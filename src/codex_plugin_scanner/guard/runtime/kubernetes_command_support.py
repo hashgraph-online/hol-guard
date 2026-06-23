@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 
 _SENSITIVE_ENV_NAME_PATTERN = re.compile(
     r"(?i)(?:^|[_-])(?:api[_-]?key|auth|credential|credentials|key|password|private[_-]?key|secret|token)(?:[_-]|$)"
@@ -13,6 +14,7 @@ _ENV_EXPANSION_PATTERN = re.compile(
 _INTERPRETER_ENV_LOOKUP_PATTERNS = (
     re.compile(r"os\.environ\s*\[\s*['\"](?P<name>[^'\"]+)['\"]\s*\]", re.IGNORECASE),
     re.compile(r"os\.environ\s*\[\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\]", re.IGNORECASE),
+    re.compile(r"os\.environ\.get\(\s*['\"](?P<name>[^'\"]+)['\"]", re.IGNORECASE),
     re.compile(r"os\.getenv\(\s*['\"](?P<name>[^'\"]+)['\"]", re.IGNORECASE),
     re.compile(r"process\.env(?:\.\s*(?P<dot>[A-Za-z_][A-Za-z0-9_]*)|\[\s*['\"](?P<bracket>[^'\"]+)['\"]\s*\])"),
     re.compile(r"ENV\[\s*['\"](?P<name>[^'\"]+)['\"]\s*\]"),
@@ -29,6 +31,20 @@ _SECRET_VOLUME_PATH_MARKERS = (
     "/var/run/secrets",
     "/run/secrets",
 )
+_KUBERNETES_REMOTE_PREFIX = r"(?is)\b(?:kubectl|oc)\b[^\n;&|]*\b(?:exec|rsh)\b[^\n;&|]*"
+_KUBERNETES_INTERPRETER_HEREDOC_PATTERN = re.compile(
+    _KUBERNETES_REMOTE_PREFIX
+    + (
+        r"\b(?:python(?:\d+(?:\.\d+)*)?|node|perl|php|ruby)\b[^\n;&|]*\s-\s*<<-?\s*"
+        r"(['\"]?)(?P<tag>[^\s'\"`;&|<>]+)\1\s*\n"
+    )
+    + r"(?P<body>.*?)\n(?P=tag)(?=$|\s)"
+)
+_KUBERNETES_SHELL_HEREDOC_PATTERN = re.compile(
+    _KUBERNETES_REMOTE_PREFIX
+    + r"\b(?:ash|bash|dash|ksh|sh|zsh)\b[^\n;&|]*<<-?\s*(['\"]?)(?P<tag>[^\s'\"`;&|<>]+)\1\s*\n"
+    + r"(?P<body>.*?)\n(?P=tag)(?=$|\s)"
+)
 
 
 def interpreter_reads_sensitive_env(command_name: str, args: tuple[str, ...]) -> bool:
@@ -38,7 +54,25 @@ def interpreter_reads_sensitive_env(command_name: str, args: tuple[str, ...]) ->
     if script is not None:
         return script_reads_sensitive_env(script)
     joined = " ".join(args)
-    return "-" in args and "<<" in joined and script_reads_sensitive_env(joined)
+    return "-" in args and any(token.startswith("<<") for token in args) and script_reads_sensitive_env(joined)
+
+
+def kubernetes_heredoc_secret_source(command: str) -> str | None:
+    for pattern, source_hint in (
+        (_KUBERNETES_INTERPRETER_HEREDOC_PATTERN, "Kubernetes pod environment"),
+        (_KUBERNETES_SHELL_HEREDOC_PATTERN, None),
+    ):
+        match = pattern.search(command)
+        if match is None:
+            continue
+        body = str(match.group("body") or "")
+        if source_hint is not None:
+            return source_hint if script_reads_sensitive_env(body) else None
+        if _script_body_reads_secret_volume(body):
+            return "Kubernetes secret volume"
+        if script_reads_sensitive_env(body):
+            return "Kubernetes pod environment"
+    return None
 
 
 def is_output_redirect_target(token: str, *, previous_token: str | None) -> bool:
@@ -59,11 +93,12 @@ def is_sensitive_env_name(name: str) -> bool:
 
 def raw_secret_api_path(path: str) -> bool:
     normalized = path.strip().strip("'\"").lower()
+    base_path = normalized.split("?", 1)[0]
     return (
-        "/secret/" in normalized
-        or "/secrets/" in normalized
-        or normalized.endswith("/secret")
-        or normalized.endswith("/secrets")
+        "/secret/" in base_path
+        or "/secrets/" in base_path
+        or base_path.endswith("/secret")
+        or base_path.endswith("/secrets")
     )
 
 
@@ -94,6 +129,14 @@ def strip_redirect_prefix(token: str) -> str:
         if token.startswith(prefix):
             return token[len(prefix) :]
     return token
+
+
+def _script_body_reads_secret_volume(body: str) -> bool:
+    try:
+        tokens = shlex.split(body)
+    except ValueError:
+        tokens = body.split()
+    return any(is_secret_volume_path(strip_redirect_prefix(token)) for token in tokens)
 
 
 def _path_candidates(path: str) -> tuple[str, ...]:
@@ -132,6 +175,7 @@ __all__ = [
     "is_output_redirect_target",
     "is_secret_volume_path",
     "is_sensitive_env_name",
+    "kubernetes_heredoc_secret_source",
     "raw_secret_api_path",
     "resource_token_includes_secret",
     "script_reads_sensitive_env",

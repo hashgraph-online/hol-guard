@@ -12,6 +12,7 @@ from .kubernetes_command_support import (
     is_output_redirect_target,
     is_secret_volume_path,
     is_sensitive_env_name,
+    kubernetes_heredoc_secret_source,
     raw_secret_api_path,
     resource_token_includes_secret,
     script_reads_sensitive_env,
@@ -108,11 +109,6 @@ _SHELL_EXECUTABLES = frozenset({"ash", "bash", "dash", "ksh", "sh", "zsh"})
 _WRITE_ONLY_REMOTE_COMMANDS = frozenset(
     {"chmod", "chown", "echo", "install", "mkdir", "printf", "rm", "rmdir", "tee", "touch", "truncate"}
 )
-_INTERPRETER_HEREDOC_PATTERN = re.compile(
-    r"(?is)\b(?:kubectl|oc)\b.*?\b(?:exec|rsh)\b.*?"
-    r"\b(?:python(?:\d+(?:\.\d+)*)?|node|perl|php|ruby)\b[^\n]*?\s-\s*<<-?\s*(['\"]?)(?P<tag>[^\s'\"`;&|<>]+)\1\s*\n"
-    r"(?P<body>.*?)\n(?P=tag)(?=$|\s)"
-)
 
 
 def kubernetes_secret_read_source(command: str | None) -> str | None:
@@ -135,7 +131,7 @@ def _command_candidates(command: str, *, depth: int = 0) -> tuple[str, ...]:
 
 
 def _kubernetes_secret_read_source_for_candidate(command: str) -> str | None:
-    if (source := _interpreter_heredoc_secret_source(command)) is not None:
+    if (source := kubernetes_heredoc_secret_source(command)) is not None:
         return source
     for segment in extract_command_segments(command):
         tokens = _shell_tokens(segment)
@@ -152,14 +148,6 @@ def _shell_tokens(command: str) -> tuple[str, ...]:
         return tuple(shlex.split(command))
     except ValueError:
         return tuple(command.split())
-
-
-def _interpreter_heredoc_secret_source(command: str) -> str | None:
-    match = _INTERPRETER_HEREDOC_PATTERN.search(command)
-    if match is None:
-        return None
-    body = str(match.group("body") or "")
-    return "Kubernetes pod environment" if script_reads_sensitive_env(body) else None
 
 
 def _kubectl_secret_read_source_from_tokens(tokens: tuple[str, ...]) -> str | None:
@@ -299,26 +287,31 @@ def _remote_command_reads_pod_environment(tokens: tuple[str, ...], *, depth: int
         return _remote_command_reads_pod_environment(tokens[unwrapped_index:], depth=depth + 1)
     command_name = Path(tokens[0]).name.lower()
     if command_name == "printenv":
-        env_names = tuple(token for token in _tokens_before_pipe(tokens[1:]) if not token.startswith("-"))
+        env_args = tokens[1:]
+        if "|" in env_args:
+            env_args = env_args[: env_args.index("|")]
+        env_names = tuple(token for token in env_args if not token.startswith("-"))
         return not env_names or any(is_sensitive_env_name(name) for name in env_names)
     if command_name == "env":
+        env_args = tokens[1:]
+        if "|" in env_args:
+            env_args = env_args[: env_args.index("|")]
         env_names = tuple(
-            token
-            for token in _tokens_before_pipe(tokens[1:])
-            if not token.startswith("-") and not _ASSIGNMENT_PATTERN.match(token)
+            token for token in env_args if not token.startswith("-") and not _ASSIGNMENT_PATTERN.match(token)
         )
         return not env_names
     if command_name in _SHELL_EXECUTABLES:
         script = _shell_c_script(tokens[1:])
-        if script is None:
-            return False
-        if script_reads_sensitive_env(script):
-            return True
-        for candidate in _command_candidates(script):
-            candidate_tokens = _shell_tokens(candidate)
-            if _remote_command_reads_pod_environment(candidate_tokens, depth=depth + 1):
+        if script is not None:
+            if script_reads_sensitive_env(script):
                 return True
-        return False
+            for candidate in _command_candidates(script):
+                candidate_tokens = _shell_tokens(candidate)
+                if _remote_command_reads_pod_environment(candidate_tokens, depth=depth + 1):
+                    return True
+            return False
+        heredoc_source = _shell_stdin_secret_source(tokens)
+        return heredoc_source == "Kubernetes pod environment"
     return interpreter_reads_sensitive_env(command_name, tokens[1:])
 
 
@@ -331,13 +324,14 @@ def _remote_command_reads_secret_volume(tokens: tuple[str, ...], *, depth: int =
     command_name = Path(tokens[0]).name.lower()
     if command_name in _SHELL_EXECUTABLES:
         script = _shell_c_script(tokens[1:])
-        if script is None:
+        if script is not None:
+            for candidate in _command_candidates(script):
+                if _remote_command_reads_secret_volume(_shell_tokens(candidate), depth=depth + 1):
+                    return True
             return False
-        for candidate in _command_candidates(script):
-            if _remote_command_reads_secret_volume(_shell_tokens(candidate), depth=depth + 1):
-                return True
-        return False
-    if _command_input_redirects_secret_volume(" ".join(tokens)):
+        heredoc_source = _shell_stdin_secret_source(tokens)
+        return heredoc_source == "Kubernetes secret volume"
+    if any(is_secret_volume_path(target) for target in extract_input_redirects(" ".join(tokens))):
         return True
     if command_name == "cp":
         return _remote_copy_source_reads_secret_volume(tokens[1:])
@@ -412,12 +406,6 @@ def _secret_volume_source_arguments(tokens: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(sources))
 
 
-def _tokens_before_pipe(tokens: tuple[str, ...]) -> tuple[str, ...]:
-    if "|" not in tokens:
-        return tokens
-    return tokens[: tokens.index("|")]
-
-
 def _env_looks_like_wrapper(tokens: tuple[str, ...]) -> bool:
     index = 0
     saw_wrapper_syntax = False
@@ -473,8 +461,22 @@ def _shell_c_script(tokens: tuple[str, ...]) -> str | None:
     return None
 
 
-def _command_input_redirects_secret_volume(command_text: str) -> bool:
-    return any(is_secret_volume_path(target) for target in extract_input_redirects(command_text))
+def _shell_stdin_secret_source(tokens: tuple[str, ...]) -> str | None:
+    if not any(token.startswith("<<") for token in tokens[1:]):
+        return None
+    body_tokens = [token for token in tokens[1:] if not token.startswith("<<")]
+    if body_tokens:
+        body_tokens = body_tokens[:-1]
+    script_text = " ".join(body_tokens).strip()
+    if not script_text:
+        return None
+    if _remote_command_reads_secret_volume(_shell_tokens(script_text), depth=1):
+        return "Kubernetes secret volume"
+    if script_reads_sensitive_env(script_text):
+        return "Kubernetes pod environment"
+    if _remote_command_reads_pod_environment(_shell_tokens(script_text), depth=1):
+        return "Kubernetes pod environment"
+    return None
 
 
 def _remote_cp_path(value: str) -> str | None:
