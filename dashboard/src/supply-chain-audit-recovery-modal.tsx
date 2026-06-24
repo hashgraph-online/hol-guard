@@ -7,7 +7,7 @@ import {
   HiMiniCloudArrowDown,
   HiMiniShieldCheck,
 } from "react-icons/hi2";
-import { ApprovalProofInline } from "./approval-proof-inline";
+import { ApprovalProofInline, buildApprovalProofCredentials } from "./approval-proof-inline";
 import { ActionButton, Tag } from "./approval-center-primitives";
 import { GuardModalLayer } from "./guard-modal-layer";
 import type { GuardApprovalGatePublicConfig, PackageFirewallStatusResponse } from "./guard-types";
@@ -172,10 +172,7 @@ export function AuditRecoveryModal({
 
   const handleApprovalSubmit = useCallback(() => {
     setApprovalSubmitting(true);
-    onApprovalSubmit({
-      approval_password: approvalPassword,
-      ...(approvalGate?.totp_enabled === true ? { approval_totp_code: approvalTotpCode } : {}),
-    });
+    onApprovalSubmit(buildApprovalProofCredentials(approvalGate, { approvalPassword, approvalTotpCode }));
   }, [approvalGate, approvalPassword, approvalTotpCode, onApprovalSubmit]);
 
   return (

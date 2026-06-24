@@ -384,24 +384,19 @@ def disable_totp(
     state = _load_state(guard_home)
     if not _enabled(state):
         raise ApprovalGateError("approval_gate_required", "Approval password is required.")
-    if _verifier(state) is None:
-        raise ApprovalGateError(
-            "approval_gate_recovery_required",
-            "Approval gate is enabled but no verifier is configured.",
-            status=423,
-        )
     now_epoch = _epoch(now)
     locked_until = _optional_string(state.get("locked_until"))
     if _is_future(locked_until, now_epoch):
         raise ApprovalGateError("approval_gate_locked", "Approval gate is temporarily locked.", status=423)
     gate_input = approval_gate_input or ApprovalGateInput()
-    if gate_input.password is None:
-        raise ApprovalGateError("approval_gate_required", "Approval password is required.")
-    if not _verify_password(gate_input.password, _verifier(state)):
-        _record_failed_attempt(guard_home, state, now=now)
-        raise ApprovalGateError("approval_gate_invalid_password", "Approval password is invalid.")
     secret_id = _optional_string(state.get("totp_secret_id"))
     if secret_id is None:
+        if _totp_enabled(state):
+            raise ApprovalGateError(
+                "approval_gate_recovery_required",
+                "Approval gate TOTP secret is unavailable.",
+                status=423,
+            )
         state["totp_enabled"] = False
         _write_state(guard_home, state, now=now)
         return public_config(guard_home, now=now)
@@ -578,7 +573,10 @@ def validate_grant(
     strict: bool,
     now: str | None = None,
 ) -> None:
+    state = _load_state(guard_home)
     if approval_gate_grant is None:
+        if _totp_enabled(state):
+            raise ApprovalGateError("approval_gate_totp_required", "TOTP code is required.")
         raise ApprovalGateError("approval_gate_required", "Approval password is required.")
     metadata = _ACTIVE_GRANTS.get(approval_gate_grant.grant_id)
     if metadata is None:
@@ -594,7 +592,6 @@ def validate_grant(
         raise ApprovalGateError("approval_gate_required", "Approval password is required.")
     if strict and not approval_gate_grant.strict:
         raise ApprovalGateError("approval_gate_required", "Approval password is required.")
-    state = _load_state(guard_home)
     if _totp_enabled(state):
         _validate_totp_state_or_raise(guard_home, state)
         if not approval_gate_grant.totp_verified:
@@ -630,32 +627,10 @@ def _verify_or_raise(
     now: str | None,
 ) -> ApprovalGateGrant:
     now_epoch = _epoch(now)
-    if _verifier(state) is None:
-        raise ApprovalGateError(
-            "approval_gate_recovery_required",
-            "Approval gate is enabled but no verifier is configured.",
-            status=423,
-        )
     locked_until = _optional_string(state.get("locked_until"))
     if _is_future(locked_until, now_epoch):
         raise ApprovalGateError("approval_gate_locked", "Approval gate is temporarily locked.", status=423)
-    if not strict and _cooldown_active(state, now_epoch) and not _totp_enabled(state):
-        return _register_grant(
-            guard_home,
-            purpose=purpose,
-            strict=False,
-            used_cooldown=True,
-            cooldown_expires_at=_optional_string(state.get("cooldown_expires_at")),
-            totp_verified=False,
-            now=now,
-        )
     gate_input = approval_gate_input or ApprovalGateInput()
-    if gate_input.password is None:
-        raise ApprovalGateError("approval_gate_required", "Approval password is required.")
-    if not _verify_password(gate_input.password, _verifier(state)):
-        _record_failed_attempt(guard_home, state, now=now)
-        raise ApprovalGateError("approval_gate_invalid_password", "Approval password is invalid.")
-    totp_verified = False
     if _totp_enabled(state):
         if gate_input.totp_code is None:
             raise ApprovalGateError("approval_gate_totp_required", "TOTP code is required.")
@@ -666,16 +641,44 @@ def _verify_or_raise(
             now_epoch=now_epoch,
         )
         state["totp_last_counter"] = accepted_counter
-        totp_verified = True
+        state["failed_attempts"] = 0
+        state.pop("locked_until", None)
+        state.pop("cooldown_expires_at", None)
+        _write_state(guard_home, state, now=now)
+        return _register_grant(
+            guard_home,
+            purpose=purpose,
+            strict=strict,
+            used_cooldown=False,
+            cooldown_expires_at=None,
+            totp_verified=True,
+            now=now,
+        )
+    if _verifier(state) is None:
+        raise ApprovalGateError(
+            "approval_gate_recovery_required",
+            "Approval gate is enabled but no verifier is configured.",
+            status=423,
+        )
+    if not strict and _cooldown_active(state, now_epoch):
+        return _register_grant(
+            guard_home,
+            purpose=purpose,
+            strict=False,
+            used_cooldown=True,
+            cooldown_expires_at=_optional_string(state.get("cooldown_expires_at")),
+            totp_verified=False,
+            now=now,
+        )
+    if gate_input.password is None:
+        raise ApprovalGateError("approval_gate_required", "Approval password is required.")
+    if not _verify_password(gate_input.password, _verifier(state)):
+        _record_failed_attempt(guard_home, state, now=now)
+        raise ApprovalGateError("approval_gate_invalid_password", "Approval password is invalid.")
     state["failed_attempts"] = 0
     state.pop("locked_until", None)
     cooldown_expires_at: str | None = None
-    if (
-        not strict
-        and not _totp_enabled(state)
-        and _cooldown_seconds(state) > 0
-        and gate_input.use_cooldown is not False
-    ):
+    if not strict and _cooldown_seconds(state) > 0 and gate_input.use_cooldown is not False:
         cooldown_expires_at = _iso_from_epoch(now_epoch + _cooldown_seconds(state))
         state["cooldown_expires_at"] = cooldown_expires_at
     _write_state(guard_home, state, now=now)
@@ -685,7 +688,7 @@ def _verify_or_raise(
         strict=strict,
         used_cooldown=False,
         cooldown_expires_at=cooldown_expires_at,
-        totp_verified=totp_verified,
+        totp_verified=False,
         now=now,
     )
 

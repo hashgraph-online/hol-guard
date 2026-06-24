@@ -580,7 +580,18 @@ class TestVolatileFields:
             _VOLATILE_FIELDS,
         )
 
-        expected = {"timeout", "pageId", "tabId", "traceId", "width", "height", "viewport", "waitUntil", "duration", "requestId"}
+        expected = {
+            "timeout",
+            "pageId",
+            "tabId",
+            "traceId",
+            "width",
+            "height",
+            "viewport",
+            "waitUntil",
+            "duration",
+            "requestId",
+        }
         assert expected.issubset(_VOLATILE_FIELDS)
 
     def test_detects_volatile_fields_in_arguments(self) -> None:

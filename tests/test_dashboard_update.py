@@ -554,7 +554,10 @@ def test_status_payload_hides_auto_update_for_local_wheel_install(
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_commands._direct_url_payload",
-        lambda: {"url": "file:///home/me/dist/hol_guard-1.0.0-py3-none-any.whl", "archive_info": {"hash": "sha256:abc"}},
+        lambda: {
+            "url": "file:///home/me/dist/hol_guard-1.0.0-py3-none-any.whl",
+            "archive_info": {"hash": "sha256:abc"},
+        },
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_commands._local_source_install_payload",
@@ -601,7 +604,10 @@ def test_status_payload_hides_auto_update_for_missing_local_wheel_install(
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_commands._direct_url_payload",
-        lambda: {"url": "file:///home/me/dist/hol_guard-1.0.0-py3-none-any.whl", "archive_info": {"hash": "sha256:abc"}},
+        lambda: {
+            "url": "file:///home/me/dist/hol_guard-1.0.0-py3-none-any.whl",
+            "archive_info": {"hash": "sha256:abc"},
+        },
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_commands._local_source_install_payload",

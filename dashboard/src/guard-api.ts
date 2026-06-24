@@ -1889,7 +1889,7 @@ export async function revokeApprovalGateCooldown(password: string, totpCode?: st
     },
     body: JSON.stringify({
       approval_gate: {
-        password,
+        ...(password.trim().length > 0 ? { password } : {}),
         ...(totpCode !== undefined && totpCode.trim().length > 0 ? { totp_code: totpCode } : {})
       }
     })
@@ -1967,7 +1967,7 @@ export async function disableApprovalGateTotp(
     },
     body: JSON.stringify({
       approval_gate: {
-        password: currentPassword
+        ...(currentPassword.trim().length > 0 ? { password: currentPassword } : {})
       },
       approval_totp_code: code
     })

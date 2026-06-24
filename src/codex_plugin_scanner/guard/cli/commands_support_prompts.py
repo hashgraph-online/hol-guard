@@ -86,7 +86,10 @@ def _run_approval_password_settings_command(*, args: argparse.Namespace, guard_h
         gate_updated = update_approval_gate_settings(guard_home, payload, approval_gate_grant=grant)
         return {"approval_gate": gate_updated.to_dict()}
     if command == "change":
-        gate_input = ApprovalGateInput(password=str(args.current_password), totp_code=getattr(args, "totp_code", None))
+        gate_input = ApprovalGateInput(
+            password=getattr(args, "current_password", None),
+            totp_code=getattr(args, "totp_code", None),
+        )
         grant = require_high_risk(guard_home, purpose="settings_write", approval_gate_input=gate_input)
         gate_updated = update_approval_gate_settings(
             guard_home,
@@ -99,7 +102,10 @@ def _run_approval_password_settings_command(*, args: argparse.Namespace, guard_h
         )
         return {"approval_gate": gate_updated.to_dict()}
     if command == "disable":
-        gate_input = ApprovalGateInput(password=str(args.current_password), totp_code=getattr(args, "totp_code", None))
+        gate_input = ApprovalGateInput(
+            password=getattr(args, "current_password", None),
+            totp_code=getattr(args, "totp_code", None),
+        )
         grant = require_high_risk(guard_home, purpose="settings_write", approval_gate_input=gate_input)
         gate_updated = update_approval_gate_settings(
             guard_home,
@@ -134,7 +140,7 @@ def _run_approval_totp_settings_command(*, args: argparse.Namespace, guard_home:
         gate = disable_totp(
             guard_home,
             approval_gate_input=ApprovalGateInput(
-                password=str(args.current_password),
+                password=getattr(args, "current_password", None),
                 totp_code=str(args.code),
             ),
         )

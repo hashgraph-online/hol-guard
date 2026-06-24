@@ -467,7 +467,12 @@ def test_hgc075_updates_last_known_good_on_valid_replacement(tmp_path: Path) -> 
     assert store.get_sync_payload("policy_bundle_last_good") == replacement_validated
 
 
-def _sample_rule(rule_id: str, action: str, ecosystems: list[str], matcher_families: list[str] | None = None) -> dict[str, object]:
+def _sample_rule(
+    rule_id: str,
+    action: str,
+    ecosystems: list[str],
+    matcher_families: list[str] | None = None,
+) -> dict[str, object]:
     return {
         "ruleId": rule_id,
         "action": action,
@@ -507,7 +512,12 @@ def test_hgps046_multi_rule_bundle_validates() -> None:
 def test_hgps048_multi_rule_bundle_rejects_malformed_entry() -> None:
     rules = [
         _sample_rule("pkg-block", "block", ["npm"]),
-        {"ruleId": "bad-rule", "action": "not-an-action", "reason": "Bad action.", "matcherFamilies": ["package-request"]},
+        {
+            "ruleId": "bad-rule",
+            "action": "not-an-action",
+            "reason": "Bad action.",
+            "matcherFamilies": ["package-request"],
+        },
     ]
     bundle = _bundle_with_rules(rules)
     payload, reason = validated_policy_bundle_payload(bundle)

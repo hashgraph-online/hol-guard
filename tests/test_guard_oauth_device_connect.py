@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+import re
 import subprocess
 import urllib.error
 import urllib.parse
@@ -811,7 +812,7 @@ def test_disconnect_keeps_local_oauth_credentials_when_description_matches_but_o
 
     with pytest.raises(
         RuntimeError,
-        match="Guard OAuth token exchange failed: The grant is missing, expired, or already consumed.",
+        match=re.escape("Guard OAuth token exchange failed: The grant is missing, expired, or already consumed."),
     ):
         connect_flow.run_guard_disconnect_command(
             store=store,

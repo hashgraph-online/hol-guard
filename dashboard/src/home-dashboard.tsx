@@ -24,6 +24,7 @@ import { harnessDisplayName, formatRelativeTime, formatNumber, isDisplayableHarn
 import { useFocusTrap } from "./use-focus-trap";
 import { DeviceProofCard, resolveCloudIntelCopy } from "./runtime-overview";
 import { HomeProtectionModule } from "./home-protection-module";
+import { approvalProofRequiresPassword } from "./approval-proof-inline";
 import { EvidenceInsightsHomePreview } from "./evidence/evidence-insights-home-preview";
 import { EvidenceInsightsShareModal } from "./evidence/evidence-insights-share-modal";
 import { useReceiptAnalytics } from "./evidence/use-receipt-analytics";
@@ -444,6 +445,7 @@ function ClearConfirmDialog(props: {
   const dialogRef = useRef<HTMLDivElement>(null);
   useFocusTrap(true, dialogRef);
   const needsProof = props.approvalGate?.enabled === true && props.approvalGate.configured === true;
+  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
 
   return (
     <div className="guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Confirm clear decisions">
@@ -459,17 +461,18 @@ function ClearConfirmDialog(props: {
                 </p>
                 {needsProof && (
                   <div className="mt-4 grid gap-3">
-                    <label className="block">
-                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
-                      <input
-                        type="password"
-                        autoComplete="current-password"
-                        value={props.clearPassword}
-                        onChange={props.onClearPasswordChange}
-                        className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                      />
-                    </label>
-                    {props.approvalGate?.totp_enabled === true && (
+                    {needsPassword ? (
+                      <label className="block">
+                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
+                        <input
+                          type="password"
+                          autoComplete="current-password"
+                          value={props.clearPassword}
+                          onChange={props.onClearPasswordChange}
+                          className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                        />
+                      </label>
+                    ) : (
                       <label className="block">
                         <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Authenticator code</span>
                         <input
@@ -480,6 +483,7 @@ function ClearConfirmDialog(props: {
                           value={props.clearTotpCode}
                           onChange={props.onClearTotpCodeChange}
                           placeholder="123456"
+                          autoComplete="one-time-code"
                           className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                         />
                       </label>

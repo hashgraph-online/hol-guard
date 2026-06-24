@@ -42,7 +42,10 @@ def _write_repo_files(tmp_path: Path, *, pyproject_version: str, module_version:
                 "",
                 "[package.optional-dependencies]",
                 "cisco = [",
-                '    { name = "litellm", marker = "python_full_version >= \'3.11\' and python_full_version < \'3.14\'" },',
+                (
+                    '    { name = "litellm", marker = '
+                    '"python_full_version >= \'3.11\' and python_full_version < \'3.14\'" },'
+                ),
                 "]",
                 "",
             ]

@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import type { ChangeEvent } from "react";
 import { ActionButton, SectionLabel } from "./approval-center-primitives";
-import { ApprovalProofFieldInputs } from "./approval-proof-inline";
+import { ApprovalProofFieldInputs, buildApprovalProofCredentials, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
 
 type ApprovalProofModalProps = {
@@ -27,14 +27,14 @@ export function ApprovalProofModal(props: ApprovalProofModalProps) {
   }, []);
 
   const handleConfirm = useCallback(() => {
-    onConfirm({
-      approval_password: password,
-      ...(approvalGate?.totp_enabled === true ? { approval_totp_code: totpCode } : {}),
-    });
+    onConfirm(buildApprovalProofCredentials(approvalGate, { approvalPassword: password, approvalTotpCode: totpCode }));
   }, [approvalGate, onConfirm, password, totpCode]);
 
-  const confirmDisabled =
-    password.trim() === "" || (approvalGate?.totp_enabled === true && totpCode.trim() === "");
+  const confirmDisabled = isApprovalProofSubmitDisabled(
+    approvalGate,
+    { approvalPassword: password, approvalTotpCode: totpCode },
+    false,
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
