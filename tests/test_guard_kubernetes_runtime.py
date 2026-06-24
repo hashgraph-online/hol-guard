@@ -68,7 +68,12 @@ def test_kubectl_secret_reads_are_detected_in_command_substitutions(tmp_path: Pa
     assert kubernetes_secret_read_source("kubectl get --raw /api/v1/namespaces/default/secrets#x") == (
         "Kubernetes Secret resource"
     )
+    assert kubernetes_secret_read_source("kubectl get --chunk-size 500 secrets -A -o yaml") == (
+        "Kubernetes Secret resource"
+    )
+    assert kubernetes_secret_read_source("kubectl get --raw /api/v1/namespaces/default/configmaps/secret/foo") is None
     assert kubernetes_secret_read_source("kubectl get pods -n registry-broker") is None
+    assert kubernetes_secret_read_source("kubectl create token default") == "Kubernetes service-account token"
 
 
 def test_kubectl_exec_shell_expansion_secret_reads_are_detected(tmp_path: Path) -> None:
@@ -87,6 +92,9 @@ def test_kubectl_exec_shell_expansion_secret_reads_are_detected(tmp_path: Path) 
     assert kubernetes_secret_read_source("oc rsh registry-frontend printenv GUARD_GITHUB_APP_PRIVATE_KEY") == (
         "Kubernetes pod environment"
     )
+    assert kubernetes_secret_read_source(
+        "kubectl exec --context prod registry-frontend -- printenv GUARD_GITHUB_APP_PRIVATE_KEY"
+    ) == ("Kubernetes pod environment")
     assert kubernetes_secret_read_source(
         'kubectl exec registry-frontend -- bash -c "env | grep GUARD_GITHUB_APP_PRIVATE_KEY"'
     ) == ("Kubernetes pod environment")
@@ -132,6 +140,9 @@ def test_kubectl_exec_secret_volume_readers_are_detected() -> None:
 
 def test_kubectl_cp_only_flags_remote_secret_volume_sources() -> None:
     assert kubernetes_secret_read_source("kubectl cp registry-frontend:/etc/secrets/token ./token") == (
+        "Kubernetes secret volume"
+    )
+    assert kubernetes_secret_read_source("kubectl cp --context prod registry-frontend:/etc/secrets/token ./token") == (
         "Kubernetes secret volume"
     )
     assert kubernetes_secret_read_source("kubectl cp ./token registry-frontend:/etc/secrets/token") is None
@@ -229,3 +240,17 @@ def test_local_interpreter_heredoc_after_kubectl_exec_is_not_mislabeled() -> Non
     )
 
     assert kubernetes_secret_read_source(command) is None
+
+
+def test_only_later_kubernetes_heredoc_secret_is_detected() -> None:
+    command = (
+        "kubectl exec registry-frontend -- python - <<'PY1'\n"
+        "print('safe')\n"
+        "PY1\n"
+        "kubectl exec registry-frontend -- python - <<'PY2'\n"
+        "import os\n"
+        'print(os.environ["GUARD_GITHUB_APP_PRIVATE_KEY"])\n'
+        "PY2"
+    )
+
+    assert kubernetes_secret_read_source(command) == "Kubernetes pod environment"

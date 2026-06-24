@@ -48,6 +48,10 @@ _KUBERNETES_SHELL_HEREDOC_PATTERN = re.compile(
     + r"\b(?:ash|bash|dash|ksh|sh|zsh)\b[^\n;&|]*<<-?\s*(['\"]?)(?P<tag>[^\s'\"`;&|<>]+)\1\s*\n"
     + r"(?P<body>.*?)\n(?P=tag)(?=$|\s)"
 )
+_RAW_SECRET_RESOURCE_PATH_PATTERN = re.compile(
+    r"^/(?:api/[^/]+|apis/[^/]+/[^/]+)/(?:watch/)?(?:namespaces/[^/]+/)?secrets?(?:/[^/?#]+)?$",
+    re.IGNORECASE,
+)
 
 
 def interpreter_reads_sensitive_env(command_name: str, args: tuple[str, ...]) -> bool:
@@ -65,16 +69,43 @@ def kubernetes_heredoc_secret_source(command: str) -> str | None:
         (_KUBERNETES_INTERPRETER_HEREDOC_PATTERN, "Kubernetes pod environment"),
         (_KUBERNETES_SHELL_HEREDOC_PATTERN, None),
     ):
-        match = pattern.search(command)
-        if match is None:
-            continue
-        body = str(match.group("body") or "")
-        if source_hint is not None:
-            return source_hint if script_reads_sensitive_env(body) else None
-        if _script_body_reads_secret_volume(body):
-            return "Kubernetes secret volume"
-        if script_reads_sensitive_env(body):
-            return "Kubernetes pod environment"
+        for match in pattern.finditer(command):
+            body = str(match.group("body") or "")
+            if source_hint is not None:
+                if script_reads_sensitive_env(body):
+                    return source_hint
+                continue
+            if _script_body_reads_secret_volume(body):
+                return "Kubernetes secret volume"
+            if script_reads_sensitive_env(body):
+                return "Kubernetes pod environment"
+    return None
+
+
+def kubernetes_option_tokens_consumed(
+    tokens: tuple[str, ...],
+    index: int,
+    *,
+    base_value_flags: frozenset[str],
+    base_boolean_flags: frozenset[str],
+    base_boolean_short_cluster: frozenset[str],
+    value_flags: frozenset[str] = frozenset(),
+    boolean_flags: frozenset[str] = frozenset(),
+    boolean_short_cluster: frozenset[str] = frozenset(),
+) -> int | None:
+    token = tokens[index]
+    all_value_flags = base_value_flags | value_flags
+    if token in all_value_flags and index + 1 < len(tokens):
+        return 2
+    if any(token.startswith(f"{flag}=") for flag in all_value_flags if flag.startswith("--")):
+        return 1
+    if token in (base_boolean_flags | boolean_flags):
+        return 1
+    if any(token.startswith(flag) and len(token) > len(flag) for flag in all_value_flags if flag.startswith("-")):
+        return 1
+    short_cluster = base_boolean_short_cluster | boolean_short_cluster
+    if token.startswith("-") and not token.startswith("--") and set(token[1:]).issubset(short_cluster):
+        return 1
     return None
 
 
@@ -97,12 +128,16 @@ def is_sensitive_env_name(name: str) -> bool:
 def raw_secret_api_path(path: str) -> bool:
     normalized = path.strip().strip("'\"").lower()
     base_path = normalized.split("#", 1)[0].split("?", 1)[0]
-    return (
-        "/secret/" in base_path
-        or "/secrets/" in base_path
-        or base_path.endswith("/secret")
-        or base_path.endswith("/secrets")
-    )
+    return _RAW_SECRET_RESOURCE_PATH_PATTERN.fullmatch(base_path) is not None
+
+
+def remote_cp_path(value: str) -> str | None:
+    if "://" in value:
+        return None
+    prefix, separator, path = value.partition(":")
+    if not separator or not prefix or not path:
+        return None
+    return path
 
 
 def resource_token_includes_secret(token: str) -> bool:
@@ -186,7 +221,9 @@ __all__ = [
     "is_secret_volume_path",
     "is_sensitive_env_name",
     "kubernetes_heredoc_secret_source",
+    "kubernetes_option_tokens_consumed",
     "raw_secret_api_path",
+    "remote_cp_path",
     "resource_token_includes_secret",
     "script_reads_sensitive_env",
     "secret_volume_argument_value",

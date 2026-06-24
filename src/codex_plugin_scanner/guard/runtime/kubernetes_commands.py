@@ -13,7 +13,9 @@ from .kubernetes_command_support import (
     is_secret_volume_path,
     is_sensitive_env_name,
     kubernetes_heredoc_secret_source,
+    kubernetes_option_tokens_consumed,
     raw_secret_api_path,
+    remote_cp_path,
     resource_token_includes_secret,
     script_reads_sensitive_env,
     secret_volume_argument_value,
@@ -58,6 +60,7 @@ _KUBECTL_OPTIONS_WITH_VALUES = frozenset(
         "--as-group",
         "--cache-dir",
         "--certificate-authority",
+        "--chunk-size",
         "--client-certificate",
         "--client-key",
         "--cluster",
@@ -75,6 +78,7 @@ _KUBECTL_OPTIONS_WITH_VALUES = frozenset(
         "--request-timeout",
         "--selector",
         "--server",
+        "--sort-by",
         "--template",
         "--token",
         "--user",
@@ -87,6 +91,7 @@ _KUBECTL_OPTIONS_WITH_VALUES = frozenset(
     }
 )
 _KUBECTL_VALUE_PREFIXES = tuple(f"{flag}=" for flag in _KUBECTL_OPTIONS_WITH_VALUES if flag.startswith("--"))
+_KUBECTL_BOOLEAN_OPTIONS = frozenset({"-A", "--all-namespaces"})
 _EXEC_OPTIONS_WITH_VALUES = frozenset(
     {
         "--container",
@@ -160,6 +165,8 @@ def _kubectl_secret_read_source_from_tokens(tokens: tuple[str, ...]) -> str | No
     subcommand = tokens[subcommand_index].lower()
     if subcommand == "get" and _kubectl_get_raw_secret_path(tokens, subcommand_index + 1):
         return "Kubernetes Secret resource"
+    if subcommand == "create" and _kubectl_create_token(tokens, subcommand_index + 1):
+        return "Kubernetes service-account token"
     if subcommand in {"get", "describe", "edit"} and _kubectl_resource_is_secret(tokens, subcommand_index + 1):
         return "Kubernetes Secret resource"
     if subcommand in {"exec", "rsh"}:
@@ -203,16 +210,14 @@ def _skip_kubectl_options(tokens: tuple[str, ...], index: int) -> int:
             return index + 1
         if not token.startswith("-"):
             return index
-        if token in _KUBECTL_OPTIONS_WITH_VALUES:
-            index += 2
-            continue
-        if token.startswith(_KUBECTL_VALUE_PREFIXES):
-            index += 1
-            continue
-        if token.startswith(("-n", "-o", "-l")) and len(token) > 2:
-            index += 1
-            continue
-        index += 1
+        option_consumed = kubernetes_option_tokens_consumed(
+            tokens,
+            index,
+            base_value_flags=_KUBECTL_OPTIONS_WITH_VALUES,
+            base_boolean_flags=_KUBECTL_BOOLEAN_OPTIONS,
+            base_boolean_short_cluster=_EXEC_BOOLEAN_SHORT_CLUSTER,
+        )
+        index += option_consumed if option_consumed is not None else 1
     return index
 
 
@@ -234,6 +239,13 @@ def _kubectl_get_raw_secret_path(tokens: tuple[str, ...], index: int) -> bool:
     return False
 
 
+def _kubectl_create_token(tokens: tuple[str, ...], index: int) -> bool:
+    index = _skip_kubectl_options(tokens, index)
+    if index >= len(tokens):
+        return False
+    return tokens[index].lower() == "token"
+
+
 def _kubectl_exec_secret_source(tokens: tuple[str, ...]) -> str | None:
     remote_tokens = _kubectl_exec_remote_tokens(tokens)
     if not remote_tokens:
@@ -252,7 +264,16 @@ def _kubectl_exec_remote_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
         token = tokens[index]
         if token == "--":
             return tokens[index + 1 :]
-        option_consumed = _exec_option_tokens_consumed(tokens, index)
+        option_consumed = kubernetes_option_tokens_consumed(
+            tokens,
+            index,
+            base_value_flags=_KUBECTL_OPTIONS_WITH_VALUES,
+            base_boolean_flags=_KUBECTL_BOOLEAN_OPTIONS,
+            base_boolean_short_cluster=_EXEC_BOOLEAN_SHORT_CLUSTER,
+            value_flags=_EXEC_OPTIONS_WITH_VALUES,
+            boolean_flags=_EXEC_BOOLEAN_OPTIONS,
+            boolean_short_cluster=_EXEC_BOOLEAN_SHORT_CLUSTER,
+        )
         if option_consumed is not None:
             index += option_consumed
             continue
@@ -261,21 +282,6 @@ def _kubectl_exec_remote_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
             index += 1
             continue
         return tokens[index:]
-    return ()
-
-
-def _exec_option_tokens_consumed(tokens: tuple[str, ...], index: int) -> int | None:
-    token = tokens[index]
-    if token in _EXEC_OPTIONS_WITH_VALUES and index + 1 < len(tokens):
-        return 2
-    if any(token.startswith(f"{flag}=") for flag in _EXEC_OPTIONS_WITH_VALUES if flag.startswith("--")):
-        return 1
-    if token in _EXEC_BOOLEAN_OPTIONS:
-        return 1
-    if token.startswith(("-c", "-n")) and len(token) > 2:
-        return 1
-    if token.startswith("-") and not token.startswith("--") and set(token[1:]).issubset(_EXEC_BOOLEAN_SHORT_CLUSTER):
-        return 1
     return None
 
 
@@ -345,7 +351,7 @@ def _kubectl_cp_reads_secret_volume(tokens: tuple[str, ...]) -> bool:
     operands = _kubectl_cp_operands(tokens)
     if len(operands) < 2:
         return False
-    remote_source = _remote_cp_path(operands[0])
+    remote_source = remote_cp_path(operands[0])
     return remote_source is not None and is_secret_volume_path(remote_source)
 
 
@@ -354,17 +360,17 @@ def _kubectl_cp_operands(tokens: tuple[str, ...]) -> tuple[str, ...]:
     index = 0
     while index < len(tokens):
         token = tokens[index]
-        if token in _CP_OPTIONS_WITH_VALUES and index + 1 < len(tokens):
-            index += 2
-            continue
-        if any(token.startswith(f"{flag}=") for flag in _CP_OPTIONS_WITH_VALUES if flag.startswith("--")):
-            index += 1
-            continue
-        if token in _CP_BOOLEAN_OPTIONS:
-            index += 1
-            continue
-        if token.startswith(("-c", "-n")) and len(token) > 2:
-            index += 1
+        option_consumed = kubernetes_option_tokens_consumed(
+            tokens,
+            index,
+            base_value_flags=_KUBECTL_OPTIONS_WITH_VALUES,
+            base_boolean_flags=_KUBECTL_BOOLEAN_OPTIONS,
+            base_boolean_short_cluster=_EXEC_BOOLEAN_SHORT_CLUSTER,
+            value_flags=_CP_OPTIONS_WITH_VALUES,
+            boolean_flags=_CP_BOOLEAN_OPTIONS,
+        )
+        if option_consumed is not None:
+            index += option_consumed
             continue
         if token.startswith("-"):
             index += 1
@@ -477,15 +483,6 @@ def _shell_stdin_secret_source(tokens: tuple[str, ...]) -> str | None:
     if _remote_command_reads_pod_environment(_shell_tokens(script_text), depth=1):
         return "Kubernetes pod environment"
     return None
-
-
-def _remote_cp_path(value: str) -> str | None:
-    if "://" in value:
-        return None
-    prefix, separator, path = value.partition(":")
-    if not separator or not prefix or not path:
-        return None
-    return path
 
 
 def _option_tokens_consumed(command_name: str, token: str) -> int:
