@@ -1,4 +1,4 @@
-"""OAuth Device Code Guard connect helpers."""
+"""Guard OAuth connect helpers for browser and device-code flows."""
 
 from __future__ import annotations
 
@@ -1322,7 +1322,7 @@ def build_connect_status_payload(
     }
     if action in {"repair", "re-pair"}:
         payload["repair_action"] = "rerun_connect"
-        payload["repair_message"] = "Run hol-guard connect to start OAuth Device Code approval."
+        payload["repair_message"] = "Run hol-guard connect to start browser sign-in."
     elif (oauth_repair_required and cloud_profile is None) or (
         oauth_required and not bool(oauth_storage_health.get("configured")) and payload["status"] == "retry_required"
     ):

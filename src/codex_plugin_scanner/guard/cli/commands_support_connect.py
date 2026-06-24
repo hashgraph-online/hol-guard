@@ -488,7 +488,7 @@ def _manual_guard_login_payload(
     if manual_token is None:
         return None
     print(
-        "Manual token login is retired. Run `hol-guard connect` to sign in with OAuth Device Code.",
+        "Manual token login is retired. Run `hol-guard connect` to sign in with browser OAuth.",
         file=sys.stderr,
     )
     return None, 2
