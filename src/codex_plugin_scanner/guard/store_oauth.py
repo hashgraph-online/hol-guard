@@ -406,10 +406,13 @@ class StoreOAuthConnectMixin:
         supply_chain_firewall = workspace_metadata.get("supply_chain_firewall")
         if isinstance(supply_chain_firewall, bool):
             recovered_payload["supply_chain_firewall"] = supply_chain_firewall
-        if self._build_oauth_local_credentials_result(
-            metadata=self._oauth_local_credentials_metadata(recovered_payload) or {},
-            secret_payload=secret_payload,
-        ) is None:
+        if (
+            self._build_oauth_local_credentials_result(
+                metadata=self._oauth_local_credentials_metadata(recovered_payload) or {},
+                secret_payload=secret_payload,
+            )
+            is None
+        ):
             return None
         self._mirror_oauth_secret_to_fallback(secret_ref, secret_json)
         self._remember_oauth_secret_payload(
