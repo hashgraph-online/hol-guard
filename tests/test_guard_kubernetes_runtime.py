@@ -104,6 +104,25 @@ def test_kubectl_secret_reads_are_detected_in_command_substitutions(tmp_path: Pa
     )
 
 
+def test_kubectl_secret_reads_are_detected_in_single_item_command_lists(tmp_path: Path) -> None:
+    command = "kubectl get secret prod -o yaml"
+
+    for arguments in (
+        {"commands": [command]},
+        {"command_args": [command]},
+        {"commandArgs": [command]},
+    ):
+        request = extract_sensitive_tool_action_request(
+            "Bash",
+            arguments,
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+
+        assert request is not None
+        assert request.action_class == "Kubernetes secret read command"
+
+
 def test_kubectl_exec_shell_expansion_secret_reads_are_detected(tmp_path: Path) -> None:
     command = "kubectl exec registry-frontend -- sh -c 'echo \"$GUARD_GITHUB_APP_PRIVATE_KEY\"'"
 
@@ -322,6 +341,25 @@ def test_pi_post_tool_output_labels_argv_wrapped_kubernetes_secret_source(tmp_pa
     assert artifact is not None
     assert artifact.metadata["action_class"] == "Kubernetes secret read command"
     assert artifact.metadata["guard_default_action"] == "require-reapproval"
+    assert artifact.metadata["secret_source_family"] == "Kubernetes Secret resource"
+
+
+def test_pi_post_tool_output_labels_single_item_command_args_kubernetes_secret_source(tmp_path: Path) -> None:
+    artifact = _codex_post_tool_output_artifact(
+        harness="pi",
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {"command_args": ["kubectl get secret prod -o yaml"]},
+            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+        },
+        config_path="~/.pi/agent/settings.json",
+        source_scope="project",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert artifact is not None
+    assert artifact.metadata["action_class"] == "Kubernetes secret read command"
     assert artifact.metadata["secret_source_family"] == "Kubernetes Secret resource"
 
 

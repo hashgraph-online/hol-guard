@@ -3519,6 +3519,15 @@ def _candidate_command_texts(value: object) -> list[str]:
     return results
 
 
+def command_list_candidate_texts(values: list[str]) -> tuple[str, ...]:
+    string_values = [item.strip() for item in values if isinstance(item, str) and item.strip()]
+    if not string_values:
+        return ()
+    if len(string_values) == 1:
+        return (string_values[0],)
+    return (shlex.join(string_values),)
+
+
 def _collect_candidate_commands(value: object, results: list[str], *, depth: int) -> None:
     if depth > 4:
         return
@@ -3528,9 +3537,7 @@ def _collect_candidate_commands(value: object, results: list[str], *, depth: int
             results.append(stripped)
         return
     if isinstance(value, list):
-        string_values = [item.strip() for item in value if isinstance(item, str) and item.strip()]
-        if string_values:
-            results.append(shlex.join(string_values))
+        results.extend(command_list_candidate_texts(value))
         for child in value:
             if isinstance(child, (dict, list)):
                 _collect_candidate_commands(child, results, depth=depth + 1)
@@ -3544,9 +3551,7 @@ def _collect_candidate_commands(value: object, results: list[str], *, depth: int
     for key in _COMMAND_LIST_KEYS:
         candidate = value.get(key)
         if isinstance(candidate, list):
-            string_values = [item.strip() for item in candidate if isinstance(item, str) and item.strip()]
-            if string_values:
-                results.append(shlex.join(string_values))
+            results.extend(command_list_candidate_texts(candidate))
     for child in value.values():
         if isinstance(child, (dict, list)):
             _collect_candidate_commands(child, results, depth=depth + 1)

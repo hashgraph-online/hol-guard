@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from .commands_support_runtime_artifacts import _codex_command_references_sensitive_local_source
 
 
-from ..runtime.secret_file_requests import COMMAND_LIST_KEYS
+from ..runtime.secret_file_requests import COMMAND_LIST_KEYS, command_list_candidate_texts
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from .commands_support_codex_tool_output import (
@@ -172,9 +172,9 @@ def _codex_post_tool_command_text(payload: dict[str, object]) -> str:
         for key in COMMAND_LIST_KEYS:
             candidate = tool_input.get(key)
             if isinstance(candidate, list):
-                string_values = [item.strip() for item in candidate if isinstance(item, str) and item.strip()]
-                if string_values:
-                    return shlex.join(string_values)
+                command_texts = command_list_candidate_texts(candidate)
+                if command_texts:
+                    return command_texts[0]
     return ""
 
 _CODEX_READ_ONLY_SEARCH_COMMANDS = frozenset({"fd", "rg", "grep", "egrep", "fgrep"})
