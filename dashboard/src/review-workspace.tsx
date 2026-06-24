@@ -1059,6 +1059,7 @@ function ReviewDecisionCard(props: {
       setErrorMessage(null);
       try {
         const gate = props.approvalGate;
+        const needsPassword = approvalProofRequiresPassword(gate);
         const includeGateFields =
           gate?.enabled === true &&
           gate?.configured === true &&
@@ -1070,10 +1071,8 @@ function ReviewDecisionCard(props: {
             scope,
             reason: action === "allow" ? "approved in review" : "blocked in review",
           }),
-          ...(includeGateFields && approvalProofRequiresPassword(gate) ? { approval_password: approvalPassword } : {}),
-          ...(includeGateFields && !approvalProofRequiresPassword(gate)
-            ? { approval_totp_code: approvalTotpCode }
-            : {}),
+          ...(includeGateFields && needsPassword ? { approval_password: approvalPassword } : {}),
+          ...(includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {}),
           ...(includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}),
         });
         setResolved(action);

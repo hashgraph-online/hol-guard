@@ -23240,7 +23240,7 @@ function isBulkApproveGateReady(gate) {
 }
 function validateBulkApproveCredentials(gate, credentials) {
   if (!isBulkApproveGateReady(gate)) {
-    return "Set up an approval password in Settings before bulk approval.";
+    return "Set up an approval gate in Settings before bulk approval.";
   }
   if (gate?.totp_enabled === true) {
     return credentials.totpCode.trim() ? null : "Enter your authenticator code to continue.";
@@ -24906,6 +24906,7 @@ function ReviewDecisionCard(props) {
       setErrorMessage(null);
       try {
         const gate = props.approvalGate;
+        const needsPassword = approvalProofRequiresPassword(gate);
         const includeGateFields = gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope);
         await props.onResolve({
           ...buildDecisionPayload({
@@ -24914,8 +24915,8 @@ function ReviewDecisionCard(props) {
             scope,
             reason: action === "allow" ? "approved in review" : "blocked in review"
           }),
-          ...includeGateFields && approvalProofRequiresPassword(gate) ? { approval_password: approvalPassword } : {},
-          ...includeGateFields && !approvalProofRequiresPassword(gate) ? { approval_totp_code: approvalTotpCode } : {},
+          ...includeGateFields && needsPassword ? { approval_password: approvalPassword } : {},
+          ...includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {},
           ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
         });
         setResolved(action);

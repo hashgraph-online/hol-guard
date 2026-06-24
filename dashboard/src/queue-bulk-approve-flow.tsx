@@ -29,7 +29,7 @@ export function validateBulkApproveCredentials(
   credentials: { password: string; totpCode: string },
 ): string | null {
   if (!isBulkApproveGateReady(gate)) {
-    return "Set up an approval password in Settings before bulk approval.";
+    return "Set up an approval gate in Settings before bulk approval.";
   }
   if (gate?.totp_enabled === true) {
     return credentials.totpCode.trim() ? null : "Enter your authenticator code to continue.";

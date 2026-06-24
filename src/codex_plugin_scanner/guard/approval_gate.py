@@ -678,11 +678,7 @@ def _verify_or_raise(
     state["failed_attempts"] = 0
     state.pop("locked_until", None)
     cooldown_expires_at: str | None = None
-    if (
-        not strict
-        and _cooldown_seconds(state) > 0
-        and gate_input.use_cooldown is not False
-    ):
+    if not strict and _cooldown_seconds(state) > 0 and gate_input.use_cooldown is not False:
         cooldown_expires_at = _iso_from_epoch(now_epoch + _cooldown_seconds(state))
         state["cooldown_expires_at"] = cooldown_expires_at
     _write_state(guard_home, state, now=now)
