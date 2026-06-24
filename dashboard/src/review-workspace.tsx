@@ -83,6 +83,7 @@ import {
 import { plainEnglishRequestTitle, whyPaused } from "./evidence/plain-english";
 import { requiresApprovalPasswordPrompt, type BulkGateCredentials } from "./approval-gate-utils";
 import { ApprovalPasswordModal } from "./approval-center-review-cards";
+import { approvalProofRequiresPassword } from "./approval-proof-inline";
 import { guardAwareHref } from "./guard-api";
 import { LoggedActionPanel } from "./logged-action-panel";
 import {
@@ -1069,8 +1070,8 @@ function ReviewDecisionCard(props: {
             scope,
             reason: action === "allow" ? "approved in review" : "blocked in review",
           }),
-          ...(includeGateFields ? { approval_password: approvalPassword } : {}),
-          ...(includeGateFields && gate?.totp_enabled === true
+          ...(includeGateFields && approvalProofRequiresPassword(gate) ? { approval_password: approvalPassword } : {}),
+          ...(includeGateFields && !approvalProofRequiresPassword(gate)
             ? { approval_totp_code: approvalTotpCode }
             : {}),
           ...(includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}),

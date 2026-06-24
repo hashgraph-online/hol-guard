@@ -110,7 +110,15 @@ assert(
 const gateCredentials = buildBulkGateCredentials(readyGate, "secret", "123456");
 assert(gateCredentials?.approval_password === "secret", "T-BULK-09: buildBulkGateCredentials includes password when gate is ready");
 assert(gateCredentials?.approval_gate_use_cooldown === false, "T-BULK-10: buildBulkGateCredentials never enables cooldown for bulk");
+const totpGate = { ...readyGate, totp_enabled: true };
+assert(
+  validateBulkApproveCredentials(totpGate, { password: "", totpCode: "123456" }) === null,
+  "T-BULK-11: validateBulkApproveCredentials accepts totp without password when MFA is enabled",
+);
+const totpCredentials = buildBulkGateCredentials(totpGate, "", "123456");
+assert(totpCredentials?.approval_totp_code === "123456", "T-BULK-12: buildBulkGateCredentials includes totp when MFA is enabled");
+assert(!("approval_password" in (totpCredentials ?? {})), "T-BULK-13: buildBulkGateCredentials omits password when MFA is enabled");
 
-assert(buildBulkGateCredentials(null, "secret", "") === undefined, "T-BULK-11: buildBulkGateCredentials omits credentials when gate is not ready");
+assert(buildBulkGateCredentials(null, "secret", "") === undefined, "T-BULK-14: buildBulkGateCredentials omits credentials when gate is not ready");
 
 console.log("queue-bulk-approve.test.ts: all tests passed");

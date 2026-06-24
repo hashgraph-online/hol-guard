@@ -77,7 +77,7 @@ export function resolveSettingsSaveProofModalCopy(input: {
   if (input.mode === "change-password") {
     return {
       title: "Change approval password",
-      detail: "Enter your current password, then choose a new one.",
+      detail: "Confirm your approval proof, then choose a new password.",
       confirmLabel: "Update password",
     };
   }
@@ -106,7 +106,7 @@ export function resolveSettingsSaveProofModalCopy(input: {
     if (input.maintenanceAction === "disable-totp") {
       return {
         title: "Disconnect authenticator",
-        detail: "Confirm your approval password and a current app code to remove this second factor.",
+        detail: "Confirm a current app code to remove this second factor.",
         confirmLabel: "Disconnect",
       };
     }
@@ -133,13 +133,13 @@ export function resolveSettingsSaveProofModalCopy(input: {
   if (input.gateSettingsChanged) {
     return {
       title: "Confirm before saving gate changes",
-      detail: "Enter your approval password so Guard can apply the gate updates you chose.",
+      detail: "Enter your approval proof so Guard can apply the gate updates you chose.",
       confirmLabel: "Save settings",
     };
   }
   return {
     title: "Confirm before saving",
-    detail: "Enter your approval password so Guard can save these settings.",
+    detail: "Enter your approval proof so Guard can save these settings.",
     confirmLabel: "Save settings",
   };
 }
@@ -158,20 +158,24 @@ export function isSettingsSaveProofSubmitDisabled(
     return next.length === 0 || confirm.length === 0 || next !== confirm;
   }
   if (mode === "change-password") {
-    if (current.length === 0 || next.length === 0 || confirm.length === 0 || next !== confirm) {
+    if (next.length === 0 || confirm.length === 0 || next !== confirm) {
       return true;
     }
-    return totpRequired && totp.length === 0;
+    return totpRequired ? totp.length === 0 : current.length === 0;
+  }
+  if (totpRequired) {
+    return totp.length === 0;
   }
   if (current.length === 0) {
     return true;
   }
-  return totpRequired && totp.length === 0;
+  return false;
 }
 
 export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
+  const totpRef = useRef<HTMLInputElement>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -188,10 +192,17 @@ export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
       return;
     }
     const timer = setTimeout(() => {
-      passwordRef.current?.focus();
+      if (
+        props.gate?.totp_enabled === true
+        && (props.mode === "verify-save" || props.mode === "change-password" || props.mode === "maintenance")
+      ) {
+        totpRef.current?.focus();
+      } else {
+        passwordRef.current?.focus();
+      }
     }, 50);
     return () => clearTimeout(timer);
-  }, [props.open, props.mode]);
+  }, [props.gate?.totp_enabled, props.open, props.mode]);
 
   useEffect(() => {
     if (props.open) {
@@ -212,6 +223,7 @@ export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
 
   const totpRequired = props.gate?.totp_enabled === true
     && (props.mode === "verify-save" || props.mode === "change-password" || props.mode === "maintenance");
+  const needsCurrentPassword = props.mode !== "setup-gate" && !totpRequired;
 
   const handleCurrentPasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setCurrentPassword(event.target.value);
@@ -285,7 +297,7 @@ export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
         </div>
 
         <div className="mt-5 space-y-3">
-          {props.mode !== "setup-gate" ? (
+          {needsCurrentPassword ? (
             <label className="block">
               <span className="text-sm font-semibold text-brand-dark">Approval password</span>
               <input
@@ -333,6 +345,8 @@ export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
                 inputMode="numeric"
                 pattern="[0-9]*"
                 maxLength={6}
+                ref={totpRef}
+                autoComplete="one-time-code"
                 value={totpCode}
                 onChange={handleTotpChange}
                 placeholder="123456"

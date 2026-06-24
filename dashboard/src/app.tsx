@@ -610,8 +610,8 @@ export function App() {
     if (bulkApproveInFlight.current) {
       return;
     }
-    if (!gateCredentials?.approval_password?.trim()) {
-      throw new Error("Bulk approval requires an approval password.");
+    if (!gateCredentials?.approval_password?.trim() && !gateCredentials?.approval_totp_code?.trim()) {
+      throw new Error("Bulk approval requires approval proof.");
     }
     bulkApproveInFlight.current = true;
     try {

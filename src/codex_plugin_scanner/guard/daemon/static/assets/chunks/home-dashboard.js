@@ -1,4 +1,4 @@
-import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, f as fetchReceiptAnalytics, h as harnessDisplayName, i as isDisplayableHarness, b as EmptyState, A as ActionButton, c as EvidenceInsightsShareModal, d as HiMiniCheckCircle, e as GuardHero, k as formatNumber, l as HiMiniShieldCheck, D as DeviceProofCard, m as formatRelativeTime, n as HiMiniSparkles, o as HiMiniXMark, p as HiMiniChevronUp, q as HiMiniChevronDown, s as resolveCloudIntelCopy, t as HiMiniCloud, u as HiMiniQuestionMarkCircle, v as useFocusTrap, w as HiMiniExclamationTriangle, x as HiMiniBolt, B as Badge, y as HiMiniChevronRight, z as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, f as fetchReceiptAnalytics, h as harnessDisplayName, i as isDisplayableHarness, b as EmptyState, A as ActionButton, c as EvidenceInsightsShareModal, d as HiMiniCheckCircle, e as GuardHero, k as formatNumber, l as HiMiniShieldCheck, D as DeviceProofCard, m as formatRelativeTime, n as HiMiniSparkles, o as HiMiniXMark, p as HiMiniChevronUp, q as HiMiniChevronDown, s as resolveCloudIntelCopy, t as HiMiniCloud, u as HiMiniQuestionMarkCircle, v as useFocusTrap, w as approvalProofRequiresPassword, x as HiMiniExclamationTriangle, y as HiMiniBolt, B as Badge, z as HiMiniChevronRight, C as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { H as HomeProtectionModule } from "./home-protection-module.js";
 function HomeInsightsSkeleton() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -430,6 +430,7 @@ function ClearConfirmDialog(props) {
   const dialogRef = reactExports.useRef(null);
   useFocusTrap(true, dialogRef);
   const needsProof = props.approvalGate?.enabled === true && props.approvalGate.configured === true;
+  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm", role: "dialog", "aria-modal": "true", "aria-label": "Confirm clear decisions", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: dialogRef, className: "guard-fade-in w-full max-w-md rounded-2xl border border-brand-attention/20 bg-white p-6 shadow-2xl", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
@@ -440,37 +441,35 @@ function ClearConfirmDialog(props) {
           props.clearConfirm.all ? "all saved approvals" : `decisions for ${props.clearConfirm.harness ?? "this app"}`,
           ". Guard will ask again next time matching actions run."
         ] }),
-        needsProof && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 grid gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Approval password" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "password",
-                autoComplete: "current-password",
-                value: props.clearPassword,
-                onChange: props.onClearPasswordChange,
-                className: "mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-              }
-            )
-          ] }),
-          props.approvalGate?.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Authenticator code" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "text",
-                inputMode: "numeric",
-                pattern: "[0-9]*",
-                maxLength: 6,
-                value: props.clearTotpCode,
-                onChange: props.onClearTotpCodeChange,
-                placeholder: "123456",
-                className: "mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-              }
-            )
-          ] })
-        ] }),
+        needsProof && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 grid gap-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Approval password" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "password",
+              autoComplete: "current-password",
+              value: props.clearPassword,
+              onChange: props.onClearPasswordChange,
+              className: "mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            }
+          )
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Authenticator code" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "text",
+              inputMode: "numeric",
+              pattern: "[0-9]*",
+              maxLength: 6,
+              value: props.clearTotpCode,
+              onChange: props.onClearTotpCodeChange,
+              placeholder: "123456",
+              autoComplete: "one-time-code",
+              className: "mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            }
+          )
+        ] }) }),
         props.clearError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-sm text-brand-dark", children: props.clearError })
       ] })
     ] }),

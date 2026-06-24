@@ -1,5 +1,6 @@
 import type { GuardApprovalGatePublicConfig, GuardSettings } from "./guard-types";
 import { approvalGateCooldownLabel, requiresApprovalPasswordPrompt } from "./approval-gate-utils";
+import { buildApprovalProofCredentials, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
 import { applyApprovalGateDraft, hasUnsavedChanges } from "./settings-workspace";
 
 function assert(condition: boolean, message: string): void {
@@ -231,6 +232,28 @@ function testBulkApproveGateCredentialsPayload(): void {
   assert(!("approval_gate_use_cooldown" in withoutGate), "bulk payload should not include approval_gate_use_cooldown when no gate credentials");
 }
 
+function testApprovalProofTotpOverridesPassword(): void {
+  const totpGate: GuardApprovalGatePublicConfig = {
+    enabled: true,
+    configured: true,
+    cooldown_seconds: 0,
+    cooldown_active: false,
+    cooldown_expires_at: null,
+    locked_until: null,
+    fail_closed: false,
+    strict_all_decisions: false,
+    totp_enabled: true,
+    totp_pending: false,
+  };
+  assert(
+    isApprovalProofSubmitDisabled(totpGate, { approvalPassword: "", approvalTotpCode: "123456" }, false) === false,
+    "totp approval proof should not require password",
+  );
+  const credentials = buildApprovalProofCredentials(totpGate, { approvalPassword: "ignored", approvalTotpCode: "123456" });
+  assert(credentials.approval_totp_code === "123456", "totp approval proof should include authenticator code");
+  assert(!("approval_password" in credentials), "totp approval proof should omit password");
+}
+
 const tests: Array<[string, () => void]> = [
   ["testApprovalGatePublicConfigEnabled", testApprovalGatePublicConfigEnabled],
   ["testApprovalGatePublicConfigDisabled", testApprovalGatePublicConfigDisabled],
@@ -240,6 +263,7 @@ const tests: Array<[string, () => void]> = [
   ["testApprovalGateToggleReflectedInDraftApprovalGate", testApprovalGateToggleReflectedInDraftApprovalGate],
   ["testApprovalGateCooldownReflectedInDraftApprovalGate", testApprovalGateCooldownReflectedInDraftApprovalGate],
   ["testBulkApproveGateCredentialsPayload", testBulkApproveGateCredentialsPayload],
+  ["testApprovalProofTotpOverridesPassword", testApprovalProofTotpOverridesPassword],
 ];
 
 let passed = 0;

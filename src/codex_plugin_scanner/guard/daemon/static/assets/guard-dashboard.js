@@ -13656,7 +13656,7 @@ function queueCategoryText(item) {
     envelope?.action_type ?? "",
     envelope?.command ?? "",
     envelope?.tool_name ?? "",
-    envelope?.prompt_excerpt ?? "",
+    envelope?.prompt_text ?? envelope?.prompt_excerpt ?? "",
     envelope?.mcp_server ?? "",
     envelope?.mcp_tool ?? "",
     envelope?.package_manager ?? "",
@@ -13933,7 +13933,7 @@ function searchQueue(items, term) {
       item.launch_summary ?? "",
       item.why_now ?? "",
       envelope?.command ?? "",
-      envelope?.prompt_excerpt ?? "",
+      envelope?.prompt_text ?? envelope?.prompt_excerpt ?? "",
       envelope?.mcp_server ?? "",
       envelope?.mcp_tool ?? "",
       envelope?.package_name ?? "",
@@ -16209,7 +16209,7 @@ async function revokeApprovalGateCooldown(password, totpCode) {
     },
     body: JSON.stringify({
       approval_gate: {
-        password,
+        ...password.trim().length > 0 ? { password } : {},
         ...totpCode !== void 0 && totpCode.trim().length > 0 ? { totp_code: totpCode } : {}
       }
     })
@@ -16274,7 +16274,7 @@ async function disableApprovalGateTotp(currentPassword, code) {
     },
     body: JSON.stringify({
       approval_gate: {
-        password: currentPassword
+        ...currentPassword.trim().length > 0 ? { password: currentPassword } : {}
       },
       approval_totp_code: code
     })
@@ -18337,9 +18337,9 @@ function resolveActionTitle(receipt) {
   if ((type === "File read" || type === "File write") && targetPath && targetPath.length > 0) {
     return truncate(targetPath, 80);
   }
-  const promptExcerpt = envelope?.prompt_excerpt?.trim();
-  if (type === "Prompt" && promptExcerpt && promptExcerpt.length > 0) {
-    return truncate(promptExcerpt, 80);
+  const promptText = (envelope?.prompt_text ?? envelope?.prompt_excerpt)?.trim();
+  if (type === "Prompt" && promptText && promptText.length > 0) {
+    return truncate(promptText, 80);
   }
   const host = envelope?.network_hosts?.[0]?.trim();
   if (type === "Network request" && host && host.length > 0) {
@@ -23012,14 +23012,120 @@ function requiresApprovalPasswordPrompt(cooldownActive, strictAllDecisions, sele
   }
   return strictAllDecisions;
 }
-function ApprovalPasswordModal(props) {
+function approvalProofRequiresPassword(gate) {
+  return gate?.totp_enabled !== true;
+}
+function isApprovalProofSubmitDisabled(gate, credentials, busy) {
+  if (busy) {
+    return true;
+  }
+  if (approvalProofRequiresPassword(gate)) {
+    return credentials.approvalPassword.trim() === "";
+  }
+  return credentials.approvalTotpCode.trim() === "";
+}
+function buildApprovalProofCredentials(gate, credentials) {
+  if (approvalProofRequiresPassword(gate)) {
+    return { approval_password: credentials.approvalPassword };
+  }
+  return { approval_totp_code: credentials.approvalTotpCode };
+}
+function ApprovalProofFieldInputs(props) {
+  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        ref: props.passwordRef,
+        type: "password",
+        autoComplete: "current-password",
+        value: props.approvalPassword,
+        onChange: props.onApprovalPasswordChange,
+        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+      }
+    )
+  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        type: "text",
+        inputMode: "numeric",
+        pattern: "[0-9]*",
+        autoComplete: "one-time-code",
+        value: props.approvalTotpCode,
+        onChange: props.onApprovalTotpCodeChange,
+        className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+      }
+    )
+  ] }) });
+}
+function ApprovalProofInline(props) {
   const passwordRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       passwordRef.current?.focus();
     }, 50);
-    return () => clearTimeout(timer);
+    return () => window.clearTimeout(timer);
   }, []);
+  const submitDisabled = isApprovalProofSubmitDisabled(
+    props.approvalGate,
+    {
+      approvalPassword: props.approvalPassword,
+      approvalTotpCode: props.approvalTotpCode
+    },
+    props.submitBusy
+  );
+  const handleKeyDown = reactExports.useCallback(
+    (event) => {
+      if (event.key === "Enter" && !submitDisabled) {
+        event.preventDefault();
+        props.onSubmit();
+      }
+    },
+    [props.onSubmit, submitDisabled]
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", onKeyDown: handleKeyDown, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Approval proof required" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-600", children: "Enter your local approval proof before Guard syncs supply-chain intel on this device." })
+      ] })
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ApprovalProofFieldInputs,
+      {
+        approvalGate: props.approvalGate,
+        approvalPassword: props.approvalPassword,
+        approvalTotpCode: props.approvalTotpCode,
+        passwordRef,
+        onApprovalPasswordChange: props.onApprovalPasswordChange,
+        onApprovalTotpCodeChange: props.onApprovalTotpCodeChange
+      }
+    ),
+    props.error !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "alert", children: props.error }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 sm:flex-row sm:items-center", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: props.onSubmit, disabled: submitDisabled, children: props.submitLabel }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onBack, disabled: props.submitBusy, children: "Go back" })
+    ] })
+  ] });
+}
+function ApprovalPasswordModal(props) {
+  const passwordRef = reactExports.useRef(null);
+  const totpRef = reactExports.useRef(null);
+  const needsPassword = approvalProofRequiresPassword(props.gate);
+  reactExports.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (needsPassword) {
+        passwordRef.current?.focus();
+      } else {
+        totpRef.current?.focus();
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [needsPassword]);
   const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active && props.gate.totp_enabled !== true;
   const handleBackdropClick = reactExports.useCallback(
     (e) => {
@@ -23054,14 +23160,14 @@ function ApprovalPasswordModal(props) {
               {
                 id: "approval-password-modal-title",
                 className: "text-lg font-semibold tracking-tight text-brand-dark",
-                children: "Approval password required"
+                children: needsPassword ? "Approval password required" : "Authenticator code required"
               }
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: "Guard needs a fresh proof before it can save this decision." })
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 space-y-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          needsPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "input",
@@ -23074,15 +23180,16 @@ function ApprovalPasswordModal(props) {
                 className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               }
             )
-          ] }),
-          props.gate.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "input",
               {
+                ref: totpRef,
                 type: "text",
                 inputMode: "numeric",
                 pattern: "[0-9]*",
+                autoComplete: "one-time-code",
                 value: props.approvalTotpCode,
                 onChange: props.onApprovalTotpCodeChange,
                 className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
@@ -23135,11 +23242,11 @@ function validateBulkApproveCredentials(gate, credentials) {
   if (!isBulkApproveGateReady(gate)) {
     return "Set up an approval password in Settings before bulk approval.";
   }
+  if (gate?.totp_enabled === true) {
+    return credentials.totpCode.trim() ? null : "Enter your authenticator code to continue.";
+  }
   if (!credentials.password.trim()) {
     return "Enter your approval password to continue.";
-  }
-  if (gate?.totp_enabled === true && !credentials.totpCode.trim()) {
-    return "Enter your authenticator code to continue.";
   }
   return null;
 }
@@ -23147,9 +23254,14 @@ function buildBulkGateCredentials(gate, password, totpCode) {
   if (!isBulkApproveGateReady(gate)) {
     return void 0;
   }
+  if (gate?.totp_enabled === true) {
+    return {
+      approval_totp_code: totpCode.trim(),
+      approval_gate_use_cooldown: false
+    };
+  }
   return {
     approval_password: password.trim(),
-    approval_totp_code: totpCode.trim(),
     approval_gate_use_cooldown: false
   };
 }
@@ -23454,25 +23566,11 @@ function QueueBulkDrawer(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-px flex-1 bg-slate-200", "aria-hidden": "true" })
       ] }),
       gateReady ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-password", className: "text-sm font-semibold text-brand-dark", children: "Approval password" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            id: "guard-bulk-approval-password",
-            type: "password",
-            value: props.bulkApprovePassword,
-            onChange: props.onBulkApprovePasswordChange,
-            placeholder: "Enter your approval password",
-            autoComplete: "current-password",
-            disabled: props.step === "submitting",
-            className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
-          }
-        ),
         props.approvalGate?.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-totp", className: "block text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-totp", className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" })
+          ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "input",
             {
@@ -23483,6 +23581,25 @@ function QueueBulkDrawer(props) {
               value: props.bulkApproveTotpCode,
               onChange: props.onBulkApproveTotpCodeChange,
               placeholder: "6-digit code",
+              disabled: props.step === "submitting",
+              className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+            }
+          )
+        ] }),
+        props.approvalGate?.totp_enabled !== true && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "guard-bulk-approval-password", className: "text-sm font-semibold text-brand-dark", children: "Approval password" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              id: "guard-bulk-approval-password",
+              type: "password",
+              value: props.bulkApprovePassword,
+              onChange: props.onBulkApprovePasswordChange,
+              placeholder: "Enter your approval password",
+              autoComplete: "current-password",
               disabled: props.step === "submitting",
               className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
             }
@@ -24704,7 +24821,7 @@ function iconForQueueCategory(categoryId) {
 }
 function queueItemPreview(item) {
   const envelope = item.action_envelope_json;
-  return envelope?.command ?? envelope?.mcp_tool ?? envelope?.prompt_excerpt ?? envelope?.package_name ?? displayArtifactName(item);
+  return envelope?.command ?? envelope?.mcp_tool ?? (envelope?.prompt_text ?? envelope?.prompt_excerpt) ?? envelope?.package_name ?? displayArtifactName(item);
 }
 function ReviewDecisionCard(props) {
   const detail = props.detail;
@@ -24797,8 +24914,8 @@ function ReviewDecisionCard(props) {
             scope,
             reason: action === "allow" ? "approved in review" : "blocked in review"
           }),
-          ...includeGateFields ? { approval_password: approvalPassword } : {},
-          ...includeGateFields && gate?.totp_enabled === true ? { approval_totp_code: approvalTotpCode } : {},
+          ...includeGateFields && approvalProofRequiresPassword(gate) ? { approval_password: approvalPassword } : {},
+          ...includeGateFields && !approvalProofRequiresPassword(gate) ? { approval_totp_code: approvalTotpCode } : {},
           ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
         });
         setResolved(action);
@@ -26004,8 +26121,8 @@ function App() {
     if (bulkApproveInFlight.current) {
       return;
     }
-    if (!gateCredentials?.approval_password?.trim()) {
-      throw new Error("Bulk approval requires an approval password.");
+    if (!gateCredentials?.approval_password?.trim() && !gateCredentials?.approval_totp_code?.trim()) {
+      throw new Error("Bulk approval requires approval proof.");
     }
     bulkApproveInFlight.current = true;
     try {
@@ -26231,140 +26348,145 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  clearPolicy as $,
+  updateSettings as $,
   ActionButton as A,
   Badge as B,
-  HiMiniEye as C,
+  HiMiniMinusCircle as C,
   DeviceProofCard as D,
   EvidenceInsightsShareButton as E,
-  HiMiniWrenchScrewdriver as F,
+  HiMiniEye as F,
   GuardStatMetric as G,
   HomeInsightsMetrics as H,
-  HiMiniXCircle as I,
-  HiMiniExclamationCircle as J,
-  HiMiniClipboardDocumentCheck as K,
-  HiMiniClipboard as L,
-  requireReact as M,
-  getDefaultExportFromCjs as N,
-  HiMiniKey as O,
+  HiMiniWrenchScrewdriver as I,
+  HiMiniXCircle as J,
+  HiMiniExclamationCircle as K,
+  HiMiniClipboardDocumentCheck as L,
+  HiMiniClipboard as M,
+  requireReact as N,
+  getDefaultExportFromCjs as O,
   ProofStrip as P,
-  HiMiniLockClosed as Q,
-  HiMiniBellAlert as R,
+  HiMiniKey as Q,
+  HiMiniLockClosed as R,
   SectionLabel as S,
-  HiMiniAdjustmentsHorizontal as T,
-  HiMiniCog6Tooth as U,
-  HiMiniCircleStack as V,
-  TabBar as W,
-  resolveProtectionLevelCopy as X,
-  fetchSettings as Y,
-  fetchRuntimeSnapshot as Z,
-  updateSettings as _,
+  HiMiniBellAlert as T,
+  HiMiniAdjustmentsHorizontal as U,
+  HiMiniCog6Tooth as V,
+  HiMiniCircleStack as W,
+  TabBar as X,
+  resolveProtectionLevelCopy as Y,
+  fetchSettings as Z,
+  fetchRuntimeSnapshot as _,
   EvidenceActivityHeatmapMini as a,
-  WorkspacePageHeader as a$,
-  clearReviewQueue as a0,
-  revokeApprovalGateCooldown as a1,
-  disableApprovalGateTotp as a2,
-  importSettings as a3,
-  resetSettings as a4,
-  enrollApprovalGateTotp as a5,
-  verifyApprovalGateTotp as a6,
-  clearEvidence as a7,
-  exportDiagnostics as a8,
-  repairApprovalCenter as a9,
-  HiMiniCommandLine as aA,
-  isSupplyChainAuditIncomplete as aB,
-  isSupplyChainAuditEvidence as aC,
-  readString$1 as aD,
-  isRecord$2 as aE,
-  HiMiniClock as aF,
-  IconActionButton as aG,
-  HiMiniBeaker as aH,
-  ActivationSummary as aI,
-  ActionResultPanel as aJ,
-  HiMiniBugAnt as aK,
-  GuardModalLayer as aL,
-  ConnectFlowCard as aM,
-  HiMiniArrowTopRightOnSquare as aN,
-  HiMiniCloudArrowDown as aO,
-  fetchPackageFirewallStatus as aP,
-  runPackageAudit as aQ,
-  resolveSupplyChainAuditFailure as aR,
-  runPackageSync as aS,
-  startPackageFirewallConnect as aT,
-  openPackageFirewallAuthorizeFallback as aU,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as aV,
-  runPackageFirewallAction as aW,
-  parseInterceptProofSnapshot as aX,
-  openPackageFirewallShell as aY,
-  EntitlementNotice as aZ,
-  fetchReceipts as a_,
-  exportSettings as aa,
-  setupDesktopNotifications as ab,
-  Tag as ac,
-  HiMiniMagnifyingGlass as ad,
-  approvalGateCooldownLabel as ae,
-  fetchApprovalPage as af,
-  fetchPolicy as ag,
-  HiMiniArrowLeft as ah,
-  HiMiniHome as ai,
-  DEFAULT_FILTER_STATE as aj,
-  filterEvidence as ak,
-  sortEvidence as al,
-  computeMetrics as am,
-  EvidenceFilterBar as an,
-  EvidenceInsightStrip as ao,
-  EvidenceActionList as ap,
-  EvidenceActionDetail as aq,
-  policyIdentityKey as ar,
-  HiMiniChartBar as as,
-  runHarnessAction as at,
-  GuardHarnessActionError as au,
-  HiMiniRocketLaunch as av,
-  HiMiniArrowPath as aw,
-  HiMiniTrash as ax,
-  clearLabelForScope as ay,
-  formatHarnessCommand as az,
+  runPackageFirewallAction as a$,
+  clearPolicy as a0,
+  clearReviewQueue as a1,
+  revokeApprovalGateCooldown as a2,
+  disableApprovalGateTotp as a3,
+  importSettings as a4,
+  resetSettings as a5,
+  enrollApprovalGateTotp as a6,
+  verifyApprovalGateTotp as a7,
+  clearEvidence as a8,
+  exportDiagnostics as a9,
+  formatHarnessCommand as aA,
+  HiMiniCommandLine as aB,
+  isSupplyChainAuditIncomplete as aC,
+  isSupplyChainAuditEvidence as aD,
+  buildApprovalProofCredentials as aE,
+  isApprovalProofSubmitDisabled as aF,
+  ApprovalProofFieldInputs as aG,
+  readString$1 as aH,
+  isRecord$2 as aI,
+  HiMiniClock as aJ,
+  IconActionButton as aK,
+  HiMiniBeaker as aL,
+  ActivationSummary as aM,
+  ActionResultPanel as aN,
+  HiMiniBugAnt as aO,
+  GuardModalLayer as aP,
+  ConnectFlowCard as aQ,
+  ApprovalProofInline as aR,
+  HiMiniArrowTopRightOnSquare as aS,
+  HiMiniCloudArrowDown as aT,
+  fetchPackageFirewallStatus as aU,
+  runPackageAudit as aV,
+  resolveSupplyChainAuditFailure as aW,
+  runPackageSync as aX,
+  startPackageFirewallConnect as aY,
+  openPackageFirewallAuthorizeFallback as aZ,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as a_,
+  repairApprovalCenter as aa,
+  exportSettings as ab,
+  setupDesktopNotifications as ac,
+  Tag as ad,
+  HiMiniMagnifyingGlass as ae,
+  approvalGateCooldownLabel as af,
+  fetchApprovalPage as ag,
+  fetchPolicy as ah,
+  HiMiniArrowLeft as ai,
+  HiMiniHome as aj,
+  DEFAULT_FILTER_STATE as ak,
+  filterEvidence as al,
+  sortEvidence as am,
+  computeMetrics as an,
+  EvidenceFilterBar as ao,
+  EvidenceInsightStrip as ap,
+  EvidenceActionList as aq,
+  EvidenceActionDetail as ar,
+  policyIdentityKey as as,
+  HiMiniChartBar as at,
+  runHarnessAction as au,
+  GuardHarnessActionError as av,
+  HiMiniRocketLaunch as aw,
+  HiMiniArrowPath as ax,
+  HiMiniTrash as ay,
+  clearLabelForScope as az,
   EmptyState as b,
-  __vitePreload as b0,
-  scopeLabel as b1,
-  guardAwareHref as b2,
-  HiMiniDocumentText as b3,
-  HiMiniCloudArrowUp as b4,
-  HiMiniCheck as b5,
-  HiMiniCodeBracket as b6,
-  HiMiniClipboardDocument as b7,
-  HiMiniUsers as b8,
-  HiMiniFolder as b9,
-  HiMiniArrowDown as bA,
-  HiMiniArrowUp as bB,
-  runAuditRemediation as bC,
-  HiMiniSignal as bD,
-  HiMiniInformationCircle as ba,
-  HiMiniIdentification as bb,
-  policyActionLabel as bc,
-  createCloudExceptionRequest as bd,
-  HiMiniArrowRight as be,
-  HiMiniPuzzlePiece as bf,
-  HiMiniGlobeAlt as bg,
-  fetchCloudExceptions as bh,
-  fetchCloudExceptionRequests as bi,
-  downloadBlob as bj,
-  PolicyStatField as bk,
-  PaginationControls as bl,
-  HiMiniNoSymbol as bm,
-  HiMiniCube as bn,
-  HiMiniArrowDownTray as bo,
-  HiMiniQueueList as bp,
-  HiMiniPlay as bq,
-  Surface as br,
-  HiMiniCheckBadge as bs,
-  fetchSupplyChainBundle as bt,
-  isSupplyChainScannerEvidence as bu,
-  HiMiniDocumentMagnifyingGlass as bv,
-  HiMiniShieldExclamation as bw,
-  HiMiniComputerDesktop as bx,
-  HiMiniChevronLeft as by,
-  HiMiniFunnel as bz,
+  parseInterceptProofSnapshot as b0,
+  openPackageFirewallShell as b1,
+  EntitlementNotice as b2,
+  fetchReceipts as b3,
+  WorkspacePageHeader as b4,
+  __vitePreload as b5,
+  scopeLabel as b6,
+  guardAwareHref as b7,
+  HiMiniDocumentText as b8,
+  HiMiniCloudArrowUp as b9,
+  HiMiniDocumentMagnifyingGlass as bA,
+  HiMiniShieldExclamation as bB,
+  HiMiniComputerDesktop as bC,
+  HiMiniChevronLeft as bD,
+  HiMiniFunnel as bE,
+  HiMiniArrowDown as bF,
+  HiMiniArrowUp as bG,
+  runAuditRemediation as bH,
+  HiMiniSignal as bI,
+  HiMiniCheck as ba,
+  HiMiniCodeBracket as bb,
+  HiMiniClipboardDocument as bc,
+  HiMiniUsers as bd,
+  HiMiniFolder as be,
+  HiMiniInformationCircle as bf,
+  HiMiniIdentification as bg,
+  policyActionLabel as bh,
+  createCloudExceptionRequest as bi,
+  HiMiniArrowRight as bj,
+  HiMiniPuzzlePiece as bk,
+  HiMiniGlobeAlt as bl,
+  fetchCloudExceptions as bm,
+  fetchCloudExceptionRequests as bn,
+  downloadBlob as bo,
+  PolicyStatField as bp,
+  PaginationControls as bq,
+  HiMiniNoSymbol as br,
+  HiMiniCube as bs,
+  HiMiniArrowDownTray as bt,
+  HiMiniQueueList as bu,
+  HiMiniPlay as bv,
+  Surface as bw,
+  HiMiniCheckBadge as bx,
+  fetchSupplyChainBundle as by,
+  isSupplyChainScannerEvidence as bz,
   EvidenceInsightsShareModal as c,
   HiMiniCheckCircle as d,
   GuardHero as e,
@@ -26385,8 +26507,8 @@ export {
   HiMiniCloud as t,
   HiMiniQuestionMarkCircle as u,
   useFocusTrap as v,
-  HiMiniExclamationTriangle as w,
-  HiMiniBolt as x,
-  HiMiniChevronRight as y,
-  HiMiniMinusCircle as z
+  approvalProofRequiresPassword as w,
+  HiMiniExclamationTriangle as x,
+  HiMiniBolt as y,
+  HiMiniChevronRight as z
 };
