@@ -329,8 +329,8 @@ def _run_guard_supply_chain_command(
     config = _require_guard_config(config)
     supply_chain_command = getattr(args, "supply_chain_command", None)
     if supply_chain_command == "support-matrix":
-        from ..shims import package_shim_supported_managers
         from ..shim_probe import _PACKAGE_SHIM_PROBE_ARGS
+        from ..shims import package_shim_supported_managers
 
         managers = package_shim_supported_managers()
         probe_managers = set(_PACKAGE_SHIM_PROBE_ARGS.keys())
