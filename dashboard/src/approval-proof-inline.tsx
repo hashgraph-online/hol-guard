@@ -13,9 +13,10 @@ type ApprovalProofFieldInputsProps = {
   onApprovalTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
 };
 
-export function approvalProofRequiresPassword(gate: GuardApprovalGatePublicConfig | null | undefined): boolean {
+export function approvalProofRequiresPassword(_gate: GuardApprovalGatePublicConfig | null | undefined): boolean {
   // The approval password is always the primary factor. TOTP, when enabled,
-  // is an additional second factor rather than a replacement for it.
+  // is an additional second factor rather than a replacement for it. The gate
+  // argument is retained so call sites keep passing the resolved gate config.
   return true;
 }
 
