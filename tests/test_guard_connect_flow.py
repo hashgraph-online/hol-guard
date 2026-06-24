@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -863,6 +864,7 @@ def test_connect_status_does_not_recover_missing_oauth_metadata_from_fallback_on
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(sys, "platform", "darwin")
     keyring_module = _install_fake_system_keyring(monkeypatch)
     monkeypatch.setattr(
         SystemKeyringSecretStore,
