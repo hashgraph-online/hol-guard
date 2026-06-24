@@ -23,7 +23,11 @@ if TYPE_CHECKING:
     from .commands_support_runtime_artifacts import _codex_command_references_sensitive_local_source
 
 
-from ..runtime.secret_file_requests import COMMAND_LIST_KEYS, command_list_candidate_texts
+from ..runtime.secret_file_requests import (
+    COMMAND_CANDIDATE_LIST_KEYS,
+    COMMAND_SEQUENCE_KEYS,
+    command_list_candidate_texts,
+)
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from .commands_support_codex_tool_output import (
@@ -169,10 +173,10 @@ def _codex_post_tool_command_text(payload: dict[str, object]) -> str:
         command = tool_input.get("command")
         if isinstance(command, str):
             return command.strip()
-        for key in COMMAND_LIST_KEYS:
+        for key in COMMAND_CANDIDATE_LIST_KEYS:
             candidate = tool_input.get(key)
             if isinstance(candidate, list):
-                command_texts = command_list_candidate_texts(candidate)
+                command_texts = command_list_candidate_texts(candidate, preserve_items=key in COMMAND_SEQUENCE_KEYS)
                 if command_texts:
                     return command_texts[0]
     return ""
