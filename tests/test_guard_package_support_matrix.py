@@ -14,8 +14,8 @@ so the portal support matrix can accurately report interceptTest=False.
 
 from __future__ import annotations
 
-from codex_plugin_scanner.guard.shims import package_shim_supported_managers
 from codex_plugin_scanner.guard.shim_probe import _PACKAGE_SHIM_PROBE_ARGS
+from codex_plugin_scanner.guard.shims import package_shim_supported_managers
 
 
 def test_supported_managers_are_sorted() -> None:

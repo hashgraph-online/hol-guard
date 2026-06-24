@@ -232,7 +232,7 @@ function testBulkApproveGateCredentialsPayload(): void {
   assert(!("approval_gate_use_cooldown" in withoutGate), "bulk payload should not include approval_gate_use_cooldown when no gate credentials");
 }
 
-function testApprovalProofTotpOverridesPassword(): void {
+function testApprovalProofTotpRequiresPassword(): void {
   const totpGate: GuardApprovalGatePublicConfig = {
     enabled: true,
     configured: true,
@@ -245,13 +245,23 @@ function testApprovalProofTotpOverridesPassword(): void {
     totp_enabled: true,
     totp_pending: false,
   };
+  // With TOTP enabled, the password is still the primary factor: a TOTP code
+  // alone does not enable submit.
   assert(
-    isApprovalProofSubmitDisabled(totpGate, { approvalPassword: "", approvalTotpCode: "123456" }, false) === false,
-    "totp approval proof should not require password",
+    isApprovalProofSubmitDisabled(totpGate, { approvalPassword: "", approvalTotpCode: "123456" }, false) === true,
+    "totp approval proof should still require password",
   );
-  const credentials = buildApprovalProofCredentials(totpGate, { approvalPassword: "ignored", approvalTotpCode: "123456" });
+  assert(
+    isApprovalProofSubmitDisabled(totpGate, { approvalPassword: "pw", approvalTotpCode: "" }, false) === true,
+    "totp approval proof should require the authenticator code",
+  );
+  assert(
+    isApprovalProofSubmitDisabled(totpGate, { approvalPassword: "pw", approvalTotpCode: "123456" }, false) === false,
+    "totp approval proof should accept both factors",
+  );
+  const credentials = buildApprovalProofCredentials(totpGate, { approvalPassword: "pw", approvalTotpCode: "123456" });
+  assert(credentials.approval_password === "pw", "totp approval proof should include password");
   assert(credentials.approval_totp_code === "123456", "totp approval proof should include authenticator code");
-  assert(!("approval_password" in credentials), "totp approval proof should omit password");
 }
 
 const tests: Array<[string, () => void]> = [
@@ -263,7 +273,7 @@ const tests: Array<[string, () => void]> = [
   ["testApprovalGateToggleReflectedInDraftApprovalGate", testApprovalGateToggleReflectedInDraftApprovalGate],
   ["testApprovalGateCooldownReflectedInDraftApprovalGate", testApprovalGateCooldownReflectedInDraftApprovalGate],
   ["testBulkApproveGateCredentialsPayload", testBulkApproveGateCredentialsPayload],
-  ["testApprovalProofTotpOverridesPassword", testApprovalProofTotpOverridesPassword],
+  ["testApprovalProofTotpRequiresPassword", testApprovalProofTotpRequiresPassword],
 ];
 
 let passed = 0;

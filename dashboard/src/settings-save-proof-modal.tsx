@@ -161,13 +161,16 @@ export function isSettingsSaveProofSubmitDisabled(
     if (next.length === 0 || confirm.length === 0 || next !== confirm) {
       return true;
     }
-    return totpRequired ? totp.length === 0 : current.length === 0;
-  }
-  if (totpRequired) {
-    return totp.length === 0;
+    if (current.length === 0) {
+      return true;
+    }
+    return totpRequired ? totp.length === 0 : false;
   }
   if (current.length === 0) {
     return true;
+  }
+  if (totpRequired) {
+    return totp.length === 0;
   }
   return false;
 }
@@ -192,17 +195,10 @@ export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
       return;
     }
     const timer = setTimeout(() => {
-      if (
-        props.gate?.totp_enabled === true
-        && (props.mode === "verify-save" || props.mode === "change-password" || props.mode === "maintenance")
-      ) {
-        totpRef.current?.focus();
-      } else {
-        passwordRef.current?.focus();
-      }
+      passwordRef.current?.focus();
     }, 50);
     return () => clearTimeout(timer);
-  }, [props.gate?.totp_enabled, props.open, props.mode]);
+  }, [props.open]);
 
   useEffect(() => {
     if (props.open) {
@@ -223,7 +219,9 @@ export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
 
   const totpRequired = props.gate?.totp_enabled === true
     && (props.mode === "verify-save" || props.mode === "change-password" || props.mode === "maintenance");
-  const needsCurrentPassword = props.mode !== "setup-gate" && !totpRequired;
+  // The approval password is always the primary factor; TOTP adds a second
+  // factor rather than replacing the password prompt.
+  const needsCurrentPassword = props.mode !== "setup-gate";
 
   const handleCurrentPasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setCurrentPassword(event.target.value);
