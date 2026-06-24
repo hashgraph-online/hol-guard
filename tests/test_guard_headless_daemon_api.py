@@ -694,6 +694,75 @@ def test_guard_cloud_connect_starts_local_browser_flow_for_insights_share(
     assert store.get_cloud_sync_profile() is not None
 
 
+def test_package_firewall_connect_accepts_hosted_dashboard_origin(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+
+        class _FakeSession:
+            authorize_url = "https://hol.org/mock-authorize"
+            redirect_uri = "http://127.0.0.1:53112/oauth/callback"
+            pkce_verifier = "pkce-verifier"
+            dpop_key_material = type(
+                "KeyMaterial",
+                (),
+                {
+                    "private_key_pem": "private-key-new",
+                    "public_jwk": {"kty": "EC", "crv": "P-256", "x": "x-value-new", "y": "y-value-new"},
+                    "public_jwk_thumbprint": "thumbprint-new",
+                },
+            )()
+
+            def wait_for_callback(self, _timeout_seconds: float):
+                return type("Callback", (), {"code": "auth-code-1"})()
+
+            def close(self) -> None:
+                return None
+
+        monkeypatch.setattr(daemon_server, "start_guard_browser_session", lambda **_kwargs: _FakeSession())
+        monkeypatch.setattr(daemon_server.webbrowser, "open", lambda _url: True)
+        monkeypatch.setattr(
+            daemon_server,
+            "exchange_guard_authorization_code",
+            lambda **_kwargs: GuardOAuthTokenExchangeResult(
+                access_token="access-token-1",
+                refresh_token="refresh-token-new",
+                expires_in=300,
+                scope="guard:runtime.sync guard:offline_access",
+                token_type="Bearer",
+                grant_id="grant-new",
+                machine_id="machine-new",
+                supply_chain_entitlement={
+                    "supply_chain_entitlement_expires_at": "2026-07-05T01:39:51+00:00",
+                    "supply_chain_firewall": True,
+                    "supply_chain_plan_id": "team",
+                },
+                workspace_id="workspace-1",
+            ),
+        )
+
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims/connect",
+                token=token,
+                payload={},
+                origin="https://hol.org",
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 202
+    assert payload["state"] == "running"
+    assert payload["authorize_url"] == "https://hol.org/mock-authorize"
+
+
 def _assert_connect_endpoint_coalesces_concurrent_browser_starts(
     *,
     endpoint: str,
