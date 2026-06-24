@@ -4492,6 +4492,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/receipts/analytics",
             "/v1/insights/share",
             "/v1/cloud/connect",
+            "/v1/supply-chain/package-shims/connect",
             "/v1/receipts/latest",
             "/v1/runtime",
             "/v1/settings",

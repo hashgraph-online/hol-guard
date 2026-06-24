@@ -1035,7 +1035,7 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
   const url = input instanceof Request ? input.url : String(input);
   connectCalls.push({ url, init });
   const path = new URL(url, "http://127.0.0.1:4174").pathname;
-  if (path === "/v1/cloud/connect") {
+  if (path === "/v1/supply-chain/package-shims/connect") {
     return new Response(JSON.stringify({ error: "unauthorized", message: "Guard session missing." }), {
       status: 401,
       headers: { "Content-Type": "application/json" }
@@ -1052,8 +1052,8 @@ try {
 }
 assert(connectCalls.length === 1, "L079dc: connect flow does not mint local session from unauthenticated initialize");
 assert(
-  new URL(connectCalls[0].url).pathname === "/v1/cloud/connect",
-  "L079dc: connect flow posts to shared Guard Cloud connect route"
+  new URL(connectCalls[0].url).pathname === "/v1/supply-chain/package-shims/connect",
+  "L079dc: connect flow posts to package firewall connect route"
 );
 assert(
   connectFlowError instanceof Error && connectFlowError.message.includes("Guard session missing"),
