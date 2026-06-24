@@ -259,8 +259,11 @@ class TestPiInstall:
         assert "const toolCallId = toolCallIdKey(event.toolCallId);" in text
         assert "if (toolCallId) blockedToolResults.set(toolCallId, reason);" in text
         assert "blockedToolResults.delete(toolCallId);" in text
-        assert "HOL Guard blocked oversized Pi tool output before review" in text
-        assert "return blockedToolResult(reason, event.details);" in text
+        # Oversized tool results are truncated and reviewed, not pre-emptively blocked.
+        assert "HOL Guard blocked oversized Pi tool output before review" not in text
+        assert 'oversizeNotice' in text
+        assert 'ctx.ui.notify(oversizeNotice, "info")' in text
+        assert 'const response = runGuard(' in text
         assert "tool_response: limitedContent" in text
         assert "stdout: toolOutput" in text
         assert "contentText(event.content)" not in text

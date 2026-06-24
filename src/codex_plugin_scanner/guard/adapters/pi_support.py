@@ -447,14 +447,12 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    );\n"
         "    const boundedContent = boundValue(event.content);\n"
         "    const boundedStdout = boundedOutputText(event.content);\n"
-        "    if (boundedToolInput.truncated || boundedContent.truncated || boundedStdout.truncated) {\n"
-        '      const reason = "HOL Guard blocked oversized Pi tool output before review because "\n'
-        '        + "the result exceeded the safe hook limit.";\n'
-        "      const toolCallId = toolCallIdKey(event.toolCallId);\n"
-        "      if (toolCallId) blockedToolResults.set(toolCallId, reason);\n"
-        '      ctx.ui.notify(reason, "warning");\n'
-        "      return blockedToolResult(reason, event.details);\n"
-        "    }\n"
+        "    const oversizeNotice =\n"
+        "      boundedToolInput.truncated || boundedContent.truncated || boundedStdout.truncated\n"
+        '        ? "HOL Guard reviewed a size-bounded excerpt of a large Pi tool result; "\n'
+        '          + "the full output was truncated before review."\n'
+        "        : null;\n"
+        '    if (oversizeNotice) ctx.ui.notify(oversizeNotice, "info");\n'
         "    const toolInput =\n"
         "      boundedToolInput.value as Record<string, unknown>;\n"
         "    const limitedContent = boundedContent.value;\n"
