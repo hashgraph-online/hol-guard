@@ -6,7 +6,12 @@ import re
 import shlex
 from pathlib import Path
 
-from .data_flow import extract_command_segments, extract_input_redirects
+from .data_flow import (
+    _split_top_level_pipes,
+    extract_command_segments,
+    extract_command_substitutions,
+    extract_input_redirects,
+)
 from .kubernetes_command_support import (
     is_output_redirect_target,
     is_secret_volume_path,
@@ -107,8 +112,8 @@ _WRITE_ONLY_COMMANDS = frozenset(
 
 
 def kubernetes_heredoc_secret_source(command: str) -> str | None:
-    for header, body in _iter_kubernetes_heredocs(command):
-        source_kind = _kubernetes_heredoc_remote_kind(header)
+    for before, after, body in _iter_kubernetes_heredocs(command):
+        source_kind = _kubernetes_heredoc_remote_kind(before, after)
         if source_kind is None:
             continue
         if source_kind == "interpreter":
@@ -159,8 +164,8 @@ def _is_inline_interpreter_command(command_name: str) -> bool:
     return command_name.startswith("python") or command_name in {"node", "perl", "php", "ruby"}
 
 
-def _iter_kubernetes_heredocs(command: str) -> tuple[tuple[str, str], ...]:
-    heredocs: list[tuple[str, str]] = []
+def _iter_kubernetes_heredocs(command: str) -> tuple[tuple[str, str, str], ...]:
+    heredocs: list[tuple[str, str, str]] = []
     command_start = 0
     index = 0
     quote: str | None = None
@@ -218,11 +223,12 @@ def _iter_kubernetes_heredocs(command: str) -> tuple[tuple[str, str], ...]:
             if _looks_like_heredoc_operator(command, index):
                 parsed = _parse_heredoc(command, index)
                 if parsed is not None:
-                    tag, body_start = parsed
+                    tag, after_tag_start, body_start, line_end = parsed
                     body, next_index = _heredoc_body_and_end(command, tag=tag, start=body_start)
                     if body is not None:
-                        header = command[command_start:index].strip()
-                        heredocs.append((header, body))
+                        before = command[command_start:index].strip()
+                        after = command[after_tag_start:line_end].strip()
+                        heredocs.append((before, after, body))
                         command_start = _skip_command_whitespace(command, next_index)
                         index = command_start
                         continue
@@ -230,8 +236,24 @@ def _iter_kubernetes_heredocs(command: str) -> tuple[tuple[str, str], ...]:
     return tuple(heredocs)
 
 
-def _kubernetes_heredoc_remote_kind(header: str) -> str | None:
-    remote_tokens = _kubernetes_heredoc_remote_tokens(header)
+def _kubernetes_heredoc_remote_kind(before: str, after: str) -> str | None:
+    remote_tokens = _kubernetes_remote_kind_from_command(_last_pipe_segment(before))
+    if remote_tokens is not None:
+        return remote_tokens
+    if not after.lstrip().startswith("|"):
+        return None
+    for segment in _pipe_segments(after.lstrip()[1:]):
+        remote_tokens = _kubernetes_remote_kind_from_command(segment)
+        if remote_tokens is not None:
+            return remote_tokens
+    return None
+
+
+def _kubernetes_remote_kind_from_command(command: str) -> str | None:
+    command_name, kubernetes_tokens = _unwrap_heredoc_remote_command(_shell_tokens(command))
+    if command_name not in {"kubectl", "oc"} or not kubernetes_tokens:
+        return None
+    remote_tokens = _kubernetes_exec_remote_tokens(kubernetes_tokens)
     if not remote_tokens:
         return None
     command_name, args = _unwrap_heredoc_remote_command(remote_tokens)
@@ -244,21 +266,9 @@ def _kubernetes_heredoc_remote_kind(header: str) -> str | None:
     return None
 
 
-def _kubernetes_heredoc_remote_tokens(header: str) -> tuple[str, ...]:
-    tokens = _shell_tokens(header)
-    if not tokens:
-        return ()
-    kubernetes_index = next(
-        (index for index, token in enumerate(tokens) if Path(token).name.lower() in {"kubectl", "oc"}),
-        None,
-    )
-    if kubernetes_index is None:
-        return ()
-    subcommand_index = next(
-        (index for index in range(kubernetes_index + 1, len(tokens)) if tokens[index].lower() in {"exec", "rsh"}),
-        None,
-    )
-    if subcommand_index is None:
+def _kubernetes_exec_remote_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    subcommand_index = _skip_kubectl_options(tokens, 0)
+    if subcommand_index >= len(tokens) or tokens[subcommand_index].lower() not in {"exec", "rsh"}:
         return ()
     tokens = tokens[subcommand_index + 1 :]
     resource_seen = False
@@ -290,6 +300,8 @@ def _kubernetes_heredoc_remote_tokens(header: str) -> tuple[str, ...]:
 
 def _script_body_reads_secret_volume(body: str) -> bool:
     if any(is_secret_volume_path(target) for target in extract_input_redirects(body)):
+        return True
+    if any(_script_body_reads_secret_volume(substitution) for substitution in extract_command_substitutions(body)):
         return True
     return any(_segment_reads_secret_volume(_shell_tokens(segment)) for segment in extract_command_segments(body))
 
@@ -382,6 +394,19 @@ def _unwrap_heredoc_remote_command(tokens: tuple[str, ...]) -> tuple[str | None,
     return None, ()
 
 
+def _last_pipe_segment(command: str) -> str:
+    segments = _pipe_segments(command)
+    return segments[-1] if segments else command.strip()
+
+
+def _pipe_segments(command: str) -> tuple[str, ...]:
+    stripped = command.strip()
+    if not stripped:
+        return ()
+    segments = tuple(segment.strip() for segment in _split_top_level_pipes(stripped) if segment.strip())
+    return segments or (stripped,)
+
+
 def _heredoc_body_and_end(command: str, *, tag: str, start: int) -> tuple[str | None, int]:
     terminator = re.compile(rf"(?m)^[\t ]*{re.escape(tag)}[\t ]*(?:\r?\n|$)")
     end_match = terminator.search(command, start)
@@ -400,7 +425,7 @@ def _looks_like_heredoc_operator(command: str, index: int) -> bool:
     return command.startswith("<<", index) and not command.startswith("<<<", index)
 
 
-def _parse_heredoc(command: str, index: int) -> tuple[str, int] | None:
+def _parse_heredoc(command: str, index: int) -> tuple[str, int, int, int] | None:
     cursor = index + 2
     if cursor < len(command) and command[cursor] == "-":
         cursor += 1
@@ -427,17 +452,29 @@ def _parse_heredoc(command: str, index: int) -> tuple[str, int] | None:
         if cursor >= len(command) or command[cursor] != quote:
             return None
         cursor += 1
-    while cursor < len(command) and command[cursor] in {" ", "\t"}:
-        cursor += 1
-    if cursor >= len(command):
+    newline_index = command.find("\n", cursor)
+    if newline_index == -1:
         return None
-    if command[cursor] == "\r":
-        cursor += 1
-        if cursor >= len(command) or command[cursor] != "\n":
-            return None
-    if command[cursor] != "\n":
-        return None
-    return tag, cursor + 1
+    line_end = newline_index - 1 if newline_index > cursor and command[newline_index - 1] == "\r" else newline_index
+    return tag, cursor, newline_index + 1, line_end
+
+
+def _skip_kubectl_options(tokens: tuple[str, ...], index: int) -> int:
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--":
+            return index + 1
+        if not token.startswith("-"):
+            return index
+        option_consumed = kubernetes_option_tokens_consumed(
+            tokens,
+            index,
+            base_value_flags=_KUBECTL_OPTIONS_WITH_VALUES,
+            base_boolean_flags=_KUBECTL_BOOLEAN_OPTIONS,
+            base_boolean_short_cluster=_EXEC_BOOLEAN_SHORT_CLUSTER,
+        )
+        index += option_consumed if option_consumed is not None else 1
+    return index
 
 
 def _skip_command_whitespace(command: str, index: int) -> int:

@@ -270,6 +270,17 @@ def test_quoted_kubectl_heredoc_sample_is_not_mislabeled() -> None:
     assert kubernetes_secret_read_source(command) is None
 
 
+def test_argument_text_before_heredoc_is_not_mislabeled() -> None:
+    command = (
+        "echo kubectl exec registry-frontend -- python - <<'PY'\n"
+        "import os\n"
+        'print(os.environ["GUARD_GITHUB_APP_PRIVATE_KEY"])\n'
+        "PY"
+    )
+
+    assert kubernetes_secret_read_source(command) is None
+
+
 def test_only_later_kubernetes_heredoc_secret_is_detected() -> None:
     command = (
         "kubectl exec registry-frontend -- python - <<'PY1'\n"
@@ -282,3 +293,15 @@ def test_only_later_kubernetes_heredoc_secret_is_detected() -> None:
     )
 
     assert kubernetes_secret_read_source(command) == "Kubernetes pod environment"
+
+
+def test_pipe_fed_kubernetes_heredoc_secret_is_detected() -> None:
+    command = "cat <<'SH' | kubectl exec -i registry-frontend -- sh\necho \"$GUARD_GITHUB_APP_PRIVATE_KEY\"\nSH"
+
+    assert kubernetes_secret_read_source(command) == "Kubernetes pod environment"
+
+
+def test_nested_shell_substitution_reads_secret_volume_in_heredoc() -> None:
+    command = "kubectl exec -i registry-frontend -- sh <<'SH'\necho \"$(cat /etc/secrets/token)\"\nSH"
+
+    assert kubernetes_secret_read_source(command) == "Kubernetes secret volume"
