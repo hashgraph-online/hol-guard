@@ -923,34 +923,52 @@ def test_approval_gate_totp_manual_key_accepts_readability_dashes(tmp_path: Path
     assert totp_code_at_counter(secret=dashed_secret, counter=_counter("2026-04-11T00:01:00+00:00"))
 
 
-def test_approval_gate_disable_totp_requires_totp_only_when_enabled(tmp_path: Path) -> None:
+def test_approval_gate_disable_totp_requires_password_and_totp_when_enabled(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
     secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
 
-    with pytest.raises(ApprovalGateError) as missing_totp:
+    # Disabling TOTP is a strict action: the approval password is required first,
+    # and a current authenticator code is required as the second factor.
+    with pytest.raises(ApprovalGateError) as missing_password:
         disable_totp(store.guard_home, approval_gate_input=ApprovalGateInput(), now="2026-04-11T00:00:31+00:00")
+    assert missing_password.value.code == "approval_gate_required"
+
+    with pytest.raises(ApprovalGateError) as wrong_password:
+        disable_totp(
+            store.guard_home,
+            approval_gate_input=ApprovalGateInput(password=WRONG_PASSWORD),
+            now="2026-04-11T00:00:31+00:00",
+        )
+    assert wrong_password.value.code == "approval_gate_invalid_password"
+
+    disable_now = "2026-04-11T00:01:31+00:00"
+    disable_code = totp_code_at_counter(secret=secret, counter=_counter(disable_now))
+    with pytest.raises(ApprovalGateError) as missing_totp:
+        disable_totp(
+            store.guard_home,
+            approval_gate_input=ApprovalGateInput(password=PASSWORD),
+            now=disable_now,
+        )
     assert missing_totp.value.code == "approval_gate_totp_required"
 
     with pytest.raises(ApprovalGateError) as invalid_totp:
         disable_totp(
             store.guard_home,
-            approval_gate_input=ApprovalGateInput(totp_code="000000"),
-            now="2026-04-11T00:00:31+00:00",
+            approval_gate_input=ApprovalGateInput(password=PASSWORD, totp_code="000000"),
+            now=disable_now,
         )
     assert invalid_totp.value.code == "approval_gate_totp_invalid"
 
-    disable_now = "2026-04-11T00:01:31+00:00"
-    disable_code = totp_code_at_counter(secret=secret, counter=_counter(disable_now))
     gate = disable_totp(
         store.guard_home,
-        approval_gate_input=ApprovalGateInput(totp_code=disable_code),
+        approval_gate_input=ApprovalGateInput(password=PASSWORD, totp_code=disable_code),
         now=disable_now,
     )
     assert gate.totp_enabled is False
 
 
-def test_approval_gate_password_disable_uses_totp_only_when_enabled(tmp_path: Path) -> None:
+def test_approval_gate_password_disable_requires_password_and_totp_when_enabled(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
     workspace = tmp_path / "workspace"
@@ -958,7 +976,7 @@ def test_approval_gate_password_disable_uses_totp_only_when_enabled(tmp_path: Pa
     home_dir = tmp_path / "home"
     secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
 
-    disable_without_totp = run_guard_command(
+    disable_without_password = run_guard_command(
         SimpleNamespace(
             guard_command="settings",
             settings_command="approval-password",
@@ -973,11 +991,12 @@ def test_approval_gate_password_disable_uses_totp_only_when_enabled(tmp_path: Pa
         ),
         output_stream=io.StringIO(),
     )
-    assert disable_without_totp == 4
+    assert disable_without_password == 4
 
     disable_now = datetime.now(timezone.utc).isoformat()
     disable_code = totp_code_at_counter(secret=secret, counter=_counter(disable_now))
-    disable_with_totp = run_guard_command(
+    # TOTP alone is no longer sufficient; the password is the primary factor.
+    disable_with_totp_only = run_guard_command(
         SimpleNamespace(
             guard_command="settings",
             settings_command="approval-password",
@@ -992,11 +1011,28 @@ def test_approval_gate_password_disable_uses_totp_only_when_enabled(tmp_path: Pa
         ),
         output_stream=io.StringIO(),
     )
-    assert disable_with_totp == 0
+    assert disable_with_totp_only == 4
+
+    disable_with_both = run_guard_command(
+        SimpleNamespace(
+            guard_command="settings",
+            settings_command="approval-password",
+            settings_approval_password_command="disable",
+            current_password=PASSWORD,
+            totp_code=disable_code,
+            guard_home=str(store.guard_home),
+            home=str(home_dir),
+            workspace=str(workspace),
+            json=True,
+            cisco_mode="off",
+        ),
+        output_stream=io.StringIO(),
+    )
+    assert disable_with_both == 0
     assert public_config(store.guard_home).enabled is False
 
 
-def test_approval_gate_totp_overrides_password_for_reviews(tmp_path: Path) -> None:
+def test_approval_gate_totp_requires_password_for_reviews(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
     secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
@@ -1004,10 +1040,31 @@ def test_approval_gate_totp_overrides_password_for_reviews(tmp_path: Path) -> No
     approve_code = totp_code_at_counter(secret=secret, counter=_counter(approve_now))
     _add_request(store, "req-totp-only")
 
+    # With TOTP enabled the approval password is still the primary factor: a
+    # wrong password is rejected even when a valid authenticator code is present.
+    with pytest.raises(ApprovalGateError) as wrong_password:
+        _approve(
+            store,
+            "req-totp-only",
+            gate_input=ApprovalGateInput(password=WRONG_PASSWORD, totp_code=approve_code),
+            now=approve_now,
+        )
+    assert wrong_password.value.code == "approval_gate_invalid_password"
+
+    # TOTP alone (no password) is also rejected.
+    with pytest.raises(ApprovalGateError) as missing_password:
+        _approve(
+            store,
+            "req-totp-only",
+            gate_input=ApprovalGateInput(totp_code=approve_code),
+            now=approve_now,
+        )
+    assert missing_password.value.code == "approval_gate_required"
+
     _approve(
         store,
         "req-totp-only",
-        gate_input=ApprovalGateInput(password=WRONG_PASSWORD, totp_code=approve_code),
+        gate_input=ApprovalGateInput(password=PASSWORD, totp_code=approve_code),
         now=approve_now,
     )
 
@@ -1166,7 +1223,7 @@ def test_approval_gate_settings_import_and_reset_require_totp_when_enabled(tmp_p
     assert reset_body["error"] == "approval_gate_totp_required"
 
 
-def test_approval_gate_settings_update_accepts_totp_without_password(tmp_path: Path) -> None:
+def test_approval_gate_settings_update_requires_password_and_totp_when_enabled(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
     secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
@@ -1175,11 +1232,28 @@ def test_approval_gate_settings_update_accepts_totp_without_password(tmp_path: P
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
+        # TOTP alone is not sufficient; the approval password is required.
+        totp_only_request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/settings",
+            data=json.dumps(
+                {
+                    "settings": {"approval_wait_timeout_seconds": 90},
+                    "approval_totp_code": settings_code,
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as totp_only_error:
+            urllib.request.urlopen(totp_only_request, timeout=5)
+        totp_only_body = json.loads(totp_only_error.value.read().decode("utf-8"))
+
         update_request = urllib.request.Request(
             f"http://127.0.0.1:{daemon.port}/v1/settings",
             data=json.dumps(
                 {
                     "settings": {"approval_wait_timeout_seconds": 90},
+                    "approval_gate": {"password": PASSWORD},
                     "approval_totp_code": settings_code,
                 }
             ).encode("utf-8"),
@@ -1191,6 +1265,8 @@ def test_approval_gate_settings_update_accepts_totp_without_password(tmp_path: P
     finally:
         daemon.stop()
 
+    assert totp_only_error.value.code == 403
+    assert totp_only_body["error"] == "approval_gate_required"
     assert update_body["settings"]["approval_wait_timeout_seconds"] == 90
 
 
