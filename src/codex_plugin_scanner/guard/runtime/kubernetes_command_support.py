@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import re
 import shlex
+from pathlib import Path
 
+_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _SENSITIVE_ENV_NAME_PATTERN = re.compile(
     r"(?i)(?:^|[_-])(?:api[_-]?key|auth|credential|credentials|key|password|private[_-]?key|secret|token)(?:[_-]|$)"
 )
@@ -34,20 +36,94 @@ _SECRET_VOLUME_PATH_MARKERS = (
     "/run/secrets",
     "/run/secrets-store",
 )
-_KUBERNETES_REMOTE_PREFIX = r"(?is)\b(?:kubectl|oc)\b[^\n;&|]*\b(?:exec|rsh)\b[^\n;&|]*"
-_KUBERNETES_INTERPRETER_HEREDOC_PATTERN = re.compile(
-    _KUBERNETES_REMOTE_PREFIX
-    + (
-        r"\b(?:python(?:\d+(?:\.\d+)*)?|node|perl|php|ruby)\b[^\n;&|]*\s-\s*<<-?\s*"
-        r"(['\"]?)(?P<tag>[^\s'\"`;&|<>]+)\1\s*\n"
-    )
-    + r"(?P<body>.*?)\n(?P=tag)(?=$|\s)"
+_KUBERNETES_HEREDOC_HEADER_PATTERN = re.compile(
+    r"(?im)(?P<header>\b(?:kubectl|oc)\b[^\n]*\b(?:exec|rsh)\b[^\n]*?)"
+    r"<<-?\s*(?P<quote>['\"]?)(?P<tag>[^\s'\"`;&|<>]+)(?P=quote)[ \t]*\n"
 )
-_KUBERNETES_SHELL_HEREDOC_PATTERN = re.compile(
-    _KUBERNETES_REMOTE_PREFIX
-    + r"\b(?:ash|bash|dash|ksh|sh|zsh)\b[^\n;&|]*<<-?\s*(['\"]?)(?P<tag>[^\s'\"`;&|<>]+)\1\s*\n"
-    + r"(?P<body>.*?)\n(?P=tag)(?=$|\s)"
+_HEREDOC_WRAPPER_COMMANDS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
+_HEREDOC_WRAPPER_OPTIONS_WITH_VALUES = {
+    "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
+    "nice": frozenset({"-n", "--adjustment"}),
+    "stdbuf": frozenset({"-i", "--input", "-o", "--output", "-e", "--error"}),
+    "sudo": frozenset(
+        {
+            "-C",
+            "-D",
+            "-R",
+            "-T",
+            "-g",
+            "-h",
+            "-p",
+            "-r",
+            "-t",
+            "-u",
+            "--chdir",
+            "--chroot",
+            "--close-from",
+            "--command-timeout",
+            "--group",
+            "--host",
+            "--prompt",
+            "--role",
+            "--type",
+            "--user",
+        }
+    ),
+    "time": frozenset({"-f", "--format", "-o", "--output"}),
+}
+_KUBECTL_OPTIONS_WITH_VALUES = frozenset(
+    {
+        "--as",
+        "--as-group",
+        "--cache-dir",
+        "--certificate-authority",
+        "--chunk-size",
+        "--client-certificate",
+        "--client-key",
+        "--cluster",
+        "--context",
+        "--field-manager",
+        "--field-selector",
+        "--filename",
+        "--kubeconfig",
+        "--label-selector",
+        "--namespace",
+        "--output",
+        "--password",
+        "--profile",
+        "--profile-output",
+        "--request-timeout",
+        "--selector",
+        "--server",
+        "--sort-by",
+        "--template",
+        "--token",
+        "--user",
+        "--username",
+        "-c",
+        "-f",
+        "-l",
+        "-n",
+        "-o",
+    }
 )
+_KUBECTL_BOOLEAN_OPTIONS = frozenset({"-A", "--all-namespaces"})
+_EXEC_OPTIONS_WITH_VALUES = frozenset(
+    {
+        "--container",
+        "--namespace",
+        "--pod-running-timeout",
+        "--profile",
+        "--profile-output",
+        "--request-timeout",
+        "--shell",
+        "-c",
+        "-n",
+    }
+)
+_EXEC_BOOLEAN_OPTIONS = frozenset({"--quiet", "--stdin", "--tty", "-T", "-i", "-q", "-t"})
+_EXEC_BOOLEAN_SHORT_CLUSTER = frozenset({"i", "q", "t"})
+_SHELL_EXECUTABLES = frozenset({"ash", "bash", "dash", "ksh", "sh", "zsh"})
 _RAW_SECRET_RESOURCE_PATH_PATTERN = re.compile(
     r"^/(?:api/[^/]+|apis/[^/]+/[^/]+)/(?:watch/)?(?:namespaces/[^/]+/)?secrets?(?:/[^/?#]+)?$",
     re.IGNORECASE,
@@ -65,20 +141,21 @@ def interpreter_reads_sensitive_env(command_name: str, args: tuple[str, ...]) ->
 
 
 def kubernetes_heredoc_secret_source(command: str) -> str | None:
-    for pattern, source_hint in (
-        (_KUBERNETES_INTERPRETER_HEREDOC_PATTERN, "Kubernetes pod environment"),
-        (_KUBERNETES_SHELL_HEREDOC_PATTERN, None),
-    ):
-        for match in pattern.finditer(command):
-            body = str(match.group("body") or "")
-            if source_hint is not None:
-                if script_reads_sensitive_env(body):
-                    return source_hint
-                continue
-            if _script_body_reads_secret_volume(body):
-                return "Kubernetes secret volume"
+    for match in _KUBERNETES_HEREDOC_HEADER_PATTERN.finditer(command):
+        source_kind = _kubernetes_heredoc_remote_kind(str(match.group("header") or ""))
+        if source_kind is None:
+            continue
+        body = _heredoc_body(command, tag=str(match.group("tag") or ""), start=match.end())
+        if body is None:
+            continue
+        if source_kind == "interpreter":
             if script_reads_sensitive_env(body):
                 return "Kubernetes pod environment"
+            continue
+        if _script_body_reads_secret_volume(body):
+            return "Kubernetes secret volume"
+        if script_reads_sensitive_env(body):
+            return "Kubernetes pod environment"
     return None
 
 
@@ -213,6 +290,158 @@ def _interpreter_inline_script(args: tuple[str, ...]) -> str | None:
 
 def _is_inline_interpreter_command(command_name: str) -> bool:
     return command_name.startswith("python") or command_name in {"node", "perl", "php", "ruby"}
+
+
+def _env_looks_like_wrapper(tokens: tuple[str, ...]) -> bool:
+    index = 0
+    saw_wrapper_syntax = False
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--":
+            return saw_wrapper_syntax and index + 1 < len(tokens)
+        if _ASSIGNMENT_PATTERN.match(token):
+            saw_wrapper_syntax = True
+            index += 1
+            continue
+        if token.startswith("-"):
+            saw_wrapper_syntax = True
+            index += _wrapper_option_tokens_consumed("env", token)
+            continue
+        return saw_wrapper_syntax
+    return False
+
+
+def _heredoc_body(command: str, *, tag: str, start: int) -> str | None:
+    terminator = re.compile(rf"(?m)^[\t ]*{re.escape(tag)}[\t ]*(?:\r?$)")
+    end_match = terminator.search(command, start)
+    if end_match is None:
+        return None
+    return command[start : end_match.start()]
+
+
+def _interpreter_reads_stdin(args: tuple[str, ...]) -> bool:
+    for token in args:
+        if token == "--":
+            continue
+        if token in {"-c", "-e"} or (token.startswith(("-c", "-e")) and len(token) > 2):
+            return False
+        if token == "-":
+            return True
+        if token.startswith("-"):
+            continue
+        return False
+    return False
+
+
+def _kubernetes_heredoc_remote_kind(header: str) -> str | None:
+    remote_tokens = _kubernetes_heredoc_remote_tokens(header)
+    if not remote_tokens:
+        return None
+    command_name, args = _unwrap_heredoc_remote_command(remote_tokens)
+    if command_name is None:
+        return None
+    if command_name in _SHELL_EXECUTABLES and _shell_reads_stdin(args):
+        return "shell"
+    if _is_inline_interpreter_command(command_name) and _interpreter_reads_stdin(args):
+        return "interpreter"
+    return None
+
+
+def _kubernetes_heredoc_remote_tokens(header: str) -> tuple[str, ...]:
+    try:
+        tokens = tuple(shlex.split(header))
+    except ValueError:
+        tokens = tuple(header.split())
+    if not tokens:
+        return ()
+    kubernetes_index = next(
+        (index for index, token in enumerate(tokens) if Path(token).name.lower() in {"kubectl", "oc"}),
+        None,
+    )
+    if kubernetes_index is None:
+        return ()
+    subcommand_index = next(
+        (index for index in range(kubernetes_index + 1, len(tokens)) if tokens[index].lower() in {"exec", "rsh"}),
+        None,
+    )
+    if subcommand_index is None:
+        return ()
+    tokens = tokens[subcommand_index + 1 :]
+    resource_seen = False
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--":
+            return tokens[index + 1 :]
+        option_consumed = kubernetes_option_tokens_consumed(
+            tokens,
+            index,
+            base_value_flags=_KUBECTL_OPTIONS_WITH_VALUES,
+            base_boolean_flags=_KUBECTL_BOOLEAN_OPTIONS,
+            base_boolean_short_cluster=_EXEC_BOOLEAN_SHORT_CLUSTER,
+            value_flags=_EXEC_OPTIONS_WITH_VALUES,
+            boolean_flags=_EXEC_BOOLEAN_OPTIONS,
+            boolean_short_cluster=_EXEC_BOOLEAN_SHORT_CLUSTER,
+        )
+        if option_consumed is not None:
+            index += option_consumed
+            continue
+        if not resource_seen:
+            resource_seen = True
+            index += 1
+            continue
+        return tokens[index:]
+    return ()
+
+
+def _shell_reads_stdin(args: tuple[str, ...]) -> bool:
+    for token in args:
+        if token == "--":
+            continue
+        if token == "-s":
+            return True
+        if token == "-c" or (token.startswith("-") and "c" in token[1:]):
+            return False
+        if token.startswith("-"):
+            continue
+        return token == "-"
+    return True
+
+
+def _unwrap_heredoc_remote_command(tokens: tuple[str, ...]) -> tuple[str | None, tuple[str, ...]]:
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if _ASSIGNMENT_PATTERN.match(token):
+            index += 1
+            continue
+        command_name = Path(token).name.lower()
+        if command_name not in _HEREDOC_WRAPPER_COMMANDS:
+            return command_name, tokens[index + 1 :]
+        if command_name == "env" and not _env_looks_like_wrapper(tokens[index + 1 :]):
+            return command_name, tokens[index + 1 :]
+        index += 1
+        while index < len(tokens):
+            current = tokens[index]
+            if current == "--":
+                index += 1
+                break
+            if _ASSIGNMENT_PATTERN.match(current):
+                index += 1
+                continue
+            if not current.startswith("-"):
+                break
+            index += _wrapper_option_tokens_consumed(command_name, current)
+    return None, ()
+
+
+def _wrapper_option_tokens_consumed(command_name: str, token: str) -> int:
+    options_with_values = _HEREDOC_WRAPPER_OPTIONS_WITH_VALUES.get(command_name, frozenset())
+    if token in options_with_values:
+        return 2
+    if any(token.startswith(f"{option}=") for option in options_with_values if option.startswith("--")):
+        return 1
+    return 1
 
 
 __all__ = [
