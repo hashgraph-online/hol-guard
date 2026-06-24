@@ -34,6 +34,7 @@ from .oauth_client import (
     build_pkce_s256_challenge,
     generate_dpop_key_pair,
     generate_pkce_verifier,
+    guard_api_base_path,
     resolve_guard_oauth_client_config,
 )
 
@@ -449,7 +450,8 @@ def resolve_connect_url(connect_url: str) -> tuple[str, str]:
 
 def _oauth_sync_url_from_issuer(issuer: str) -> str:
     oauth_client = resolve_guard_oauth_client_config(issuer)
-    return f"{oauth_client.issuer}/api/guard/receipts/sync"
+    prefix = guard_api_base_path(issuer)
+    return f"{oauth_client.issuer}{prefix}/api/guard/receipts/sync"
 
 
 def _build_sync_auth_context(
