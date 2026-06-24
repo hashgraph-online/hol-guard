@@ -325,7 +325,8 @@ def _remote_command_reads_pod_environment(tokens: tuple[str, ...], *, depth: int
             return False
         heredoc_source = _shell_stdin_secret_source(tokens)
         return heredoc_source == "Kubernetes pod environment"
-    if matching_source_arguments(tokens, is_proc_environ_path):
+    proc_environ_sources = matching_source_arguments(tokens, is_proc_environ_path)
+    if proc_environ_sources and command_name not in WRITE_ONLY_COMMANDS:
         return True
     return interpreter_reads_sensitive_env(command_name, tokens[1:])
 

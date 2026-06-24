@@ -140,9 +140,13 @@ def test_kubectl_exec_shell_expansion_secret_reads_are_detected(tmp_path: Path) 
     assert kubernetes_secret_read_source("kubectl exec registry-frontend -- cat /proc/1/environ") == (
         "Kubernetes pod environment"
     )
+    assert kubernetes_secret_read_source("kubectl exec registry-frontend -- cat /proc/self/environ") == (
+        "Kubernetes pod environment"
+    )
     assert kubernetes_secret_read_source(
         "kubectl exec registry-frontend -- strings /proc/1/environ | grep GUARD_GITHUB_APP_PRIVATE_KEY"
     ) == ("Kubernetes pod environment")
+    assert kubernetes_secret_read_source("kubectl exec registry-frontend -- rm /proc/1/environ") is None
 
 
 def test_kubectl_exec_secret_volume_readers_are_detected() -> None:
@@ -352,6 +356,16 @@ def test_only_later_kubernetes_heredoc_secret_is_detected() -> None:
 
 def test_pipe_fed_kubernetes_heredoc_secret_is_detected() -> None:
     command = "cat <<'SH' | kubectl exec -i registry-frontend -- sh\necho \"$GUARD_GITHUB_APP_PRIVATE_KEY\"\nSH"
+
+    assert kubernetes_secret_read_source(command) == "Kubernetes pod environment"
+
+
+def test_nodejs_kubernetes_heredoc_secret_is_detected() -> None:
+    command = (
+        "kubectl exec registry-frontend -- /usr/bin/nodejs - <<'JS'\n"
+        "console.log(process.env.GUARD_GITHUB_APP_PRIVATE_KEY)\n"
+        "JS"
+    )
 
     assert kubernetes_secret_read_source(command) == "Kubernetes pod environment"
 

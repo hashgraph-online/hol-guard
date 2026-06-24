@@ -161,7 +161,7 @@ def _interpreter_reads_stdin(args: tuple[str, ...]) -> bool:
 
 
 def _is_inline_interpreter_command(command_name: str) -> bool:
-    return command_name.startswith("python") or command_name in {"node", "perl", "php", "ruby"}
+    return command_name.startswith("python") or command_name in {"node", "nodejs", "perl", "php", "ruby"}
 
 
 def _iter_kubernetes_heredocs(command: str) -> tuple[tuple[str, str, str], ...]:

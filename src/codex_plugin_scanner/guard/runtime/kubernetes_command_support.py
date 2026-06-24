@@ -40,7 +40,7 @@ _RAW_SECRET_RESOURCE_PATH_PATTERN = re.compile(
     r"^/(?:api/[^/]+|apis/[^/]+/[^/]+)/(?:watch/)?(?:namespaces/[^/]+/)?secrets?(?:/[^/?#]+)?$",
     re.IGNORECASE,
 )
-_PROC_ENVIRON_PATH_PATTERN = re.compile(r"^/proc/\d+/environ$")
+_PROC_ENVIRON_PATH_PATTERN = re.compile(r"^/proc/(?:\d+|self)/environ$")
 
 
 def interpreter_reads_sensitive_env(command_name: str, args: tuple[str, ...]) -> bool:
