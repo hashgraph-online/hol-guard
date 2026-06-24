@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
+from .package_firewall_defaults import (
+    PACKAGE_FIREWALL_PAID_TIERS,
+    build_guard_local_entitlement_defaults,
+)
 from .store import GuardStore
 
-PACKAGE_FIREWALL_PAID_TIERS = frozenset({"paid", "premium", "pro", "team", "enterprise", "guard_cloud", "guard-cloud"})
 PACKAGE_FIREWALL_CONNECT_CTA = (
     "Connect HOL Guard Cloud to check package firewall access and run package firewall actions."
 )
 PACKAGE_FIREWALL_RECONNECT_CTA = "Reconnect HOL Guard Cloud to refresh package firewall access."
 PACKAGE_FIREWALL_UPGRADE_CTA = "Upgrade to HOL Guard Cloud to run package firewall actions."
-_OAUTH_ENTITLEMENT_FALLBACK_TTL = timedelta(days=30)
 
 
 def _optional_string(value: object) -> str | None:
@@ -44,22 +46,7 @@ def build_oauth_package_firewall_entitlement(
     record = payload.get("guard_local_entitlement")
     if not isinstance(record, dict):
         return None
-    plan_id = _optional_string(record.get("plan_id")) or _optional_string(record.get("tier"))
-    if plan_id is None:
-        return None
-    normalized_tier = plan_id.lower()
-    allowed_value = record.get("supply_chain_firewall")
-    allowed = allowed_value if isinstance(allowed_value, bool) else normalized_tier in PACKAGE_FIREWALL_PAID_TIERS
-    expires_at = _optional_string(record.get("expires_at"))
-    if expires_at is None:
-        resolved_now = now or datetime.now(timezone.utc)
-        expires_at = (resolved_now + _OAUTH_ENTITLEMENT_FALLBACK_TTL).isoformat()
-    return {
-        "plan_id": normalized_tier,
-        "supply_chain_entitlement_expires_at": expires_at,
-        "supply_chain_firewall": allowed,
-        "supply_chain_plan_id": normalized_tier,
-    }
+    return build_guard_local_entitlement_defaults(record, now=now)
 
 
 def _bundle_entitlement(payload: object) -> dict[str, object] | None:

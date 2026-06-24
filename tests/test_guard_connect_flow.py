@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -23,6 +24,7 @@ from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.package_firewall_entitlement import resolve_package_firewall_entitlement
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_base import SystemKeyringSecretStore
 from tests.test_guard_store_migrations import _install_fake_system_keyring
 
 
@@ -767,6 +769,158 @@ def test_sync_local_guard_cloud_proof_repairs_degraded_oauth_from_encrypted_fall
     latest_state = store.get_latest_guard_connect_state(now="2026-06-05T01:40:25+00:00")
     assert latest_state is not None
     assert latest_state["milestone"] == "first_sync_succeeded"
+
+
+def test_connect_status_recovers_missing_oauth_metadata_from_surviving_secret(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_system_keyring(monkeypatch)
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "get_secret_with_timeout",
+        lambda self, secret_id, timeout_seconds=0.0: self.get_secret(secret_id),
+    )
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem="private-key-1",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value-1", "y": "y-value-1"},
+        dpop_public_jwk_thumbprint="thumbprint-1",
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        supply_chain_plan_id="premium",
+        supply_chain_firewall=True,
+        now="2026-06-24T18:20:00+00:00",
+    )
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {
+            "workspace_id": "workspace-1",
+            "tier": "premium",
+        },
+        "2026-06-24T18:20:00+00:00",
+    )
+    store.set_sync_payload(
+        "sync_summary",
+        {
+            "synced_at": "2026-06-24T18:21:00+00:00",
+            "receipts_stored": 5,
+            "inventory_tracked": 3,
+        },
+        "2026-06-24T18:21:00+00:00",
+    )
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-06-24T18:20:00+00:00",
+        request_id="connect-1",
+    )
+    store.record_latest_guard_connect_sync_success(
+        sync_payload={
+            "synced_at": "2026-06-24T18:21:00+00:00",
+            "receipts_stored": 5,
+            "inventory_items": 3,
+        },
+        now="2026-06-24T18:21:00+00:00",
+        request_id="connect-1",
+    )
+    store.delete_sync_payload("oauth_local_credentials")
+
+    payload = build_connect_status_payload(
+        store=store,
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        connect_url="https://hol.org/guard/connect",
+    )
+
+    assert payload["status"] == "connected"
+    assert payload["milestone"] == "first_sync_succeeded"
+    latest_state = payload["latest_connect_state"]
+    assert isinstance(latest_state, dict)
+    assert latest_state["status"] == "connected"
+    assert latest_state["milestone"] == "first_sync_succeeded"
+    repaired_payload = store.get_sync_payload("oauth_local_credentials")
+    assert isinstance(repaired_payload, dict)
+    assert repaired_payload["workspace_id"] == "workspace-1"
+    assert repaired_payload["supply_chain_plan_id"] == "premium"
+    assert repaired_payload["supply_chain_firewall"] is True
+    assert isinstance(repaired_payload["supply_chain_entitlement_expires_at"], str)
+    assert store.get_oauth_local_credential_health()["state"] == "healthy"
+    assert store.get_cloud_sync_profile() == {
+        "auth_mode": "oauth",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "workspace_id": "workspace-1",
+    }
+    entitlement = resolve_package_firewall_entitlement(store)
+    assert entitlement["allowed"] is True
+    assert entitlement["tier"] == "premium"
+    assert entitlement["upgrade_cta"] is None
+
+
+def test_connect_status_does_not_recover_missing_oauth_metadata_from_fallback_only_secret_on_macos(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "platform", "darwin")
+    keyring_module = _install_fake_system_keyring(monkeypatch)
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "get_secret_with_timeout",
+        lambda self, secret_id, timeout_seconds=0.0: self.get_secret(secret_id),
+    )
+    store = GuardStore(tmp_path / "guard-home")
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-06-24T18:20:00+00:00",
+        request_id="connect-1",
+    )
+    store.record_latest_guard_connect_sync_success(
+        sync_payload={
+            "synced_at": "2026-06-24T18:21:00+00:00",
+            "receipts_stored": 5,
+            "inventory_items": 3,
+        },
+        now="2026-06-24T18:21:00+00:00",
+        request_id="connect-1",
+    )
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {
+            "workspace_id": "workspace-1",
+            "tier": "premium",
+        },
+        "2026-06-24T18:20:00+00:00",
+    )
+    fallback_store = store._resolve_oauth_fallback_store()
+    assert fallback_store is not None
+    fallback_store.set_secret(
+        store._oauth_local_credentials_ref,
+        json.dumps(
+            {
+                "refresh_token": "refresh-token-1",
+                "dpop_private_key_pem": "private-key-1",
+                "dpop_public_jwk": {"kty": "EC", "crv": "P-256", "x": "x-value-1", "y": "y-value-1"},
+                "dpop_public_jwk_thumbprint": "thumbprint-1",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+    )
+    keyring_module.delete_password("hol-guard.oauth", store._oauth_local_credentials_ref)
+
+    payload = build_connect_status_payload(
+        store=store,
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        connect_url="https://hol.org/guard/connect",
+    )
+
+    assert payload["status"] == "retry_required"
+    assert payload["milestone"] == "first_sync_failed"
+    assert store.get_sync_payload("oauth_local_credentials") is None
 
 
 def test_retry_required_connect_state_prefers_reconnect_over_false_paywall(tmp_path: Path) -> None:
