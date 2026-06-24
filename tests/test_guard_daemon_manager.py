@@ -191,6 +191,35 @@ def test_running_guard_daemon_processes_for_guard_home_returns_empty_on_ps_timeo
     assert daemon_manager_module._running_guard_daemon_processes_for_guard_home(guard_home) == []
 
 
+def test_running_guard_daemon_processes_for_guard_home_accepts_console_script_launch(
+    tmp_path,
+    monkeypatch,
+):
+    guard_home = tmp_path / "guard-home"
+    command = (
+        "/Users/test/.local/pipx/venvs/hol-guard/bin/python "
+        "/Users/test/.local/bin/hol-guard guard daemon --serve "
+        f"--guard-home {guard_home} --port 5474"
+    )
+
+    monkeypatch.setattr(
+        daemon_manager_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(stdout=f"12345 {command}\n"),
+    )
+
+    assert daemon_manager_module._running_guard_daemon_processes_for_guard_home(guard_home) == [(12345, 5474)]
+
+
+def test_guard_daemon_command_matches_accepts_console_script_shortcuts() -> None:
+    assert daemon_manager_module._guard_daemon_command_matches(
+        "/Users/test/.local/bin/hol-guard daemon --serve --guard-home /tmp/guard-home --port 5474"
+    )
+    assert daemon_manager_module._guard_daemon_command_matches(
+        "/Users/test/.local/bin/plugin-guard daemon --serve --guard-home /tmp/guard-home --port 5474"
+    )
+
+
 def test_ensure_guard_daemon_reuses_inflight_pid_before_respawning(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     responses = iter((None, None, "http://127.0.0.1:5409"))
@@ -805,6 +834,30 @@ def test_guard_daemon_pid_matches_command_validates_guard_home_on_windows(tmp_pa
         daemon_manager_module,
         "_guard_home_from_command",
         lambda _command: expected_guard_home,
+    )
+
+    assert daemon_manager_module._guard_daemon_pid_matches_command(
+        12345,
+        expected_guard_home=expected_guard_home,
+    )
+    assert not daemon_manager_module._guard_daemon_pid_matches_command(
+        12345,
+        expected_guard_home=tmp_path / "other-home",
+    )
+
+
+def test_guard_daemon_pid_matches_command_accepts_console_script_launch(tmp_path, monkeypatch):
+    expected_guard_home = tmp_path / "guard-home"
+    command = (
+        "/Users/test/.local/pipx/venvs/hol-guard/bin/python "
+        "/Users/test/.local/bin/hol-guard guard daemon --serve "
+        f"--guard-home {expected_guard_home} --port 5474"
+    )
+
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_guard_daemon_command_for_pid",
+        lambda _pid: command,
     )
 
     assert daemon_manager_module._guard_daemon_pid_matches_command(
