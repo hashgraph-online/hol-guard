@@ -87,7 +87,8 @@ _GH_PR_OPTION_VALUE_FLAGS = frozenset({"-R", "--repo"})
 _SHELL_CONTROL_PREFIX_TOKENS = frozenset(
     {"!", "(", "{", "case", "do", "elif", "else", "for", "if", "select", "then", "until", "while"}
 )
-_COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
+COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
+_COMMAND_LIST_KEYS = COMMAND_LIST_KEYS
 _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "push", "run"})
 _DOCKER_BUILD_SUBCOMMANDS = frozenset({"build"})
 _DOCKER_BUILDX_BUILD_SUBCOMMANDS = frozenset({"b", "build"})
@@ -3529,7 +3530,7 @@ def _collect_candidate_commands(value: object, results: list[str], *, depth: int
     if isinstance(value, list):
         string_values = [item.strip() for item in value if isinstance(item, str) and item.strip()]
         if string_values:
-            results.append(" ".join(string_values))
+            results.append(shlex.join(string_values))
         for child in value:
             if isinstance(child, (dict, list)):
                 _collect_candidate_commands(child, results, depth=depth + 1)
@@ -3545,7 +3546,7 @@ def _collect_candidate_commands(value: object, results: list[str], *, depth: int
         if isinstance(candidate, list):
             string_values = [item.strip() for item in candidate if isinstance(item, str) and item.strip()]
             if string_values:
-                results.append(" ".join(string_values))
+                results.append(shlex.join(string_values))
     for child in value.values():
         if isinstance(child, (dict, list)):
             _collect_candidate_commands(child, results, depth=depth + 1)
