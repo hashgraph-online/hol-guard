@@ -1,0 +1,489 @@
+"""Kubernetes shell-command secret source detection."""
+
+from __future__ import annotations
+
+import re
+import shlex
+from pathlib import Path
+
+from .data_flow import extract_command_segments, extract_command_substitutions, extract_input_redirects
+from .kubernetes_command_support import (
+    WRITE_ONLY_COMMANDS,
+    interpreter_reads_sensitive_env,
+    is_output_redirect_target,
+    is_proc_environ_path,
+    is_secret_volume_path,
+    is_sensitive_env_name,
+    kubernetes_option_tokens_consumed,
+    matching_source_arguments,
+    raw_secret_api_path,
+    remote_cp_path,
+    resource_token_includes_secret,
+    script_reads_sensitive_env,
+)
+from .kubernetes_heredoc_support import kubernetes_heredoc_secret_source
+from .shell_command_wrappers import normalize_transparent_shell_command
+
+_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
+_OUTPUT_REDIRECT_TOKENS = frozenset({">", "1>", "2>", ">>", "1>>", "2>>"})
+_WRAPPER_COMMANDS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
+_WRAPPER_OPTIONS_WITH_VALUES = {
+    "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
+    "nice": frozenset({"-n", "--adjustment"}),
+    "stdbuf": frozenset({"-i", "--input", "-o", "--output", "-e", "--error"}),
+    "sudo": frozenset(
+        {
+            "-C",
+            "-D",
+            "-R",
+            "-T",
+            "-g",
+            "-h",
+            "-p",
+            "-r",
+            "-t",
+            "-u",
+            "--chdir",
+            "--chroot",
+            "--close-from",
+            "--command-timeout",
+            "--group",
+            "--host",
+            "--prompt",
+            "--role",
+            "--type",
+            "--user",
+        }
+    ),
+    "time": frozenset({"-f", "--format", "-o", "--output"}),
+}
+_KUBECTL_OPTIONS_WITH_VALUES = frozenset(
+    {
+        "--as",
+        "--as-group",
+        "--as-uid",
+        "--cache-dir",
+        "--certificate-authority",
+        "--chunk-size",
+        "--client-certificate",
+        "--client-key",
+        "--cluster",
+        "--context",
+        "--field-manager",
+        "--field-selector",
+        "--filename",
+        "--kubeconfig",
+        "--label-selector",
+        "--namespace",
+        "--output",
+        "--password",
+        "--profile",
+        "--profile-output",
+        "--request-timeout",
+        "--selector",
+        "--server",
+        "--sort-by",
+        "--subresource",
+        "--template",
+        "--token",
+        "--user",
+        "--username",
+        "-c",
+        "-f",
+        "-l",
+        "-n",
+        "-o",
+    }
+)
+_KUBECTL_BOOLEAN_OPTIONS = frozenset({"-A", "--all-namespaces"})
+_EXEC_OPTIONS_WITH_VALUES = frozenset(
+    {
+        "--container",
+        "--namespace",
+        "--pod-running-timeout",
+        "--profile",
+        "--profile-output",
+        "--request-timeout",
+        "--shell",
+        "-c",
+        "-n",
+    }
+)
+_EXEC_BOOLEAN_OPTIONS = frozenset({"--quiet", "--stdin", "--tty", "-T", "-i", "-q", "-t"})
+_EXEC_BOOLEAN_SHORT_CLUSTER = frozenset({"i", "q", "t"})
+_CP_OPTIONS_WITH_VALUES = frozenset({"--container", "--namespace", "--retries", "-c", "-n"})
+_CP_BOOLEAN_OPTIONS = frozenset({"--no-preserve"})
+_REMOTE_CP_OPTIONS_WITH_VALUES = frozenset({"--target-directory", "-t"})
+_SHELL_EXECUTABLES = frozenset({"ash", "bash", "dash", "ksh", "sh", "zsh"})
+
+
+def kubernetes_secret_read_source(command: str | None) -> str | None:
+    if not isinstance(command, str) or not command.strip():
+        return None
+    for candidate in _command_candidates(command):
+        source = _kubernetes_secret_read_source_for_candidate(candidate)
+        if source is not None:
+            return source
+    return None
+
+
+def _command_candidates(command: str, *, depth: int = 0) -> tuple[str, ...]:
+    if depth > 3:
+        return (command,)
+    candidates: list[str] = [command]
+    normalized = normalize_transparent_shell_command(command).normalized_command.strip()
+    if normalized and normalized != command:
+        candidates.extend(_command_candidates(normalized, depth=depth + 1))
+    for substitution in extract_command_substitutions(command):
+        candidates.extend(_command_candidates(substitution, depth=depth + 1))
+    return tuple(dict.fromkeys(candidate for candidate in candidates if candidate.strip()))
+
+
+def _kubernetes_secret_read_source_for_candidate(command: str) -> str | None:
+    if (source := kubernetes_heredoc_secret_source(command)) is not None:
+        return source
+    for segment in extract_command_segments(command):
+        tokens = _shell_tokens(segment)
+        if not tokens:
+            continue
+        source = _kubectl_secret_read_source_from_tokens(tokens)
+        if source is not None:
+            return source
+    return None
+
+
+def _shell_tokens(command: str) -> tuple[str, ...]:
+    try:
+        return tuple(shlex.split(command))
+    except ValueError:
+        return tuple(command.split())
+
+
+def _kubectl_secret_read_source_from_tokens(tokens: tuple[str, ...]) -> str | None:
+    index = _unwrap_command_start(tokens)
+    if index >= len(tokens) or Path(tokens[index]).name.lower() not in {"kubectl", "oc"}:
+        return None
+    command_name = Path(tokens[index]).name.lower()
+    subcommand_index = _skip_kubectl_options(tokens, index + 1)
+    if subcommand_index >= len(tokens):
+        return None
+    subcommand = tokens[subcommand_index].lower()
+    if subcommand == "get" and _kubectl_get_raw_secret_path(tokens, subcommand_index + 1):
+        return "Kubernetes Secret resource"
+    if command_name == "oc" and subcommand == "extract" and _kubectl_resource_is_secret(tokens, subcommand_index + 1):
+        return "Kubernetes Secret resource"
+    if subcommand == "create" and _kubectl_create_token(tokens, subcommand_index + 1):
+        return "Kubernetes service-account token"
+    if subcommand in {"get", "describe", "edit"} and _kubectl_resource_is_secret(tokens, subcommand_index + 1):
+        return "Kubernetes Secret resource"
+    if subcommand in {"exec", "rsh"}:
+        return _kubectl_exec_secret_source(tokens[subcommand_index + 1 :])
+    if subcommand == "cp" and _kubectl_cp_reads_secret_volume(tokens[subcommand_index + 1 :]):
+        return "Kubernetes secret volume"
+    return None
+
+
+def _unwrap_command_start(tokens: tuple[str, ...]) -> int:
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if _ASSIGNMENT_PATTERN.match(token):
+            index += 1
+            continue
+        command_name = Path(token).name.lower()
+        if command_name not in _WRAPPER_COMMANDS:
+            return index
+        if command_name == "env" and not _env_looks_like_wrapper(tokens[index + 1 :]):
+            return index
+        index += 1
+        while index < len(tokens):
+            current = tokens[index]
+            if current == "--":
+                index += 1
+                break
+            if _ASSIGNMENT_PATTERN.match(current):
+                index += 1
+                continue
+            if not current.startswith("-"):
+                break
+            index += _option_tokens_consumed(command_name, current)
+    return index
+
+
+def _skip_kubectl_options(tokens: tuple[str, ...], index: int) -> int:
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--":
+            return index + 1
+        if not token.startswith("-"):
+            return index
+        option_consumed = kubernetes_option_tokens_consumed(
+            tokens,
+            index,
+            base_value_flags=_KUBECTL_OPTIONS_WITH_VALUES,
+            base_boolean_flags=_KUBECTL_BOOLEAN_OPTIONS,
+            base_boolean_short_cluster=_EXEC_BOOLEAN_SHORT_CLUSTER,
+        )
+        index += option_consumed if option_consumed is not None else 1
+    return index
+
+
+def _kubectl_resource_is_secret(tokens: tuple[str, ...], index: int) -> bool:
+    index = _skip_kubectl_options(tokens, index)
+    if index >= len(tokens):
+        return False
+    return resource_token_includes_secret(tokens[index])
+
+
+def _kubectl_get_raw_secret_path(tokens: tuple[str, ...], index: int) -> bool:
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--raw" and index + 1 < len(tokens):
+            return raw_secret_api_path(tokens[index + 1])
+        if token.startswith("--raw="):
+            return raw_secret_api_path(token.split("=", 1)[1])
+        index += 1
+    return False
+
+
+def _kubectl_create_token(tokens: tuple[str, ...], index: int) -> bool:
+    index = _skip_kubectl_options(tokens, index)
+    if index >= len(tokens):
+        return False
+    return tokens[index].lower() == "token"
+
+
+def _kubectl_exec_secret_source(tokens: tuple[str, ...]) -> str | None:
+    remote_tokens = _kubectl_exec_remote_tokens(tokens)
+    if not remote_tokens:
+        return None
+    if _remote_command_reads_secret_volume(remote_tokens):
+        return "Kubernetes secret volume"
+    if _remote_command_reads_pod_environment(remote_tokens):
+        return "Kubernetes pod environment"
+    return None
+
+
+def _kubectl_exec_remote_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    resource_seen = False
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--":
+            return tokens[index + 1 :]
+        option_consumed = kubernetes_option_tokens_consumed(
+            tokens,
+            index,
+            base_value_flags=_KUBECTL_OPTIONS_WITH_VALUES,
+            base_boolean_flags=_KUBECTL_BOOLEAN_OPTIONS,
+            base_boolean_short_cluster=_EXEC_BOOLEAN_SHORT_CLUSTER,
+            value_flags=_EXEC_OPTIONS_WITH_VALUES,
+            boolean_flags=_EXEC_BOOLEAN_OPTIONS,
+            boolean_short_cluster=_EXEC_BOOLEAN_SHORT_CLUSTER,
+        )
+        if option_consumed is not None:
+            index += option_consumed
+            continue
+        if not resource_seen:
+            resource_seen = True
+            index += 1
+            continue
+        return tokens[index:]
+    return ()
+
+
+def _remote_command_reads_pod_environment(tokens: tuple[str, ...], *, depth: int = 0) -> bool:
+    if depth > 3 or not tokens:
+        return False
+    unwrapped_index = _unwrap_command_start(tokens)
+    if 0 < unwrapped_index < len(tokens):
+        return _remote_command_reads_pod_environment(tokens[unwrapped_index:], depth=depth + 1)
+    command_name = Path(tokens[0]).name.lower()
+    if command_name == "printenv":
+        env_args = tokens[1:]
+        if "|" in env_args:
+            env_args = env_args[: env_args.index("|")]
+        env_names = tuple(token for token in env_args if not token.startswith("-"))
+        return not env_names or any(is_sensitive_env_name(name) for name in env_names)
+    if command_name == "env":
+        env_args = tokens[1:]
+        if "|" in env_args:
+            env_args = env_args[: env_args.index("|")]
+        env_names = tuple(
+            token for token in env_args if not token.startswith("-") and not _ASSIGNMENT_PATTERN.match(token)
+        )
+        return not env_names
+    if command_name in _SHELL_EXECUTABLES:
+        script = _shell_c_script(tokens[1:])
+        if script is not None:
+            if script_reads_sensitive_env(script):
+                return True
+            for candidate in _command_candidates(script):
+                candidate_tokens = _shell_tokens(candidate)
+                if _remote_command_reads_pod_environment(candidate_tokens, depth=depth + 1):
+                    return True
+            return False
+        heredoc_source = _shell_stdin_secret_source(tokens)
+        return heredoc_source == "Kubernetes pod environment"
+    proc_environ_sources = matching_source_arguments(tokens, is_proc_environ_path)
+    if proc_environ_sources and command_name not in WRITE_ONLY_COMMANDS:
+        return True
+    return interpreter_reads_sensitive_env(command_name, tokens[1:])
+
+
+def _remote_command_reads_secret_volume(tokens: tuple[str, ...], *, depth: int = 0) -> bool:
+    if depth > 3 or not tokens:
+        return False
+    unwrapped_index = _unwrap_command_start(tokens)
+    if 0 < unwrapped_index < len(tokens):
+        return _remote_command_reads_secret_volume(tokens[unwrapped_index:], depth=depth + 1)
+    command_name = Path(tokens[0]).name.lower()
+    if command_name in _SHELL_EXECUTABLES:
+        script = _shell_c_script(tokens[1:])
+        if script is not None:
+            for candidate in _command_candidates(script):
+                if _remote_command_reads_secret_volume(_shell_tokens(candidate), depth=depth + 1):
+                    return True
+            return False
+        heredoc_source = _shell_stdin_secret_source(tokens)
+        return heredoc_source == "Kubernetes secret volume"
+    if any(is_secret_volume_path(target) for target in extract_input_redirects(" ".join(tokens))):
+        return True
+    if command_name == "cp":
+        return _remote_copy_source_reads_secret_volume(tokens[1:])
+    source_arguments = _secret_volume_source_arguments(tokens)
+    if not source_arguments:
+        return False
+    return command_name not in WRITE_ONLY_COMMANDS
+
+
+def _kubectl_cp_reads_secret_volume(tokens: tuple[str, ...]) -> bool:
+    operands = _kubectl_cp_operands(tokens)
+    if len(operands) < 2:
+        return False
+    remote_source = remote_cp_path(operands[0])
+    return remote_source is not None and is_secret_volume_path(remote_source)
+
+
+def _kubectl_cp_operands(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    operands: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        option_consumed = kubernetes_option_tokens_consumed(
+            tokens,
+            index,
+            base_value_flags=_KUBECTL_OPTIONS_WITH_VALUES,
+            base_boolean_flags=_KUBECTL_BOOLEAN_OPTIONS,
+            base_boolean_short_cluster=_EXEC_BOOLEAN_SHORT_CLUSTER,
+            value_flags=_CP_OPTIONS_WITH_VALUES,
+            boolean_flags=_CP_BOOLEAN_OPTIONS,
+        )
+        if option_consumed is not None:
+            index += option_consumed
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        operands.append(token)
+        index += 1
+    return tuple(operands)
+
+
+def _remote_copy_source_reads_secret_volume(tokens: tuple[str, ...]) -> bool:
+    source_operands = _remote_cp_operands(tokens)
+    if not source_operands:
+        return False
+    return any(
+        is_secret_volume_path(operand) and not is_output_redirect_target(operand, previous_token=None)
+        for operand in source_operands
+    )
+
+
+def _secret_volume_source_arguments(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    return matching_source_arguments(tokens, is_secret_volume_path)
+
+
+def _env_looks_like_wrapper(tokens: tuple[str, ...]) -> bool:
+    index = 0
+    saw_wrapper_syntax = False
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--":
+            return saw_wrapper_syntax and index + 1 < len(tokens)
+        if _ASSIGNMENT_PATTERN.match(token):
+            saw_wrapper_syntax = True
+            index += 1
+            continue
+        if token.startswith("-"):
+            saw_wrapper_syntax = True
+            index += _option_tokens_consumed("env", token)
+            continue
+        return saw_wrapper_syntax
+    return False
+
+
+def _remote_cp_operands(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    operands: list[str] = []
+    has_target_directory = False
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token in _REMOTE_CP_OPTIONS_WITH_VALUES and index + 1 < len(tokens):
+            has_target_directory = has_target_directory or token in {"--target-directory", "-t"}
+            index += 2
+            continue
+        if any(token.startswith(f"{flag}=") for flag in _REMOTE_CP_OPTIONS_WITH_VALUES if flag.startswith("--")):
+            has_target_directory = has_target_directory or token.startswith("--target-directory=")
+            index += 1
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        operands.append(token)
+        index += 1
+    if has_target_directory:
+        return tuple(operands)
+    return tuple(operands[:-1]) if len(operands) >= 2 else ()
+
+
+def _shell_c_script(tokens: tuple[str, ...]) -> str | None:
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "-c" and index + 1 < len(tokens):
+            return tokens[index + 1]
+        if token.startswith("-") and "c" in token[1:] and index + 1 < len(tokens):
+            return tokens[index + 1]
+        index += 1
+    return None
+
+
+def _shell_stdin_secret_source(tokens: tuple[str, ...]) -> str | None:
+    if not any(token.startswith("<<") for token in tokens[1:]):
+        return None
+    body_tokens = [token for token in tokens[1:] if not token.startswith("<<")]
+    if body_tokens:
+        body_tokens = body_tokens[:-1]
+    script_text = " ".join(body_tokens).strip()
+    if not script_text:
+        return None
+    if _remote_command_reads_secret_volume(_shell_tokens(script_text), depth=1):
+        return "Kubernetes secret volume"
+    if script_reads_sensitive_env(script_text):
+        return "Kubernetes pod environment"
+    if _remote_command_reads_pod_environment(_shell_tokens(script_text), depth=1):
+        return "Kubernetes pod environment"
+    return None
+
+
+def _option_tokens_consumed(command_name: str, token: str) -> int:
+    options_with_values = _WRAPPER_OPTIONS_WITH_VALUES.get(command_name, frozenset())
+    if token in options_with_values:
+        return 2
+    if any(token.startswith(f"{option}=") for option in options_with_values if option.startswith("--")):
+        return 1
+    return 1
+
+
+__all__ = ["kubernetes_secret_read_source"]
