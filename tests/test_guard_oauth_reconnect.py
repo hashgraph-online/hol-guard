@@ -14,7 +14,12 @@ from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def _store_with_oauth_credentials(tmp_path) -> GuardStore:
+def _store_with_oauth_credentials(
+    tmp_path,
+    *,
+    access_token: str | None = None,
+    access_token_expires_at: str | None = None,
+) -> GuardStore:
     store = GuardStore(tmp_path / "guard-home")
     dpop_key_material = generate_dpop_key_pair()
     store.set_oauth_local_credentials(
@@ -27,6 +32,8 @@ def _store_with_oauth_credentials(tmp_path) -> GuardStore:
         grant_id="grant-1",
         machine_id="machine-1",
         workspace_id="workspace-1",
+        access_token=access_token,
+        access_token_expires_at=access_token_expires_at,
         now="2026-06-01T00:00:00+00:00",
     )
     return store
@@ -154,6 +161,24 @@ def test_prepare_guard_cloud_connect_authorization_refreshes_under_lock(tmp_path
     assert result["cleared_stale_sign_in"] is False
     assert result["existing_sign_in_valid"] is True
     assert store.get_oauth_local_credentials(allow_primary=True) is not None
+
+
+def test_resolve_guard_sync_auth_context_reuses_cached_access_token(tmp_path, monkeypatch) -> None:
+    store = _store_with_oauth_credentials(
+        tmp_path,
+        access_token="cached-access-token",
+        access_token_expires_at="2099-01-01T00:00:00+00:00",
+    )
+
+    def _unexpected_refresh(**_kwargs):
+        raise AssertionError("refresh should not run while cached access token is still valid")
+
+    monkeypatch.setattr(guard_runner_module, "_refresh_guard_oauth_access_token", _unexpected_refresh)
+
+    auth_context = guard_runner_module._resolve_guard_sync_auth_context(store)
+
+    assert auth_context["access_token"] == "cached-access-token"
+    assert auth_context["sync_url"] == "https://hol.org/api/guard/receipts/sync"
 
 
 def test_prepare_guard_cloud_connect_authorization_tolerates_refresh_lock_timeout(

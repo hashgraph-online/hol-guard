@@ -2740,6 +2740,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     workspace_id=token_result.workspace_id,
                     runtime_id="hol-guard",
                     runtime_label="HOL Guard CLI",
+                    access_token=token_result.access_token,
+                    access_token_expires_at=token_result.access_token_expires_at,
                     now=timestamp,
                 )
                 payload = _finalize_daemon_guard_connect_payload(
@@ -2923,6 +2925,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     workspace_id=token_result.workspace_id,
                     runtime_id="hol-guard",
                     runtime_label="HOL Guard CLI",
+                    access_token=token_result.access_token,
+                    access_token_expires_at=token_result.access_token_expires_at,
                     now=timestamp,
                 )
                 payload = _finalize_daemon_guard_connect_payload(

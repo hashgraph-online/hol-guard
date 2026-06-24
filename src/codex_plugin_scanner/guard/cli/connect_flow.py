@@ -13,7 +13,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from cryptography.hazmat.primitives import hashes, serialization
@@ -100,6 +100,20 @@ class GuardOAuthTokenExchangeResult:
     machine_id: str | None
     supply_chain_entitlement: dict[str, object] | None
     workspace_id: str | None
+    access_token_expires_at: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.access_token_expires_at is not None:
+            return
+        object.__setattr__(
+            self,
+            "access_token_expires_at",
+            _guard_access_token_expires_at(
+                access_token=self.access_token,
+                expires_in=self.expires_in,
+                now=datetime.now(timezone.utc),
+            ),
+        )
 
 
 @dataclass
@@ -160,6 +174,21 @@ def _read_nested_string(payload: dict[str, object], *path: str) -> str | None:
             return None
         current = current.get(segment)
     return current if isinstance(current, str) and current else None
+
+
+def _guard_access_token_expires_at(
+    *,
+    access_token: str,
+    expires_in: int,
+    now: datetime,
+) -> str | None:
+    claims = _decode_access_token_claims(access_token)
+    exp = claims.get("exp")
+    if isinstance(exp, (int, float)) and float(exp) > 0:
+        return datetime.fromtimestamp(float(exp), tz=timezone.utc).isoformat()
+    if expires_in <= 0:
+        return None
+    return (now + timedelta(seconds=expires_in)).isoformat()
 
 
 def _encode_jwt_segment(payload: dict[str, object]) -> str:
@@ -486,18 +515,25 @@ def _parse_guard_token_exchange_payload(payload: dict[str, object]) -> GuardOAut
     token_type = _require_string(payload, "token_type")
     if token_type.lower() != "bearer":
         raise RuntimeError("Guard OAuth token exchange failed: missing access token.")
+    now = datetime.now(timezone.utc)
     claims = _decode_access_token_claims(access_token)
+    expires_in = _int_payload_value(payload, "expires_in", 0)
     return GuardOAuthTokenExchangeResult(
         access_token=access_token,
+        access_token_expires_at=_guard_access_token_expires_at(
+            access_token=access_token,
+            expires_in=expires_in,
+            now=now,
+        ),
         refresh_token=str(payload.get("refresh_token") or "").strip() or None,
-        expires_in=_int_payload_value(payload, "expires_in", 0),
+        expires_in=expires_in,
         scope=str(payload.get("scope") or "").strip(),
         token_type=token_type,
         grant_id=_read_nested_string(claims, "grant", "grantId"),
         machine_id=_read_nested_string(claims, "machine", "machineId"),
         supply_chain_entitlement=build_oauth_package_firewall_entitlement(
             payload,
-            now=datetime.now(timezone.utc),
+            now=now,
         ),
         workspace_id=_read_nested_string(claims, "workspace", "workspaceId"),
     )
@@ -903,6 +939,8 @@ def _persist_oauth_local_credentials(
     workspace_id: str | None = None,
     runtime_id: str | None = None,
     runtime_label: str | None = None,
+    access_token: str | None = None,
+    access_token_expires_at: str | None = None,
 ) -> None:
     store.set_oauth_local_credentials(
         issuer=issuer,
@@ -934,6 +972,8 @@ def _persist_oauth_local_credentials(
         workspace_id=workspace_id,
         runtime_id=runtime_id,
         runtime_label=runtime_label,
+        access_token=access_token,
+        access_token_expires_at=access_token_expires_at,
         now=now,
     )
     reconcile_connect_state_with_oauth_entitlement(store, now=now)
@@ -997,6 +1037,8 @@ def run_guard_disconnect_command(
             workspace_id=workspace_id,
             runtime_id=_read_nested_string(credentials, "runtime_id"),
             runtime_label=_read_nested_string(credentials, "runtime_label"),
+            access_token=token_result.access_token,
+            access_token_expires_at=token_result.access_token_expires_at,
             now=timestamp,
         )
     revoke_guard_self_oauth_grant(
@@ -1116,6 +1158,8 @@ def run_guard_device_connect_command(
         workspace_id=token_result.workspace_id,
         runtime_id=HEADLESS_RUNTIME_ID,
         runtime_label=HEADLESS_RUNTIME_LABEL,
+        access_token=token_result.access_token,
+        access_token_expires_at=token_result.access_token_expires_at,
         now=timestamp,
     )
     sync_url = _oauth_sync_url_from_issuer(oauth_client.issuer)
@@ -1190,6 +1234,8 @@ def run_guard_browser_connect_command(
         workspace_id=token_result.workspace_id,
         runtime_id=HEADLESS_RUNTIME_ID,
         runtime_label=HEADLESS_RUNTIME_LABEL,
+        access_token=token_result.access_token,
+        access_token_expires_at=token_result.access_token_expires_at,
         now=timestamp,
     )
     sync_url = _oauth_sync_url_from_issuer(oauth_client.issuer)

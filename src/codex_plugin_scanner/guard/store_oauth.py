@@ -51,6 +51,8 @@ class StoreOAuthConnectMixin:
         workspace_id: str | None = None,
         runtime_id: str | None = None,
         runtime_label: str | None = None,
+        access_token: str | None = None,
+        access_token_expires_at: str | None = None,
     ) -> None:
         with self.hold_oauth_credential_lock():
             self._set_oauth_local_credentials_unlocked(
@@ -69,6 +71,8 @@ class StoreOAuthConnectMixin:
                 workspace_id=workspace_id,
                 runtime_id=runtime_id,
                 runtime_label=runtime_label,
+                access_token=access_token,
+                access_token_expires_at=access_token_expires_at,
             )
 
     def _set_oauth_local_credentials_unlocked(
@@ -89,6 +93,8 @@ class StoreOAuthConnectMixin:
         workspace_id: str | None = None,
         runtime_id: str | None = None,
         runtime_label: str | None = None,
+        access_token: str | None = None,
+        access_token_expires_at: str | None = None,
     ) -> None:
         normalized_issuer = resolve_guard_oauth_client_config(issuer).issuer
         secret_payload = {
@@ -97,6 +103,10 @@ class StoreOAuthConnectMixin:
             "dpop_public_jwk": dpop_public_jwk,
             "dpop_public_jwk_thumbprint": dpop_public_jwk_thumbprint,
         }
+        if isinstance(access_token, str) and access_token:
+            secret_payload["access_token"] = access_token
+        if isinstance(access_token_expires_at, str) and access_token_expires_at:
+            secret_payload["access_token_expires_at"] = access_token_expires_at
         secret_json = json.dumps(secret_payload, sort_keys=True, separators=(",", ":"))
         secret_hash = _secret_fingerprint(secret_json)
         payload: dict[str, object] = {
@@ -392,6 +402,8 @@ class StoreOAuthConnectMixin:
             "workspace_id": _string_value(credentials.get("workspace_id")),
             "runtime_id": _string_value(credentials.get("runtime_id")),
             "runtime_label": _string_value(credentials.get("runtime_label")),
+            "access_token": _string_value(credentials.get("access_token")),
+            "access_token_expires_at": _string_value(credentials.get("access_token_expires_at")),
         }
         return recovered_inputs
 
@@ -587,6 +599,12 @@ class StoreOAuthConnectMixin:
             "dpop_public_jwk": {str(key): str(value) for key, value in dpop_public_jwk.items()},
             "dpop_public_jwk_thumbprint": dpop_public_jwk_thumbprint,
         }
+        access_token = secret_payload.get("access_token")
+        if isinstance(access_token, str) and access_token:
+            result["access_token"] = access_token
+        access_token_expires_at = secret_payload.get("access_token_expires_at")
+        if isinstance(access_token_expires_at, str) and access_token_expires_at:
+            result["access_token_expires_at"] = access_token_expires_at
         for key in ("grant_id", "machine_id", "workspace_id", "runtime_id", "runtime_label"):
             value = metadata.get(key)
             if isinstance(value, str) and value:
