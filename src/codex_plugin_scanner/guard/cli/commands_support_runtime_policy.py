@@ -441,6 +441,7 @@ def _runtime_artifact_risk_classes(artifact: GuardArtifact) -> list[str]:
         "docker-sensitive command": ["network_egress", "destructive_shell"],
         "docker client config access": ["local_secret_read"],
         "encoded or encrypted shell command": ["encoded_execution"],
+        "kubernetes secret read command": ["local_secret_read"],
         "shell file upload command": ["credential_exfiltration", "network_egress"],
         "destructive shell command": ["destructive_shell"],
     }
