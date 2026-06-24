@@ -71,6 +71,8 @@ def kubernetes_option_tokens_consumed(
         return 1
     if token in (base_boolean_flags | boolean_flags):
         return 1
+    if any(token.startswith(f"{flag}=") for flag in (base_boolean_flags | boolean_flags) if flag.startswith("--")):
+        return 1
     if any(token.startswith(flag) and len(token) > len(flag) for flag in all_value_flags if flag.startswith("-")):
         return 1
     short_cluster = base_boolean_short_cluster | boolean_short_cluster

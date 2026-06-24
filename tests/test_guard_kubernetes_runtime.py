@@ -109,6 +109,12 @@ def test_kubectl_exec_shell_expansion_secret_reads_are_detected(tmp_path: Path) 
         "kubectl exec --as-uid 1000 registry-frontend -- printenv GUARD_GITHUB_APP_PRIVATE_KEY"
     ) == ("Kubernetes pod environment")
     assert kubernetes_secret_read_source(
+        "kubectl exec --stdin=true registry-frontend -- printenv GUARD_GITHUB_APP_PRIVATE_KEY"
+    ) == ("Kubernetes pod environment")
+    assert kubernetes_secret_read_source(
+        "kubectl exec --tty=false registry-frontend -- printenv GUARD_GITHUB_APP_PRIVATE_KEY"
+    ) == ("Kubernetes pod environment")
+    assert kubernetes_secret_read_source(
         'kubectl exec registry-frontend -- bash -c "env | grep GUARD_GITHUB_APP_PRIVATE_KEY"'
     ) == ("Kubernetes pod environment")
     python_env_command = (
@@ -149,6 +155,9 @@ def test_kubectl_exec_secret_volume_readers_are_detected() -> None:
     assert kubernetes_secret_read_source("kubectl exec registry-frontend -- sh <<'SH'\ncat /etc/secrets/token\nSH") == (
         "Kubernetes secret volume"
     )
+    assert kubernetes_secret_read_source(
+        "kubectl exec --stdin=true registry-frontend -- sh <<'SH'\necho \"$GUARD_GITHUB_APP_PRIVATE_KEY\"\nSH"
+    ) == ("Kubernetes pod environment")
     shell_stdin_command = "kubectl exec registry-frontend -- sh <<'SH'\necho \"$GUARD_GITHUB_APP_PRIVATE_KEY\"\nSH"
     assert kubernetes_secret_read_source(shell_stdin_command) == "Kubernetes pod environment"
     assert (
