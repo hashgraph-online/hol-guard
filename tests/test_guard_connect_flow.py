@@ -157,10 +157,13 @@ def test_daemon_rejects_legacy_connect_pairing_endpoints(tmp_path: Path) -> None
 
     assert request_status == 410
     assert request_payload["error"] == "legacy_pairing_disabled"
+    assert request_payload["message"] == "Use hol-guard connect for browser OAuth."
     assert complete_status == 410
     assert complete_payload["error"] == "legacy_pairing_disabled"
+    assert complete_payload["message"] == "Use hol-guard connect for browser OAuth."
     assert result_status == 410
     assert result_payload["error"] == "legacy_pairing_disabled"
+    assert result_payload["message"] == "Use hol-guard connect for browser OAuth."
     assert "legacy-sync-secret" not in json.dumps([request_payload, complete_payload, result_payload])
 
 
