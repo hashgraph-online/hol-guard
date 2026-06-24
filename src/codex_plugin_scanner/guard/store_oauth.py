@@ -11,6 +11,8 @@ from .store_base import *
 class StoreOAuthConnectMixin:
     def get_cloud_sync_profile(self) -> dict[str, str] | None:
         oauth_payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+        if not isinstance(oauth_payload, dict) and self.repair_oauth_local_credential_storage_from_primary():
+            oauth_payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
         if isinstance(oauth_payload, dict):
             oauth_health = self.get_oauth_local_credential_health()
             if not isinstance(oauth_health, dict) or oauth_health.get("state") != "healthy":
@@ -201,6 +203,8 @@ class StoreOAuthConnectMixin:
 
     def get_oauth_local_credential_health(self) -> dict[str, object]:
         payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+        if not isinstance(payload, dict) and self.repair_oauth_local_credential_storage_from_primary():
+            payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
         health: dict[str, object] = {
             "configured": isinstance(payload, dict),
             "state": "not_configured",
@@ -330,7 +334,11 @@ class StoreOAuthConnectMixin:
         with self.hold_oauth_credential_lock():
             payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
             if not isinstance(payload, dict):
-                return False
+                recovered_payload = self._recover_missing_oauth_local_credentials_payload(now=_now())
+                if recovered_payload is None:
+                    return False
+                self.set_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY, recovered_payload, _now())
+                return True
             repaired_payload = None
             if self._should_attempt_oauth_storage_repair():
                 self._mark_oauth_storage_repair_attempt()
@@ -363,6 +371,117 @@ class StoreOAuthConnectMixin:
             if cache_key is not None:
                 _OAUTH_HEALTH_RESULT_PROCESS_CACHE.pop(cache_key, None)
             return True
+
+    def _recover_missing_oauth_local_credentials_payload(self, *, now: str) -> dict[str, object] | None:
+        secret_ref = self._oauth_local_credentials_ref
+        secret_json = self._load_oauth_secret_json_without_payload(secret_ref)
+        if secret_json is None:
+            return None
+        secret_payload = self._parse_oauth_secret_payload(secret_json)
+        if secret_payload is None:
+            return None
+        latest_state = self.get_latest_guard_connect_state(now=now)
+        issuer = self._recover_oauth_issuer_for_missing_metadata(latest_state)
+        if issuer is None:
+            return None
+        try:
+            oauth_client = resolve_guard_oauth_client_config(issuer)
+        except ValueError:
+            return None
+        workspace_metadata = self._recover_oauth_workspace_metadata()
+        recovered_payload: dict[str, object] = {
+            "issuer": oauth_client.issuer,
+            "client_id": oauth_client.client_id,
+            _OAUTH_LOCAL_CREDENTIALS_REF_KEY: secret_ref,
+            _OAUTH_LOCAL_CREDENTIALS_HASH_KEY: _secret_fingerprint(secret_json),
+        }
+        device = self.get_device_metadata()
+        installation_id = device.get("installation_id")
+        if isinstance(installation_id, str) and installation_id:
+            recovered_payload["machine_id"] = installation_id
+        for key in ("workspace_id", "supply_chain_plan_id"):
+            value = workspace_metadata.get(key)
+            if isinstance(value, str) and value:
+                recovered_payload[key] = value
+        supply_chain_firewall = workspace_metadata.get("supply_chain_firewall")
+        if isinstance(supply_chain_firewall, bool):
+            recovered_payload["supply_chain_firewall"] = supply_chain_firewall
+        if self._build_oauth_local_credentials_result(
+            metadata=self._oauth_local_credentials_metadata(recovered_payload) or {},
+            secret_payload=secret_payload,
+        ) is None:
+            return None
+        self._mirror_oauth_secret_to_fallback(secret_ref, secret_json)
+        self._remember_oauth_secret_payload(
+            secret_ref,
+            str(recovered_payload[_OAUTH_LOCAL_CREDENTIALS_HASH_KEY]),
+            secret_json,
+        )
+        return recovered_payload
+
+    def _load_oauth_secret_json_without_payload(self, secret_ref: str) -> str | None:
+        fallback_secret_json = self._load_oauth_fallback_secret_json(secret_ref)
+        if isinstance(fallback_secret_json, str) and self._parse_oauth_secret_payload(fallback_secret_json) is not None:
+            return fallback_secret_json
+        for candidate in self._get_secret_candidates(
+            self._oauth_secret_store,
+            secret_ref,
+            None,
+            prefer_fallback_first=True,
+            fallback_token_hint=fallback_secret_json,
+        ):
+            if self._parse_oauth_secret_payload(candidate) is not None:
+                return candidate
+        return None
+
+    @staticmethod
+    def _recover_oauth_issuer_for_missing_metadata(latest_state: dict[str, object] | None) -> str | None:
+        if not isinstance(latest_state, dict):
+            return None
+        allowed_origin = latest_state.get("allowed_origin")
+        if isinstance(allowed_origin, str) and allowed_origin.strip():
+            return allowed_origin.strip()
+        sync_url = latest_state.get("sync_url")
+        if isinstance(sync_url, str) and sync_url.strip():
+            return _allowed_origin_from_sync_url(sync_url.strip())
+        return None
+
+    def _recover_oauth_workspace_metadata(self) -> dict[str, object]:
+        payload = self.get_sync_payload("supply_chain_bundle_entitlement")
+        workspace_id = None
+        plan_id = None
+        supply_chain_firewall = None
+        if isinstance(payload, dict):
+            raw_workspace_id = payload.get("workspace_id")
+            if isinstance(raw_workspace_id, str) and raw_workspace_id.strip():
+                workspace_id = raw_workspace_id.strip()
+            raw_tier = payload.get("tier")
+            if isinstance(raw_tier, str) and raw_tier.strip():
+                normalized_tier = raw_tier.strip().lower()
+                plan_id = normalized_tier
+                supply_chain_firewall = normalized_tier in {"premium", "pro", "team"}
+        if workspace_id is None:
+            with self._connect() as connection:
+                row = connection.execute(
+                    """
+                    select workspace_id
+                    from guard_supply_chain_bundle_cache
+                    order by cached_at desc
+                    limit 1
+                    """
+                ).fetchone()
+            if row is not None:
+                raw_workspace_id = row["workspace_id"]
+                if isinstance(raw_workspace_id, str) and raw_workspace_id.strip():
+                    workspace_id = raw_workspace_id.strip()
+        metadata: dict[str, object] = {}
+        if workspace_id is not None:
+            metadata["workspace_id"] = workspace_id
+        if plan_id is not None:
+            metadata["supply_chain_plan_id"] = plan_id
+        if isinstance(supply_chain_firewall, bool):
+            metadata["supply_chain_firewall"] = supply_chain_firewall
+        return metadata
 
     @staticmethod
     def _build_recovered_oauth_local_credentials_inputs(
