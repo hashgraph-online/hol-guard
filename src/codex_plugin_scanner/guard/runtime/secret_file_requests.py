@@ -87,7 +87,8 @@ _GH_PR_OPTION_VALUE_FLAGS = frozenset({"-R", "--repo"})
 _SHELL_CONTROL_PREFIX_TOKENS = frozenset(
     {"!", "(", "{", "case", "do", "elif", "else", "for", "if", "select", "then", "until", "while"}
 )
-_COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
+COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
+_COMMAND_LIST_KEYS = COMMAND_LIST_KEYS
 _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "push", "run"})
 _DOCKER_BUILD_SUBCOMMANDS = frozenset({"build"})
 _DOCKER_BUILDX_BUILD_SUBCOMMANDS = frozenset({"b", "build"})

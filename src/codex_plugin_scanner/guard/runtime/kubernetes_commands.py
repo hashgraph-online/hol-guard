@@ -154,7 +154,7 @@ def _kubernetes_secret_read_source_for_candidate(command: str) -> str | None:
 
 def _shell_tokens(command: str) -> tuple[str, ...]:
     try:
-        return tuple(token for token in shlex.split(command) if token.strip())
+        return tuple(token for token in shlex.split(command) if token == "" or token.strip())
     except ValueError:
         return tuple(command.split())
 
