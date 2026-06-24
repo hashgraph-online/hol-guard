@@ -211,6 +211,15 @@ def test_running_guard_daemon_processes_for_guard_home_accepts_console_script_la
     assert daemon_manager_module._running_guard_daemon_processes_for_guard_home(guard_home) == [(12345, 5474)]
 
 
+def test_guard_daemon_command_matches_accepts_console_script_shortcuts() -> None:
+    assert daemon_manager_module._guard_daemon_command_matches(
+        "/Users/test/.local/bin/hol-guard daemon --serve --guard-home /tmp/guard-home --port 5474"
+    )
+    assert daemon_manager_module._guard_daemon_command_matches(
+        "/Users/test/.local/bin/plugin-guard daemon --serve --guard-home /tmp/guard-home --port 5474"
+    )
+
+
 def test_ensure_guard_daemon_reuses_inflight_pid_before_respawning(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     responses = iter((None, None, "http://127.0.0.1:5409"))
