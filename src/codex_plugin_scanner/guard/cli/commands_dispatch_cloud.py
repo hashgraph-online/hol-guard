@@ -341,7 +341,7 @@ def _run_guard_supply_chain_command(
             }
             for manager in managers
         ]
-        payload = {
+        payload: dict[str, object] = {
             "managers": list(managers),
             "entries": entries,
             "source": "hol-guard/src/codex_plugin_scanner/guard/shims.py::_PACKAGE_SHIM_COMMANDS",
