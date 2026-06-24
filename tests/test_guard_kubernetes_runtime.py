@@ -71,9 +71,19 @@ def test_kubectl_secret_reads_are_detected_in_command_substitutions(tmp_path: Pa
     assert kubernetes_secret_read_source("kubectl get --chunk-size 500 secrets -A -o yaml") == (
         "Kubernetes Secret resource"
     )
+    assert kubernetes_secret_read_source("kubectl get --as-uid 1000 secrets -A -o yaml") == (
+        "Kubernetes Secret resource"
+    )
+    assert kubernetes_secret_read_source("kubectl get --subresource=status secrets -A -o yaml") == (
+        "Kubernetes Secret resource"
+    )
     assert kubernetes_secret_read_source("kubectl get --raw /api/v1/namespaces/default/configmaps/secret/foo") is None
     assert kubernetes_secret_read_source("kubectl get pods -n registry-broker") is None
     assert kubernetes_secret_read_source("kubectl create token default") == "Kubernetes service-account token"
+    assert kubernetes_secret_read_source("oc extract secret/mysecret --to=-") == "Kubernetes Secret resource"
+    assert kubernetes_secret_read_source("oc extract secret/mysecret --keys=token --to=-") == (
+        "Kubernetes Secret resource"
+    )
 
 
 def test_kubectl_exec_shell_expansion_secret_reads_are_detected(tmp_path: Path) -> None:
@@ -94,6 +104,9 @@ def test_kubectl_exec_shell_expansion_secret_reads_are_detected(tmp_path: Path) 
     )
     assert kubernetes_secret_read_source(
         "kubectl exec --context prod registry-frontend -- printenv GUARD_GITHUB_APP_PRIVATE_KEY"
+    ) == ("Kubernetes pod environment")
+    assert kubernetes_secret_read_source(
+        "kubectl exec --as-uid 1000 registry-frontend -- printenv GUARD_GITHUB_APP_PRIVATE_KEY"
     ) == ("Kubernetes pod environment")
     assert kubernetes_secret_read_source(
         'kubectl exec registry-frontend -- bash -c "env | grep GUARD_GITHUB_APP_PRIVATE_KEY"'

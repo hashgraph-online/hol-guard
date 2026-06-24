@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .data_flow import extract_command_segments, extract_command_substitutions, extract_input_redirects
 from .kubernetes_command_support import (
+    WRITE_ONLY_COMMANDS,
     interpreter_reads_sensitive_env,
     is_output_redirect_target,
     is_secret_volume_path,
@@ -58,6 +59,7 @@ _KUBECTL_OPTIONS_WITH_VALUES = frozenset(
     {
         "--as",
         "--as-group",
+        "--as-uid",
         "--cache-dir",
         "--certificate-authority",
         "--chunk-size",
@@ -79,6 +81,7 @@ _KUBECTL_OPTIONS_WITH_VALUES = frozenset(
         "--selector",
         "--server",
         "--sort-by",
+        "--subresource",
         "--template",
         "--token",
         "--user",
@@ -90,7 +93,6 @@ _KUBECTL_OPTIONS_WITH_VALUES = frozenset(
         "-o",
     }
 )
-_KUBECTL_VALUE_PREFIXES = tuple(f"{flag}=" for flag in _KUBECTL_OPTIONS_WITH_VALUES if flag.startswith("--"))
 _KUBECTL_BOOLEAN_OPTIONS = frozenset({"-A", "--all-namespaces"})
 _EXEC_OPTIONS_WITH_VALUES = frozenset(
     {
@@ -111,9 +113,6 @@ _CP_OPTIONS_WITH_VALUES = frozenset({"--container", "--namespace", "--retries", 
 _CP_BOOLEAN_OPTIONS = frozenset({"--no-preserve"})
 _REMOTE_CP_OPTIONS_WITH_VALUES = frozenset({"--target-directory", "-t"})
 _SHELL_EXECUTABLES = frozenset({"ash", "bash", "dash", "ksh", "sh", "zsh"})
-_WRITE_ONLY_REMOTE_COMMANDS = frozenset(
-    {"chmod", "chown", "echo", "install", "mkdir", "printf", "rm", "rmdir", "tee", "touch", "truncate"}
-)
 
 
 def kubernetes_secret_read_source(command: str | None) -> str | None:
@@ -159,11 +158,14 @@ def _kubectl_secret_read_source_from_tokens(tokens: tuple[str, ...]) -> str | No
     index = _unwrap_command_start(tokens)
     if index >= len(tokens) or Path(tokens[index]).name.lower() not in {"kubectl", "oc"}:
         return None
+    command_name = Path(tokens[index]).name.lower()
     subcommand_index = _skip_kubectl_options(tokens, index + 1)
     if subcommand_index >= len(tokens):
         return None
     subcommand = tokens[subcommand_index].lower()
     if subcommand == "get" and _kubectl_get_raw_secret_path(tokens, subcommand_index + 1):
+        return "Kubernetes Secret resource"
+    if command_name == "oc" and subcommand == "extract" and _kubectl_resource_is_secret(tokens, subcommand_index + 1):
         return "Kubernetes Secret resource"
     if subcommand == "create" and _kubectl_create_token(tokens, subcommand_index + 1):
         return "Kubernetes service-account token"
@@ -344,7 +346,7 @@ def _remote_command_reads_secret_volume(tokens: tuple[str, ...], *, depth: int =
     source_arguments = _secret_volume_source_arguments(tokens)
     if not source_arguments:
         return False
-    return command_name not in _WRITE_ONLY_REMOTE_COMMANDS
+    return command_name not in WRITE_ONLY_COMMANDS
 
 
 def _kubectl_cp_reads_secret_volume(tokens: tuple[str, ...]) -> bool:

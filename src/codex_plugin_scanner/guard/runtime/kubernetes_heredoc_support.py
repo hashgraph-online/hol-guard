@@ -13,6 +13,7 @@ from .data_flow import (
     extract_input_redirects,
 )
 from .kubernetes_command_support import (
+    WRITE_ONLY_COMMANDS,
     is_output_redirect_target,
     is_secret_volume_path,
     kubernetes_option_tokens_consumed,
@@ -56,6 +57,7 @@ _KUBECTL_OPTIONS_WITH_VALUES = frozenset(
     {
         "--as",
         "--as-group",
+        "--as-uid",
         "--cache-dir",
         "--certificate-authority",
         "--chunk-size",
@@ -77,6 +79,7 @@ _KUBECTL_OPTIONS_WITH_VALUES = frozenset(
         "--selector",
         "--server",
         "--sort-by",
+        "--subresource",
         "--template",
         "--token",
         "--user",
@@ -106,9 +109,6 @@ _EXEC_BOOLEAN_OPTIONS = frozenset({"--quiet", "--stdin", "--tty", "-T", "-i", "-
 _EXEC_BOOLEAN_SHORT_CLUSTER = frozenset({"i", "q", "t"})
 _OUTPUT_REDIRECT_TOKENS = frozenset({">", "1>", "2>", ">>", "1>>", "2>>"})
 _SHELL_EXECUTABLES = frozenset({"ash", "bash", "dash", "ksh", "sh", "zsh"})
-_WRITE_ONLY_COMMANDS = frozenset(
-    {"chmod", "chown", "echo", "install", "mkdir", "printf", "rm", "rmdir", "tee", "touch", "truncate"}
-)
 
 
 def kubernetes_heredoc_secret_source(command: str) -> str | None:
@@ -313,7 +313,7 @@ def _segment_reads_secret_volume(tokens: tuple[str, ...]) -> bool:
     if command_name in _SHELL_EXECUTABLES:
         script = _shell_c_script(tokens[1:])
         return bool(script) and _script_body_reads_secret_volume(script)
-    if command_name in _WRITE_ONLY_COMMANDS:
+    if command_name in WRITE_ONLY_COMMANDS:
         return False
     previous_token: str | None = None
     for token in tokens[1:]:

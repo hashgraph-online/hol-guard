@@ -33,6 +33,9 @@ _SECRET_VOLUME_PATH_MARKERS = (
     "/run/secrets",
     "/run/secrets-store",
 )
+WRITE_ONLY_COMMANDS = frozenset(
+    {"chmod", "chown", "echo", "install", "mkdir", "printf", "rm", "rmdir", "tee", "touch", "truncate"}
+)
 _RAW_SECRET_RESOURCE_PATH_PATTERN = re.compile(
     r"^/(?:api/[^/]+|apis/[^/]+/[^/]+)/(?:watch/)?(?:namespaces/[^/]+/)?secrets?(?:/[^/?#]+)?$",
     re.IGNORECASE,
@@ -175,6 +178,7 @@ def _path_candidates(path: str) -> tuple[str, ...]:
 
 
 __all__ = [
+    "WRITE_ONLY_COMMANDS",
     "interpreter_reads_sensitive_env",
     "is_output_redirect_target",
     "is_secret_volume_path",
