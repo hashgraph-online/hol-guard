@@ -3913,7 +3913,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self._write_json(
             {
                 "error": "legacy_pairing_disabled",
-                "message": "Use OAuth Device Code through hol-guard connect.",
+                "message": "Use hol-guard connect for browser OAuth.",
             },
             status=410,
         )
@@ -3922,7 +3922,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self._write_json(
             {
                 "error": "legacy_cloud_handoff_disabled",
-                "message": "Use OAuth Device Code through hol-guard connect.",
+                "message": "Use hol-guard connect for browser OAuth.",
             },
             status=410,
         )
