@@ -21,7 +21,7 @@ def _configure_guard_cloud_parsers(
 ) -> None:
     login_parser = guard_subparsers.add_parser(
         "login",
-        help="Compatibility alias for Guard Cloud sign-in and pairing",
+        help="Compatibility alias for Guard Cloud browser sign-in and pairing",
     )
     login_parser.add_argument("--sync-url", type=_guard_http_url)
     login_parser.add_argument("--token")
@@ -33,7 +33,7 @@ def _configure_guard_cloud_parsers(
 
     connect_parser = guard_subparsers.add_parser(
         "connect",
-        help="Open the browser, pair this runtime to HOL Guard, and send the first sync",
+        help="Open browser OAuth, pair this runtime to HOL Guard, and send the first sync",
     )
     connect_parser.add_argument("connect_command", nargs="?", choices=("status", "repair", "re-pair"))
     _add_guard_common_args(connect_parser)

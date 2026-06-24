@@ -64,8 +64,8 @@ def _run_guard_login_command(
     payload, exit_code = _build_guard_device_connect_payload(
         store=store,
         connect_url=args.connect_url,
-        use_browser_oauth=False,
-        open_device_browser=True,
+        use_browser_oauth=True,
+        open_device_browser=False,
         wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
         announce_copy=None if getattr(args, "json", False) else _announce_guard_device_connect_copy,
     )
@@ -137,8 +137,8 @@ def _run_guard_connect_command(
         payload, exit_code = _build_guard_device_connect_payload(
             store=store,
             connect_url=args.connect_url,
-            use_browser_oauth=False,
-            open_device_browser=True,
+            use_browser_oauth=True,
+            open_device_browser=False,
             wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
             announce_copy=None if getattr(args, "json", False) else _announce_guard_device_connect_copy,
         )
@@ -329,8 +329,8 @@ def _run_guard_supply_chain_command(
     config = _require_guard_config(config)
     supply_chain_command = getattr(args, "supply_chain_command", None)
     if supply_chain_command == "support-matrix":
-        from ..shims import package_shim_supported_managers
         from ..shim_probe import _PACKAGE_SHIM_PROBE_ARGS
+        from ..shims import package_shim_supported_managers
 
         managers = package_shim_supported_managers()
         probe_managers = set(_PACKAGE_SHIM_PROBE_ARGS.keys())
@@ -341,7 +341,7 @@ def _run_guard_supply_chain_command(
             }
             for manager in managers
         ]
-        payload = {
+        payload: dict[str, object] = {
             "managers": list(managers),
             "entries": entries,
             "source": "hol-guard/src/codex_plugin_scanner/guard/shims.py::_PACKAGE_SHIM_COMMANDS",
