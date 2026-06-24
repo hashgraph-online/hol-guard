@@ -189,6 +189,13 @@ def _configure_guard_cloud_parsers(
     _add_guard_common_args(supply_chain_explain_parser)
     supply_chain_explain_parser.add_argument("--json", action="store_true")
 
+    supply_chain_matrix_parser = supply_chain_subparsers.add_parser(
+        "support-matrix",
+        help="Print supported package managers and probe coverage as JSON",
+    )
+    _add_guard_common_args(supply_chain_matrix_parser)
+    supply_chain_matrix_parser.add_argument("--json", action="store_true")
+
     service_parser = guard_subparsers.add_parser(
         "service",
         help="Manage headless hosted-runtime Guard Cloud login, sync, and status",
