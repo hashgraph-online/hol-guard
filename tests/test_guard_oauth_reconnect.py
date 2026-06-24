@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import urllib.error
 from contextlib import contextmanager
+from datetime import datetime, timezone
 
 import pytest
 
@@ -179,6 +180,49 @@ def test_resolve_guard_sync_auth_context_reuses_cached_access_token(tmp_path, mo
 
     assert auth_context["access_token"] == "cached-access-token"
     assert auth_context["sync_url"] == "https://hol.org/api/guard/receipts/sync"
+
+
+def test_refresh_guard_oauth_access_token_prefers_jwt_expiry_claim(monkeypatch) -> None:
+    expiry = datetime(2099, 1, 1, tzinfo=timezone.utc)
+    access_token = ".".join(
+        (
+            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
+            guard_runner_module._encode_jwt_segment({"exp": int(expiry.timestamp())}),
+            "signature",
+        )
+    )
+
+    class _Response:
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "access_token": access_token,
+                    "refresh_token": "refresh-token-2",
+                    "token_type": "Bearer",
+                }
+            ).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    monkeypatch.setattr(
+        guard_runner_module.urllib.request,
+        "urlopen",
+        lambda request, timeout: _Response(),
+    )
+
+    refreshed = guard_runner_module._refresh_guard_oauth_access_token(
+        token_endpoint="https://hol.org/api/guard/oauth/token",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_key_material=generate_dpop_key_pair(),
+    )
+
+    assert refreshed["access_token"] == access_token
+    assert refreshed["access_token_expires_at"] == expiry.isoformat()
 
 
 def test_prepare_guard_cloud_connect_authorization_tolerates_refresh_lock_timeout(

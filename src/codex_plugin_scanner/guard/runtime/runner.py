@@ -13,7 +13,7 @@ import threading
 import urllib.error
 import urllib.parse
 import urllib.request
-from base64 import urlsafe_b64encode
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
@@ -2601,11 +2601,10 @@ def _refresh_guard_oauth_access_token(
         token_type = _optional_string(payload.get("token_type"))
         if access_token is None or token_type is None or token_type.lower() not in {"bearer", "dpop"}:
             raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
-        expires_in = _int_value(payload.get("expires_in"))
-        access_token_expires_at = (
-            (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
-            if isinstance(expires_in, int) and expires_in > 0
-            else None
+        access_token_expires_at = _oauth_access_token_expires_at(
+            access_token,
+            payload=payload,
+            now=datetime.now(timezone.utc),
         )
         return {
             "access_token": access_token,
@@ -2638,6 +2637,44 @@ def _oauth_dpop_key_material(credentials: dict[str, object]) -> GuardDpopKeyMate
 
 
 _OAUTH_ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 60
+
+
+def _decode_oauth_access_token_claims(access_token: str) -> dict[str, object]:
+    parts = access_token.split(".")
+    if len(parts) != 3:
+        return {}
+    try:
+        padding = "=" * (-len(parts[1]) % 4)
+        payload = json.loads(urlsafe_b64decode(parts[1] + padding).decode("utf-8"))
+    except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _oauth_access_token_expires_at(
+    access_token: str,
+    *,
+    payload: dict[str, object],
+    now: datetime,
+) -> str | None:
+    claims = _decode_oauth_access_token_claims(access_token)
+    exp = claims.get("exp")
+    if isinstance(exp, (int, float)) and not isinstance(exp, bool) and float(exp) > 0:
+        return datetime.fromtimestamp(float(exp), tz=timezone.utc).isoformat()
+    expires_in = payload.get("expires_in")
+    parsed_expires_in: int | None
+    if isinstance(expires_in, (int, float)) and not isinstance(expires_in, bool):
+        parsed_expires_in = int(expires_in)
+    elif isinstance(expires_in, str):
+        try:
+            parsed_expires_in = int(expires_in)
+        except ValueError:
+            parsed_expires_in = None
+    else:
+        parsed_expires_in = None
+    if parsed_expires_in is None or parsed_expires_in <= 0:
+        return None
+    return (now + timedelta(seconds=parsed_expires_in)).isoformat()
 
 
 def _cached_oauth_access_token(credentials: dict[str, object], *, now: datetime) -> str | None:
