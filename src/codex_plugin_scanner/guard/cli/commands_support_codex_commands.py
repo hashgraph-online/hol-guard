@@ -168,6 +168,12 @@ def _codex_post_tool_command_text(payload: dict[str, object]) -> str:
         command = tool_input.get("command")
         if isinstance(command, str):
             return command.strip()
+        for key in ("argv", "command_args", "commandArgs"):
+            candidate = tool_input.get(key)
+            if isinstance(candidate, list):
+                string_values = [item.strip() for item in candidate if isinstance(item, str) and item.strip()]
+                if string_values:
+                    return shlex.join(string_values)
     return ""
 
 _CODEX_READ_ONLY_SEARCH_COMMANDS = frozenset({"fd", "rg", "grep", "egrep", "fgrep"})
