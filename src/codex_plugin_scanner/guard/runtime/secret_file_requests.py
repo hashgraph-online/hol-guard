@@ -3529,14 +3529,11 @@ def command_list_candidate_texts(
     string_values = [item.strip() for item in values if isinstance(item, str) and item.strip()]
     if not string_values:
         return ()
-    candidates: list[str] = []
     if preserve_items:
-        candidates.extend(string_values)
+        return tuple(string_values)
     if len(string_values) == 1:
-        candidates.append(string_values[0])
-    else:
-        candidates.append(shlex.join(string_values))
-    return tuple(dict.fromkeys(candidates))
+        return (string_values[0],)
+    return (shlex.join(string_values),)
 
 
 def _collect_candidate_commands(value: object, results: list[str], *, depth: int) -> None:
