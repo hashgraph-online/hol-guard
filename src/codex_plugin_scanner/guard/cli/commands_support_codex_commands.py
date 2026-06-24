@@ -160,9 +160,10 @@ def _codex_post_tool_command_is_read_only_source_inspection(
     cwd: Path | None,
     home_dir: Path | None,
 ) -> bool:
-    return any(
+    command_texts = _codex_post_tool_command_texts(payload)
+    return bool(command_texts) and all(
         _codex_command_is_read_only_source_inspection(command_text, cwd=cwd, home_dir=home_dir)
-        for command_text in _codex_post_tool_command_texts(payload)
+        for command_text in command_texts
     )
 
 

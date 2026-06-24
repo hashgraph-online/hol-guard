@@ -425,6 +425,42 @@ def test_pi_post_tool_output_labels_later_commands_payload_kubernetes_secret_sou
     assert artifact.metadata["secret_source_family"] == "Kubernetes Secret resource"
 
 
+def test_pi_post_tool_output_keeps_sensitive_batched_command_even_with_read_only_sibling(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
+    event = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"commands": ["kubectl get secret prod -o yaml", "rg foo src"]},
+        "stdout": "ok\n",
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--guard-home",
+            str(guard_home),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "pi",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 2
+    assert output["decision"] == "deny"
+    assert "kubernetes secret read command" in output["reason"].lower()
+
+
 def test_pi_post_tool_output_labels_wrapped_kubernetes_secret_source(tmp_path: Path) -> None:
     command = (
         'bash -lc "kubectl exec -n registry-broker registry-frontend-7fb9bf6b46-2fcj8 '
