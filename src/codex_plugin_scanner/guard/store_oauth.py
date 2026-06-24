@@ -6,6 +6,7 @@ from __future__ import annotations
 
 # ruff: noqa: F403,F405
 from .store_base import *
+from .package_firewall_defaults import build_guard_local_entitlement_defaults
 
 
 class StoreOAuthConnectMixin:
@@ -453,8 +454,6 @@ class StoreOAuthConnectMixin:
         return None
 
     def _recover_oauth_workspace_metadata(self) -> dict[str, object]:
-        from .package_firewall_entitlement import build_oauth_package_firewall_entitlement
-
         payload = self.get_sync_payload("supply_chain_bundle_entitlement")
         workspace_id = None
         entitlement_fields: dict[str, object] = {}
@@ -464,8 +463,8 @@ class StoreOAuthConnectMixin:
                 workspace_id = raw_workspace_id.strip()
             raw_tier = payload.get("tier")
             if isinstance(raw_tier, str) and raw_tier.strip():
-                recovered_entitlement = build_oauth_package_firewall_entitlement(
-                    {"guard_local_entitlement": {"tier": raw_tier.strip()}},
+                recovered_entitlement = build_guard_local_entitlement_defaults(
+                    {"tier": raw_tier.strip()},
                     now=datetime.now(timezone.utc),
                 )
                 if isinstance(recovered_entitlement, dict):
