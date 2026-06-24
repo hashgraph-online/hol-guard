@@ -2646,8 +2646,13 @@ export async function fetchPackageFirewallStatus(): Promise<PackageFirewallStatu
 }
 
 export async function startPackageFirewallConnect(): Promise<PackageFirewallStatusResponse["connect_flow"]> {
-  const status = await startGuardCloudConnect();
-  return status.connect_flow;
+  return normalizePackageFirewallConnectFlow(
+    await readJson<unknown>("/v1/supply-chain/package-shims/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }),
+  );
 }
 
 export async function fetchSupplyChainBundle(): Promise<SupplyChainBundle | null> {
