@@ -239,6 +239,13 @@ LOCAL_API_OWNERSHIP = (
     ApiOwnership(path="/v1/runtime", method="GET", category="config", auth_required=True, writes_state=False),
     ApiOwnership(path="/v1/cloud/connect", method="GET", category="config", auth_required=True, writes_state=False),
     ApiOwnership(path="/v1/cloud/connect", method="POST", category="config", auth_required=True, writes_state=True),
+    ApiOwnership(
+        path="/v1/supply-chain/package-shims/connect",
+        method="POST",
+        category="supply_chain",
+        auth_required=True,
+        writes_state=True,
+    ),
     ApiOwnership(path="/v1/harnesses", method="GET", category="config", auth_required=True, writes_state=False),
     ApiOwnership(
         path="/v1/harnesses/{harness}/install",
