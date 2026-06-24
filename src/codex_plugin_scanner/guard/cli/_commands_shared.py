@@ -200,6 +200,7 @@ from .connect_flow import (
     build_connect_status_payload,
     connect_recovery_command,
     connect_state_requires_oauth,
+    guard_api_base_path,
     normalize_connect_state_for_missing_oauth,
     resolve_connect_url,
     run_guard_browser_connect_command,

@@ -19,12 +19,17 @@ LOCAL_GUARD_OAUTH_CLIENT_ID = "guard-local-daemon-local"
 
 PRODUCTION_GUARD_ISSUER = "https://hol.org"
 STAGING_GUARD_ISSUER = "https://staging.hol.org"
+REGISTRY_STAGING_GUARD_ISSUER = "https://registry-staging.hol.org"
 LOCAL_GUARD_ISSUER = "http://127.0.0.1:3000"
 
 _ALLOWED_PRODUCTION_GUARD_ORIGINS = frozenset({PRODUCTION_GUARD_ISSUER})
-_ALLOWED_STAGING_GUARD_ORIGINS = frozenset({STAGING_GUARD_ISSUER})
+_ALLOWED_STAGING_GUARD_ORIGINS = frozenset({STAGING_GUARD_ISSUER, REGISTRY_STAGING_GUARD_ISSUER})
 _LOOPBACK_GUARD_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _DOCKER_LAB_GUARD_HOSTS = frozenset({"host.docker.internal"})
+
+_GUARD_OAUTH_PATH_PREFIXES: dict[str, str] = {
+    REGISTRY_STAGING_GUARD_ISSUER: "/points",
+}
 
 _PKCE_ALLOWED_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
 
@@ -101,12 +106,13 @@ def _oauth_endpoints(origin: str) -> GuardOAuthClientConfig:
         "staging": STAGING_GUARD_OAUTH_CLIENT_ID,
         "local": LOCAL_GUARD_OAUTH_CLIENT_ID,
     }[environment]
+    prefix = _GUARD_OAUTH_PATH_PREFIXES.get(origin.lower(), "")
     return GuardOAuthClientConfig(
         issuer=origin,
-        authorize_endpoint=f"{origin}/api/guard/oauth/authorize",
-        token_endpoint=f"{origin}/api/guard/oauth/token",
-        device_authorization_endpoint=f"{origin}/api/guard/oauth/device/authorize",
-        jwks_endpoint=f"{origin}/api/guard/oauth/jwks",
+        authorize_endpoint=f"{origin}{prefix}/api/guard/oauth/authorize",
+        token_endpoint=f"{origin}{prefix}/api/guard/oauth/token",
+        device_authorization_endpoint=f"{origin}{prefix}/api/guard/oauth/device/authorize",
+        jwks_endpoint=f"{origin}{prefix}/api/guard/oauth/jwks",
         client_id=client_id,
     )
 
@@ -118,6 +124,12 @@ def detect_guard_oauth_environment(issuer: str) -> str:
     if origin in _ALLOWED_STAGING_GUARD_ORIGINS:
         return "staging"
     return "production"
+
+
+def guard_api_base_path(issuer: str) -> str:
+    """Return the API path prefix for a given issuer (e.g. '/points' for registry-staging)."""
+    origin = _require_allowlisted_guard_oauth_origin(issuer)
+    return _GUARD_OAUTH_PATH_PREFIXES.get(origin.lower(), "")
 
 
 def resolve_guard_oauth_client_config(issuer: str) -> GuardOAuthClientConfig:
