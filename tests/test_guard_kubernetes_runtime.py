@@ -133,8 +133,15 @@ def test_kubectl_exec_secret_volume_readers_are_detected() -> None:
     assert kubernetes_secret_read_source('kubectl exec registry-frontend -- sh -c "cat /etc/secrets/token"') == (
         "Kubernetes secret volume"
     )
+    assert kubernetes_secret_read_source("kubectl exec registry-frontend -- sh <<'SH'\ncat /etc/secrets/token\nSH") == (
+        "Kubernetes secret volume"
+    )
     shell_stdin_command = "kubectl exec registry-frontend -- sh <<'SH'\necho \"$GUARD_GITHUB_APP_PRIVATE_KEY\"\nSH"
     assert kubernetes_secret_read_source(shell_stdin_command) == "Kubernetes pod environment"
+    assert (
+        kubernetes_secret_read_source("kubectl exec registry-frontend -- sh <<'SH'\ncat > /etc/secrets/token\nSH")
+        is None
+    )
     assert kubernetes_secret_read_source("kubectl exec registry-frontend -- cat /etc/secrets-backup/token") is None
 
 

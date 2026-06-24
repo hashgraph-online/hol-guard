@@ -12,7 +12,6 @@ from .kubernetes_command_support import (
     is_output_redirect_target,
     is_secret_volume_path,
     is_sensitive_env_name,
-    kubernetes_heredoc_secret_source,
     kubernetes_option_tokens_consumed,
     raw_secret_api_path,
     remote_cp_path,
@@ -20,6 +19,7 @@ from .kubernetes_command_support import (
     script_reads_sensitive_env,
     secret_volume_argument_value,
 )
+from .kubernetes_heredoc_support import kubernetes_heredoc_secret_source
 
 _ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _OUTPUT_REDIRECT_TOKENS = frozenset({">", "1>", "2>", ">>", "1>>", "2>>"})
