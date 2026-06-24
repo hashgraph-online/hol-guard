@@ -876,16 +876,34 @@ def _guard_daemon_command_matches(command: str) -> bool:
         parts = shlex.split(command)
     except ValueError:
         return False
-    for index in range(len(parts) - 2):
+    for index in range(len(parts) - 1):
+        prefix = parts[:index]
+        if parts[index : index + 2] == ["daemon", "--serve"]:
+            if any(part == "codex_plugin_scanner.cli" for part in prefix):
+                return True
+            if index > 0:
+                launcher_name = Path(parts[index - 1]).name.lower()
+                if launcher_name in {
+                    "hol-guard",
+                    "hol-guard.exe",
+                    "plugin-guard",
+                    "plugin-guard.exe",
+                }:
+                    return True
+            continue
         if parts[index : index + 3] != ["guard", "daemon", "--serve"]:
             continue
-        prefix = parts[:index]
         if any(part == "codex_plugin_scanner.cli" for part in prefix):
             return True
         if index == 0:
             continue
         launcher_name = Path(parts[index - 1]).name.lower()
-        if launcher_name in {"hol-guard", "hol-guard.exe"}:
+        if launcher_name in {
+            "hol-guard",
+            "hol-guard.exe",
+            "plugin-guard",
+            "plugin-guard.exe",
+        }:
             return True
     return False
 
