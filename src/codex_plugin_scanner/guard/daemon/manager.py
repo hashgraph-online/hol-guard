@@ -806,7 +806,7 @@ def _running_ephemeral_guard_daemon_processes() -> list[tuple[int, Path, float]]
         pid = int(match.group(1))
         elapsed_seconds = _elapsed_seconds_from_ps(match.group(2))
         command = match.group(3).strip()
-        if "codex_plugin_scanner.cli guard daemon --serve" not in command:
+        if not _guard_daemon_command_matches(command):
             continue
         guard_home = _guard_home_from_command(command)
         if guard_home is None or not _guard_home_is_ephemeral(guard_home):
@@ -871,6 +871,25 @@ def _guard_daemon_port_from_command(command: str) -> int | None:
     return None
 
 
+def _guard_daemon_command_matches(command: str) -> bool:
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return False
+    for index in range(len(parts) - 2):
+        if parts[index : index + 3] != ["guard", "daemon", "--serve"]:
+            continue
+        prefix = parts[:index]
+        if any(part == "codex_plugin_scanner.cli" for part in prefix):
+            return True
+        if index == 0:
+            continue
+        launcher_name = Path(parts[index - 1]).name.lower()
+        if launcher_name in {"hol-guard", "hol-guard.exe"}:
+            return True
+    return False
+
+
 def _running_guard_daemon_processes_for_guard_home(guard_home: Path) -> list[tuple[int, int]]:
     if os.name == "nt":
         return []
@@ -891,7 +910,7 @@ def _running_guard_daemon_processes_for_guard_home(guard_home: Path) -> list[tup
             continue
         pid = int(match.group(1))
         command = match.group(2).strip()
-        if "codex_plugin_scanner.cli" not in command or "guard daemon --serve" not in command:
+        if not _guard_daemon_command_matches(command):
             continue
         command_guard_home = _guard_home_from_command(command)
         port = _guard_daemon_port_from_command(command)
@@ -972,7 +991,7 @@ def _guard_daemon_pid_matches_command(pid: int, expected_guard_home: Path | None
     command = _guard_daemon_command_for_pid(pid)
     if command is None:
         return False
-    if "codex_plugin_scanner.cli" not in command or "guard daemon --serve" not in command:
+    if not _guard_daemon_command_matches(command):
         return False
     if expected_guard_home is None:
         return True
