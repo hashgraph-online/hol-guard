@@ -36,10 +36,6 @@ _SECRET_VOLUME_PATH_MARKERS = (
     "/run/secrets",
     "/run/secrets-store",
 )
-_KUBERNETES_HEREDOC_HEADER_PATTERN = re.compile(
-    r"(?im)(?P<header>\b(?:kubectl|oc)\b[^\n]*\b(?:exec|rsh)\b[^\n]*?)"
-    r"<<-?\s*(?P<quote>['\"]?)(?P<tag>[^\s'\"`;&|<>]+)(?P=quote)[ \t]*\n"
-)
 _HEREDOC_WRAPPER_COMMANDS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
 _HEREDOC_WRAPPER_OPTIONS_WITH_VALUES = {
     "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
@@ -141,12 +137,9 @@ def interpreter_reads_sensitive_env(command_name: str, args: tuple[str, ...]) ->
 
 
 def kubernetes_heredoc_secret_source(command: str) -> str | None:
-    for match in _KUBERNETES_HEREDOC_HEADER_PATTERN.finditer(command):
-        source_kind = _kubernetes_heredoc_remote_kind(str(match.group("header") or ""))
+    for header, body in _iter_kubernetes_heredocs(command):
+        source_kind = _kubernetes_heredoc_remote_kind(header)
         if source_kind is None:
-            continue
-        body = _heredoc_body(command, tag=str(match.group("tag") or ""), start=match.end())
-        if body is None:
             continue
         if source_kind == "interpreter":
             if script_reads_sensitive_env(body):
@@ -311,14 +304,6 @@ def _env_looks_like_wrapper(tokens: tuple[str, ...]) -> bool:
     return False
 
 
-def _heredoc_body(command: str, *, tag: str, start: int) -> str | None:
-    terminator = re.compile(rf"(?m)^[\t ]*{re.escape(tag)}[\t ]*(?:\r?$)")
-    end_match = terminator.search(command, start)
-    if end_match is None:
-        return None
-    return command[start : end_match.start()]
-
-
 def _interpreter_reads_stdin(args: tuple[str, ...]) -> bool:
     for token in args:
         if token == "--":
@@ -345,6 +330,77 @@ def _kubernetes_heredoc_remote_kind(header: str) -> str | None:
     if _is_inline_interpreter_command(command_name) and _interpreter_reads_stdin(args):
         return "interpreter"
     return None
+
+
+def _iter_kubernetes_heredocs(command: str) -> tuple[tuple[str, str], ...]:
+    heredocs: list[tuple[str, str]] = []
+    command_start = 0
+    index = 0
+    quote: str | None = None
+    in_backtick = False
+    subshell_depth = 0
+    while index < len(command):
+        char = command[index]
+        if char == "\\":
+            index += 2
+            continue
+        if char == "`" and quote != "'":
+            in_backtick = not in_backtick
+            index += 1
+            continue
+        if in_backtick:
+            index += 1
+            continue
+        if quote == "'":
+            if char == "'":
+                quote = None
+            index += 1
+            continue
+        if char == "'" and quote is None:
+            quote = "'"
+            index += 1
+            continue
+        if char == '"':
+            if quote == '"':
+                quote = None
+            elif quote is None:
+                quote = '"'
+            index += 1
+            continue
+        if quote != "'" and command.startswith("$(", index):
+            subshell_depth += 1
+            index += 2
+            continue
+        if quote is None and char == "(" and subshell_depth > 0:
+            subshell_depth += 1
+            index += 1
+            continue
+        if quote is None and char == ")" and subshell_depth > 0:
+            subshell_depth -= 1
+            index += 1
+            continue
+        if quote is None and subshell_depth == 0:
+            if _starts_command_separator(command, index):
+                index += 2
+                command_start = _skip_command_whitespace(command, index)
+                continue
+            if char in {";", "\n"} or _is_background_separator(command, index):
+                index += 1
+                command_start = _skip_command_whitespace(command, index)
+                continue
+            if _looks_like_heredoc_operator(command, index):
+                parsed = _parse_heredoc(command, index)
+                if parsed is not None:
+                    tag, body_start = parsed
+                    body, next_index = _heredoc_body_and_end(command, tag=tag, start=body_start)
+                    if body is not None:
+                        header = command[command_start:index].strip()
+                        heredocs.append((header, body))
+                        command_start = _skip_command_whitespace(command, next_index)
+                        index = command_start
+                        continue
+        index += 1
+    return tuple(heredocs)
 
 
 def _kubernetes_heredoc_remote_tokens(header: str) -> tuple[str, ...]:
@@ -433,6 +489,74 @@ def _unwrap_heredoc_remote_command(tokens: tuple[str, ...]) -> tuple[str | None,
                 break
             index += _wrapper_option_tokens_consumed(command_name, current)
     return None, ()
+
+
+def _heredoc_body_and_end(command: str, *, tag: str, start: int) -> tuple[str | None, int]:
+    terminator = re.compile(rf"(?m)^[\t ]*{re.escape(tag)}[\t ]*(?:\r?\n|$)")
+    end_match = terminator.search(command, start)
+    if end_match is None:
+        return None, start
+    return command[start : end_match.start()], end_match.end()
+
+
+def _is_background_separator(command: str, index: int) -> bool:
+    previous_char = command[index - 1] if index > 0 else ""
+    next_char = command[index + 1] if index + 1 < len(command) else ""
+    return command[index] == "&" and previous_char not in {">", "<", "|"} and next_char not in {"&", ">"}
+
+
+def _looks_like_heredoc_operator(command: str, index: int) -> bool:
+    return command.startswith("<<", index) and not command.startswith("<<<", index)
+
+
+def _parse_heredoc(command: str, index: int) -> tuple[str, int] | None:
+    cursor = index + 2
+    if cursor < len(command) and command[cursor] == "-":
+        cursor += 1
+    while cursor < len(command) and command[cursor] in {" ", "\t"}:
+        cursor += 1
+    if cursor >= len(command):
+        return None
+    quote = command[cursor] if command[cursor] in {"'", '"'} else None
+    if quote is not None:
+        cursor += 1
+    tag_start = cursor
+    while cursor < len(command):
+        current = command[cursor]
+        if quote is not None:
+            if current == quote:
+                break
+        elif current.isspace() or current in "'\"`;&|<>":
+            break
+        cursor += 1
+    if cursor == tag_start:
+        return None
+    tag = command[tag_start:cursor]
+    if quote is not None:
+        if cursor >= len(command) or command[cursor] != quote:
+            return None
+        cursor += 1
+    while cursor < len(command) and command[cursor] in {" ", "\t"}:
+        cursor += 1
+    if cursor >= len(command):
+        return None
+    if command[cursor] == "\r":
+        cursor += 1
+        if cursor >= len(command) or command[cursor] != "\n":
+            return None
+    if command[cursor] != "\n":
+        return None
+    return tag, cursor + 1
+
+
+def _skip_command_whitespace(command: str, index: int) -> int:
+    while index < len(command) and command[index].isspace():
+        index += 1
+    return index
+
+
+def _starts_command_separator(command: str, index: int) -> bool:
+    return command.startswith("&&", index) or command.startswith("||", index)
 
 
 def _wrapper_option_tokens_consumed(command_name: str, token: str) -> int:

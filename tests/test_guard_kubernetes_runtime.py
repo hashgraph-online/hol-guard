@@ -253,6 +253,16 @@ def test_non_interpreter_kubectl_heredoc_is_not_mislabeled() -> None:
     assert kubernetes_secret_read_source(command) is None
 
 
+def test_quoted_kubectl_heredoc_sample_is_not_mislabeled() -> None:
+    command = (
+        "printf '%s\n' 'kubectl exec registry-frontend -- python - <<\"PY\"'\n"
+        'printf "%s\n" \'import os; print(os.environ["GUARD_GITHUB_APP_PRIVATE_KEY"])\'\n'
+        "printf '%s\n' 'PY'"
+    )
+
+    assert kubernetes_secret_read_source(command) is None
+
+
 def test_only_later_kubernetes_heredoc_secret_is_detected() -> None:
     command = (
         "kubectl exec registry-frontend -- python - <<'PY1'\n"

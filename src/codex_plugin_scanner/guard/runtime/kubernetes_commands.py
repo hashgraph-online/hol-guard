@@ -282,7 +282,7 @@ def _kubectl_exec_remote_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
             index += 1
             continue
         return tokens[index:]
-    return None
+    return ()
 
 
 def _remote_command_reads_pod_environment(tokens: tuple[str, ...], *, depth: int = 0) -> bool:
