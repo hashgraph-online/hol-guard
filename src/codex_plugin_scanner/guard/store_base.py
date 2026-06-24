@@ -195,6 +195,8 @@ class _RecoveredOAuthLocalCredentialInputs(TypedDict):
     workspace_id: str | None
     runtime_id: str | None
     runtime_label: str | None
+    access_token: str | None
+    access_token_expires_at: str | None
 
 
 class PolicyDecisionLookupResult(TypedDict):

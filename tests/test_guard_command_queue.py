@@ -873,7 +873,7 @@ def test_poll_once_retries_pending_result_before_leasing(tmp_path: Path, monkeyp
     assert status["pending_result"] is None
 
 
-def test_poll_once_continues_across_oauth_refresh_token_rotation(
+def test_poll_once_reuses_cached_access_token_across_oauth_polls(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -893,6 +893,7 @@ def test_poll_once_continues_across_oauth_refresh_token_rotation(
         current_index = len(observed_refresh_tokens)
         return {
             "access_token": f"access-token-{current_index}",
+            "access_token_expires_at": "2099-07-05T00:00:00+00:00",
             "refresh_token": f"refresh-token-{current_index + 1}",
             "package_firewall_entitlement": {
                 "supply_chain_entitlement_expires_at": "2026-07-05T00:00:00+00:00",
@@ -921,11 +922,13 @@ def test_poll_once_continues_across_oauth_refresh_token_rotation(
 
     assert first_status["last_poll_was_empty"] is True
     assert second_status["last_poll_was_empty"] is True
-    assert observed_refresh_tokens == ["refresh-token-1", "refresh-token-2"]
-    assert observed_access_tokens == ["access-token-1", "access-token-2"]
+    assert observed_refresh_tokens == ["refresh-token-1"]
+    assert observed_access_tokens == ["access-token-1", "access-token-1"]
     credentials = store.get_oauth_local_credentials()
     assert credentials is not None
-    assert credentials["refresh_token"] == "refresh-token-3"
+    assert credentials["refresh_token"] == "refresh-token-2"
+    assert credentials["access_token"] == "access-token-1"
+    assert credentials["access_token_expires_at"] == "2099-07-05T00:00:00+00:00"
 
 
 def test_poll_once_clears_active_job_for_malformed_pending_result(tmp_path: Path, monkeypatch) -> None:

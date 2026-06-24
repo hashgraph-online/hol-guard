@@ -19272,10 +19272,11 @@ def test_sync_local_guard_cloud_proof_serializes_concurrent_oauth_refresh(tmp_pa
 
     assert sync_errors == []
     assert len(sync_results) == 2
-    assert token_refreshes == ["refresh-token-1", "refresh-token-2"]
+    assert token_refreshes == ["refresh-token-1"]
     stored_credentials = store.get_oauth_local_credentials()
     assert isinstance(stored_credentials, dict)
-    assert stored_credentials["refresh_token"] == "refresh-token-3"
+    assert stored_credentials["refresh_token"] == "refresh-token-2"
+    assert stored_credentials["access_token"] == "oauth-access-token-for-refresh-token-1"
 
 
 def test_sync_pain_signals_raises_when_oauth_refresh_is_revoked(tmp_path, monkeypatch):

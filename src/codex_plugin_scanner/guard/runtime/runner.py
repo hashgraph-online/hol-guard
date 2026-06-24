@@ -13,7 +13,7 @@ import threading
 import urllib.error
 import urllib.parse
 import urllib.request
-from base64 import urlsafe_b64encode
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
@@ -2601,8 +2601,14 @@ def _refresh_guard_oauth_access_token(
         token_type = _optional_string(payload.get("token_type"))
         if access_token is None or token_type is None or token_type.lower() not in {"bearer", "dpop"}:
             raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
+        access_token_expires_at = _oauth_access_token_expires_at(
+            access_token,
+            payload=payload,
+            now=datetime.now(timezone.utc),
+        )
         return {
             "access_token": access_token,
+            "access_token_expires_at": access_token_expires_at,
             "package_firewall_entitlement": build_oauth_package_firewall_entitlement(
                 payload,
                 now=datetime.now(timezone.utc),
@@ -2630,12 +2636,72 @@ def _oauth_dpop_key_material(credentials: dict[str, object]) -> GuardDpopKeyMate
     )
 
 
+_OAUTH_ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 60
+
+
+def _decode_oauth_access_token_claims(access_token: str) -> dict[str, object]:
+    parts = access_token.split(".")
+    if len(parts) != 3:
+        return {}
+    try:
+        padding = "=" * (-len(parts[1]) % 4)
+        payload = json.loads(urlsafe_b64decode(parts[1] + padding).decode("utf-8"))
+    except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _oauth_access_token_expires_at(
+    access_token: str,
+    *,
+    payload: dict[str, object],
+    now: datetime,
+) -> str | None:
+    claims = _decode_oauth_access_token_claims(access_token)
+    exp = claims.get("exp")
+    if isinstance(exp, (int, float)) and not isinstance(exp, bool) and float(exp) > 0:
+        return datetime.fromtimestamp(float(exp), tz=timezone.utc).isoformat()
+    expires_in = payload.get("expires_in")
+    parsed_expires_in: int | None
+    if isinstance(expires_in, (int, float)) and not isinstance(expires_in, bool):
+        parsed_expires_in = int(expires_in)
+    elif isinstance(expires_in, str):
+        try:
+            parsed_expires_in = int(expires_in)
+        except ValueError:
+            parsed_expires_in = None
+    else:
+        parsed_expires_in = None
+    if parsed_expires_in is None or parsed_expires_in <= 0:
+        return None
+    return (now + timedelta(seconds=parsed_expires_in)).isoformat()
+
+
+def _cached_oauth_access_token(credentials: dict[str, object], *, now: datetime) -> str | None:
+    access_token = _optional_string(credentials.get("access_token"))
+    access_token_expires_at = _optional_string(credentials.get("access_token_expires_at"))
+    if access_token is None or access_token_expires_at is None:
+        return None
+    try:
+        expires_at = datetime.fromisoformat(access_token_expires_at)
+    except ValueError:
+        return None
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    expires_at = expires_at.astimezone(timezone.utc)
+    if expires_at <= now + timedelta(seconds=_OAUTH_ACCESS_TOKEN_REFRESH_SKEW_SECONDS):
+        return None
+    return access_token
+
+
 def _persist_rotated_oauth_refresh_token(
     *,
     store: GuardStore,
     credentials: dict[str, object],
     package_firewall_entitlement: dict[str, object] | None = None,
     refresh_token: str,
+    access_token: str | None = None,
+    access_token_expires_at: str | None = None,
 ) -> None:
     issuer = _optional_string(credentials.get("issuer"))
     client_id = _optional_string(credentials.get("client_id"))
@@ -2681,6 +2747,10 @@ def _persist_rotated_oauth_refresh_token(
             else _optional_string(credentials.get("supply_chain_plan_id"))
         ),
         workspace_id=_optional_string(credentials.get("workspace_id")),
+        runtime_id=_optional_string(credentials.get("runtime_id")),
+        runtime_label=_optional_string(credentials.get("runtime_label")),
+        access_token=access_token,
+        access_token_expires_at=access_token_expires_at,
         now=_now(),
     )
 
@@ -2701,6 +2771,17 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
         oauth_client = resolve_guard_oauth_client_config(issuer)
     except ValueError as error:
         raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
+    cached_access_token = _cached_oauth_access_token(oauth_credentials, now=datetime.now(timezone.utc))
+    if cached_access_token is not None and not persist_recovered_secret:
+        sync_url = _validate_guard_sync_url(
+            _oauth_sync_url_from_issuer(oauth_client.issuer),
+            issuer=oauth_client.issuer,
+        )
+        return {
+            "sync_url": sync_url,
+            "access_token": cached_access_token,
+            "dpop_key_material": dpop_key_material,
+        }
     refreshed = _refresh_guard_oauth_access_token(
         token_endpoint=oauth_client.token_endpoint,
         client_id=client_id,
@@ -2718,6 +2799,8 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
             credentials=oauth_credentials,
             package_firewall_entitlement=package_firewall_entitlement,
             refresh_token=rotated_refresh_token,
+            access_token=_optional_string(refreshed.get("access_token")),
+            access_token_expires_at=_optional_string(refreshed.get("access_token_expires_at")),
         )
     sync_url = _validate_guard_sync_url(
         _oauth_sync_url_from_issuer(oauth_client.issuer),
