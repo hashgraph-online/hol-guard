@@ -452,7 +452,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         '        ? "HOL Guard reviewed a size-bounded excerpt of a large Pi tool result; "\n'
         '          + "the full output was truncated before review."\n'
         "        : null;\n"
-        "    if (oversizeNotice) ctx.ui.notify(oversizeNotice, \"info\");\n"
+        '    if (oversizeNotice) ctx.ui.notify(oversizeNotice, "info");\n'
         "    const toolInput =\n"
         "      boundedToolInput.value as Record<string, unknown>;\n"
         "    const limitedContent = boundedContent.value;\n"
