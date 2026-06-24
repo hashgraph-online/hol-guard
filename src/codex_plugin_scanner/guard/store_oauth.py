@@ -399,7 +399,7 @@ class StoreOAuthConnectMixin:
         installation_id = device.get("installation_id")
         if isinstance(installation_id, str) and installation_id:
             recovered_payload["machine_id"] = installation_id
-        for key in ("workspace_id", "supply_chain_plan_id"):
+        for key in ("workspace_id", "supply_chain_plan_id", "supply_chain_entitlement_expires_at"):
             value = workspace_metadata.get(key)
             if isinstance(value, str) and value:
                 recovered_payload[key] = value
@@ -423,18 +423,21 @@ class StoreOAuthConnectMixin:
         return recovered_payload
 
     def _load_oauth_secret_json_without_payload(self, secret_ref: str) -> str | None:
+        primary_secret_json = None
+        secret_store = self._oauth_secret_store
+        if isinstance(secret_store, FallbackSecretStore):
+            primary_secret_json = self._get_secret_from_primary_store(secret_store.primary, secret_ref)
+        else:
+            primary_secret_json = self._get_secret_from_store(secret_store, secret_ref)
+        if isinstance(primary_secret_json, str) and self._parse_oauth_secret_payload(primary_secret_json) is not None:
+            return primary_secret_json
+        if not self._oauth_fallback_recovery_allowed():
+            return None
+        if self._oauth_primary_repair_available() and not self._oauth_primary_secret_definitely_missing(secret_ref):
+            return None
         fallback_secret_json = self._load_oauth_fallback_secret_json(secret_ref)
         if isinstance(fallback_secret_json, str) and self._parse_oauth_secret_payload(fallback_secret_json) is not None:
             return fallback_secret_json
-        for candidate in self._get_secret_candidates(
-            self._oauth_secret_store,
-            secret_ref,
-            None,
-            prefer_fallback_first=True,
-            fallback_token_hint=fallback_secret_json,
-        ):
-            if self._parse_oauth_secret_payload(candidate) is not None:
-                return candidate
         return None
 
     @staticmethod
@@ -450,19 +453,23 @@ class StoreOAuthConnectMixin:
         return None
 
     def _recover_oauth_workspace_metadata(self) -> dict[str, object]:
+        from .package_firewall_entitlement import build_oauth_package_firewall_entitlement
+
         payload = self.get_sync_payload("supply_chain_bundle_entitlement")
         workspace_id = None
-        plan_id = None
-        supply_chain_firewall = None
+        entitlement_fields: dict[str, object] = {}
         if isinstance(payload, dict):
             raw_workspace_id = payload.get("workspace_id")
             if isinstance(raw_workspace_id, str) and raw_workspace_id.strip():
                 workspace_id = raw_workspace_id.strip()
             raw_tier = payload.get("tier")
             if isinstance(raw_tier, str) and raw_tier.strip():
-                normalized_tier = raw_tier.strip().lower()
-                plan_id = normalized_tier
-                supply_chain_firewall = normalized_tier in {"premium", "pro", "team"}
+                recovered_entitlement = build_oauth_package_firewall_entitlement(
+                    {"guard_local_entitlement": {"tier": raw_tier.strip()}},
+                    now=datetime.now(timezone.utc),
+                )
+                if isinstance(recovered_entitlement, dict):
+                    entitlement_fields.update(recovered_entitlement)
         if workspace_id is None:
             with self._connect() as connection:
                 row = connection.execute(
@@ -480,8 +487,11 @@ class StoreOAuthConnectMixin:
         metadata: dict[str, object] = {}
         if workspace_id is not None:
             metadata["workspace_id"] = workspace_id
-        if plan_id is not None:
-            metadata["supply_chain_plan_id"] = plan_id
+        for key in ("supply_chain_plan_id", "supply_chain_entitlement_expires_at"):
+            value = entitlement_fields.get(key)
+            if isinstance(value, str) and value:
+                metadata[key] = value
+        supply_chain_firewall = entitlement_fields.get("supply_chain_firewall")
         if isinstance(supply_chain_firewall, bool):
             metadata["supply_chain_firewall"] = supply_chain_firewall
         return metadata
