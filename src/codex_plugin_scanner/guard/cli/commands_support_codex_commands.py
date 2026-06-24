@@ -160,26 +160,34 @@ def _codex_post_tool_command_is_read_only_source_inspection(
     cwd: Path | None,
     home_dir: Path | None,
 ) -> bool:
-    command_text = _codex_post_tool_command_text(payload)
-    return bool(command_text) and _codex_command_is_read_only_source_inspection(
-        command_text,
-        cwd=cwd,
-        home_dir=home_dir,
+    return any(
+        _codex_command_is_read_only_source_inspection(command_text, cwd=cwd, home_dir=home_dir)
+        for command_text in _codex_post_tool_command_texts(payload)
     )
 
+
 def _codex_post_tool_command_text(payload: dict[str, object]) -> str:
+    command_texts = _codex_post_tool_command_texts(payload)
+    return command_texts[0] if command_texts else ""
+
+
+def _codex_post_tool_command_texts(payload: dict[str, object]) -> tuple[str, ...]:
     tool_input = payload.get("tool_input")
     if isinstance(tool_input, dict):
+        candidates: list[str] = []
         command = tool_input.get("command")
         if isinstance(command, str):
-            return command.strip()
+            stripped = command.strip()
+            if stripped:
+                candidates.append(stripped)
         for key in COMMAND_CANDIDATE_LIST_KEYS:
             candidate = tool_input.get(key)
             if isinstance(candidate, list):
-                command_texts = command_list_candidate_texts(candidate, preserve_items=key in COMMAND_SEQUENCE_KEYS)
-                if command_texts:
-                    return command_texts[0]
-    return ""
+                candidates.extend(
+                    command_list_candidate_texts(candidate, preserve_items=key in COMMAND_SEQUENCE_KEYS)
+                )
+        return tuple(dict.fromkeys(text for text in candidates if text))
+    return ()
 
 _CODEX_READ_ONLY_SEARCH_COMMANDS = frozenset({"fd", "rg", "grep", "egrep", "fgrep"})
 
