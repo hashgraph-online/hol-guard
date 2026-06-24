@@ -1,5 +1,5 @@
 const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/feed-health-workspace.js","assets/chunks/home-protection-module.js","assets/chunks/supply-chain-protection-stats.js","assets/chunks/audit-workspace.js"])))=>i.map(i=>d[i]);
-import { aB as isSupplyChainAuditIncomplete, aC as isSupplyChainAuditEvidence, j as jsxRuntimeExports, r as reactExports, O as HiMiniKey, A as ActionButton, S as SectionLabel, au as GuardHarnessActionError, aD as readString$1, aE as isRecord$1, d as HiMiniCheckCircle, aw as HiMiniArrowPath, w as HiMiniExclamationTriangle, ac as Tag, m as formatRelativeTime, aF as HiMiniClock, aG as IconActionButton, I as HiMiniXCircle, ax as HiMiniTrash, l as HiMiniShieldCheck, F as HiMiniWrenchScrewdriver, aH as HiMiniBeaker, aI as ActivationSummary, aJ as ActionResultPanel, ad as HiMiniMagnifyingGlass, b as EmptyState, aK as HiMiniBugAnt, Y as fetchSettings, o as HiMiniXMark, aL as GuardModalLayer, aM as ConnectFlowCard, aN as HiMiniArrowTopRightOnSquare, aO as HiMiniCloudArrowDown, aP as fetchPackageFirewallStatus, aQ as runPackageAudit, aR as resolveSupplyChainAuditFailure, aS as runPackageSync, aT as startPackageFirewallConnect, aU as openPackageFirewallAuthorizeFallback, aV as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, aW as runPackageFirewallAction, aX as parseInterceptProofSnapshot, aY as openPackageFirewallShell, aZ as EntitlementNotice, a_ as fetchReceipts, a$ as WorkspacePageHeader, b0 as __vitePreload } from "../guard-dashboard.js";
+import { aC as isSupplyChainAuditIncomplete, aD as isSupplyChainAuditEvidence, r as reactExports, aE as buildApprovalProofCredentials, aF as isApprovalProofSubmitDisabled, j as jsxRuntimeExports, S as SectionLabel, aG as ApprovalProofFieldInputs, A as ActionButton, av as GuardHarnessActionError, aH as readString$1, aI as isRecord$1, d as HiMiniCheckCircle, ax as HiMiniArrowPath, x as HiMiniExclamationTriangle, ad as Tag, m as formatRelativeTime, aJ as HiMiniClock, aK as IconActionButton, J as HiMiniXCircle, ay as HiMiniTrash, l as HiMiniShieldCheck, I as HiMiniWrenchScrewdriver, aL as HiMiniBeaker, aM as ActivationSummary, aN as ActionResultPanel, ae as HiMiniMagnifyingGlass, b as EmptyState, aO as HiMiniBugAnt, Z as fetchSettings, o as HiMiniXMark, aP as GuardModalLayer, aQ as ConnectFlowCard, aR as ApprovalProofInline, aS as HiMiniArrowTopRightOnSquare, aT as HiMiniCloudArrowDown, aU as fetchPackageFirewallStatus, aV as runPackageAudit, aW as resolveSupplyChainAuditFailure, aX as runPackageSync, aY as startPackageFirewallConnect, aZ as openPackageFirewallAuthorizeFallback, a_ as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, a$ as runPackageFirewallAction, b0 as parseInterceptProofSnapshot, b1 as openPackageFirewallShell, b2 as EntitlementNotice, b3 as fetchReceipts, b4 as WorkspacePageHeader, b5 as __vitePreload } from "../guard-dashboard.js";
 const SEVERITY_RANK = {
   critical: 4,
   high: 3,
@@ -377,83 +377,6 @@ function packageWorkbenchEcosystems(findings) {
   return Array.from(new Set(findings.map((finding) => finding.ecosystem))).sort();
 }
 const SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS = "min-w-0 max-w-full space-y-6 overflow-x-hidden";
-function ApprovalProofFieldInputs(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          ref: props.passwordRef,
-          type: "password",
-          autoComplete: "current-password",
-          value: props.approvalPassword,
-          onChange: props.onApprovalPasswordChange,
-          className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-        }
-      )
-    ] }),
-    props.approvalGate?.totp_enabled === true ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          type: "text",
-          inputMode: "numeric",
-          pattern: "[0-9]*",
-          autoComplete: "one-time-code",
-          value: props.approvalTotpCode,
-          onChange: props.onApprovalTotpCodeChange,
-          className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-        }
-      )
-    ] }) : null
-  ] });
-}
-function ApprovalProofInline(props) {
-  const passwordRef = reactExports.useRef(null);
-  reactExports.useEffect(() => {
-    const timer = window.setTimeout(() => {
-      passwordRef.current?.focus();
-    }, 50);
-    return () => window.clearTimeout(timer);
-  }, []);
-  const submitDisabled = props.submitBusy || props.approvalPassword.trim() === "" || props.approvalGate?.totp_enabled === true && props.approvalTotpCode.trim() === "";
-  const handleKeyDown = reactExports.useCallback(
-    (event) => {
-      if (event.key === "Enter" && !submitDisabled) {
-        event.preventDefault();
-        props.onSubmit();
-      }
-    },
-    [props.onSubmit, submitDisabled]
-  );
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", onKeyDown: handleKeyDown, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Approval proof required" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-600", children: "Enter your local approval password before Guard syncs supply-chain intel on this device." })
-      ] })
-    ] }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ApprovalProofFieldInputs,
-      {
-        approvalGate: props.approvalGate,
-        approvalPassword: props.approvalPassword,
-        approvalTotpCode: props.approvalTotpCode,
-        passwordRef,
-        onApprovalPasswordChange: props.onApprovalPasswordChange,
-        onApprovalTotpCodeChange: props.onApprovalTotpCodeChange
-      }
-    ),
-    props.error !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "alert", children: props.error }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 sm:flex-row sm:items-center", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: props.onSubmit, disabled: submitDisabled, children: props.submitLabel }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onBack, disabled: props.submitBusy, children: "Go back" })
-    ] })
-  ] });
-}
 function ApprovalProofModal(props) {
   const { title, detail, confirmLabel, approvalGate, onCancel, onConfirm } = props;
   const [password, setPassword] = reactExports.useState("");
@@ -465,12 +388,13 @@ function ApprovalProofModal(props) {
     setTotpCode(event.target.value);
   }, []);
   const handleConfirm = reactExports.useCallback(() => {
-    onConfirm({
-      approval_password: password,
-      ...approvalGate?.totp_enabled === true ? { approval_totp_code: totpCode } : {}
-    });
+    onConfirm(buildApprovalProofCredentials(approvalGate, { approvalPassword: password, approvalTotpCode: totpCode }));
   }, [approvalGate, onConfirm, password, totpCode]);
-  const confirmDisabled = password.trim() === "" || approvalGate?.totp_enabled === true && totpCode.trim() === "";
+  const confirmDisabled = isApprovalProofSubmitDisabled(
+    approvalGate,
+    { approvalPassword: password, approvalTotpCode: totpCode },
+    false
+  );
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval required" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "mt-2 text-base font-semibold text-brand-dark", children: title }),
@@ -1516,10 +1440,7 @@ function AuditRecoveryModal({
   }, []);
   const handleApprovalSubmit = reactExports.useCallback(() => {
     setApprovalSubmitting(true);
-    onApprovalSubmit({
-      approval_password: approvalPassword,
-      ...approvalGate?.totp_enabled === true ? { approval_totp_code: approvalTotpCode } : {}
-    });
+    onApprovalSubmit(buildApprovalProofCredentials(approvalGate, { approvalPassword, approvalTotpCode }));
   }, [approvalGate, approvalPassword, approvalTotpCode, onApprovalSubmit]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: "Finish workspace audit setup", onClose, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white shadow-xl", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-b border-slate-100 px-5 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [

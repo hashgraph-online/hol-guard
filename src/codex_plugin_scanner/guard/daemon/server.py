@@ -3479,6 +3479,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if isinstance(gate_payload, dict)
             else None
         )
+        if payload.get("approval_password") or payload.get("approval_totp_code"):
+            proof_input = approval_gate_input_from_mapping(payload)
+            if proof_input is not None:
+                gate_input = proof_input
         try:
             approval_gate_grant = require_high_risk(
                 guard_home,

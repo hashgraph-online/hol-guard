@@ -197,7 +197,7 @@ def _configure_guard_policy_parsers(
         "change",
         help="Change the approval password",
     )
-    approval_password_change_parser.add_argument("--current-password", required=True)
+    approval_password_change_parser.add_argument("--current-password")
     approval_password_change_parser.add_argument("--new-password", required=True)
     approval_password_change_parser.add_argument("--confirm-password", required=True)
     approval_password_change_parser.add_argument("--totp-code")
@@ -207,7 +207,7 @@ def _configure_guard_policy_parsers(
         "disable",
         help="Disable the approval password gate",
     )
-    approval_password_disable_parser.add_argument("--current-password", required=True)
+    approval_password_disable_parser.add_argument("--current-password")
     approval_password_disable_parser.add_argument("--totp-code")
     _add_guard_common_args(approval_password_disable_parser)
     approval_password_disable_parser.add_argument("--json", action="store_true")
@@ -243,9 +243,9 @@ def _configure_guard_policy_parsers(
     approval_totp_verify_parser.add_argument("--json", action="store_true")
     approval_totp_disable_parser = approval_totp_subparsers.add_parser(
         "disable",
-        help="Disable TOTP with a fresh password and code",
+        help="Disable TOTP with a fresh authenticator code",
     )
-    approval_totp_disable_parser.add_argument("--current-password", required=True)
+    approval_totp_disable_parser.add_argument("--current-password")
     approval_totp_disable_parser.add_argument("--code", required=True)
     _add_guard_common_args(approval_totp_disable_parser)
     approval_totp_disable_parser.add_argument("--json", action="store_true")

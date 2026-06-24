@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, type ChangeEvent } from "react";
 import { HiMiniCheck, HiMiniXMark, HiMiniKey } from "react-icons/hi2";
 import type { GuardApprovalRequest, GuardApprovalGatePublicConfig } from "./guard-types";
 import { approvalGateCooldownLabel } from "./approval-gate-utils";
+import { approvalProofRequiresPassword } from "./approval-proof-inline";
 
 type WhyThisPausedProps = {
   item: GuardApprovalRequest;
@@ -110,12 +111,18 @@ type ApprovalPasswordModalProps = {
 
 export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
   const passwordRef = useRef<HTMLInputElement>(null);
+  const totpRef = useRef<HTMLInputElement>(null);
+  const needsPassword = approvalProofRequiresPassword(props.gate);
   useEffect(() => {
     const timer = setTimeout(() => {
-      passwordRef.current?.focus();
+      if (needsPassword) {
+        passwordRef.current?.focus();
+      } else {
+        totpRef.current?.focus();
+      }
     }, 50);
     return () => clearTimeout(timer);
-  }, []);
+  }, [needsPassword]);
 
   const showCooldownOption =
     props.gate.cooldown_seconds > 0 &&
@@ -158,7 +165,7 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
               id="approval-password-modal-title"
               className="text-lg font-semibold tracking-tight text-brand-dark"
             >
-              Approval password required
+              {needsPassword ? "Approval password required" : "Authenticator code required"}
             </h2>
             <p className="text-sm text-brand-dark/70">
               Guard needs a fresh proof before it can save this decision.
@@ -167,24 +174,27 @@ export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
         </div>
 
         <div className="mt-5 space-y-3">
-          <label className="block">
-            <span className="text-sm font-semibold text-brand-dark">Approval password</span>
-            <input
-              ref={passwordRef}
-              type="password"
-              autoComplete="current-password"
-              value={props.approvalPassword}
-              onChange={props.onApprovalPasswordChange}
-              className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-            />
-          </label>
-          {props.gate.totp_enabled === true && (
+          {needsPassword ? (
+            <label className="block">
+              <span className="text-sm font-semibold text-brand-dark">Approval password</span>
+              <input
+                ref={passwordRef}
+                type="password"
+                autoComplete="current-password"
+                value={props.approvalPassword}
+                onChange={props.onApprovalPasswordChange}
+                className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              />
+            </label>
+          ) : (
             <label className="block">
               <span className="text-sm font-semibold text-brand-dark">Authenticator code</span>
               <input
+                ref={totpRef}
                 type="text"
                 inputMode="numeric"
                 pattern="[0-9]*"
+                autoComplete="one-time-code"
                 value={props.approvalTotpCode}
                 onChange={props.onApprovalTotpCodeChange}
                 className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"

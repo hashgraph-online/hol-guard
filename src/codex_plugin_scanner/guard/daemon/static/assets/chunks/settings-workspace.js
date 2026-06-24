@@ -1,4 +1,4 @@
-import { M as requireReact, N as getDefaultExportFromCjs, j as jsxRuntimeExports, r as reactExports, v as useFocusTrap, O as HiMiniKey, S as SectionLabel, A as ActionButton, l as HiMiniShieldCheck, Q as HiMiniLockClosed, R as HiMiniBellAlert, T as HiMiniAdjustmentsHorizontal, U as HiMiniCog6Tooth, V as HiMiniCircleStack, W as TabBar, y as HiMiniChevronRight, X as resolveProtectionLevelCopy, Y as fetchSettings, Z as fetchRuntimeSnapshot, _ as updateSettings, $ as clearPolicy, a0 as clearReviewQueue, a1 as revokeApprovalGateCooldown, a2 as disableApprovalGateTotp, a3 as importSettings, a4 as resetSettings, a5 as enrollApprovalGateTotp, a6 as verifyApprovalGateTotp, a7 as clearEvidence, a8 as exportDiagnostics, a9 as repairApprovalCenter, aa as exportSettings, ab as setupDesktopNotifications, b as EmptyState, e as GuardHero, ac as Tag, ad as HiMiniMagnifyingGlass, d as HiMiniCheckCircle, w as HiMiniExclamationTriangle, ae as approvalGateCooldownLabel, o as HiMiniXMark } from "../guard-dashboard.js";
+import { N as requireReact, O as getDefaultExportFromCjs, j as jsxRuntimeExports, r as reactExports, v as useFocusTrap, Q as HiMiniKey, S as SectionLabel, A as ActionButton, l as HiMiniShieldCheck, R as HiMiniLockClosed, T as HiMiniBellAlert, U as HiMiniAdjustmentsHorizontal, V as HiMiniCog6Tooth, W as HiMiniCircleStack, X as TabBar, z as HiMiniChevronRight, Y as resolveProtectionLevelCopy, Z as fetchSettings, _ as fetchRuntimeSnapshot, $ as updateSettings, a0 as clearPolicy, a1 as clearReviewQueue, a2 as revokeApprovalGateCooldown, a3 as disableApprovalGateTotp, a4 as importSettings, a5 as resetSettings, a6 as enrollApprovalGateTotp, a7 as verifyApprovalGateTotp, a8 as clearEvidence, a9 as exportDiagnostics, aa as repairApprovalCenter, ab as exportSettings, ac as setupDesktopNotifications, b as EmptyState, e as GuardHero, ad as Tag, ae as HiMiniMagnifyingGlass, d as HiMiniCheckCircle, x as HiMiniExclamationTriangle, af as approvalGateCooldownLabel, o as HiMiniXMark } from "../guard-dashboard.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, s as securityLevelLabel } from "./app-catalog.js";
 var lib = {};
 var propTypes = { exports: {} };
@@ -1294,7 +1294,7 @@ function resolveSettingsSaveProofModalCopy(input) {
   if (input.mode === "change-password") {
     return {
       title: "Change approval password",
-      detail: "Enter your current password, then choose a new one.",
+      detail: "Confirm your approval proof, then choose a new password.",
       confirmLabel: "Update password"
     };
   }
@@ -1323,7 +1323,7 @@ function resolveSettingsSaveProofModalCopy(input) {
     if (input.maintenanceAction === "disable-totp") {
       return {
         title: "Disconnect authenticator",
-        detail: "Confirm your approval password and a current app code to remove this second factor.",
+        detail: "Confirm a current app code to remove this second factor.",
         confirmLabel: "Disconnect"
       };
     }
@@ -1350,13 +1350,13 @@ function resolveSettingsSaveProofModalCopy(input) {
   if (input.gateSettingsChanged) {
     return {
       title: "Confirm before saving gate changes",
-      detail: "Enter your approval password so Guard can apply the gate updates you chose.",
+      detail: "Enter your approval proof so Guard can apply the gate updates you chose.",
       confirmLabel: "Save settings"
     };
   }
   return {
     title: "Confirm before saving",
-    detail: "Enter your approval password so Guard can save these settings.",
+    detail: "Enter your approval proof so Guard can save these settings.",
     confirmLabel: "Save settings"
   };
 }
@@ -1369,19 +1369,23 @@ function isSettingsSaveProofSubmitDisabled(mode2, credentials, totpRequired) {
     return next.length === 0 || confirm.length === 0 || next !== confirm;
   }
   if (mode2 === "change-password") {
-    if (current.length === 0 || next.length === 0 || confirm.length === 0 || next !== confirm) {
+    if (next.length === 0 || confirm.length === 0 || next !== confirm) {
       return true;
     }
-    return totpRequired && totp.length === 0;
+    return totpRequired ? totp.length === 0 : current.length === 0;
+  }
+  if (totpRequired) {
+    return totp.length === 0;
   }
   if (current.length === 0) {
     return true;
   }
-  return totpRequired && totp.length === 0;
+  return false;
 }
 function SettingsSaveProofModal(props) {
   const dialogRef = reactExports.useRef(null);
   const passwordRef = reactExports.useRef(null);
+  const totpRef = reactExports.useRef(null);
   const [currentPassword, setCurrentPassword] = reactExports.useState("");
   const [newPassword, setNewPassword] = reactExports.useState("");
   const [confirmPassword, setConfirmPassword] = reactExports.useState("");
@@ -1396,10 +1400,14 @@ function SettingsSaveProofModal(props) {
       return;
     }
     const timer = setTimeout(() => {
-      passwordRef.current?.focus();
+      if (props.gate?.totp_enabled === true && (props.mode === "verify-save" || props.mode === "change-password" || props.mode === "maintenance")) {
+        totpRef.current?.focus();
+      } else {
+        passwordRef.current?.focus();
+      }
     }, 50);
     return () => clearTimeout(timer);
-  }, [props.open, props.mode]);
+  }, [props.gate?.totp_enabled, props.open, props.mode]);
   reactExports.useEffect(() => {
     if (props.open) {
       document.documentElement.dataset.guardModalOpen = String(
@@ -1417,6 +1425,7 @@ function SettingsSaveProofModal(props) {
     return void 0;
   }, [props.open]);
   const totpRequired = props.gate?.totp_enabled === true && (props.mode === "verify-save" || props.mode === "change-password" || props.mode === "maintenance");
+  const needsCurrentPassword = props.mode !== "setup-gate" && !totpRequired;
   const handleCurrentPasswordChange = reactExports.useCallback((event) => {
     setCurrentPassword(event.target.value);
   }, []);
@@ -1478,7 +1487,7 @@ function SettingsSaveProofModal(props) {
               ] })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 space-y-3", children: [
-              props.mode !== "setup-gate" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+              needsCurrentPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   "input",
@@ -1530,6 +1539,8 @@ function SettingsSaveProofModal(props) {
                     inputMode: "numeric",
                     pattern: "[0-9]*",
                     maxLength: 6,
+                    ref: totpRef,
+                    autoComplete: "one-time-code",
                     value: totpCode,
                     onChange: handleTotpChange,
                     placeholder: "123456",
