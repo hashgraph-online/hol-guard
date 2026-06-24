@@ -40,6 +40,7 @@ _RAW_SECRET_RESOURCE_PATH_PATTERN = re.compile(
     r"^/(?:api/[^/]+|apis/[^/]+/[^/]+)/(?:watch/)?(?:namespaces/[^/]+/)?secrets?(?:/[^/?#]+)?$",
     re.IGNORECASE,
 )
+_PROC_ENVIRON_PATH_PATTERN = re.compile(r"^/proc/\d+/environ$")
 
 
 def interpreter_reads_sensitive_env(command_name: str, args: tuple[str, ...]) -> bool:
@@ -83,6 +84,10 @@ def kubernetes_option_tokens_consumed(
 
 def is_output_redirect_target(token: str, *, previous_token: str | None) -> bool:
     return token.startswith((">", "1>", "2>", ">>", "1>>", "2>>")) or previous_token in _OUTPUT_REDIRECT_TOKENS
+
+
+def is_proc_environ_path(path: str) -> bool:
+    return any(_PROC_ENVIRON_PATH_PATTERN.fullmatch(candidate) for candidate in _path_candidates(path))
 
 
 def is_secret_volume_path(path: str) -> bool:
@@ -134,6 +139,28 @@ def script_reads_sensitive_env(script: str) -> bool:
     return False
 
 
+def matching_source_arguments(tokens: tuple[str, ...], predicate) -> tuple[str, ...]:
+    sources: list[str] = []
+    previous_token: str | None = None
+    for token in tokens[1:]:
+        if token in _OUTPUT_REDIRECT_TOKENS:
+            previous_token = token
+            continue
+        normalized_token = secret_volume_argument_value(token)
+        if token.startswith("-") and "=" not in token:
+            previous_token = token
+            continue
+        if not predicate(normalized_token):
+            previous_token = token
+            continue
+        if is_output_redirect_target(token, previous_token=previous_token):
+            previous_token = token
+            continue
+        sources.append(normalized_token)
+        previous_token = token
+    return tuple(dict.fromkeys(sources))
+
+
 def secret_volume_argument_value(token: str) -> str:
     normalized_token = strip_redirect_prefix(token)
     if normalized_token.startswith("-") and "=" in normalized_token:
@@ -163,7 +190,7 @@ def _interpreter_inline_script(args: tuple[str, ...]) -> str | None:
 
 
 def _is_inline_interpreter_command(command_name: str) -> bool:
-    return command_name.startswith("python") or command_name in {"node", "perl", "php", "ruby"}
+    return command_name.startswith("python") or command_name in {"node", "nodejs", "perl", "php", "ruby"}
 
 
 def _path_candidates(path: str) -> tuple[str, ...]:
@@ -183,9 +210,11 @@ __all__ = [
     "WRITE_ONLY_COMMANDS",
     "interpreter_reads_sensitive_env",
     "is_output_redirect_target",
+    "is_proc_environ_path",
     "is_secret_volume_path",
     "is_sensitive_env_name",
     "kubernetes_option_tokens_consumed",
+    "matching_source_arguments",
     "raw_secret_api_path",
     "remote_cp_path",
     "resource_token_includes_secret",

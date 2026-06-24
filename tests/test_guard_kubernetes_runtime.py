@@ -126,6 +126,10 @@ def test_kubectl_exec_shell_expansion_secret_reads_are_detected(tmp_path: Path) 
         "'import os; print(os.environ.get(\"GUARD_GITHUB_APP_PRIVATE_KEY\"))'"
     )
     assert kubernetes_secret_read_source(python_environ_get_command) == "Kubernetes pod environment"
+    nodejs_env_command = (
+        'kubectl exec registry-frontend -- /usr/bin/nodejs -e "console.log(process.env.GUARD_GITHUB_APP_PRIVATE_KEY)"'
+    )
+    assert kubernetes_secret_read_source(nodejs_env_command) == "Kubernetes pod environment"
     python_stdin_command = (
         "kubectl exec registry-frontend -- python - <<'PY'\n"
         "import os\n"
@@ -133,6 +137,12 @@ def test_kubectl_exec_shell_expansion_secret_reads_are_detected(tmp_path: Path) 
         "PY"
     )
     assert kubernetes_secret_read_source(python_stdin_command) == "Kubernetes pod environment"
+    assert kubernetes_secret_read_source("kubectl exec registry-frontend -- cat /proc/1/environ") == (
+        "Kubernetes pod environment"
+    )
+    assert kubernetes_secret_read_source(
+        "kubectl exec registry-frontend -- strings /proc/1/environ | grep GUARD_GITHUB_APP_PRIVATE_KEY"
+    ) == ("Kubernetes pod environment")
 
 
 def test_kubectl_exec_secret_volume_readers_are_detected() -> None:
@@ -236,6 +246,29 @@ def test_pi_post_tool_output_labels_kubernetes_secret_source(tmp_path: Path) -> 
     assert artifact is not None
     assert artifact.metadata["action_class"] == "Kubernetes secret read command"
     assert artifact.metadata["guard_default_action"] == "require-reapproval"
+    assert artifact.metadata["secret_source_family"] == "Kubernetes pod environment"
+
+
+def test_pi_post_tool_output_labels_wrapped_kubernetes_secret_source(tmp_path: Path) -> None:
+    command = (
+        'bash -lc "kubectl exec -n registry-broker registry-frontend-7fb9bf6b46-2fcj8 '
+        '-- printenv GUARD_GITHUB_APP_PRIVATE_KEY"'
+    )
+    artifact = _codex_post_tool_output_artifact(
+        harness="pi",
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+        },
+        config_path="~/.pi/agent/settings.json",
+        source_scope="project",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert artifact is not None
+    assert artifact.metadata["action_class"] == "Kubernetes secret read command"
     assert artifact.metadata["secret_source_family"] == "Kubernetes pod environment"
 
 

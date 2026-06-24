@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
 
 from ..runtime.kubernetes_commands import kubernetes_secret_read_source
+from ..runtime.shell_command_wrappers import normalize_transparent_shell_command
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from .commands_support_codex_commands import (
@@ -350,7 +351,10 @@ def _codex_post_tool_output_artifact(
     if not command_text:
         command_text = tool_name
     local_source_matches = _codex_sensitive_local_source_matches(command_text, cwd=cwd)
-    kubernetes_secret_source = kubernetes_secret_read_source(command_text)
+    normalized_command = normalize_transparent_shell_command(
+        command_text, cwd=cwd, home_dir=home_dir
+    ).normalized_command
+    kubernetes_secret_source = kubernetes_secret_read_source(normalized_command)
     sensitive_file_request = extract_sensitive_file_read_request(
         payload.get("tool_name"),
         payload.get("tool_input", payload.get("arguments")),

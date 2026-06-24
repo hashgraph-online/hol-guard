@@ -11,16 +11,18 @@ from .kubernetes_command_support import (
     WRITE_ONLY_COMMANDS,
     interpreter_reads_sensitive_env,
     is_output_redirect_target,
+    is_proc_environ_path,
     is_secret_volume_path,
     is_sensitive_env_name,
     kubernetes_option_tokens_consumed,
+    matching_source_arguments,
     raw_secret_api_path,
     remote_cp_path,
     resource_token_includes_secret,
     script_reads_sensitive_env,
-    secret_volume_argument_value,
 )
 from .kubernetes_heredoc_support import kubernetes_heredoc_secret_source
+from .shell_command_wrappers import normalize_transparent_shell_command
 
 _ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _OUTPUT_REDIRECT_TOKENS = frozenset({">", "1>", "2>", ">>", "1>>", "2>>"})
@@ -129,6 +131,9 @@ def _command_candidates(command: str, *, depth: int = 0) -> tuple[str, ...]:
     if depth > 3:
         return (command,)
     candidates: list[str] = [command]
+    normalized = normalize_transparent_shell_command(command).normalized_command.strip()
+    if normalized and normalized != command:
+        candidates.extend(_command_candidates(normalized, depth=depth + 1))
     for substitution in extract_command_substitutions(command):
         candidates.extend(_command_candidates(substitution, depth=depth + 1))
     return tuple(dict.fromkeys(candidate for candidate in candidates if candidate.strip()))
@@ -320,6 +325,8 @@ def _remote_command_reads_pod_environment(tokens: tuple[str, ...], *, depth: int
             return False
         heredoc_source = _shell_stdin_secret_source(tokens)
         return heredoc_source == "Kubernetes pod environment"
+    if matching_source_arguments(tokens, is_proc_environ_path):
+        return True
     return interpreter_reads_sensitive_env(command_name, tokens[1:])
 
 
@@ -393,25 +400,7 @@ def _remote_copy_source_reads_secret_volume(tokens: tuple[str, ...]) -> bool:
 
 
 def _secret_volume_source_arguments(tokens: tuple[str, ...]) -> tuple[str, ...]:
-    sources: list[str] = []
-    previous_token: str | None = None
-    for token in tokens[1:]:
-        if token in _OUTPUT_REDIRECT_TOKENS:
-            previous_token = token
-            continue
-        normalized_token = secret_volume_argument_value(token)
-        if token.startswith("-") and "=" not in token:
-            previous_token = token
-            continue
-        if not is_secret_volume_path(normalized_token):
-            previous_token = token
-            continue
-        if is_output_redirect_target(token, previous_token=previous_token):
-            previous_token = token
-            continue
-        sources.append(normalized_token)
-        previous_token = token
-    return tuple(dict.fromkeys(sources))
+    return matching_source_arguments(tokens, is_secret_volume_path)
 
 
 def _env_looks_like_wrapper(tokens: tuple[str, ...]) -> bool:
