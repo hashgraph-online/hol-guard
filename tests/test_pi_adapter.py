@@ -253,7 +253,10 @@ class TestPiInstall:
         assert "[deep object omitted by HOL Guard]" in text
         assert "const boundedContent = boundValue(event.content);" in text
         assert "const boundedStdout = boundedOutputText(event.content);" in text
-        assert "boundedToolInput.truncated || boundedContent.truncated || boundedStdout.truncated" in text
+        # Only output truncation gates the reviewed-result replacement; a
+        # truncated tool input alone must not replace the result.
+        assert "boundedContent.truncated || boundedStdout.truncated" in text
+        assert "boundedToolInput.truncated || boundedContent.truncated" not in text
         assert "const blockedToolResults = new Map<string, string>();" in text
         assert 'pi.on("message_end"' in text
         assert "const toolCallId = toolCallIdKey(event.toolCallId);" in text
@@ -261,9 +264,13 @@ class TestPiInstall:
         assert "blockedToolResults.delete(toolCallId);" in text
         # Oversized tool results are truncated and reviewed, not pre-emptively blocked.
         assert "HOL Guard blocked oversized Pi tool output before review" not in text
-        assert 'oversizeNotice' in text
+        assert "oversizeNotice" in text
         assert 'ctx.ui.notify(oversizeNotice, "info")' in text
-        assert 'const response = runGuard(' in text
+        assert "const response = runGuard(" in text
+        # When truncated, the reviewed excerpt (not the full unreviewed output) is
+        # returned to Pi so omitted content never reaches the model.
+        assert "function reviewedToolResult(" in text
+        assert "return reviewedToolResult(limitedContent, event.details, event.isError === true);" in text
         assert "tool_response: limitedContent" in text
         assert "stdout: toolOutput" in text
         assert "contentText(event.content)" not in text
