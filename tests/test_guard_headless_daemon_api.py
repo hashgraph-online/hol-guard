@@ -1926,6 +1926,7 @@ def test_cloud_app_handoff_start_rejects_legacy_handoff_url(tmp_path: Path) -> N
 
     assert status == 410
     assert payload["error"] == "legacy_cloud_handoff_disabled"
+    assert payload["message"] == "Use hol-guard connect for browser OAuth."
     assert auth_token not in json.dumps(payload)
 
 
