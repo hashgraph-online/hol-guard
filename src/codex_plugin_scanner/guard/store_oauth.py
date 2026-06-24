@@ -4,9 +4,10 @@
 
 from __future__ import annotations
 
+from .package_firewall_defaults import build_guard_local_entitlement_defaults
+
 # ruff: noqa: F403,F405
 from .store_base import *
-from .package_firewall_defaults import build_guard_local_entitlement_defaults
 
 
 class StoreOAuthConnectMixin:
