@@ -435,6 +435,13 @@
             "writes_state": true
         },
         {
+            "path": "/v1/supply-chain/package-shims/connect",
+            "method": "POST",
+            "category": "supply_chain",
+            "auth_required": true,
+            "writes_state": true
+        },
+        {
             "path": "/v1/harnesses",
             "method": "GET",
             "category": "config",
