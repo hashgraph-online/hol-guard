@@ -275,7 +275,7 @@ def test_daemon_guard_cloud_connect_persists_oauth_state_for_dashboard(
     assert runtime["cloud_state"] in {"paired_active", "paired_waiting"}
 
 
-def test_connect_repair_copy_points_to_device_code(tmp_path: Path) -> None:
+def test_connect_repair_copy_points_to_browser_sign_in(tmp_path: Path) -> None:
     payload = build_connect_status_payload(
         store=GuardStore(tmp_path / "guard-home"),
         sync_url="https://hol.org/api/guard/receipts/sync",
@@ -285,7 +285,7 @@ def test_connect_repair_copy_points_to_device_code(tmp_path: Path) -> None:
 
     rendered = json.dumps(payload)
     assert payload["repair_action"] == "rerun_connect"
-    assert payload["repair_message"] == "Run hol-guard connect to start OAuth Device Code approval."
+    assert payload["repair_message"] == "Run hol-guard connect to start browser sign-in."
     assert "pairing" not in rendered.lower()
     assert "guardPairSecret" not in rendered
 
