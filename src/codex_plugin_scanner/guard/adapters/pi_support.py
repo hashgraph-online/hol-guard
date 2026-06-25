@@ -98,10 +98,24 @@ def enable_managed_extension(*, settings_path: Path, extension_path: Path) -> No
     raw_extensions = payload.get("extensions")
     extensions = [item for item in raw_extensions if isinstance(item, str)] if isinstance(raw_extensions, list) else []
     extension_value = str(extension_path)
+    extensions = [
+        item
+        for item in extensions
+        if item == extension_value or not _is_managed_extension_reference(item, settings_path=settings_path)
+    ]
     if extension_value not in extensions:
         extensions.append(extension_value)
     payload["extensions"] = extensions
     settings_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _is_managed_extension_reference(value: str, *, settings_path: Path) -> bool:
+    if is_remote_resource(value):
+        return False
+    candidate = Path(value).expanduser()
+    if not candidate.is_absolute():
+        candidate = (settings_path.parent / candidate).expanduser()
+    return candidate.name == PI_MANAGED_EXTENSION_NAME
 
 
 def disable_managed_extension(*, settings_path: Path, extension_path: Path) -> None:
