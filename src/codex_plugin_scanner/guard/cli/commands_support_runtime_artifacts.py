@@ -13,7 +13,7 @@ if TYPE_CHECKING:
         _codex_local_secret_source_label,
         _codex_pipeline_segment_may_read_local_content,
         _codex_post_tool_command_is_read_only_source_inspection,
-        _codex_post_tool_command_text,
+        _codex_post_tool_command_texts,
         _codex_shell_split,
         _codex_source_inspection_can_skip_secret_output,
     )
@@ -42,7 +42,7 @@ from .commands_support_codex_commands import (
     _codex_local_secret_source_label,
     _codex_pipeline_segment_may_read_local_content,
     _codex_post_tool_command_is_read_only_source_inspection,
-    _codex_post_tool_command_text,
+    _codex_post_tool_command_texts,
     _codex_shell_split,
     _codex_source_inspection_can_skip_secret_output,
 )
@@ -347,14 +347,32 @@ def _codex_post_tool_output_artifact(
     if stdout_text:
         response_text = f"{response_text}\n{stdout_text}".strip() if response_text else stdout_text
     tool_name = _coalesce_string(payload.get("tool_name"), "Bash")
-    command_text = _codex_post_tool_command_text(payload)
-    if not command_text:
-        command_text = tool_name
+    command_texts = _codex_post_tool_command_texts(payload)
+    command_text = command_texts[0] if command_texts else tool_name
     local_source_matches = _codex_sensitive_local_source_matches(command_text, cwd=cwd)
     normalized_command = normalize_transparent_shell_command(
         command_text, cwd=cwd, home_dir=home_dir
     ).normalized_command
     kubernetes_secret_source = kubernetes_secret_read_source(normalized_command)
+    for candidate_command_text in command_texts[1:]:
+        candidate_local_source_matches = _codex_sensitive_local_source_matches(candidate_command_text, cwd=cwd)
+        candidate_normalized_command = normalize_transparent_shell_command(
+            candidate_command_text, cwd=cwd, home_dir=home_dir
+        ).normalized_command
+        candidate_kubernetes_secret_source = kubernetes_secret_read_source(candidate_normalized_command)
+        candidate_references_local_content = (
+            bool(candidate_local_source_matches)
+            or candidate_kubernetes_secret_source is not None
+            or _codex_command_may_read_local_content(candidate_command_text, cwd=cwd)
+        )
+        if not candidate_references_local_content:
+            continue
+        command_text = candidate_command_text
+        local_source_matches = candidate_local_source_matches
+        normalized_command = candidate_normalized_command
+        kubernetes_secret_source = candidate_kubernetes_secret_source
+        if candidate_kubernetes_secret_source is not None:
+            break
     sensitive_file_request = extract_sensitive_file_read_request(
         payload.get("tool_name"),
         payload.get("tool_input", payload.get("arguments")),
