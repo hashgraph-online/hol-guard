@@ -42,7 +42,7 @@ from ..cloud_exceptions import (
     dedupe_cloud_exceptions,
     stored_receipt_sync_cloud_exceptions,
 )
-from ..config import GuardConfig, VALID_RECEIPT_REDACTION_LEVELS
+from ..config import VALID_RECEIPT_REDACTION_LEVELS, GuardConfig
 from ..edge_events import build_runtime_session_event
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..package_firewall_entitlement import (
