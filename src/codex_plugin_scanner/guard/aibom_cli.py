@@ -259,10 +259,10 @@ def build_aibom_export_payload(
     return payload
 
 
-_AIBOM_AUTO_SYNC_INTERVAL_SECONDS = 60 * 60
-_AIBOM_EMPTY_SYNC_RETRY_SECONDS = 5 * 60
+_AIBOM_AUTO_SYNC_INTERVAL_SECONDS = 15 * 60  # 15 min — stale AIBOM data undermines trust surfaces
+_AIBOM_EMPTY_SYNC_RETRY_SECONDS = 2 * 60
 _AIBOM_GUARD_EVENTS_BACKOFF_KEY = "aibom_guard_events_backoff"
-_AIBOM_GUARD_EVENTS_BACKOFF_HOURS = 24
+_AIBOM_GUARD_EVENTS_BACKOFF_MINUTES = 5  # matches _GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_MINUTES
 
 
 def _aware_utc_timestamp(value: str) -> datetime:
@@ -313,7 +313,7 @@ def _aibom_guard_events_endpoint_unavailable_recently(store: Any) -> bool:
         parsed = _aware_utc_timestamp(synced_at)
     except (ValueError, OverflowError, TypeError):
         return False
-    return datetime.now(timezone.utc) - parsed < timedelta(hours=_AIBOM_GUARD_EVENTS_BACKOFF_HOURS)
+    return datetime.now(timezone.utc) - parsed < timedelta(minutes=_AIBOM_GUARD_EVENTS_BACKOFF_MINUTES)
 
 
 def _resolve_operator_home_dir(home_dir: Path | None = None) -> Path:

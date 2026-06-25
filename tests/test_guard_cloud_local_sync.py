@@ -240,7 +240,7 @@ def test_guard_cloud_event_queue_handles_large_overflow_without_sqlite_parameter
     assert overflow_events[0]["payload"]["dropped_count"] == 1004
 
 
-def test_sync_guard_events_drains_all_pending_events_when_v1_endpoint_is_unavailable(
+def test_sync_guard_events_preserves_pending_events_when_v1_endpoint_is_unavailable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -275,9 +275,11 @@ def test_sync_guard_events_drains_all_pending_events_when_v1_endpoint_is_unavail
     result = guard_runner_module.sync_guard_events(store)
 
     assert result["sync_reason"] == "guard_events_endpoint_unavailable"
-    assert result["skipped"] == 250
-    assert store.count_guard_events_v1(uploaded=False) == 0
-    assert store.count_guard_events_v1(uploaded=True) == 250
+    assert result["skipped"] == 0
+    assert result["pending_count"] == 200  # first batch of 200 attempted
+    # All events must remain pending — 404 must NOT silently drop data
+    assert store.count_guard_events_v1(uploaded=False) == 250
+    assert store.count_guard_events_v1(uploaded=True) == 0
 
 
 def test_sync_guard_events_preserves_unavailable_summary_when_no_events_pending(tmp_path: Path) -> None:
