@@ -21,6 +21,10 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
     config_path_json = json.dumps(str(settings_path))
     return (
         'import { spawnSync } from "node:child_process";\n'
+        'import { createHash } from "node:crypto";\n'
+        'import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";\n'
+        'import { tmpdir } from "node:os";\n'
+        'import { join } from "node:path";\n'
         'import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";\n'
         "\n"
         f"const GUARD_ARGS = {guard_args_json};\n"
@@ -193,6 +197,31 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  return trimmed.length > 0 ? trimmed : null;\n"
         "}\n"
         "\n"
+        "function referencedPayload(payload: Record<string, unknown>, serializedPayload: string) {\n"
+        "  const directory = mkdtempSync(join(tmpdir(), 'hol-guard-hook-payload-'));\n"
+        "  try { chmodSync(directory, 0o700); } catch {}\n"
+        "  const path = join(directory, 'payload.json');\n"
+        "  writeFileSync(path, serializedPayload, { encoding: 'utf8', mode: 0o600 });\n"
+        "  const sha256 = createHash('sha256').update(serializedPayload).digest('hex');\n"
+        "  const referencePayload: Record<string, unknown> = {\n"
+        "    hook_event_name: payload.hook_event_name,\n"
+        "    config_path: payload.config_path,\n"
+        "    tool_name: payload.tool_name,\n"
+        "    is_error: payload.is_error,\n"
+        "    guard_payload_ref: {\n"
+        "      version: 1,\n"
+        "      path,\n"
+        "      sha256,\n"
+        "      encoding: 'json',\n"
+        "      serialized_chars: serializedPayload.length,\n"
+        "    },\n"
+        "  };\n"
+        "  return {\n"
+        "    payload: referencePayload,\n"
+        "    cleanup: () => { try { rmSync(directory, { recursive: true, force: true }); } catch {} },\n"
+        "  };\n"
+        "}\n"
+        "\n"
         "function runGuard(\n"
         "  payload: Record<string, unknown>,\n"
         "  cwd?: string,\n"
@@ -203,6 +232,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         '  if (workspace) args.push("--workspace", workspace);\n'
         "  let payloadToSend = payload;\n"
         "  let serializedPayload = '';\n"
+        "  let cleanupPayloadReference = () => {};\n"
         "  try {\n"
         "    serializedPayload = JSON.stringify(payloadToSend);\n"
         "  } catch (error) {\n"
@@ -215,24 +245,28 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  }\n"
         "  if (\n"
         "    options?.enforceSizeCap === true &&\n"
-        "    serializedPayload.length > GUARD_MAX_SERIALIZED_PAYLOAD_CHARS &&\n"
-        '    payloadToSend.hook_event_name === "PostToolUse" &&\n'
-        '    typeof payloadToSend.stdout === "string"\n'
+        "    serializedPayload.length > GUARD_MAX_SERIALIZED_PAYLOAD_CHARS\n"
         "  ) {\n"
-        "    const reducedPayload = { ...payloadToSend };\n"
-        "    delete reducedPayload.stdout;\n"
+        "    const referenced = referencedPayload(payloadToSend, serializedPayload);\n"
+        "    payloadToSend = referenced.payload;\n"
+        "    cleanupPayloadReference = referenced.cleanup;\n"
         "    try {\n"
-        "      const reducedSerializedPayload = JSON.stringify(reducedPayload);\n"
-        "      if (reducedSerializedPayload.length <= GUARD_MAX_SERIALIZED_PAYLOAD_CHARS) {\n"
-        "        payloadToSend = reducedPayload;\n"
-        "        serializedPayload = reducedSerializedPayload;\n"
-        "      }\n"
-        "    } catch {}\n"
+        "      serializedPayload = JSON.stringify(payloadToSend);\n"
+        "    } catch (error) {\n"
+        "      cleanupPayloadReference();\n"
+        "      return {\n"
+        '        decision: "deny",\n'
+        "        reason: `HOL Guard could not serialize Pi hook payload reference: ${\n"
+        "          error instanceof Error ? error.message : String(error)\n"
+        "        }`,\n"
+        "      };\n"
+        "    }\n"
         "  }\n"
         "  if (\n"
         "    options?.enforceSizeCap === true &&\n"
         "    serializedPayload.length > GUARD_MAX_SERIALIZED_PAYLOAD_CHARS\n"
         "  ) {\n"
+        "    cleanupPayloadReference();\n"
         "    return {\n"
         '      decision: "deny",\n'
         '      reason: "HOL Guard blocked this Pi hook payload before review because it exceeded "\n'
@@ -244,6 +278,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         '    encoding: "utf-8",\n'
         "    timeout: GUARD_TIMEOUT_MS,\n"
         "  });\n"
+        "  cleanupPayloadReference();\n"
         "  if (result.error) {\n"
         "    const resultError = result.error as (Error & { code?: unknown }) | undefined;\n"
         "    const errorMessage = resultError instanceof Error ? resultError.message : String(result.error);\n"
@@ -348,12 +383,11 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    };\n"
         "  });\n"
         '  pi.on("tool_result", async (event, ctx) => {\n'
-        "    const boundedToolInput = boundValue(\n"
+        "    const toolInput =\n"
         "      (event as { input?: Record<string, unknown> }).input ??\n"
         "      (event as { toolInput?: Record<string, unknown> }).toolInput ??\n"
         "      (event as { arguments?: Record<string, unknown> }).arguments ??\n"
-        "      {},\n"
-        "    );\n"
+        "      {};\n"
         "    const boundedContent = boundValue(event.content);\n"
         "    const boundedStdout = boundedOutputText(event.content);\n"
         "    // Only the reviewed *output* content determines whether the result is\n"
@@ -363,19 +397,17 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    const toolOutput = boundedStdout.value as string;\n"
         "    const reviewedContent = outputTruncated ? [{ type: 'text', text: toolOutput }] : boundedContent.value;\n"
         "    const oversizeNotice = outputTruncated\n"
-        '        ? "HOL Guard reviewed a size-bounded excerpt of a large Pi tool result; "\n'
+        '        ? "HOL Guard reviewed the full large Pi tool result; "\n'
         '          + "the model receives the reviewed excerpt, not the full output."\n'
         "        : null;\n"
         '    if (oversizeNotice) ctx.ui.notify(oversizeNotice, "info");\n'
-        "    const toolInput =\n"
-        "      boundedToolInput.value as Record<string, unknown>;\n"
         "    const response = runGuard(\n"
         "      {\n"
         '        hook_event_name: "PostToolUse",\n'
         "        config_path: GUARD_CONFIG_PATH,\n"
         "        tool_name: event.toolName,\n"
         "        tool_input: toolInput,\n"
-        "        tool_response: reviewedContent,\n"
+        "        tool_response: event.content,\n"
         "        stdout: toolOutput,\n"
         "        is_error: event.isError === true,\n"
         "      },\n"
