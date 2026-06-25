@@ -192,7 +192,7 @@ class TestPiInstall:
         assert 'pi.on("tool_result"' in text
         assert 'pi.on("input"' in text
         assert 'hook_event_name: "PostToolUse"' in text
-        assert "tool_response: limitedContent" in text
+        assert "tool_response: reviewedContent" in text
         assert "const GUARD_CONFIG_PATH =" in text
         assert "config_path: GUARD_CONFIG_PATH" in text
         assert '"--harness", "pi"' in text
@@ -253,6 +253,10 @@ class TestPiInstall:
         assert "[deep object omitted by HOL Guard]" in text
         assert "const boundedContent = boundValue(event.content);" in text
         assert "const boundedStdout = boundedOutputText(event.content);" in text
+        assert (
+            "const reviewedContent = outputTruncated ? [{ type: 'text', text: toolOutput }] : boundedContent.value;"
+            in text
+        )
         # Only output truncation gates the reviewed-result replacement; a
         # truncated tool input alone must not replace the result.
         assert "boundedContent.truncated || boundedStdout.truncated" in text
@@ -270,8 +274,8 @@ class TestPiInstall:
         # When truncated, the reviewed excerpt (not the full unreviewed output) is
         # returned to Pi so omitted content never reaches the model.
         assert "function reviewedToolResult(" in text
-        assert "return reviewedToolResult(limitedContent, event.details, event.isError === true);" in text
-        assert "tool_response: limitedContent" in text
+        assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
+        assert "tool_response: reviewedContent" in text
         assert "stdout: toolOutput" in text
         assert "contentText(event.content)" not in text
         assert "options?.enforceSizeCap === true" in text
