@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..adapters.kimi_hooks import normalize_kimi_prompt
+from ..runtime.hook_payload_reference import hydrate_hook_payload_reference
 
 def _emit_native_hook_response(
     *,
@@ -389,11 +390,15 @@ def _load_hook_payload(
 ) -> dict[str, object]:
     if event_file:
         payload = json.loads(Path(event_file).read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            payload = hydrate_hook_payload_reference(payload)
         return _normalize_hook_payload(payload, harness=harness) if isinstance(payload, dict) else {}
     raw = input_text.strip() if isinstance(input_text, str) else sys.stdin.read().strip()
     if not raw:
         return {}
     payload = json.loads(raw)
+    if isinstance(payload, dict):
+        payload = hydrate_hook_payload_reference(payload)
     return _normalize_hook_payload(payload, harness=harness) if isinstance(payload, dict) else {}
 
 _ACTION_ENVELOPE_HARNESSES = frozenset(
