@@ -325,8 +325,10 @@ def test_sync_receipts_keeps_receipt_success_when_v1_events_endpoint_is_missing(
 
     assert result["receipts"] == 1
     assert result["guard_events_v1"]["sync_skipped"] is True
-    assert result["guard_events_v1"]["skipped"] == 1
-    assert store.list_guard_events_v1(uploaded=False, limit=10) == []
+    # Events must NOT be marked as skipped/dropped on 404 — they remain pending for retry
+    assert result["guard_events_v1"]["skipped"] == 0
+    pending = store.list_guard_events_v1(uploaded=False, limit=10)
+    assert len(pending) == 1  # The receipt.created event is still pending
 
 
 def test_sync_guard_events_marks_rejected_events_processed(tmp_path) -> None:

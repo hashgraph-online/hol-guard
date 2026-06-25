@@ -280,7 +280,7 @@ _RECEIPT_SYNC_CURSOR_PAGE_SIZE = 200
 _RECEIPT_SYNC_CURSOR_BACKFILL_ROWS = 200
 _PAIN_SIGNAL_TIMEOUT_SECONDS = 10
 _PAIN_SIGNAL_RETRY_TIMEOUT_SECONDS = 90
-_GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_HOURS = 24
+_GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_MINUTES = 5  # single 404 shouldn't disable sync for a full day
 
 
 class GuardSyncNotConfiguredError(RuntimeError):
@@ -1840,14 +1840,15 @@ def sync_guard_events(
             )
         except urllib.error.HTTPError as error:
             if error.code == 404:
-                skipped_count = _mark_all_guard_events_v1_uploaded(store, synced_at)
+                pending_count = len(pending_events)
                 summary: dict[str, object] = {
                     "synced_at": synced_at,
-                    "events": total_events + skipped_count,
+                    "events": total_events,
                     "accepted": total_accepted,
-                    "skipped": skipped_count,
+                    "skipped": 0,
                     "sync_skipped": True,
                     "sync_reason": "guard_events_endpoint_unavailable",
+                    "pending_count": pending_count,
                 }
                 store.set_sync_payload("guard_events_v1_summary", summary, synced_at)
                 return summary
@@ -1897,22 +1898,6 @@ def sync_guard_events(
     return summary
 
 
-def _mark_all_guard_events_v1_uploaded(store: GuardStore, uploaded_at: str) -> int:
-    total_marked = 0
-    while True:
-        pending_events = store.list_guard_events_v1(uploaded=False, limit=200)
-        if not pending_events:
-            break
-        event_ids = [str(event["event_id"]) for event in pending_events if isinstance(event.get("event_id"), str)]
-        if not event_ids:
-            break
-        marked = store.mark_guard_events_v1_uploaded(event_ids, uploaded_at)
-        total_marked += marked
-        if marked == 0:
-            break
-    return total_marked
-
-
 def _record_guard_events_sync_failure(
     store: GuardStore,
     *,
@@ -1950,7 +1935,7 @@ def _guard_events_endpoint_unavailable_recently(store: GuardStore) -> bool:
     parsed = _parse_iso_timestamp(synced_at)
     if parsed is None:
         return True
-    return datetime.now(timezone.utc) - parsed < timedelta(hours=_GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_HOURS)
+    return datetime.now(timezone.utc) - parsed < timedelta(minutes=_GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_MINUTES)
 
 
 def sync_runtime_session(
@@ -2144,12 +2129,6 @@ def sync_pain_signals(
                 )
             except urllib.error.HTTPError as error:
                 if error.code == 404:
-                    current_event_id = last_processed_event_id
-                    store.set_sync_payload(
-                        "pain_signal_cursor",
-                        {"event_id": current_event_id},
-                        _now(),
-                    )
                     return uploaded_count
                 raise RuntimeError(_sync_http_error_message(error)) from error
             except OSError as error:
