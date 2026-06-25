@@ -227,8 +227,8 @@ def test_sync_aibom_snapshots_if_due_skips_recent_sync(tmp_path: Path, monkeypat
     now = "2026-06-10T13:00:00+00:00"
     store.set_sync_payload(
         "aibom_sync_summary",
-        {"synced": True, "synced_at": "2026-06-10T12:30:00+00:00"},
-        "2026-06-10T12:30:00+00:00",
+        {"synced": True, "synced_at": "2026-06-10T12:55:00+00:00"},
+        "2026-06-10T12:55:00+00:00",
     )
 
     summary = sync_aibom_snapshots_if_due(store, generated_at=now)
@@ -247,11 +247,11 @@ def test_sync_aibom_snapshots_if_due_skips_recent_empty_sync(tmp_path: Path, mon
         "aibom_sync_summary",
         {
             "synced": True,
-            "synced_at": "2026-06-10T12:00:00+00:00",
+            "synced_at": "2026-06-10T12:02:30+00:00",
             "snapshots": 0,
             "accepted": 0,
         },
-        "2026-06-10T12:00:00+00:00",
+        "2026-06-10T12:02:30+00:00",
     )
 
     summary = sync_aibom_snapshots_if_due(store, generated_at=now)
