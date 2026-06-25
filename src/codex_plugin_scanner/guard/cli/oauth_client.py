@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import secrets
 import urllib.parse
 from dataclasses import dataclass
@@ -19,17 +20,14 @@ LOCAL_GUARD_OAUTH_CLIENT_ID = "guard-local-daemon-local"
 
 PRODUCTION_GUARD_ISSUER = "https://hol.org"
 STAGING_GUARD_ISSUER = "https://staging.hol.org"
-REGISTRY_STAGING_GUARD_ISSUER = "https://registry-staging.hol.org"
 LOCAL_GUARD_ISSUER = "http://127.0.0.1:3000"
 
 _ALLOWED_PRODUCTION_GUARD_ORIGINS = frozenset({PRODUCTION_GUARD_ISSUER})
-_ALLOWED_STAGING_GUARD_ORIGINS = frozenset({STAGING_GUARD_ISSUER, REGISTRY_STAGING_GUARD_ISSUER})
+_ALLOWED_STAGING_GUARD_ORIGINS = frozenset({STAGING_GUARD_ISSUER})
 _LOOPBACK_GUARD_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _DOCKER_LAB_GUARD_HOSTS = frozenset({"host.docker.internal"})
 
-_GUARD_OAUTH_PATH_PREFIXES: dict[str, str] = {
-    REGISTRY_STAGING_GUARD_ISSUER: "/points",
-}
+_GUARD_OAUTH_PATH_PREFIXES: dict[str, str] = {}
 
 _PKCE_ALLOWED_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
 
@@ -76,6 +74,43 @@ def _is_local_guard_origin(origin: str) -> bool:
     return _is_loopback_guard_origin(origin) or _is_docker_lab_guard_origin(origin)
 
 
+def _resolve_extra_staging_origins() -> tuple[frozenset[str], dict[str, str]]:
+    """Build (origins, path_prefixes) from HOL_GUARD_STAGING_ORIGIN env var.
+
+    Format: ``origin1[|prefix1],origin2[|prefix2],...``
+    Example: ``https://my-staging.example.com|/points``
+    """
+    raw = os.environ.get("HOL_GUARD_STAGING_ORIGIN", "").strip()
+    if not raw:
+        return frozenset(), {}
+    origins: set[str] = set()
+    prefixes: dict[str, str] = {}
+    for entry in raw.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        parts = entry.split("|", 1)
+        origin = parts[0].strip()
+        if not origin:
+            continue
+        origins.add(origin)
+        if len(parts) == 2 and parts[1].strip():
+            prefixes[origin.lower()] = parts[1].strip()
+    return frozenset(origins), prefixes
+
+
+def _all_allowed_staging_origins() -> frozenset[str]:
+    extra, _ = _resolve_extra_staging_origins()
+    return _ALLOWED_STAGING_GUARD_ORIGINS | extra
+
+
+def _all_path_prefixes() -> dict[str, str]:
+    _, extra_prefixes = _resolve_extra_staging_origins()
+    result: dict[str, str] = dict(_GUARD_OAUTH_PATH_PREFIXES)
+    result.update(extra_prefixes)
+    return result
+
+
 def is_guard_oauth_origin_allowed(issuer: str) -> bool:
     try:
         origin = _issuer_origin(issuer)
@@ -83,7 +118,7 @@ def is_guard_oauth_origin_allowed(issuer: str) -> bool:
         return False
     return (
         origin in _ALLOWED_PRODUCTION_GUARD_ORIGINS
-        or origin in _ALLOWED_STAGING_GUARD_ORIGINS
+        or origin in _all_allowed_staging_origins()
         or _is_local_guard_origin(origin)
     )
 
@@ -92,7 +127,7 @@ def _require_allowlisted_guard_oauth_origin(issuer: str) -> str:
     origin = _issuer_origin(issuer)
     if (
         origin in _ALLOWED_PRODUCTION_GUARD_ORIGINS
-        or origin in _ALLOWED_STAGING_GUARD_ORIGINS
+        or origin in _all_allowed_staging_origins()
         or _is_local_guard_origin(origin)
     ):
         return origin
@@ -106,7 +141,7 @@ def _oauth_endpoints(origin: str) -> GuardOAuthClientConfig:
         "staging": STAGING_GUARD_OAUTH_CLIENT_ID,
         "local": LOCAL_GUARD_OAUTH_CLIENT_ID,
     }[environment]
-    prefix = _GUARD_OAUTH_PATH_PREFIXES.get(origin.lower(), "")
+    prefix = _all_path_prefixes().get(origin.lower(), "")
     return GuardOAuthClientConfig(
         issuer=origin,
         authorize_endpoint=f"{origin}{prefix}/api/guard/oauth/authorize",
@@ -121,15 +156,15 @@ def detect_guard_oauth_environment(issuer: str) -> str:
     origin = _require_allowlisted_guard_oauth_origin(issuer).lower()
     if _is_local_guard_origin(origin):
         return "local"
-    if origin in _ALLOWED_STAGING_GUARD_ORIGINS:
+    if origin in _all_allowed_staging_origins():
         return "staging"
     return "production"
 
 
 def guard_api_base_path(issuer: str) -> str:
-    """Return the API path prefix for a given issuer (e.g. '/points' for registry-staging)."""
+    """Return the API path prefix for a given issuer (e.g. '/points' for a staging host)."""
     origin = _require_allowlisted_guard_oauth_origin(issuer)
-    return _GUARD_OAUTH_PATH_PREFIXES.get(origin.lower(), "")
+    return _all_path_prefixes().get(origin.lower(), "")
 
 
 def resolve_guard_oauth_client_config(issuer: str) -> GuardOAuthClientConfig:
