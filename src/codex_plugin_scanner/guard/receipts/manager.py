@@ -11,9 +11,19 @@ from ..models import GUARD_ACTION_VALUES, GuardAction, GuardReceipt
 from ..runtime.actions import GuardActionEnvelope
 
 
-def _redacted_envelope_dict(envelope: GuardActionEnvelope) -> dict[str, object]:
-    """Return a cloud-safe redacted view of the action envelope."""
-    return {
+def _redacted_envelope_dict(
+    envelope: GuardActionEnvelope,
+    *,
+    redaction_level: str = "full",
+) -> dict[str, object]:
+    """Return a cloud-safe redacted view of the action envelope.
+
+    ``redaction_level`` controls how much command detail is included:
+    - ``full`` (default): command text never leaves the daemon (counts/booleans only)
+    - ``partial``: command text included (already secret-scrubbed via redact_text at source)
+    - ``none``: command text, target paths, network hosts, package name included
+    """
+    base: dict[str, object] = {
         "schema_version": envelope.schema_version,
         "action_id": envelope.action_id,
         "harness": envelope.harness,
@@ -33,6 +43,21 @@ def _redacted_envelope_dict(envelope: GuardActionEnvelope) -> dict[str, object]:
         "pre_execution_result": envelope.pre_execution_result,
         "script_name": envelope.script_name,
     }
+
+    if redaction_level == "none":
+        if envelope.command is not None:
+            base["command"] = envelope.command
+        if envelope.target_paths:
+            base["target_paths"] = list(envelope.target_paths)
+        if envelope.network_hosts:
+            base["network_hosts"] = list(envelope.network_hosts)
+        if envelope.package_name is not None and len(envelope.package_name) > 0:
+            base["package_name"] = envelope.package_name
+    elif redaction_level == "partial":
+        if envelope.command is not None:
+            base["command"] = envelope.command
+
+    return base
 
 
 def _auto_diff_summary(changed_capabilities: list[str]) -> str:

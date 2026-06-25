@@ -42,7 +42,7 @@ from ..cloud_exceptions import (
     dedupe_cloud_exceptions,
     stored_receipt_sync_cloud_exceptions,
 )
-from ..config import GuardConfig
+from ..config import VALID_RECEIPT_REDACTION_LEVELS, GuardConfig, load_guard_config
 from ..edge_events import build_runtime_session_event
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..package_firewall_entitlement import (
@@ -1213,6 +1213,7 @@ def sync_receipts(
     team_policy_pack_payload: dict[str, object] | None = None
     remote_decisions: set[PolicyDecision] = set()
     device_id, device_name = _guard_device_metadata(store)
+    redaction_level = _resolve_cloud_receipt_redaction_level(store)
     local_guard_online_at = _now()
     sync_context = _receipt_sync_context(
         store=store,
@@ -1228,6 +1229,7 @@ def sync_receipts(
                     receipt_batch,
                     device_id=device_id,
                     device_name=device_name,
+                    redaction_level=redaction_level,
                 ),
                 "syncContext": sync_context,
             }
@@ -1361,6 +1363,18 @@ def sync_receipts(
                 now,
             )
             store.set_sync_payload("policy_bundle_last_error", {}, now)
+            # Extract cloud-configured receipt redaction level from policy bundle
+            cloud_redaction_level = non_empty_string(
+                validated_policy_bundle.get("receiptRedactionLevel")
+                if isinstance(validated_policy_bundle, dict)
+                else None
+            )
+            if cloud_redaction_level and cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
+                store.set_sync_payload(
+                    "cloud_receipt_redaction_level",
+                    {"level": cloud_redaction_level, "updated_at": now},
+                    now,
+                )
             remote_decisions.update(
                 _build_policy_bundle_decisions(
                     validated_policy_bundle,
@@ -3585,8 +3599,17 @@ def _cloud_sync_receipts_payload(
     *,
     device_id: str,
     device_name: str,
+    redaction_level: str = "full",
 ) -> list[dict[str, object]]:
-    return [_cloud_sync_receipt_payload(receipt, device_id=device_id, device_name=device_name) for receipt in receipts]
+    return [
+        _cloud_sync_receipt_payload(
+            receipt,
+            device_id=device_id,
+            device_name=device_name,
+            redaction_level=redaction_level,
+        )
+        for receipt in receipts
+    ]
 
 
 def _dedupe_sync_payload_items(items: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -3687,11 +3710,32 @@ def _persist_receipt_sync_cursor(
     store.set_sync_payload("receipt_sync_cursor", payload, synced_at)
 
 
+def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
+    """Resolve the receipt redaction level for cloud sync.
+
+    Priority: cloud-configured level (from policy bundle downlink) >
+    local GuardConfig.receipt_redaction_level > 'full' (safest).
+    """
+    payload = store.get_sync_payload("cloud_receipt_redaction_level")
+    if isinstance(payload, dict):
+        level = payload.get("level")
+        if isinstance(level, str) and level in VALID_RECEIPT_REDACTION_LEVELS:
+            return level
+    try:
+        config = load_guard_config(store.guard_home)
+        if config.receipt_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
+            return config.receipt_redaction_level
+    except Exception:
+        pass
+    return "full"
+
+
 def _cloud_sync_receipt_payload(
     receipt: dict[str, object],
     *,
     device_id: str,
     device_name: str,
+    redaction_level: str = "full",
 ) -> dict[str, object]:
     receipt_fingerprint = _cloud_sync_receipt_fingerprint(receipt)
     artifact_id = _optional_string(receipt.get("artifact_id")) or f"guard:local-receipt:{receipt_fingerprint[:24]}"
@@ -3743,7 +3787,30 @@ def _cloud_sync_receipt_payload(
         payload["publisher"] = publisher
     redacted_envelope = receipt.get("envelope_redacted_json")
     if isinstance(redacted_envelope, dict) and redacted_envelope:
-        payload["envelopeRedacted"] = redacted_envelope
+        # When redaction level is not "full", enrich the envelope with command text
+        # from the full envelope (already secret-scrubbed at source via redact_text)
+        if redaction_level != "full":
+            full_envelope = receipt.get("action_envelope_json")
+            if isinstance(full_envelope, dict):
+                enriched = dict(redacted_envelope)
+                command = full_envelope.get("command")
+                if isinstance(command, str) and command:
+                    enriched["command"] = command
+                if redaction_level == "none":
+                    target_paths = full_envelope.get("target_paths")
+                    if isinstance(target_paths, list):
+                        enriched["target_paths"] = target_paths
+                    network_hosts = full_envelope.get("network_hosts")
+                    if isinstance(network_hosts, list):
+                        enriched["network_hosts"] = network_hosts
+                    package_name = full_envelope.get("package_name")
+                    if isinstance(package_name, str) and package_name:
+                        enriched["package_name"] = package_name
+                payload["envelopeRedacted"] = enriched
+            else:
+                payload["envelopeRedacted"] = redacted_envelope
+        else:
+            payload["envelopeRedacted"] = redacted_envelope
     return payload
 
 

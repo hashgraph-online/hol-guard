@@ -178,8 +178,11 @@ EDITABLE_GUARD_SETTING_KEYS = frozenset(
         "telemetry",
         "sync",
         "billing",
+        "receipt_redaction_level",
     }
 )
+VALID_RECEIPT_REDACTION_LEVELS = frozenset({"full", "partial", "none"})
+
 VALID_APPROVAL_SURFACE_POLICIES = {"auto-open-once", "native-only", "approval-center"}
 BARE_TOML_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 WORKSPACE_BLOCKED_POLICY_KEYS = frozenset(
@@ -275,6 +278,7 @@ class GuardConfig:
     desktop_notifications: bool = True
     telemetry: bool = False
     sync: bool = False
+    receipt_redaction_level: str = "full"
     billing: bool = False
     runtime_detector_registry: bool = False
     runtime_detector_timeout_ms: int = 50
@@ -334,6 +338,12 @@ def _read_toml(path: Path) -> dict[str, object]:
         return payload if isinstance(payload, dict) else {}
     except OSError:
         return {}
+
+
+def _coerce_loaded_receipt_redaction_level(value: object) -> str:
+    if isinstance(value, str) and value in VALID_RECEIPT_REDACTION_LEVELS:
+        return value
+    return "full"
 
 
 def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardConfig:
@@ -404,6 +414,7 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "desktop_notifications": config.desktop_notifications,
         "telemetry": config.telemetry,
         "sync": config.sync,
+        "receipt_redaction_level": config.receipt_redaction_level,
         "billing": config.billing,
         "approval_gate": public_config(config.guard_home).to_dict(),
     }
@@ -479,6 +490,10 @@ def _coerce_editable_setting(key: str, value: object) -> object:
         if isinstance(value, bool):
             return value
         raise ValueError(f"{key} must be true or false.")
+    if key == "receipt_redaction_level":
+        if isinstance(value, str) and value in VALID_RECEIPT_REDACTION_LEVELS:
+            return value
+        raise ValueError(f"Invalid receipt redaction level: {value!r}")
     raise ValueError(f"Unsupported Guard setting: {key}")
 
 
@@ -691,6 +706,7 @@ def overlay_synced_guard_policy(
         config.subprocess_action,
     )
     sync_enabled = payload.get("syncEnabled")
+    cloud_redaction_level = payload.get("receiptRedactionLevel")
     return replace(
         config,
         mode=next_mode,
@@ -700,6 +716,11 @@ def overlay_synced_guard_policy(
         new_network_domain_action=new_network_domain_action,
         subprocess_action=subprocess_action,
         sync=bool(sync_enabled) if isinstance(sync_enabled, bool) else config.sync,
+        receipt_redaction_level=(
+            cloud_redaction_level
+            if cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS
+            else config.receipt_redaction_level
+        ),
     )
 
 
