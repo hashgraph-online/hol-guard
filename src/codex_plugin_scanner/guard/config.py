@@ -669,18 +669,47 @@ def _toml_inline_table(value: Mapping[str, object]) -> str:
 
 def overlay_synced_guard_policy(
     config: GuardConfig,
-    payload: object,
+    payload: dict[str, object] | None,
 ) -> GuardConfig:
     if not isinstance(payload, dict):
         return config
-    security_level = _coerce_loaded_security_level(payload.get("security_level"))
-    risk_actions = _coerce_risk_action_map(payload.get("risk_actions"))
-    harness_risk_actions = _coerce_harness_risk_action_map(payload.get("harness_risk_actions"))
+    next_mode = config.mode
+    raw_mode = payload.get("mode")
+    if isinstance(raw_mode, str) and raw_mode in VALID_GUARD_MODES:
+        next_mode = raw_mode
+    default_action = _coerce_action_value(payload.get("defaultAction"), config.default_action)
+    unknown_publisher_action = _coerce_action_value(
+        payload.get("unknownPublisherAction"),
+        config.unknown_publisher_action,
+    )
+    changed_hash_action = _coerce_action_value(
+        payload.get("changedHashAction"),
+        config.changed_hash_action,
+    )
+    new_network_domain_action = _coerce_action_value(
+        payload.get("newNetworkDomainAction"),
+        config.new_network_domain_action,
+    )
+    subprocess_action = _coerce_action_value(
+        payload.get("subprocessAction"),
+        config.subprocess_action,
+    )
+    sync_enabled = payload.get("syncEnabled")
+    cloud_redaction_level = payload.get("receiptRedactionLevel")
     return replace(
         config,
-        security_level=security_level,
-        risk_actions=risk_actions,
-        harness_risk_actions=harness_risk_actions,
+        mode=next_mode,
+        default_action=default_action,
+        unknown_publisher_action=unknown_publisher_action,
+        changed_hash_action=changed_hash_action,
+        new_network_domain_action=new_network_domain_action,
+        subprocess_action=subprocess_action,
+        sync=bool(sync_enabled) if isinstance(sync_enabled, bool) else config.sync,
+        receipt_redaction_level=(
+            cloud_redaction_level
+            if cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS
+            else config.receipt_redaction_level
+        ),
     )
 
 
