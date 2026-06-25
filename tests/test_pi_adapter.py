@@ -249,7 +249,9 @@ class TestPiInstall:
         assert "function toolCallIdKey(" in text
         assert "guard_payload_ref" in text
         assert "mkdtempSync(join(tmpdir(), 'hol-guard-hook-payload-'))" in text
-        assert "createHash('sha256').update(serializedPayload).digest('hex')" in text
+        assert "createCipheriv('aes-256-gcm', key, nonce)" in text
+        assert "createHash('sha256').update(encrypted.ciphertext).digest('hex')" in text
+        assert "encryption: 'aes-256-gcm'" in text
         assert "if (value === undefined) return { value: undefined, truncated: false };" in text
         assert "typeof value === 'bigint'" in text
         assert "value.toString()" in text

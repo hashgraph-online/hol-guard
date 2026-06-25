@@ -21,7 +21,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
     config_path_json = json.dumps(str(settings_path))
     return (
         'import { spawnSync } from "node:child_process";\n'
-        'import { createHash } from "node:crypto";\n'
+        'import { createCipheriv, createHash, randomBytes } from "node:crypto";\n'
         'import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";\n'
         'import { tmpdir } from "node:os";\n'
         'import { join } from "node:path";\n'
@@ -197,12 +197,29 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  return trimmed.length > 0 ? trimmed : null;\n"
         "}\n"
         "\n"
+        "function base64Url(value: Buffer): string {\n"
+        "  return value.toString('base64url');\n"
+        "}\n"
+        "\n"
+        "function encryptedPayload(serializedPayload: string) {\n"
+        "  const key = randomBytes(32);\n"
+        "  const nonce = randomBytes(12);\n"
+        "  const cipher = createCipheriv('aes-256-gcm', key, nonce);\n"
+        "  const ciphertext = Buffer.concat([\n"
+        "    cipher.update(serializedPayload, 'utf8'),\n"
+        "    cipher.final(),\n"
+        "    cipher.getAuthTag(),\n"
+        "  ]);\n"
+        "  return { ciphertext, key: base64Url(key), nonce: base64Url(nonce) };\n"
+        "}\n"
+        "\n"
         "function referencedPayload(payload: Record<string, unknown>, serializedPayload: string) {\n"
         "  const directory = mkdtempSync(join(tmpdir(), 'hol-guard-hook-payload-'));\n"
         "  try { chmodSync(directory, 0o700); } catch {}\n"
         "  const path = join(directory, 'payload.json');\n"
-        "  writeFileSync(path, serializedPayload, { encoding: 'utf8', mode: 0o600 });\n"
-        "  const sha256 = createHash('sha256').update(serializedPayload).digest('hex');\n"
+        "  const encrypted = encryptedPayload(serializedPayload);\n"
+        "  writeFileSync(path, encrypted.ciphertext, { mode: 0o600 });\n"
+        "  const sha256 = createHash('sha256').update(encrypted.ciphertext).digest('hex');\n"
         "  const referencePayload: Record<string, unknown> = {\n"
         "    hook_event_name: payload.hook_event_name,\n"
         "    config_path: payload.config_path,\n"
@@ -213,6 +230,9 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "      path,\n"
         "      sha256,\n"
         "      encoding: 'json',\n"
+        "      encryption: 'aes-256-gcm',\n"
+        "      key: encrypted.key,\n"
+        "      nonce: encrypted.nonce,\n"
         "      serialized_chars: serializedPayload.length,\n"
         "    },\n"
         "  };\n"
