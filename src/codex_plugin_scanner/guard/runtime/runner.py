@@ -10,6 +10,7 @@ import re
 import socket
 import subprocess
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -1443,7 +1444,13 @@ def sync_receipts(
         exceptions=deduped_exceptions,
         now=now,
     )
-    pain_signals_uploaded = sync_pain_signals(store, auth_context=resolved_auth_context)
+    try:
+        pain_signals_uploaded = sync_pain_signals(store, auth_context=resolved_auth_context)
+    except RuntimeError as pain_signal_error:
+        if "429" in str(pain_signal_error):
+            pain_signals_uploaded = 0
+        else:
+            raise
     value_metrics = _build_value_metrics(store)
     weekly_digest = _build_weekly_firewall_digest(metrics=value_metrics, now=now)
     summary: dict[str, object] = {
@@ -1494,7 +1501,7 @@ def _guard_cloud_http_error_details(error: urllib.error.HTTPError) -> tuple[str,
         raw_body = error.read().decode("utf-8", errors="replace")
     except OSError:
         raw_body = ""
-    retryable = error.code in {503, 524}
+    retryable = error.code in {429, 503, 524}
     payload: object = None
     if raw_body:
         try:
@@ -1852,6 +1859,20 @@ def sync_guard_events(
                 }
                 store.set_sync_payload("guard_events_v1_summary", summary, synced_at)
                 return summary
+            if error.code == 429:
+                retry_after_seconds = _parse_retry_after_header(error)
+                summary: dict[str, object] = {
+                    "synced_at": synced_at,
+                    "events": total_events,
+                    "accepted": total_accepted,
+                    "skipped": 0,
+                    "sync_skipped": True,
+                    "sync_reason": "guard_events_rate_limited",
+                    "pending_count": len(pending_events),
+                    "retry_after_seconds": retry_after_seconds,
+                }
+                store.set_sync_payload("guard_events_v1_summary", summary, synced_at)
+                return summary
             if error.code == 403:
                 is_plan, message = _check_plan_restriction_403(error)
                 if is_plan:
@@ -1898,6 +1919,23 @@ def sync_guard_events(
     return summary
 
 
+def _parse_retry_after_header(error: urllib.error.HTTPError) -> int:
+    """Parse the Retry-After header from a 429 response. Returns seconds to wait."""
+    retry_after = error.headers.get("Retry-After") if error.headers else None
+    if not retry_after:
+        return 60  # Default: 60 seconds
+    try:
+        return max(1, int(retry_after))
+    except ValueError:
+        pass
+    try:
+        retry_date = datetime.fromisoformat(retry_after.replace("Z", "+00:00"))
+        delta = (retry_date - datetime.now(timezone.utc)).total_seconds()
+        return max(1, int(delta))
+    except (ValueError, TypeError):
+        return 60
+
+
 def _record_guard_events_sync_failure(
     store: GuardStore,
     *,
@@ -1927,7 +1965,7 @@ def _guard_events_endpoint_unavailable_recently(store: GuardStore) -> bool:
     summary = store.get_sync_payload("guard_events_v1_summary")
     if not isinstance(summary, dict):
         return False
-    if summary.get("sync_reason") != "guard_events_endpoint_unavailable":
+    if summary.get("sync_reason") not in ("guard_events_endpoint_unavailable", "guard_events_rate_limited"):
         return False
     synced_at = summary.get("synced_at")
     if not isinstance(synced_at, str):
@@ -1980,6 +2018,25 @@ def sync_runtime_session(
                 "runtime_surface": session_payload["surface"],
                 "runtime_workspace": session_payload["workspace"],
                 "runtime_device_id": session_payload["deviceId"],
+            }
+            store.set_sync_payload("runtime_session_summary", summary, recorded_at)
+            return summary
+        if error.code == 429:
+            retry_after_seconds = _parse_retry_after_header(error)
+            recorded_at = _now()
+            summary = {
+                "synced_at": None,
+                "runtime_session_synced_at": None,
+                "runtime_session_id": session_payload["sessionId"],
+                "runtime_sessions_visible": 0,
+                "runtime_session_sync_skipped": True,
+                "runtime_session_sync_reason": "runtime_session_rate_limited",
+                "local_guard_online_at": recorded_at,
+                "runtime_harness": session_payload["harness"],
+                "runtime_surface": session_payload["surface"],
+                "runtime_workspace": session_payload["workspace"],
+                "runtime_device_id": session_payload["deviceId"],
+                "retry_after_seconds": retry_after_seconds,
             }
             store.set_sync_payload("runtime_session_summary", summary, recorded_at)
             return summary
@@ -2129,6 +2186,8 @@ def sync_pain_signals(
                 )
             except urllib.error.HTTPError as error:
                 if error.code == 404:
+                    return uploaded_count
+                if error.code == 429:
                     return uploaded_count
                 raise RuntimeError(_sync_http_error_message(error)) from error
             except OSError as error:
@@ -3046,11 +3105,19 @@ def _urlopen_json_with_timeout_retry(
     current_timeout_seconds = timeout_seconds
     retried_timeout = False
     nonce_retry_count = 0
+    rate_limit_retry_count = 0
     while True:
         try:
             with urllib.request.urlopen(current_request, timeout=current_timeout_seconds) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
+            if error.code == 429 and rate_limit_retry_count < 2:
+                retry_after = _parse_retry_after_header(error)
+                time.sleep(min(retry_after, 120))
+                rate_limit_retry_count += 1
+                current_timeout_seconds = timeout_seconds
+                retried_timeout = False
+                continue
             error_payload = _http_error_payload(error) if error.code in {400, 401} else None
             dpop_nonce = _dpop_nonce_from_http_error(error, error_payload)
             retry_request = (
@@ -3086,11 +3153,19 @@ def _urlopen_with_timeout_retry(
     current_timeout_seconds = timeout_seconds
     retried_timeout = False
     nonce_retry_count = 0
+    rate_limit_retry_count = 0
     while True:
         try:
             with urllib.request.urlopen(current_request, timeout=current_timeout_seconds):
                 return
         except urllib.error.HTTPError as error:
+            if error.code == 429 and rate_limit_retry_count < 2:
+                retry_after = _parse_retry_after_header(error)
+                time.sleep(min(retry_after, 120))
+                rate_limit_retry_count += 1
+                current_timeout_seconds = timeout_seconds
+                retried_timeout = False
+                continue
             error_payload = _http_error_payload(error) if error.code in {400, 401} else None
             dpop_nonce = _dpop_nonce_from_http_error(error, error_payload)
             retry_request = (
