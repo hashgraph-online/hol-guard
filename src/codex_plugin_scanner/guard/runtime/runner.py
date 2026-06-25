@@ -42,7 +42,7 @@ from ..cloud_exceptions import (
     dedupe_cloud_exceptions,
     stored_receipt_sync_cloud_exceptions,
 )
-from ..config import VALID_RECEIPT_REDACTION_LEVELS, GuardConfig
+from ..config import VALID_RECEIPT_REDACTION_LEVELS, GuardConfig, load_guard_config
 from ..edge_events import build_runtime_session_event
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..package_firewall_entitlement import (
@@ -3711,15 +3711,22 @@ def _persist_receipt_sync_cursor(
 
 
 def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
-    """Read the cloud-configured receipt redaction level from sync payload.
+    """Resolve the receipt redaction level for cloud sync.
 
-    Falls back to 'full' (safest) when not set.
+    Priority: cloud-configured level (from policy bundle downlink) >
+    local GuardConfig.receipt_redaction_level > 'full' (safest).
     """
     payload = store.get_sync_payload("cloud_receipt_redaction_level")
     if isinstance(payload, dict):
         level = payload.get("level")
         if isinstance(level, str) and level in VALID_RECEIPT_REDACTION_LEVELS:
             return level
+    try:
+        config = load_guard_config(store.guard_home)
+        if config.receipt_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
+            return config.receipt_redaction_level
+    except Exception:
+        pass
     return "full"
 
 
