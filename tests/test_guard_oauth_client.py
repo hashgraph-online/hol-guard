@@ -9,6 +9,7 @@ from codex_plugin_scanner.guard.cli.oauth_client import (
     detect_guard_oauth_environment,
     generate_dpop_key_pair,
     generate_pkce_verifier,
+    guard_api_base_path,
     resolve_guard_oauth_client_config,
     validate_guard_sync_endpoint,
 )
@@ -31,6 +32,48 @@ def test_resolve_guard_oauth_client_config_for_staging() -> None:
     assert config.client_id == STAGING_GUARD_OAUTH_CLIENT_ID
     assert config.token_endpoint == "https://staging.hol.org/api/guard/oauth/token"
     assert detect_guard_oauth_environment(config.issuer) == "staging"
+
+
+def test_resolve_guard_oauth_client_config_for_env_staging(monkeypatch: pytest.MonkeyPatch) -> None:
+    staging_origin = "https://staging.example.test"
+    monkeypatch.setenv("HOL_GUARD_STAGING_ORIGIN", staging_origin)
+    config = resolve_guard_oauth_client_config(staging_origin)
+
+    assert config.client_id == STAGING_GUARD_OAUTH_CLIENT_ID
+    assert config.issuer == staging_origin
+    assert config.authorize_endpoint == f"{staging_origin}/api/guard/oauth/authorize"
+    assert config.token_endpoint == f"{staging_origin}/api/guard/oauth/token"
+    assert detect_guard_oauth_environment(config.issuer) == "staging"
+    assert guard_api_base_path(config.issuer) == ""
+
+
+def test_resolve_guard_oauth_client_config_for_env_staging_with_path_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    staging_origin = "https://staging.example.test"
+    monkeypatch.setenv("HOL_GUARD_STAGING_ORIGIN", f"{staging_origin}|/points")
+    config = resolve_guard_oauth_client_config(staging_origin)
+
+    assert config.client_id == STAGING_GUARD_OAUTH_CLIENT_ID
+    assert config.issuer == staging_origin
+    assert config.authorize_endpoint == f"{staging_origin}/points/api/guard/oauth/authorize"
+    assert config.token_endpoint == f"{staging_origin}/points/api/guard/oauth/token"
+    assert config.device_authorization_endpoint == f"{staging_origin}/points/api/guard/oauth/device/authorize"
+    assert config.jwks_endpoint == f"{staging_origin}/points/api/guard/oauth/jwks"
+    assert detect_guard_oauth_environment(config.issuer) == "staging"
+    assert guard_api_base_path(config.issuer) == "/points"
+
+
+def test_guard_api_base_path_is_empty_for_non_staging_origins() -> None:
+    assert guard_api_base_path("https://hol.org") == ""
+    assert guard_api_base_path("https://staging.hol.org") == ""
+    assert guard_api_base_path("http://127.0.0.1:3000") == ""
+
+
+def test_validate_guard_sync_endpoint_allows_env_staging(monkeypatch: pytest.MonkeyPatch) -> None:
+    staging_origin = "https://staging.example.test"
+    monkeypatch.setenv("HOL_GUARD_STAGING_ORIGIN", staging_origin)
+    sync_url = f"{staging_origin}/api/guard/receipts/sync"
+
+    assert validate_guard_sync_endpoint(sync_url, issuer=staging_origin) == sync_url
 
 
 def test_resolve_guard_oauth_client_config_for_local_loopback() -> None:
