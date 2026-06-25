@@ -161,7 +161,11 @@ def _review_runtime_artifact_hook(
                             ),
                             "command_text": _hook_command_text(payload_map),
                             "workspace": str(workspace) if workspace else None,
-                            **codex_resume_metadata_from_hook_payload(payload_map),
+                            **(
+                                codex_resume_metadata_from_hook_payload(payload_map)
+                                if _canonical_harness_name(args.harness) == "codex"
+                                else {}
+                            ),
                         },
                         detection=runtime_detection.to_dict(),
                         evaluation=evaluation_payload,
@@ -354,7 +358,11 @@ def _review_runtime_artifact_hook(
                         ),
                         "command_text": _hook_command_text(payload_map),
                         "workspace": str(workspace) if workspace else None,
-                        **codex_resume_metadata_from_hook_payload(payload_map),
+                        **(
+                            codex_resume_metadata_from_hook_payload(payload_map)
+                            if _canonical_harness_name(args.harness) == "codex"
+                            else {}
+                        ),
                     },
                     detection=runtime_detection.to_dict(),
                     evaluation=evaluation_payload,
