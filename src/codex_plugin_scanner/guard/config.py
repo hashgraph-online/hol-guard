@@ -181,8 +181,9 @@ EDITABLE_GUARD_SETTING_KEYS = frozenset(
         "receipt_redaction_level",
     }
 )
-VALID_APPROVAL_SURFACE_POLICIES = {"auto-open-once", "native-only", "approval-center"}
 VALID_RECEIPT_REDACTION_LEVELS = frozenset({"full", "partial", "none"})
+
+VALID_APPROVAL_SURFACE_POLICIES = {"auto-open-once", "native-only", "approval-center"}
 BARE_TOML_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 WORKSPACE_BLOCKED_POLICY_KEYS = frozenset(
     {
@@ -277,6 +278,7 @@ class GuardConfig:
     desktop_notifications: bool = True
     telemetry: bool = False
     sync: bool = False
+    receipt_redaction_level: str = "full"
     billing: bool = False
     runtime_detector_registry: bool = False
     runtime_detector_timeout_ms: int = 50
@@ -289,7 +291,6 @@ class GuardConfig:
     publisher_actions: dict[str, GuardAction] | None = None
     artifact_actions: dict[str, GuardAction] | None = None
     evidence_retain_days: int = 90
-    receipt_redaction_level: str = "full"
 
     def resolve_action_override(
         self,
@@ -339,6 +340,12 @@ def _read_toml(path: Path) -> dict[str, object]:
         return {}
 
 
+def _coerce_loaded_receipt_redaction_level(value: object) -> str:
+    if isinstance(value, str) and value in VALID_RECEIPT_REDACTION_LEVELS:
+        return value
+    return "full"
+
+
 def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardConfig:
     """Load Guard config from home and workspace overrides."""
 
@@ -385,7 +392,6 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
         security_level=_coerce_loaded_security_level(merged.get("security_level", DEFAULT_SECURITY_LEVEL)),
         risk_actions=_coerce_risk_action_map(merged.get("risk_actions")),
         harness_risk_actions=_coerce_harness_risk_action_map(merged.get("harness_risk_actions")),
-        receipt_redaction_level=_coerce_loaded_receipt_redaction_level(merged.get("receipt_redaction_level", "full")),
     )
 
 
@@ -408,8 +414,8 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "desktop_notifications": config.desktop_notifications,
         "telemetry": config.telemetry,
         "sync": config.sync,
-        "billing": config.billing,
         "receipt_redaction_level": config.receipt_redaction_level,
+        "billing": config.billing,
         "approval_gate": public_config(config.guard_home).to_dict(),
     }
 
@@ -487,7 +493,7 @@ def _coerce_editable_setting(key: str, value: object) -> object:
     if key == "receipt_redaction_level":
         if isinstance(value, str) and value in VALID_RECEIPT_REDACTION_LEVELS:
             return value
-        raise ValueError("Invalid receipt redaction level. Must be 'full', 'partial', or 'none'.")
+        raise ValueError(f"Invalid receipt redaction level: {value!r}")
     raise ValueError(f"Unsupported Guard setting: {key}")
 
 
@@ -565,22 +571,17 @@ def _coerce_sandbox_analysis(value: object) -> str:
     return "off"
 
 
-def _coerce_loaded_receipt_redaction_level(value: object) -> str:
-    if isinstance(value, str) and value in VALID_RECEIPT_REDACTION_LEVELS:
-        return value
-    return "full"
-
-
 def _coerce_risk_action_payload(value: object) -> dict[str, GuardAction]:
     if not isinstance(value, dict):
         raise ValueError("Risk actions must be a table.")
     action_map: dict[str, GuardAction] = {}
     for key, action in value.items():
         if not isinstance(key, str) or key not in VALID_RISK_ACTION_KEYS:
-            continue
+            raise ValueError("Invalid Guard risk action.")
         resolved_action = _coerce_loaded_guard_action(action, None)
-        if resolved_action is not None:
-            action_map[key] = resolved_action
+        if resolved_action is None:
+            raise ValueError("Invalid Guard risk action.")
+        action_map[key] = resolved_action
     return action_map
 
 
@@ -588,34 +589,33 @@ def _coerce_harness_risk_action_payload(value: object) -> dict[str, dict[str, Gu
     if not isinstance(value, dict):
         raise ValueError("Harness risk actions must be a table.")
     harness_actions: dict[str, dict[str, GuardAction]] = {}
-    for harness, actions in value.items():
+    for harness, risk_payload in value.items():
         if not isinstance(harness, str) or not harness.strip():
-            continue
-        harness_actions[harness] = _coerce_risk_action_payload(actions)
+            raise ValueError("Invalid Guard harness.")
+        harness_actions[harness] = _coerce_risk_action_payload(risk_payload)
     return harness_actions
 
 
 def _effective_risk_actions(config: GuardConfig) -> dict[str, GuardAction]:
     defaults = SECURITY_LEVEL_RISK_ACTIONS.get(
-        config.security_level,
-        SECURITY_LEVEL_RISK_ACTIONS[DEFAULT_SECURITY_LEVEL],
+        config.security_level, SECURITY_LEVEL_RISK_ACTIONS[DEFAULT_SECURITY_LEVEL]
     )
     return {**defaults, **dict(config.risk_actions or {})}
 
 
 def resolve_risk_action(config: GuardConfig, risk_class: str | None, *, harness: str | None) -> GuardAction | None:
     """Resolve the configured action for a concrete runtime risk class."""
-    if risk_class is None:
+
+    if not isinstance(risk_class, str) or risk_class not in VALID_RISK_ACTION_KEYS:
         return None
-    if harness is not None and config.harness_risk_actions:
-        harness_map = config.harness_risk_actions.get(harness)
-        if harness_map is not None and risk_class in harness_map:
-            return harness_map[risk_class]
-    if config.risk_actions and risk_class in config.risk_actions:
+    if isinstance(harness, str) and config.harness_risk_actions is not None:
+        harness_actions = config.harness_risk_actions.get(harness)
+        if harness_actions is not None and risk_class in harness_actions:
+            return harness_actions[risk_class]
+    if config.risk_actions is not None and risk_class in config.risk_actions:
         return config.risk_actions[risk_class]
     defaults = SECURITY_LEVEL_RISK_ACTIONS.get(
-        config.security_level,
-        SECURITY_LEVEL_RISK_ACTIONS[DEFAULT_SECURITY_LEVEL],
+        config.security_level, SECURITY_LEVEL_RISK_ACTIONS[DEFAULT_SECURITY_LEVEL]
     )
     return defaults.get(risk_class)
 
@@ -628,13 +628,23 @@ def _write_guard_config(path: Path, payload: dict[str, object]) -> None:
 
 def _toml_lines_for_table(payload: Mapping[str, object], path: tuple[str, ...]) -> list[str]:
     lines: list[str] = []
-    for key, value in payload.items():
-        if isinstance(value, Mapping):
-            child_path = (*path, key)
-            lines.append(f"[{'.'.join(child_path)}]")
-            lines.extend(_toml_lines_for_table(value, child_path))
-        else:
-            lines.append(f"{_toml_key(key)} = {_toml_literal(value)}")
+    scalar_items: list[tuple[str, object]] = []
+    table_items: list[tuple[str, dict[str, object]]] = []
+    for key, value in sorted(payload.items(), key=lambda item: item[0]):
+        nested_table = _string_object_table(value)
+        if nested_table is not None:
+            table_items.append((key, nested_table))
+            continue
+        scalar_items.append((key, value))
+    if path:
+        lines.append(f"[{'.'.join(_toml_key(item) for item in path)}]")
+    for key, value in scalar_items:
+        lines.append(f"{_toml_key(key)} = {_toml_literal(value)}")
+    for key, value in table_items:
+        nested_lines = _toml_lines_for_table(value, (*path, key))
+        if lines and nested_lines:
+            lines.append("")
+        lines.extend(nested_lines)
     return lines
 
 
@@ -647,20 +657,23 @@ def _toml_key(value: str) -> str:
 def _toml_literal(value: object) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
-    if isinstance(value, int) and not isinstance(value, bool):
+    if isinstance(value, int):
         return str(value)
     if isinstance(value, float):
         return repr(value)
-    if isinstance(value, tuple | list):
+    if isinstance(value, str):
+        return json.dumps(value)
+    if isinstance(value, list):
         return "[" + ", ".join(_toml_literal(item) for item in value) + "]"
-    if isinstance(value, Mapping):
-        return _toml_inline_table(value)
+    nested_table = _string_object_table(value)
+    if nested_table is not None:
+        return _toml_inline_table(nested_table)
     return json.dumps(str(value))
 
 
 def _toml_inline_table(value: Mapping[str, object]) -> str:
     items: list[str] = []
-    for key, item in value.items():
+    for key, item in sorted(value.items(), key=lambda entry: entry[0]):
         items.append(f"{_toml_key(key)} = {_toml_literal(item)}")
     return "{ " + ", ".join(items) + " }"
 
@@ -724,7 +737,7 @@ def _string_object_table(value: object) -> dict[str, object] | None:
 def _existing_legacy_guard_home() -> Path | None:
     for relative_path in LEGACY_GUARD_DIRNAMES:
         candidate = Path.home() / relative_path
-        if candidate.is_dir():
+        if candidate.exists():
             return candidate
     return None
 
@@ -732,69 +745,82 @@ def _existing_legacy_guard_home() -> Path | None:
 def _migrate_guard_home_state(*, source: Path, destination: Path) -> None:
     if not source.exists():
         return
+    destination.mkdir(parents=True, exist_ok=True)
+    replace_database = not _guard_home_has_sync_credentials(destination) and not _guard_home_has_state(destination)
     for entry in source.iterdir():
-        if entry.name.startswith("."):
+        if entry.name in NON_MIGRATED_GUARD_RUNTIME_FILES:
             continue
         target = destination / entry.name
+        if target.exists():
+            if replace_database and entry.name == "secrets" and entry.is_dir() and target.is_dir():
+                shutil.rmtree(target)
+                shutil.copytree(entry, target)
+                continue
+            if entry.is_dir() and target.is_dir():
+                _migrate_guard_home_state(source=entry, destination=target)
+                continue
+            if replace_database and entry.name == "guard.db" and entry.is_file():
+                _copy_guard_database(source=entry, destination=target)
+            continue
         if entry.is_dir():
-            shutil.copytree(entry, target, dirs_exist_ok=True)
-        else:
-            shutil.copy2(entry, target)
+            shutil.copytree(entry, target)
+            continue
+        if entry.name == "guard.db" and entry.is_file():
+            _copy_guard_database(source=entry, destination=target)
+            continue
+        shutil.copy2(entry, target)
 
 
 def _migrate_guard_home_transactionally(*, source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with tempfile.TemporaryDirectory(prefix="guard-home-migration-") as staging:
-            staging_path = Path(staging)
-            _migrate_guard_home_state(source=source, destination=staging_path)
-            _copy_guard_database(source=source, destination=staging_path)
-            _prune_retired_guard_db_sync_state(staging_path / "guard.db")
-            _remove_guard_home_destination(destination)
-            shutil.move(str(staging_path), str(destination))
+        with tempfile.TemporaryDirectory(dir=destination.parent, prefix=f"{destination.name}-migration-") as temp_dir:
+            staging_root = Path(temp_dir) / destination.name
+            _migrate_guard_home_state(source=source, destination=staging_root)
+            if destination.exists():
+                _remove_guard_home_destination(destination)
+            shutil.move(str(staging_root), str(destination))
     except OSError:
         raise GuardHomeMigrationError("guard home migration failed") from None
 
 
 def _remove_guard_home_destination(path: Path) -> None:
-    if not path.exists():
-        return
     for entry in path.iterdir():
         if entry.is_dir():
             shutil.rmtree(entry)
-        else:
-            entry.unlink()
+            continue
+        entry.unlink()
     path.rmdir()
 
 
 def _copy_guard_database(*, source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    source_db = source / "guard.db"
-    if not source_db.is_file():
-        return
+    temporary_destination = destination.with_name(f"{destination.name}.migrating")
     deadline = time.monotonic() + GUARD_DB_BACKUP_TIMEOUT_SECONDS
-    backup_path = destination / "guard.db"
-    while True:
-        _raise_when_backup_deadline_elapsed(deadline)
-        try:
-            shutil.copy2(source_db, backup_path)
-            break
-        except OSError:
-            time.sleep(GUARD_DB_BACKUP_SLEEP_SECONDS)
     try:
-        with sqlite3.connect(backup_path) as conn:
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    except sqlite3.DatabaseError:
-        backup_path.unlink(missing_ok=True)
+        with (
+            sqlite3.connect(f"file:{source}?mode=ro", uri=True) as source_connection,
+            sqlite3.connect(temporary_destination) as destination_connection,
+        ):
+            source_connection.backup(
+                destination_connection,
+                pages=128,
+                progress=lambda *_: _raise_when_backup_deadline_elapsed(deadline),
+                sleep=GUARD_DB_BACKUP_SLEEP_SECONDS,
+            )
+        _prune_retired_guard_db_sync_state(temporary_destination)
+        temporary_destination.replace(destination)
+    except (TimeoutError, sqlite3.Error):
+        if temporary_destination.exists():
+            temporary_destination.unlink()
         raise GuardHomeMigrationError("guard.db migration failed") from None
 
 
 def _prune_retired_guard_db_sync_state(database_path: Path) -> None:
     try:
-        with sqlite3.connect(database_path) as conn:
-            conn.execute("DELETE FROM sync_payload WHERE key LIKE 'retired_%'")
-    except sqlite3.DatabaseError:
+        with sqlite3.connect(database_path) as connection:
+            connection.execute("delete from sync_state where state_key = 'credentials'")
+    except sqlite3.Error:
         return
 
 
@@ -808,8 +834,7 @@ def _load_workspace_guard_config(workspace: Path | None) -> dict[str, object]:
         return {}
     merged: dict[str, object] = {}
     for filename in WORKSPACE_CONFIG_FILENAMES:
-        payload = _sanitize_workspace_guard_config(_read_toml(workspace / filename))
-        merged.update(payload)
+        merged = _merge_config_payload(merged, _sanitize_workspace_guard_config(_read_toml(workspace / filename)))
     return merged
 
 
@@ -820,39 +845,57 @@ def _sanitize_workspace_guard_config(payload: dict[str, object]) -> dict[str, ob
 def _merge_config_payload(base: dict[str, object], override: dict[str, object]) -> dict[str, object]:
     merged = dict(base)
     for key, value in override.items():
-        if isinstance(value, Mapping) and isinstance(merged.get(key), Mapping):
-            merged_child = dict(merged[key])
-            merged_child.update(value)
-            merged[key] = merged_child
-        else:
-            merged[key] = value
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            nested_existing = {name: nested_value for name, nested_value in existing.items() if isinstance(name, str)}
+            nested_override = {name: nested_value for name, nested_value in value.items() if isinstance(name, str)}
+            if "action" in nested_override or "default_action" in nested_override:
+                nested_existing.pop("action", None)
+                nested_existing.pop("default_action", None)
+            merged[key] = _merge_config_payload(nested_existing, nested_override)
+            continue
+        merged[key] = value
     return merged
 
 
 def _guard_home_has_state(path: Path) -> bool:
     if not path.exists():
         return False
-    for entry in path.iterdir():
-        if entry.name.startswith("."):
-            continue
-        if entry.is_dir():
-            continue
-        if entry.name in GUARD_HOME_METADATA_FILES:
-            continue
-        if entry.name == "guard.db":
-            continue
-        if entry.suffix in {".json", ".toml"}:
-            continue
+    entries = list(path.iterdir())
+    if not entries:
+        return False
+    if any(entry.name not in {"guard.db", *GUARD_HOME_METADATA_FILES} for entry in entries):
         return True
-    db_path = path / "guard.db"
-    if db_path.is_file():
-        try:
-            with sqlite3.connect(db_path) as conn:
-                row = conn.execute("SELECT COUNT(*) FROM runtime_receipts").fetchone()
-                if row is not None and row[0] > 0:
+    database_path = path / "guard.db"
+    if not database_path.is_file():
+        return True
+    try:
+        with sqlite3.connect(f"file:{database_path}?mode=ro", uri=True) as connection:
+            tables = {str(row[0]) for row in connection.execute("select name from sqlite_master where type = 'table'")}
+            for table_name in (
+                "harness_installations",
+                "artifact_snapshots",
+                "artifact_hashes",
+                "artifact_diffs",
+                "artifact_inventory",
+                "policy_decisions",
+                "runtime_receipts",
+                "publisher_cache",
+                "guard_events",
+                "managed_installs",
+                "guard_sessions",
+                "guard_operations",
+                "guard_operation_items",
+                "guard_client_attachments",
+                "guard_surface_opens",
+                "approval_requests",
+            ):
+                if table_name not in tables:
+                    continue
+                if connection.execute(f"select 1 from {table_name} limit 1").fetchone() is not None:
                     return True
-        except sqlite3.DatabaseError:
-            pass
+    except sqlite3.Error:
+        return True
     return False
 
 
@@ -861,8 +904,15 @@ def _guard_home_has_sync_credentials(path: Path) -> bool:
     if not database_path.is_file():
         return False
     try:
-        with sqlite3.connect(database_path) as conn:
-            row = conn.execute("SELECT value FROM sync_payload WHERE key = 'auth_context'").fetchone()
-    except sqlite3.DatabaseError:
+        with sqlite3.connect(f"file:{database_path}?mode=ro", uri=True) as connection:
+            row = connection.execute(
+                """
+                select 1
+                from sync_state
+                where state_key = 'oauth_local_credentials'
+                limit 1
+                """
+            ).fetchone()
+    except sqlite3.Error:
         return False
     return row is not None
