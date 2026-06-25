@@ -759,6 +759,8 @@ def _migrate_guard_home_transactionally(*, source: Path, destination: Path) -> N
 
 
 def _remove_guard_home_destination(path: Path) -> None:
+    if not path.exists():
+        return
     for entry in path.iterdir():
         if entry.is_dir():
             shutil.rmtree(entry)
