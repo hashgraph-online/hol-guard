@@ -468,6 +468,8 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    // replaced with the bounded excerpt. A truncated tool input alone does\n"
         "    // not mean the output reached the model unreviewed.\n"
         "    const outputTruncated = boundedContent.truncated || boundedStdout.truncated;\n"
+        "    const toolOutput = boundedStdout.value as string;\n"
+        "    const reviewedContent = outputTruncated ? [{ type: 'text', text: toolOutput }] : boundedContent.value;\n"
         "    const oversizeNotice = outputTruncated\n"
         '        ? "HOL Guard reviewed a size-bounded excerpt of a large Pi tool result; "\n'
         '          + "the model receives the reviewed excerpt, not the full output."\n'
@@ -475,15 +477,13 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         '    if (oversizeNotice) ctx.ui.notify(oversizeNotice, "info");\n'
         "    const toolInput =\n"
         "      boundedToolInput.value as Record<string, unknown>;\n"
-        "    const limitedContent = boundedContent.value;\n"
-        "    const toolOutput = boundedStdout.value as string;\n"
         "    const response = runGuard(\n"
         "      {\n"
         '        hook_event_name: "PostToolUse",\n'
         "        config_path: GUARD_CONFIG_PATH,\n"
         "        tool_name: event.toolName,\n"
         "        tool_input: toolInput,\n"
-        "        tool_response: limitedContent,\n"
+        "        tool_response: reviewedContent,\n"
         "        stdout: toolOutput,\n"
         "        is_error: event.isError === true,\n"
         "      },\n"
@@ -502,7 +502,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    // undefined would leave Pi's original full event.content intact, so the\n"
         "    // unreviewed tail would still reach the model. Instead, replace the\n"
         "    // result with the bounded excerpt Guard actually reviewed.\n"
-        "    return reviewedToolResult(limitedContent, event.details, event.isError === true);\n"
+        "    return reviewedToolResult(reviewedContent, event.details, event.isError === true);\n"
         "  });\n"
         "}\n"
     )
