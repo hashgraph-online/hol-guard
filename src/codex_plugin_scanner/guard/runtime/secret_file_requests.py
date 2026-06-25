@@ -88,6 +88,8 @@ _SHELL_CONTROL_PREFIX_TOKENS = frozenset(
     {"!", "(", "{", "case", "do", "elif", "else", "for", "if", "select", "then", "until", "while"}
 )
 COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
+COMMAND_SEQUENCE_KEYS = ("commands",)
+COMMAND_CANDIDATE_LIST_KEYS = (*COMMAND_LIST_KEYS, *COMMAND_SEQUENCE_KEYS)
 _COMMAND_LIST_KEYS = COMMAND_LIST_KEYS
 _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "push", "run"})
 _DOCKER_BUILD_SUBCOMMANDS = frozenset({"build"})
@@ -3519,6 +3521,21 @@ def _candidate_command_texts(value: object) -> list[str]:
     return results
 
 
+def command_list_candidate_texts(
+    values: list[str],
+    *,
+    preserve_items: bool = False,
+) -> tuple[str, ...]:
+    string_values = [item.strip() for item in values if isinstance(item, str) and item.strip()]
+    if not string_values:
+        return ()
+    if preserve_items:
+        return tuple(string_values)
+    if len(string_values) == 1:
+        return (string_values[0],)
+    return (shlex.join(string_values),)
+
+
 def _collect_candidate_commands(value: object, results: list[str], *, depth: int) -> None:
     if depth > 4:
         return
@@ -3528,9 +3545,7 @@ def _collect_candidate_commands(value: object, results: list[str], *, depth: int
             results.append(stripped)
         return
     if isinstance(value, list):
-        string_values = [item.strip() for item in value if isinstance(item, str) and item.strip()]
-        if string_values:
-            results.append(shlex.join(string_values))
+        results.extend(command_list_candidate_texts(value))
         for child in value:
             if isinstance(child, (dict, list)):
                 _collect_candidate_commands(child, results, depth=depth + 1)
@@ -3541,13 +3556,13 @@ def _collect_candidate_commands(value: object, results: list[str], *, depth: int
         candidate = value.get(key)
         if isinstance(candidate, str) and candidate.strip():
             results.append(candidate.strip())
-    for key in _COMMAND_LIST_KEYS:
+    for key in COMMAND_CANDIDATE_LIST_KEYS:
         candidate = value.get(key)
         if isinstance(candidate, list):
-            string_values = [item.strip() for item in candidate if isinstance(item, str) and item.strip()]
-            if string_values:
-                results.append(shlex.join(string_values))
-    for child in value.values():
+            results.extend(command_list_candidate_texts(candidate, preserve_items=key in COMMAND_SEQUENCE_KEYS))
+    for key, child in value.items():
+        if key in COMMAND_CANDIDATE_LIST_KEYS:
+            continue
         if isinstance(child, (dict, list)):
             _collect_candidate_commands(child, results, depth=depth + 1)
 

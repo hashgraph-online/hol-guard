@@ -8,6 +8,9 @@ import sys
 from pathlib import Path
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.cli.commands_support_codex_commands import (
+    _codex_post_tool_command_is_read_only_source_inspection,
+)
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
 from codex_plugin_scanner.guard.runtime.kubernetes_commands import kubernetes_secret_read_source
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
@@ -102,6 +105,49 @@ def test_kubectl_secret_reads_are_detected_in_command_substitutions(tmp_path: Pa
     assert kubernetes_secret_read_source("oc extract secret/mysecret --keys=token --to=-") == (
         "Kubernetes Secret resource"
     )
+
+
+def test_kubectl_secret_reads_are_detected_in_single_item_command_lists(tmp_path: Path) -> None:
+    command = "kubectl get secret prod -o yaml"
+
+    for arguments in (
+        {"commands": [command]},
+        {"command_args": [command]},
+        {"commandArgs": [command]},
+    ):
+        request = extract_sensitive_tool_action_request(
+            "Bash",
+            arguments,
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+
+        assert request is not None
+        assert request.action_class == "Kubernetes secret read command"
+
+
+def test_kubectl_secret_reads_are_detected_in_batched_command_lists(tmp_path: Path) -> None:
+    request = extract_sensitive_tool_action_request(
+        "Bash",
+        {"commands": ["kubectl get secret prod -o yaml", "echo ok"]},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert request is not None
+    assert request.action_class == "Kubernetes secret read command"
+
+
+def test_kubectl_secret_reads_are_detected_when_later_batched_command_is_sensitive(tmp_path: Path) -> None:
+    request = extract_sensitive_tool_action_request(
+        "Bash",
+        {"commands": ["echo ok", "kubectl get secret prod -o yaml"]},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert request is not None
+    assert request.action_class == "Kubernetes secret read command"
 
 
 def test_kubectl_exec_shell_expansion_secret_reads_are_detected(tmp_path: Path) -> None:
@@ -323,6 +369,109 @@ def test_pi_post_tool_output_labels_argv_wrapped_kubernetes_secret_source(tmp_pa
     assert artifact.metadata["action_class"] == "Kubernetes secret read command"
     assert artifact.metadata["guard_default_action"] == "require-reapproval"
     assert artifact.metadata["secret_source_family"] == "Kubernetes Secret resource"
+
+
+def test_pi_post_tool_output_labels_single_item_command_args_kubernetes_secret_source(tmp_path: Path) -> None:
+    artifact = _codex_post_tool_output_artifact(
+        harness="pi",
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {"command_args": ["kubectl get secret prod -o yaml"]},
+            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+        },
+        config_path="~/.pi/agent/settings.json",
+        source_scope="project",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert artifact is not None
+    assert artifact.metadata["action_class"] == "Kubernetes secret read command"
+    assert artifact.metadata["secret_source_family"] == "Kubernetes Secret resource"
+
+
+def test_pi_post_tool_output_labels_commands_payload_kubernetes_secret_source(tmp_path: Path) -> None:
+    artifact = _codex_post_tool_output_artifact(
+        harness="pi",
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {"commands": ["kubectl get secret prod -o yaml"]},
+            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+        },
+        config_path="~/.pi/agent/settings.json",
+        source_scope="project",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert artifact is not None
+    assert artifact.metadata["action_class"] == "Kubernetes secret read command"
+    assert artifact.metadata["secret_source_family"] == "Kubernetes Secret resource"
+
+
+def test_pi_post_tool_output_labels_later_commands_payload_kubernetes_secret_source(tmp_path: Path) -> None:
+    artifact = _codex_post_tool_output_artifact(
+        harness="pi",
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {"commands": ["echo ok", "kubectl get secret prod -o yaml"]},
+            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+        },
+        config_path="~/.pi/agent/settings.json",
+        source_scope="project",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert artifact is not None
+    assert artifact.metadata["action_class"] == "Kubernetes secret read command"
+    assert artifact.metadata["secret_source_family"] == "Kubernetes Secret resource"
+
+
+def test_pi_post_tool_output_keeps_sensitive_batched_command_even_with_read_only_sibling(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
+    event = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"commands": ["kubectl get secret prod -o yaml", "rg foo src"]},
+        "stdout": "ok\n",
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--guard-home",
+            str(guard_home),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "pi",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 2
+    assert output["decision"] == "deny"
+    assert "kubernetes secret read command" in output["reason"].lower()
+
+
+def test_read_only_command_batches_stay_read_only_for_post_tool_skip(tmp_path: Path) -> None:
+    payload = {"tool_input": {"commands": ["rg foo src", "grep bar src/app.py"]}}
+
+    assert _codex_post_tool_command_is_read_only_source_inspection(
+        payload=payload,
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
 
 
 def test_pi_post_tool_output_labels_wrapped_kubernetes_secret_source(tmp_path: Path) -> None:
