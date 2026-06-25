@@ -1919,7 +1919,6 @@ def sync_guard_events(
     return summary
 
 
-
 def _parse_retry_after_header(error: urllib.error.HTTPError) -> int:
     """Parse the Retry-After header from a 429 response. Returns seconds to wait."""
     retry_after = error.headers.get("Retry-After") if error.headers else None
