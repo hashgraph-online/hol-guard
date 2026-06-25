@@ -385,9 +385,7 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
         security_level=_coerce_loaded_security_level(merged.get("security_level", DEFAULT_SECURITY_LEVEL)),
         risk_actions=_coerce_risk_action_map(merged.get("risk_actions")),
         harness_risk_actions=_coerce_harness_risk_action_map(merged.get("harness_risk_actions")),
-        receipt_redaction_level=_coerce_loaded_receipt_redaction_level(
-            merged.get("receipt_redaction_level", "full")
-        ),
+        receipt_redaction_level=_coerce_loaded_receipt_redaction_level(merged.get("receipt_redaction_level", "full")),
     )
 
 
@@ -864,9 +862,7 @@ def _guard_home_has_sync_credentials(path: Path) -> bool:
         return False
     try:
         with sqlite3.connect(database_path) as conn:
-            row = conn.execute(
-                "SELECT value FROM sync_payload WHERE key = 'auth_context'"
-            ).fetchone()
+            row = conn.execute("SELECT value FROM sync_payload WHERE key = 'auth_context'").fetchone()
     except sqlite3.DatabaseError:
         return False
     return row is not None
