@@ -187,6 +187,18 @@ def _codex_post_tool_command_texts(payload: dict[str, object]) -> tuple[str, ...
                 candidates.extend(
                     command_list_candidate_texts(candidate, preserve_items=key in COMMAND_SEQUENCE_KEYS)
                 )
+        if not candidates and str(payload.get("tool_name", "")).strip().lower() in {
+            "cat_file",
+            "open_file",
+            "read",
+            "read_file",
+            "view",
+            "view_file",
+        }:
+            for key in ("path", "file_path", "filePath", "filepath", "file", "filename"):
+                value = tool_input.get(key)
+                if isinstance(value, str) and value.strip():
+                    candidates.append(f"cat -- {shlex.quote(value.strip())}")
         return tuple(dict.fromkeys(text for text in candidates if text))
     return ()
 

@@ -396,6 +396,26 @@ class TestPiRuntime:
         assert artifact.harness == "pi"
         assert artifact.artifact_id.startswith("pi:")
 
+    def test_pi_source_file_read_with_credential_like_code_does_not_block(self, tmp_path: Path) -> None:
+        source_path = tmp_path / "src" / "lib" / "guard-notion-api.ts"
+        source_path.parent.mkdir(parents=True)
+        source_path.write_text("export const NOTION_API_KEY = process.env.NOTION_API_KEY;\n", encoding="utf-8")
+
+        artifact = _codex_post_tool_output_artifact(
+            harness="pi",
+            payload={
+                "tool_name": "Read",
+                "tool_input": {"file_path": str(source_path)},
+                "tool_response": [{"type": "text", "text": source_path.read_text(encoding="utf-8")}],
+            },
+            config_path="~/.pi/agent/settings.json",
+            source_scope="project",
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+
+        assert artifact is None
+
     def test_pi_focused_pytest_messages_label_pi_runtime(self) -> None:
         assert _codex_tool_output_request_summary(
             harness_label="Pi",
