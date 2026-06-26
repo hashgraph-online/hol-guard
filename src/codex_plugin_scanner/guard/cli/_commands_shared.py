@@ -213,6 +213,7 @@ from .install_commands import (
     apply_managed_install,
     build_harness_setup_plan,
     build_harness_verification,
+    build_managed_install_plan,
     list_harness_setup_items,
     uninstall_confirmation_token,
 )
