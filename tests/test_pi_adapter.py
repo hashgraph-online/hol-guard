@@ -196,6 +196,10 @@ class TestPiInstall:
         assert 'pi.on("input"' in text
         assert 'hook_event_name: "PostToolUse"' in text
         assert 'const GUARD_COMMAND_CANDIDATES = ["plugin-guard", "hol-guard"]' in text
+        assert 'const GUARD_HOME =' in text
+        assert "daemon-state.json" in text
+        assert "daemon-auth-token" in text
+        assert "/v1/hooks/pi?" in text
         assert "tool_response: event.content" in text
         assert "const GUARD_CONFIG_PATH =" in text
         assert "config_path: GUARD_CONFIG_PATH" in text
@@ -223,6 +227,10 @@ class TestPiInstall:
         assert "serializedPayload.length > GUARD_MAX_SERIALIZED_PAYLOAD_CHARS" in text
         assert "for (const command of GUARD_COMMAND_CANDIDATES)" in text
         assert "resultError?.code === 'ENOENT'" in text
+        assert "async function daemonGuardResponse(" in text
+        assert "await fetch(`http://127.0.0.1:${port}/v1/hooks/pi?" in text
+        assert "const daemonResponse = await daemonGuardResponse(serializedPayload, cwd);" in text
+        assert "const response = await runGuard(" in text
         assert "if (result.error) {" in text
         assert "const resultError =" in text
         assert "const errorCode =" in text
@@ -287,7 +295,7 @@ class TestPiInstall:
         assert "HOL Guard blocked oversized Pi tool output before review" not in text
         assert "oversizeNotice" in text
         assert 'ctx.ui.notify(oversizeNotice, "info")' in text
-        assert "const response = runGuard(" in text
+        assert "const response = await runGuard(" in text
         # When truncated, the reviewed excerpt (not the full unreviewed output) is
         # returned to Pi so omitted content never reaches the model.
         assert "function reviewedToolResult(" in text

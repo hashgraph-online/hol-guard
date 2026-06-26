@@ -1550,8 +1550,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/initialize":
             self._handle_initialize(payload)
             return
-        if parsed.path == "/v1/hooks/claude-code":
-            self._handle_claude_hook(payload, parsed.query)
+        if len(path_parts) == 3 and path_parts[:2] == ["v1", "hooks"]:
+            self._handle_runtime_hook(payload, parsed.query, default_harness=path_parts[2])
             return
         if parsed.path == "/v1/clients/attach":
             self._handle_client_attach(payload)
@@ -3927,7 +3927,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             status=410,
         )
 
-    def _handle_claude_hook(self, payload: dict[str, object], query: str) -> None:
+    def _handle_runtime_hook(self, payload: dict[str, object], query: str, *, default_harness: str) -> None:
         params = parse_qs(query)
         try:
             home_dir = self._validated_hook_directory_string(
@@ -3946,7 +3946,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": error.code}, status=400)
             return
         runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
-        harness = runtime_harness or "claude-code"
+        harness = runtime_harness or default_harness
         args = argparse.Namespace(
             guard_command="hook",
             home=home_dir,
