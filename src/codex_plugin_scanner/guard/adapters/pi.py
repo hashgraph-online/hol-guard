@@ -33,7 +33,7 @@ class PiHarnessAdapter(HarnessAdapter):
     """Discover Pi settings, packages, extensions, skills, prompts, and themes."""
 
     harness = "pi"
-    aliases = ("pi", "pi-agent", "pi-coding-agent")
+    aliases = ("pi", "pi-agent", "pi-coding-agent", "omp", "oh-my-pi")
     executable = "pi"
     launcher_name = "pi"
     approval_tier = "approval-center"

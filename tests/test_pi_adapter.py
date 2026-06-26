@@ -51,7 +51,7 @@ class TestPiAdapterIdentity:
         assert adapter.harness == "pi"
 
     def test_aliases_resolve_to_pi(self) -> None:
-        for alias in ("pi", "pi-agent", "pi-coding-agent"):
+        for alias in ("pi", "pi-agent", "pi-coding-agent", "omp", "oh-my-pi"):
             assert get_adapter(alias).harness == "pi"
 
     def test_pi_is_registered(self) -> None:
@@ -63,6 +63,9 @@ class TestPiAdapterIdentity:
         assert contract.harness == "pi"
         assert contract.smoke_command == "hol-guard install pi --dry-run"
         assert "tool_result" in contract.event_surfaces
+        assert contract_for("omp") == contract
+        assert "omp" in contract.install_aliases
+        assert "oh-my-pi" in contract.install_aliases
 
 
 class TestPiDetect:
