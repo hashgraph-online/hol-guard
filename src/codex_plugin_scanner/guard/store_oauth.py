@@ -52,7 +52,7 @@ class StoreOAuthConnectMixin:
             if key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY:
                 source_name = "default"
             elif key.startswith(prefix):
-                source_name = key[len(prefix):]
+                source_name = key[len(prefix) :]
             else:
                 continue
             payload = json.loads(str(row["payload_json"]))
@@ -60,11 +60,13 @@ class StoreOAuthConnectMixin:
                 continue
             issuer = payload.get("issuer")
             workspace_id = payload.get("workspace_id")
-            sources.append({
-                "source": source_name,
-                "issuer": issuer if isinstance(issuer, str) else None,
-                "workspace_id": workspace_id if isinstance(workspace_id, str) else None,
-            })
+            sources.append(
+                {
+                    "source": source_name,
+                    "issuer": issuer if isinstance(issuer, str) else None,
+                    "workspace_id": workspace_id if isinstance(workspace_id, str) else None,
+                }
+            )
         return sources
 
     def clear_cloud_sync_state_for_reconnect(self) -> None:

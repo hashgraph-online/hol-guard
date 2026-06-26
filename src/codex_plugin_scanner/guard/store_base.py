@@ -257,16 +257,12 @@ def _normalize_source_name(source: str) -> str:
     if not normalized:
         return "default"
     if not _SOURCE_NAME_PATTERN.match(normalized):
-        raise ValueError(
-            f"Invalid source name: {source!r}. "
-            "Source names must match [a-zA-Z0-9][a-zA-Z0-9_-]*"
-        )
+        raise ValueError(f"Invalid source name: {source!r}. Source names must match [a-zA-Z0-9][a-zA-Z0-9_-]*")
     if len(normalized) > 64:
-        raise ValueError(
-            f"Invalid source name: {source!r}. "
-            "Source names must be 64 characters or fewer."
-        )
+        raise ValueError(f"Invalid source name: {source!r}. Source names must be 64 characters or fewer.")
     return normalized
+
+
 _POLICY_INTEGRITY_ENFORCEMENTS = frozenset({"warn", "enforce"})
 _POLICY_INTEGRITY_STATUSES = (
     "valid",
