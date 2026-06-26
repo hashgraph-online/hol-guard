@@ -29,13 +29,18 @@ def _configure_guard_cloud_parsers(
     login_parser.add_argument("--wait-timeout-seconds", type=int, default=180)
     login_parser.add_argument("--home")
     login_parser.add_argument("--guard-home")
+    login_parser.add_argument(
+        "--source",
+        default="default",
+        help="Named connection profile for multi-environment usage.",
+    )
     login_parser.add_argument("--json", action="store_true")
 
     connect_parser = guard_subparsers.add_parser(
         "connect",
         help="Open browser OAuth, pair this runtime to HOL Guard, and send the first sync",
     )
-    connect_parser.add_argument("connect_command", nargs="?", choices=("status", "repair", "re-pair"))
+    connect_parser.add_argument("connect_command", nargs="?", choices=("status", "repair", "re-pair", "sources"))
     _add_guard_common_args(connect_parser)
     connect_parser.add_argument("--sync-url", default=DEFAULT_GUARD_SYNC_URL, type=_guard_http_url)
     connect_parser.add_argument("--connect-url", default=DEFAULT_GUARD_CONNECT_URL, type=_guard_http_url)
@@ -63,6 +68,11 @@ def _configure_guard_cloud_parsers(
         action="store_true",
         dest="headless",
         help="Alias for --headless. Start Device Code approval without opening a browser.",
+    )
+    connect_parser.add_argument(
+        "--source",
+        default="default",
+        help="Named connection profile for multi-environment usage (e.g. 'staging'). Defaults to 'default'.",
     )
     connect_parser.add_argument("--json", action="store_true")
 
@@ -103,11 +113,21 @@ def _configure_guard_cloud_parsers(
         action="store_true",
         help="Also revoke the machine and runtime grant state in Guard Cloud.",
     )
+    disconnect_parser.add_argument(
+        "--source",
+        default="default",
+        help="Named connection profile to disconnect. Defaults to 'default'.",
+    )
     disconnect_parser.add_argument("--json", action="store_true")
 
     sync_parser = guard_subparsers.add_parser("sync", help="Sync receipts to the configured Guard endpoint")
     sync_parser.add_argument("--home")
     sync_parser.add_argument("--guard-home")
+    sync_parser.add_argument(
+        "--source",
+        default="default",
+        help="Named connection profile to sync from. Defaults to 'default'.",
+    )
     sync_parser.add_argument("--json", action="store_true")
 
     commands_parser = guard_subparsers.add_parser(

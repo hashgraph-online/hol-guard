@@ -12,9 +12,9 @@ from .store_base import *
 
 class StoreOAuthConnectMixin:
     def get_cloud_sync_profile(self) -> dict[str, str] | None:
-        oauth_payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+        oauth_payload = self.get_sync_payload(self._oauth_local_credentials_state_key)
         if not isinstance(oauth_payload, dict) and self.repair_oauth_local_credential_storage_from_primary():
-            oauth_payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+            oauth_payload = self.get_sync_payload(self._oauth_local_credentials_state_key)
         if isinstance(oauth_payload, dict):
             oauth_health = self.get_oauth_local_credential_health()
             if not isinstance(oauth_health, dict) or oauth_health.get("state") != "healthy":
@@ -33,6 +33,39 @@ class StoreOAuthConnectMixin:
                     profile["workspace_id"] = workspace_id.strip()
                 return profile
         return None
+
+    def list_oauth_sources(self) -> list[dict[str, object]]:
+        """List all configured connection source profiles.
+
+        Returns a list of dicts with 'source', 'issuer', 'workspace_id',
+        and 'connected' fields for each source that has OAuth credentials.
+        """
+        sources: list[dict[str, object]] = []
+        prefix = _OAUTH_LOCAL_CREDENTIALS_STATE_KEY + ":"
+        with self._connect() as connection:
+            rows = connection.execute(
+                "select state_key, payload_json from sync_state where state_key = ? or state_key like ?",
+                (_OAUTH_LOCAL_CREDENTIALS_STATE_KEY, prefix + "%"),
+            ).fetchall()
+        for row in rows:
+            key = str(row["state_key"])
+            if key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY:
+                source_name = "default"
+            elif key.startswith(prefix):
+                source_name = key[len(prefix):]
+            else:
+                continue
+            payload = json.loads(str(row["payload_json"]))
+            if not isinstance(payload, dict):
+                continue
+            issuer = payload.get("issuer")
+            workspace_id = payload.get("workspace_id")
+            sources.append({
+                "source": source_name,
+                "issuer": issuer if isinstance(issuer, str) else None,
+                "workspace_id": workspace_id if isinstance(workspace_id, str) else None,
+            })
+        return sources
 
     def clear_cloud_sync_state_for_reconnect(self) -> None:
         self.delete_sync_payloads(list(_GUARD_CLOUD_RESET_STATE_KEYS))
@@ -135,7 +168,7 @@ class StoreOAuthConnectMixin:
             payload["runtime_id"] = runtime_id
         if runtime_label:
             payload["runtime_label"] = runtime_label
-        existing_payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+        existing_payload = self.get_sync_payload(self._oauth_local_credentials_state_key)
         existing_secret_ref = (
             existing_payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY) if isinstance(existing_payload, dict) else None
         )
@@ -160,10 +193,10 @@ class StoreOAuthConnectMixin:
         self._mirror_oauth_secret_to_fallback(self._oauth_local_credentials_ref, secret_json)
         self._assert_oauth_secret_persisted(self._oauth_local_credentials_ref, secret_json)
         self._remember_oauth_secret_payload(self._oauth_local_credentials_ref, secret_hash, secret_json)
-        self.set_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY, payload, now)
+        self.set_sync_payload(self._oauth_local_credentials_state_key, payload, now)
 
     def get_oauth_local_credentials(self, *, allow_primary: bool = False) -> dict[str, object] | None:
-        payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+        payload = self.get_sync_payload(self._oauth_local_credentials_state_key)
         if not isinstance(payload, dict):
             return None
         metadata = self._oauth_local_credentials_metadata(payload)
@@ -178,7 +211,7 @@ class StoreOAuthConnectMixin:
         return self._build_oauth_local_credentials_result(metadata=metadata, secret_payload=secret_payload)
 
     def get_recoverable_oauth_local_credentials(self) -> dict[str, object] | None:
-        payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+        payload = self.get_sync_payload(self._oauth_local_credentials_state_key)
         if not isinstance(payload, dict):
             return None
         metadata = self._oauth_local_credentials_metadata(payload)
@@ -191,7 +224,7 @@ class StoreOAuthConnectMixin:
 
     def clear_oauth_local_credentials(self) -> None:
         self._clear_oauth_secret_payload_cache()
-        payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+        payload = self.get_sync_payload(self._oauth_local_credentials_state_key)
         if isinstance(payload, dict):
             secret_ref = payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY)
             if isinstance(secret_ref, str) and secret_ref:
@@ -201,12 +234,12 @@ class StoreOAuthConnectMixin:
                     legacy_path = legacy_fallback._path_for(secret_ref)
                     with suppress(OSError):
                         legacy_path.unlink()
-        self.delete_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+        self.delete_sync_payload(self._oauth_local_credentials_state_key)
 
     def get_oauth_local_credential_health(self) -> dict[str, object]:
-        payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+        payload = self.get_sync_payload(self._oauth_local_credentials_state_key)
         if not isinstance(payload, dict) and self.repair_oauth_local_credential_storage_from_primary():
-            payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+            payload = self.get_sync_payload(self._oauth_local_credentials_state_key)
         health: dict[str, object] = {
             "configured": isinstance(payload, dict),
             "state": "not_configured",
@@ -235,7 +268,7 @@ class StoreOAuthConnectMixin:
             and can_repair_from_primary
             and self.repair_oauth_local_credential_storage_from_primary()
         ):
-            refreshed_payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+            refreshed_payload = self.get_sync_payload(self._oauth_local_credentials_state_key)
             if isinstance(refreshed_payload, dict):
                 payload = refreshed_payload
                 secret_hash = payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY)
@@ -334,12 +367,12 @@ class StoreOAuthConnectMixin:
     def repair_oauth_local_credential_storage_from_primary(self) -> bool:
         """Rebuild OAuth credential storage from primary or recoverable fallback state."""
         with self.hold_oauth_credential_lock():
-            payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+            payload = self.get_sync_payload(self._oauth_local_credentials_state_key)
             if not isinstance(payload, dict):
                 recovered_payload = self._recover_missing_oauth_local_credentials_payload(now=_now())
                 if recovered_payload is None:
                     return False
-                self.set_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY, recovered_payload, _now())
+                self.set_sync_payload(self._oauth_local_credentials_state_key, recovered_payload, _now())
                 return True
             repaired_payload = None
             if self._should_attempt_oauth_storage_repair():

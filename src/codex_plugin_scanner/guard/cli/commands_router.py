@@ -122,7 +122,12 @@ def run_guard_command(
         )
         return _normalize_guard_handler_result(result)
 
-    store = GuardStore(guard_home, prime_policy_integrity=args.guard_command != "hook")
+    source = getattr(args, "source", "default")
+    try:
+        store = GuardStore(guard_home, source=source, prime_policy_integrity=args.guard_command != "hook")
+    except ValueError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 2
     config = load_guard_config(guard_home, workspace=workspace)
     config = overlay_synced_guard_policy(config, _synced_policy_payload(store))
 

@@ -97,7 +97,7 @@ def _run_guard_update_command(
         store = None
     else:
         try:
-            store = GuardStore(guard_home)
+            store = GuardStore(guard_home, source=getattr(args, "source", "default"))
         except (OSError, RuntimeError, sqlite3.Error) as error:
             store = None
             update_store_error = error
