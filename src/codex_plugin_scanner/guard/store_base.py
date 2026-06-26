@@ -10,6 +10,7 @@ import importlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -241,6 +242,29 @@ _SQLITE_ID_BATCH_SIZE = 500
 _WORKSPACE_POLICY_KEY_PREFIX = "workspace:"
 _POLICY_INTEGRITY_STATE_KEY = "policy_integrity"
 _POLICY_INTEGRITY_CONTROL_VERSION = 1
+
+_SOURCE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
+
+
+def _normalize_source_name(source: str | None) -> str:
+    """Normalize a connection source name.
+
+    The default source is 'default'. Source names are used to namespace
+    OAuth credentials in the local store, allowing multiple simultaneous
+    connections (e.g. production + staging).
+    """
+    if source is None:
+        return "default"
+    normalized = source.strip().lower()
+    if not normalized:
+        return "default"
+    if not _SOURCE_NAME_PATTERN.match(normalized):
+        raise ValueError(f"Invalid source name: {source!r}. Source names must match [a-zA-Z0-9][a-zA-Z0-9_-]*")
+    if len(normalized) > 64:
+        raise ValueError(f"Invalid source name: {source!r}. Source names must be 64 characters or fewer.")
+    return normalized
+
+
 _POLICY_INTEGRITY_ENFORCEMENTS = frozenset({"warn", "enforce"})
 _POLICY_INTEGRITY_STATUSES = (
     "valid",

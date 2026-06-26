@@ -322,7 +322,7 @@ def run_bridge(
     """Run the Guard Bridge daemon."""
     config = BridgeConfig(guard_url=guard_url, poll_interval=poll_interval, dry_run=dry_run)
     if store is None:
-        store = GuardStore(resolve_guard_home())
+        store = GuardStore(resolve_guard_home())  # source defaults to "default"
 
     bridge = GuardBridge(config=config, store=store, backend=backend)
     bridge.run()
