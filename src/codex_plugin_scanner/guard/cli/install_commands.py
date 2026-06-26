@@ -185,25 +185,6 @@ def build_harness_setup_plan(
     return payload
 
 
-def build_managed_install_plan(
-    requested_harness: str | None,
-    install_all: bool,
-    context: HarnessContext,
-    store: GuardStore,
-) -> dict[str, object]:
-    targets = _resolve_targets("install", requested_harness, install_all, context, store)
-    plans = [build_harness_setup_plan("connect", harness, context, dry_run=True) for harness in targets]
-    payload: dict[str, object] = {
-        "dry_run": True,
-        "setup_plans": plans,
-        "auto_detected": requested_harness is None or install_all,
-    }
-    if len(plans) == 1:
-        payload["setup_plan"] = plans[0]
-        payload.update(plans[0])
-    return payload
-
-
 def build_harness_verification(
     requested_harness: str,
     context: HarnessContext,
@@ -505,7 +486,6 @@ __all__ = [
     "apply_managed_install",
     "build_harness_setup_plan",
     "build_harness_verification",
-    "build_managed_install_plan",
     "list_harness_setup_items",
     "scan_workspace_skills",
     "uninstall_confirmation_token",
