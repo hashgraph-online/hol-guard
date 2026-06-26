@@ -93,6 +93,7 @@ def _configure_guard_local_parsers(
     install_parser = guard_subparsers.add_parser("install", help="Enable Guard management for one or more harnesses")
     install_parser.add_argument("harness", nargs="?")
     install_parser.add_argument("--all", action="store_true")
+    install_parser.add_argument("--dry-run", action="store_true")
     _add_guard_common_args(install_parser)
     install_parser.add_argument("--json", action="store_true")
 

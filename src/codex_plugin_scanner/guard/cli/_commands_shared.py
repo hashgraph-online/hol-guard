@@ -216,6 +216,7 @@ from .install_commands import (
     list_harness_setup_items,
     uninstall_confirmation_token,
 )
+from .install_dry_run import build_managed_install_plan
 from .protect_approvals import _queue_local_protect_approvals, _suppress_package_shim_allow_output
 from .remote_pair_flow import dispatch_guard_remote_pair_command
 from .uninstall_commands import run_guard_self_uninstall
