@@ -161,5 +161,5 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 | `antigravity` | `antigravity` | ❌ | ✅ | ❌ | mcp_tool, prompt |
 | `kimi` | `kimi`, `kimi-code`, `kimi-cli` | ❌ | ✅ | ❌ | shell, prompt |
 | `grok` | `grok`, `grok-build`, `grok-build-cli`, `xai-grok` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read |
-| `pi` | `pi`, `pi-agent`, `pi-coding-agent` | ✅ | ✅ | ❌ | shell, prompt, mcp_tool, file_read, tool_result |
+| `pi` | `pi`, `pi-agent`, `pi-coding-agent`, `omp`, `oh-my-pi` | ✅ | ✅ | ❌ | shell, prompt, mcp_tool, file_read, tool_result |
 | `zcode` | `zcode`, `zai`, `z-code`, `zai-zcode` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read |
