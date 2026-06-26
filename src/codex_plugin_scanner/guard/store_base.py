@@ -246,13 +246,15 @@ _POLICY_INTEGRITY_CONTROL_VERSION = 1
 _SOURCE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
 
 
-def _normalize_source_name(source: str) -> str:
+def _normalize_source_name(source: str | None) -> str:
     """Normalize a connection source name.
 
     The default source is 'default'. Source names are used to namespace
     OAuth credentials in the local store, allowing multiple simultaneous
     connections (e.g. production + staging).
     """
+    if source is None:
+        return "default"
     normalized = source.strip().lower()
     if not normalized:
         return "default"
