@@ -345,15 +345,18 @@ def _run_guard_install_command(
     context = _require_guard_context(context)
     store = _require_guard_store(store)
     try:
-        payload = apply_managed_install(
-            "install",
-            args.harness,
-            bool(getattr(args, "all", False)),
-            context,
-            store,
-            str(workspace) if workspace else None,
-            _now(),
-        )
+        if bool(getattr(args, "dry_run", False)):
+            payload = build_managed_install_plan(args.harness, bool(getattr(args, "all", False)), context, store)
+        else:
+            payload = apply_managed_install(
+                "install",
+                args.harness,
+                bool(getattr(args, "all", False)),
+                context,
+                store,
+                str(workspace) if workspace else None,
+                _now(),
+            )
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 2
