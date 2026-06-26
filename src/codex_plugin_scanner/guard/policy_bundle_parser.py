@@ -31,6 +31,11 @@ _POLICY_BUNDLE_CORE_KEYS = (
     "rules",
 )
 
+# receiptRedactionLevel is included in the policy bundle signing payload by the
+# portal (buildPolicyBundleCore), so it must be part of the canonical hash.
+# Older bundles may not have it, so treat it as optional in hash computation.
+_POLICY_BUNDLE_OPTIONAL_CORE_KEYS = ("receiptRedactionLevel",)
+
 _POLICY_BUNDLE_DEFAULT_ACTIONS = frozenset({"allow", "warn", "block"})
 _POLICY_BUNDLE_MODE_VALUES = frozenset({"observe", "prompt", "enforce"})
 _POLICY_BUNDLE_REVIEW_ACTIONS = frozenset({"allow", "review", "block"})
@@ -96,6 +101,9 @@ def computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
         if key not in policy_bundle:
             raise ValueError(f"missing_policy_bundle_key:{key}")
         bundle_core[key] = policy_bundle[key]
+    for key in _POLICY_BUNDLE_OPTIONAL_CORE_KEYS:
+        if key in policy_bundle:
+            bundle_core[key] = policy_bundle[key]
     verifier = bundle_core.get("verifier")
     if isinstance(verifier, dict):
         normalized_verifier = dict(verifier)
@@ -188,9 +196,14 @@ def canonical_policy_bundle_payload(policy_bundle: dict[str, object]) -> bytes:
         if key not in policy_bundle:
             raise ValueError(f"missing_policy_bundle_key:{key}")
         bundle_core[key] = policy_bundle[key]
+    for key in _POLICY_BUNDLE_OPTIONAL_CORE_KEYS:
+        if key in policy_bundle:
+            bundle_core[key] = policy_bundle[key]
     verifier = bundle_core.get("verifier")
     if isinstance(verifier, dict):
         normalized_verifier = dict(verifier)
+        if verifier.get("algorithm") == "rsa-pss-sha256":
+            normalized_verifier["publicKeyPem"] = None
         normalized_verifier["signature"] = None
         bundle_core["verifier"] = normalized_verifier
     workspace_id = policy_bundle.get("workspaceId")
@@ -360,6 +373,9 @@ def validated_policy_bundle_payload(
         "rules": rules,
         "acknowledgements": acknowledgements,
     }
+    receipt_redaction_level = _non_empty_string(policy_bundle.get("receiptRedactionLevel"))
+    if receipt_redaction_level is not None:
+        payload["receiptRedactionLevel"] = receipt_redaction_level
     cloud_exceptions = policy_bundle.get("cloudExceptions")
     if isinstance(cloud_exceptions, list) and cloud_exceptions:
         payload["cloudExceptions"] = cloud_exceptions
