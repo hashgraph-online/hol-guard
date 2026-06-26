@@ -77,14 +77,14 @@ class StoreSecretPolicyIntegrityMixin:
         self._policy_integrity_key_ref = self._build_scoped_secret_ref(_POLICY_INTEGRITY_KEY_REF)
         self._policy_integrity_control_ref = self._build_scoped_secret_ref(_POLICY_INTEGRITY_CONTROL_REF)
         self._guard_source = _normalize_source_name(source)
-        self._oauth_local_credentials_ref = self._build_scoped_secret_ref(
-            _OAUTH_LOCAL_CREDENTIALS_REF if self._guard_source == "default"
-            else f"{_OAUTH_LOCAL_CREDENTIALS_REF}:{self._guard_source}"
-        )
-        self._oauth_local_credentials_state_key = (
-            _OAUTH_LOCAL_CREDENTIALS_STATE_KEY if self._guard_source == "default"
-            else f"{_OAUTH_LOCAL_CREDENTIALS_STATE_KEY}:{self._guard_source}"
-        )
+        if self._guard_source == "default":
+            oauth_ref_prefix = _OAUTH_LOCAL_CREDENTIALS_REF
+            oauth_state_key = _OAUTH_LOCAL_CREDENTIALS_STATE_KEY
+        else:
+            oauth_ref_prefix = f"{_OAUTH_LOCAL_CREDENTIALS_REF}:{self._guard_source}"
+            oauth_state_key = f"{_OAUTH_LOCAL_CREDENTIALS_STATE_KEY}:{self._guard_source}"
+        self._oauth_local_credentials_ref = self._build_scoped_secret_ref(oauth_ref_prefix)
+        self._oauth_local_credentials_state_key = oauth_state_key
         self._guard_event_queue_limit = max(1, guard_event_queue_limit)
         self._prime_policy_integrity_on_initialize = prime_policy_integrity
         self.path = self.guard_home / "guard.db"
