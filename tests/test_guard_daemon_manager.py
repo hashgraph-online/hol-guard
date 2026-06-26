@@ -587,6 +587,104 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_daemon_states(tmp_path, monke
     assert json.loads(fresh_state_path.read_text(encoding="utf-8"))["pid"] == 22222
 
 
+def test_ensure_guard_daemon_skips_runtime_probe_for_dead_ephemeral_state_pid(tmp_path, monkeypatch):
+    _disable_daemon_adoption(monkeypatch)
+    _disable_duplicate_retire(monkeypatch)
+    guard_home = tmp_path / "guard-home"
+    stale_guard_home = tmp_path / "pytest-of-user" / "pytest-11" / "test-stale" / "home"
+    stale_guard_home.mkdir(parents=True)
+    stale_state_path = stale_guard_home / "daemon-state.json"
+    stale_state_path.write_text(
+        json.dumps(
+            {
+                "pid": 12345,
+                "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+                "source_root": daemon_manager_module._current_guard_daemon_source_root(),
+                "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    launched_commands: list[list[str]] = []
+    runtime_probe_calls = {"count": 0}
+
+    def fake_load_guard_daemon_url(_guard_home):
+        if launched_commands:
+            return "http://127.0.0.1:5418"
+        return None
+
+    def fake_runtime_state_age_seconds(_guard_home):
+        runtime_probe_calls["count"] += 1
+        return 60.0
+
+    monkeypatch.setattr(daemon_manager_module, "_LAST_EPHEMERAL_REAP_AT", 0.0)
+    monkeypatch.setattr(daemon_manager_module.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
+    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home, **kwargs: [5418])
+    monkeypatch.setattr(daemon_manager_module, "_state_path_age_seconds", lambda _path: 60.0)
+    monkeypatch.setattr(daemon_manager_module, "_runtime_state_age_seconds", fake_runtime_state_age_seconds)
+    monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: False)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_guard_daemon_pid_matches_command",
+        lambda _pid, expected_guard_home=None: True,
+    )
+    monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        daemon_manager_module.subprocess,
+        "Popen",
+        lambda command, **_kwargs: launched_commands.append(list(command)) or SimpleNamespace(),
+    )
+
+    url = daemon_manager_module.ensure_guard_daemon(guard_home)
+
+    assert url == "http://127.0.0.1:5418"
+    assert runtime_probe_calls["count"] == 0
+    assert json.loads(stale_state_path.read_text(encoding="utf-8")) == {}
+
+
+def test_ensure_guard_daemon_skips_runtime_probe_for_ephemeral_state_without_pid(tmp_path, monkeypatch):
+    _disable_daemon_adoption(monkeypatch)
+    _disable_duplicate_retire(monkeypatch)
+    guard_home = tmp_path / "guard-home"
+    stale_guard_home = tmp_path / "pytest-of-user" / "pytest-12" / "test-stale" / "home"
+    stale_guard_home.mkdir(parents=True)
+    stale_state_path = stale_guard_home / "daemon-state.json"
+    stale_state_path.write_text("{}", encoding="utf-8")
+    launched_commands: list[list[str]] = []
+    runtime_probe_calls = {"count": 0}
+
+    def fake_load_guard_daemon_url(_guard_home):
+        if launched_commands:
+            return "http://127.0.0.1:5419"
+        return None
+
+    def fake_runtime_state_age_seconds(_guard_home):
+        runtime_probe_calls["count"] += 1
+        return 60.0
+
+    monkeypatch.setattr(daemon_manager_module, "_LAST_EPHEMERAL_REAP_AT", 0.0)
+    monkeypatch.setattr(daemon_manager_module.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
+    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home, **kwargs: [5419])
+    monkeypatch.setattr(daemon_manager_module, "_state_path_age_seconds", lambda _path: 60.0)
+    monkeypatch.setattr(daemon_manager_module, "_runtime_state_age_seconds", fake_runtime_state_age_seconds)
+    monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
+    monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        daemon_manager_module.subprocess,
+        "Popen",
+        lambda command, **_kwargs: launched_commands.append(list(command)) or SimpleNamespace(),
+    )
+
+    url = daemon_manager_module.ensure_guard_daemon(guard_home)
+
+    assert url == "http://127.0.0.1:5419"
+    assert runtime_probe_calls["count"] == 0
+    assert json.loads(stale_state_path.read_text(encoding="utf-8")) == {}
+
+
 def test_ensure_guard_daemon_keeps_ephemeral_state_with_recent_runtime_heartbeat(tmp_path, monkeypatch):
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)

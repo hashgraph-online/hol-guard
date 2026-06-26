@@ -671,11 +671,16 @@ def _reap_stale_ephemeral_guard_daemons(*, exclude_guard_home: Path | None = Non
             continue
         if not _guard_home_is_ephemeral(resolved_guard_home):
             continue
-        if _state_path_age_seconds(state_path) < _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS:
-            continue
-        if not _ephemeral_guard_home_is_inactive(guard_home, fallback_age_seconds=_state_path_age_seconds(state_path)):
+        state_age_seconds = _state_path_age_seconds(state_path)
+        if state_age_seconds < _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS:
             continue
         payload = _load_state(guard_home)
+        if not _ephemeral_guard_home_is_inactive(
+            guard_home,
+            fallback_age_seconds=state_age_seconds,
+            state_payload=payload,
+        ):
+            continue
         if not isinstance(payload, dict) or not _looks_like_guard_daemon_state(payload, guard_home=guard_home):
             continue
         payload = {**payload, "guard_home": str(guard_home)}
@@ -758,7 +763,21 @@ def _guard_home_is_ephemeral(guard_home: Path) -> bool:
     return any(part.startswith("pytest-") or "pytest-of-" in part for part in guard_home.parts)
 
 
-def _ephemeral_guard_home_is_inactive(guard_home: Path, *, fallback_age_seconds: float) -> bool:
+def _ephemeral_guard_home_is_inactive(
+    guard_home: Path,
+    *,
+    fallback_age_seconds: float,
+    state_payload: dict[str, object] | None = None,
+) -> bool:
+    payload = state_payload if isinstance(state_payload, dict) else _load_state(guard_home)
+    if isinstance(payload, dict):
+        pid = payload.get("pid")
+        if not isinstance(pid, int) or pid <= 0:
+            return fallback_age_seconds >= _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS
+        if not _guard_daemon_pid_is_running(pid):
+            return fallback_age_seconds >= _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS
+        if not _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home):
+            return fallback_age_seconds >= _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS
     heartbeat_age_seconds = _runtime_state_age_seconds(guard_home)
     if heartbeat_age_seconds is None:
         return fallback_age_seconds >= _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS
