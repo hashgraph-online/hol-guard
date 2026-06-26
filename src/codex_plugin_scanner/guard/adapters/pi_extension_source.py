@@ -14,20 +14,27 @@ GUARD_HOOK_MAX_SERIALIZED_PAYLOAD_CHARS = 24_000
 
 
 def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path: Path) -> str:
-    guard_args = ["guard", "hook", "--guard-home", str(guard_home), "--harness", "pi"]
+    guard_args = ["hook", "--guard-home", str(guard_home), "--harness", "pi"]
     if home_dir.resolve() != Path.home().resolve():
         guard_args.extend(["--home", str(home_dir)])
     guard_args_json = json.dumps(guard_args)
+    guard_home_json = json.dumps(str(guard_home))
+    home_dir_json = json.dumps(str(home_dir))
+    home_dir_is_default_json = "true" if home_dir.resolve() == Path.home().resolve() else "false"
     config_path_json = json.dumps(str(settings_path))
     return (
         'import { spawnSync } from "node:child_process";\n'
         'import { createCipheriv, createHash, randomBytes } from "node:crypto";\n'
-        'import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";\n'
+        'import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";\n'
         'import { tmpdir } from "node:os";\n'
         'import { join } from "node:path";\n'
         'import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";\n'
         "\n"
+        'const GUARD_COMMAND_CANDIDATES = ["plugin-guard", "hol-guard"] as const;\n'
         f"const GUARD_ARGS = {guard_args_json};\n"
+        f"const GUARD_HOME = {guard_home_json};\n"
+        f"const GUARD_HOME_DIR = {home_dir_json};\n"
+        f"const GUARD_HOME_DIR_IS_DEFAULT = {home_dir_is_default_json};\n"
         f"const GUARD_CONFIG_PATH = {config_path_json};\n"
         f"const GUARD_TIMEOUT_MS = {GUARD_HOOK_TIMEOUT_MS};\n"
         f"const GUARD_TEXT_LIMIT_CHARS = {GUARD_HOOK_TEXT_LIMIT_CHARS};\n"
@@ -242,11 +249,56 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  };\n"
         "}\n"
         "\n"
-        "function runGuard(\n"
+        "async function daemonGuardResponse(\n"
+        "  serializedPayload: string,\n"
+        "  cwd?: string,\n"
+        "): Promise<GuardResponse | null> {\n"
+        "  if (typeof fetch !== 'function') return null;\n"
+        "  let port = 0;\n"
+        "  let authToken = '';\n"
+        "  try {\n"
+        "    const daemonState = JSON.parse(\n"
+        "      readFileSync(join(GUARD_HOME, 'daemon-state.json'), 'utf8'),\n"
+        "    ) as { port?: unknown };\n"
+        "    port = typeof daemonState.port === 'number' ? daemonState.port : 0;\n"
+        "    authToken = readFileSync(join(GUARD_HOME, 'daemon-auth-token'), 'utf8').trim();\n"
+        "  } catch {\n"
+        "    return null;\n"
+        "  }\n"
+        "  if (!(port > 0) || authToken.length === 0) return null;\n"
+        '  const workspace = typeof cwd === "string" && cwd ? cwd : process.cwd();\n'
+        "  const params = new URLSearchParams({ 'guard-home': GUARD_HOME });\n"
+        "  if (workspace) params.set('workspace', workspace);\n"
+        "  if (!GUARD_HOME_DIR_IS_DEFAULT && GUARD_HOME_DIR) params.set('home', GUARD_HOME_DIR);\n"
+        "  const controller = typeof AbortController === 'function' ? new AbortController() : undefined;\n"
+        "  const timeoutHandle = setTimeout(() => controller?.abort(), Math.max(GUARD_TIMEOUT_MS - 500, 1));\n"
+        "  try {\n"
+        "    const response = await fetch(`http://127.0.0.1:${port}/v1/hooks/pi?${params.toString()}`, {\n"
+        "      method: 'POST',\n"
+        "      headers: {\n"
+        "        'Content-Type': 'application/json',\n"
+        "        'X-Guard-Token': authToken,\n"
+        "      },\n"
+        "      body: serializedPayload,\n"
+        "      signal: controller?.signal,\n"
+        "    });\n"
+        "    if (!response.ok) return null;\n"
+        "    const raw = (await response.text()).trim();\n"
+        "    if (!raw) return {};\n"
+        "    const parsed = JSON.parse(raw) as GuardResponse;\n"
+        "    return parsed && typeof parsed === 'object' ? parsed : null;\n"
+        "  } catch {\n"
+        "    return null;\n"
+        "  } finally {\n"
+        "    clearTimeout(timeoutHandle);\n"
+        "  }\n"
+        "}\n"
+        "\n"
+        "async function runGuard(\n"
         "  payload: Record<string, unknown>,\n"
         "  cwd?: string,\n"
         "  options?: { enforceSizeCap?: boolean },\n"
-        "): GuardResponse {\n"
+        "): Promise<GuardResponse> {\n"
         "  const args = [...GUARD_ARGS];\n"
         '  const workspace = typeof cwd === "string" && cwd ? cwd : process.cwd();\n'
         '  if (workspace) args.push("--workspace", workspace);\n'
@@ -293,12 +345,28 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         '        + "the safe size limit.",\n'
         "    };\n"
         "  }\n"
-        '  const result = spawnSync("hol-guard", args, {\n'
-        "    input: `${serializedPayload}\\n`,\n"
-        '    encoding: "utf-8",\n'
-        "    timeout: GUARD_TIMEOUT_MS,\n"
-        "  });\n"
+        "  const daemonResponse = await daemonGuardResponse(serializedPayload, cwd);\n"
+        "  if (daemonResponse) {\n"
+        "    cleanupPayloadReference();\n"
+        "    return daemonResponse;\n"
+        "  }\n"
+        "  let result: ReturnType<typeof spawnSync<string>> | null = null;\n"
+        "  for (const command of GUARD_COMMAND_CANDIDATES) {\n"
+        "    result = spawnSync(command, args, {\n"
+        "      input: `${serializedPayload}\\n`,\n"
+        '      encoding: "utf-8",\n'
+        "      timeout: GUARD_TIMEOUT_MS,\n"
+        "    });\n"
+        "    const resultError = result.error as (Error & { code?: unknown }) | undefined;\n"
+        "    if (!(result.error && resultError?.code === 'ENOENT')) break;\n"
+        "  }\n"
         "  cleanupPayloadReference();\n"
+        "  if (result === null) {\n"
+        "    return {\n"
+        '      decision: "deny",\n'
+        '      reason: "HOL Guard Pi hook failed before completing review: Guard CLI was not found.",\n'
+        "    };\n"
+        "  }\n"
         "  if (result.error) {\n"
         "    const resultError = result.error as (Error & { code?: unknown }) | undefined;\n"
         "    const errorMessage = resultError instanceof Error ? resultError.message : String(result.error);\n"
@@ -356,7 +424,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  const blockedToolResults = new Map<string, string>();\n"
         '  pi.on("input", async (event, ctx) => {\n'
         '    if (event.source === "extension") return { action: "continue" };\n'
-        "    const response = runGuard(\n"
+        "    const response = await runGuard(\n"
         '      { hook_event_name: "UserPromptSubmit", prompt: event.text, config_path: GUARD_CONFIG_PATH },\n'
         "      ctx.cwd,\n"
         "    );\n"
@@ -372,7 +440,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "      (event as { toolInput?: Record<string, unknown> }).toolInput ??\n"
         "      (event as { arguments?: Record<string, unknown> }).arguments ??\n"
         "      {};\n"
-        "    const response = runGuard(\n"
+        "    const response = await runGuard(\n"
         "      {\n"
         '        hook_event_name: "PreToolUse",\n'
         "        config_path: GUARD_CONFIG_PATH,\n"
@@ -421,7 +489,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         '          + "the model receives the reviewed excerpt, not the full output."\n'
         "        : null;\n"
         '    if (oversizeNotice) ctx.ui.notify(oversizeNotice, "info");\n'
-        "    const response = runGuard(\n"
+        "    const response = await runGuard(\n"
         "      {\n"
         '        hook_event_name: "PostToolUse",\n'
         "        config_path: GUARD_CONFIG_PATH,\n"

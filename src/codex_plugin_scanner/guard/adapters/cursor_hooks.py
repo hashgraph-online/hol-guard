@@ -446,8 +446,11 @@ def _remove_managed_hook_entries(*, hooks_path: Path, script_path: Path) -> bool
 
 
 def _resolve_guard_cli_command() -> list[str]:
-    """Prefer the installed hol-guard CLI so hooks use the same runtime as install."""
+    """Prefer the installed guard-only CLI so hooks use the leanest runtime."""
 
+    plugin_guard = shutil.which("plugin-guard")
+    if plugin_guard:
+        return [plugin_guard]
     hol_guard = shutil.which("hol-guard")
     if hol_guard:
         return [hol_guard]

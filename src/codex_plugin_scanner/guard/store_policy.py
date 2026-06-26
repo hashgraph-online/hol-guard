@@ -201,9 +201,6 @@ class StorePolicyMixin:
         selected_payload: dict[str, object] | None = None
         ignored_local_integrity: dict[str, object] | None = None
         with self._connect() as connection:
-            state = self._refresh_policy_integrity_state(connection, now=current_time, create_key=True)
-            trust_status = TrustStatus.from_policy_integrity_state(state).to_dict()
-            key, key_id = self._policy_integrity_secret_material(create=True)
             local_once_decision = None
             local_once_hashes = tuple(
                 dict.fromkeys(hash_value for hash_value in (artifact_hash, runtime_exact_match_key) if hash_value)
@@ -298,12 +295,62 @@ class StorePolicyMixin:
                     current_time,
                 ),
             ).fetchall()
+            cached_state = self._load_policy_integrity_state(connection) or {}
+            cached_trust_status = TrustStatus.from_policy_integrity_state(cached_state).to_dict()
             if not rows and selected_payload is None:
                 return {
                     "decision": None,
                     "ignored_local_integrity": None,
-                    "trust_status": trust_status,
+                    "trust_status": cached_trust_status,
                 }
+            has_local_rows = any(not is_remote_policy_source(str(candidate["source"])) for candidate in rows)
+            if not has_local_rows:
+                if selected_payload is None:
+                    for candidate in rows:
+                        if _scoped_runtime_row_requires_exact_match(
+                            scope=str(candidate["scope"]),
+                            stored_artifact_id=(
+                                str(candidate["artifact_id"]) if isinstance(candidate["artifact_id"], str) else None
+                            ),
+                            stored_artifact_hash=(
+                                str(candidate["artifact_hash"]) if isinstance(candidate["artifact_hash"], str) else None
+                            ),
+                            source=str(candidate["source"]),
+                            requested_artifact_id=artifact_id,
+                            requested_runtime_exact_match_key=runtime_exact_match_key,
+                        ):
+                            continue
+                        selected_payload = self._policy_row_payload(candidate)
+                        if is_remote_policy_source(str(candidate["source"])):
+                            events.append(
+                                (
+                                    "policy.cloud.applied",
+                                    {
+                                        "decision_id": int(candidate["decision_id"]),
+                                        "harness": str(candidate["harness"]),
+                                        "artifact_id": candidate["artifact_id"],
+                                        "scope": str(candidate["scope"]),
+                                        "source": str(candidate["source"]),
+                                        "action": str(candidate["action"]),
+                                    },
+                                )
+                            )
+                        if _is_approval_gate_one_shot_policy(candidate):
+                            connection.execute(
+                                "delete from policy_decisions where decision_id = ?",
+                                (int(candidate["decision_id"]),),
+                            )
+                        break
+                for event_name, payload in events:
+                    self.add_event(event_name, payload, current_time)
+                return {
+                    "decision": selected_payload,
+                    "ignored_local_integrity": None,
+                    "trust_status": cached_trust_status,
+                }
+            state = self._refresh_policy_integrity_state(connection, now=current_time, create_key=True)
+            trust_status = TrustStatus.from_policy_integrity_state(state).to_dict()
+            key, key_id = self._policy_integrity_secret_material(create=True)
             for candidate in rows if selected_payload is None else ():
                 if _scoped_runtime_row_requires_exact_match(
                     scope=str(candidate["scope"]),
