@@ -1077,7 +1077,10 @@ def _retire_guard_daemon_pid(pid: int, *, expected_guard_home: Path | None = Non
     if not _guard_daemon_pid_is_running(pid):
         return True
     if not _guard_daemon_pid_matches_command(pid, expected_guard_home):
-        return False
+        # The pid is running a different command — not our daemon.
+        # There is nothing to kill; return True so the caller clears
+        # the stale daemon-state.json instead of revisiting it forever.
+        return True
     try:
         os.kill(pid, signal.SIGTERM)
     except OSError:
