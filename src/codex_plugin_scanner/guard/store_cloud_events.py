@@ -184,7 +184,9 @@ class StoreCloudEventsMixin:
             )
 
     def set_sync_payload(self, state_key: str, payload: Mapping[str, object] | Sequence[object], now: str) -> None:
-        if state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY:
+        if state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY or state_key.startswith(
+            _OAUTH_LOCAL_CREDENTIALS_STATE_KEY + ":"
+        ):
             self._clear_oauth_secret_payload_cache()
         with self._connect() as connection:
             connection.execute(

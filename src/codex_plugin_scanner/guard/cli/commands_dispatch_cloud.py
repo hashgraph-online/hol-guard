@@ -119,6 +119,10 @@ def _run_guard_connect_command(
         )
         _emit("connect", payload, getattr(args, "json", False))
         return 0
+    if connect_subcommand == "sources":
+        sources = store.list_oauth_sources()
+        _emit("connect", {"sources": sources}, getattr(args, "json", False))
+        return 0
     if connect_subcommand in {"status", "re-pair"}:
         payload = build_connect_status_payload(
             store=store,
