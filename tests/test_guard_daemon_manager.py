@@ -774,7 +774,7 @@ def test_ensure_guard_daemon_does_not_clobber_unowned_ephemeral_state_files(tmp_
     assert foreign_state_path.read_text(encoding="utf-8") == '"not-json-dict"'
 
 
-def test_ensure_guard_daemon_keeps_stale_state_when_pid_no_longer_matches_guard_home(tmp_path, monkeypatch):
+def test_ensure_guard_daemon_clears_stale_state_when_pid_no_longer_matches_guard_home(tmp_path, monkeypatch):
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
     guard_home = tmp_path / "guard-home"
@@ -819,7 +819,8 @@ def test_ensure_guard_daemon_keeps_stale_state_when_pid_no_longer_matches_guard_
     url = daemon_manager_module.ensure_guard_daemon(guard_home)
 
     assert url == "http://127.0.0.1:5417"
-    assert json.loads(stale_state_path.read_text(encoding="utf-8")) == stale_payload
+    # Stale daemon-state.json is cleared when the pid belongs to a different command
+    assert json.loads(stale_state_path.read_text(encoding="utf-8")) == {}
 
 
 def test_ensure_guard_daemon_reaps_stale_ephemeral_processes_without_state_file(tmp_path, monkeypatch):
@@ -877,7 +878,7 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_processes_without_state_file(
     assert json.loads((stale_guard_home / "daemon-state.json").read_text(encoding="utf-8")) == {}
 
 
-def test_retire_guard_daemon_process_skips_recycled_pid_for_different_guard_home(tmp_path, monkeypatch):
+def test_retire_guard_daemon_process_clears_recycled_pid_for_different_guard_home(tmp_path, monkeypatch):
     killed: list[int] = []
     payload = {
         "pid": 55555,
@@ -894,7 +895,8 @@ def test_retire_guard_daemon_process_skips_recycled_pid_for_different_guard_home
 
     retired = daemon_manager_module._retire_guard_daemon_process(payload)
 
-    assert retired is False
+    # Mismatched pid returns True (nothing to kill) so the caller clears stale state
+    assert retired is True
     assert killed == []
 
 
