@@ -37,8 +37,8 @@ class StoreOAuthConnectMixin:
     def list_oauth_sources(self) -> list[dict[str, object]]:
         """List all configured connection source profiles.
 
-        Returns a list of dicts with 'source', 'issuer', 'workspace_id',
-        and 'connected' fields for each source that has OAuth credentials.
+        Returns a list of dicts with 'source', 'issuer', and 'workspace_id'
+        fields for each source that has OAuth credentials.
         """
         sources: list[dict[str, object]] = []
         prefix = _OAUTH_LOCAL_CREDENTIALS_STATE_KEY + ":"
