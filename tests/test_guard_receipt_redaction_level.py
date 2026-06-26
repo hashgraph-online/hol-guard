@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from codex_plugin_scanner.guard.config import (
     VALID_RECEIPT_REDACTION_LEVELS,
     _coerce_editable_setting,
@@ -46,7 +48,7 @@ def _make_envelope(
 
 class TestRedactionLevelConfig:
     def test_valid_levels(self):
-        assert VALID_RECEIPT_REDACTION_LEVELS == frozenset({"full", "partial", "none"})
+        assert frozenset({"full", "partial", "none"}) == VALID_RECEIPT_REDACTION_LEVELS
 
     def test_coerce_loaded_default(self):
         assert _coerce_loaded_receipt_redaction_level(None) == "full"
@@ -63,11 +65,9 @@ class TestRedactionLevelConfig:
         assert _coerce_editable_setting("receipt_redaction_level", "none") == "none"
 
     def test_coerce_editable_invalid(self):
-        try:
+        with pytest.raises(ValueError) as exc_info:
             _coerce_editable_setting("receipt_redaction_level", "invalid")
-            assert False, "Should have raised ValueError"
-        except ValueError as e:
-            assert "receipt redaction level" in str(e).lower()
+        assert "receipt redaction level" in str(exc_info.value).lower()
 
 
 class TestRedactedEnvelopeDictFull:
