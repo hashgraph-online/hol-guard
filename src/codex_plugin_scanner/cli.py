@@ -301,6 +301,14 @@ def main(argv: list[str] | None = None) -> int:
         program_name=program_name,
     )
     args = parser.parse_args(resolved_argv)
+    if program_mode == "guard":
+        try:
+            return run_guard_command(args)
+        except ValueError as exc:
+            parser.error(str(exc))
+        except Exception as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
     if getattr(args, "list_ecosystems", False):
         for ecosystem in list_supported_ecosystems():
             print(ecosystem)

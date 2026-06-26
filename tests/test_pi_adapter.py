@@ -195,9 +195,12 @@ class TestPiInstall:
         assert 'pi.on("tool_result"' in text
         assert 'pi.on("input"' in text
         assert 'hook_event_name: "PostToolUse"' in text
+        assert 'const GUARD_COMMAND_CANDIDATES = ["plugin-guard", "hol-guard"]' in text
         assert "tool_response: event.content" in text
         assert "const GUARD_CONFIG_PATH =" in text
         assert "config_path: GUARD_CONFIG_PATH" in text
+        assert '"hook", "--guard-home"' in text
+        assert '"guard", "hook"' not in text
         assert '"--harness", "pi"' in text
         assert '"--home"' in text
         assert "ctx.cwd" in text
@@ -218,6 +221,8 @@ class TestPiInstall:
         text = Path(str(manifest["config_path"])).read_text(encoding="utf-8")
         assert "serializedPayload = JSON.stringify(payloadToSend);" in text
         assert "serializedPayload.length > GUARD_MAX_SERIALIZED_PAYLOAD_CHARS" in text
+        assert "for (const command of GUARD_COMMAND_CANDIDATES)" in text
+        assert "resultError?.code === 'ENOENT'" in text
         assert "if (result.error) {" in text
         assert "const resultError =" in text
         assert "const errorCode =" in text

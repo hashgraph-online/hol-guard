@@ -59,6 +59,56 @@ def _make_store(tmp_path: Path) -> GuardStore:
     return GuardStore(tmp_path / "guard")
 
 
+def test_resolve_policy_without_matching_rules_skips_policy_integrity_refresh(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _make_store(tmp_path)
+
+    def fail_refresh(*_args, **_kwargs):
+        raise AssertionError("policy integrity refresh should not run for an empty policy lookup")
+
+    monkeypatch.setattr(store, "_refresh_policy_integrity_state", fail_refresh)
+    monkeypatch.setattr(store, "_policy_integrity_secret_material", fail_refresh)
+
+    assert store.resolve_policy("codex", "codex:project:none", "hash-none") is None
+
+
+def test_resolve_policy_with_remote_only_rule_skips_policy_integrity_refresh(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _make_store(tmp_path)
+    artifact_id = "codex:project:remote-only"
+    artifact_hash = "hash-remote"
+    store.replace_remote_policies(
+        [
+            PolicyDecision(
+                harness="codex",
+                scope="artifact",
+                artifact_id=artifact_id,
+                artifact_hash=artifact_hash,
+                workspace=None,
+                publisher=None,
+                action="allow",
+                reason="remote policy",
+                owner=None,
+                source="cloud-sync",
+            )
+        ],
+        now="2026-06-26T00:00:00Z",
+        remote_write_authorized=True,
+    )
+
+    def fail_refresh(*_args, **_kwargs):
+        raise AssertionError("policy integrity refresh should not run for remote-only policy lookups")
+
+    monkeypatch.setattr(store, "_refresh_policy_integrity_state", fail_refresh)
+    monkeypatch.setattr(store, "_policy_integrity_secret_material", fail_refresh)
+
+    assert store.resolve_policy("codex", artifact_id, artifact_hash) == "allow"
+
+
 class TestDecideAction:
     def test_allow_policy_passes_through_unchanged(self) -> None:
         config = GuardConfig(guard_home=Path("/tmp/test-guard"), workspace=None)

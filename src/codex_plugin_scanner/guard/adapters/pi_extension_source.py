@@ -14,7 +14,7 @@ GUARD_HOOK_MAX_SERIALIZED_PAYLOAD_CHARS = 24_000
 
 
 def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path: Path) -> str:
-    guard_args = ["guard", "hook", "--guard-home", str(guard_home), "--harness", "pi"]
+    guard_args = ["hook", "--guard-home", str(guard_home), "--harness", "pi"]
     if home_dir.resolve() != Path.home().resolve():
         guard_args.extend(["--home", str(home_dir)])
     guard_args_json = json.dumps(guard_args)
@@ -27,6 +27,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         'import { join } from "node:path";\n'
         'import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";\n'
         "\n"
+        'const GUARD_COMMAND_CANDIDATES = ["plugin-guard", "hol-guard"] as const;\n'
         f"const GUARD_ARGS = {guard_args_json};\n"
         f"const GUARD_CONFIG_PATH = {config_path_json};\n"
         f"const GUARD_TIMEOUT_MS = {GUARD_HOOK_TIMEOUT_MS};\n"
@@ -293,12 +294,23 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         '        + "the safe size limit.",\n'
         "    };\n"
         "  }\n"
-        '  const result = spawnSync("hol-guard", args, {\n'
-        "    input: `${serializedPayload}\\n`,\n"
-        '    encoding: "utf-8",\n'
-        "    timeout: GUARD_TIMEOUT_MS,\n"
-        "  });\n"
+        "  let result: ReturnType<typeof spawnSync<string>> | null = null;\n"
+        "  for (const command of GUARD_COMMAND_CANDIDATES) {\n"
+        "    result = spawnSync(command, args, {\n"
+        "      input: `${serializedPayload}\\n`,\n"
+        '      encoding: "utf-8",\n'
+        "      timeout: GUARD_TIMEOUT_MS,\n"
+        "    });\n"
+        "    const resultError = result.error as (Error & { code?: unknown }) | undefined;\n"
+        "    if (!(result.error && resultError?.code === 'ENOENT')) break;\n"
+        "  }\n"
         "  cleanupPayloadReference();\n"
+        "  if (result === null) {\n"
+        "    return {\n"
+        '      decision: "deny",\n'
+        '      reason: "HOL Guard Pi hook failed before completing review: Guard CLI was not found.",\n'
+        "    };\n"
+        "  }\n"
         "  if (result.error) {\n"
         "    const resultError = result.error as (Error & { code?: unknown }) | undefined;\n"
         "    const errorMessage = resultError instanceof Error ? resultError.message : String(result.error);\n"

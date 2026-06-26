@@ -63,13 +63,54 @@ def test_guard_store_constructor_uses_facade_patched_helpers(
     store = GuardStore(guard_home)
 
     assert permission_calls
+    assert oauth_builder_calls == []
+    assert policy_builder_calls == ["policy"]
+
+    assert isinstance(store._oauth_secret_store, EncryptedFileSecretStore)
     assert oauth_builder_calls == [str(guard_home)]
+
+    assert store._policy_integrity_secret_store is None
     assert policy_builder_calls == ["policy"]
 
     permission_calls.clear()
     store._repair_store_permissions()
 
     assert any(path == str(guard_home) for path, _mode in permission_calls)
+
+
+def test_guard_store_constructor_can_skip_policy_integrity_priming(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    oauth_builder_calls: list[str] = []
+    policy_builder_calls: list[str] = []
+
+    def _fake_oauth_secret_store(path):
+        oauth_builder_calls.append(str(path))
+        return EncryptedFileSecretStore(path)
+
+    def _fake_policy_integrity_secret_store():
+        policy_builder_calls.append("policy")
+        return None
+
+    monkeypatch.setattr(guard_store_module, "_build_oauth_secret_store", _fake_oauth_secret_store)
+    monkeypatch.setattr(
+        guard_store_module,
+        "_build_policy_integrity_secret_store",
+        _fake_policy_integrity_secret_store,
+    )
+
+    store = GuardStore(guard_home, prime_policy_integrity=False)
+
+    assert oauth_builder_calls == []
+    assert policy_builder_calls == []
+
+    assert isinstance(store._oauth_secret_store, EncryptedFileSecretStore)
+    assert oauth_builder_calls == [str(guard_home)]
+
+    assert store._policy_integrity_secret_store is None
+    assert policy_builder_calls == ["policy"]
 
 
 class _FakeSystemKeyringModule:
