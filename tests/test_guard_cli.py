@@ -782,6 +782,22 @@ class TestGuardCli:
         assert exc_info.value.code == 2
         assert "Run `hol-guard guard --help` to inspect available Guard commands." in capsys.readouterr().err
 
+    def test_plugin_guard_program_routes_directly_to_guard_mode(self, monkeypatch) -> None:
+        called: dict[str, object] = {}
+
+        def _fake_run_guard_command(args):
+            called["guard_command"] = args.guard_command
+            called["harness"] = getattr(args, "harness", None)
+            return 7
+
+        monkeypatch.setattr(sys, "argv", ["plugin-guard"])
+        monkeypatch.setattr("codex_plugin_scanner.cli.run_guard_command", _fake_run_guard_command)
+
+        rc = main(["hook", "--harness", "pi"])
+
+        assert rc == 7
+        assert called == {"guard_command": "hook", "harness": "pi"}
+
     def test_guard_detect_reports_supported_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

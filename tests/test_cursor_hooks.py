@@ -197,6 +197,21 @@ def test_cursor_hook_script_source_routes_hook_argv_by_cli_entrypoint(
     assert 'GUARD_HOOK_ARGV = ["guard", "hook"' in module_source
 
 
+def test_cursor_resolve_guard_cli_command_prefers_plugin_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import _resolve_guard_cli_command
+
+    def fake_which(command: str) -> str | None:
+        if command == "plugin-guard":
+            return "/usr/local/bin/plugin-guard"
+        if command == "hol-guard":
+            return "/usr/local/bin/hol-guard"
+        return None
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor_hooks.shutil.which", fake_which)
+
+    assert _resolve_guard_cli_command() == ["/usr/local/bin/plugin-guard"]
+
+
 def test_strip_managed_hook_entries_removes_hol_guard_pretooluse(tmp_path: Path) -> None:
     script_path = tmp_path / "hol-guard-cursor-hook.py"
     script_path.write_text("# Managed by HOL Guard\n", encoding="utf-8")

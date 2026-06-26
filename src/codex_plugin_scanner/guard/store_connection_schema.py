@@ -533,22 +533,25 @@ class StoreConnectionSchemaMixin:
                 self._record_schema_version(connection, version=2)
             self._enable_wal_mode(connection)
             self._repair_store_permissions()
-        # Prime policy-integrity secrets outside the SQLite transaction. Some
-        # credential-store lookups can block long enough to stall other Guard
-        # processes if initialization still holds the writer lock.
-        self._startup_prefetched_policy_integrity_secret_material = self._policy_integrity_secret_material(create=False)
-        self._startup_prefetched_policy_integrity_trusted_state = self._load_policy_integrity_control_state(
-            create=False
-        )
-        self._startup_prefetched_policy_integrity_repair_failed = False
-        self._prepare_startup_prefetched_policy_integrity_state()
-        try:
-            with self._connect() as connection:
-                self._refresh_policy_integrity_state(connection, now=_now(), create_key=False)
-        finally:
-            self._startup_prefetched_policy_integrity_secret_material = _POLICY_INTEGRITY_LOOKUP_UNSET
-            self._startup_prefetched_policy_integrity_trusted_state = _POLICY_INTEGRITY_LOOKUP_UNSET
+        if getattr(self, "_prime_policy_integrity_on_initialize", True):
+            # Prime policy-integrity secrets outside the SQLite transaction. Some
+            # credential-store lookups can block long enough to stall other Guard
+            # processes if initialization still holds the writer lock.
+            self._startup_prefetched_policy_integrity_secret_material = self._policy_integrity_secret_material(
+                create=False
+            )
+            self._startup_prefetched_policy_integrity_trusted_state = self._load_policy_integrity_control_state(
+                create=False
+            )
             self._startup_prefetched_policy_integrity_repair_failed = False
+            self._prepare_startup_prefetched_policy_integrity_state()
+            try:
+                with self._connect() as connection:
+                    self._refresh_policy_integrity_state(connection, now=_now(), create_key=False)
+            finally:
+                self._startup_prefetched_policy_integrity_secret_material = _POLICY_INTEGRITY_LOOKUP_UNSET
+                self._startup_prefetched_policy_integrity_trusted_state = _POLICY_INTEGRITY_LOOKUP_UNSET
+                self._startup_prefetched_policy_integrity_repair_failed = False
 
     @staticmethod
     def _enable_wal_mode(connection: sqlite3.Connection) -> None:
