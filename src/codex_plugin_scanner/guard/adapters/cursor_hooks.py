@@ -532,6 +532,9 @@ import os
 import shlex
 import subprocess
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -563,6 +566,53 @@ def _hook_process_env() -> dict[str, str]:
             if validated is not None:
                 env["PYTHONPATH"] = validated
     return env
+
+
+def _guard_hook_arg_value(flag: str) -> str | None:
+    try:
+        index = GUARD_HOOK_ARGV.index(flag)
+    except ValueError:
+        return None
+    if index + 1 >= len(GUARD_HOOK_ARGV):
+        return None
+    value = GUARD_HOOK_ARGV[index + 1]
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _daemon_hook_result(payload_json: str, *, workspace: str | None) -> tuple[int, str, str] | None:
+    state_path = Path(GUARD_HOME) / "daemon-state.json"
+    token_path = Path(GUARD_HOME) / "daemon-auth-token"
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        auth_token = token_path.read_text(encoding="utf-8").strip()
+    except (OSError, ValueError):
+        return None
+    port = state.get("port") if isinstance(state, dict) else None
+    if not isinstance(port, int) or port <= 0 or not auth_token:
+        return None
+    params = [("guard-home", GUARD_HOME)]
+    if workspace:
+        params.append(("workspace", workspace))
+    home_dir = _guard_hook_arg_value("--home")
+    if home_dir:
+        params.append(("home", home_dir))
+    query = urllib.parse.urlencode(params)
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}/v1/hooks/cursor?{query}",
+        data=payload_json.encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "X-Guard-Token": auth_token,
+        },
+        method="POST",
+    )
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(request, timeout=max(GUARD_HOOK_TIMEOUT_SECONDS - 2, 1)) as response:
+            body = response.read().decode("utf-8", errors="replace")
+    except (OSError, urllib.error.URLError):
+        return None
+    return (0, body if body.strip() else "{}", "")
 
 
 def _validated_hol_guard_src_path(path_str: str) -> str | None:
@@ -1011,16 +1061,26 @@ def main() -> int:
             guard_env["HOL_GUARD_CURSOR_APPROVAL_BINDING"] = approval_binding
         if proof:
             guard_env["HOL_GUARD_CURSOR_AFTER_SHELL_PROOF"] = proof
+    payload_json = json.dumps(prepared)
+    daemon_result = _daemon_hook_result(payload_json, workspace=workspace)
     try:
-        proc = subprocess.run(
-            [*GUARD_CLI, *guard_argv],
-            input=json.dumps(prepared),
-            capture_output=True,
-            text=True,
-            cwd=GUARD_HOME,
-            env=guard_env,
-            timeout=GUARD_HOOK_TIMEOUT_SECONDS,
-        )
+        if daemon_result is not None:
+            proc = subprocess.CompletedProcess(
+                [*GUARD_CLI, *guard_argv],
+                daemon_result[0],
+                stdout=daemon_result[1],
+                stderr=daemon_result[2],
+            )
+        else:
+            proc = subprocess.run(
+                [*GUARD_CLI, *guard_argv],
+                input=payload_json,
+                capture_output=True,
+                text=True,
+                cwd=GUARD_HOME,
+                env=guard_env,
+                timeout=GUARD_HOOK_TIMEOUT_SECONDS,
+            )
     except subprocess.TimeoutExpired:
         print(
             json.dumps(

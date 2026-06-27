@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -19,7 +21,9 @@ from codex_plugin_scanner.guard.adapters.cursor_hooks import (
     prepare_cursor_hook_payload,
     uninstall_cursor_hooks,
 )
+from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardArtifact
+from codex_plugin_scanner.guard.store import GuardStore
 
 
 def _cursor_shell_artifact(*, workspace_dir: Path, command: str) -> GuardArtifact:
@@ -195,6 +199,61 @@ def test_cursor_hook_script_source_routes_hook_argv_by_cli_entrypoint(
     )
     module_source = cursor_hook_script_source(context)
     assert 'GUARD_HOOK_ARGV = ["guard", "hook"' in module_source
+
+
+def test_cursor_hook_script_source_includes_daemon_fast_path(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    context = HarnessContext(home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=tmp_path)
+    source = cursor_hook_script_source(context)
+
+    assert "daemon-state.json" in source
+    assert "daemon-auth-token" in source
+    assert "/v1/hooks/cursor?" in source
+    assert "subprocess.CompletedProcess(" in source
+
+
+def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    store = GuardStore(guard_home)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
+            lambda: [sys.executable, "-m", "codex_plugin_scanner.cli"],
+        )
+        context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
+        script_path = tmp_path / "cursor-hook.py"
+        script_path.write_text(cursor_hook_script_source(context), encoding="utf-8")
+        script_path.chmod(0o755)
+
+        payload = {
+            "hook_event_name": "beforeShellExecution",
+            "tool_name": "Bash",
+            "tool_input": {"command": "echo hi"},
+            "command": "echo hi",
+            "cwd": str(workspace_dir),
+        }
+        proc = subprocess.run(
+            [sys.executable, str(script_path)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            env={**os.environ, "CURSOR_PROJECT_DIR": str(workspace_dir)},
+            timeout=10,
+        )
+    finally:
+        daemon.stop()
+
+    assert proc.returncode == 0
+    assert json.loads(proc.stdout) == {"permission": "allow"}
 
 
 def test_cursor_resolve_guard_cli_command_prefers_plugin_guard(monkeypatch: pytest.MonkeyPatch) -> None:
