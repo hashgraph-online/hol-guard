@@ -324,6 +324,7 @@ def _review_runtime_artifact_hook(
                 browser_approval_daemon_client = load_guard_surface_daemon_client(guard_home)
             except RuntimeError:
                 queued = queue_blocked_approvals(
+                    redaction_level=config.receipt_redaction_level,
                     detection=runtime_detection,
                     evaluation=evaluation_payload,
                     store=store,
