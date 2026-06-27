@@ -51,6 +51,72 @@ def _run_guard_diff_command(
     return 0
 
 
+def _run_guard_test_eval_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    """Evaluate a single artifact description against local policy without persisting.
+
+    Reads a JSON file with artifact fields (artifactType, artifactId, artifactName,
+    artifactHash, capabilities) and calls evaluate_detection(persist=False).
+    """
+    import json
+    import sys
+    from pathlib import Path as _Path
+
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
+
+    input_file = getattr(args, "input_file", None)
+    if input_file:
+        raw = _Path(input_file).read_text(encoding="utf-8")
+    elif input_text:
+        raw = input_text
+    else:
+        raw = sys.stdin.read()
+
+    artifact_desc = json.loads(raw)
+    harness = getattr(args, "harness", artifact_desc.get("harness", "codex"))
+
+    artifact_metadata = artifact_desc.get("metadata", {})
+    if artifact_hash := artifact_desc.get("artifactHash", artifact_desc.get("artifact_hash")):
+        artifact_metadata["artifactHash"] = artifact_hash
+    if capabilities := artifact_desc.get("capabilities"):
+        artifact_metadata["capabilities"] = capabilities
+    if device_id := artifact_desc.get("deviceId"):
+        artifact_metadata["deviceId"] = device_id
+
+    artifact = GuardArtifact(
+        artifact_id=artifact_desc.get("artifactId", artifact_desc.get("artifact_id", "test-artifact")),
+        name=artifact_desc.get("artifactName", artifact_desc.get("artifact_name", "test-artifact")),
+        harness=harness,
+        artifact_type=artifact_desc.get("artifactType", artifact_desc.get("artifact_type", "tool_action_request")),
+        source_scope=artifact_desc.get("sourceScope", artifact_desc.get("source_scope", "test")),
+        config_path=artifact_desc.get("configPath", artifact_desc.get("config_path", "/test")),
+        publisher=artifact_desc.get("publisher"),
+        metadata=artifact_metadata,
+    )
+
+    detection = HarnessDetection(
+        harness=harness,
+        installed=True,
+        command_available=True,
+        config_paths=("/test",),
+        artifacts=(artifact,),
+    )
+
+    payload = evaluate_detection(detection, store, config, default_action="allow", persist=False)
+    _emit("test-eval", payload, getattr(args, "json", False))
+    return 0
+
 def _run_guard_receipts_command(
     args: argparse.Namespace,
     *,

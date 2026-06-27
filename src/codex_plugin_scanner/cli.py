@@ -245,6 +245,7 @@ def _resolve_legacy_args(
         "protect",
         "preflight",
         "diff",
+        "test-eval",
         "receipts",
         "history",
         "inventory",
