@@ -243,6 +243,7 @@ def _headless_approval_resolver(
                 approval_flow,
             ),
             open_key=None,
+            redaction_level=config.receipt_redaction_level,
         )
         operation = blocked_operation["operation"] if isinstance(blocked_operation.get("operation"), dict) else {}
         queued = (

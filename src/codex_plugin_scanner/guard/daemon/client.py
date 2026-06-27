@@ -94,6 +94,7 @@ class GuardSurfaceDaemonClient:
         approval_center_url: str,
         approval_surface_policy: str,
         open_key: str | None = None,
+        redaction_level: str = "full",
     ) -> dict[str, object]:
         return self._post(
             "/v1/operations/block",
@@ -107,6 +108,7 @@ class GuardSurfaceDaemonClient:
                 "approval_center_url": approval_center_url,
                 "approval_surface_policy": approval_surface_policy,
                 "open_key": open_key,
+                "redaction_level": redaction_level,
             },
         )
 
