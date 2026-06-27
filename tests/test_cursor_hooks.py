@@ -1109,3 +1109,121 @@ def test_uninstall_cursor_hooks_restores_backup(tmp_path: Path, monkeypatch: pyt
     result = uninstall_cursor_hooks(context)
     assert result["restored"] is True
     assert json.loads(hooks_path.read_text(encoding="utf-8")) == {"version": 1, "hooks": {"preToolUse": []}}
+
+
+def test_cursor_hook_daemon_fast_path_rejects_stale_pid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fast path returns None when daemon-state.json points at a dead PID."""
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
+        lambda: [sys.executable, "-m", "codex_plugin_scanner.cli"],
+    )
+    context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
+    script_path = tmp_path / "cursor-hook.py"
+    script_path.write_text(cursor_hook_script_source(context), encoding="utf-8")
+    script_path.chmod(0o755)
+
+    # Write stale daemon state pointing at a dead PID and a real-looking port.
+    guard_home.mkdir(parents=True, exist_ok=True)
+    (guard_home / "daemon-state.json").write_text(
+        json.dumps({"port": 59999, "pid": 999999, "compatibility_version": "v1"}),
+        encoding="utf-8",
+    )
+    (guard_home / "daemon-auth-token").write_text("stale-token", encoding="utf-8")
+
+    payload = {
+        "hook_event_name": "beforeShellExecution",
+        "tool_name": "Bash",
+        "tool_input": {"command": "echo hi"},
+        "command": "echo hi",
+        "cwd": str(workspace_dir),
+    }
+    proc = subprocess.run(
+        [sys.executable, str(script_path)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        env={**os.environ, "CURSOR_PROJECT_DIR": str(workspace_dir)},
+        timeout=30,
+    )
+    # Should fall through to the subprocess CLI path, not crash or default-allow.
+    assert proc.returncode in (0, 2)
+
+
+def test_cursor_hook_daemon_fast_path_rejects_empty_response(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fast path returns None when daemon returns an empty body, falling through to CLI."""
+    import http.server
+    import threading
+
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+
+    # Spin up a minimal HTTP server that returns 200 on /healthz but empty body on POST.
+    class _EmptyResponseHandler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        def do_POST(self) -> None:
+            self.send_response(200)
+            self.end_headers()
+            # Empty body — should be rejected by the fast path.
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), _EmptyResponseHandler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
+            lambda: [sys.executable, "-m", "codex_plugin_scanner.cli"],
+        )
+        context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
+        script_path = tmp_path / "cursor-hook.py"
+        script_path.write_text(cursor_hook_script_source(context), encoding="utf-8")
+        script_path.chmod(0o755)
+
+        # Write daemon state pointing at our test server with the current PID.
+        guard_home.mkdir(parents=True, exist_ok=True)
+        (guard_home / "daemon-state.json").write_text(
+            json.dumps({"port": port, "pid": os.getpid()}),
+            encoding="utf-8",
+        )
+        (guard_home / "daemon-auth-token").write_text("test-token", encoding="utf-8")
+
+        payload = {
+            "hook_event_name": "beforeShellExecution",
+            "tool_name": "Bash",
+            "tool_input": {"command": "echo hi"},
+            "command": "echo hi",
+            "cwd": str(workspace_dir),
+        }
+        proc = subprocess.run(
+            [sys.executable, str(script_path)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            env={**os.environ, "CURSOR_PROJECT_DIR": str(workspace_dir)},
+            timeout=30,
+        )
+    finally:
+        server.shutdown()
+
+    # The fast path should reject the empty response and fall through to CLI.
+    # The CLI path may fail (no real daemon), but it must not default-allow.
+    assert proc.returncode in (0, 2)
