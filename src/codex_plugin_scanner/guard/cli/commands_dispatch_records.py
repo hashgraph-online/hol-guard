@@ -117,6 +117,7 @@ def _run_guard_test_eval_command(
     _emit("test-eval", payload, getattr(args, "json", False))
     return 0
 
+
 def _run_guard_receipts_command(
     args: argparse.Namespace,
     *,

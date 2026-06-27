@@ -656,7 +656,7 @@ def extract_sensitive_file_read_request_from_action(
                 tool_name=tool_name,
                 normalized_tool_name=normalized_tool_name,
                 path_match=path_match,
-                )
+            )
     return None
 
 
@@ -779,8 +779,7 @@ def build_file_write_request_artifact(
         ).encode("utf-8")
     ).hexdigest()
     request_summary = (
-        f"Requested `{request.tool_name}` write access to `{request.normalized_path}` "
-        f"({request.path_class})."
+        f"Requested `{request.tool_name}` write access to `{request.normalized_path}` ({request.path_class})."
     )
     risk_summary = f"Requests a {request.action_class}: {request.path_class}."
     return GuardArtifact(
