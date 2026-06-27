@@ -270,6 +270,8 @@ def queue_blocked_approvals(
         if artifact is not None and redaction_level != "full":
             candidate = artifact.metadata.get("raw_command_text")
             if not isinstance(candidate, str) or not candidate.strip():
+                candidate = artifact.metadata.get("command_text")
+            if not isinstance(candidate, str) or not candidate.strip():
                 candidate = artifact.command if artifact.command is not None else None
             if isinstance(candidate, str) and candidate.strip():
                 scrubbed = redact_text(candidate.strip())
