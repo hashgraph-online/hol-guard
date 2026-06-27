@@ -330,3 +330,35 @@ class TestRawCommandTextPropagation:
         )
         assert len(queued) == 1
         assert queued[0]["raw_command_text"] is None
+
+    def test_raw_command_text_falls_back_to_action_envelope_command(self, tmp_path):
+        """PreToolUse shell command blocks store command in action_envelope_json,
+        not in artifact metadata. The extraction should parse it as final fallback."""
+        import json as _json
+        store = GuardStore(tmp_path / "guard-home")
+        artifact = GuardArtifact(
+            artifact_id="pi:project:pretool:test",
+            name="bash docker-sensitive command",
+            harness="pi",
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path=str(tmp_path / "config.toml"),
+            command=None,
+            metadata={},
+        )
+        detection = _make_detection(artifact, tmp_path)
+        envelope = _json.dumps({"action_type": "shell_command", "command": "docker run --rm alpine cat /etc/passwd"})
+        evaluation = _make_evaluation("pi:project:pretool:test", tmp_path)
+        evaluation["artifacts"][0]["action_envelope_json"] = envelope
+        queued = queue_blocked_approvals(
+            detection=detection,
+            evaluation=evaluation,
+            store=store,
+            approval_center_url="http://127.0.0.1/pending",
+            redaction_level="none",
+        )
+        assert len(queued) == 1
+        raw = queued[0]["raw_command_text"]
+        assert raw is not None
+        assert "docker run" in raw
+        assert "alpine" in raw
