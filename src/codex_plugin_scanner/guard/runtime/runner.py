@@ -769,11 +769,7 @@ def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
                 add_secret_request(label=label, matched=hint)
                 break
     exfil_match = _first_match(_EXFIL_PROMPT_PATTERNS, normalized_prompt)
-    if exfil_match is not None and not _prompt_match_is_documented_example(
-        normalized_prompt,
-        start=exfil_match.start(),
-        end=exfil_match.end(),
-    ):
+    if exfil_match is not None:
         matched_text = exfil_match.group(0).strip()
         requests.append(
             PromptRequest(
