@@ -610,8 +610,41 @@ def _daemon_hook_result(
         auth_token = token_path.read_text(encoding="utf-8").strip()
     except (OSError, ValueError):
         return None
-    port = state.get("port") if isinstance(state, dict) else None
+    if not isinstance(state, dict):
+        return None
+    port = state.get("port")
     if not isinstance(port, int) or port <= 0 or not auth_token:
+        return None
+    # Validate the recorded PID is still alive before trusting the state file.
+    # A stale state file after a crash could point at an attacker-controlled listener.
+    pid = state.get("pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return None
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return None
+    # Probe /healthz before sending the hook payload and auth token.
+    # Ensures the listener is actually the Guard daemon, not a spoofed process.
+    # Validate the response body — not just HTTP 200 — so an attacker listener
+    # that returns 200 but doesn't know the daemon's compatibility version is rejected.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        health_req = urllib.request.Request(f"http://127.0.0.1:{port}/healthz", method="GET")
+        with opener.open(health_req, timeout=2) as health_response:
+            if health_response.status != 200:
+                return None
+            health_body = health_response.read().decode("utf-8", errors="replace")
+    except (OSError, urllib.error.URLError):
+        return None
+    try:
+        health_json = json.loads(health_body)
+    except ValueError:
+        return None
+    if not isinstance(health_json, dict) or health_json.get("ok") is not True:
+        return None
+    state_compat = state.get("compatibility_version")
+    if isinstance(state_compat, str) and health_json.get("compatibility_version") != state_compat:
         return None
     params = [("guard-home", GUARD_HOME)]
     if workspace:
@@ -637,13 +670,23 @@ def _daemon_hook_result(
         },
         method="POST",
     )
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
         with opener.open(request, timeout=max(GUARD_HOOK_TIMEOUT_SECONDS - 2, 1)) as response:
             body = response.read().decode("utf-8", errors="replace")
     except (OSError, urllib.error.URLError):
         return None
-    return (0, body if body.strip() else "{}", "")
+    # Reject empty or non-dict responses — they default policy_action to "allow".
+    # Fall through to the CLI subprocess path instead of trusting a malformed response.
+    body_stripped = body.strip()
+    if not body_stripped:
+        return None
+    try:
+        parsed_body = json.loads(body_stripped)
+    except ValueError:
+        return None
+    if not isinstance(parsed_body, dict):
+        return None
+    return (0, body_stripped, "")
 
 
 def _validated_hol_guard_src_path(path_str: str) -> str | None:
