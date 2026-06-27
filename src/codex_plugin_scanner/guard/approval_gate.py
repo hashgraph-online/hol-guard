@@ -359,7 +359,10 @@ def confirm_totp_enrollment(
     )
     if accepted_counter is None:
         _record_failed_attempt(guard_home, state, now=now)
-        raise ApprovalGateError("approval_gate_totp_invalid", "TOTP code is invalid.")
+        raise ApprovalGateError(
+            "approval_gate_totp_invalid",
+            "That authenticator code is wrong. Open your authenticator app and enter the current six-digit code.",
+        )
     active_secret_id = _optional_string(state.get("totp_secret_id"))
     if active_secret_id is not None and active_secret_id != pending_secret_id:
         store.delete_secret(active_secret_id)
@@ -418,7 +421,10 @@ def disable_totp(
     )
     if accepted_counter is None:
         _record_failed_attempt(guard_home, state, now=now)
-        raise ApprovalGateError("approval_gate_totp_invalid", "TOTP code is invalid.")
+        raise ApprovalGateError(
+            "approval_gate_totp_invalid",
+            "That authenticator code is wrong. Open your authenticator app and enter the current six-digit code.",
+        )
     state["failed_attempts"] = 0
     state.pop("locked_until", None)
     state["totp_enabled"] = False
@@ -748,7 +754,10 @@ def _verify_totp_or_raise(
     )
     if accepted_counter is None:
         _record_failed_attempt(guard_home, state, now=_iso_from_epoch(now_epoch))
-        raise ApprovalGateError("approval_gate_totp_invalid", "TOTP code is invalid.")
+        raise ApprovalGateError(
+            "approval_gate_totp_invalid",
+            "That authenticator code is wrong. Open your authenticator app and enter the current six-digit code.",
+        )
     return accepted_counter
 
 
