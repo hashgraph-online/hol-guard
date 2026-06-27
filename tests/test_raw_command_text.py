@@ -1,0 +1,279 @@
+"""Tests that raw_command_text flows through the approval pipeline with redaction."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from codex_plugin_scanner.guard.approvals import (
+    queue_blocked_approvals,
+)
+from codex_plugin_scanner.guard.models import (
+    GuardApprovalRequest,
+    GuardArtifact,
+    HarnessDetection,
+)
+from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_approvals import (
+    add_approval_request,
+    get_approval_request,
+    list_approval_requests,
+)
+
+
+def _make_detection(artifact: GuardArtifact, tmp_path: Path) -> HarnessDetection:
+    return HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(str(tmp_path / "config.toml"),),
+        artifacts=(artifact,),
+    )
+
+
+def _make_evaluation(artifact_id: str, tmp_path: Path) -> dict:
+    return {
+        "artifacts": [
+            {
+                "artifact_id": artifact_id,
+                "artifact_name": "blocked-cmd",
+                "artifact_hash": "hash-1",
+                "artifact_type": "command",
+                "policy_action": "require-reapproval",
+                "changed_fields": ["command"],
+                "source_scope": "project",
+                "config_path": str(tmp_path / "config.toml"),
+                "risk_summary": "Blocked command",
+                "risk_signals": ["blocked"],
+            }
+        ]
+    }
+
+
+class TestRawCommandTextPropagation:
+    """Tests that raw_command_text flows through the approval pipeline with redaction."""
+
+    def test_raw_command_text_included_when_redaction_none(self, tmp_path):
+        """With redaction_level='none', the actual blocked command is included."""
+        store = GuardStore(tmp_path / "guard-home")
+        artifact = GuardArtifact(
+            artifact_id="codex:cmd:test",
+            name="blocked-cmd",
+            harness="codex",
+            artifact_type="command",
+            source_scope="project",
+            config_path=str(tmp_path / "config.toml"),
+            command="rm -rf /var/tmp/*",
+            metadata={"raw_command_text": "rm -rf /var/tmp/*"},
+        )
+        detection = _make_detection(artifact, tmp_path)
+        evaluation = _make_evaluation("codex:cmd:test", tmp_path)
+        queued = queue_blocked_approvals(
+            detection=detection,
+            evaluation=evaluation,
+            store=store,
+            approval_center_url="http://127.0.0.1/pending",
+            redaction_level="none",
+        )
+        assert len(queued) == 1
+        assert queued[0]["raw_command_text"] == "rm -rf /var/tmp/*"
+
+    def test_raw_command_text_excluded_when_redaction_full(self, tmp_path):
+        """With redaction_level='full', raw_command_text is None."""
+        store = GuardStore(tmp_path / "guard-home")
+        artifact = GuardArtifact(
+            artifact_id="codex:cmd:test2",
+            name="blocked-cmd",
+            harness="codex",
+            artifact_type="command",
+            source_scope="project",
+            config_path=str(tmp_path / "config.toml"),
+            command="rm -rf /var/tmp/*",
+            metadata={"raw_command_text": "rm -rf /var/tmp/*"},
+        )
+        detection = _make_detection(artifact, tmp_path)
+        evaluation = _make_evaluation("codex:cmd:test2", tmp_path)
+        queued = queue_blocked_approvals(
+            detection=detection,
+            evaluation=evaluation,
+            store=store,
+            approval_center_url="http://127.0.0.1/pending",
+            redaction_level="full",
+        )
+        assert len(queued) == 1
+        assert queued[0]["raw_command_text"] is None
+
+    def test_raw_command_text_scrubs_secrets(self, tmp_path):
+        """Secrets in raw_command_text are scrubbed by redact_text()."""
+        store = GuardStore(tmp_path / "guard-home")
+        token = "ghp_" + "abc123def456"
+        secret_cmd = f"curl -H 'Authorization: Bearer {token}' https://api.internal/data"
+        artifact = GuardArtifact(
+            artifact_id="codex:cmd:secret",
+            name="curl-with-token",
+            harness="codex",
+            artifact_type="command",
+            source_scope="project",
+            config_path=str(tmp_path / "config.toml"),
+            command=secret_cmd,
+            metadata={"raw_command_text": secret_cmd},
+        )
+        detection = _make_detection(artifact, tmp_path)
+        evaluation = _make_evaluation("codex:cmd:secret", tmp_path)
+        queued = queue_blocked_approvals(
+            detection=detection,
+            evaluation=evaluation,
+            store=store,
+            approval_center_url="http://127.0.0.1/pending",
+            redaction_level="none",
+        )
+        assert len(queued) == 1
+        raw = queued[0]["raw_command_text"]
+        assert raw is not None
+        assert token not in raw
+        assert "curl" in raw
+
+    def test_raw_command_text_falls_back_to_artifact_command(self, tmp_path):
+        """When metadata lacks raw_command_text, falls back to artifact.command."""
+        store = GuardStore(tmp_path / "guard-home")
+        artifact = GuardArtifact(
+            artifact_id="codex:cmd:fallback",
+            name="fallback-cmd",
+            harness="codex",
+            artifact_type="command",
+            source_scope="project",
+            config_path=str(tmp_path / "config.toml"),
+            command="npm install evil-pkg",
+            metadata={},
+        )
+        detection = _make_detection(artifact, tmp_path)
+        evaluation = _make_evaluation("codex:cmd:fallback", tmp_path)
+        queued = queue_blocked_approvals(
+            detection=detection,
+            evaluation=evaluation,
+            store=store,
+            approval_center_url="http://127.0.0.1/pending",
+            redaction_level="none",
+        )
+        assert len(queued) == 1
+        assert queued[0]["raw_command_text"] == "npm install evil-pkg"
+
+    def test_raw_command_text_persisted_in_store(self, tmp_path):
+        """raw_command_text survives store round-trip (INSERT then SELECT)."""
+        store = GuardStore(tmp_path / "guard-home")
+        req = GuardApprovalRequest(
+            request_id="store-test-1",
+            harness="codex",
+            artifact_id="codex:cmd:store",
+            artifact_name="store-cmd",
+            artifact_hash="hash-store",
+            policy_action="require-reapproval",
+            recommended_scope="artifact",
+            changed_fields=("command",),
+            source_scope="project",
+            config_path=str(tmp_path / "config.toml"),
+            review_command="hol-guard approvals approve store-test-1",
+            approval_url="http://127.0.0.1/pending",
+            raw_command_text="rm -rf /var/tmp/*",
+        )
+        store.add_approval_request(req, "2026-06-27T00:00:00+00:00")
+        with store._connect() as conn:
+            rows = list_approval_requests(conn, limit=10)
+            assert len(rows) == 1
+            assert rows[0]["raw_command_text"] == "rm -rf /var/tmp/*"
+            single = get_approval_request(conn, "store-test-1")
+            assert single["raw_command_text"] == "rm -rf /var/tmp/*"
+
+    def test_surface_runtime_passes_redaction_level(self, tmp_path):
+        """GuardSurfaceRuntime.queue_blocked_operation passes redaction_level
+        through to queue_blocked_approvals, so 'none' includes the command."""
+        from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime
+
+        store = GuardStore(tmp_path / "guard-home")
+        runtime = GuardSurfaceRuntime(store=store)
+        store.upsert_guard_session(
+            session_id="surf-1",
+            harness="codex",
+            surface="cli",
+            status="active",
+            client_name="test",
+            client_title="Test",
+            client_version="1.0",
+            workspace=None,
+            capabilities=["approval-resolution"],
+            now="2026-06-27T00:00:00+00:00",
+        )
+        artifact = GuardArtifact(
+            artifact_id="codex:cmd:surf",
+            name="surf-cmd",
+            harness="codex",
+            artifact_type="command",
+            source_scope="project",
+            config_path=str(tmp_path / "config.toml"),
+            command="docker run --rm alpine cat /etc/passwd",
+            metadata={"raw_command_text": "docker run --rm alpine cat /etc/passwd"},
+        )
+        detection = _make_detection(artifact, tmp_path)
+        evaluation = _make_evaluation("codex:cmd:surf", tmp_path)
+        response = runtime.queue_blocked_operation(
+            session_id="surf-1",
+            operation_type="run",
+            harness="codex",
+            metadata={},
+            detection=detection.to_dict(),
+            evaluation=evaluation,
+            approval_center_url="http://127.0.0.1/pending",
+            approval_surface_policy="always",
+            open_key=None,
+            opener=lambda url: None,
+            redaction_level="none",
+        )
+        queued = response.get("approval_requests", [])
+        assert len(queued) == 1
+        assert queued[0]["raw_command_text"] == "docker run --rm alpine cat /etc/passwd"
+
+    def test_surface_runtime_redaction_full_suppresses_command(self, tmp_path):
+        """GuardSurfaceRuntime with redaction_level='full' suppresses raw_command_text."""
+        from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime
+
+        store = GuardStore(tmp_path / "guard-home")
+        runtime = GuardSurfaceRuntime(store=store)
+        store.upsert_guard_session(
+            session_id="surf-2",
+            harness="codex",
+            surface="cli",
+            status="active",
+            client_name="test",
+            client_title="Test",
+            client_version="1.0",
+            workspace=None,
+            capabilities=["approval-resolution"],
+            now="2026-06-27T00:00:00+00:00",
+        )
+        artifact = GuardArtifact(
+            artifact_id="codex:cmd:surf2",
+            name="surf-cmd2",
+            harness="codex",
+            artifact_type="command",
+            source_scope="project",
+            config_path=str(tmp_path / "config.toml"),
+            command="docker run --rm alpine cat /etc/passwd",
+            metadata={"raw_command_text": "docker run --rm alpine cat /etc/passwd"},
+        )
+        detection = _make_detection(artifact, tmp_path)
+        evaluation = _make_evaluation("codex:cmd:surf2", tmp_path)
+        response = runtime.queue_blocked_operation(
+            session_id="surf-2",
+            operation_type="run",
+            harness="codex",
+            metadata={},
+            detection=detection.to_dict(),
+            evaluation=evaluation,
+            approval_center_url="http://127.0.0.1/pending",
+            approval_surface_policy="always",
+            open_key=None,
+            opener=lambda url: None,
+            redaction_level="full",
+        )
+        queued = response.get("approval_requests", [])
+        assert len(queued) == 1
+        assert queued[0]["raw_command_text"] is None
