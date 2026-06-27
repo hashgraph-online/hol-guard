@@ -4007,7 +4007,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
 
     def _hook_fast_path_enabled(self) -> bool:
-        return os.environ.get("HOL_GUARD_HOOK_FAST_PATH", "0") == "1"
+        from ..config import hook_fast_path_enabled
+
+        return hook_fast_path_enabled()
 
     def _handle_runtime_hook_fast(
         self,

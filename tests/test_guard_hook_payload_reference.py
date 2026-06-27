@@ -89,3 +89,114 @@ def test_hook_payload_reference_rejects_digest_mismatch() -> None:
             input_text=_referenced_input(payload, Path(reference_dir), sha256="0" * 64),
             harness="pi",
         )
+
+
+def test_reject_path_outside_temp_root(tmp_path: Path) -> None:
+    payload = {"hook_event_name": "PostToolUse", "tool_name": "Read", "tool_response": []}
+    with pytest.raises(HookPayloadReferenceError, match="Guard-owned temp directory"):
+        _load_hook_payload(
+            None,
+            input_text=_referenced_input(payload, tmp_path),
+            harness="pi",
+        )
+
+
+def test_reject_wrong_prefix_temp_dir() -> None:
+    payload = {"hook_event_name": "PostToolUse", "tool_name": "Read", "tool_response": []}
+    with (
+        pytest.raises(HookPayloadReferenceError, match="Guard-owned temp directory"),
+        tempfile.TemporaryDirectory(prefix="wrong-prefix-") as reference_dir,
+    ):
+        _load_hook_payload(
+            None,
+            input_text=_referenced_input(payload, Path(reference_dir)),
+            harness="pi",
+        )
+
+
+def test_reject_directory_instead_of_file() -> None:
+    with (
+        pytest.raises(HookPayloadReferenceError, match="must be a file"),
+        tempfile.TemporaryDirectory(prefix="hol-guard-hook-payload-") as reference_dir,
+    ):
+        directory_path = Path(reference_dir) / "payload.json"
+        directory_path.mkdir()
+        ref = {
+            "guard_payload_ref": {
+                "version": 1,
+                "path": str(directory_path),
+                "sha256": "0" * 64,
+                "encoding": "json",
+                "encryption": "aes-256-gcm",
+                "key": _b64url(os.urandom(32)),
+                "nonce": _b64url(os.urandom(12)),
+            },
+        }
+        _load_hook_payload(None, input_text=json.dumps(ref), harness="pi")
+
+
+def test_reject_payload_over_5mb() -> None:
+    with (
+        pytest.raises(HookPayloadReferenceError, match="exceeds the safe local size limit"),
+        tempfile.TemporaryDirectory(prefix="hol-guard-hook-payload-") as reference_dir,
+    ):
+        ref_path = Path(reference_dir) / "payload.json"
+        ref_path.write_bytes(bytes(5 * 1024 * 1024 + 1))
+        ref = {
+            "guard_payload_ref": {
+                "version": 1,
+                "path": str(ref_path),
+                "sha256": "0" * 64,
+                "encoding": "json",
+                "encryption": "aes-256-gcm",
+                "key": _b64url(os.urandom(32)),
+                "nonce": _b64url(os.urandom(12)),
+            },
+        }
+        _load_hook_payload(None, input_text=json.dumps(ref), harness="pi")
+
+
+def test_reject_invalid_aes_key_length() -> None:
+    payload = {"hook_event_name": "PostToolUse", "tool_name": "Read", "tool_response": []}
+    with (
+        pytest.raises(HookPayloadReferenceError, match="invalid encryption key"),
+        tempfile.TemporaryDirectory(prefix="hol-guard-hook-payload-") as reference_dir,
+    ):
+        ref = json.loads(_referenced_input(payload, Path(reference_dir)))
+        ref["guard_payload_ref"]["key"] = _b64url(os.urandom(16))
+        _load_hook_payload(None, input_text=json.dumps(ref), harness="pi")
+
+
+def test_reject_invalid_nonce_length() -> None:
+    payload = {"hook_event_name": "PostToolUse", "tool_name": "Read", "tool_response": []}
+    with (
+        pytest.raises(HookPayloadReferenceError, match="invalid encryption nonce"),
+        tempfile.TemporaryDirectory(prefix="hol-guard-hook-payload-") as reference_dir,
+    ):
+        ref = json.loads(_referenced_input(payload, Path(reference_dir)))
+        ref["guard_payload_ref"]["nonce"] = _b64url(os.urandom(8))
+        _load_hook_payload(None, input_text=json.dumps(ref), harness="pi")
+
+
+def test_reject_decrypted_json_list() -> None:
+    with (
+        pytest.raises(HookPayloadReferenceError, match="must contain a JSON object"),
+        tempfile.TemporaryDirectory(prefix="hol-guard-hook-payload-") as reference_dir,
+    ):
+        key = os.urandom(32)
+        nonce = os.urandom(12)
+        ciphertext = AESGCM(key).encrypt(nonce, json.dumps([1, 2, 3]).encode("utf-8"), None)
+        ref_path = Path(reference_dir) / "payload.json"
+        ref_path.write_bytes(ciphertext)
+        ref = {
+            "guard_payload_ref": {
+                "version": 1,
+                "path": str(ref_path),
+                "sha256": hashlib.sha256(ciphertext).hexdigest(),
+                "encoding": "json",
+                "encryption": "aes-256-gcm",
+                "key": _b64url(key),
+                "nonce": _b64url(nonce),
+            },
+        }
+        _load_hook_payload(None, input_text=json.dumps(ref), harness="pi")

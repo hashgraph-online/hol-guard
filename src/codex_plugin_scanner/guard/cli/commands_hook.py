@@ -296,6 +296,11 @@ def _try_source_ref_fast_path(
     """
     if "guard_source_ref" not in payload:
         return None
+    # CLI fallback is enabled by default. The HOL_GUARD_HOOK_SOURCE_REF=0
+    # flag disables guard_source_ref generation in the Pi extension, but
+    # the CLI should still handle source refs if they arrive.
+    import os
+
     if os.environ.get("HOL_GUARD_HOOK_SOURCE_REF", "1") != "1":
         return None
 
