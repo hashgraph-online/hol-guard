@@ -60,11 +60,13 @@ def _run_guard_hook_command(
     context = _require_guard_context(context)
     store = _require_guard_store(store)
     config = _require_guard_config(config)
+    request_env = getattr(args, "hook_env", None)
+    resolved_env = os.environ if request_env is None else request_env
     runtime_harness = getattr(args, "runtime_harness", None)
     if isinstance(runtime_harness, str) and runtime_harness.strip():
         args.harness = runtime_harness.strip()
     else:
-        args.harness = resolve_runtime_hook_harness(args.harness)
+        args.harness = resolve_runtime_hook_harness(args.harness, env=resolved_env)
     payload = _load_hook_payload(
         getattr(args, "event_file", None),
         input_text=input_text,
@@ -103,7 +105,7 @@ def _run_guard_hook_command(
             home_dir=context.home_dir,
             guard_home=context.guard_home,
             workspace=runtime_workspace,
-            hook_env=os.environ,
+            hook_env=resolved_env,
         )
         _emit(
             "hook",
