@@ -174,9 +174,11 @@ from ..runtime.runner import (
 )
 from ..runtime.secret_file_requests import (
     build_file_read_request_artifact,
+    build_file_write_request_artifact,
     build_tool_action_request_artifact,
     extract_sensitive_file_read_request,
     extract_sensitive_file_read_request_from_action,
+    extract_sensitive_file_write_request,
     extract_sensitive_tool_action_request,
     is_explicitly_benign_tool_action_request,
 )

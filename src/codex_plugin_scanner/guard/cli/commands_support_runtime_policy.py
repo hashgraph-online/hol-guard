@@ -438,11 +438,13 @@ def _runtime_artifact_risk_classes(artifact: GuardArtifact) -> list[str]:
             "credential_exfiltration",
             "network_egress",
         ],
+        "guard-managed config write": ["destructive_shell"],
         "docker-sensitive command": ["network_egress", "destructive_shell"],
         "docker client config access": ["local_secret_read"],
         "encoded or encrypted shell command": ["encoded_execution"],
         "kubernetes secret read command": ["local_secret_read"],
         "shell file upload command": ["credential_exfiltration", "network_egress"],
+        "sensitive local file write": ["destructive_shell", "local_secret_read"],
         "destructive shell command": ["destructive_shell"],
     }
     return action_risk_classes.get(action_class.strip().lower(), [])
