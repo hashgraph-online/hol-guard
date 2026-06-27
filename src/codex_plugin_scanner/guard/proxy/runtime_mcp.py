@@ -769,6 +769,7 @@ class RuntimeMcpGuardProxy:
         queued: list[dict[str, Any]] = []
         if should_queue_approval_center:
             queued = queue_blocked_approvals(
+                redaction_level=self.config.receipt_redaction_level,
                 detection=HarnessDetection(
                     harness=self.harness,
                     installed=True,
@@ -1195,6 +1196,7 @@ class RuntimeMcpGuardProxy:
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
         queued = queue_blocked_approvals(
+            redaction_level=self.config.receipt_redaction_level,
             detection=HarnessDetection(
                 harness=self.harness,
                 installed=True,
@@ -1308,6 +1310,7 @@ class RuntimeMcpGuardProxy:
         if extra_fields:
             artifact_payload.update(extra_fields)
         return queue_blocked_approvals(
+            redaction_level=self.config.receipt_redaction_level,
             detection=HarnessDetection(
                 harness=self.harness,
                 installed=True,
