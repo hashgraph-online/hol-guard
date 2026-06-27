@@ -144,6 +144,12 @@ def evaluate_source_file_ref(
     source_ref = request.source_ref
 
     # 2. Resolve target path.
+    #    The source ref's path fields are adapter-controlled and could
+    #    point at a different file than the actual tool read target.
+    #    Resolve the source ref candidate AND the envelope target, then
+    #    require both to resolve to the same real path. This prevents
+    #    a malformed source ref from pointing at a benign file while the
+    #    actual tool read targeted a different file.
     candidate_path_str = source_ref.tool_input_path or source_ref.path or envelope.target_paths[0]
     resolved_path = resolve_source_candidate_path(
         candidate_path_str,
@@ -152,6 +158,23 @@ def evaluate_source_file_ref(
     )
     if resolved_path is None:
         return SourceReadFastPathResult(status="inconclusive", reason_code="unresolved_path")
+
+    # Verify the source ref path matches the normalized envelope target.
+    # Both must resolve to the same real path after symlink resolution.
+    envelope_target_str = envelope.target_paths[0]
+    envelope_resolved = resolve_source_candidate_path(
+        envelope_target_str,
+        cwd=request.cwd,
+        home_dir=request.home_dir,
+    )
+    if envelope_resolved is None:
+        return SourceReadFastPathResult(status="inconclusive", reason_code="unresolved_envelope_target")
+
+    try:
+        if os.path.realpath(resolved_path) != os.path.realpath(envelope_resolved):
+            return SourceReadFastPathResult(status="inconclusive", reason_code="source_ref_target_mismatch")
+    except OSError:
+        return SourceReadFastPathResult(status="inconclusive", reason_code="source_ref_target_mismatch")
 
     # 3. Reject sensitive path (before source_path_is_allowed, so .env etc.
     #    return risky, not inconclusive).

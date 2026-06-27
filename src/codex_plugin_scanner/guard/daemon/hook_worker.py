@@ -75,8 +75,25 @@ class HookWorker:
 
         Raises ``HookWorkerUnsupported`` if the request cannot be handled
         by the fast path (caller should fall back to legacy CLI).
+
+        The fast path only handles ``PostToolUse`` events that carry a
+        ``guard_source_ref``. All other events (``PreToolUse``,
+        ``UserPromptSubmit``, ``PermissionRequest``, PostToolUse without
+        a source ref) must fall through to the legacy CLI path so that
+        existing policy, permission, and approval logic is not bypassed.
         """
         harness = self._runtime_harness(params) or default_harness
+        event_name = self._hook_event_name(payload)
+        source_ref = self._parse_source_ref(payload)
+
+        # Only PostToolUse with guard_source_ref is eligible for the fast
+        # path. Everything else needs the full CLI policy/permission engine.
+        if event_name != "PostToolUse" or source_ref is None:
+            raise HookWorkerUnsupported(
+                f"fast path only supports PostToolUse with guard_source_ref, "
+                f"got event={event_name}, has_source_ref={source_ref is not None}"
+            )
+
         request = self._request_from_payload(
             payload,
             harness=harness,

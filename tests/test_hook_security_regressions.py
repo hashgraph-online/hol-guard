@@ -383,3 +383,119 @@ class TestCacheStaleOnConfigChange:
         # Second call with different config should not hit cache
         response2 = engine2.review(request)
         assert response2.reason_code == "source_full_scan_allow"  # Not "source_cache_hit"
+
+
+class TestSourceRefTargetMismatch:
+    """Regression: source ref must not choose a different file than the
+    envelope target. A malformed source ref pointing at a benign file
+    while the actual tool read targeted a different file must not
+    result in allow_original."""
+
+    def test_source_ref_pointing_at_different_file_is_inconclusive(
+        self, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        store = GuardStore(guard_home)
+        scanner = ContentScanner()
+        cache = HookDecisionCache(store)
+        config = GuardConfig(guard_home=guard_home, workspace=workspace)
+        engine = HookReviewEngine(
+            store=store,
+            scanner=scanner,
+            cache=cache,
+            config_loader=lambda gh, ws: config,
+        )
+
+        # Create two files: a benign one and the "actual" target.
+        benign_content = "export const safe = 1;\n"
+        benign_file = workspace / "src" / "benign.ts"
+        benign_file.write_text(benign_content)
+
+        actual_content = "export const actual = 2;\n"
+        actual_file = workspace / "src" / "actual.ts"
+        actual_file.write_text(actual_content)
+
+        # Source ref claims the benign file's hash but points at a
+        # different path than the envelope target.
+        ref = HookSourceFileRef(
+            version=1,
+            path="src/benign.ts",
+            output_sha256=sha256_text(benign_content),
+            output_chars=len(benign_content),
+            tool_input_path="src/benign.ts",
+        )
+        # Envelope says the tool read src/actual.ts
+        request = HookReviewRequest(
+            harness="pi",
+            event_name="PostToolUse",
+            payload={
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Read",
+                "tool_input": {"file_path": "src/actual.ts"},
+            },
+            payload_kind="source_file_ref",
+            config_path=None,
+            cwd=workspace,
+            home_dir=home_dir,
+            guard_home=guard_home,
+            source_scope="project",
+            source_ref=ref,
+        )
+
+        response = engine.review(request)
+        # Must NOT allow original — source ref pointed at a different file
+        # than the envelope target.
+        assert response.model_output_action != "allow_original"
+        assert response.decision != "allow" or response.model_output_action != "allow_original"
+
+class TestPreToolUseFallsBackToLegacy:
+    """Regression: PreToolUse must not be handled by the fast worker.
+    It must raise HookWorkerUnsupported so the server falls through to
+    the legacy CLI path, preserving policy/permission checks."""
+
+    def test_pre_tool_use_raises_unsupported(
+        self, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        from codex_plugin_scanner.guard.daemon.hook_worker import HookWorkerUnsupported
+
+        store = GuardStore(guard_home)
+        worker = HookWorker(store=store)
+
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "src/foo.ts"},
+        }
+
+        with pytest.raises(HookWorkerUnsupported):
+            worker.review_http_payload(
+                payload=payload,
+                params={},
+                default_harness="pi",
+                home_dir=home_dir,
+                guard_home=guard_home,
+                workspace=workspace,
+            )
+
+    def test_post_tool_use_without_source_ref_raises_unsupported(
+        self, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        from codex_plugin_scanner.guard.daemon.hook_worker import HookWorkerUnsupported
+
+        store = GuardStore(guard_home)
+        worker = HookWorker(store=store)
+
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "src/foo.ts"},
+        }
+
+        with pytest.raises(HookWorkerUnsupported):
+            worker.review_http_payload(
+                payload=payload,
+                params={},
+                default_harness="pi",
+                home_dir=home_dir,
+                guard_home=guard_home,
+                workspace=workspace,
+            )

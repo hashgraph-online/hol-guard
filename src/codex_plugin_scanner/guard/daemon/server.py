@@ -4019,7 +4019,19 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         guard_home: str,
         workspace: str | None,
     ) -> dict[str, object] | None:
-        """Try the resident hook worker. Return None to fall back to legacy."""
+        """Try the resident hook worker. Return None to fall back to legacy.
+
+        The worker only handles ``PostToolUse`` with ``guard_source_ref``.
+        ``HookWorkerUnsupported`` means the event is not eligible for the
+        fast path — return ``None`` so the caller falls through to the
+        legacy CLI path, preserving existing policy/permission checks.
+
+        Any other exception is a real failure — deny/block rather than
+        fall back, because the request may have omitted full output and
+        supplied only ``guard_source_ref``.
+        """
+        from .hook_worker import HookWorkerUnsupported
+
         try:
             worker = self._daemon_server().hook_worker
             return worker.review_http_payload(
@@ -4030,6 +4042,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 guard_home=Path(guard_home),
                 workspace=Path(workspace) if workspace else None,
             )
+        except HookWorkerUnsupported:
+            # Not eligible for fast path — fall back to legacy CLI so
+            # PreToolUse/PermissionRequest/PostToolUse-without-source-ref
+            # still get full policy/permission/approval checks.
+            return None
         except Exception:
             # Fail safe: deny/block. Do not fall back to legacy CLI for
             # requests that omitted full output and supplied only guard_source_ref.

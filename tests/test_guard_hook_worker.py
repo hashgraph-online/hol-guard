@@ -149,25 +149,30 @@ class TestHookWorkerMalformedPayload:
         # Invalid source ref version should not allow original
         assert result["model_output_action"] != "allow_original"
 
-    def test_missing_output_summary_blocks_safely(
+    def test_missing_output_summary_raises_unsupported(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
     ) -> None:
+        """PostToolUse without guard_source_ref must fall back to legacy CLI.
+
+        The fast path only handles PostToolUse with guard_source_ref.
+        Without a source ref, the worker raises HookWorkerUnsupported so
+        the server falls through to the legacy CLI path, preserving
+        existing policy/permission checks.
+        """
         payload = {
             "hook_event_name": "PostToolUse",
             "tool_name": "Read",
         }
 
-        result = worker.review_http_payload(
-            payload=payload,
-            params={},
-            default_harness="pi",
-            home_dir=home_dir,
-            guard_home=guard_home,
-            workspace=workspace,
-        )
-
-        assert result["decision"] == "deny"
-        assert result["model_output_action"] == "block"
+        with pytest.raises(HookWorkerUnsupported):
+            worker.review_http_payload(
+                payload=payload,
+                params={},
+                default_harness="pi",
+                home_dir=home_dir,
+                guard_home=guard_home,
+                workspace=workspace,
+            )
 
 
 class TestHookWorkerException:
@@ -210,22 +215,28 @@ class TestHookWorkerException:
 
 
 class TestHookWorkerNonPostTool:
-    def test_pre_tool_use_returns_not_applicable(
+    def test_pre_tool_use_raises_unsupported(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
     ) -> None:
+        """PreToolUse must fall back to legacy CLI for policy/permission checks.
+
+        The fast path only handles PostToolUse with guard_source_ref.
+        PreToolUse must raise HookWorkerUnsupported so the server falls
+        through to the legacy CLI path, which performs the full policy
+        evaluation, permission checks, and approval-center queueing.
+        """
         payload = {
             "hook_event_name": "PreToolUse",
             "tool_name": "Read",
             "tool_input": {"file_path": "src/foo.ts"},
         }
 
-        result = worker.review_http_payload(
-            payload=payload,
-            params={},
-            default_harness="pi",
-            home_dir=home_dir,
-            guard_home=guard_home,
-            workspace=workspace,
-        )
-
-        assert result["model_output_action"] == "not_applicable"
+        with pytest.raises(HookWorkerUnsupported):
+            worker.review_http_payload(
+                payload=payload,
+                params={},
+                default_harness="pi",
+                home_dir=home_dir,
+                guard_home=guard_home,
+                workspace=workspace,
+            )
