@@ -351,6 +351,7 @@ def _runtime_hook_env_overlay_from_payload(payload: Mapping[str, object]) -> dic
             overlay[key] = value
     return overlay
 
+
 _DEFAULT_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 30 * 60
 _DEFAULT_SUPPLY_CHAIN_REFRESH_BACKOFF_SECONDS = 60.0
 _DEFAULT_SUPPLY_CHAIN_REFRESH_INTERVAL_SECONDS = 15 * 60.0
@@ -3992,6 +3993,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         buffer = io.StringIO()
         with _CLAUDE_HOOK_EXECUTION_LOCK:
             from ..cli.commands import run_guard_command
+
             original_env: dict[str, str | None] = {key: os.environ.get(key) for key in hook_env}
             try:
                 os.environ.update(hook_env)
