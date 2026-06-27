@@ -19,6 +19,7 @@ import threading
 import time
 import uuid
 import webbrowser
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -324,6 +325,32 @@ _ROOT_STATIC_FILES = {
     "/favicon-32x32.png",
 }
 _CLAUDE_HOOK_EXECUTION_LOCK = threading.Lock()
+_RUNTIME_HOOK_ENV_ALLOWLIST = frozenset(
+    {
+        "HOL_GUARD_MANAGED_CURSOR_HOOK",
+        "HOL_GUARD_CURSOR_APPROVAL_BINDING",
+        "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF",
+        "CURSOR_PROJECT_DIR",
+        "CURSOR_VERSION",
+        "CURSOR_TRACE_ID",
+        "CURSOR_SESSION_ID",
+        "CURSOR_TRANSCRIPT_PATH",
+    }
+)
+
+
+def _runtime_hook_env_overlay_from_payload(payload: Mapping[str, object]) -> dict[str, str]:
+    raw_overlay = payload.get("hook_env")
+    if not isinstance(raw_overlay, Mapping):
+        return {}
+    overlay: dict[str, str] = {}
+    for key, value in raw_overlay.items():
+        if not isinstance(key, str) or key not in _RUNTIME_HOOK_ENV_ALLOWLIST:
+            continue
+        if isinstance(value, str) and value:
+            overlay[key] = value
+    return overlay
+
 _DEFAULT_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 30 * 60
 _DEFAULT_SUPPLY_CHAIN_REFRESH_BACKOFF_SECONDS = 60.0
 _DEFAULT_SUPPLY_CHAIN_REFRESH_INTERVAL_SECONDS = 15 * 60.0
@@ -3929,6 +3956,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _handle_runtime_hook(self, payload: dict[str, object], query: str, *, default_harness: str) -> None:
         params = parse_qs(query)
+        hook_env = _runtime_hook_env_overlay_from_payload(payload)
+        payload = {key: value for key, value in payload.items() if key != "hook_env"}
         try:
             home_dir = self._validated_hook_directory_string(
                 "home",
@@ -3963,8 +3992,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         buffer = io.StringIO()
         with _CLAUDE_HOOK_EXECUTION_LOCK:
             from ..cli.commands import run_guard_command
-
-            exit_code = run_guard_command(args, input_text=json.dumps(payload), output_stream=buffer)
+            original_env: dict[str, str | None] = {key: os.environ.get(key) for key in hook_env}
+            try:
+                os.environ.update(hook_env)
+                exit_code = run_guard_command(args, input_text=json.dumps(payload), output_stream=buffer)
+            finally:
+                for key, original in original_env.items():
+                    if original is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = original
         raw_response = buffer.getvalue().strip()
         if not raw_response:
             if exit_code == 0:

@@ -646,6 +646,66 @@ class TestGuardSurfaceServer:
         assert hook_payload["decision"] == "deny"
         assert "Kubernetes secret read command" in str(hook_payload["reason"])
 
+    def test_guard_daemon_cursor_hook_endpoint_applies_hook_env_overlay(self, tmp_path, monkeypatch) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        captured: dict[str, str | None] = {}
+
+        def fake_run_guard_command(args, *, input_text, output_stream):
+            del input_text
+            captured["binding"] = os.environ.get("HOL_GUARD_CURSOR_APPROVAL_BINDING")
+            captured["proof"] = os.environ.get("HOL_GUARD_CURSOR_AFTER_SHELL_PROOF")
+            captured["managed"] = os.environ.get("HOL_GUARD_MANAGED_CURSOR_HOOK")
+            captured["session"] = os.environ.get("CURSOR_SESSION_ID")
+            output_stream.write("{}")
+            return 0
+
+        monkeypatch.setattr(guard_commands_module, "run_guard_command", fake_run_guard_command)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                (
+                    f"http://127.0.0.1:{daemon.port}/v1/hooks/cursor?"
+                    f"guard-home={urllib.parse.quote(str(store.guard_home))}&"
+                    f"workspace={urllib.parse.quote(str(workspace_dir))}"
+                ),
+                data=json.dumps(
+                    {
+                        "hook_event_name": "afterShellExecution",
+                        "tool_name": "Bash",
+                        "tool_input": {"command": "echo hi"},
+                        "hook_env": {
+                            "HOL_GUARD_MANAGED_CURSOR_HOOK": "1",
+                            "HOL_GUARD_CURSOR_APPROVAL_BINDING": "binding-123",
+                            "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF": "proof-456",
+                            "CURSOR_SESSION_ID": "cursor-session-789",
+                            "PATH": "/should/not/be/forwarded",
+                        },
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert response.status == 200
+        assert payload == {}
+        assert captured == {
+            "binding": "binding-123",
+            "proof": "proof-456",
+            "managed": "1",
+            "session": "cursor-session-789",
+        }
+
     def test_guard_daemon_claude_hook_endpoint_requires_auth_and_records_audit(self, tmp_path) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
