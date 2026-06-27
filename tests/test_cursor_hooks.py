@@ -214,6 +214,33 @@ def test_cursor_hook_script_source_includes_daemon_fast_path(tmp_path: Path) -> 
     assert "subprocess.CompletedProcess(" in source
 
 
+def _write_cursor_hook_script(tmp_path: Path, guard_home: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
+        lambda: [sys.executable, "-m", "codex_plugin_scanner.cli"],
+    )
+    context = HarnessContext(home_dir=tmp_path / "home", guard_home=guard_home, workspace_dir=tmp_path / "workspace")
+    script_path = tmp_path / "cursor-hook.py"
+    script_path.write_text(cursor_hook_script_source(context), encoding="utf-8")
+    script_path.chmod(0o755)
+    return script_path
+
+
+def _run_cursor_hook_script(
+    script_path: Path, payload: dict[str, object], *, env: dict[str, str]
+) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(script_path)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=15,
+    )
+
+
 def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
 
@@ -255,6 +282,100 @@ def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: p
 
     assert proc.returncode == 0
     assert json.loads(proc.stdout) == {"permission": "allow"}
+
+
+def test_cursor_hook_script_falls_back_to_local_cli_when_daemon_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No daemon state/token => definitely unavailable => fall back to local CLI (no replay risk)."""
+    guard_home = tmp_path / "guard"
+    guard_home.mkdir(parents=True, exist_ok=True)
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+
+    script_path = _write_cursor_hook_script(tmp_path, guard_home, monkeypatch)
+
+    payload = {
+        "hook_event_name": "beforeShellExecution",
+        "tool_name": "Bash",
+        "tool_input": {"command": "echo fallback"},
+        "command": "echo fallback",
+        "cwd": str(workspace_dir),
+    }
+    proc = _run_cursor_hook_script(
+        script_path,
+        payload,
+        env={**os.environ, "CURSOR_PROJECT_DIR": str(workspace_dir)},
+    )
+
+    assert proc.returncode == 0
+    assert json.loads(proc.stdout) == {"permission": "allow"}
+
+
+def test_cursor_hook_script_does_not_replay_on_ambiguous_daemon_failure_blocking(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Stale daemon state with a dead port => ambiguous post-send failure => safe deny, no local replay."""
+    from codex_plugin_scanner.guard.daemon.manager import write_guard_daemon_state
+
+    guard_home = tmp_path / "guard"
+    guard_home.mkdir(parents=True, exist_ok=True)
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+
+    write_guard_daemon_state(guard_home, port=1, auth_token="stale-token")
+
+    script_path = _write_cursor_hook_script(tmp_path, guard_home, monkeypatch)
+
+    payload = {
+        "hook_event_name": "beforeShellExecution",
+        "tool_name": "Bash",
+        "tool_input": {"command": "echo ambiguous"},
+        "command": "echo ambiguous",
+        "cwd": str(workspace_dir),
+    }
+    proc = _run_cursor_hook_script(
+        script_path,
+        payload,
+        env={**os.environ, "CURSOR_PROJECT_DIR": str(workspace_dir)},
+    )
+
+    assert proc.returncode == 2
+    response = json.loads(proc.stdout)
+    assert response["permission"] == "deny"
+    assert "replay suppressed" in response["user_message"]
+
+
+def test_cursor_hook_script_does_not_replay_on_ambiguous_daemon_failure_observer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Observer hook + ambiguous daemon failure => safe noop ({}, 0), no local replay."""
+    from codex_plugin_scanner.guard.daemon.manager import write_guard_daemon_state
+
+    guard_home = tmp_path / "guard"
+    guard_home.mkdir(parents=True, exist_ok=True)
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+
+    write_guard_daemon_state(guard_home, port=1, auth_token="stale-token")
+
+    script_path = _write_cursor_hook_script(tmp_path, guard_home, monkeypatch)
+
+    payload = {
+        "hook_event_name": "afterShellExecution",
+        "tool_name": "Bash",
+        "tool_input": {"command": "echo observer"},
+        "command": "echo observer",
+        "cwd": str(workspace_dir),
+    }
+    proc = _run_cursor_hook_script(
+        script_path,
+        payload,
+        env={**os.environ, "CURSOR_PROJECT_DIR": str(workspace_dir)},
+    )
+
+    assert proc.returncode == 0
+    assert json.loads(proc.stdout) == {}
 
 
 def test_cursor_resolve_guard_cli_command_prefers_plugin_guard(monkeypatch: pytest.MonkeyPatch) -> None:

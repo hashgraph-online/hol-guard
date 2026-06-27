@@ -650,10 +650,18 @@ class TestGuardSurfaceServer:
         store = GuardStore(tmp_path / "guard-home")
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
-        captured: dict[str, str | None] = {}
+        captured: dict[str, object] = {}
+        env_before = {
+            "HOL_GUARD_CURSOR_APPROVAL_BINDING": os.environ.get("HOL_GUARD_CURSOR_APPROVAL_BINDING"),
+            "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF": os.environ.get("HOL_GUARD_CURSOR_AFTER_SHELL_PROOF"),
+            "HOL_GUARD_MANAGED_CURSOR_HOOK": os.environ.get("HOL_GUARD_MANAGED_CURSOR_HOOK"),
+            "CURSOR_SESSION_ID": os.environ.get("CURSOR_SESSION_ID"),
+        }
 
         def fake_run_guard_command(args, *, input_text, output_stream):
             del input_text
+            hook_env = getattr(args, "hook_env", None)
+            captured["hook_env"] = hook_env
             captured["binding"] = os.environ.get("HOL_GUARD_CURSOR_APPROVAL_BINDING")
             captured["proof"] = os.environ.get("HOL_GUARD_CURSOR_AFTER_SHELL_PROOF")
             captured["managed"] = os.environ.get("HOL_GUARD_MANAGED_CURSOR_HOOK")
@@ -699,12 +707,16 @@ class TestGuardSurfaceServer:
 
         assert response.status == 200
         assert payload == {}
-        assert captured == {
-            "binding": "binding-123",
-            "proof": "proof-456",
-            "managed": "1",
-            "session": "cursor-session-789",
+        assert captured["hook_env"] == {
+            "HOL_GUARD_MANAGED_CURSOR_HOOK": "1",
+            "HOL_GUARD_CURSOR_APPROVAL_BINDING": "binding-123",
+            "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF": "proof-456",
+            "CURSOR_SESSION_ID": "cursor-session-789",
         }
+        assert captured["binding"] == env_before["HOL_GUARD_CURSOR_APPROVAL_BINDING"]
+        assert captured["proof"] == env_before["HOL_GUARD_CURSOR_AFTER_SHELL_PROOF"]
+        assert captured["managed"] == env_before["HOL_GUARD_MANAGED_CURSOR_HOOK"]
+        assert captured["session"] == env_before["CURSOR_SESSION_ID"]
 
     def test_guard_daemon_claude_hook_endpoint_requires_auth_and_records_audit(self, tmp_path) -> None:
         home_dir = tmp_path / "home"

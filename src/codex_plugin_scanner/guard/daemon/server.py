@@ -3991,21 +3991,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             policy_action=None,
             event_file=None,
             json=True,
+            hook_env=hook_env,
         )
         buffer = io.StringIO()
         with _CLAUDE_HOOK_EXECUTION_LOCK:
             from ..cli.commands import run_guard_command
 
-            original_env: dict[str, str | None] = {key: os.environ.get(key) for key in hook_env}
-            try:
-                os.environ.update(hook_env)
-                exit_code = run_guard_command(args, input_text=json.dumps(payload), output_stream=buffer)
-            finally:
-                for key, original in original_env.items():
-                    if original is None:
-                        os.environ.pop(key, None)
-                    else:
-                        os.environ[key] = original
+            exit_code = run_guard_command(args, input_text=json.dumps(payload), output_stream=buffer)
         raw_response = buffer.getvalue().strip()
         if not raw_response:
             if exit_code == 0:

@@ -597,12 +597,15 @@ def _daemon_hook_env_overlay(guard_env: Mapping[str, str]) -> dict[str, str]:
     return overlay
 
 
+_DAEMON_AMBIGUOUS_FAILURE = object()
+
+
 def _daemon_hook_result(
     payload_json: str,
     *,
     workspace: str | None,
     hook_env_overlay: Mapping[str, str] | None = None,
-) -> tuple[int, str, str] | None:
+) -> tuple[int, str, str] | object | None:
     state_path = Path(GUARD_HOME) / "daemon-state.json"
     token_path = Path(GUARD_HOME) / "daemon-auth-token"
     try:
@@ -642,7 +645,7 @@ def _daemon_hook_result(
         with opener.open(request, timeout=max(GUARD_HOOK_TIMEOUT_SECONDS - 2, 1)) as response:
             body = response.read().decode("utf-8", errors="replace")
     except (OSError, urllib.error.URLError):
-        return None
+        return _DAEMON_AMBIGUOUS_FAILURE
     return (0, body if body.strip() else "{}", "")
 
 
@@ -1098,6 +1101,23 @@ def main() -> int:
         workspace=workspace,
         hook_env_overlay=_daemon_hook_env_overlay(guard_env),
     )
+    if daemon_result is _DAEMON_AMBIGUOUS_FAILURE:
+        normalized_event = hook_event_name.strip().lower()
+        if normalized_event in {"aftershellexecution", "aftermcpexecution"}:
+            print("{}")
+            return 0
+        print(
+            json.dumps(
+                {
+                    "permission": "deny",
+                    "user_message": (
+                        "HOL Guard daemon hook transport failed after dispatch; "
+                        "local replay suppressed to avoid double execution."
+                    ),
+                }
+            )
+        )
+        return 2
     try:
         if daemon_result is not None:
             proc = subprocess.CompletedProcess(
