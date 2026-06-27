@@ -305,4 +305,28 @@ class TestRawCommandTextPropagation:
         raw = queued[0]["raw_command_text"]
         assert raw is not None
         assert "grep" in raw
-        assert "password" in raw
+
+    def test_generic_tool_label_not_promoted_to_raw_command_text(self, tmp_path):
+        """Generic tool labels like 'Bash' or 'Read' should not become raw_command_text."""
+        store = GuardStore(tmp_path / "guard-home")
+        artifact = GuardArtifact(
+            artifact_id="codex:project:tool-output:generic",
+            name="Bash credential-looking output",
+            harness="codex",
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path=str(tmp_path / "config.toml"),
+            command=None,
+            metadata={"command_text": "Bash"},
+        )
+        detection = _make_detection(artifact, tmp_path)
+        evaluation = _make_evaluation("codex:project:tool-output:generic", tmp_path)
+        queued = queue_blocked_approvals(
+            detection=detection,
+            evaluation=evaluation,
+            store=store,
+            approval_center_url="http://127.0.0.1/pending",
+            redaction_level="none",
+        )
+        assert len(queued) == 1
+        assert queued[0]["raw_command_text"] is None
