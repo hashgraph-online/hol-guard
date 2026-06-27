@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ..adapters.base import HarnessContext
 from ..approvals import approval_center_hint, attach_primary_approval_link, queue_blocked_approvals
+from ..config import load_guard_config
 from ..models import GuardArtifact, HarnessDetection
 from ..shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from ..store import GuardStore
@@ -44,11 +45,13 @@ def _queue_local_protect_approvals(
         config_paths=(artifact.config_path,),
         artifacts=(artifact,),
     )
+    _protect_config = load_guard_config(guard_home)
     queued = queue_blocked_approvals(
         detection=detection,
         evaluation={"artifacts": [approval_item]},
         store=store,
         approval_center_url=approval_center_url,
+        redaction_level=_protect_config.receipt_redaction_level,
     )
     if not queued:
         return

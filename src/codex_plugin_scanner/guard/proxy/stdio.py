@@ -434,6 +434,7 @@ class StdioGuardProxy:
                     response_data = None
                     if self.guard_store is not None and self.approval_center_url is not None:
                         event["approval_requests"] = queue_blocked_approvals(
+                            redaction_level=getattr(self.guard_config, "receipt_redaction_level", "full"),
                             detection=HarnessDetection(
                                 harness=self.harness,
                                 installed=True,

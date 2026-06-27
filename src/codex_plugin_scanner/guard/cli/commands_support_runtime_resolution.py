@@ -342,6 +342,8 @@ def _queue_claude_native_approval_gate_fallback(
     action_envelope: GuardActionEnvelope | None = None,
 ) -> list[dict[str, object]]:
     now = _now()
+    # TODO: pass redaction_level from GuardConfig when available;
+    # for now, default to "full" so no raw command text is exposed
     queued = queue_blocked_approvals(
         detection=_runtime_detection(harness, artifact),
         evaluation={

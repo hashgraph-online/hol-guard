@@ -39,6 +39,7 @@ from .models import (
     HarnessDetection,
     PolicyDecision,
 )
+from .redaction import redact_text
 from .risk import artifact_risk_signals, artifact_risk_summary
 from .store import (
     GuardStore,
@@ -240,6 +241,7 @@ def queue_blocked_approvals(
     store: GuardStore,
     approval_center_url: str,
     now: str | None = None,
+    redaction_level: str = "full",
 ) -> list[dict[str, object]]:
     timestamp = now or _now()
     artifacts_by_id = {artifact.artifact_id: artifact for artifact in detection.artifacts}
@@ -264,6 +266,14 @@ def queue_blocked_approvals(
         request_id = uuid.uuid4().hex
         risk_summary = _item_risk_summary(item, artifact)
         launch_target = _launch_target(artifact, item)
+        raw_command_text: str | None = None
+        if artifact is not None and redaction_level != "full":
+            candidate = artifact.metadata.get("raw_command_text")
+            if not isinstance(candidate, str) or not candidate.strip():
+                candidate = artifact.command if artifact.command is not None else None
+            if isinstance(candidate, str) and candidate.strip():
+                scrubbed = redact_text(candidate.strip())
+                raw_command_text = scrubbed.text
         incident = build_incident_context(
             harness=detection.harness,
             artifact=artifact,
@@ -306,6 +316,7 @@ def queue_blocked_approvals(
             action_envelope_json=_item_action_envelope_json(item),
             decision_v2_json=_item_decision_v2_json(item),
             scanner_evidence=_item_scanner_evidence(item),
+            raw_command_text=raw_command_text,
         )
         persisted_request_id = store.add_approval_request(request, timestamp)
         created_new_request = persisted_request_id == request.request_id
