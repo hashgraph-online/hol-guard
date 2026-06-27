@@ -30,7 +30,6 @@ from .desktop_notifications import (
 from .incident import build_incident_context
 from .local_dashboard_session import build_local_dashboard_session_token
 from .local_supply_chain import build_local_supply_chain_posture
-from .redaction import redact_text
 from .models import (
     DECISION_SCOPE_VALUES,
     GUARD_ACTION_VALUES,
@@ -40,6 +39,7 @@ from .models import (
     HarnessDetection,
     PolicyDecision,
 )
+from .redaction import redact_text
 from .risk import artifact_risk_signals, artifact_risk_summary
 from .store import (
     GuardStore,

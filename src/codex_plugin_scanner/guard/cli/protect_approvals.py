@@ -9,8 +9,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ..adapters.base import HarnessContext
-from ..config import load_guard_config
 from ..approvals import approval_center_hint, attach_primary_approval_link, queue_blocked_approvals
+from ..config import load_guard_config
 from ..models import GuardArtifact, HarnessDetection
 from ..shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from ..store import GuardStore
