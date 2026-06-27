@@ -295,6 +295,16 @@ def queue_blocked_approvals(
                 candidate = artifact.metadata.get("command_text")
             if not isinstance(candidate, str) or not candidate.strip():
                 candidate = artifact.command if artifact.command is not None else None
+            if not isinstance(candidate, str) or not candidate.strip():
+                envelope_raw = item.get("action_envelope_json")
+                if isinstance(envelope_raw, str):
+                    try:
+                        import json as _json
+
+                        envelope = _json.loads(envelope_raw)
+                        candidate = envelope.get("command") if isinstance(envelope, dict) else None
+                    except (ValueError, TypeError):
+                        pass
             if isinstance(candidate, str) and candidate.strip():
                 stripped = candidate.strip()
                 if not _is_generic_tool_label(stripped):
