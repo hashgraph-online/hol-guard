@@ -3794,6 +3794,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         metadata = payload.get("metadata")
         try:
+            redaction_level = self._optional_string(payload.get("redaction_level")) or "full"
             response = self.server.runtime.queue_blocked_operation(  # type: ignore[attr-defined]
                 session_id=session_id,
                 operation_type=operation_type,
@@ -3806,6 +3807,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 approval_surface_policy=approval_surface_policy,
                 open_key=self._optional_string(payload.get("open_key")),
                 opener=webbrowser.open,
+                redaction_level=redaction_level,
             )
         except ValueError as error:
             self._write_json({"error": str(error)}, status=400)

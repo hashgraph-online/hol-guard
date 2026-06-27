@@ -132,6 +132,7 @@ def _review_runtime_artifact_hook(
                         store=store,
                         approval_center_url=approval_center_url,
                         now=_now(),
+                        redaction_level=config.receipt_redaction_level,
                     )
                 else:
                     session = browser_approval_daemon_client.start_session(
@@ -175,6 +176,7 @@ def _review_runtime_artifact_hook(
                             approval_flow,
                         ),
                         open_key=artifact_id,
+                        redaction_level=config.receipt_redaction_level,
                     )
                     operation = blocked_operation.get("operation")
                     if not isinstance(operation, dict):
@@ -373,6 +375,7 @@ def _review_runtime_artifact_hook(
                         approval_flow,
                     ),
                     open_key=artifact_id,
+                    redaction_level=config.receipt_redaction_level,
                 )
                 operation = blocked_operation.get("operation")
                 if not isinstance(operation, dict):

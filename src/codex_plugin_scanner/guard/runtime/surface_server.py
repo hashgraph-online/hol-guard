@@ -223,18 +223,18 @@ class GuardSurfaceRuntime:
         approval_surface_policy: str,
         open_key: str | None,
         opener: Callable[[str], object],
+        redaction_level: str = "full",
     ) -> dict[str, object]:
         if self.store.get_guard_session(session_id) is None:
             raise ValueError(f"Unknown guard session: {session_id}")
         parsed_detection = _parse_detection(detection)
-        # TODO: pass redaction_level from GuardConfig when available;
-        # for now, default to "full" so no raw command text is exposed
         queued = queue_blocked_approvals(
             detection=parsed_detection,
             evaluation=evaluation,
             store=self.store,
             approval_center_url=approval_center_url,
             now=_now(),
+            redaction_level=redaction_level,
         )
         operation = self.start_operation(
             session_id=session_id,

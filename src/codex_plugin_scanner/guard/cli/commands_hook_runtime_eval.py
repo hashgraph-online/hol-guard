@@ -206,6 +206,7 @@ def _evaluate_runtime_artifact_hook(
                 artifact_digest=runtime_artifact_hash,
                 approval_center_url=load_guard_daemon_url(guard_home) or "http://127.0.0.1:5474",
                 action_envelope=action_envelope,
+                redaction_level=config.receipt_redaction_level,
             )
         _record_harness_usage_for_hook(
             store=store,

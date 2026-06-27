@@ -117,6 +117,7 @@ def _queue_observed_copilot_approval(
                 approval_flow,
             ),
             open_key=artifact.artifact_id,
+            redaction_level=config.receipt_redaction_level,
         )
         queued = blocked_operation.get("approval_requests")
         if not isinstance(queued, list):
@@ -393,6 +394,7 @@ def _run_hook_copilot_permission_request(
                 approval_flow,
             ),
             open_key=artifact_id,
+            redaction_level=config.receipt_redaction_level,
         )
         operation = blocked_operation.get("operation")
         if not isinstance(operation, dict):
