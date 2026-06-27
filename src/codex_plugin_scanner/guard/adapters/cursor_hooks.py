@@ -579,7 +579,30 @@ def _guard_hook_arg_value(flag: str) -> str | None:
     return value if isinstance(value, str) and value.strip() else None
 
 
-def _daemon_hook_result(payload_json: str, *, workspace: str | None) -> tuple[int, str, str] | None:
+def _daemon_hook_env_overlay(guard_env: Mapping[str, str]) -> dict[str, str]:
+    overlay: dict[str, str] = {}
+    for key in (
+        "HOL_GUARD_MANAGED_CURSOR_HOOK",
+        "HOL_GUARD_CURSOR_APPROVAL_BINDING",
+        "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF",
+        "CURSOR_PROJECT_DIR",
+        "CURSOR_VERSION",
+        "CURSOR_TRACE_ID",
+        "CURSOR_SESSION_ID",
+        "CURSOR_TRANSCRIPT_PATH",
+    ):
+        value = guard_env.get(key)
+        if isinstance(value, str) and value:
+            overlay[key] = value
+    return overlay
+
+
+def _daemon_hook_result(
+    payload_json: str,
+    *,
+    workspace: str | None,
+    hook_env_overlay: Mapping[str, str] | None = None,
+) -> tuple[int, str, str] | None:
     state_path = Path(GUARD_HOME) / "daemon-state.json"
     token_path = Path(GUARD_HOME) / "daemon-auth-token"
     try:
@@ -596,10 +619,18 @@ def _daemon_hook_result(payload_json: str, *, workspace: str | None) -> tuple[in
     home_dir = _guard_hook_arg_value("--home")
     if home_dir:
         params.append(("home", home_dir))
+    try:
+        request_payload = json.loads(payload_json)
+    except ValueError:
+        return None
+    if not isinstance(request_payload, dict):
+        return None
+    if hook_env_overlay:
+        request_payload["hook_env"] = dict(hook_env_overlay)
     query = urllib.parse.urlencode(params)
     request = urllib.request.Request(
         f"http://127.0.0.1:{port}/v1/hooks/cursor?{query}",
-        data=payload_json.encode("utf-8"),
+        data=json.dumps(request_payload).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
             "X-Guard-Token": auth_token,
@@ -1062,7 +1093,11 @@ def main() -> int:
         if proof:
             guard_env["HOL_GUARD_CURSOR_AFTER_SHELL_PROOF"] = proof
     payload_json = json.dumps(prepared)
-    daemon_result = _daemon_hook_result(payload_json, workspace=workspace)
+    daemon_result = _daemon_hook_result(
+        payload_json,
+        workspace=workspace,
+        hook_env_overlay=_daemon_hook_env_overlay(guard_env),
+    )
     try:
         if daemon_result is not None:
             proc = subprocess.CompletedProcess(

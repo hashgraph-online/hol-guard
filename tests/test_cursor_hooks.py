@@ -210,6 +210,7 @@ def test_cursor_hook_script_source_includes_daemon_fast_path(tmp_path: Path) -> 
     assert "daemon-state.json" in source
     assert "daemon-auth-token" in source
     assert "/v1/hooks/cursor?" in source
+    assert '"hook_env"' in source
     assert "subprocess.CompletedProcess(" in source
 
 
