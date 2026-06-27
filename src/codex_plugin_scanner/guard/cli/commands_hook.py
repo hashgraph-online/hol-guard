@@ -117,6 +117,20 @@ def _run_guard_hook_command(
         return 0
     if args.harness == "copilot":
         runtime_workspace = _resolve_copilot_workspace_root(runtime_workspace)
+    # Fast path: if the payload contains guard_source_ref, try the hook
+    # review engine before the full runtime artifact path. This avoids
+    # CLI command layering cost for safe source-file reads.
+    source_ref_result = _try_source_ref_fast_path(
+        args,
+        config=config,
+        context=context,
+        guard_home=guard_home,
+        payload=payload,
+        runtime_workspace=runtime_workspace,
+        store=store,
+    )
+    if source_ref_result is not None:
+        return source_ref_result
     action_envelope = _hook_action_envelope(
         harness=args.harness,
         payload=payload,
@@ -263,6 +277,120 @@ def _run_guard_hook_command(
         payload=payload,
         runtime_workspace=runtime_workspace,
         store=store,
+    )
+
+def _try_source_ref_fast_path(
+    args: argparse.Namespace,
+    *,
+    config: GuardConfig | None,
+    context: HarnessContext,
+    guard_home: Path,
+    payload: dict[str, object],
+    runtime_workspace: Path | None,
+    store: GuardStore,
+) -> int | None:
+    """Try the hook review engine for source-ref payloads.
+
+    Returns an exit code if the fast path handled the request, or None
+    to fall through to the standard runtime artifact path.
+    """
+    if "guard_source_ref" not in payload:
+        return None
+    if os.environ.get("HOL_GUARD_HOOK_SOURCE_REF", "1") != "1":
+        return None
+
+    from ..runtime.hook_content_scanner import ContentScanner
+    from ..runtime.hook_decision_cache import HookDecisionCache
+    from ..runtime.hook_review_engine import HookReviewEngine
+    from ..runtime.hook_review_types import HookReviewRequest, HookSourceFileRef, HookOutputSummary
+    from collections.abc import Mapping
+
+    source_ref_raw = payload.get("guard_source_ref")
+    if not isinstance(source_ref_raw, Mapping):
+        return None
+
+    source_ref = _parse_source_ref(source_ref_raw)
+    output_summary = _parse_output_summary(payload.get("tool_response_summary"))
+
+    request = HookReviewRequest(
+        harness=args.harness,
+        event_name=_hook_event_name(payload),
+        payload=payload,
+        payload_kind="source_file_ref",
+        config_path=None,
+        cwd=runtime_workspace,
+        home_dir=context.home_dir,
+        guard_home=context.guard_home,
+        source_scope=str(payload.get("source_scope") or "project"),
+        source_ref=source_ref,
+        output_summary=output_summary,
+    )
+
+    scanner = ContentScanner()
+    cache = HookDecisionCache(store)
+    engine = HookReviewEngine(
+        store=store,
+        scanner=scanner,
+        cache=cache,
+        config_loader=lambda gh, ws: config if config is not None else load_guard_config(gh, workspace=ws),
+    )
+
+    response = engine.review(request)
+    _emit("hook", response.to_harness_json(), getattr(args, "json", False))
+    return 0
+
+
+def _parse_source_ref(ref: Mapping[str, object]) -> HookSourceFileRef:
+    """Parse a guard_source_ref mapping into a HookSourceFileRef."""
+    from ..runtime.hook_review_types import HookSourceFileRef
+
+    version = ref.get("version")
+    path = ref.get("path")
+    output_sha256 = ref.get("output_sha256")
+    output_chars = ref.get("output_chars")
+    tool_input_path = ref.get("tool_input_path")
+    adapter_stat = ref.get("adapter_stat")
+
+    if not isinstance(version, int) or not isinstance(path, str) or not isinstance(output_sha256, str):
+        return HookSourceFileRef(version=-1, path="", output_sha256="", output_chars=0)
+
+    if not isinstance(output_chars, int):
+        output_chars = 0
+    if not isinstance(tool_input_path, str):
+        tool_input_path = None
+    stat_dict = dict(adapter_stat) if isinstance(adapter_stat, Mapping) else {}
+
+    return HookSourceFileRef(
+        version=version,
+        path=path,
+        output_sha256=output_sha256,
+        output_chars=output_chars,
+        tool_input_path=tool_input_path,
+        adapter_stat=stat_dict,
+    )
+
+
+def _parse_output_summary(summary_raw: object) -> HookOutputSummary | None:
+    """Parse a tool_response_summary mapping into a HookOutputSummary."""
+    from collections.abc import Mapping as _Mapping
+
+    from ..runtime.hook_review_types import HookOutputSummary
+    if not isinstance(summary_raw, _Mapping):
+        return None
+    text_excerpt = summary_raw.get("text_excerpt") or summary_raw.get("excerpt") or ""
+    if not isinstance(text_excerpt, str):
+        text_excerpt = str(text_excerpt)
+    excerpt_truncated = bool(summary_raw.get("excerpt_truncated", False))
+    output_sha256 = summary_raw.get("output_sha256")
+    if not isinstance(output_sha256, str):
+        output_sha256 = None
+    output_chars_raw = summary_raw.get("output_chars")
+    output_chars = int(output_chars_raw) if isinstance(output_chars_raw, (int, float)) else None
+    return HookOutputSummary(
+        text_excerpt=text_excerpt,
+        excerpt_truncated=excerpt_truncated,
+        output_sha256=output_sha256,
+        output_chars=output_chars,
     )
 
 
