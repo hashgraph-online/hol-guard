@@ -44,6 +44,7 @@ _COMMON_HANDLERS = {
     "package-shims": "_run_guard_package_shims_command",
     "run": "_run_guard_run_command",
     "diff": "_run_guard_diff_command",
+    "test-eval": "_run_guard_test_eval_command",
     "receipts": "_run_guard_receipts_command",
     "history": "_run_guard_history_command",
     "inventory": "_run_guard_inventory_command",

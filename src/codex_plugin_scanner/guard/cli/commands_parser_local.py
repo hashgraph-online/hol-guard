@@ -191,6 +191,18 @@ def _configure_guard_local_parsers(
     _add_guard_common_args(diff_parser)
     diff_parser.add_argument("--json", action="store_true")
 
+    test_eval_parser = guard_subparsers.add_parser(
+        "test-eval",
+        help="Evaluate a single artifact description against local policy without persisting (test-safe)",
+    )
+    _add_guard_common_args(test_eval_parser)
+    test_eval_parser.add_argument("harness", help="Harness name (e.g. codex)")
+    test_eval_parser.add_argument(
+        "--input",
+        dest="input_file",
+        help="Path to JSON file with artifact description",
+    )
+    test_eval_parser.add_argument("--json", action="store_true")
     receipts_parser = guard_subparsers.add_parser("receipts", help="List local Guard receipts")
     _add_guard_common_args(receipts_parser)
     receipts_parser.add_argument("--json", action="store_true")
