@@ -200,7 +200,7 @@ class TestPiInstall:
         assert "daemon-state.json" in text
         assert "daemon-auth-token" in text
         assert "/v1/hooks/pi?" in text
-        assert "tool_response: event.content" in text
+        assert "guardPayload.tool_response = event.content" in text
         assert "const GUARD_CONFIG_PATH =" in text
         assert "config_path: GUARD_CONFIG_PATH" in text
         assert '"hook", "--guard-home"' in text
@@ -293,19 +293,32 @@ class TestPiInstall:
         # Oversized tool results are passed to Guard by reference for full
         # review, not pre-emptively blocked.
         assert "HOL Guard blocked oversized Pi tool output before review" not in text
-        assert "oversizeNotice" in text
-        assert 'ctx.ui.notify(oversizeNotice, "info")' in text
+        assert "oversizeNotice" not in text
+        assert 'ctx.ui.notify(oversizeNotice' not in text
         assert "const response = await runGuard(" in text
         # When truncated, the reviewed excerpt (not the full unreviewed output) is
         # returned to Pi so omitted content never reaches the model.
         assert "function reviewedToolResult(" in text
         assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
-        assert "tool_response: event.content" in text
+        assert "guardPayload.tool_response = event.content" in text
         assert "stdout: toolOutput" in text
         assert "contentText(event.content)" not in text
         assert "options?.enforceSizeCap === true" in text
         assert 'payloadToSend.hook_event_name === "PostToolUse"' not in text
         assert "delete reducedPayload.stdout;" not in text
+        # Source-ref fast path support
+        assert "guard_source_ref" in text
+        assert "digestOutputText" in text
+        assert "sourceFileRefForPostToolUse" in text
+        assert "GUARD_SOURCE_REF_MAX_OUTPUT_CHARS" in text
+        assert "GUARD_SOURCE_REF_ALLOWED_TOOL_NAMES" in text
+        assert "reviewed_output_sha256" in text
+        assert 'response.model_output_action === "allow_original"' in text
+        assert "response.reviewed_output_sha256 === digest.sha256" in text
+        # guard_payload_ref fallback still present
+        assert "guard_payload_ref" in text
+        # Reviewed excerpt still returned when not proven safe
+        assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
 
     def test_uninstall_removes_managed_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
