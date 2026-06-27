@@ -234,6 +234,28 @@ def _parsed_url_host(parsed: ParseResult) -> str:
     return host_port
 
 
+_GENERIC_TOOL_LABELS = frozenset(
+    {
+        "Bash",
+        "Shell",
+        "shell_command",
+        "Read",
+        "Write",
+        "Edit",
+        "MultiEdit",
+        "Glob",
+        "Grep",
+        "WebFetch",
+        "TodoWrite",
+    }
+)
+
+
+def _is_generic_tool_label(value: str) -> bool:
+    """Return True if the value is a generic tool name, not an actual command."""
+    return value in _GENERIC_TOOL_LABELS
+
+
 def queue_blocked_approvals(
     *,
     detection: HarnessDetection,
@@ -270,10 +292,14 @@ def queue_blocked_approvals(
         if artifact is not None and redaction_level != "full":
             candidate = artifact.metadata.get("raw_command_text")
             if not isinstance(candidate, str) or not candidate.strip():
+                candidate = artifact.metadata.get("command_text")
+            if not isinstance(candidate, str) or not candidate.strip():
                 candidate = artifact.command if artifact.command is not None else None
             if isinstance(candidate, str) and candidate.strip():
-                scrubbed = redact_text(candidate.strip())
-                raw_command_text = scrubbed.text
+                stripped = candidate.strip()
+                if not _is_generic_tool_label(stripped):
+                    scrubbed = redact_text(stripped)
+                    raw_command_text = scrubbed.text
         incident = build_incident_context(
             harness=detection.harness,
             artifact=artifact,

@@ -277,3 +277,56 @@ class TestRawCommandTextPropagation:
         queued = response.get("approval_requests", [])
         assert len(queued) == 1
         assert queued[0]["raw_command_text"] is None
+
+    def test_raw_command_text_falls_back_to_metadata_command_text(self, tmp_path):
+        """tool_action_request artifacts store command as metadata['command_text'],
+        not metadata['raw_command_text']. The extraction should fall back to it."""
+        store = GuardStore(tmp_path / "guard-home")
+        artifact = GuardArtifact(
+            artifact_id="pi:project:tool-output:test",
+            name="grep credential-looking output",
+            harness="pi",
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path=str(tmp_path / "config.toml"),
+            command=None,
+            metadata={"command_text": "grep -r 'password' ~/secrets"},
+        )
+        detection = _make_detection(artifact, tmp_path)
+        evaluation = _make_evaluation("pi:project:tool-output:test", tmp_path)
+        queued = queue_blocked_approvals(
+            detection=detection,
+            evaluation=evaluation,
+            store=store,
+            approval_center_url="http://127.0.0.1/pending",
+            redaction_level="none",
+        )
+        assert len(queued) == 1
+        raw = queued[0]["raw_command_text"]
+        assert raw is not None
+        assert "grep" in raw
+
+    def test_generic_tool_label_not_promoted_to_raw_command_text(self, tmp_path):
+        """Generic tool labels like 'Bash' or 'Read' should not become raw_command_text."""
+        store = GuardStore(tmp_path / "guard-home")
+        artifact = GuardArtifact(
+            artifact_id="codex:project:tool-output:generic",
+            name="Bash credential-looking output",
+            harness="codex",
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path=str(tmp_path / "config.toml"),
+            command=None,
+            metadata={"command_text": "Bash"},
+        )
+        detection = _make_detection(artifact, tmp_path)
+        evaluation = _make_evaluation("codex:project:tool-output:generic", tmp_path)
+        queued = queue_blocked_approvals(
+            detection=detection,
+            evaluation=evaluation,
+            store=store,
+            approval_center_url="http://127.0.0.1/pending",
+            redaction_level="none",
+        )
+        assert len(queued) == 1
+        assert queued[0]["raw_command_text"] is None
