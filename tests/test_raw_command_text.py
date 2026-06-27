@@ -182,3 +182,98 @@ class TestRawCommandTextPropagation:
             assert rows[0]["raw_command_text"] == "rm -rf /var/tmp/*"
             single = get_approval_request(conn, "store-test-1")
             assert single["raw_command_text"] == "rm -rf /var/tmp/*"
+
+    def test_surface_runtime_passes_redaction_level(self, tmp_path):
+        """GuardSurfaceRuntime.queue_blocked_operation passes redaction_level
+        through to queue_blocked_approvals, so 'none' includes the command."""
+        from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime
+
+        store = GuardStore(tmp_path / "guard-home")
+        runtime = GuardSurfaceRuntime(store=store)
+        store.upsert_guard_session(
+            session_id="surf-1",
+            harness="codex",
+            surface="cli",
+            status="active",
+            client_name="test",
+            client_title="Test",
+            client_version="1.0",
+            workspace=None,
+            capabilities=["approval-resolution"],
+            now="2026-06-27T00:00:00+00:00",
+        )
+        artifact = GuardArtifact(
+            artifact_id="codex:cmd:surf",
+            name="surf-cmd",
+            harness="codex",
+            artifact_type="command",
+            source_scope="project",
+            config_path=str(tmp_path / "config.toml"),
+            command="docker run --rm alpine cat /etc/passwd",
+            metadata={"raw_command_text": "docker run --rm alpine cat /etc/passwd"},
+        )
+        detection = _make_detection(artifact, tmp_path)
+        evaluation = _make_evaluation("codex:cmd:surf", tmp_path)
+        response = runtime.queue_blocked_operation(
+            session_id="surf-1",
+            operation_type="run",
+            harness="codex",
+            metadata={},
+            detection=detection.to_dict(),
+            evaluation=evaluation,
+            approval_center_url="http://127.0.0.1/pending",
+            approval_surface_policy="always",
+            open_key=None,
+            opener=lambda url: None,
+            redaction_level="none",
+        )
+        queued = response.get("approval_requests", [])
+        assert len(queued) == 1
+        assert queued[0]["raw_command_text"] == "docker run --rm alpine cat /etc/passwd"
+
+    def test_surface_runtime_redaction_full_suppresses_command(self, tmp_path):
+        """GuardSurfaceRuntime with redaction_level='full' suppresses raw_command_text."""
+        from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime
+
+        store = GuardStore(tmp_path / "guard-home")
+        runtime = GuardSurfaceRuntime(store=store)
+        store.upsert_guard_session(
+            session_id="surf-2",
+            harness="codex",
+            surface="cli",
+            status="active",
+            client_name="test",
+            client_title="Test",
+            client_version="1.0",
+            workspace=None,
+            capabilities=["approval-resolution"],
+            now="2026-06-27T00:00:00+00:00",
+        )
+        artifact = GuardArtifact(
+            artifact_id="codex:cmd:surf2",
+            name="surf-cmd2",
+            harness="codex",
+            artifact_type="command",
+            source_scope="project",
+            config_path=str(tmp_path / "config.toml"),
+            command="docker run --rm alpine cat /etc/passwd",
+            metadata={"raw_command_text": "docker run --rm alpine cat /etc/passwd"},
+        )
+        detection = _make_detection(artifact, tmp_path)
+        evaluation = _make_evaluation("codex:cmd:surf2", tmp_path)
+        response = runtime.queue_blocked_operation(
+            session_id="surf-2",
+            operation_type="run",
+            harness="codex",
+            metadata={},
+            detection=detection.to_dict(),
+            evaluation=evaluation,
+            approval_center_url="http://127.0.0.1/pending",
+            approval_surface_policy="always",
+            open_key=None,
+            opener=lambda url: None,
+            redaction_level="full",
+        )
+        queued = response.get("approval_requests", [])
+        assert len(queued) == 1
+        assert queued[0]["raw_command_text"] is None
