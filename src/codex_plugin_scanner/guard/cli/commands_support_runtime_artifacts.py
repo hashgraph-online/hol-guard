@@ -242,6 +242,24 @@ def _hook_runtime_artifact(
             config_path=config_path,
             source_scope=source_scope,
         )
+    file_write_request = extract_sensitive_file_write_request(
+        payload.get("tool_name"),
+        payload.get("tool_input", payload.get("arguments")),
+        cwd=workspace,
+        home_dir=home_dir,
+        protected_paths=_runtime_protected_file_write_paths(
+            harness=harness,
+            home_dir=home_dir,
+            workspace=workspace,
+        ),
+    )
+    if file_write_request is not None:
+        return build_file_write_request_artifact(
+            harness=harness,
+            request=file_write_request,
+            config_path=config_path,
+            source_scope=source_scope,
+        )
     package_intent = None
     if not _post_tool_package_request_was_already_evaluated(payload=payload, action_envelope=action_envelope):
         package_intent = extract_package_intent_request(
@@ -279,6 +297,22 @@ def _hook_runtime_artifact(
         config_path=config_path,
         source_scope=source_scope,
     )
+
+
+def _runtime_protected_file_write_paths(
+    *,
+    harness: str,
+    home_dir: Path,
+    workspace: Path | None,
+) -> dict[str, str]:
+    protected_paths: dict[str, str] = {}
+    if harness == "codex":
+        protected_paths[str(home_dir / ".codex" / "config.toml")] = "Codex config"
+        protected_paths[str(home_dir / ".codex" / "hooks.json")] = "Codex hooks"
+        if workspace is not None:
+            protected_paths[str(workspace / ".codex" / "config.toml")] = "Codex config"
+            protected_paths[str(workspace / ".codex" / "hooks.json")] = "Codex hooks"
+    return protected_paths
 
 
 def _runtime_data_flow_artifact(

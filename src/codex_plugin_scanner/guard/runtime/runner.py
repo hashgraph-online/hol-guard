@@ -270,6 +270,27 @@ _GUARD_BYPASS_PROMPT_PATTERN = re.compile(
     r"\b(hol-guard\s+(?:disable|off|uninstall)|disable\s+hol-guard|approval_policy\s*=\s*\"never\"|guard[_-]?bypass)\b",
     re.IGNORECASE,
 )
+_DOCUMENT_PROMPT_ACTION_PATTERN = re.compile(
+    r"\b(?:create|draft|document|generate|outline|plan|update|write)\b",
+    re.IGNORECASE,
+)
+_DOCUMENT_PROMPT_TARGET_PATTERN = re.compile(
+    r"\b(?:checklist|docs?|documentation|file|files|guide|markdown|notes?|plan(?:ning)?|prd|prompt|report|runbook|spec|todo)\b",
+    re.IGNORECASE,
+)
+_DOCUMENT_PROMPT_CONTEXT_PATTERN = re.compile(
+    r"\b(?:checklist|command|commands|document|documentation|example|examples|regression|test|tests|validate|verify)\b",
+    re.IGNORECASE,
+)
+_DOCUMENT_PROMPT_GUARDRAIL_PATTERN = re.compile(
+    r"\b(?:approval|block(?:ed)?|guard|guardrail|policy|protection|require(?:s|d)?\s+approval)\b",
+    re.IGNORECASE,
+)
+_DOCUMENT_PROMPT_STRONG_GUARDRAIL_PATTERN = re.compile(
+    r"(?:do\s+not|must\s+not|must\s+stay\s+blocked|must\s+remain\s+blocked|never|"
+    r"require(?:s|d)?\s+approval|should\s+stay\s+blocked|should\s+remain\s+blocked|stay\s+blocked)",
+    re.IGNORECASE,
+)
 _PROMPT_SENTENCE_BOUNDARY_PATTERN = re.compile(r"[!?;]|[.](?=\s|$)")
 _GUARD_SYNC_USER_AGENT = f"hol-guard/{__version__}"
 _SYNC_HTTP_TIMEOUT_SECONDS = 20
@@ -323,6 +344,8 @@ def _prompt_secret_intent_region(text: str, *, start: int, end: int) -> str:
 
 
 def _prompt_has_secret_read_intent(prompt_text: str, *, start: int, end: int) -> bool:
+    if _prompt_match_is_documented_example(prompt_text, start=start, end=end):
+        return False
     sentence = _secret_match_sentence(prompt_text, start=start, end=end)
     sentence_end = _prompt_sentence_end(prompt_text, end)
     sentence_intents = tuple(_SECRET_READ_INTENT_PATTERN.finditer(sentence))
@@ -370,6 +393,51 @@ def _secret_read_intent_is_negated(region: str, intent_start: int, intent_end: i
     scoped_start = clause_start
     scoped_region = region[scoped_start:intent_end]
     return _NEGATED_SECRET_READ_PATTERN.search(scoped_region) is not None
+
+
+def _prompt_match_is_documented_example(prompt_text: str, *, start: int, end: int) -> bool:
+    region = _prompt_secret_intent_region(prompt_text, start=start, end=end)
+    if _DOCUMENT_PROMPT_ACTION_PATTERN.search(region) is None:
+        return False
+    if _DOCUMENT_PROMPT_TARGET_PATTERN.search(region) is None:
+        return False
+    if _DOCUMENT_PROMPT_GUARDRAIL_PATTERN.search(region) is None:
+        return False
+    if _DOCUMENT_PROMPT_CONTEXT_PATTERN.search(region) is None and not _prompt_match_is_wrapped_literal(
+        prompt_text,
+        start=start,
+        end=end,
+    ):
+        return False
+    return _DOCUMENT_PROMPT_STRONG_GUARDRAIL_PATTERN.search(region) is not None or _prompt_match_is_wrapped_literal(
+        prompt_text,
+        start=start,
+        end=end,
+    )
+
+
+def _prompt_match_is_wrapped_literal(prompt_text: str, *, start: int, end: int) -> bool:
+    if start < len(prompt_text) and prompt_text[start] in {"`", "'", '"'}:
+        delimiter = prompt_text[start]
+        return _next_non_whitespace_character(prompt_text, end) == delimiter
+    delimiter = _previous_non_whitespace_character(prompt_text, start)
+    if delimiter not in {"`", "'", '"'}:
+        return False
+    return _next_non_whitespace_character(prompt_text, end) == delimiter
+
+
+def _previous_non_whitespace_character(text: str, index: int) -> str | None:
+    for position in range(index - 1, -1, -1):
+        if not text[position].isspace():
+            return text[position]
+    return None
+
+
+def _next_non_whitespace_character(text: str, index: int) -> str | None:
+    for position in range(index, len(text)):
+        if not text[position].isspace():
+            return text[position]
+    return None
 
 
 def _first_match(patterns: tuple[re.Pattern[str], ...], text: str) -> re.Match[str] | None:

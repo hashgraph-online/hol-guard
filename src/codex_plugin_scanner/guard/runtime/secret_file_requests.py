@@ -50,6 +50,15 @@ _FILE_READ_TOOL_NAMES = frozenset(
         "cat_file",
     }
 )
+_FILE_WRITE_TOOL_NAMES = frozenset(
+    {
+        "edit",
+        "edit_file",
+        "multiedit",
+        "write",
+        "write_file",
+    }
+)
 _PATH_KEYS = (
     "path",
     "file_path",
@@ -570,6 +579,18 @@ class ToolActionRequestMatch:
     wrapper_chain: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class FileWriteRequestMatch:
+    """A sensitive file-write tool call."""
+
+    tool_name: str
+    normalized_tool_name: str
+    normalized_path: str
+    path_class: str
+    reason: str
+    action_class: str
+
+
 def is_file_read_tool_name(tool_name: str | None) -> bool:
     """Return whether the tool name looks like a file-read tool."""
 
@@ -639,6 +660,62 @@ def extract_sensitive_file_read_request_from_action(
     return None
 
 
+def extract_sensitive_file_write_request(
+    tool_name: object,
+    arguments: object,
+    *,
+    cwd: Path | None = None,
+    home_dir: Path | None = None,
+    protected_paths: dict[str, str] | None = None,
+) -> FileWriteRequestMatch | None:
+    """Extract a sensitive file-write request from native tool arguments."""
+
+    normalized_tool_name = _normalize_tool_name(tool_name)
+    if normalized_tool_name is None or normalized_tool_name not in _FILE_WRITE_TOOL_NAMES:
+        return None
+    requested_tool_name = str(tool_name).strip() if isinstance(tool_name, str) and str(tool_name).strip() else "Write"
+    normalized_protected_paths = protected_paths or {}
+    for candidate in _candidate_paths(arguments):
+        normalized_candidate = _normalized_candidate_path(candidate, cwd=cwd, home_dir=home_dir)
+        if normalized_candidate is not None:
+            protected_label = normalized_protected_paths.get(normalized_candidate)
+            if protected_label is not None:
+                return FileWriteRequestMatch(
+                    tool_name=requested_tool_name,
+                    normalized_tool_name=normalized_tool_name,
+                    normalized_path=normalized_candidate,
+                    path_class=protected_label,
+                    reason=(
+                        f"Guard treats writes to {protected_label} as sensitive because changing harness "
+                        "configuration can weaken approvals or bypass protections before the user confirms the action."
+                    ),
+                    action_class="guard-managed config write",
+                )
+        path_match = classify_secret_path(candidate, cwd=cwd, home_dir=home_dir)
+        if path_match is not None:
+            return FileWriteRequestMatch(
+                tool_name=requested_tool_name,
+                normalized_tool_name=normalized_tool_name,
+                normalized_path=path_match.normalized_path,
+                path_class=path_match.path_class,
+                reason=path_match.reason,
+                action_class="sensitive local file write",
+            )
+    return None
+
+
+def _normalized_candidate_path(
+    value: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> str | None:
+    stripped = value.strip().strip("'").strip('"')
+    if not stripped:
+        return None
+    return _normalize_path(_expand_home(stripped, home_dir), cwd)
+
+
 def _is_lossy_redacted_path(path: str) -> bool:
     return path.strip().startswith(".../")
 
@@ -677,6 +754,50 @@ def build_file_read_request_artifact(
             "runtime_request_signals": ["requests access to a sensitive local file"],
             "runtime_request_summary": risk_summary,
             "runtime_request_reason": request.path_match.reason,
+        },
+    )
+
+
+def build_file_write_request_artifact(
+    harness: str,
+    request: FileWriteRequestMatch,
+    *,
+    config_path: str,
+    source_scope: str,
+) -> GuardArtifact:
+    """Build a Guard artifact for a sensitive runtime file-write request."""
+
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            {
+                "harness": harness,
+                "tool_name": request.normalized_tool_name,
+                "normalized_path": request.normalized_path,
+                "action_class": request.action_class,
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    request_summary = (
+        f"Requested `{request.tool_name}` write access to `{request.normalized_path}` ({request.path_class})."
+    )
+    risk_summary = f"Requests a {request.action_class}: {request.path_class}."
+    return GuardArtifact(
+        artifact_id=f"{harness}:{source_scope}:file-write:{fingerprint}",
+        name=f"{request.tool_name} {Path(request.normalized_path).name}",
+        harness=harness,
+        artifact_type="tool_action_request",
+        source_scope=source_scope,
+        config_path=config_path,
+        metadata={
+            "tool_name": request.tool_name,
+            "normalized_path": request.normalized_path,
+            "path_class": request.path_class,
+            "action_class": request.action_class,
+            "request_summary": request_summary,
+            "runtime_request_signals": [f"writes a sensitive local path: {request.path_class}"],
+            "runtime_request_summary": risk_summary,
+            "runtime_request_reason": request.reason,
         },
     )
 

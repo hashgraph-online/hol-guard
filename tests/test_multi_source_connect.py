@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
-
 import pytest
 
 from codex_plugin_scanner.guard.store import GuardStore
@@ -152,4 +149,3 @@ class TestMultiSourceCredentials:
         # Staging should be gone
         staging_creds = store_staging.get_oauth_local_credentials()
         assert staging_creds is None
-
