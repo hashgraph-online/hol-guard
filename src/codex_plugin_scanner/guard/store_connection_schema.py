@@ -507,6 +507,7 @@ class StoreConnectionSchemaMixin:
             self._ensure_approval_column(connection, "fallback_cli_command", "text")
             self._ensure_approval_column(connection, "scanner_evidence_json", "text not null default '[]'")
             self._ensure_approval_column(connection, "desktop_notified_at", "text")
+            self._ensure_approval_column(connection, "raw_command_text", "text")
             if not self._schema_version_applied(connection, version=3):
                 _backfill_approval_queue_columns_compat(connection)
                 self._record_schema_version(connection, version=3)

@@ -172,6 +172,7 @@ def _headless_approval_resolver(
             daemon_client = load_guard_surface_daemon_client(context.guard_home)
         except RuntimeError:
             queued = queue_blocked_approvals(
+                redaction_level=config.receipt_redaction_level,
                 detection=detection,
                 evaluation=payload,
                 store=store,
