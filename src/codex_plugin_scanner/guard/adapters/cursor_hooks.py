@@ -626,13 +626,25 @@ def _daemon_hook_result(
         return None
     # Probe /healthz before sending the hook payload and auth token.
     # Ensures the listener is actually the Guard daemon, not a spoofed process.
+    # Validate the response body — not just HTTP 200 — so an attacker listener
+    # that returns 200 but doesn't know the daemon's compatibility version is rejected.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
         health_req = urllib.request.Request(f"http://127.0.0.1:{port}/healthz", method="GET")
         with opener.open(health_req, timeout=2) as health_response:
             if health_response.status != 200:
                 return None
+            health_body = health_response.read().decode("utf-8", errors="replace")
     except (OSError, urllib.error.URLError):
+        return None
+    try:
+        health_json = json.loads(health_body)
+    except ValueError:
+        return None
+    if not isinstance(health_json, dict) or health_json.get("ok") is not True:
+        return None
+    state_compat = state.get("compatibility_version")
+    if isinstance(state_compat, str) and health_json.get("compatibility_version") != state_compat:
         return None
     params = [("guard-home", GUARD_HOME)]
     if workspace:

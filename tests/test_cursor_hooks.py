@@ -1168,12 +1168,13 @@ def test_cursor_hook_daemon_fast_path_rejects_empty_response(tmp_path: Path, mon
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
 
-    # Spin up a minimal HTTP server that returns 200 on /healthz but empty body on POST.
+    # Spin up a minimal HTTP server that returns a valid /healthz but empty body on POST.
     class _EmptyResponseHandler(http.server.BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             self.send_response(200)
+            self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(b"ok")
+            self.wfile.write(json.dumps({"ok": True, "compatibility_version": "v1"}).encode())
 
         def do_POST(self) -> None:
             self.send_response(200)
@@ -1201,7 +1202,7 @@ def test_cursor_hook_daemon_fast_path_rejects_empty_response(tmp_path: Path, mon
         # Write daemon state pointing at our test server with the current PID.
         guard_home.mkdir(parents=True, exist_ok=True)
         (guard_home / "daemon-state.json").write_text(
-            json.dumps({"port": port, "pid": os.getpid()}),
+            json.dumps({"port": port, "pid": os.getpid(), "compatibility_version": "v1"}),
             encoding="utf-8",
         )
         (guard_home / "daemon-auth-token").write_text("test-token", encoding="utf-8")
