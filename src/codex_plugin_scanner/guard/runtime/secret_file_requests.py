@@ -4024,6 +4024,13 @@ def _docker_global_context_is_sensitive(global_tokens: list[str]) -> bool:
     index = 0
     while index < len(global_tokens):
         token = global_tokens[index]
+        attached_short = _docker_attached_short_context_option(token)
+        if attached_short is not None:
+            flag, value = attached_short
+            if _docker_global_context_value_is_sensitive(flag, value):
+                return True
+            index += 1
+            continue
         if _docker_global_option_has_value(token):
             if "=" in token:
                 flag, value = token.split("=", 1)
@@ -4043,6 +4050,16 @@ def _docker_global_context_is_sensitive(global_tokens: list[str]) -> bool:
             return True
         index += 1
     return False
+
+
+def _docker_attached_short_context_option(token: str) -> tuple[str, str] | None:
+    for flag in ("-c", "-H"):
+        if token.startswith(flag) and token not in {flag, f"{flag}="}:
+            value = token[len(flag) :]
+            if value.startswith("="):
+                value = value[1:]
+            return flag, value
+    return None
 
 
 def _docker_global_context_value_is_sensitive(flag: str, value: str) -> bool:
@@ -4087,6 +4104,8 @@ def _docker_compose_sensitive_reason(args: list[str], *, sensitive_context: bool
 def _docker_compose_subcommand_reason(compose_subcommand: str, subcommand_args: list[str]) -> str | None:
     if compose_subcommand in _DOCKER_COMPOSE_SENSITIVE_SUBCOMMANDS:
         return f"compose-{compose_subcommand}"
+    if _docker_compose_args_include_secret_bearing_option(subcommand_args):
+        return "compose-env-file"
     if compose_subcommand in _DOCKER_BUILD_SUBCOMMANDS and _docker_build_args_are_sensitive(subcommand_args):
         return "compose-build-sensitive-flags"
     if compose_subcommand in _DOCKER_COMPOSE_SAFE_SUBCOMMANDS:
@@ -4103,6 +4122,10 @@ def _docker_compose_option_has_value(token: str) -> bool:
 
 def _docker_compose_option_is_secret_bearing(token: str) -> bool:
     return token == "--env-file" or token.startswith("--env-file=")
+
+
+def _docker_compose_args_include_secret_bearing_option(args: list[str]) -> bool:
+    return any(_docker_compose_option_is_secret_bearing(token) for token in args)
 
 
 def _docker_compose_flag_option_matches(token: str) -> bool:
