@@ -249,3 +249,39 @@ class GuardRuntimeState:
         payload = asdict(self)
         payload["approval_center_url"] = f"http://{self.daemon_host}:{self.daemon_port}"
         return payload
+
+
+@dataclass(frozen=True, slots=True)
+class SyncedPolicyRule:
+    """A compiled policy rule from a synced cloud policy bundle.
+
+    Maps to the ``rules`` array in ``guard-policy-bundle.v1``.  Each rule
+    carries an action and a scope that the local evaluator matches against
+    the incoming artifact's harness, device, and type.
+    """
+
+    rule_id: str
+    action: str
+    reason: str
+    agents: tuple[str, ...] = ()
+    devices: tuple[str, ...] = ()
+    harnesses: tuple[str, ...] = ()
+    locations: tuple[str, ...] = ()
+    artifact_types: tuple[str, ...] = ()
+
+    def matches(
+        self,
+        *,
+        harness: str,
+        artifact_type: str,
+        device_id: str | None = None,
+    ) -> bool:
+        """Return ``True`` when every non-empty scope dimension matches."""
+        if self.harnesses and harness not in self.harnesses:
+            return False
+        if self.artifact_types and artifact_type not in self.artifact_types:
+            return False
+        if self.devices and device_id is not None and device_id not in self.devices:
+            return False
+        # Empty scope dimensions mean "matches all" (wildcard)
+        return True

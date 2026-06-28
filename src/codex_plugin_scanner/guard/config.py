@@ -21,7 +21,7 @@ else:  # pragma: no cover - runtime compatibility
     tomllib = importlib.import_module("tomllib" if sys.version_info >= (3, 11) else "tomli")
 
 from .approval_gate import ApprovalGateGrant, public_config, require_settings_write
-from .models import GuardAction, GuardMode
+from .models import GuardAction, GuardMode, SyncedPolicyRule
 
 DEFAULT_GUARD_DIRNAME = ".hol-guard"
 LEGACY_GUARD_DIRNAMES = (".config/.ai-plugin-scanner-guard", ".ai-plugin-scanner-guard", ".holguard")
@@ -318,7 +318,26 @@ class GuardConfig:
     harness_actions: dict[str, GuardAction] | None = None
     publisher_actions: dict[str, GuardAction] | None = None
     artifact_actions: dict[str, GuardAction] | None = None
-    evidence_retain_days: int = 90
+    synced_rules: tuple[SyncedPolicyRule, ...] = ()
+
+    def resolve_synced_rule_action(
+        self,
+        harness: str,
+        artifact_type: str,
+        device_id: str | None = None,
+    ) -> GuardAction | None:
+        """Check synced cloud policy rules for a matching action.
+
+        Rules are checked in order; the first matching rule wins.
+        Returns ``None`` when no rule matches so callers fall through
+        to ``default_action``.
+        """
+        for rule in self.synced_rules:
+            if rule.matches(harness=harness, artifact_type=artifact_type, device_id=device_id):
+                action = rule.action
+                if action in ("allow", "warn", "review", "block", "sandbox-required", "require-reapproval"):
+                    return action  # type: ignore[return-value]
+        return None
 
     def resolve_action_override(
         self,
@@ -738,6 +757,10 @@ def overlay_synced_guard_policy(
     )
     sync_enabled = payload.get("syncEnabled")
     cloud_redaction_level = payload.get("receiptRedactionLevel")
+    synced_rules = _parse_synced_rules(payload.get("rules"))
+    # Also check for policyRules (alternative key used by some bundle formats)
+    if not synced_rules:
+        synced_rules = _parse_synced_rules(payload.get("policyRules"))
     return replace(
         config,
         mode=next_mode,
@@ -752,7 +775,49 @@ def overlay_synced_guard_policy(
             if cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS
             else config.receipt_redaction_level
         ),
+        synced_rules=synced_rules if synced_rules else config.synced_rules,
     )
+
+def _parse_synced_rules(raw: object) -> tuple[SyncedPolicyRule, ...]:
+    """Parse the ``rules`` array from a synced policy bundle payload."""
+    if not isinstance(raw, list):
+        return ()
+    rules: list[SyncedPolicyRule] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        rule_id = item.get("ruleId") or item.get("id") or ""
+        if not isinstance(rule_id, str) or not rule_id:
+            continue
+        action = item.get("action")
+        if not isinstance(action, str):
+            continue
+        reason = item.get("reason") or ""
+        if not isinstance(reason, str):
+            reason = ""
+        scope = item.get("scope") if isinstance(item.get("scope"), dict) else {}
+        agents = tuple(s for s in scope.get("agents", []) if isinstance(s, str))
+        devices = tuple(s for s in scope.get("devices", []) if isinstance(s, str))
+        harnesses = tuple(s for s in scope.get("harnesses", []) if isinstance(s, str))
+        locations = tuple(s for s in scope.get("locations", []) if isinstance(s, str))
+        # Map artifact_type families from the bundle's matcher fields
+        artifact_types: tuple[str, ...] = ()
+        matcher_families = item.get("matcherFamilies")
+        if isinstance(matcher_families, list):
+            artifact_types = tuple(s for s in matcher_families if isinstance(s, str))
+        rules.append(
+            SyncedPolicyRule(
+                rule_id=rule_id,
+                action=action,
+                reason=reason,
+                agents=agents,
+                devices=devices,
+                harnesses=harnesses,
+                locations=locations,
+                artifact_types=artifact_types,
+            )
+        )
+    return tuple(rules)
 
 
 def _coerce_action_value(value: object, fallback: GuardAction) -> GuardAction:

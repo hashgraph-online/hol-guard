@@ -117,9 +117,14 @@ def _synced_policy_payload(store: GuardStore) -> dict[str, object] | None:
                 payload["bundleHash"] = bundle_hash
             if bundle_version is not None:
                 payload["bundleVersion"] = bundle_version
+            # Include compiled rules so overlay_synced_guard_policy can
+            # apply per-rule graph-based enforcement, not just policyDefaults.
+            bundle_rules = policy_bundle.get("rules")
+            if isinstance(bundle_rules, list):
+                payload["rules"] = bundle_rules
             return payload
-    payload = store.get_sync_payload("policy")
-    return payload if isinstance(payload, dict) else None
+    fallback = store.get_sync_payload("policy")
+    return fallback if isinstance(fallback, dict) else None
 
 
 _PERSISTED_POLICY_BUNDLE_REJECTION_REASONS = frozenset(

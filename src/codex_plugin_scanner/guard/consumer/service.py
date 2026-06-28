@@ -487,6 +487,22 @@ def evaluate_detection(
                 artifact.artifact_id,
                 artifact.publisher,
             )
+        # Check synced cloud policy rules (per-rule graph-based enforcement)
+        if configured_action is None:
+            device_id = artifact.metadata.get("deviceId") if isinstance(artifact.metadata, dict) else None
+            if isinstance(device_id, str):
+                synced_action = config.resolve_synced_rule_action(
+                    harness=detection.harness,
+                    artifact_type=artifact.artifact_type,
+                    device_id=device_id,
+                )
+            else:
+                synced_action = config.resolve_synced_rule_action(
+                    harness=detection.harness,
+                    artifact_type=artifact.artifact_type,
+                )
+            if synced_action is not None:
+                configured_action = synced_action
         previous_capabilities = store.get_artifact_capability(detection.harness, artifact.artifact_id)
         current_capabilities = normalize_artifact_capabilities(artifact)
         capability_delta = compute_capability_delta(previous_capabilities, current_capabilities)
