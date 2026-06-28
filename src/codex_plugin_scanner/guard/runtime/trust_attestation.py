@@ -151,9 +151,9 @@ def _resolve_persistent_trust_attestation_signing_config(
     try:
         private_key_pem = key_path.read_text(encoding="utf-8").strip()
         if not private_key_pem:
-            return None
+            raise ValueError("Empty key file")
         private_key = _load_private_key(private_key_pem)
-    except (OSError, ValueError):
+    except Exception:
         try:
             private_key = ec.generate_private_key(ec.SECP256R1())
             private_key_pem = private_key.private_bytes(
@@ -162,12 +162,10 @@ def _resolve_persistent_trust_attestation_signing_config(
                 encryption_algorithm=serialization.NoEncryption(),
             ).decode("utf-8")
             key_path.parent.mkdir(parents=True, exist_ok=True)
-            key_path.write_text(private_key_pem, encoding="utf-8")
-            try:
-                key_path.chmod(0o600)
-            except OSError:
-                pass
-        except (OSError, ValueError):
+            fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(private_key_pem)
+        except Exception:
             return None
     public_key_pem = (
         private_key.public_key()
