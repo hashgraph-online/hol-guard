@@ -602,7 +602,8 @@ def _cisco_trust_layer(
                 "label": label,
                 "score": trust_score,
                 "status": component_status,
-                "summary": message or (
+                "summary": message
+                or (
                     f"{label} completed with {sum(severity_counts.values())} findings "
                     f"using {len(analyzers_used)} analyzer(s)."
                 ),
@@ -706,6 +707,7 @@ def _cisco_layer_score(
     else:
         ceiling = 90
     return max(0, min(ceiling, raw_score))
+
 
 def _trust_components_from_domain(domain: TrustDomainScore) -> list[dict[str, object]]:
     components: list[dict[str, object]] = []
