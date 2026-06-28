@@ -4479,7 +4479,18 @@ def _read_only_lookup_find_args_are_safe(args: list[str], *, home_dir: Path | No
 _GREP_PATTERN_OPTIONS = frozenset({"-e", "--regexp"})
 _GREP_PATTERN_FILE_OPTIONS = frozenset({"-f", "--file"})
 _GREP_FILTER_FILE_OPTIONS = frozenset({"--exclude-from"})
-_GREP_SKIP_NEXT_OPTIONS = frozenset({"-A", "-B", "-C", "-m", "--after-context", "--before-context", "--context", "--max-count"})
+_GREP_SKIP_NEXT_OPTIONS = frozenset(
+    {
+        "-A",
+        "-B",
+        "-C",
+        "-m",
+        "--after-context",
+        "--before-context",
+        "--context",
+        "--max-count",
+    }
+)
 
 
 def _read_only_lookup_filter_grep_args_are_safe(
@@ -4619,8 +4630,6 @@ def _read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool, home_dir:
     if Path(normalized).suffix.lower() in SOURCE_INSPECTION_EXTENSIONS:
         return True
     return allow_dirs
-
-
 
 
 _SAFE_GRAPHQL_QUERY_FILE_WORKFLOW_PATTERN = re.compile(

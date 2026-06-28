@@ -121,13 +121,13 @@ def resolve_guard_oauth_trust_attestation_signing_config(
         public_jwk_thumbprint=public_jwk_thumbprint,
         signature_algorithm=GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
     )
+
+
 def trust_attestation_v2_enabled(environ: Mapping[str, str] | None = None) -> bool:
     """Trust attestation v2 is enabled by default. Set GUARD_AIBOM_TRUST_ATTESTATION_V2=0 to opt out."""
     env = environ or os.environ
     raw = _sanitize_env(env.get("GUARD_AIBOM_TRUST_ATTESTATION_V2")).lower()
-    if raw in _FALSY_ENV_VALUES:
-        return False
-    return True
+    return raw not in _FALSY_ENV_VALUES
 
 
 def _headless_short_lived_attestation_enabled(environ: Mapping[str, str]) -> bool:

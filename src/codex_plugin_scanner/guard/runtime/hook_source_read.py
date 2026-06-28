@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import stat
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
@@ -210,7 +211,7 @@ def evaluate_source_file_ref(
     except OSError:
         return SourceReadFastPathResult(status="inconclusive", reason_code="stat_failed")
 
-    if (pre_stat.st_mode & 0o170000) != 0o100000:  # S_ISREG
+    if not stat.S_ISREG(pre_stat.st_mode):
         return SourceReadFastPathResult(status="inconclusive", reason_code="not_regular_file")
 
     if pre_stat.st_size > SOURCE_READ_MAX_SCAN_BYTES:

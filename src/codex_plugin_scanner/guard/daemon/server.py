@@ -3987,8 +3987,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 payload,
                 params,
                 default_harness=default_harness,
-                home_dir=home_dir or "",
-                guard_home=guard_home or "",
+                home_dir=home_dir,
+                guard_home=guard_home,
                 workspace=workspace,
             )
             if result is not None:
@@ -4001,8 +4001,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             params,
             hook_env=hook_env,
             default_harness=default_harness,
-            home_dir=home_dir or "",
-            guard_home=guard_home or "",
+            home_dir=home_dir,
+            guard_home=guard_home,
             workspace=workspace,
         )
 
@@ -4017,8 +4017,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         params: Mapping[str, list[str]],
         *,
         default_harness: str,
-        home_dir: str,
-        guard_home: str,
+        home_dir: str | None,
+        guard_home: str | None,
         workspace: str | None,
     ) -> dict[str, object] | None:
         """Try the resident hook worker. Return None to fall back to legacy.
@@ -4033,6 +4033,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         supplied only ``guard_source_ref``.
         """
         from .hook_worker import HookWorkerUnsupported
+
+        if home_dir is None or guard_home is None:
+            return None
 
         try:
             worker = self._daemon_server().hook_worker
@@ -4067,8 +4070,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         *,
         hook_env: dict[str, str],
         default_harness: str,
-        home_dir: str,
-        guard_home: str,
+        home_dir: str | None,
+        guard_home: str | None,
         workspace: str | None,
     ) -> None:
         runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
