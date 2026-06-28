@@ -81,6 +81,11 @@ class HookWorker:
         ``UserPromptSubmit``, ``PermissionRequest``, PostToolUse without
         a source ref) must fall through to the legacy CLI path so that
         existing policy, permission, and approval logic is not bypassed.
+
+        Harnesses that don't generate ``guard_source_ref`` client-side
+        (claude-code, codex, grok, zcode) fall through to legacy CLI
+        for all events. This is safe and correct — the fast path is an
+        optimization, not a security requirement.
         """
         harness = self._runtime_harness(params) or default_harness
         event_name = self._hook_event_name(payload)
@@ -220,6 +225,18 @@ class HookWorker:
             tool_input_path=tool_input_path,
             adapter_stat=stat_dict,
         )
+
+    # Note on server-side source ref synthesis:
+    # Server-side synthesis was considered but rejected because harness
+    # output includes formatting (line numbers, banners) that won't match
+    # the raw file hash. The fast path requires an exact hash match
+    # between output text and file content (see output_equivalent() in
+    # hook_source_read.py). Only client-side generation (like Pi's
+    # digestOutputText) can produce a matching hash because it hashes
+    # the same structured output the server receives.
+    #
+    # Harnesses without client-side guard_source_ref generation fall
+    # through to the legacy CLI path, which is safe and correct.
 
 
 __all__ = ["HookWorker", "HookWorkerUnsupported"]
