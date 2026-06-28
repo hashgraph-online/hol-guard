@@ -523,7 +523,11 @@ def run_cisco_mcp_scan(
         )
     # Only report analyzers that actually ran successfully
     analyzer_names = successful_analyzers if successful_analyzers else tuple(name for name, _ in analyzers)
-    error_suffix = f" (skipped: {', '.join(f'{n} ({e})' for n, e in analyzer_errors.items())})" if analyzer_errors else ""
+    error_suffix = (
+        f" (skipped: {', '.join(f'{n} ({e})' for n, e in analyzer_errors.items())})"
+        if analyzer_errors
+        else ""
+    )
     if findings:
         message = (
             f"Cisco MCP scanner completed static analysis for {targets_scanned} target(s) "

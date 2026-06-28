@@ -602,7 +602,10 @@ def _cisco_trust_layer(
                 "label": label,
                 "score": trust_score,
                 "status": component_status,
-                "summary": message or f"{label} completed with {sum(severity_counts.values())} findings using {len(analyzers_used)} analyzer(s).",
+                "summary": message or (
+                    f"{label} completed with {sum(severity_counts.values())} findings "
+                    f"using {len(analyzers_used)} analyzer(s)."
+                ),
                 "weight": 1.0,
             }
         )
