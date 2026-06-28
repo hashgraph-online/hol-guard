@@ -1,7 +1,7 @@
 """Shared secret path family classification for Guard runtime surfaces."""
 
-from __future__ import annotations
-
+import hashlib
+import json
 import os
 import re
 from dataclasses import dataclass
@@ -304,6 +304,28 @@ def classify_secret_content(text: str | None, *, suppress_samples: bool = True) 
             )
         )
     return tuple(matches)
+
+
+def secret_content_rule_version() -> str:
+    """Return a stable hash of the current secret-content classifier rules.
+
+    This lets caches invalidate when secret detection patterns change.
+    The hash is deterministic across calls within one process and stable
+    as long as ``_SECRET_CONTENT_PATTERNS`` is unchanged.
+    """
+    material = [
+        {
+            "classifier": classifier,
+            "family": family,
+            "sensitivity": sensitivity,
+            "pattern": pattern.pattern,
+            "flags": pattern.flags,
+        }
+        for classifier, family, sensitivity, pattern, _reason in _SECRET_CONTENT_PATTERNS
+    ]
+    return hashlib.sha256(
+        json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
 
 def _secret_content_match_is_sample(*, classifier: str, text: str, enabled: bool) -> bool:

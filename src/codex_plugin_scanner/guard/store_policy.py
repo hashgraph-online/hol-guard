@@ -488,3 +488,52 @@ class StorePolicyMixin:
         workspace = _workspace_policy_key(decision.workspace) if decision.scope == "workspace" else None
         publisher = decision.publisher if decision.scope == "publisher" else None
         return artifact_id, artifact_hash, workspace, publisher
+
+    def policy_fingerprint(
+        self,
+        *,
+        harness: str,
+        workspace: Path | str | None,
+        now: str | None = None,
+    ) -> str:
+        """Return a stable hash of all policy decisions affecting a harness/workspace.
+
+        Reads all non-expired rows that can affect global, harness, publisher,
+        artifact, or workspace-scoped decisions. Includes policy integrity
+        trust status. Any policy change invalidates this fingerprint, ensuring
+        source-read cache entries are invalidated when policy changes.
+        """
+        import hashlib
+        import json
+
+        from datetime import datetime, timezone
+
+        current_time = now or datetime.now(timezone.utc).isoformat()
+        workspace_key = _workspace_policy_key(str(workspace) if workspace is not None else None)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                select decision_id, harness, scope, artifact_id, artifact_hash, workspace, publisher,
+                       action, source, expires_at, updated_at, integrity_version, integrity_generation,
+                       payload_hash, payload_mac, integrity_key_id, signed_at
+                from policy_decisions
+                where (harness = ? or harness = '*')
+                  and (expires_at is null or expires_at > ?)
+                  and (
+                    scope in ('global', 'harness', 'publisher', 'artifact')
+                    or (scope = 'workspace' and (workspace = ? or workspace is null))
+                  )
+                order by decision_id asc
+                """,
+                (harness, current_time, workspace_key),
+            ).fetchall()
+            integrity_state = self._load_policy_integrity_state(connection) or {}
+        material = {
+            "harness": harness,
+            "workspace": workspace_key,
+            "rows": [dict(row) for row in rows],
+            "trust_status": TrustStatus.from_policy_integrity_state(integrity_state).to_dict(),
+        }
+        return hashlib.sha256(
+            json.dumps(material, sort_keys=True, default=str, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()

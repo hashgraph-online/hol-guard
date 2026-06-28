@@ -293,6 +293,9 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         self.package_firewall_action_rate_limiter = PackageFirewallActionRateLimiter()
         self.package_firewall_session_nonces = {}
         self.package_firewall_session_nonces_lock = threading.Lock()
+        from .hook_worker import HookWorker
+
+        self.hook_worker = HookWorker(store=store)
 
     def daemon_host(self) -> str:
         return str(self.server_address[0])
@@ -3977,13 +3980,104 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
             self._write_json({"error": error.code}, status=400)
             return
+
+        # Fast path: use the resident hook worker for supported hooks.
+        if self._hook_fast_path_enabled():
+            result = self._handle_runtime_hook_fast(
+                payload,
+                params,
+                default_harness=default_harness,
+                home_dir=home_dir,
+                guard_home=guard_home,
+                workspace=workspace,
+            )
+            if result is not None:
+                self._write_json(result)
+                return
+
+        # Legacy CLI path.
+        self._handle_runtime_hook_legacy_cli(
+            payload,
+            params,
+            hook_env=hook_env,
+            default_harness=default_harness,
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
+    def _hook_fast_path_enabled(self) -> bool:
+        from ..config import hook_fast_path_enabled
+
+        return hook_fast_path_enabled()
+
+    def _handle_runtime_hook_fast(
+        self,
+        payload: dict[str, object],
+        params: Mapping[str, list[str]],
+        *,
+        default_harness: str,
+        home_dir: str,
+        guard_home: str,
+        workspace: str | None,
+    ) -> dict[str, object] | None:
+        """Try the resident hook worker. Return None to fall back to legacy.
+
+        The worker only handles ``PostToolUse`` with ``guard_source_ref``.
+        ``HookWorkerUnsupported`` means the event is not eligible for the
+        fast path — return ``None`` so the caller falls through to the
+        legacy CLI path, preserving existing policy/permission checks.
+
+        Any other exception is a real failure — deny/block rather than
+        fall back, because the request may have omitted full output and
+        supplied only ``guard_source_ref``.
+        """
+        from .hook_worker import HookWorkerUnsupported
+
+        try:
+            worker = self._daemon_server().hook_worker
+            return worker.review_http_payload(
+                payload=payload,
+                params=params,
+                default_harness=default_harness,
+                home_dir=Path(home_dir),
+                guard_home=Path(guard_home),
+                workspace=Path(workspace) if workspace else None,
+            )
+        except HookWorkerUnsupported:
+            # Not eligible for fast path — fall back to legacy CLI so
+            # PreToolUse/PermissionRequest/PostToolUse-without-source-ref
+            # still get full policy/permission/approval checks.
+            return None
+        except Exception:
+            # Fail safe: deny/block. Do not fall back to legacy CLI for
+            # requests that omitted full output and supplied only guard_source_ref.
+            return {
+                "decision": "deny",
+                "reason": "HOL Guard could not complete local hook review safely.",
+                "model_output_action": "block",
+                "notice": "warning",
+                "reason_code": "daemon_worker_exception",
+            }
+
+    def _handle_runtime_hook_legacy_cli(
+        self,
+        payload: dict[str, object],
+        params: Mapping[str, list[str]],
+        *,
+        hook_env: dict[str, str],
+        default_harness: str,
+        home_dir: str,
+        guard_home: str,
+        workspace: str | None,
+    ) -> None:
         runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
         harness = runtime_harness or default_harness
         args = argparse.Namespace(
             guard_command="hook",
             home=home_dir,
             guard_home=guard_home,
-            workspace=str(workspace) if workspace is not None else None,
+            workspace=workspace,
             runtime_harness=runtime_harness,
             harness=harness,
             artifact_id=None,
