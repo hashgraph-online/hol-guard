@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from ..runtime.hook_review_types import HookOutputSummary, HookSourceFileRef
     from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
     from .commands_support_claude_approval import _persist_claude_guard_question_decision
     from .commands_support_hook_payload import _hook_action_envelope, _load_hook_payload, _normalize_hook_payload
@@ -279,6 +280,7 @@ def _run_guard_hook_command(
         store=store,
     )
 
+
 def _try_source_ref_fast_path(
     args: argparse.Namespace,
     *,
@@ -304,11 +306,12 @@ def _try_source_ref_fast_path(
     if os.environ.get("HOL_GUARD_HOOK_SOURCE_REF", "1") != "1":
         return None
 
+    from collections.abc import Mapping
+
     from ..runtime.hook_content_scanner import ContentScanner
     from ..runtime.hook_decision_cache import HookDecisionCache
     from ..runtime.hook_review_engine import HookReviewEngine
-    from ..runtime.hook_review_types import HookReviewRequest, HookSourceFileRef, HookOutputSummary
-    from collections.abc import Mapping
+    from ..runtime.hook_review_types import HookReviewRequest
 
     source_ref_raw = payload.get("guard_source_ref")
     if not isinstance(source_ref_raw, Mapping):
@@ -319,7 +322,7 @@ def _try_source_ref_fast_path(
 
     request = HookReviewRequest(
         harness=args.harness,
-        event_name=_hook_event_name(payload),
+        event_name=_hook_event_name(payload) or "PreToolUse",
         payload=payload,
         payload_kind="source_file_ref",
         config_path=None,
@@ -380,6 +383,7 @@ def _parse_output_summary(summary_raw: object) -> HookOutputSummary | None:
     from collections.abc import Mapping as _Mapping
 
     from ..runtime.hook_review_types import HookOutputSummary
+
     if not isinstance(summary_raw, _Mapping):
         return None
     text_excerpt = summary_raw.get("text_excerpt") or summary_raw.get("excerpt") or ""

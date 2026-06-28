@@ -124,4 +124,4 @@ class HookEnrichmentQueue:
         )
 
 
-__all__ = ["HookEnrichmentTask", "HookEnrichmentQueue"]
+__all__ = ["HookEnrichmentQueue", "HookEnrichmentTask"]

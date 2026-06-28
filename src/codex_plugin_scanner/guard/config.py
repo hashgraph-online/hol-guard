@@ -71,6 +71,7 @@ def hook_fast_path_shadow_enabled() -> bool:
 
     return os.environ.get(HOOK_FAST_PATH_SHADOW_ENV, "0") == "1"
 
+
 VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
 VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
 VALID_SECURITY_LEVELS = {"relaxed", "gentle", "balanced", "strict", "paranoid", "custom"}

@@ -8,7 +8,6 @@ flushed to SQLite asynchronously via ``maybe_flush_to_store()``.
 from __future__ import annotations
 
 import threading
-import time
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
@@ -73,7 +72,9 @@ class HookMetricsRecorder:
         with self._lock:
             if len(self._latencies) < self._max_items:
                 self._latencies.append(latency_ms)
-            key = f"{harness}:{event_name}:{route}:{payload_kind}:{decision}:{reason_code}:{cache_status}:{fallback_kind}"
+            key = (
+                f"{harness}:{event_name}:{route}:{payload_kind}:{decision}:{reason_code}:{cache_status}:{fallback_kind}"
+            )
             self._counters[key] += 1
             self._counters[f"latency:{_latency_bucket(latency_ms)}"] += 1
             self._counters[f"size:{_size_bucket(output_size)}"] += 1
@@ -105,7 +106,7 @@ class HookMetricsRecorder:
         with self._lock:
             if not force and len(self._latencies) < 100:
                 return
-            snapshot = {
+            snapshot: dict[str, object] = {
                 "counters": dict(self._counters),
                 "latency_p50_ms": round(
                     sorted(self._latencies)[len(self._latencies) // 2] if self._latencies else 0.0, 2
@@ -127,4 +128,4 @@ class HookMetricsRecorder:
         )
 
 
-__all__ = ["HookMetricsRecorder", "LATENCY_BUCKETS_MS", "SIZE_BUCKETS"]
+__all__ = ["LATENCY_BUCKETS_MS", "SIZE_BUCKETS", "HookMetricsRecorder"]

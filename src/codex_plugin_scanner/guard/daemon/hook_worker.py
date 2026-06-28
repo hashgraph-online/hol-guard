@@ -13,7 +13,6 @@ Security:
 
 from __future__ import annotations
 
-import os
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -24,6 +23,7 @@ from ..runtime.hook_decision_cache import HookDecisionCache
 from ..runtime.hook_review_engine import HookReviewEngine
 from ..runtime.hook_review_types import (
     HookOutputSummary,
+    HookPayloadKind,
     HookReviewRequest,
     HookSourceFileRef,
 )
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from ..store import GuardStore
 
 
-class HookWorkerUnsupported(RuntimeError):
+class HookWorkerUnsupported(RuntimeError):  # noqa: N818
     """Raised when the worker cannot handle a request (caller falls back to CLI)."""
 
 
@@ -155,7 +155,7 @@ class HookWorker:
                 return value.strip()
         return "PreToolUse"
 
-    def _payload_kind(self, payload: Mapping[str, object]) -> str:
+    def _payload_kind(self, payload: Mapping[str, object]) -> HookPayloadKind:
         if "guard_payload_ref" in payload:
             return "encrypted_payload_ref"
         if "guard_source_ref" in payload:
