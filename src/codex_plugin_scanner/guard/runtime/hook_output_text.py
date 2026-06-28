@@ -96,10 +96,7 @@ def collect_output_text(value: object) -> ExtractedOutput:
         if val is None or isinstance(val, (int, float, bool)):
             return
         if isinstance(val, bytes):
-            try:
-                _append(val.decode("utf-8"))
-            except UnicodeDecodeError:
-                truncated = True
+            _append(val.decode("utf-8", errors="replace"))
             return
         if not isinstance(val, (Mapping, list)):
             return
@@ -145,21 +142,36 @@ def collect_output_text(value: object) -> ExtractedOutput:
     return ExtractedOutput(text="".join(parts), chars=chars, truncated=truncated)
 
 def extract_payload_output(payload: Mapping[str, object]) -> ExtractedOutput:
-    """Extract the tool output value from a hook payload, then collect text.
+    """Extract and concatenate text from all output fields in a hook payload.
 
-    Mirrors the TypeScript pattern where ``collectOutputText`` is called
-    with ``event.content`` (the tool response value), not the full event.
-
-    Checks ``PAYLOAD_OUTPUT_KEYS`` in order — first match wins. If no
-    output key is found, returns empty text (caller should fall back).
+    Scans ALL present output keys (``tool_response``, ``stdout``,
+    ``stderr``, etc.) — not just the first match — to ensure no output
+    field is left unscanned. This prevents secrets in ``stderr`` from
+    being missed when ``stdout`` is also non-empty.
     """
+    all_parts: list[str] = []
+    total_chars = 0
+    any_truncated = False
+
     for key in PAYLOAD_OUTPUT_KEYS:
         value = payload.get(key)
         if value is not None:
             result = collect_output_text(value)
             if result.text:
-                return result
-    return ExtractedOutput(text="", chars=0, truncated=False)
+                all_parts.append(result.text)
+                total_chars += result.chars
+                if result.truncated:
+                    any_truncated = True
+
+    if not all_parts:
+        return ExtractedOutput(text="", chars=0, truncated=False)
+
+    joined = "\n".join(all_parts)
+    return ExtractedOutput(
+        text=joined,
+        chars=len(joined),
+        truncated=any_truncated or len(joined) > MAX_OUTPUT_CHARS,
+    )
 
 
 __all__ = [
