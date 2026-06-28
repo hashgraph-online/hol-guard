@@ -438,6 +438,7 @@ def sync_aibom_snapshots(
     total_rejected = 0
     all_statuses: list[dict[str, object]] = []
     synced_at = generated_at
+    batches_sent = 0
     for batch_start in range(0, len(events), _AIBOM_SYNC_BATCH_SIZE):
         batch = events[batch_start:batch_start + _AIBOM_SYNC_BATCH_SIZE]
         body = json.dumps({"events": batch}).encode("utf-8")
@@ -461,24 +462,59 @@ def sync_aibom_snapshots(
                     _AIBOM_GUARD_EVENTS_BACKOFF_KEY,
                     {
                         "synced_at": synced_at,
-                        "events": 0,
-                        "accepted": 0,
-                        "skipped": 0,
+                        "events": len(events) - batch_start,
+                        "accepted": total_accepted,
+                        "skipped": len(events) - batch_start,
                         "sync_skipped": True,
                         "sync_reason": "guard_events_endpoint_unavailable",
                     },
                     synced_at,
                 )
-                summary: dict[str, object] = {
-                    "synced": False,
-                    "skipped": True,
-                    "reason": "guard_events_endpoint_unavailable",
-                }
+                if batches_sent > 0:
+                    summary: dict[str, object] = {
+                        "synced": False,
+                        "synced_at": synced_at,
+                        "snapshots": len(snapshots),
+                        "accepted": total_accepted,
+                        "rejected": total_rejected,
+                        "statuses": all_statuses,
+                        "partial": True,
+                        "reason": "guard_events_endpoint_unavailable",
+                    }
+                else:
+                    summary = {
+                        "synced": False,
+                        "skipped": True,
+                        "reason": "guard_events_endpoint_unavailable",
+                    }
                 store.set_sync_payload("aibom_sync_summary", summary, synced_at)
                 return summary
+            failure_summary: dict[str, object] = {
+                "synced": False,
+                "synced_at": synced_at,
+                "snapshots": len(snapshots),
+                "accepted": total_accepted,
+                "rejected": total_rejected,
+                "statuses": all_statuses,
+                "partial": batches_sent > 0,
+                "error": "Guard Cloud AIBOM sync failed due to an HTTP error.",
+            }
+            store.set_sync_payload("aibom_sync_summary", failure_summary, synced_at)
             raise RuntimeError("Guard Cloud AIBOM sync failed due to an HTTP error.") from error
         except OSError as error:
+            failure_summary = {
+                "synced": False,
+                "synced_at": synced_at,
+                "snapshots": len(snapshots),
+                "accepted": total_accepted,
+                "rejected": total_rejected,
+                "statuses": all_statuses,
+                "partial": batches_sent > 0,
+                "error": "Guard Cloud AIBOM sync failed due to a network error.",
+            }
+            store.set_sync_payload("aibom_sync_summary", failure_summary, synced_at)
             raise RuntimeError("Guard Cloud AIBOM sync failed due to a network error.") from error
+        batches_sent += 1
         batch_accepted = payload.get("accepted")
         if isinstance(batch_accepted, int):
             total_accepted += batch_accepted
@@ -495,7 +531,7 @@ def sync_aibom_snapshots(
         "synced": True,
         "synced_at": synced_at,
         "snapshots": len(snapshots),
-        "accepted": total_accepted if total_accepted else len(snapshots),
+        "accepted": total_accepted,
         "rejected": total_rejected,
         "statuses": all_statuses,
     }
