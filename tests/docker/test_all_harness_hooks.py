@@ -123,7 +123,10 @@ def run_tests(port: int, auth_token: str, harnesses: list[str]) -> tuple[int, in
             "hook_event_name": "PreToolUse", "tool_name": "Bash",
             "tool_input": {"command": "echo hello"},
         }, auth_token=auth_token)
-        if result.get("model_output_action") != "not_applicable":
+        if "error" in result:
+            print(f"  [FAIL] PreToolUse error: {result}")
+            failed += 1
+        elif result.get("model_output_action") != "not_applicable":
             print("  [PASS] PreToolUse falls back to legacy")
             passed += 1
         else:
@@ -136,7 +139,10 @@ def run_tests(port: int, auth_token: str, harnesses: list[str]) -> tuple[int, in
             "tool_input": {"command": "echo hello"},
             "tool_response": [{"type": "text", "text": "hello"}],
         }, auth_token=auth_token)
-        if result.get("model_output_action") != "not_applicable":
+        if "error" in result:
+            print(f"  [FAIL] PostToolUse without source_ref error: {result}")
+            failed += 1
+        elif result.get("model_output_action") != "not_applicable":
             print("  [PASS] PostToolUse without source_ref falls back to legacy")
             passed += 1
         else:
@@ -155,7 +161,10 @@ def run_tests(port: int, auth_token: str, harnesses: list[str]) -> tuple[int, in
                 "output_sha256": sha, "output_chars": len(content),
             },
         }, auth_token=auth_token)
-        if harness == "pi":
+        if "error" in result:
+            print(f"  [FAIL] PostToolUse with source_ref error: {result}")
+            failed += 1
+        elif harness == "pi":
             if result.get("model_output_action") == "allow_original":
                 print("  [PASS] Pi PostToolUse with source_ref uses fast path")
                 passed += 1
