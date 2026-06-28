@@ -56,6 +56,13 @@ import {
   normalizeDecisionScope,
   standardScopeChoicesForRequest,
 } from "./approval-scopes";
+import { ConsolidatedEvidenceAlert, type EvidenceItem } from "./consolidated-evidence-alert";
+import {
+  deriveDataFlowEvidence,
+  deriveSkillRiskSignals,
+  deriveSupplyChainRiskSignals,
+  deriveEncodedLayerSignals,
+} from "./approval-center-utils";
 import type {
   GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
@@ -1164,6 +1171,61 @@ function ReviewDecisionCard(props: {
   const hasEvidence = hasReviewEvidence(item);
   const pauseReason = whyPaused(item);
 
+  const evidenceItems: EvidenceItem[] = [];
+  const allSignals = item.decision_v2_json?.signals ?? [];
+  if (allSignals.some((s) => s.category === "skill" || s.category === "mcp")) {
+    evidenceItems.push({
+      id: "scanner",
+      title: "Scanner evidence",
+      tone: "blue",
+      content: <ScannerEvidenceSection signals={allSignals} />,
+    });
+  }
+  if (item.why_now) {
+    evidenceItems.push({
+      id: "why-now",
+      title: "Why now",
+      tone: "purple",
+      content: <p className="text-sm text-brand-dark">{item.why_now}</p>,
+    });
+  }
+  if (deriveDataFlowEvidence(item) !== null) {
+    evidenceItems.push({
+      id: "data-flow",
+      title: "Data flow detected",
+      tone: "blue",
+      content: <DataFlowEvidenceCard item={item} />,
+    });
+  }
+  if (deriveSkillRiskSignals(item).length > 0) {
+    evidenceItems.push({
+      id: "skill-risk",
+      title: "Skill risk",
+      tone: "blue",
+      content: <SkillRiskCard item={item} />,
+    });
+  }
+  const isSupplyChainArtifact =
+    item.artifact_type === "supply_chain" ||
+    item.artifact_type === "package_request" ||
+    (typeof item.artifact_type === "string" && item.artifact_type.endsWith("_package"));
+  if (deriveSupplyChainRiskSignals(item).length > 0 || isSupplyChainArtifact) {
+    evidenceItems.push({
+      id: "supply-chain",
+      title: "Supply chain risk",
+      tone: "amber",
+      content: <SupplyChainRiskCard item={item} />,
+    });
+  }
+  if (deriveEncodedLayerSignals(item).length > 0) {
+    evidenceItems.push({
+      id: "decoded-layer",
+      title: "Decoded layer",
+      tone: "slate",
+      content: <DecodedLayerCard item={item} />,
+    });
+  }
+
   return (
     <div className="space-y-5">
       {resolved && (
@@ -1367,17 +1429,8 @@ function ReviewDecisionCard(props: {
             )}
           </button>
           {showEvidence && (
-            <div className="mt-4 space-y-3">
-              <ScannerEvidenceSection signals={item.decision_v2_json?.signals ?? []} />
-              {item.why_now && (
-                <div className="rounded-xl border border-brand-purple/15 bg-brand-purple/[0.04] p-4">
-                  <p className="text-sm text-brand-dark">{item.why_now}</p>
-                </div>
-              )}
-              <DataFlowEvidenceCard item={item} />
-              <SkillRiskCard item={item} />
-              <SupplyChainRiskCard item={item} />
-              <DecodedLayerCard item={item} />
+            <div className="mt-4">
+              <ConsolidatedEvidenceAlert items={evidenceItems} />
             </div>
           )}
         </div>

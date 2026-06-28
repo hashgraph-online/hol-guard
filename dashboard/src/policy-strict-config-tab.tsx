@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import { EmptyState } from "./approval-center-primitives";
 import { fetchSettings, updateSettings } from "./guard-api";
 import type { GuardRuntimeSnapshot, GuardSettings } from "./guard-types";
@@ -20,6 +20,23 @@ import {
   type StrictScenarioId,
 } from "./policy-strict-config-utils";
 import { formatPolicyDateTime, resolveCloudPolicyBundleCopy } from "./policy-workspace-helpers";
+
+function isUnauthorizedError(error: string): boolean {
+  return /HTTP Error 401|unauthorized/i.test(error.trim());
+}
+
+function humanizeStrictConfigError(error: string): { title: string; body: string } {
+  if (isUnauthorizedError(error)) {
+    return {
+      title: "Guard Cloud authorization expired",
+      body: "Local remembered rules and strict config still apply on this device. Run connect again to refresh signed access.",
+    };
+  }
+  return {
+    title: "Could not load strict config",
+    body: error || "Try again from Settings if the daemon is unavailable.",
+  };
+}
 
 type PolicyStrictConfigTabProps = {
   snapshot: GuardRuntimeSnapshot;
@@ -198,10 +215,20 @@ export function PolicyStrictConfigTab({
   }
 
   if (loadState === "error" || !settings) {
+    const is401 = loadError !== null && isUnauthorizedError(loadError);
+    const humanized = loadError !== null ? humanizeStrictConfigError(loadError) : { title: "Could not load strict config", body: "Try again from Settings if the daemon is unavailable." };
     return (
       <EmptyState
-        title="Could not load strict config"
-        body={loadError ?? "Try again from Settings if the daemon is unavailable."}
+        title={humanized.title}
+        body={humanized.body}
+        action={is401 && cloudControlsUrl ? (
+          <a
+            href={cloudControlsUrl}
+            className="inline-flex items-center gap-2 rounded-xl bg-brand-blue px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          >
+            Connect Guard Cloud
+          </a>
+        ) : undefined}
       />
     );
   }
