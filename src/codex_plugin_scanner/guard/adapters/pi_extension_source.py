@@ -103,8 +103,8 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "      return;\n"
         "    }\n"
         "    const record = val as Record<string, unknown>;\n"
-        "    // Match collectOutputText: only extract text from {type: \"text\", text: ...}\n"
-        "    // objects, not from metadata keys like \"type\".\n"
+        '    // Match collectOutputText: only extract text from {type: "text", text: ...}\n'
+        '    // objects, not from metadata keys like "type".\n'
         "    if (record.type === 'text' && typeof record.text === 'string') {\n"
         "      update(record.text);\n"
         "      return;\n"
@@ -144,7 +144,8 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  event: Record<string, unknown>,\n"
         "  toolInput: Record<string, unknown>,\n"
         "  digest: OutputDigest,\n"
-        "): { version: number; kind: string; path: string; tool_input_path: string; output_sha256: string; output_chars: number } | null {\n"
+        "): { version: number; kind: string; path: string; tool_input_path: string;"
+        " output_sha256: string; output_chars: number } | null {\n"
         "  const toolName = typeof event.toolName === 'string' ? event.toolName : '';\n"
         "  if (!GUARD_SOURCE_REF_ALLOWED_TOOL_NAMES.has(toolName)) return null;\n"
         "  if (!digest.sha256 || digest.traversalTruncated) return null;\n"
@@ -596,7 +597,8 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    const digest = digestOutputText(event.content);\n"
         "    const boundedContent = boundValue(event.content);\n"
         "    const boundedStdout = boundedOutputText(event.content);\n"
-        "    const outputTruncated = boundedContent.truncated || boundedStdout.truncated || digest.excerptTruncated || digest.traversalTruncated;\n"
+        "    const outputTruncated = boundedContent.truncated || boundedStdout.truncated"
+        " || digest.excerptTruncated || digest.traversalTruncated;\n"
         "    const toolOutput = digest.textForExcerpt || (boundedStdout.value as string);\n"
         "    const reviewedContent = outputTruncated ? [{ type: 'text', text: toolOutput }] : boundedContent.value;\n"
         "    const sourceRef = sourceFileRefForPostToolUse(event as Record<string, unknown>, toolInput, digest);\n"
@@ -639,8 +641,10 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "        return undefined;\n"
         "      }\n"
         "      const notice = response.reason ||\n"
-        '        "HOL Guard returned a reviewed excerpt because this output could not be fully proven safe within local limits.";\n'
-        '      if (response.notice === "excerpt" || response.model_output_action === "replace_with_reviewed_excerpt") {\n'
+        '        "HOL Guard returned a reviewed excerpt because this output could not be fully proven safe'
+        ' within local limits.";\n'
+        '      if (response.notice === "excerpt"'
+        ' || response.model_output_action === "replace_with_reviewed_excerpt") {\n'
         '        ctx.ui.notify(notice, "info");\n'
         "      }\n"
         "      return reviewedToolResult(reviewedContent, event.details, event.isError === true);\n"

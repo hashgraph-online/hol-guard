@@ -25,21 +25,20 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-import time
+import stat
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from .hook_content_scanner import ContentScanMatch, ContentScanner
 from .hook_decision_cache import HookDecisionCache, SourceReadCacheMaterial, hook_config_fingerprint
-from .hook_review_types import HookReviewRequest, HookSourceFileRef
+from .hook_review_types import HookReviewRequest
 from .secret_sensitivity import classify_secret_path
 from .source_paths import SOURCE_CLASSIFIER_VERSION, resolve_source_candidate_path, source_path_is_allowed
 
 if TYPE_CHECKING:
-    from ..actions import GuardActionEnvelope
     from ..config import GuardConfig
     from ..store import GuardStore
+    from .actions import GuardActionEnvelope
 
 SOURCE_READ_FAST_PATH_VERSION = "source-read-fast-v1"
 SOURCE_READ_MAX_SCAN_BYTES = 5 * 1024 * 1024
@@ -212,7 +211,7 @@ def evaluate_source_file_ref(
     except OSError:
         return SourceReadFastPathResult(status="inconclusive", reason_code="stat_failed")
 
-    if not pre_stat.st_mode & 0o170000 == 0o100000:  # S_ISREG
+    if not stat.S_ISREG(pre_stat.st_mode):
         return SourceReadFastPathResult(status="inconclusive", reason_code="not_regular_file")
 
     if pre_stat.st_size > SOURCE_READ_MAX_SCAN_BYTES:

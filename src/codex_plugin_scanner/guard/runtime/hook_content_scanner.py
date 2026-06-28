@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .secret_sensitivity import classify_secret_content, secret_content_rule_version
 
@@ -172,10 +172,7 @@ class ContentScanner:
 
             tail = window[-HOOK_SCANNER_CONTEXT_CHARS:] if len(window) > HOOK_SCANNER_CONTEXT_CHARS else window
 
-        if not matches_by_classifier:
-            reason_code = "clean"
-        else:
-            reason_code = "matches"
+        reason_code = "clean" if not matches_by_classifier else "matches"
 
         return ContentScanResult(
             matches=tuple(matches_by_classifier.values()),
@@ -235,11 +232,11 @@ def _truncate_to_byte_limit(text: str, max_bytes: int) -> str:
 
 
 __all__ = [
-    "ContentScanMatch",
-    "ContentScanResult",
-    "ContentScanner",
     "HOOK_CONTENT_SCANNER_VERSION",
     "HOOK_SCANNER_CONTEXT_CHARS",
     "HOOK_SCANNER_DEFAULT_MAX_BYTES",
     "HOOK_SCANNER_MAX_MATCHES",
+    "ContentScanMatch",
+    "ContentScanResult",
+    "ContentScanner",
 ]

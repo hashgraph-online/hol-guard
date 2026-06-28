@@ -17,7 +17,6 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -76,9 +75,7 @@ def hook_config_fingerprint(config: GuardConfig) -> str:
         },
         "approval_surface_policy": config.approval_surface_policy,
     }
-    return hashlib.sha256(
-        json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 class HookDecisionCache:
@@ -141,9 +138,9 @@ class HookDecisionCache:
 
 
 __all__ = [
-    "HookDecisionCache",
     "SOURCE_CACHE_SCANNER_NAME",
     "SOURCE_CACHE_VERSION",
+    "HookDecisionCache",
     "SourceReadCacheMaterial",
     "hook_config_fingerprint",
 ]

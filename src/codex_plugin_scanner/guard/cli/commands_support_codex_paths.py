@@ -8,15 +8,11 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .commands_support_codex_commands import (
-        _CODEX_BENIGN_SOURCE_DOTFILES,
         _CODEX_SEARCH_OPTION_VALUE_FLAGS,
         _CODEX_SEARCH_OPTION_VALUE_FLAGS_BY_EXECUTABLE,
         _CODEX_SEARCH_PATTERN_VALUE_FLAGS,
         _CODEX_SEARCH_UNSAFE_FLAGS,
         _CODEX_SEARCH_UNSAFE_SHORT_FLAGS_BY_EXECUTABLE,
-        _CODEX_SENSITIVE_SEARCH_BASENAMES,
-        _CODEX_SOURCE_SEARCH_EXTENSIONS,
-        _CODEX_SOURCE_SEARCH_PREFIXES,
     )
     from .commands_support_codex_reads import _codex_sed_args_are_bounded_filter
     from .commands_support_runtime_artifacts import (

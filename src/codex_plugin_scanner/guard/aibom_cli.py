@@ -442,7 +442,7 @@ def sync_aibom_snapshots(
     synced_at = generated_at
     batches_sent = 0
     for batch_start in range(0, len(events), _AIBOM_SYNC_BATCH_SIZE):
-        batch = events[batch_start:batch_start + _AIBOM_SYNC_BATCH_SIZE]
+        batch = events[batch_start : batch_start + _AIBOM_SYNC_BATCH_SIZE]
         body = json.dumps({"events": batch}).encode("utf-8")
         request = runner._guard_sync_request(
             resolved_auth_context,
@@ -516,7 +516,7 @@ def sync_aibom_snapshots(
             }
             store.set_sync_payload("aibom_sync_summary", failure_summary, synced_at)
             raise RuntimeError("Guard Cloud AIBOM sync failed due to a network error.") from error
-        batches_sent += 1
+        batches_sent += 1  # noqa: SIM113
         batch_accepted = payload.get("accepted")
         if isinstance(batch_accepted, int):
             total_accepted += batch_accepted
