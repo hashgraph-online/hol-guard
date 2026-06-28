@@ -76,27 +76,27 @@ class HookWorker:
         Raises ``HookWorkerUnsupported`` if the request cannot be handled
         by the fast path (caller should fall back to legacy CLI).
 
-        The fast path only handles ``PostToolUse`` events that carry a
-        ``guard_source_ref``. All other events (``PreToolUse``,
-        ``UserPromptSubmit``, ``PermissionRequest``, PostToolUse without
-        a source ref) must fall through to the legacy CLI path so that
-        existing policy, permission, and approval logic is not bypassed.
+        The fast path handles ``PostToolUse`` events:
+        + With ``guard_source_ref`` (Pi/OMP): uses the source-read fast
+        + path with hash verification and file-system caching.
+        + Without ``guard_source_ref`` (claude-code, codex, grok, zcode,
+        + etc.): uses the server-side output scanning path. The engine
+        + extracts the full tool output from the payload, scans it for
+        + secrets, and returns ``allow_original`` if clean.
 
-        Harnesses that don't generate ``guard_source_ref`` client-side
-        (claude-code, codex, grok, zcode) fall through to legacy CLI
-        for all events. This is safe and correct — the fast path is an
-        optimization, not a security requirement.
+        All other events (``PreToolUse``, ``UserPromptSubmit``,
+        ``PermissionRequest``) must fall through to the legacy CLI path
+        so that existing policy, permission, and approval logic is not
+        bypassed.
         """
         harness = self._runtime_harness(params) or default_harness
         event_name = self._hook_event_name(payload)
-        source_ref = self._parse_source_ref(payload)
 
-        # Only PostToolUse with guard_source_ref is eligible for the fast
-        # path. Everything else needs the full CLI policy/permission engine.
-        if event_name != "PostToolUse" or source_ref is None:
+        # Only PostToolUse is eligible for the fast path. Everything else
+        # needs the full CLI policy/permission engine.
+        if event_name != "PostToolUse":
             raise HookWorkerUnsupported(
-                f"fast path only supports PostToolUse with guard_source_ref, "
-                f"got event={event_name}, has_source_ref={source_ref is not None}"
+                f"fast path only supports PostToolUse, got event={event_name}"
             )
 
         request = self._request_from_payload(
@@ -226,17 +226,17 @@ class HookWorker:
             adapter_stat=stat_dict,
         )
 
-    # Note on server-side source ref synthesis:
-    # Server-side synthesis was considered but rejected because harness
-    # output includes formatting (line numbers, banners) that won't match
-    # the raw file hash. The fast path requires an exact hash match
-    # between output text and file content (see output_equivalent() in
-    # hook_source_read.py). Only client-side generation (like Pi's
-    # digestOutputText) can produce a matching hash because it hashes
-    # the same structured output the server receives.
+    # Server-side output scanning:
+    # Harnesses without client-side guard_source_ref (claude-code, codex,
+    # grok, zcode, etc.) are handled by the engine's server-side output
+    # scanning path. The engine extracts the full tool output from the
+    # payload (tool_response, stdout, etc.), scans it for secrets, and
+    # returns allow_original if clean. This is more secure than the legacy
+    # CLI path because the full output is scanned, not just a bounded excerpt.
     #
-    # Harnesses without client-side guard_source_ref generation fall
-    # through to the legacy CLI path, which is safe and correct.
+    # The source-read fast path (with guard_source_ref) remains available
+    # for Pi/OMP, which provides a client-computed hash for file-system
+    # caching and exact-match verification.
 
 
 __all__ = ["HookWorker", "HookWorkerUnsupported"]

@@ -159,8 +159,98 @@ class HookReviewEngine:
 
             # inconclusive: fall through to standard path below.
 
+        # Server-side output scanning for PostToolUse without guard_source_ref.
+        # This handles all harnesses that don't generate guard_source_ref
+        # client-side (claude-code, codex, grok, zcode, etc.). The engine
+        # extracts the full tool output from the payload and scans it.
+        if request.event_name == "PostToolUse" and request.source_ref is None:
+            return self._review_output_scan(request, envelope, config, start)
+
         # Standard path for non-source or inconclusive requests.
         return self._review_standard(request, envelope, config, start)
+
+    def _review_output_scan(
+        self,
+        request: HookReviewRequest,
+        envelope: object,
+        config: GuardConfig,
+        start: float,
+    ) -> HookReviewResponse:
+        """Scan full tool output for PostToolUse file reads without guard_source_ref.
+
+        This is the server-side fast path for all harnesses that do not
+        generate ``guard_source_ref`` client-side (claude-code, codex,
+        grok, zcode, etc.). It extracts the full tool output from the
+        payload, scans it for secrets, and returns ``allow_original``
+        if clean.
+
+        Only ``file_read`` actions are eligible — shell commands, MCP
+        tools, and other action types still need the full CLI policy/
+        permission/approval engine and fall through to ``_review_standard``.
+        """
+        from .hook_output_text import extract_payload_output
+
+        action_type = getattr(envelope, "action_type", None)
+        if action_type != "file_read":
+            return self._review_standard(request, envelope, config, start)
+
+        extracted = extract_payload_output(request.payload)
+
+        if not extracted.text:
+            # No output text found in payload — fall back to excerpt path.
+            return self._review_standard(request, envelope, config, start)
+
+        if extracted.truncated:
+            # Output too large to scan safely — return conservative excerpt.
+            excerpt = extracted.text[:SOURCE_READ_FULL_MODEL_BYTES_P95_TARGET]
+            return HookReviewResponse(
+                decision="allow",
+                reason="HOL Guard returned a reviewed excerpt because the output was too large"
+                " to scan in full within local limits.",
+                model_output_action="replace_with_reviewed_excerpt",
+                reviewed_excerpt=excerpt,
+                notice="excerpt",
+                reason_code="output_too_large",
+            )
+
+        # Scan the full output text.
+        deadline = start + (HOOK_SCANNER_DEFAULT_BUDGET_MS / 1000.0)
+        scan_result = self.scanner.scan_text(
+            extracted.text,
+            local_content=True,
+            source_context=True,
+            max_bytes=SOURCE_READ_MAX_SCAN_BYTES,
+            deadline_monotonic=deadline,
+        )
+
+        if scan_result.budget_exhausted:
+            excerpt = extracted.text[:SOURCE_READ_FULL_MODEL_BYTES_P95_TARGET]
+            return HookReviewResponse(
+                decision="deny",
+                reason="HOL Guard could not complete local hook review safely.",
+                model_output_action="block",
+                notice="warning",
+                reason_code="scanner_budget_exhausted",
+            )
+
+        if scan_result.matches:
+            return HookReviewResponse(
+                decision="deny",
+                reason="HOL Guard blocked this output because it contains sensitive content.",
+                model_output_action="block",
+                notice="warning",
+                reason_code="output_secret_match",
+            )
+
+        # Full output is clean — allow the model to see the original.
+        return HookReviewResponse(
+            decision="allow",
+            reason=None,
+            model_output_action="allow_original",
+            notice="none",
+            reason_code="output_scan_allow",
+            policy_action="allow",
+        )
 
     def _review_standard(
         self,

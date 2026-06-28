@@ -132,23 +132,24 @@ def run_tests(port: int, auth_token: str, harnesses: list[str]) -> tuple[int, in
             print("  [FAIL] PreToolUse hit worker (should fall back)")
             failed += 1
 
-        # Test 2: PostToolUse without source_ref falls back to legacy
+        # Test 2: PostToolUse file read without source_ref uses server-side
+        # output scanning (all harnesses get the fast path now)
         result = send_hook(port, harness, {
-            "hook_event_name": "PostToolUse", "tool_name": "Bash",
-            "tool_input": {"command": "echo hello"},
-            "tool_response": [{"type": "text", "text": "hello"}],
+            "hook_event_name": "PostToolUse", "tool_name": "Read",
+            "tool_input": {"file_path": "src/hello.ts"},
+            "tool_response": [{"type": "text", "text": 'export const hello = "world";'}],
         }, auth_token=auth_token)
         if "error" in result:
-            print(f"  [FAIL] PostToolUse without source_ref error: {result}")
+            print(f"  [FAIL] PostToolUse file read error: {result}")
             failed += 1
-        elif result.get("model_output_action") != "not_applicable":
-            print("  [PASS] PostToolUse without source_ref falls back to legacy")
+        elif result.get("model_output_action") == "allow_original":
+            print(f"  [PASS] {harness} PostToolUse file read uses fast path (output scan)")
             passed += 1
         else:
-            print("  [FAIL] PostToolUse without source_ref hit worker")
+            print(f"  [FAIL] {harness} expected allow_original, got {result.get('model_output_action')}: {result}")
             failed += 1
 
-        # Test 3: PostToolUse with source_ref (only Pi should use fast path)
+        # Test 3: PostToolUse with source_ref (Pi-style hash verification)
         content = 'export const hello = "world";\n'
         sha = hashlib.sha256(content.encode()).hexdigest()
         result = send_hook(port, harness, {
