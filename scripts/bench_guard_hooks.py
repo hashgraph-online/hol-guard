@@ -70,20 +70,24 @@ def _make_request(
     guard_home: Path,
     source_ref: HookSourceFileRef | None = None,
     output_summary: HookOutputSummary | None = None,
+    payload_override: dict[str, object] | None = None,
 ) -> HookReviewRequest:
-    payload: dict[str, object] = {
-        "hook_event_name": event_name,
-        "tool_name": "Read",
-    }
-    if source_ref is not None:
-        payload["tool_input"] = {"file_path": source_ref.path}
-        payload["guard_source_ref"] = {
-            "version": source_ref.version,
-            "path": source_ref.path,
-            "output_sha256": source_ref.output_sha256,
-            "output_chars": source_ref.output_chars,
-            "tool_input_path": source_ref.tool_input_path,
+    if payload_override is not None:
+        payload = dict(payload_override)
+    else:
+        payload: dict[str, object] = {
+            "hook_event_name": event_name,
+            "tool_name": "Read",
         }
+        if source_ref is not None:
+            payload["tool_input"] = {"file_path": source_ref.path}
+            payload["guard_source_ref"] = {
+                "version": source_ref.version,
+                "path": source_ref.path,
+                "output_sha256": source_ref.output_sha256,
+                "output_chars": source_ref.output_chars,
+                "tool_input_path": source_ref.tool_input_path,
+            }
     return HookReviewRequest(
         harness=harness,
         event_name=event_name,
@@ -219,6 +223,55 @@ def _setup_cases(tmp: Path, workspace: Path) -> dict[str, HookReviewRequest]:
         source_ref=_make_source_ref("src/data.json", adv_content),
     )
 
+    # output-scan-small: 1KB tool_response, no source_ref (claude-code path)
+    scan_small_content = "export const x = 1;\n" * 50
+    cases["output-scan-small"] = _make_request(
+        harness="claude-code",
+        event_name="PostToolUse",
+        cwd=workspace,
+        home_dir=home_dir,
+        guard_home=guard_home,
+        payload_override={
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "src/small.ts"},
+            "tool_response": [{"type": "text", "text": scan_small_content}],
+        },
+    )
+
+    # output-scan-250kb: 250KB tool_response, no source_ref
+    scan_large_content = "// TypeScript source file\n" + "const x = 1;\n" * 12000
+    cases["output-scan-250kb"] = _make_request(
+        harness="claude-code",
+        event_name="PostToolUse",
+        cwd=workspace,
+        home_dir=home_dir,
+        guard_home=guard_home,
+        payload_override={
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "src/large.ts"},
+            "tool_response": [{"type": "text", "text": scan_large_content}],
+        },
+    )
+
+    # output-scan-secret: secret in tool_response, no source_ref
+    scan_secret_content = (
+        'x = 1;\nconst credential = "BENCH_FIXTURE_CREDENTIAL_VALUE";\n' + "y = 2;\n" * 100
+    )
+    cases["output-scan-secret"] = _make_request(
+        harness="claude-code",
+        event_name="PostToolUse",
+        cwd=workspace,
+        home_dir=home_dir,
+        guard_home=guard_home,
+        payload_override={
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "src/secret.ts"},
+            "tool_response": [{"type": "text", "text": scan_secret_content}],
+        },
+    )
     return cases
 
 

@@ -4,8 +4,7 @@
 
 HOL Guard's fast hook review engine is **harness-agnostic by design**. All
 harnesses share the same daemon endpoint, review engine, and payload
-normalization. The fast source-ref path is an optimization available to
-harnesses that can generate `guard_source_ref` client-side.
+normalization. All harnesses get the fast path for PostToolUse file reads.
 
 ## Shared Architecture (All Harnesses)
 
@@ -28,94 +27,95 @@ Harness Hook Script → /v1/hooks/{harness} → HookWorker → HookReviewEngine
   (codex, claude-code, opencode, copilot, gemini, cursor, grok, pi, zcode)
 - **ContentScanner**: same streaming secret scanner for all harnesses
 - **HookDecisionCache**: same cache, keyed by content hash + stat + config
-- **Security**: same TOCTOU guard, sensitive-path check, symlink rejection, scanner
+- **hook_output_text.extract_payload_output()**: extracts tool output text
+  from any harness payload (checks `tool_response`, `stdout`, `output`, etc.)
 
 ### What's Harness-Specific
 
 - **Hook script format**: Pi uses TypeScript, Claude Code uses JSON config,
   Codex uses TOML config, Cursor uses Python bridge
-- **Client-side `guard_source_ref` generation**: Only Pi/OMP currently
-  generates this in its TypeScript extension
+- **Client-side `guard_source_ref` generation**: Only Pi/OMP generates
+  this in its TypeScript extension, enabling file-system caching with
+  hash verification
 
-## Fast Path vs Legacy Path
+## Fast Paths
 
-### Fast Path (Pi/OMP only)
+All PostToolUse events go through the engine. The engine has two fast paths
+depending on whether the harness provides `guard_source_ref`:
+
+### Source-Ref Fast Path (Pi/OMP)
 
 When a harness generates `guard_source_ref` client-side:
 1. Hook script computes SHA256 of text-bearing output fields
 2. Hook script sends `guard_source_ref` with the payload
-3. Worker checks PostToolUse + has source_ref → runs engine
+3. Engine calls `evaluate_source_file_ref()`
 4. Engine re-reads file, re-stats, re-hashes → exact match → `allow_original`
-5. Model receives full reviewed content (no excerpt)
+5. Results are cached by file stat + content hash
+6. Model receives full reviewed content (no excerpt)
 
-**Why only Pi**: The fast path requires an exact hash match between the
-output text the harness sends and the file content on disk. Pi's
-`digestOutputText()` hashes the same structured output the server receives,
-using the same text extraction logic as `collectOutputText()`. Other
-harnesses format output differently (line numbers, banners, etc.), so
-a client-side hash wouldn't match server-side file content.
+**Advantage**: File-system caching by stat identity — repeated reads of
+the same file skip scanning entirely on cache hit.
 
-### Legacy Path (All Other Harnesses)
+### Server-Side Output Scanning (All Other Harnesses)
 
-When a harness doesn't generate `guard_source_ref`:
-1. Worker raises `HookWorkerUnsupported` for PostToolUse without source_ref
-2. Server catches this and falls through to legacy CLI
-3. Legacy CLI runs full policy/permission/approval checks
-4. For PostToolUse: output is reviewed via runtime artifact detection
-5. If output is credential-looking: `require-reapproval` or `block`
-6. If output is safe: `allow` (model sees full output)
+When a harness does NOT generate `guard_source_ref` (claude-code, codex,
+grok, zcode, etc.):
+1. Worker passes PostToolUse to the engine (no `HookWorkerUnsupported`)
+2. Engine calls `_review_output_scan()`
+3. `extract_payload_output()` extracts full tool output text from the payload
+   (checks `tool_response`, `tool_output`, `stdout`, etc.)
+4. `collect_output_text()` traverses the output value, extracting all
+   text-bearing content — the same text the model would see
+5. Full output is scanned by `ContentScanner` for secrets
+6. If clean: `allow_original` (model sees full output)
+7. If secrets found: `block` (model sees nothing)
+8. If too large: `replace_with_reviewed_excerpt` (model sees safe excerpt)
 
-**This is safe and correct.** The legacy path provides full security review.
-The fast path is an optimization that avoids CLI startup cost for safe
-source-file reads — it doesn't add security, it adds speed.
+**Security**: This is **more thorough** than the legacy CLI path because
+it scans the complete output, not just a bounded excerpt. The scanner
+sees exactly what the model would see.
 
-## Server-Side Synthesis (Considered, Rejected)
+**Gating**: Only `file_read` action types get the output scanning fast
+path. Shell commands, MCP tools, and other action types still fall
+through to `_review_standard` (which may block or return an excerpt).
 
-Server-side source ref synthesis was considered but rejected because:
+### Legacy Path (Non-PostToolUse Events)
+
+PreToolUse, UserPromptSubmit, and PermissionRequest events raise
+`HookWorkerUnsupported`, causing the server to fall through to the
+legacy CLI path. This preserves existing policy/permission/approval
+checks for non-output events.
+
+## Why Not Server-Side Source Ref Synthesis?
+
+Server-side synthesis of `guard_source_ref` was considered but rejected
+in favor of direct output scanning:
 
 1. **Hash mismatch**: Harness output includes formatting (Claude Code's
    Read tool adds `     1\t` line numbers; Codex adds banners). The
    `output_equivalent()` check requires exact byte match between output
-   text and file content. `sha256("     1\tfile line") != sha256("file line")`.
+   text and file content.
 
-2. **Security weakening**: Skipping the hash check for synthesized refs
-   would weaken the security model — the server couldn't verify the
-   payload text matches the file content, only that a file exists at
-   the path.
+2. **Vacuous hash check**: If the server synthesizes the hash from the
+   file content, `output_equivalent()` compares the file hash against
+   itself — always true. The hash check becomes meaningless.
 
-3. **Per-harness output extraction**: Building per-harness extractors
-   that strip formatting is fragile and harness-specific — the opposite
-   of the abstracted pattern we want.
-
-## Future: Enabling Fast Path for More Harnesses
-
-To enable the fast path for claude-code, codex, or other harnesses:
-
-1. **Add client-side `guard_source_ref` generation** to the harness hook
-   script. This requires the hook script to:
-   - Compute SHA256 of the output text using the same extraction logic
-     as `collectOutputText()` (only text-bearing fields, not metadata)
-   - Send `guard_source_ref` with `version`, `path`, `output_sha256`,
-     `output_chars`, `tool_input_path`
-
-2. **For TypeScript/JavaScript hooks** (like Pi): Embed a `digestOutputText()` function matching Pi's implementation
-
-3. **For shell-based hooks** (Claude Code, Codex): The hook script would
-   need to compute the hash in Python (the hook command already invokes
-   Python). Add a `--synthesize-source-ref` flag to `guard hook` that
-   computes the hash before sending the payload.
+3. **Output is already in the payload**: The daemon bridge forwards the
+   full hook payload including tool output. Scanning the actual output
+   is more secure than scanning the file on disk — it catches secrets
+   in formatted output that might differ from the file.
 
 ## Testing
 
 ### Unit Tests
 
 - `test_guard_hook_worker.py::TestHookWorkerAllHarnessFallback` — proves
-  all harnesses without `guard_source_ref` correctly raise
-  `HookWorkerUnsupported` (fall back to legacy)
+  all harnesses (claude-code, codex, grok, zcode) get `allow_original`
+  for safe PostToolUse file reads via server-side output scanning
 - `test_guard_hook_worker.py::TestHookWorkerNonPostTool` — proves
   PreToolUse falls back to legacy for all harnesses
-- `test_hook_source_ref_snippet.py` — proves the shared TypeScript
-  snippet has correct function signatures and security properties
+- `test_guard_hook_worker.py::TestHookWorkerReviewSafeSourceRef` — proves
+  Pi's client-side `guard_source_ref` fast path still works
 
 ### Integration Tests
 
@@ -123,4 +123,4 @@ To enable the fast path for claude-code, codex, or other harnesses:
   the full daemon HTTP path for Pi with `HOL_GUARD_HOOK_FAST_PATH=1`
 - `tests/docker/test_all_harness_hooks.py` — Docker-based integration
   test that starts a real daemon and sends HTTP hook payloads for each
-  harness, verifying fast-path + legacy fallback behavior
+  harness, verifying fast-path behavior
