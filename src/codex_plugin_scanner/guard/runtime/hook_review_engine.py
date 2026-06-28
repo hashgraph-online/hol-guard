@@ -19,9 +19,11 @@ Security invariants:
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
+from .actions import normalize_harness_payload
 from .hook_content_scanner import ContentScanner
 from .hook_decision_cache import HookDecisionCache
 from .hook_review_types import HookReviewRequest, HookReviewResponse
@@ -29,10 +31,9 @@ from .hook_source_read import (
     SOURCE_READ_MAX_SCAN_BYTES,
     evaluate_source_file_ref,
 )
-from .actions import normalize_harness_payload
 
 if TYPE_CHECKING:
-    from ..config import GuardConfig, load_guard_config
+    from ..config import GuardConfig
     from ..store import GuardStore
 
 HOOK_ENGINE_TOTAL_BUDGET_MS = 9000
@@ -42,7 +43,7 @@ HOOK_SCANNER_DEFAULT_BUDGET_MS = 750
 ARBITRARY_STDOUT_FULL_ALLOW_BYTES = 256 * 1024
 
 
-class HookFailSafe(RuntimeError):
+class HookFailSafe(RuntimeError):  # noqa: N818
     """Raised when the engine must fail safe with a specific reason."""
 
     def __init__(self, reason_code: str, reason: str, *, excerpt: str | None = None):
@@ -222,7 +223,8 @@ class HookReviewEngine:
             # Excerpt is safe, but we cannot prove the full output is safe.
             return HookReviewResponse(
                 decision="allow",
-                reason="HOL Guard returned a reviewed excerpt because this output could not be fully proven safe within local limits.",
+                reason="HOL Guard returned a reviewed excerpt because this output could not be fully"
+                " proven safe within local limits.",
                 model_output_action="replace_with_reviewed_excerpt",
                 reviewed_excerpt=excerpt,
                 notice="excerpt",

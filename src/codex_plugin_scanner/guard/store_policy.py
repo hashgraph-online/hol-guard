@@ -505,7 +505,6 @@ class StorePolicyMixin:
         """
         import hashlib
         import json
-
         from datetime import datetime, timezone
 
         current_time = now or datetime.now(timezone.utc).isoformat()

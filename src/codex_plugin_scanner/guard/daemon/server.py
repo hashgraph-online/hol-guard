@@ -3987,8 +3987,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 payload,
                 params,
                 default_harness=default_harness,
-                home_dir=home_dir,
-                guard_home=guard_home,
+                home_dir=home_dir or "",
+                guard_home=guard_home or "",
                 workspace=workspace,
             )
             if result is not None:
@@ -4001,8 +4001,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             params,
             hook_env=hook_env,
             default_harness=default_harness,
-            home_dir=home_dir,
-            guard_home=guard_home,
+            home_dir=home_dir or "",
+            guard_home=guard_home or "",
             workspace=workspace,
         )
 

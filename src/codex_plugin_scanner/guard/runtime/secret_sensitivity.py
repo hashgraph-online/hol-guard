@@ -323,9 +323,7 @@ def secret_content_rule_version() -> str:
         }
         for classifier, family, sensitivity, pattern, _reason in _SECRET_CONTENT_PATTERNS
     ]
-    return hashlib.sha256(
-        json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 def _secret_content_match_is_sample(*, classifier: str, text: str, enabled: bool) -> bool:

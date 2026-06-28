@@ -11,7 +11,6 @@ these implementations so existing tests and callsites are unchanged.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
