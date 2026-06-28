@@ -121,6 +121,37 @@ class TestSourcePathIsAllowed:
         assert decision.allowed
         assert decision.reason_code == "source_extension"
 
+    def test_absolute_symlink_inside_workspace_rejected(self, workspace: Path, tmp_path: Path) -> None:
+        """Regression: an absolute path that contains a symlink must be rejected.
+
+        Previously the absolute-path branch called .resolve() before
+        path_contains_symlink(), which followed the symlink and hid it.
+        """
+        outside = tmp_path / "evil.txt"
+        outside.write_text("secret")
+        link = workspace / "src" / "link.ts"
+        try:
+            os.symlink(outside, link)
+        except OSError:
+            pytest.skip("Cannot create symlinks on this platform")
+        # Pass the absolute path of the symlink
+        decision = source_path_is_allowed(str(link), cwd=workspace, home_dir=None)
+        assert not decision.allowed
+        assert decision.reason_code == "symlink_in_path"
+
+    def test_relative_symlink_inside_workspace_rejected(self, workspace: Path, tmp_path: Path) -> None:
+        """Relative-path symlinks must also be rejected (existing behavior)."""
+        outside = tmp_path / "evil.txt"
+        outside.write_text("secret")
+        link = workspace / "src" / "link.ts"
+        try:
+            os.symlink(outside, link)
+        except OSError:
+            pytest.skip("Cannot create symlinks on this platform")
+        decision = source_path_is_allowed("src/link.ts", cwd=workspace, home_dir=None)
+        assert not decision.allowed
+        assert decision.reason_code == "symlink_in_path"
+
 
 class TestPathContainsSymlink:
     def test_symlink_pointing_outside_rejected(self, workspace: Path, tmp_path: Path) -> None:

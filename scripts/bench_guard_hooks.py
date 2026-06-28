@@ -177,7 +177,7 @@ def _setup_cases(tmp: Path, workspace: Path) -> dict[str, HookReviewRequest]:
     )
 
     # secret-early: secret at byte ~100
-    secret_content = 'x = 1;\nconst token = "FAKE_BENCH_TOKEN_NOT_REAL";\n' + "y = 2;\n" * 100
+    secret_content = 'x = 1;\nconst credential = "BENCH_FIXTURE_CREDENTIAL_VALUE";\n' + "y = 2;\n" * 100
     secret_file = workspace / "src" / "secret.ts"
     secret_file.write_text(secret_content)
     cases["secret-early"] = _make_request(

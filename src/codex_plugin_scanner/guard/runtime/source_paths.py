@@ -137,13 +137,15 @@ def source_path_is_allowed(
         return SourcePathDecision(allowed=False, reason_code="unresolved_path")
 
     if target_path.is_absolute():
+        # Check for symlinks BEFORE resolving — resolve() follows symlinks
+        # and would hide them, making path_contains_symlink a no-op.
+        if path_contains_symlink(target_path, base_dir=base_dir):
+            return SourcePathDecision(allowed=False, reason_code="symlink_in_path")
         try:
             candidate = target_path.resolve(strict=False)
             relative_candidate = candidate.relative_to(base_dir)
         except (RuntimeError, ValueError):
             return SourcePathDecision(allowed=False, reason_code="absolute_path_outside_workspace")
-        if path_contains_symlink(candidate, base_dir=base_dir):
-            return SourcePathDecision(allowed=False, reason_code="symlink_in_path")
         parts = [part for part in relative_candidate.parts if part not in {"", "."}]
     else:
         unresolved_candidate = base_dir / target_path
