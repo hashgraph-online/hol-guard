@@ -8983,6 +8983,7 @@ url = http://127.0.0.1:8787/guard-canary
             "updatedAt": "2026-04-09T00:10:00Z",
             "bundleHash": "sha256:cf9abe12666da1cbd99e0aeb7b94d15f34c5051bb69bff1e5208477f305e6362",
             "bundleVersion": "policy-2026-04-09.1",
+            "rules": [],
         }
 
     def test_guard_invalid_harness_returns_parser_error(self, tmp_path, capsys):

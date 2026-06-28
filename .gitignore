@@ -50,3 +50,4 @@ Thumbs.db
 .env.*
 !.env.example
 .worktrees/
+worktrees/
