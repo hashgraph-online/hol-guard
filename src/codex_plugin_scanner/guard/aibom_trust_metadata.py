@@ -190,7 +190,8 @@ def _local_skill_security_for_artifact(
         key=lambda finding: (finding.get("file", ""), finding.get("ruleId", ""), finding.get("message", "")),
     )
     severity_counts = _cisco_severity_counts(run)
-    score = _cisco_layer_score(severity_counts) if status == "enabled" else None
+    analyzers_used = _cisco_analyzers_used(run)
+    score = _cisco_layer_score(severity_counts, analyzers_used=analyzers_used) if status == "enabled" else None
     safety = None
     if score is not None:
         safety = {
@@ -582,7 +583,8 @@ def _cisco_trust_layer(
     status = str(getattr(run, "status", "unknown"))
     message = str(getattr(run, "message", ""))
     severity_counts = _cisco_severity_counts(run)
-    trust_score = _cisco_layer_score(severity_counts) if status == "enabled" else None
+    analyzers_used = _cisco_analyzers_used(run)
+    trust_score = _cisco_layer_score(severity_counts, analyzers_used=analyzers_used) if status == "enabled" else None
     trust_components: list[dict[str, object]] = []
     if trust_score is not None:
         component_status = "positive"
@@ -666,15 +668,33 @@ def _cisco_severity_counts(run: object) -> dict[str, int]:
     return counts
 
 
-def _cisco_layer_score(severity_counts: dict[str, int]) -> int:
+def _cisco_analyzers_used(run: object) -> tuple[str, ...]:
+    """Extract analyzer names from a Cisco inventory run."""
+    metadata = getattr(run, "metadata", None)
+    if isinstance(metadata, dict):
+        raw = metadata.get("analyzersUsed")
+        if isinstance(raw, (list, tuple)):
+            return tuple(str(a) for a in raw if a)
+    return ("yara",)
+
+
+def _cisco_layer_score(
+    severity_counts: dict[str, int],
+    *,
+    analyzers_used: tuple[str, ...] = ("yara",),
+) -> int:
     raw_score = 100 - (
         30 * severity_counts["critical"]
         + 12 * severity_counts["high"]
         + 4 * severity_counts["medium"]
         + severity_counts["low"]
     )
+    # Multi-analyzer clean scans are more trustworthy: boost by up to +4
+    # for 3 analyzers, +2 for 2, +0 for 1 (baseline).
+    if sum(severity_counts.values()) == 0:
+        analyzer_boost = min(len(analyzers_used) - 1, 2) * 2
+        raw_score += analyzer_boost
     return max(0, min(100, raw_score))
-
 
 def _trust_components_from_domain(domain: TrustDomainScore) -> list[dict[str, object]]:
     components: list[dict[str, object]] = []

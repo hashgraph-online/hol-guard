@@ -100,10 +100,27 @@ def _build_summary(
 
 def _load_mcp_scanner_components(*, blocked_root: Path | None = None) -> dict[str, _CiscoAnalyzerFactory]:
     module = _load_distribution_module("cisco-ai-mcp-scanner", "mcpscanner", blocked_root=blocked_root)
-    analyzer = getattr(module, "YaraAnalyzer", None)
-    if not _is_analyzer_factory(analyzer):
-        raise ImportError("cisco-ai-mcp-scanner does not expose mcpscanner.YaraAnalyzer")
-    return {"YaraAnalyzer": analyzer}
+    components: dict[str, _CiscoAnalyzerFactory] = {}
+
+    yara_analyzer = getattr(module, "YaraAnalyzer", None)
+    if _is_analyzer_factory(yara_analyzer):
+        components["YaraAnalyzer"] = yara_analyzer
+
+    # LLM analyzer: available when MCP_SCANNER_LLM_API_KEY is set
+    if os.environ.get("MCP_SCANNER_LLM_API_KEY"):
+        llm_analyzer = getattr(module, "LLMAnalyzer", None)
+        if _is_analyzer_factory(llm_analyzer):
+            components["LLMAnalyzer"] = llm_analyzer
+
+    # Cisco AI Defense API analyzer: available when MCP_SCANNER_API_KEY is set
+    if os.environ.get("MCP_SCANNER_API_KEY"):
+        api_analyzer = getattr(module, "APIAnalyzer", None)
+        if _is_analyzer_factory(api_analyzer):
+            components["APIAnalyzer"] = api_analyzer
+
+    if not components:
+        raise ImportError("cisco-ai-mcp-scanner does not expose any analyzer factories")
+    return components
 
 
 def _load_distribution_module(
@@ -378,6 +395,35 @@ async def _scan_targets(
         for finding in external_findings:
             findings.append(_normalize_finding(plugin_dir, target.read_path, finding))
     return tuple(findings), targets_scanned
+async def _scan_targets_multi(
+    plugin_dir: Path,
+    targets: tuple[_StaticScanTarget, ...],
+    analyzers: tuple[tuple[str, _CiscoAnalyzer], ...],
+) -> tuple[tuple[Finding, ...], int]:
+    findings: list[Finding] = []
+    targets_scanned = 0
+    for target in targets:
+        try:
+            content = target.read_path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        targets_scanned += 1
+        for analyzer_name, analyzer in analyzers:
+            try:
+                external_findings = await analyzer.analyze(
+                    content,
+                    {
+                        "tool_name": target.tool_name,
+                        "content_type": target.content_type,
+                        "file_path": str(target.read_path),
+                    },
+                )
+            except Exception:
+                continue
+            for finding in external_findings:
+                normalized = _normalize_finding(plugin_dir, target.read_path, finding)
+                findings.append(normalized)
+    return tuple(findings), targets_scanned
 
 
 def run_cisco_mcp_scan(
@@ -431,10 +477,14 @@ def run_cisco_mcp_scan(
         )
 
     try:
-        analyzer_class = components["YaraAnalyzer"]
-        analyzer = analyzer_class()
+        analyzers: list[tuple[str, _CiscoAnalyzer]] = []
+        for name, factory in components.items():
+            analyzer_name = name.replace("Analyzer", "").lower()
+            analyzers.append((analyzer_name, factory()))
         targets = _collect_static_targets(plugin_dir)
-        scan_awaitable: Awaitable[tuple[tuple[Finding, ...], int]] = _scan_targets(plugin_dir, targets, analyzer)
+        scan_awaitable: Awaitable[tuple[tuple[Finding, ...], int]] = _scan_targets_multi(
+            plugin_dir, targets, tuple(analyzers)
+        )
         if timeout_seconds is not None:
             scan_awaitable = asyncio.wait_for(scan_awaitable, timeout=timeout_seconds)
         findings, targets_scanned = _run_awaitable(scan_awaitable)
@@ -449,17 +499,22 @@ def run_cisco_mcp_scan(
             message=f"Cisco MCP scanner failed: {exc}",
         )
 
+    analyzer_names = tuple(name for name, _ in analyzers)
     if findings:
         message = (
             f"Cisco MCP scanner completed static analysis for {targets_scanned} target(s) "
+            f"using {', '.join(analyzer_names)} analyzer(s) "
             f"and reported {len(findings)} finding(s)."
         )
     else:
-        message = f"Cisco MCP scanner completed static analysis for {targets_scanned} target(s) with no findings."
+        message = (
+            f"Cisco MCP scanner completed static analysis for {targets_scanned} target(s) "
+            f"using {', '.join(analyzer_names)} analyzer(s) with no findings."
+        )
     return _build_summary(
         status=CiscoIntegrationStatus.ENABLED,
         message=message,
         findings=findings,
         targets_scanned=targets_scanned,
-        analyzers_used=("yara",),
+        analyzers_used=analyzer_names,
     )
