@@ -104,7 +104,7 @@ COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
 COMMAND_SEQUENCE_KEYS = ("commands",)
 COMMAND_CANDIDATE_LIST_KEYS = (*COMMAND_LIST_KEYS, *COMMAND_SEQUENCE_KEYS)
 _COMMAND_LIST_KEYS = COMMAND_LIST_KEYS
-_DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "push", "run"})
+_DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"login", "push", "run"})
 _DOCKER_BUILD_SUBCOMMANDS = frozenset({"build"})
 _DOCKER_BUILDX_BUILD_SUBCOMMANDS = frozenset({"b", "build"})
 _DOCKER_BUILD_SECRET_FLAGS = frozenset({"--allow", "--secret", "--ssh"})
@@ -127,6 +127,58 @@ _DOCKER_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     }
 )
 _DOCKER_GLOBAL_FLAG_OPTIONS = frozenset({"--debug", "--tls", "--tlsverify"})
+# Docker global options that point Compose at a non-default/remotable control plane
+# or credential material; any non-default value keeps a Compose command sensitive.
+_DOCKER_GLOBAL_SENSITIVE_CONTEXT_OPTIONS = frozenset(
+    {"--config", "--context", "--host", "--tlscacert", "--tlscert", "--tlskey", "-c", "-H"}
+)
+# Docker global flag options (no value) that signal a non-default/TLS control plane.
+_DOCKER_GLOBAL_SENSITIVE_CONTEXT_FLAGS = frozenset({"--tls", "--tlsverify"})
+_DOCKER_COMPOSE_SUBCOMMAND = "compose"
+_DOCKER_COMPOSE_OPTIONS_WITH_VALUES = frozenset(
+    {
+        "--ansi",
+        "--env-file",
+        "--file",
+        "--parallel",
+        "--profile",
+        "--profiles",
+        "--project-directory",
+        "--project-name",
+        "--progress",
+        "-f",
+        "-p",
+    }
+)
+_DOCKER_COMPOSE_FLAG_OPTIONS = frozenset(
+    {"--all-resources", "--compatibility", "--dry-run", "--no-ansi", "--no-interpolate", "--verbose", "--volumes", "-q"}
+)
+_DOCKER_COMPOSE_SAFE_SUBCOMMANDS = frozenset(
+    {
+        "build",
+        "config",
+        "create",
+        "down",
+        "events",
+        "images",
+        "logs",
+        "ls",
+        "pause",
+        "port",
+        "ps",
+        "pull",
+        "restart",
+        "rm",
+        "start",
+        "stop",
+        "top",
+        "unpause",
+        "up",
+        "version",
+        "wait",
+    }
+)
+_DOCKER_COMPOSE_SENSITIVE_SUBCOMMANDS = frozenset({"cp", "exec", "publish", "push", "run", "watch"})
 _DOCKER_BUILDX_OPTIONS_WITH_VALUES = frozenset({"--builder"})
 _DOCKER_BUILDX_FLAG_OPTIONS = frozenset({"--debug"})
 _DOCKER_BUILD_ARG_SECRET_MARKERS = frozenset(
@@ -976,9 +1028,12 @@ def _docker_sensitive_tool_action_request(
         command_text=command_text,
         action_class="docker-sensitive command",
         reason=(
-            "Guard treats Docker login, run, compose, push, and credential-bearing build "
-            "actions as sensitive because they "
-            "can expose credentials or execute privileged container workflows."
+            "Guard treats Docker login, run, push, and credential-bearing build "
+            "actions as sensitive because they can expose credentials or execute privileged "
+            "container workflows. Docker Compose actions are sensitive when they use "
+            "subcommands that execute arbitrary commands or copy files (run, exec, cp, push, "
+            "publish, watch), supply secret-bearing input (--env-file), target a non-default "
+            "Docker host or context, or carry TLS/credential material."
         ),
     )
 
@@ -3904,15 +3959,22 @@ def _docker_sensitive_reason(command_text: str) -> str | None:
         command_name, command_index = _shell_segment_primary_command(segment)
         if command_name != "docker" or command_index is None:
             continue
-        subcommand_index = _docker_subcommand_index(segment[command_index + 1 :])
+        global_tokens = segment[command_index + 1 :]
+        subcommand_index = _docker_subcommand_index(global_tokens)
         if subcommand_index is None:
             continue
-        args = segment[command_index + 1 + subcommand_index :]
+        sensitive_context = _docker_global_context_is_sensitive(global_tokens[:subcommand_index])
+        args = global_tokens[subcommand_index:]
         subcommand = args[0].lower()
         if subcommand in _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS:
             return subcommand
         if subcommand in _DOCKER_BUILD_SUBCOMMANDS and _docker_build_args_are_sensitive(args[1:]):
             return "build-sensitive-flags"
+        if subcommand == _DOCKER_COMPOSE_SUBCOMMAND:
+            reason = _docker_compose_sensitive_reason(args[1:], sensitive_context=sensitive_context)
+            if reason is not None:
+                return reason
+            continue
         if subcommand == "buildx" and len(args) > 1:
             buildx_subcommand_index = _docker_buildx_subcommand_index(args[1:])
             if buildx_subcommand_index is None:
@@ -3955,6 +4017,97 @@ def _docker_global_option_has_value(token: str) -> bool:
 def _docker_global_flag_option_matches(token: str) -> bool:
     return token in _DOCKER_GLOBAL_FLAG_OPTIONS or any(
         token.startswith(f"{option}=") for option in _DOCKER_GLOBAL_FLAG_OPTIONS
+    )
+
+
+def _docker_global_context_is_sensitive(global_tokens: list[str]) -> bool:
+    index = 0
+    while index < len(global_tokens):
+        token = global_tokens[index]
+        if _docker_global_option_has_value(token):
+            if "=" in token:
+                flag, value = token.split("=", 1)
+                if _docker_global_context_value_is_sensitive(flag, value):
+                    return True
+                index += 1
+                continue
+            flag = token
+            value = global_tokens[index + 1] if index + 1 < len(global_tokens) else ""
+            if _docker_global_context_value_is_sensitive(flag, value):
+                return True
+            index += 2
+            continue
+        if token in _DOCKER_GLOBAL_SENSITIVE_CONTEXT_FLAGS or any(
+            token.startswith(f"{flag}=") for flag in _DOCKER_GLOBAL_SENSITIVE_CONTEXT_FLAGS
+        ):
+            return True
+        index += 1
+    return False
+
+
+def _docker_global_context_value_is_sensitive(flag: str, value: str) -> bool:
+    if flag not in _DOCKER_GLOBAL_SENSITIVE_CONTEXT_OPTIONS:
+        return False
+    normalized_value = value.strip().strip("\"'")
+    if flag in {"--context", "-c"}:
+        # ``default`` (and an empty value) still targets the local engine.
+        return normalized_value.lower() not in {"", "default"}
+    # ``--host``/``-H``, ``--config``, and TLS cert/key flags always point at a
+    # non-default/remotable control plane or credential material.
+    return True
+
+
+def _docker_compose_sensitive_reason(args: list[str], *, sensitive_context: bool) -> str | None:
+    if sensitive_context:
+        return "compose-sensitive-context"
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--":
+            remaining = args[index + 1 :]
+            if remaining:
+                compose_subcommand = remaining[0].lower()
+                return _docker_compose_subcommand_reason(compose_subcommand, remaining[1:])
+            return None
+        if _docker_compose_option_has_value(token):
+            if _docker_compose_option_is_secret_bearing(token):
+                return "compose-env-file"
+            index += 1 if "=" in token else 2
+            continue
+        if _docker_compose_flag_option_matches(token):
+            index += 1
+            continue
+        if token.startswith("-") and not token.startswith("--"):
+            index += 1
+            continue
+        return _docker_compose_subcommand_reason(token.lower(), args[index + 1 :])
+    return None
+
+
+def _docker_compose_subcommand_reason(compose_subcommand: str, subcommand_args: list[str]) -> str | None:
+    if compose_subcommand in _DOCKER_COMPOSE_SENSITIVE_SUBCOMMANDS:
+        return f"compose-{compose_subcommand}"
+    if compose_subcommand in _DOCKER_BUILD_SUBCOMMANDS and _docker_build_args_are_sensitive(subcommand_args):
+        return "compose-build-sensitive-flags"
+    if compose_subcommand in _DOCKER_COMPOSE_SAFE_SUBCOMMANDS:
+        return None
+    # Unknown Compose subcommands stay sensitive by default.
+    return "compose-unknown-subcommand"
+
+
+def _docker_compose_option_has_value(token: str) -> bool:
+    return token in _DOCKER_COMPOSE_OPTIONS_WITH_VALUES or any(
+        token.startswith(f"{option}=") for option in _DOCKER_COMPOSE_OPTIONS_WITH_VALUES
+    )
+
+
+def _docker_compose_option_is_secret_bearing(token: str) -> bool:
+    return token == "--env-file" or token.startswith("--env-file=")
+
+
+def _docker_compose_flag_option_matches(token: str) -> bool:
+    return token in _DOCKER_COMPOSE_FLAG_OPTIONS or any(
+        token.startswith(f"{option}=") for option in _DOCKER_COMPOSE_FLAG_OPTIONS
     )
 
 

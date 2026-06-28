@@ -8213,7 +8213,7 @@ def test_guard_hook_claude_ask_user_question_docker_retry_uses_exact_action_poli
         "_warn_only_policy_integrity_status",
         lambda status, state, *, source="local": status == "degraded_mode",
     )
-    command = "docker compose -f scripts/guard-cloud/docker-lab/docker-compose.yml up -d postgres"
+    command = "docker compose run --rm app"
     first_event = {
         "session_id": "session-claude-docker-allow",
         "hook_event_name": "PreToolUse",
