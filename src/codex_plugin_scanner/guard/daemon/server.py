@@ -4055,8 +4055,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except Exception:
             # Fail safe: deny/block. Do not fall back to legacy CLI for
             # requests that omitted full output and supplied only guard_source_ref.
+            rt_values = params.get("runtime-harness", [])
+            actual_harness = (
+                rt_values[-1].strip()
+                if rt_values and isinstance(rt_values[-1], str) and rt_values[-1].strip()
+                else default_harness
+            )
             return post_tool_fail_safe_response(
-                default_harness,
+                actual_harness,
                 reason="HOL Guard could not complete local hook review safely.",
                 reason_code="daemon_worker_exception",
             )

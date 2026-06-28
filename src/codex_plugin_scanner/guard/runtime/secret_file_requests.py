@@ -3981,18 +3981,51 @@ def _normalize_tool_name(tool_name: object) -> str | None:
     return tool_name.strip().lower()
 
 
-def _docker_sensitive_reason(command_text: str) -> str | None:
+def _docker_sensitive_reason(command_text: str, *, _inherited_sensitive_env: bool = False) -> str | None:
     parts = _split_shell_parts(command_text.strip())
     exported_env_context: dict[str, bool] = {}
     for segment in _iter_shell_command_segments(parts):
+        if segment and _normalized_shell_command_name(segment[0]) == "env":
+            env_tokens = segment[1:]
+            env_sensitive = _inherited_sensitive_env or _docker_env_context_is_sensitive(env_tokens)
+            remaining_tokens: list[str] = []
+            split_found = False
+            for i, tok in enumerate(env_tokens):
+                split_payload = _docker_env_split_string_payload(
+                    tok,
+                    env_tokens[i + 1] if i + 1 < len(env_tokens) else None,
+                )
+                if split_payload is not None:
+                    split_found = True
+                    nested_reason = _docker_sensitive_reason(split_payload)
+                    if nested_reason is not None:
+                        return nested_reason
+                    if _docker_env_context_is_sensitive(_split_shell_parts(split_payload)):
+                        env_sensitive = True
+                    consumed = 1 if tok in {"--split-string", "-S"} else 0
+                    remaining_tokens = env_tokens[i + consumed + 1 :]
+                    break
+            if not split_found:
+                remaining_tokens = [
+                    tok for tok in env_tokens if not tok.startswith("-") and not _SHELL_ASSIGNMENT_PATTERN.match(tok)
+                ]
+            remaining_cmd = " ".join(remaining_tokens)
+            if remaining_cmd:
+                remaining_reason = _docker_sensitive_reason(remaining_cmd, _inherited_sensitive_env=env_sensitive)
+                if remaining_reason is not None:
+                    return remaining_reason
+            continue
         command_name, command_index = _shell_segment_primary_command(segment)
         if command_name == "export" and command_index is not None:
+            exported_env_context.update(_docker_exported_env_context_sensitivity(segment[:command_index]))
             exported_env_context.update(_docker_exported_env_context_sensitivity(segment[command_index + 1 :]))
             continue
         if command_name != "docker" or command_index is None:
             continue
-        sensitive_env_context = any(exported_env_context.values()) or _docker_env_context_is_sensitive(
-            segment[:command_index]
+        sensitive_env_context = (
+            _inherited_sensitive_env
+            or any(exported_env_context.values())
+            or _docker_env_context_is_sensitive(segment[:command_index])
         )
         global_tokens = segment[command_index + 1 :]
         subcommand_index = _docker_subcommand_index(global_tokens)
@@ -4155,10 +4188,12 @@ def _docker_env_assignment(token: str) -> tuple[str, str] | None:
 
 
 def _docker_env_split_string_payload(token: str, next_token: str | None) -> str | None:
-    if token == "--split-string":
+    if token in {"--split-string", "-S"}:
         return next_token or ""
     if token.startswith("--split-string="):
         return token.split("=", 1)[1]
+    if token.startswith("-S"):
+        return token[2:] or (next_token or "")
     clustered_payload = _env_clustered_split_string_payload(token)
     if clustered_payload is None:
         return None

@@ -472,19 +472,19 @@ class StorePolicyMixin:
                     candidate["decision_id"],
                     integrity_result.status,
                 )
-        for event_name, payload in events:
-            connection.execute(
-                """
-                insert into guard_events (event_name, payload_json, occurred_at)
-                values (?, ?, ?)
-                """,
-                (event_name, json.dumps(payload), current_time),
-            )
-        return {
-            "decision": selected_payload,
-            "ignored_local_integrity": ignored_local_integrity,
-            "trust_status": trust_status,
-        }
+            for event_name, payload in events:
+                connection.execute(
+                    """
+                    insert into guard_events (event_name, payload_json, occurred_at)
+                    values (?, ?, ?)
+                    """,
+                    (event_name, json.dumps(payload), current_time),
+                )
+            return {
+                "decision": selected_payload,
+                "ignored_local_integrity": ignored_local_integrity,
+                "trust_status": trust_status,
+            }
 
     def resolve_policy_decision(
         self,
