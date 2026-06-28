@@ -95,9 +95,7 @@ class HookWorker:
         # Only PostToolUse is eligible for the fast path. Everything else
         # needs the full CLI policy/permission engine.
         if event_name != "PostToolUse":
-            raise HookWorkerUnsupported(
-                f"fast path only supports PostToolUse, got event={event_name}"
-            )
+            raise HookWorkerUnsupported(f"fast path only supports PostToolUse, got event={event_name}")
 
         request = self._request_from_payload(
             payload,

@@ -215,8 +215,7 @@ class HookReviewEngine:
             if scan_result.budget_exhausted or scan_result.matches:
                 return HookReviewResponse(
                     decision="deny",
-                    reason="HOL Guard blocked this output because it could not be fully"
-                    " scanned within local limits.",
+                    reason="HOL Guard blocked this output because it could not be fully scanned within local limits.",
                     model_output_action="block",
                     notice="warning",
                     reason_code="output_too_large",

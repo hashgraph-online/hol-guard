@@ -141,6 +141,7 @@ def collect_output_text(value: object) -> ExtractedOutput:
     _traverse(value, 0)
     return ExtractedOutput(text="".join(parts), chars=chars, truncated=truncated)
 
+
 def extract_payload_output(payload: Mapping[str, object]) -> ExtractedOutput:
     """Extract and concatenate text from all output fields in a hook payload.
 
