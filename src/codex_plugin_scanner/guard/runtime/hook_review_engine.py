@@ -201,8 +201,25 @@ class HookReviewEngine:
             return self._review_standard(request, envelope, config, start)
 
         if extracted.truncated:
-            # Output too large to scan safely — return conservative excerpt.
+            # Output too large to scan in full — scan the excerpt before returning.
             excerpt = extracted.text[:SOURCE_READ_FULL_MODEL_BYTES_P95_TARGET]
+            deadline = start + (HOOK_SCANNER_DEFAULT_BUDGET_MS / 1000.0)
+            scan_result = self.scanner.scan_text(
+                excerpt,
+                local_content=True,
+                source_context=True,
+                max_bytes=SOURCE_READ_MAX_SCAN_BYTES,
+                deadline_monotonic=deadline,
+            )
+            if scan_result.budget_exhausted or scan_result.matches:
+                return HookReviewResponse(
+                    decision="deny",
+                    reason="HOL Guard blocked this output because it could not be fully"
+                    " scanned within local limits.",
+                    model_output_action="block",
+                    notice="warning",
+                    reason_code="output_too_large",
+                )
             return HookReviewResponse(
                 decision="allow",
                 reason="HOL Guard returned a reviewed excerpt because the output was too large"
