@@ -18,8 +18,8 @@ The result is a bounded text blob suitable for streaming secret scanning.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping
 
 OUTPUT_TEXT_KEYS: tuple[str, ...] = (
     "stdout",
@@ -175,10 +175,10 @@ def extract_payload_output(payload: Mapping[str, object]) -> ExtractedOutput:
 
 
 __all__ = [
-    "ExtractedOutput",
     "MAX_OUTPUT_CHARS",
     "OUTPUT_TEXT_KEYS",
     "PAYLOAD_OUTPUT_KEYS",
+    "ExtractedOutput",
     "collect_output_text",
     "extract_payload_output",
 ]

@@ -28,6 +28,7 @@ from .hook_content_scanner import ContentScanner
 from .hook_decision_cache import HookDecisionCache
 from .hook_review_types import HookReviewRequest, HookReviewResponse
 from .hook_source_read import (
+    SOURCE_READ_FULL_MODEL_BYTES_P95_TARGET,
     SOURCE_READ_MAX_SCAN_BYTES,
     evaluate_source_file_ref,
 )
