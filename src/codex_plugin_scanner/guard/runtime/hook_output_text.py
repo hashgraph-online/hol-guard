@@ -121,8 +121,9 @@ def collect_output_text(value: object) -> ExtractedOutput:
             # Mapping — match collectOutputText: only extract text from
             # {type: "text", text: ...} objects, not from metadata keys.
             record = val
-            if record.get("type") == "text" and isinstance(record.get("text"), str):
-                _append(record["text"])  # type: ignore[literal-required]
+            text_val = record.get("text")
+            if record.get("type") == "text" and isinstance(text_val, str):
+                _append(text_val)
                 return
             key_count = 0
             for key in OUTPUT_TEXT_KEYS:
@@ -134,7 +135,7 @@ def collect_output_text(value: object) -> ExtractedOutput:
                 key_count += 1
                 if truncated:
                     return
-                _traverse(record[key], depth + 1)  # type: ignore[index]
+                _traverse(record.get(key), depth + 1)
         finally:
             seen.discard(obj_id)
 
