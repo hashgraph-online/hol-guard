@@ -420,6 +420,9 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
         security_level=_coerce_loaded_security_level(merged.get("security_level", DEFAULT_SECURITY_LEVEL)),
         risk_actions=_coerce_risk_action_map(merged.get("risk_actions")),
         harness_risk_actions=_coerce_harness_risk_action_map(merged.get("harness_risk_actions")),
+        receipt_redaction_level=_coerce_loaded_receipt_redaction_level(
+            merged.get("receipt_redaction_level"),
+        ),
     )
 
 
