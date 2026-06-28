@@ -263,6 +263,7 @@ _AIBOM_AUTO_SYNC_INTERVAL_SECONDS = 15 * 60  # 15 min — stale AIBOM data under
 _AIBOM_EMPTY_SYNC_RETRY_SECONDS = 2 * 60
 _AIBOM_GUARD_EVENTS_BACKOFF_KEY = "aibom_guard_events_backoff"
 _AIBOM_GUARD_EVENTS_BACKOFF_MINUTES = 5  # matches _GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_MINUTES
+_AIBOM_SYNC_BATCH_SIZE = 3  # keep each POST under Cloudflare's 100s origin timeout
 
 
 def _aware_utc_timestamp(value: str) -> datetime:
@@ -433,54 +434,70 @@ def sync_aibom_snapshots(
         )
         for snapshot in snapshots
     ]
-    body = json.dumps({"events": events}).encode("utf-8")
-    request = runner._guard_sync_request(
-        resolved_auth_context,
-        request_url=sync_url,
-        method="POST",
-        data=body,
-        extra_headers=None,
-    )
-    try:
-        payload = runner._urlopen_json_with_timeout_retry(
-            request=request,
-            timeout_seconds=30,
-            retry_timeout_seconds=60,
+    total_accepted = 0
+    total_rejected = 0
+    all_statuses: list[dict[str, object]] = []
+    synced_at = generated_at
+    for batch_start in range(0, len(events), _AIBOM_SYNC_BATCH_SIZE):
+        batch = events[batch_start:batch_start + _AIBOM_SYNC_BATCH_SIZE]
+        body = json.dumps({"events": batch}).encode("utf-8")
+        request = runner._guard_sync_request(
+            resolved_auth_context,
+            request_url=sync_url,
+            method="POST",
+            data=body,
+            extra_headers=None,
         )
-    except urllib.error.HTTPError as error:
-        if error.code == 404:
-            synced_at = generated_at
-            store.set_sync_payload(
-                _AIBOM_GUARD_EVENTS_BACKOFF_KEY,
-                {
-                    "synced_at": synced_at,
-                    "events": 0,
-                    "accepted": 0,
-                    "skipped": 0,
-                    "sync_skipped": True,
-                    "sync_reason": "guard_events_endpoint_unavailable",
-                },
-                synced_at,
+        try:
+            payload = runner._urlopen_json_with_timeout_retry(
+                request=request,
+                timeout_seconds=90,
+                retry_timeout_seconds=120,
             )
-            summary: dict[str, object] = {
-                "synced": False,
-                "skipped": True,
-                "reason": "guard_events_endpoint_unavailable",
-            }
-            store.set_sync_payload("aibom_sync_summary", summary, synced_at)
-            return summary
-        raise RuntimeError("Guard Cloud AIBOM sync failed due to an HTTP error.") from error
-    except OSError as error:
-        raise RuntimeError("Guard Cloud AIBOM sync failed due to a network error.") from error
-    accepted = payload.get("accepted")
-    synced_at = _sync_timestamp_from_payload(payload) or generated_at
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                synced_at = generated_at
+                store.set_sync_payload(
+                    _AIBOM_GUARD_EVENTS_BACKOFF_KEY,
+                    {
+                        "synced_at": synced_at,
+                        "events": 0,
+                        "accepted": 0,
+                        "skipped": 0,
+                        "sync_skipped": True,
+                        "sync_reason": "guard_events_endpoint_unavailable",
+                    },
+                    synced_at,
+                )
+                summary: dict[str, object] = {
+                    "synced": False,
+                    "skipped": True,
+                    "reason": "guard_events_endpoint_unavailable",
+                }
+                store.set_sync_payload("aibom_sync_summary", summary, synced_at)
+                return summary
+            raise RuntimeError("Guard Cloud AIBOM sync failed due to an HTTP error.") from error
+        except OSError as error:
+            raise RuntimeError("Guard Cloud AIBOM sync failed due to a network error.") from error
+        batch_accepted = payload.get("accepted")
+        if isinstance(batch_accepted, int):
+            total_accepted += batch_accepted
+        batch_rejected = payload.get("rejected")
+        if isinstance(batch_rejected, int):
+            total_rejected += batch_rejected
+        batch_statuses = payload.get("statuses")
+        if isinstance(batch_statuses, list):
+            all_statuses.extend(s for s in batch_statuses if isinstance(s, dict))
+        batch_synced_at = _sync_timestamp_from_payload(payload)
+        if isinstance(batch_synced_at, str):
+            synced_at = batch_synced_at
     summary: dict[str, object] = {
         "synced": True,
         "synced_at": synced_at,
         "snapshots": len(snapshots),
-        "accepted": accepted if isinstance(accepted, int) else len(snapshots),
-        "rejected": payload.get("rejected"),
-        "statuses": payload.get("statuses"),
+        "accepted": total_accepted if total_accepted else len(snapshots),
+        "rejected": total_rejected,
+        "statuses": all_statuses,
     }
     store.set_sync_payload("aibom_sync_summary", summary, synced_at)
     return summary
