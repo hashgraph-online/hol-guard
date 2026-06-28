@@ -37,7 +37,6 @@ import {
   buildRetryAfterApprovalCopy,
   buildPrimaryReviewAction,
   resolveSecondaryRiskSummary,
-  hasReviewEvidence,
   harnessDisplayName,
   displayArtifactName,
   formatRelativeTime,
@@ -1168,10 +1167,17 @@ function ReviewDecisionCard(props: {
   const harnessName = harnessDisplayName(item.harness);
   const whatWouldHappen = buildWhatWouldHappen(item);
   const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
-  const hasEvidence = hasReviewEvidence(item);
   const pauseReason = whyPaused(item);
 
   const evidenceItems: EvidenceItem[] = [];
+  if (pauseReason) {
+    evidenceItems.push({
+      id: "why-paused",
+      title: "Why paused",
+      tone: "blue",
+      content: <p className="text-sm text-brand-dark">{pauseReason}</p>,
+    });
+  }
   if (secondaryRiskSummary) {
     evidenceItems.push({
       id: "secondary-risk",
@@ -1271,10 +1277,6 @@ function ReviewDecisionCard(props: {
         </div>
 
         <PrimaryActionCard item={item} />
-
-        <div className="mt-4 rounded-xl border border-brand-blue/10 bg-brand-blue/[0.04] p-4">
-          <p className="text-sm text-brand-dark">{pauseReason}</p>
-        </div>
 
         {whatWouldHappen && (
           <div className="mt-5">
@@ -1412,7 +1414,7 @@ function ReviewDecisionCard(props: {
 
       </div>
 
-      {hasEvidence && (
+      {evidenceItems.length > 0 && (
         <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
           <button
             type="button"
@@ -1420,7 +1422,7 @@ function ReviewDecisionCard(props: {
             className="flex w-full items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-brand-blue/20 rounded-lg px-2 py-1 -ml-2"
             aria-expanded={showEvidence}
           >
-            <SectionLabel>Why Guard paused this</SectionLabel>
+            <SectionLabel>Review details</SectionLabel>
             {showEvidence ? (
               <HiMiniChevronUp className="h-4 w-4 text-slate-400" aria-hidden="true" />
             ) : (
