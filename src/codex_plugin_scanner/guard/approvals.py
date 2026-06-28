@@ -289,22 +289,29 @@ def queue_blocked_approvals(
         risk_summary = _item_risk_summary(item, artifact)
         launch_target = _launch_target(artifact, item)
         raw_command_text: str | None = None
-        if artifact is not None and redaction_level != "full":
-            candidate = artifact.metadata.get("raw_command_text")
-            if not isinstance(candidate, str) or not candidate.strip():
-                candidate = artifact.metadata.get("command_text")
-            if not isinstance(candidate, str) or not candidate.strip():
-                candidate = artifact.command if artifact.command is not None else None
+        if redaction_level != "full":
+            candidate: object | None = None
+            if artifact is not None:
+                candidate = artifact.metadata.get("raw_command_text")
+                if not isinstance(candidate, str) or not candidate.strip():
+                    candidate = artifact.metadata.get("command_text")
+                if not isinstance(candidate, str) or not candidate.strip():
+                    candidate = artifact.command if artifact.command is not None else None
+            # Fallback: extract command from action_envelope_json (handles both str and dict types)
             if not isinstance(candidate, str) or not candidate.strip():
                 envelope_raw = item.get("action_envelope_json")
+                envelope: dict[str, object] | None = None
                 if isinstance(envelope_raw, str):
                     try:
                         import json as _json
 
                         envelope = _json.loads(envelope_raw)
-                        candidate = envelope.get("command") if isinstance(envelope, dict) else None
                     except (ValueError, TypeError):
                         pass
+                elif isinstance(envelope_raw, dict):
+                    envelope = envelope_raw
+                if isinstance(envelope, dict):
+                    candidate = envelope.get("command")
             if isinstance(candidate, str) and candidate.strip():
                 stripped = candidate.strip()
                 if not _is_generic_tool_label(stripped):
