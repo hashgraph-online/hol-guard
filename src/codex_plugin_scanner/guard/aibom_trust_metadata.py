@@ -190,7 +190,8 @@ def _local_skill_security_for_artifact(
         key=lambda finding: (finding.get("file", ""), finding.get("ruleId", ""), finding.get("message", "")),
     )
     severity_counts = _cisco_severity_counts(run)
-    score = _cisco_layer_score(severity_counts) if status == "enabled" else None
+    analyzers_used = _cisco_analyzers_used(run)
+    score = _cisco_layer_score(severity_counts, analyzers_used=analyzers_used) if status == "enabled" else None
     safety = None
     if score is not None:
         safety = {
@@ -582,7 +583,8 @@ def _cisco_trust_layer(
     status = str(getattr(run, "status", "unknown"))
     message = str(getattr(run, "message", ""))
     severity_counts = _cisco_severity_counts(run)
-    trust_score = _cisco_layer_score(severity_counts) if status == "enabled" else None
+    analyzers_used = _cisco_analyzers_used(run)
+    trust_score = _cisco_layer_score(severity_counts, analyzers_used=analyzers_used) if status == "enabled" else None
     trust_components: list[dict[str, object]] = []
     if trust_score is not None:
         component_status = "positive"
@@ -590,14 +592,20 @@ def _cisco_trust_layer(
             component_status = "critical"
         elif trust_score < 70:
             component_status = "warning"
+        # Confidence scales with number of analyzers that ran:
+        # 1 analyzer = 90, 2 = 95, 3+ = 99
+        analyzer_confidence = min(90 + (len(analyzers_used) - 1) * 5, 99)
         trust_components.append(
             {
                 "componentId": component_id,
-                "confidence": 90,
+                "confidence": analyzer_confidence,
                 "label": label,
                 "score": trust_score,
                 "status": component_status,
-                "summary": message or f"{label} completed with {sum(severity_counts.values())} findings.",
+                "summary": message or (
+                    f"{label} completed with {sum(severity_counts.values())} findings "
+                    f"using {len(analyzers_used)} analyzer(s)."
+                ),
                 "weight": 1.0,
             }
         )
@@ -666,15 +674,38 @@ def _cisco_severity_counts(run: object) -> dict[str, int]:
     return counts
 
 
-def _cisco_layer_score(severity_counts: dict[str, int]) -> int:
+def _cisco_analyzers_used(run: object) -> tuple[str, ...]:
+    """Extract analyzer names from a Cisco inventory run."""
+    metadata = getattr(run, "metadata", None)
+    if isinstance(metadata, dict):
+        raw = metadata.get("analyzersUsed")
+        if isinstance(raw, (list, tuple)):
+            return tuple(str(a) for a in raw if a)
+    return ("yara",)
+
+
+def _cisco_layer_score(
+    severity_counts: dict[str, int],
+    *,
+    analyzers_used: tuple[str, ...] = ("yara",),
+) -> int:
     raw_score = 100 - (
         30 * severity_counts["critical"]
         + 12 * severity_counts["high"]
         + 4 * severity_counts["medium"]
         + severity_counts["low"]
     )
-    return max(0, min(100, raw_score))
-
+    # Ceiling: more analyzers = higher max achievable score.
+    # 1 analyzer: max 90, 2: max 95, 3+: max 100.
+    # Clean YARA-only can't reach 100; clean multi-analyzer can.
+    analyzer_count = len(analyzers_used)
+    if analyzer_count >= 3:
+        ceiling = 100
+    elif analyzer_count == 2:
+        ceiling = 95
+    else:
+        ceiling = 90
+    return max(0, min(ceiling, raw_score))
 
 def _trust_components_from_domain(domain: TrustDomainScore) -> list[dict[str, object]]:
     components: list[dict[str, object]] = []
