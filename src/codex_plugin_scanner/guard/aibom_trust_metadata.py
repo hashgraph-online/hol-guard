@@ -592,14 +592,17 @@ def _cisco_trust_layer(
             component_status = "critical"
         elif trust_score < 70:
             component_status = "warning"
+        # Confidence scales with number of analyzers that ran:
+        # 1 analyzer = 90, 2 = 95, 3+ = 99
+        analyzer_confidence = min(90 + (len(analyzers_used) - 1) * 5, 99)
         trust_components.append(
             {
                 "componentId": component_id,
-                "confidence": 90,
+                "confidence": analyzer_confidence,
                 "label": label,
                 "score": trust_score,
                 "status": component_status,
-                "summary": message or f"{label} completed with {sum(severity_counts.values())} findings.",
+                "summary": message or f"{label} completed with {sum(severity_counts.values())} findings using {len(analyzers_used)} analyzer(s).",
                 "weight": 1.0,
             }
         )

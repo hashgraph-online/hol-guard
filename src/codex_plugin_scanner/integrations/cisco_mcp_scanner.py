@@ -502,6 +502,13 @@ def run_cisco_mcp_scan(
             message=f"Cisco MCP scanner failed: {exc}",
         )
 
+    # When all configured analyzers failed, report as failed
+    if not successful_analyzers and analyzer_errors:
+        error_details = "; ".join(f"{n}: {e}" for n, e in analyzer_errors.items())
+        return _build_summary(
+            status=CiscoIntegrationStatus.FAILED,
+            message=f"All configured analyzers failed: {error_details}",
+        )
     # Only report analyzers that actually ran successfully
     analyzer_names = successful_analyzers if successful_analyzers else tuple(name for name, _ in analyzers)
     error_suffix = f" (skipped: {', '.join(f'{n} ({e})' for n, e in analyzer_errors.items())})" if analyzer_errors else ""
