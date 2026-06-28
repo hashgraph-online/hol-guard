@@ -4232,7 +4232,7 @@ def _looks_like_safe_read_only_lookup_command(
                 return False
             if not _read_only_lookup_primary_segment_is_safe(command, segment[1:], home_dir=home_dir):
                 return False
-        elif not _read_only_lookup_filter_segment_is_safe(command, segment[1:]):
+        elif not _read_only_lookup_filter_segment_is_safe(command, segment[1:], home_dir=home_dir):
             return False
     return True
 
@@ -4280,13 +4280,18 @@ def _read_only_lookup_primary_segment_is_safe(command: str, args: list[str], *, 
     return False
 
 
-def _read_only_lookup_filter_segment_is_safe(command: str, args: list[str]) -> bool:
+def _read_only_lookup_filter_segment_is_safe(
+    command: str,
+    args: list[str],
+    *,
+    home_dir: Path | None = None,
+) -> bool:
     if command == "sed":
         return _read_only_lookup_sed_args_are_safe(args, require_target=False)
     if command in {"head", "tail"}:
         return _read_only_lookup_head_tail_args_are_safe(args, require_target=False)
     if command in {"grep", "egrep", "fgrep"}:
-        return _read_only_lookup_filter_grep_args_are_safe(args)
+        return _read_only_lookup_filter_grep_args_are_safe(args, home_dir=home_dir)
     return False
 
 
@@ -4471,12 +4476,116 @@ def _read_only_lookup_find_args_are_safe(args: list[str], *, home_dir: Path | No
     return _read_only_lookup_target_is_safe(targets[0], allow_dirs=True, home_dir=home_dir)
 
 
-def _read_only_lookup_filter_grep_args_are_safe(args: list[str]) -> bool:
-    return bool(args) and all(
-        not _read_only_lookup_arg_is_redirection(arg)
-        and (arg == "--" or not _read_only_lookup_target_is_path_like(arg))
-        for arg in args
-    )
+_GREP_PATTERN_OPTIONS = frozenset({"-e", "--regexp"})
+_GREP_PATTERN_FILE_OPTIONS = frozenset({"-f", "--file"})
+_GREP_FILTER_FILE_OPTIONS = frozenset({"--exclude-from"})
+_GREP_SKIP_NEXT_OPTIONS = frozenset({"-A", "-B", "-C", "-m", "--after-context", "--before-context", "--context", "--max-count"})
+
+
+def _read_only_lookup_filter_grep_args_are_safe(
+    args: list[str],
+    *,
+    home_dir: Path | None = None,
+) -> bool:
+    """Validate grep arguments in a filter (pipe) segment.
+
+    In a filter segment grep reads stdin and writes matching lines to stdout.
+    The first positional argument is the pattern (any string, including URIs).
+    Subsequent positional arguments are file operands that grep opens as files.
+    ``-f FILE`` reads patterns from a file, so it must also be validated.
+    ``-e PATTERN`` provides a pattern and is safe to skip.
+    """
+    if not args:
+        return False
+    saw_pattern = False
+    after_options = False
+    skip_next_is_pattern = False
+    skip_next_is_file = False
+    skip_next_file_sets_pattern = False
+    skip_next_is_value = False
+    for arg in args:
+        if skip_next_is_pattern:
+            skip_next_is_pattern = False
+            saw_pattern = True
+            continue
+        if skip_next_is_file:
+            skip_next_is_file = False
+            if not _read_only_lookup_target_is_safe(arg, allow_dirs=False, home_dir=home_dir):
+                return False
+            if skip_next_file_sets_pattern:
+                saw_pattern = True
+            continue
+        if skip_next_is_value:
+            skip_next_is_value = False
+            continue
+        if _read_only_lookup_arg_is_redirection(arg):
+            return False
+        if after_options:
+            if not saw_pattern:
+                saw_pattern = True
+                continue
+            if not _read_only_lookup_target_is_safe(arg, allow_dirs=False, home_dir=home_dir):
+                return False
+            continue
+        if arg == "--":
+            after_options = True
+            continue
+        if arg in _GREP_PATTERN_OPTIONS:
+            skip_next_is_pattern = True
+            saw_pattern = True
+            continue
+        if arg in _GREP_PATTERN_FILE_OPTIONS:
+            skip_next_is_file = True
+            skip_next_file_sets_pattern = True
+            continue
+        if arg in _GREP_FILTER_FILE_OPTIONS:
+            skip_next_is_file = True
+            skip_next_file_sets_pattern = False
+            continue
+        if arg in _GREP_SKIP_NEXT_OPTIONS:
+            skip_next_is_value = True
+            continue
+        if arg.startswith("--"):
+            # Long options: --file=VALUE, --regexp=VALUE, --fixed-strings, etc.
+            if "=" in arg:
+                key, _, value = arg.partition("=")
+                if key in _GREP_PATTERN_FILE_OPTIONS:
+                    if not _read_only_lookup_target_is_safe(value, allow_dirs=False, home_dir=home_dir):
+                        return False
+                    saw_pattern = True
+                elif key in _GREP_FILTER_FILE_OPTIONS:
+                    if not _read_only_lookup_target_is_safe(value, allow_dirs=False, home_dir=home_dir):
+                        return False
+                elif key in _GREP_PATTERN_OPTIONS:
+                    saw_pattern = True
+            # Long options without = are already handled above by exact match.
+            continue
+        if arg.startswith("-") and arg != "-":
+            # Combined short options: check for -f or -e in the cluster.
+            body = arg[1:]
+            # Handle -fFILE (file operand attached) and -ePATTERN (pattern attached).
+            for i, ch in enumerate(body):
+                if ch == "f":
+                    file_arg = body[i + 1 :]
+                    if file_arg:
+                        if not _read_only_lookup_target_is_safe(file_arg, allow_dirs=False, home_dir=home_dir):
+                            return False
+                        saw_pattern = True
+                    else:
+                        skip_next_is_file = True
+                        skip_next_file_sets_pattern = True
+                    break
+                elif ch == "e":
+                    saw_pattern = True
+                    break
+            continue
+        # Positional argument: first one is the pattern, rest are file operands.
+        if not saw_pattern:
+            saw_pattern = True
+        else:
+            if not _read_only_lookup_target_is_safe(arg, allow_dirs=False, home_dir=home_dir):
+                return False
+    return True
 
 
 def _read_only_lookup_arg_is_redirection(arg: str) -> bool:
@@ -4512,13 +4621,6 @@ def _read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool, home_dir:
     return allow_dirs
 
 
-def _read_only_lookup_target_is_path_like(value: str) -> bool:
-    stripped = value.strip().strip("'\"")
-    # URI schemes like skill://, http://, https:// are not file paths.
-    # file:// URIs are treated as paths because they reference local files.
-    if "://" in stripped and not stripped.lower().startswith("file://"):
-        return False
-    return "/" in stripped or "\\" in stripped or Path(stripped).suffix != ""
 
 
 _SAFE_GRAPHQL_QUERY_FILE_WORKFLOW_PATTERN = re.compile(

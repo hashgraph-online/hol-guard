@@ -1,14 +1,13 @@
-"""Tests for command key recognition and URI-scheme path-like filtering.
+"""Tests for command key recognition and grep filter operand validation.
 
 Verifies:
 1. _command_from_payload recognizes 'pattern', 'query', 'search', 'regex' keys
 2. _hook_command_text recognizes the same keys
-3. _read_only_lookup_target_is_path_like returns False for URI schemes (skill://, http://)
+3. _read_only_lookup_filter_grep_args_are_safe distinguishes patterns from file operands
 """
 
 from codex_plugin_scanner.guard.runtime.actions import _command_from_payload
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    _read_only_lookup_target_is_path_like,
     _read_only_lookup_filter_grep_args_are_safe,
 )
 from codex_plugin_scanner.guard.cli._commands_shared import _hook_command_text
@@ -44,39 +43,17 @@ def test_hook_command_text_recognizes_query():
     assert _hook_command_text(payload) == "search_term"
 
 
-def test_path_like_returns_false_for_skill_uri():
-    assert _read_only_lookup_target_is_path_like("skill://guard-dev-testing") is False
-
-
-def test_path_like_returns_false_for_http_uri():
-    assert _read_only_lookup_target_is_path_like("http://127.0.0.1:5497/requests/abc") is False
-
-
-def test_path_like_returns_true_for_https_uri():
-    assert _read_only_lookup_target_is_path_like("https://example.com/path") is False
-
-
-def test_path_like_returns_true_for_file_uri():
-    # file:// URIs reference local files and should still be treated as path-like.
-    assert _read_only_lookup_target_is_path_like("file:///etc/shadow") is True
-
-
-def test_path_like_returns_true_for_real_path():
-    assert _read_only_lookup_target_is_path_like("src/components/Button.tsx") is True
-
-
-def test_path_like_returns_true_for_file_with_extension():
-    assert _read_only_lookup_target_is_path_like("config.json") is True
+# --- Grep filter: pattern vs file operand distinction ---
 
 
 def test_grep_filter_allows_url_pattern():
-    # URL pattern is not path-like (contains ://), so it passes.
-    # But a path operand like "src/" is still checked for safety.
-    args = ["http://127.0.0.1:5497/requests/abc#token=xyz"]
+    """A single URI argument is the pattern — allowed."""
+    args = ["http://127.0.0.1:5497/requests/abc#token=secret"]
     assert _read_only_lookup_filter_grep_args_are_safe(args) is True
 
 
-def test_grep_filter_allows_skill_uri():
+def test_grep_filter_allows_skill_uri_pattern():
+    """A skill:// URI as the pattern — allowed."""
     args = ["skill://guard-dev-testing"]
     assert _read_only_lookup_filter_grep_args_are_safe(args) is True
 
@@ -84,3 +61,187 @@ def test_grep_filter_allows_skill_uri():
 def test_grep_filter_blocks_redirection():
     args = ["pattern", ">", "/etc/passwd"]
     assert _read_only_lookup_filter_grep_args_are_safe(args) is False
+
+
+def test_grep_filter_blocks_sensitive_file_operand():
+    """URI-like file operand with sensitive path component must be blocked.
+
+    POSIX grep treats the second positional arg as a filename. With a symlink
+    named ``http:`` pointing to ``.``, ``http://.env`` resolves to ``./.env``.
+    """
+    args = ["pattern", "http://.env"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is False
+
+
+def test_grep_filter_blocks_sensitive_path_operand():
+    """A direct sensitive path as a file operand must be blocked."""
+    args = ["pattern", ".env"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is False
+
+
+def test_grep_filter_allows_safe_file_operand():
+    """A non-sensitive source file as a file operand is allowed."""
+    args = ["pattern", "src/main.py"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is True
+
+
+def test_grep_filter_allows_multiple_safe_operands():
+    args = ["pattern", "src/main.py", "src/utils.py"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is True
+
+
+def test_grep_filter_blocks_any_sensitive_operand():
+    args = ["pattern", "src/main.py", ".env"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is False
+
+
+def test_grep_filter_blocks_f_option_with_sensitive_file():
+    """-f FILE reads patterns from a file — must validate the file path."""
+    args = ["-f", ".env", "pattern"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is False
+
+
+def test_grep_filter_allows_f_option_with_safe_file():
+    args = ["-f", "src/patterns.txt", "src/data.py"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is True
+
+
+def test_grep_filter_blocks_long_file_option_sensitive():
+    args = ["--file", ".env"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is False
+
+
+def test_grep_filter_allows_attached_f_option_safe():
+    """-fFILE attached form must validate the file path."""
+    args = ["-fsrc/patterns.txt"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is True
+
+
+def test_grep_filter_blocks_attached_f_option_sensitive():
+    args = ["-f.env"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is False
+
+
+def test_grep_filter_allows_e_option_pattern():
+    """-e PATTERN provides a pattern — URI patterns are fine."""
+    args = ["-e", "http://example.com"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is True
+
+
+def test_grep_filter_allows_attached_e_option():
+    """-ePATTERN attached form — the pattern is not validated as a path."""
+    args = ["-ehttp://example.com"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is True
+
+
+def test_grep_filter_allows_combined_flags_then_pattern():
+    """Combined flags like -in before a URI pattern."""
+    args = ["-in", "http://example.com"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is True
+
+
+def test_grep_filter_blocks_after_double_dash():
+    """After --, all args are positional: first is pattern, rest are files."""
+    args = ["--", "pattern", ".env"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is False
+
+
+def test_grep_filter_allows_after_double_dash_safe():
+    args = ["--", "pattern", "src/main.py"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is True
+
+
+def test_grep_filter_allows_skip_context_options():
+    """-A, -B, -C, -m consume numeric values that are not file paths."""
+    args = ["-A", "3", "pattern", "src/main.py"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is True
+
+
+def test_grep_filter_blocks_sensitive_operand_with_context():
+    args = ["-C", "2", "pattern", ".env"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is False
+
+
+def test_grep_filter_blocks_only_sensitive_operand():
+    """Single sensitive path as the only positional = treated as pattern, allowed.
+
+    In a filter segment, the first positional is always the pattern.
+    A single ``.env`` arg is a pattern matching the literal string, not a file read.
+    """
+    args = [".env"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is True
+
+
+def test_grep_filter_blocks_f_option_then_sensitive_operand():
+    """grep -f patterns.txt .env — -f sets saw_pattern, .env is a file operand."""
+    args = ["-f", "patterns.txt", ".env"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is False
+
+
+def test_grep_filter_blocks_attached_f_option_then_sensitive_operand():
+    """grep -fpatterns.txt .env — attached -fFILE sets saw_pattern, .env is a file operand."""
+    args = ["-fpatterns.txt", ".env"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is False
+
+
+def test_grep_filter_blocks_sensitive_operand_after_safe_f_option():
+    """grep -f patterns.txt /etc/passwd — /etc/passwd is a file operand, not a pattern."""
+    args = ["-f", "patterns.txt", "/etc/passwd"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is False
+
+
+def test_grep_filter_allows_long_option_with_f_letter():
+    """--fixed-strings contains 'f' but must not trigger -f file validation."""
+    args = ["--fixed-strings", "pattern", "src/main.py"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is True
+
+
+def test_grep_filter_allows_long_option_with_e_letter():
+    """--extended-regexp contains 'e' but must not trigger -e pattern handling."""
+    args = ["--extended-regexp", "pattern", "src/main.py"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is True
+
+
+def test_grep_filter_blocks_file_equals_sensitive():
+    """--file=.env attached form must be validated."""
+    args = ["--file=.env"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is False
+
+
+def test_grep_filter_allows_regexp_equals_uri():
+    """--regexp=http://example.com attached form — pattern is not a path."""
+    args = ["--regexp=http://example.com"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is True
+
+
+def test_grep_filter_blocks_file_equals_then_sensitive_operand():
+    """--file=patterns.txt .env — saw_pattern set, .env is file operand."""
+    args = ["--file=patterns.txt", ".env"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is False
+
+
+def test_grep_filter_blocks_exclude_from_sensitive():
+    """--exclude-from reads a file — must validate the path."""
+    args = ["--exclude-from", ".env"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is False
+
+
+def test_grep_filter_blocks_exclude_from_equals_sensitive():
+    """--exclude-from=.env attached form — must validate the path."""
+    args = ["--exclude-from=.env"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is False
+
+
+def test_grep_filter_allows_exclude_from_safe():
+    args = ["--exclude-from", "src/patterns.txt", "pattern", "src/main.py"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is True
+
+
+def test_grep_filter_blocks_combined_nf_then_sensitive_operand():
+    """grep -nf patterns.txt .env — combined -nf must set saw_pattern, .env is file operand."""
+    args = ["-nf", "patterns.txt", ".env"]
+    assert _read_only_lookup_filter_grep_args_are_safe(args) is False
+
+
+def test_grep_filter_blocks_empty_args():
+    assert _read_only_lookup_filter_grep_args_are_safe([]) is False
