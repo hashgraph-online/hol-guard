@@ -36,6 +36,17 @@ def _reset_guard_sync_resolver_override(monkeypatch: pytest.MonkeyPatch) -> None
     guard_runner_module._test_sync_auth_context_override = None
 
 
+@pytest.fixture(autouse=True)
+def _isolate_trust_attestation_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clear trust attestation env vars so tests don't inherit the developer's shell config."""
+    for key in (
+        "GUARD_AIBOM_TRUST_ATTESTATION_V2",
+        "GUARD_AIBOM_TRUST_ATTESTATION_PRIVATE_KEY",
+        "GUARD_AIBOM_TRUST_ATTESTATION_KEY_ID",
+        "GUARD_AIBOM_TRUST_ATTESTATION_HEADLESS_SHORT_LIVED",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
 class _FakeSystemKeyringModule:
     def __init__(self) -> None:
         self._secrets: dict[tuple[str, str], str] = {}

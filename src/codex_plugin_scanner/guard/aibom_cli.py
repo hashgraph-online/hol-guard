@@ -111,7 +111,7 @@ def _resolve_trust_attestation_context(
     oauth_credentials = store.get_oauth_local_credentials(allow_primary=True)
     signing_config = resolve_guard_oauth_trust_attestation_signing_config(oauth_credentials)
     if signing_config is None:
-        signing_config = resolve_trust_attestation_signing_config()
+        signing_config = resolve_trust_attestation_signing_config(guard_home=store.guard_home)
     enable_v2 = trust_attestation_v2_enabled()
     installation_id = store.get_or_create_installation_id() if enable_v2 else None
     context: dict[str, object] = {
