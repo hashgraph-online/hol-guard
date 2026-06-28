@@ -8,6 +8,7 @@ import type {
 } from "./guard-types";
 import { guardAwareHref } from "./guard-api";
 import { resolveQueueCategory } from "./queue-state";
+import { whyPaused } from "./evidence/plain-english";
 
 export const EMPTY_QUEUE_TITLE = "No blocked actions";
 export const STALE_REQUEST_COPY = "This request was already decided.";
@@ -414,7 +415,8 @@ export function hasReviewEvidence(item: GuardApprovalRequest): boolean {
     (item.risk_signals?.length ?? 0) > 0 ||
     hasRenderableDecisionEvidence(item) ||
     resolveSecondaryRiskSummary(item) !== null ||
-    !!item.why_now
+    !!item.why_now ||
+    whyPaused(item) !== null
   );
 }
 
