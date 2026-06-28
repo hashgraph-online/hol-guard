@@ -399,9 +399,11 @@ async def _scan_targets_multi(
     plugin_dir: Path,
     targets: tuple[_StaticScanTarget, ...],
     analyzers: tuple[tuple[str, _CiscoAnalyzer], ...],
-) -> tuple[tuple[Finding, ...], int]:
+) -> tuple[tuple[Finding, ...], int, tuple[str, ...], dict[str, str]]:
     findings: list[Finding] = []
     targets_scanned = 0
+    successful_analyzers: set[str] = set()
+    analyzer_errors: dict[str, str] = {}
     for target in targets:
         try:
             content = target.read_path.read_text(encoding="utf-8", errors="ignore")
@@ -418,12 +420,15 @@ async def _scan_targets_multi(
                         "file_path": str(target.read_path),
                     },
                 )
-            except Exception:
+            except Exception as exc:
+                if analyzer_name not in analyzer_errors:
+                    analyzer_errors[analyzer_name] = str(exc)
                 continue
+            successful_analyzers.add(analyzer_name)
             for finding in external_findings:
                 normalized = _normalize_finding(plugin_dir, target.read_path, finding)
                 findings.append(normalized)
-    return tuple(findings), targets_scanned
+    return tuple(findings), targets_scanned, tuple(successful_analyzers), analyzer_errors
 
 
 def run_cisco_mcp_scan(
@@ -482,12 +487,10 @@ def run_cisco_mcp_scan(
             analyzer_name = name.replace("Analyzer", "").lower()
             analyzers.append((analyzer_name, factory()))
         targets = _collect_static_targets(plugin_dir)
-        scan_awaitable: Awaitable[tuple[tuple[Finding, ...], int]] = _scan_targets_multi(
-            plugin_dir, targets, tuple(analyzers)
-        )
+        scan_awaitable = _scan_targets_multi(plugin_dir, targets, tuple(analyzers))
         if timeout_seconds is not None:
             scan_awaitable = asyncio.wait_for(scan_awaitable, timeout=timeout_seconds)
-        findings, targets_scanned = _run_awaitable(scan_awaitable)
+        findings, targets_scanned, successful_analyzers, analyzer_errors = _run_awaitable(scan_awaitable)
     except (TimeoutError, asyncio.TimeoutError):
         return _build_summary(
             status=CiscoIntegrationStatus.TIMED_OUT,
@@ -499,17 +502,19 @@ def run_cisco_mcp_scan(
             message=f"Cisco MCP scanner failed: {exc}",
         )
 
-    analyzer_names = tuple(name for name, _ in analyzers)
+    # Only report analyzers that actually ran successfully
+    analyzer_names = successful_analyzers if successful_analyzers else tuple(name for name, _ in analyzers)
+    error_suffix = f" (skipped: {', '.join(f'{n} ({e})' for n, e in analyzer_errors.items())})" if analyzer_errors else ""
     if findings:
         message = (
             f"Cisco MCP scanner completed static analysis for {targets_scanned} target(s) "
             f"using {', '.join(analyzer_names)} analyzer(s) "
-            f"and reported {len(findings)} finding(s)."
+            f"and reported {len(findings)} finding(s).{error_suffix}"
         )
     else:
         message = (
             f"Cisco MCP scanner completed static analysis for {targets_scanned} target(s) "
-            f"using {', '.join(analyzer_names)} analyzer(s) with no findings."
+            f"using {', '.join(analyzer_names)} analyzer(s) with no findings.{error_suffix}"
         )
     return _build_summary(
         status=CiscoIntegrationStatus.ENABLED,

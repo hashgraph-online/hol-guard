@@ -689,11 +689,9 @@ def _cisco_layer_score(
         + 4 * severity_counts["medium"]
         + severity_counts["low"]
     )
-    # Multi-analyzer clean scans are more trustworthy: boost by up to +4
-    # for 3 analyzers, +2 for 2, +0 for 1 (baseline).
-    if sum(severity_counts.values()) == 0:
-        analyzer_boost = min(len(analyzers_used) - 1, 2) * 2
-        raw_score += analyzer_boost
+    # Multi-analyzer clean scans are more trustworthy. The score stays at
+    # 100 for clean scans, but analyzer confidence is tracked separately
+    # via the analyzersUsed metadata field in the trust layer.
     return max(0, min(100, raw_score))
 
 def _trust_components_from_domain(domain: TrustDomainScore) -> list[dict[str, object]]:
