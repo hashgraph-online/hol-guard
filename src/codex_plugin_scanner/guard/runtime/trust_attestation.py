@@ -6,6 +6,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
@@ -20,6 +21,9 @@ GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V2 = "guard-aibom-trust-attestation.v2"
 GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
 GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256 = "ecdsa-p256-sha256"
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
+_FALSY_ENV_VALUES = frozenset({"0", "false", "no", "off"})
+_DEFAULT_TRUST_ATTESTATION_KEY_FILE = "trust_attestation_key.pem"
+_DEFAULT_TRUST_ATTESTATION_KEY_ID = "guard-aibom-trust-key-local"
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,13 +52,28 @@ def payload_hash_for_trust_attestation(payload: Mapping[str, object]) -> str:
 
 def resolve_trust_attestation_signing_config(
     environ: Mapping[str, str] | None = None,
+    *,
+    guard_home: Path | None = None,
 ) -> GuardTrustAttestationSigningConfig | None:
+    """Resolve the trust attestation signing configuration.
+
+    Priority (highest wins):
+    1. ``GUARD_AIBOM_TRUST_ATTESTATION_PRIVATE_KEY`` env var (explicit override)
+    2. ``GUARD_AIBOM_TRUST_ATTESTATION_HEADLESS_SHORT_LIVED=1`` env var (ephemeral key per process)
+    3. Persistent auto-generated key in ``guard_home`` (default for new users)
+    4. ``None`` (attestation disabled)
+    """
     env = environ or os.environ
-    active_key_id = _sanitize_env(env.get("GUARD_AIBOM_TRUST_ATTESTATION_KEY_ID")) or "guard-aibom-trust-key-default"
+    active_key_id = _sanitize_env(env.get("GUARD_AIBOM_TRUST_ATTESTATION_KEY_ID")) or _DEFAULT_TRUST_ATTESTATION_KEY_ID
     private_key_pem = _normalize_pem(_sanitize_env(env.get("GUARD_AIBOM_TRUST_ATTESTATION_PRIVATE_KEY")))
     if not private_key_pem:
         if _headless_short_lived_attestation_enabled(env):
             return _resolve_headless_short_lived_trust_attestation_signing_config(active_key_id=active_key_id)
+        if guard_home is not None:
+            return _resolve_persistent_trust_attestation_signing_config(
+                active_key_id=active_key_id,
+                guard_home=guard_home,
+            )
         return None
     return GuardTrustAttestationSigningConfig(
         active_key_id=active_key_id,
@@ -102,16 +121,88 @@ def resolve_guard_oauth_trust_attestation_signing_config(
         public_jwk_thumbprint=public_jwk_thumbprint,
         signature_algorithm=GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
     )
-
-
 def trust_attestation_v2_enabled(environ: Mapping[str, str] | None = None) -> bool:
+    """Trust attestation v2 is enabled by default. Set GUARD_AIBOM_TRUST_ATTESTATION_V2=0 to opt out."""
     env = environ or os.environ
-    return _sanitize_env(env.get("GUARD_AIBOM_TRUST_ATTESTATION_V2")).lower() in _TRUTHY_ENV_VALUES
+    raw = _sanitize_env(env.get("GUARD_AIBOM_TRUST_ATTESTATION_V2")).lower()
+    if raw in _FALSY_ENV_VALUES:
+        return False
+    return True
 
 
 def _headless_short_lived_attestation_enabled(environ: Mapping[str, str]) -> bool:
     raw = environ.get("GUARD_AIBOM_TRUST_ATTESTATION_HEADLESS_SHORT_LIVED")
     return _sanitize_env(raw).lower() in _TRUTHY_ENV_VALUES
+
+
+def _resolve_persistent_trust_attestation_signing_config(
+    *,
+    active_key_id: str,
+    guard_home: Path,
+) -> GuardTrustAttestationSigningConfig | None:
+    """Load or auto-generate a persistent EC P-256 key stored in guard_home.
+
+    The key is written to ``guard_home / trust_attestation_key.pem`` with 0600
+    permissions. On subsequent runs the same key is loaded, ensuring the server
+    registers the same device key across restarts. Returns ``None`` if the key
+    file cannot be created or read.
+    """
+    key_path = guard_home / _DEFAULT_TRUST_ATTESTATION_KEY_FILE
+    try:
+        private_key_pem = key_path.read_text(encoding="utf-8").strip()
+        if not private_key_pem:
+            raise ValueError("Empty trust attestation key file")
+        private_key = _load_private_key(private_key_pem)
+    except Exception:
+        # Key file is missing, empty, or corrupted. Generate a new key
+        # using atomic exclusive creation to avoid race conditions between
+        # concurrent Guard processes. If another process already created
+        # the file, read its key instead.
+        try:
+            private_key = ec.generate_private_key(ec.SECP256R1())
+            private_key_pem = private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            ).decode("utf-8")
+            key_path.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(private_key_pem)
+        except FileExistsError:
+            # Another process created the file, or the file was corrupt and
+            # already existed. Read its key; if it fails, remove and retry.
+            try:
+                private_key_pem = key_path.read_text(encoding="utf-8").strip()
+                private_key = _load_private_key(private_key_pem)
+            except Exception:
+                key_path.unlink(missing_ok=True)
+                private_key = ec.generate_private_key(ec.SECP256R1())
+                private_key_pem = private_key.private_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PrivateFormat.PKCS8,
+                    encryption_algorithm=serialization.NoEncryption(),
+                ).decode("utf-8")
+                fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write(private_key_pem)
+        except Exception:
+            return None
+    public_key_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("utf-8")
+        .strip()
+    )
+    return GuardTrustAttestationSigningConfig(
+        active_key_id=active_key_id,
+        private_key_pem=_normalize_pem(private_key_pem),
+        public_jwk_thumbprint=_public_key_fingerprint(public_key_pem),
+        signature_algorithm=GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
+    )
 
 
 @lru_cache(maxsize=4)

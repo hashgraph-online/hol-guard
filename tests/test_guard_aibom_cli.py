@@ -56,7 +56,10 @@ def _seed_inventory(store: GuardStore, artifact: GuardArtifact, *, now: str) -> 
     )
 
 
-def test_aibom_status_json_includes_layer_and_trust_summary(tmp_path: Path, capsys) -> None:
+def test_aibom_status_json_includes_layer_and_trust_summary(tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", "0")
+    monkeypatch.delenv("GUARD_AIBOM_TRUST_ATTESTATION_PRIVATE_KEY", raising=False)
+    monkeypatch.delenv("GUARD_AIBOM_TRUST_ATTESTATION_KEY_ID", raising=False)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_codex_fixture(home_dir, workspace_dir)
@@ -100,7 +103,10 @@ def test_aibom_status_json_includes_layer_and_trust_summary(tmp_path: Path, caps
     assert output["status"] in {"not_connected", "workspace_required", "sync_required", "synced"}
 
 
-def test_inventory_json_includes_aibom_metadata_extensions(tmp_path: Path, capsys) -> None:
+def test_inventory_json_includes_aibom_metadata_extensions(tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", "0")
+    monkeypatch.delenv("GUARD_AIBOM_TRUST_ATTESTATION_PRIVATE_KEY", raising=False)
+    monkeypatch.delenv("GUARD_AIBOM_TRUST_ATTESTATION_KEY_ID", raising=False)
     workspace = tmp_path / "repo"
     shared = workspace / "shared-root"
     shared.mkdir(parents=True)
@@ -317,6 +323,7 @@ def test_resolve_trust_attestation_context_defaults_to_v1(monkeypatch: pytest.Mo
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
     monkeypatch.setattr(store, "get_or_create_installation_id", lambda: "device-1")
     monkeypatch.delenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", raising=False)
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", "0")
 
     context = aibom_cli._resolve_trust_attestation_context(
         store,
@@ -410,6 +417,76 @@ def test_resolve_trust_attestation_context_tolerates_invalid_generated_at_for_sy
 
     assert context["expiresAt"] is None
     assert context["sequence"] == 1
+
+
+def test_trust_attestation_v2_enabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime.trust_attestation import trust_attestation_v2_enabled
+
+    monkeypatch.delenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", raising=False)
+    assert trust_attestation_v2_enabled() is True
+
+
+def test_trust_attestation_v2_can_be_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime.trust_attestation import trust_attestation_v2_enabled
+
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", "0")
+    assert trust_attestation_v2_enabled() is False
+
+
+def test_resolve_trust_attestation_context_auto_generates_persistent_key(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard.runtime.trust_attestation import (
+        resolve_trust_attestation_signing_config,
+    )
+
+    guard_home = tmp_path / "guard"
+    guard_home.mkdir(parents=True, exist_ok=True)
+    key_path = guard_home / "trust_attestation_key.pem"
+    assert not key_path.exists()
+
+    config = resolve_trust_attestation_signing_config(guard_home=guard_home)
+    assert config is not None
+    assert key_path.exists()
+    assert config.signature_algorithm == "ecdsa-p256-sha256"
+
+    # Second call loads the same key
+    config2 = resolve_trust_attestation_signing_config(guard_home=guard_home)
+    assert config2 is not None
+    assert config2.private_key_pem == config.private_key_pem
+
+
+def test_env_private_key_overrides_persistent_key(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives import serialization
+
+    from codex_plugin_scanner.guard.runtime.trust_attestation import (
+        resolve_trust_attestation_signing_config,
+    )
+
+    guard_home = tmp_path / "guard"
+    guard_home.mkdir(parents=True, exist_ok=True)
+
+    # Generate a separate key for env var
+    env_key = ec.generate_private_key(ec.SECP256R1())
+    env_key_pem = env_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode("utf-8")
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_PRIVATE_KEY", env_key_pem)
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_KEY_ID", "env-key-1")
+
+    config = resolve_trust_attestation_signing_config(guard_home=guard_home)
+    assert config is not None
+    assert config.active_key_id == "env-key-1"
+    assert config.private_key_pem == env_key_pem.strip()
+    # Persistent key file should NOT be created when env var is set
+    assert not (guard_home / "trust_attestation_key.pem").exists()
 
 
 def test_sync_aibom_snapshots_404_backoff_isolated_from_guard_events_summary(
@@ -572,6 +649,7 @@ def test_sync_aibom_snapshots_uses_cloud_sync_cisco_defaults(tmp_path: Path, mon
         return ()
 
     monkeypatch.setattr(aibom_cli, "collect_aibom_snapshots", fake_collect_aibom_snapshots)
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", "0")
 
     summary = sync_aibom_snapshots(
         store,
@@ -687,7 +765,10 @@ def test_guard_aibom_sync_command_uses_cloud_sync_cisco_defaults(
     assert options.follow_unsafe_symlinks is False
 
 
-def test_aibom_export_json_includes_redaction_report(tmp_path: Path, capsys) -> None:
+def test_aibom_export_json_includes_redaction_report(tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", "0")
+    monkeypatch.delenv("GUARD_AIBOM_TRUST_ATTESTATION_PRIVATE_KEY", raising=False)
+    monkeypatch.delenv("GUARD_AIBOM_TRUST_ATTESTATION_KEY_ID", raising=False)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_codex_fixture(home_dir, workspace_dir)
