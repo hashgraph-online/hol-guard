@@ -149,30 +149,34 @@ class TestHookWorkerMalformedPayload:
         # Invalid source ref version should not allow original
         assert result["model_output_action"] != "allow_original"
 
-    def test_missing_output_summary_raises_unsupported(
+    def test_posttooluse_without_source_ref_uses_output_scan(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
     ) -> None:
-        """PostToolUse without guard_source_ref must fall back to legacy CLI.
+        """PostToolUse without guard_source_ref uses server-side output scanning.
 
-        The fast path only handles PostToolUse with guard_source_ref.
-        Without a source ref, the worker raises HookWorkerUnsupported so
-        the server falls through to the legacy CLI path, preserving
-        existing policy/permission checks.
+        The fast path now handles PostToolUse for all harnesses by scanning
+        the full tool output from the payload. No client-side guard_source_ref
+        is required.
         """
         payload = {
             "hook_event_name": "PostToolUse",
             "tool_name": "Read",
+            "tool_input": {"file_path": "src/foo.ts"},
+            "tool_response": [{"type": "text", "text": "safe file content"}],
         }
 
-        with pytest.raises(HookWorkerUnsupported):
-            worker.review_http_payload(
-                payload=payload,
-                params={},
-                default_harness="pi",
-                home_dir=home_dir,
-                guard_home=guard_home,
-                workspace=workspace,
-            )
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="pi",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
+        # Safe output should be allowed
+        assert result["decision"] == "allow"
+        assert result["model_output_action"] == "allow_original"
 
 
 class TestHookWorkerException:
@@ -240,25 +244,20 @@ class TestHookWorkerNonPostTool:
                 guard_home=guard_home,
                 workspace=workspace,
             )
-
 class TestHookWorkerAllHarnessFallback:
     """Tests proving all harnesses without client-side guard_source_ref
-    correctly fall through to legacy CLI (HookWorkerUnsupported).
+    use the server-side output scanning fast path.
 
-    Server-side synthesis was considered but rejected because harness
-    output includes formatting (line numbers, banners) that won't match
-    the raw file hash. The fast path requires exact hash match between
-    output text and file content (see output_equivalent() in
-    hook_source_read.py). Only client-side generation (like Pi's
-    digestOutputText) can produce a matching hash.
-
-    These tests prove the fallback is safe for all harnesses.
+    All harnesses (claude-code, codex, grok, zcode) now get the fast path
+    for PostToolUse file reads. The engine extracts the full tool output
+    from the payload, scans it for secrets, and returns allow_original
+    if clean.
     """
 
-    def test_claude_code_posttooluse_without_source_ref_falls_back(
+    def test_claude_code_posttooluse_uses_fast_path(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
     ) -> None:
-        """Claude Code PostToolUse without guard_source_ref falls back to legacy."""
+        """Claude Code PostToolUse uses server-side output scanning."""
         payload = {
             "hook_event_name": "PostToolUse",
             "tool_name": "Read",
@@ -266,20 +265,22 @@ class TestHookWorkerAllHarnessFallback:
             "tool_response": [{"type": "text", "text": "     1\tfile content"}],
         }
 
-        with pytest.raises(HookWorkerUnsupported):
-            worker.review_http_payload(
-                payload=payload,
-                params={},
-                default_harness="claude-code",
-                home_dir=home_dir,
-                guard_home=guard_home,
-                workspace=workspace,
-            )
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="claude-code",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
 
-    def test_codex_posttooluse_without_source_ref_falls_back(
+        assert result["model_output_action"] == "allow_original"
+        assert result["decision"] == "allow"
+
+    def test_codex_posttooluse_uses_fast_path(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
     ) -> None:
-        """Codex PostToolUse without guard_source_ref falls back to legacy."""
+        """Codex PostToolUse uses server-side output scanning."""
         payload = {
             "hook_event_name": "PostToolUse",
             "tool_name": "Read",
@@ -287,20 +288,22 @@ class TestHookWorkerAllHarnessFallback:
             "stdout": "file content",
         }
 
-        with pytest.raises(HookWorkerUnsupported):
-            worker.review_http_payload(
-                payload=payload,
-                params={},
-                default_harness="codex",
-                home_dir=home_dir,
-                guard_home=guard_home,
-                workspace=workspace,
-            )
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="codex",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
 
-    def test_grok_posttooluse_without_source_ref_falls_back(
+        assert result["model_output_action"] == "allow_original"
+        assert result["decision"] == "allow"
+
+    def test_grok_posttooluse_uses_fast_path(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
     ) -> None:
-        """Grok PostToolUse without guard_source_ref falls back to legacy."""
+        """Grok PostToolUse uses server-side output scanning."""
         payload = {
             "hook_event_name": "PostToolUse",
             "tool_name": "Read",
@@ -308,20 +311,22 @@ class TestHookWorkerAllHarnessFallback:
             "tool_response": [{"type": "text", "text": "file content"}],
         }
 
-        with pytest.raises(HookWorkerUnsupported):
-            worker.review_http_payload(
-                payload=payload,
-                params={},
-                default_harness="grok",
-                home_dir=home_dir,
-                guard_home=guard_home,
-                workspace=workspace,
-            )
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="grok",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
 
-    def test_zcode_posttooluse_without_source_ref_falls_back(
+        assert result["model_output_action"] == "allow_original"
+        assert result["decision"] == "allow"
+
+    def test_zcode_posttooluse_uses_fast_path(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
     ) -> None:
-        """ZCode PostToolUse without guard_source_ref falls back to legacy."""
+        """ZCode PostToolUse uses server-side output scanning."""
         payload = {
             "hook_event_name": "PostToolUse",
             "tool_name": "Read",
@@ -329,15 +334,17 @@ class TestHookWorkerAllHarnessFallback:
             "tool_response": [{"type": "text", "text": "file content"}],
         }
 
-        with pytest.raises(HookWorkerUnsupported):
-            worker.review_http_payload(
-                payload=payload,
-                params={},
-                default_harness="zcode",
-                home_dir=home_dir,
-                guard_home=guard_home,
-                workspace=workspace,
-            )
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="zcode",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
+        assert result["model_output_action"] == "allow_original"
+        assert result["decision"] == "allow"
 
     def test_pi_with_source_ref_still_works(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
@@ -372,3 +379,102 @@ class TestHookWorkerAllHarnessFallback:
 
         assert result["model_output_action"] == "allow_original"
         assert result["reviewed_output_sha256"] == client_hash
+
+
+class TestHookWorkerOutputScanning:
+    """Tests for the server-side output scanning fast path."""
+
+    def test_secret_in_output_blocks(
+        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        """Output containing a secret pattern is blocked."""
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "src/config.ts"},
+            "tool_response": [
+                {"type": "text", "text": "api_key = 'sk-1234567890abcdef1234567890abcdef'\n"}
+            ],
+        }
+
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="claude-code",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
+        assert result["decision"] == "deny"
+        assert result["model_output_action"] == "block"
+        assert result["reason_code"] == "output_secret_match"
+
+    def test_non_file_read_falls_back(
+        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        """Non-file-read PostToolUse (e.g. shell command) falls back to standard path."""
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "echo hello"},
+            "stdout": "hello",
+        }
+
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="claude-code",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
+        # Shell commands go through _review_standard which scans the excerpt
+        assert result["model_output_action"] != "allow_original"
+
+    def test_empty_output_falls_back(
+        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        """PostToolUse with no extractable output text falls back to standard path."""
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "src/foo.ts"},
+        }
+
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="claude-code",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
+        # No output to review — should block conservatively
+        assert result["decision"] == "deny"
+        assert result["model_output_action"] == "block"
+
+    def test_codex_stdout_uses_fast_path(
+        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        """Codex PostToolUse with stdout output uses output scanning."""
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "read",
+            "tool_input": {"file_path": "src/foo.ts"},
+            "stdout": "export const hello = 'world';\n",
+        }
+
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="codex",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
+        assert result["model_output_action"] == "allow_original"
+        assert result["decision"] == "allow"

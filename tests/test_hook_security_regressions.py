@@ -476,11 +476,14 @@ class TestPreToolUseFallsBackToLegacy:
                 workspace=workspace,
             )
 
-    def test_post_tool_use_without_source_ref_raises_unsupported(
+    def test_post_tool_use_without_source_ref_uses_engine(
         self, workspace: Path, home_dir: Path, guard_home: Path
     ) -> None:
-        from codex_plugin_scanner.guard.daemon.hook_worker import HookWorkerUnsupported
+        """PostToolUse without source_ref now uses the server-side output scanning path.
 
+        Previously this raised HookWorkerUnsupported (legacy CLI fallback).
+        Now the engine handles it by scanning the tool output in the payload.
+        """
         store = GuardStore(guard_home)
         worker = HookWorker(store=store)
 
@@ -488,14 +491,17 @@ class TestPreToolUseFallsBackToLegacy:
             "hook_event_name": "PostToolUse",
             "tool_name": "Read",
             "tool_input": {"file_path": "src/foo.ts"},
+            "tool_response": [{"type": "text", "text": "safe content"}],
         }
 
-        with pytest.raises(HookWorkerUnsupported):
-            worker.review_http_payload(
-                payload=payload,
-                params={},
-                default_harness="pi",
-                home_dir=home_dir,
-                guard_home=guard_home,
-                workspace=workspace,
-            )
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="pi",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
+        # Should not raise — engine handles it via output scanning
+        assert result["model_output_action"] == "allow_original"

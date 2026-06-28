@@ -118,15 +118,10 @@ def target_is_known_skill_doc_path(target: str, *, home_dir: Path | None = None)
         return False
     # Handle skill:// URIs: resolve the skill name against known doc roots.
     if target.startswith("skill://"):
-        skill_name = target[len("skill://"):].strip().strip("'\"")
+        skill_name = target[len("skill://") :].strip().strip("'\"")
         if skill_name:
             skill_name = os.path.normpath(skill_name).replace("\\", "/")
-            if (
-                not skill_name
-                or skill_name.startswith("..")
-                or skill_name == "."
-                or skill_name.startswith("/")
-            ):
+            if not skill_name or skill_name.startswith("..") or skill_name == "." or skill_name.startswith("/"):
                 return False
             home = os.path.normpath(str(home_dir or Path.home())).replace("\\", "/")
             for suffix in KNOWN_SKILL_DOC_ROOT_SUFFIXES:
