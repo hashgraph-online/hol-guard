@@ -75,6 +75,10 @@ _COMMAND_KEYS = (
     "cmd",
     "shell_command",
     "shellCommand",
+    "pattern",
+    "query",
+    "search",
+    "regex",
 )
 _SUDO_OPTION_VALUE_FLAGS = frozenset({"-u", "-g", "-h", "-p", "-C", "-D", "-R", "-r", "-T", "-t"})
 _SUDO_OPTION_VALUE_LONG_FLAGS = frozenset(
@@ -4510,6 +4514,10 @@ def _read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool, home_dir:
 
 def _read_only_lookup_target_is_path_like(value: str) -> bool:
     stripped = value.strip().strip("'\"")
+    # URI schemes like skill://, http://, https:// are not file paths.
+    # file:// URIs are treated as paths because they reference local files.
+    if "://" in stripped and not stripped.lower().startswith("file://"):
+        return False
     return "/" in stripped or "\\" in stripped or Path(stripped).suffix != ""
 
 
