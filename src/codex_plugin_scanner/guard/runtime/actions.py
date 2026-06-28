@@ -68,6 +68,10 @@ _COMMAND_KEYS = (
     "cmd",
     "shell_command",
     "shellCommand",
+    "pattern",
+    "query",
+    "search",
+    "regex",
 )
 _SENSITIVE_RAW_KEYS = frozenset(
     {
