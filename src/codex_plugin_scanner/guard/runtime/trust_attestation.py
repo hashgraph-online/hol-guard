@@ -170,9 +170,22 @@ def _resolve_persistent_trust_attestation_signing_config(
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(private_key_pem)
         except FileExistsError:
-            # Another process created the file; read its key
-            private_key_pem = key_path.read_text(encoding="utf-8").strip()
-            private_key = _load_private_key(private_key_pem)
+            # Another process created the file, or the file was corrupt and
+            # already existed. Read its key; if it fails, remove and retry.
+            try:
+                private_key_pem = key_path.read_text(encoding="utf-8").strip()
+                private_key = _load_private_key(private_key_pem)
+            except Exception:
+                key_path.unlink(missing_ok=True)
+                private_key = ec.generate_private_key(ec.SECP256R1())
+                private_key_pem = private_key.private_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PrivateFormat.PKCS8,
+                    encryption_algorithm=serialization.NoEncryption(),
+                ).decode("utf-8")
+                fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write(private_key_pem)
         except Exception:
             return None
     public_key_pem = (
