@@ -395,6 +395,8 @@ async def _scan_targets(
         for finding in external_findings:
             findings.append(_normalize_finding(plugin_dir, target.read_path, finding))
     return tuple(findings), targets_scanned
+
+
 async def _scan_targets_multi(
     plugin_dir: Path,
     targets: tuple[_StaticScanTarget, ...],
@@ -428,7 +430,11 @@ async def _scan_targets_multi(
             for finding in external_findings:
                 normalized = _normalize_finding(plugin_dir, target.read_path, finding)
                 findings.append(normalized)
-    return tuple(findings), targets_scanned, tuple(successful_analyzers), analyzer_errors
+    # Preserve configured order for deterministic output
+    ordered_successful = tuple(name for name, _ in analyzers if name in successful_analyzers)
+    # Only report errors for analyzers that never succeeded
+    failed_only = {n: e for n, e in analyzer_errors.items() if n not in successful_analyzers}
+    return tuple(findings), targets_scanned, ordered_successful, failed_only
 
 
 def run_cisco_mcp_scan(
@@ -508,6 +514,12 @@ def run_cisco_mcp_scan(
         return _build_summary(
             status=CiscoIntegrationStatus.FAILED,
             message=f"All configured analyzers failed: {error_details}",
+        )
+    # When no targets were scanned, no analyzer actually ran
+    if targets_scanned == 0:
+        return _build_summary(
+            status=CiscoIntegrationStatus.SKIPPED,
+            message="No scannable MCP targets found; scan skipped.",
         )
     # Only report analyzers that actually ran successfully
     analyzer_names = successful_analyzers if successful_analyzers else tuple(name for name, _ in analyzers)

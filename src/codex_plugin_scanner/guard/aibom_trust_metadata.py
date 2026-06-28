@@ -692,10 +692,17 @@ def _cisco_layer_score(
         + 4 * severity_counts["medium"]
         + severity_counts["low"]
     )
-    # Multi-analyzer clean scans are more trustworthy. The score stays at
-    # 100 for clean scans, but analyzer confidence is tracked separately
-    # via the analyzersUsed metadata field in the trust layer.
-    return max(0, min(100, raw_score))
+    # Ceiling: more analyzers = higher max achievable score.
+    # 1 analyzer: max 90, 2: max 95, 3+: max 100.
+    # Clean YARA-only can't reach 100; clean multi-analyzer can.
+    analyzer_count = len(analyzers_used)
+    if analyzer_count >= 3:
+        ceiling = 100
+    elif analyzer_count == 2:
+        ceiling = 95
+    else:
+        ceiling = 90
+    return max(0, min(ceiling, raw_score))
 
 def _trust_components_from_domain(domain: TrustDomainScore) -> list[dict[str, object]]:
     components: list[dict[str, object]] = []
