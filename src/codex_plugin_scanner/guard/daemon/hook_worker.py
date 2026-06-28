@@ -105,7 +105,7 @@ class HookWorker:
             workspace=workspace,
         )
         response = self.engine.review(request)
-        return response.to_harness_json()
+        return _harness_json_from_review_response(harness, event_name, response)
 
     def _runtime_harness(self, params: Mapping[str, list[str]]) -> str | None:
         values = params.get("runtime-harness", [])
@@ -237,4 +237,73 @@ class HookWorker:
     # caching and exact-match verification.
 
 
-__all__ = ["HookWorker", "HookWorkerUnsupported"]
+def _canonical_hook_harness(harness: str) -> str:
+    return harness.strip().lower().replace("_", "-")
+
+
+def post_tool_native_block_response(
+    *,
+    reason: str = "HOL Guard blocked this tool output because it could not be proven safe.",
+    reason_code: str = "fast_path_block",
+) -> dict[str, object]:
+    return {
+        "decision": "block",
+        "reason": reason,
+        "continue": False,
+        "stopReason": reason,
+        "policy_action": "block",
+        "risk_summary": reason,
+        "model_output_action": "block",
+        "notice": "warning",
+        "reason_code": reason_code,
+    }
+
+
+def post_tool_fail_safe_response(
+    harness: str,
+    *,
+    reason: str = "HOL Guard could not complete local hook review safely.",
+    reason_code: str = "daemon_worker_exception",
+) -> dict[str, object]:
+    if _canonical_hook_harness(harness) == "pi":
+        return {
+            "decision": "deny",
+            "reason": reason,
+            "model_output_action": "block",
+            "notice": "warning",
+            "reason_code": reason_code,
+        }
+    return post_tool_native_block_response(reason=reason, reason_code=reason_code)
+
+
+def _harness_json_from_review_response(
+    harness: str,
+    event_name: str,
+    response: object,
+) -> dict[str, object]:
+    to_harness_json = getattr(response, "to_harness_json", None)
+    payload = to_harness_json() if callable(to_harness_json) else {}
+    if not isinstance(payload, dict):
+        payload = {}
+    if event_name != "PostToolUse":
+        return payload
+    if _canonical_hook_harness(harness) == "pi":
+        return payload
+    decision = str(payload.get("decision") or "")
+    model_output_action = str(payload.get("model_output_action") or "")
+    if decision == "allow" and model_output_action == "allow_original":
+        return {
+            "policy_action": "allow",
+            "hookSpecificOutput": {"hookEventName": event_name},
+        }
+    reason = str(payload.get("reason") or "HOL Guard blocked this tool output because it could not be proven safe.")
+    reason_code = str(payload.get("reason_code") or "fast_path_block")
+    return post_tool_native_block_response(reason=reason, reason_code=reason_code)
+
+
+__all__ = [
+    "HookWorker",
+    "HookWorkerUnsupported",
+    "post_tool_fail_safe_response",
+    "post_tool_native_block_response",
+]

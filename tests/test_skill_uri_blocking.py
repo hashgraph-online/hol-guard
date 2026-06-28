@@ -5,8 +5,16 @@ from codex_plugin_scanner.guard.runtime.false_positive_rules import (
 )
 
 
-def test_skill_uri_existing():
-    assert target_is_known_skill_doc_path("skill://guard-dev-testing") is True
+def test_skill_uri_existing(tmp_path):
+    home = tmp_path / "home"
+    skills_root = home / ".claude" / "skills"
+    skills_root.mkdir(parents=True)
+    real_skill = tmp_path / "guard-dev-testing"
+    real_skill.mkdir()
+    (real_skill / "SKILL.md").write_text("---\nname: guard-dev-testing\n---\n")
+    (skills_root / "guard-dev-testing").symlink_to(real_skill, target_is_directory=True)
+
+    assert target_is_known_skill_doc_path("skill://guard-dev-testing", home_dir=home) is True
 
 
 def test_skill_uri_nonexistent():
@@ -29,18 +37,34 @@ def test_skill_uri_dot():
     assert target_is_known_skill_doc_path("skill://.") is False
 
 
-def test_resolved_claude_skill_path():
+def test_resolved_claude_skill_path(tmp_path):
     """Filesystem path to a symlinked skill dir is blocked by the symlink check.
 
     The skill:// URI path is the correct way to read skills — it uses realpath
     containment. Direct filesystem paths go through the stricter symlink check.
     """
-    assert target_is_known_skill_doc_path("~/.claude/skills/guard-dev-testing") is False
+    home = tmp_path / "home"
+    skills_root = home / ".claude" / "skills"
+    skills_root.mkdir(parents=True)
+    real_skill = tmp_path / "guard-dev-testing"
+    real_skill.mkdir()
+    (real_skill / "SKILL.md").write_text("---\nname: guard-dev-testing\n---\n")
+    (skills_root / "guard-dev-testing").symlink_to(real_skill, target_is_directory=True)
+
+    assert target_is_known_skill_doc_path("~/.claude/skills/guard-dev-testing", home_dir=home) is False
 
 
-def test_resolved_skill_md_path():
+def test_resolved_skill_md_path(tmp_path):
     """Filesystem path through a symlinked skill dir is also blocked."""
-    assert target_is_known_skill_doc_path("~/.claude/skills/guard-dev-testing/SKILL.md") is False
+    home = tmp_path / "home"
+    skills_root = home / ".claude" / "skills"
+    skills_root.mkdir(parents=True)
+    real_skill = tmp_path / "guard-dev-testing"
+    real_skill.mkdir()
+    (real_skill / "SKILL.md").write_text("---\nname: guard-dev-testing\n---\n")
+    (skills_root / "guard-dev-testing").symlink_to(real_skill, target_is_directory=True)
+
+    assert target_is_known_skill_doc_path("~/.claude/skills/guard-dev-testing/SKILL.md", home_dir=home) is False
 
 
 def test_skill_uri_absolute_path():

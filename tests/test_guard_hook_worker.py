@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -244,6 +243,8 @@ class TestHookWorkerNonPostTool:
                 guard_home=guard_home,
                 workspace=workspace,
             )
+
+
 class TestHookWorkerAllHarnessFallback:
     """Tests proving all harnesses without client-side guard_source_ref
     use the server-side output scanning fast path.
@@ -274,8 +275,8 @@ class TestHookWorkerAllHarnessFallback:
             workspace=workspace,
         )
 
-        assert result["model_output_action"] == "allow_original"
-        assert result["decision"] == "allow"
+        assert result["policy_action"] == "allow"
+        assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
 
     def test_codex_posttooluse_uses_fast_path(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
@@ -297,8 +298,8 @@ class TestHookWorkerAllHarnessFallback:
             workspace=workspace,
         )
 
-        assert result["model_output_action"] == "allow_original"
-        assert result["decision"] == "allow"
+        assert result["policy_action"] == "allow"
+        assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
 
     def test_grok_posttooluse_uses_fast_path(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
@@ -320,8 +321,8 @@ class TestHookWorkerAllHarnessFallback:
             workspace=workspace,
         )
 
-        assert result["model_output_action"] == "allow_original"
-        assert result["decision"] == "allow"
+        assert result["policy_action"] == "allow"
+        assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
 
     def test_zcode_posttooluse_uses_fast_path(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
@@ -343,14 +344,14 @@ class TestHookWorkerAllHarnessFallback:
             workspace=workspace,
         )
 
-        assert result["model_output_action"] == "allow_original"
-        assert result["decision"] == "allow"
+        assert result["policy_action"] == "allow"
+        assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
 
     def test_pi_with_source_ref_still_works(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
     ) -> None:
         """Pi with client-side guard_source_ref uses the fast path (not legacy)."""
-        content = 'export const x = 1;\n'
+        content = "export const x = 1;\n"
         file_path = workspace / "src" / "foo.ts"
         file_path.write_text(content)
 
@@ -392,9 +393,7 @@ class TestHookWorkerOutputScanning:
             "hook_event_name": "PostToolUse",
             "tool_name": "Read",
             "tool_input": {"file_path": "src/config.ts"},
-            "tool_response": [
-                {"type": "text", "text": "api_key = 'sk-1234567890abcdef1234567890abcdef'\n"}
-            ],
+            "tool_response": [{"type": "text", "text": "credential = 'fixture-only'\n"}],
         }
 
         result = worker.review_http_payload(
@@ -406,7 +405,10 @@ class TestHookWorkerOutputScanning:
             workspace=workspace,
         )
 
-        assert result["decision"] == "deny"
+        assert result["decision"] == "block"
+        assert result["continue"] is False
+        assert result["stopReason"] == result["reason"]
+        assert result["policy_action"] == "block"
         assert result["model_output_action"] == "block"
         assert result["reason_code"] == "output_secret_match"
 
@@ -430,8 +432,9 @@ class TestHookWorkerOutputScanning:
             workspace=workspace,
         )
 
-        # Shell commands go through _review_standard which scans the excerpt
-        assert result["model_output_action"] != "allow_original"
+        assert result["decision"] == "block"
+        assert result["continue"] is False
+        assert result["policy_action"] == "block"
 
     def test_empty_output_falls_back(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
@@ -452,8 +455,9 @@ class TestHookWorkerOutputScanning:
             workspace=workspace,
         )
 
-        # No output to review — should block conservatively
-        assert result["decision"] == "deny"
+        assert result["decision"] == "block"
+        assert result["continue"] is False
+        assert result["policy_action"] == "block"
         assert result["model_output_action"] == "block"
 
     def test_codex_stdout_uses_fast_path(
@@ -476,5 +480,5 @@ class TestHookWorkerOutputScanning:
             workspace=workspace,
         )
 
-        assert result["model_output_action"] == "allow_original"
-        assert result["decision"] == "allow"
+        assert result["policy_action"] == "allow"
+        assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}

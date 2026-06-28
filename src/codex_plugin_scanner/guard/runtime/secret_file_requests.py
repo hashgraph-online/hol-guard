@@ -134,6 +134,16 @@ _DOCKER_GLOBAL_SENSITIVE_CONTEXT_OPTIONS = frozenset(
 )
 # Docker global flag options (no value) that signal a non-default/TLS control plane.
 _DOCKER_GLOBAL_SENSITIVE_CONTEXT_FLAGS = frozenset({"--tls", "--tlsverify"})
+_DOCKER_SENSITIVE_CONTEXT_ENV_KEYS = frozenset(
+    {
+        "COMPOSE_ENV_FILES",
+        "DOCKER_CERT_PATH",
+        "DOCKER_CONFIG",
+        "DOCKER_CONTEXT",
+        "DOCKER_HOST",
+        "DOCKER_TLS_VERIFY",
+    }
+)
 _DOCKER_COMPOSE_SUBCOMMAND = "compose"
 _DOCKER_COMPOSE_OPTIONS_WITH_VALUES = frozenset(
     {
@@ -911,6 +921,23 @@ def extract_sensitive_tool_action_request(
                     wrapper_chain=wrapper_chain,
                 )
             return docker_sensitive_request
+        if raw_command_text != command_text:
+            docker_sensitive_request = _docker_sensitive_tool_action_request(
+                tool_name=requested_tool_name,
+                normalized_tool_name=effective_tool_name,
+                command_text=raw_command_text,
+            )
+            if docker_sensitive_request is not None:
+                if wrapper_chain:
+                    docker_sensitive_request = _request_with_wrapper_context(
+                        replace(
+                            docker_sensitive_request,
+                            command_text=normalized_command_text,
+                        ),
+                        raw_command_text=raw_command_text,
+                        wrapper_chain=wrapper_chain,
+                    )
+                return docker_sensitive_request
         docker_config_request = _docker_config_tool_action_request(
             tool_name=requested_tool_name,
             normalized_tool_name=effective_tool_name,
@@ -1033,7 +1060,8 @@ def _docker_sensitive_tool_action_request(
             "container workflows. Docker Compose actions are sensitive when they use "
             "subcommands that execute arbitrary commands or copy files (run, exec, cp, push, "
             "publish, watch), supply secret-bearing input (--env-file), target a non-default "
-            "Docker host or context, or carry TLS/credential material."
+            "Docker host or context, or carry TLS/credential material through flags or "
+            "environment variables."
         ),
     )
 
@@ -3955,15 +3983,24 @@ def _normalize_tool_name(tool_name: object) -> str | None:
 
 def _docker_sensitive_reason(command_text: str) -> str | None:
     parts = _split_shell_parts(command_text.strip())
+    exported_env_context: dict[str, bool] = {}
     for segment in _iter_shell_command_segments(parts):
         command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name == "export" and command_index is not None:
+            exported_env_context.update(_docker_exported_env_context_sensitivity(segment[command_index + 1 :]))
+            continue
         if command_name != "docker" or command_index is None:
             continue
+        sensitive_env_context = any(exported_env_context.values()) or _docker_env_context_is_sensitive(
+            segment[:command_index]
+        )
         global_tokens = segment[command_index + 1 :]
         subcommand_index = _docker_subcommand_index(global_tokens)
         if subcommand_index is None:
             continue
-        sensitive_context = _docker_global_context_is_sensitive(global_tokens[:subcommand_index])
+        sensitive_context = sensitive_env_context or _docker_global_context_is_sensitive(
+            global_tokens[:subcommand_index]
+        )
         args = global_tokens[subcommand_index:]
         subcommand = args[0].lower()
         if subcommand in _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS:
@@ -4072,6 +4109,72 @@ def _docker_global_context_value_is_sensitive(flag: str, value: str) -> bool:
     # ``--host``/``-H``, ``--config``, and TLS cert/key flags always point at a
     # non-default/remotable control plane or credential material.
     return True
+
+
+def _docker_env_context_is_sensitive(prefix_tokens: list[str]) -> bool:
+    index = 0
+    while index < len(prefix_tokens):
+        token = prefix_tokens[index]
+        assignment = _docker_env_assignment(token)
+        if assignment is not None:
+            key, value = assignment
+            if _docker_env_context_value_is_sensitive(key, value):
+                return True
+        split_payload = _docker_env_split_string_payload(
+            token,
+            prefix_tokens[index + 1] if index + 1 < len(prefix_tokens) else None,
+        )
+        if split_payload is not None and _docker_env_context_is_sensitive(_split_shell_parts(split_payload)):
+            return True
+        index += 1
+    return False
+
+
+def _docker_exported_env_context_sensitivity(args: list[str]) -> dict[str, bool]:
+    exported: dict[str, bool] = {}
+    for token in args:
+        if token.startswith("-"):
+            continue
+        assignment = _docker_env_assignment(token)
+        if assignment is None:
+            continue
+        key, value = assignment
+        exported[key] = _docker_env_context_value_is_sensitive(key, value)
+    return exported
+
+
+def _docker_env_assignment(token: str) -> tuple[str, str] | None:
+    normalized = _shell_command_token_without_attached_redirection(token).strip()
+    if not _SHELL_ASSIGNMENT_PATTERN.match(normalized):
+        return None
+    key, _, value = normalized.partition("=")
+    key = key.rstrip("+").upper()
+    if key not in _DOCKER_SENSITIVE_CONTEXT_ENV_KEYS:
+        return None
+    return key, value.strip().strip("\"'")
+
+
+def _docker_env_split_string_payload(token: str, next_token: str | None) -> str | None:
+    if token == "--split-string":
+        return next_token or ""
+    if token.startswith("--split-string="):
+        return token.split("=", 1)[1]
+    clustered_payload = _env_clustered_split_string_payload(token)
+    if clustered_payload is None:
+        return None
+    return clustered_payload or (next_token or "")
+
+
+def _docker_env_context_value_is_sensitive(key: str, value: str) -> bool:
+    normalized_value = value.strip().strip("\"'")
+    if key == "DOCKER_CONTEXT":
+        return normalized_value.lower() not in {"", "default"}
+    if key == "DOCKER_HOST":
+        lowered = normalized_value.lower()
+        return bool(normalized_value) and not lowered.startswith(("unix://", "npipe://"))
+    if key == "DOCKER_TLS_VERIFY":
+        return normalized_value.lower() not in {"", "0", "false", "no"}
+    return bool(normalized_value)
 
 
 def _docker_compose_sensitive_reason(args: list[str], *, sensitive_context: bool) -> str | None:
