@@ -279,9 +279,23 @@ class SyncedPolicyRule:
         """Return ``True`` when every non-empty scope dimension matches."""
         if self.harnesses and harness not in self.harnesses:
             return False
-        if self.artifact_types and artifact_type not in self.artifact_types:
-            return False
+        if self.artifact_types:
+            matcher = _ARTIFACT_TYPE_TO_MATCHER.get(artifact_type, artifact_type)
+            if matcher not in self.artifact_types and artifact_type not in self.artifact_types:
+                return False
         if self.devices and device_id is not None and device_id not in self.devices:
             return False
         # Empty scope dimensions mean "matches all" (wildcard)
         return True
+
+
+_ARTIFACT_TYPE_TO_MATCHER: dict[str, str] = {
+    "shell": "tool-action",
+    "tool-action": "tool-action",
+    "tool_action_request": "mcp",
+    "prompt_request": "mcp",
+    "file-read": "file-read",
+    "file_read_request": "file-read",
+    "package-request": "package-request",
+    "package_request": "package-request",
+}
