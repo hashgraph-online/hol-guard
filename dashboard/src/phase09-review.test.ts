@@ -731,8 +731,8 @@ const DUPLICATE_SUMMARY_WITH_UNRENDERED_SIGNAL_REQUEST: GuardApprovalRequest = {
   },
 };
 assert(
-  !hasReviewEvidence(DUPLICATE_SUMMARY_WITH_UNRENDERED_SIGNAL_REQUEST),
-  "GR211-11: duplicate summary does not show empty evidence section for unrendered decision_v2 signals"
+  hasReviewEvidence(DUPLICATE_SUMMARY_WITH_UNRENDERED_SIGNAL_REQUEST),
+  "GR211-11: whyPaused always provides at least one evidence item even for unrendered decision_v2 signals"
 );
 
 const DUPLICATE_SUMMARY_SUPPLY_CHAIN_REQUEST: GuardApprovalRequest = {
