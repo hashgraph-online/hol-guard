@@ -1172,6 +1172,14 @@ function ReviewDecisionCard(props: {
   const pauseReason = whyPaused(item);
 
   const evidenceItems: EvidenceItem[] = [];
+  if (secondaryRiskSummary) {
+    evidenceItems.push({
+      id: "secondary-risk",
+      title: "Additional risk",
+      tone: "amber",
+      content: <p className="text-sm text-brand-dark">{secondaryRiskSummary}</p>,
+    });
+  }
   const allSignals = item.decision_v2_json?.signals ?? [];
   if (allSignals.some((s) => s.category === "skill" || s.category === "mcp")) {
     evidenceItems.push({
@@ -1267,15 +1275,6 @@ function ReviewDecisionCard(props: {
         <div className="mt-4 rounded-xl border border-brand-blue/10 bg-brand-blue/[0.04] p-4">
           <p className="text-sm text-brand-dark">{pauseReason}</p>
         </div>
-
-        {secondaryRiskSummary && (
-          <div className="mt-4 rounded-xl border border-brand-attention/15 bg-brand-attention/[0.04] p-4">
-            <div className="flex items-start gap-2.5">
-              <HiMiniExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0 text-brand-attention" aria-hidden="true" />
-              <p className="text-sm text-brand-dark">{secondaryRiskSummary}</p>
-            </div>
-          </div>
-        )}
 
         {whatWouldHappen && (
           <div className="mt-5">
@@ -1430,7 +1429,7 @@ function ReviewDecisionCard(props: {
           </button>
           {showEvidence && (
             <div className="mt-4">
-              <ConsolidatedEvidenceAlert items={evidenceItems} />
+              <ConsolidatedEvidenceAlert key={item.request_id} items={evidenceItems} />
             </div>
           )}
         </div>
