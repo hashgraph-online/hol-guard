@@ -3088,6 +3088,8 @@ def _refresh_guard_sync_request(
 
     Reusing the same DPoP proof after a timeout triggers server-side replay
     detection because the original request may have already been consumed.
+    Preserves any server-provided DPoP nonce from the current request so
+    nonce-challenged endpoints do not lose their nonce state across retries.
     """
     request_context = _resolve_guard_dpop_retry_context(request)
     if request_context is None:
@@ -3096,6 +3098,7 @@ def _refresh_guard_sync_request(
     request_url = request_context.get("request_url")
     method = request_context.get("method")
     extra_headers = request_context.get("extra_headers")
+    current_dpop_nonce = request_context.get("dpop_nonce")
     if not isinstance(auth_context, dict) or not isinstance(request_url, str) or not isinstance(method, str):
         return None
     if extra_headers is not None and not isinstance(extra_headers, dict):
@@ -3106,7 +3109,7 @@ def _refresh_guard_sync_request(
         method=method,
         data=_request_data_bytes(request.data),
         extra_headers=None if extra_headers is None else {str(key): str(value) for key, value in extra_headers.items()},
-        dpop_nonce=None,
+        dpop_nonce=current_dpop_nonce if isinstance(current_dpop_nonce, str) else None,
     )
 
 
@@ -3237,8 +3240,9 @@ def _urlopen_json_with_timeout_retry(
                 time.sleep(min(retry_after, 120))
                 rate_limit_retry_count += 1
                 refreshed_request = _refresh_guard_sync_request(current_request)
-                if refreshed_request is not None:
-                    current_request = refreshed_request
+                if refreshed_request is None:
+                    raise
+                current_request = refreshed_request
                 current_timeout_seconds = timeout_seconds
                 retried_timeout = False
                 continue
@@ -3259,8 +3263,9 @@ def _urlopen_json_with_timeout_retry(
         except OSError as error:
             if not retried_timeout and _is_timeout_error(error):
                 refreshed_request = _refresh_guard_sync_request(current_request)
-                if refreshed_request is not None:
-                    current_request = refreshed_request
+                if refreshed_request is None:
+                    raise
+                current_request = refreshed_request
                 current_timeout_seconds = retry_timeout_seconds
                 retried_timeout = True
                 continue
@@ -3291,8 +3296,9 @@ def _urlopen_with_timeout_retry(
                 time.sleep(min(retry_after, 120))
                 rate_limit_retry_count += 1
                 refreshed_request = _refresh_guard_sync_request(current_request)
-                if refreshed_request is not None:
-                    current_request = refreshed_request
+                if refreshed_request is None:
+                    raise
+                current_request = refreshed_request
                 current_timeout_seconds = timeout_seconds
                 retried_timeout = False
                 continue
@@ -3313,8 +3319,9 @@ def _urlopen_with_timeout_retry(
         except OSError as error:
             if not retried_timeout and _is_timeout_error(error):
                 refreshed_request = _refresh_guard_sync_request(current_request)
-                if refreshed_request is not None:
-                    current_request = refreshed_request
+                if refreshed_request is None:
+                    raise
+                current_request = refreshed_request
                 current_timeout_seconds = retry_timeout_seconds
                 retried_timeout = True
                 continue
