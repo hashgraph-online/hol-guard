@@ -3109,6 +3109,60 @@ class TestGuardDaemonFastHookPath:
         # Legacy CLI path (may return {} for allow).
         assert result.get("model_output_action") != "not_applicable"
 
+    def test_fast_path_worker_exception_keeps_pi_deny_contract(self, tmp_path, monkeypatch) -> None:
+        """Pi expects internal fast-path denials as decision=deny, not native decision=block."""
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+
+        store = GuardStore(home_dir)
+        monkeypatch.setenv("HOL_GUARD_HOOK_FAST_PATH", "1")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        def broken_review_http_payload(**kwargs):
+            raise RuntimeError("boom")
+
+        try:
+            monkeypatch.setattr(daemon._server.hook_worker, "review_http_payload", broken_review_http_payload)
+            payload = {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Read",
+                "tool_input": {"file_path": "src/secret.ts"},
+                "guard_source_ref": {
+                    "version": 1,
+                    "kind": "source_file",
+                    "path": "src/secret.ts",
+                    "tool_input_path": "src/secret.ts",
+                    "output_sha256": "0" * 64,
+                    "output_chars": 10,
+                },
+            }
+
+            request = urllib.request.Request(
+                (
+                    f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?"
+                    f"guard-home={urllib.parse.quote(str(home_dir))}&"
+                    f"home={urllib.parse.quote(str(home_dir))}&"
+                    f"workspace={urllib.parse.quote(str(workspace_dir))}"
+                ),
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+            monkeypatch.delenv("HOL_GUARD_HOOK_FAST_PATH", raising=False)
+
+        assert result["decision"] == "deny"
+        assert result["model_output_action"] == "block"
+        assert result["reason_code"] == "daemon_worker_exception"
+
     def test_fast_path_secret_source_file_is_denied(self, tmp_path, monkeypatch) -> None:
         """A source file containing a secret must not return allow_original."""
         home_dir = tmp_path / "home"
@@ -3169,10 +3223,10 @@ class TestGuardDaemonFastHookPath:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         (workspace_dir / "src").mkdir(parents=True, exist_ok=True)
-        benign_content = 'export const safe = 1;\n'
+        benign_content = "export const safe = 1;\n"
         benign_file = workspace_dir / "src" / "benign.ts"
         benign_file.write_text(benign_content)
-        actual_content = 'export const actual = 2;\n'
+        actual_content = "export const actual = 2;\n"
         actual_file = workspace_dir / "src" / "actual.ts"
         actual_file.write_text(actual_content)
 

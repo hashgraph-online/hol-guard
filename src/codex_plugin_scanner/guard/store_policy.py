@@ -320,6 +320,27 @@ class StorePolicyMixin:
                             requested_runtime_exact_match_key=runtime_exact_match_key,
                         ):
                             continue
+                        integrity_result = self._policy_integrity_result_for_row(
+                            candidate,
+                            mode=str((cached_state or {}).get("mode") or "degraded"),
+                            key=None,
+                            key_id=None,
+                            trusted_generation=_mapping_int(cached_state, "generation"),
+                        )
+                        if integrity_result.status != "valid":
+                            events.append(
+                                (
+                                    "policy_integrity_violation",
+                                    {
+                                        "decision_id": int(candidate["decision_id"]),
+                                        "harness": str(candidate["harness"]),
+                                        "artifact_id": candidate["artifact_id"],
+                                        "integrity_status": integrity_result.status,
+                                        "message": integrity_result.message,
+                                    },
+                                )
+                            )
+                            continue
                         selected_payload = self._policy_row_payload(candidate)
                         if is_remote_policy_source(str(candidate["source"])):
                             events.append(
@@ -342,7 +363,13 @@ class StorePolicyMixin:
                             )
                         break
                 for event_name, payload in events:
-                    self.add_event(event_name, payload, current_time)
+                    connection.execute(
+                        """
+                        insert into guard_events (event_name, payload_json, occurred_at)
+                        values (?, ?, ?)
+                        """,
+                        (event_name, json.dumps(payload), current_time),
+                    )
                 return {
                     "decision": selected_payload,
                     "ignored_local_integrity": None,
@@ -445,13 +472,19 @@ class StorePolicyMixin:
                     candidate["decision_id"],
                     integrity_result.status,
                 )
-        for event_name, payload in events:
-            self.add_event(event_name, payload, current_time)
-        return {
-            "decision": selected_payload,
-            "ignored_local_integrity": ignored_local_integrity,
-            "trust_status": trust_status,
-        }
+            for event_name, payload in events:
+                connection.execute(
+                    """
+                    insert into guard_events (event_name, payload_json, occurred_at)
+                    values (?, ?, ?)
+                    """,
+                    (event_name, json.dumps(payload), current_time),
+                )
+            return {
+                "decision": selected_payload,
+                "ignored_local_integrity": ignored_local_integrity,
+                "trust_status": trust_status,
+            }
 
     def resolve_policy_decision(
         self,
