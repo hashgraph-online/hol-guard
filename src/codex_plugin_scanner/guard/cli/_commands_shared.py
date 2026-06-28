@@ -311,7 +311,7 @@ def _hook_command_text(payload: Mapping[str, object]) -> str | None:
     tool_input = payload.get("tool_input")
     if not isinstance(tool_input, Mapping):
         return None
-    for key in ("command", "cmd", "shell_command", "shellCommand"):
+    for key in ("command", "cmd", "shell_command", "shellCommand", "pattern", "query", "search", "regex"):
         value = tool_input.get(key)
         if isinstance(value, str) and value.strip():
             return value
