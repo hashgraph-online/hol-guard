@@ -46,8 +46,6 @@ COPY docker-requirements.txt /app/
 RUN python3 -m pip install --no-deps --require-hashes -r /app/docker-requirements.txt
 RUN python3 -m pip install pytest
 COPY src /app/src
-COPY tests /app/tests
-COPY scripts /app/scripts
 ENV PYTHONPATH=/app/src
 WORKDIR /workspace
 """
@@ -71,9 +69,10 @@ def start_container(image: str) -> tuple[str, int]:
          "-p", "0:8474", image,
          "python", "-c",
          "import os; os.makedirs('/tmp/guard-home', exist_ok=True); "
+         "from pathlib import Path; "
          "from codex_plugin_scanner.guard.daemon import GuardDaemonServer; "
          "from codex_plugin_scanner.guard.store import GuardStore; "
-         "s = GuardStore('/tmp/guard-home'); d = GuardDaemonServer(s, host='0.0.0.0', port=8474); "
+         "s = GuardStore(Path('/tmp/guard-home')); d = GuardDaemonServer(s, host='0.0.0.0', port=8474); "
          "d.start(); import time; time.sleep(999999)"],
         capture_output=True, text=True, timeout=30,
     )
@@ -91,16 +90,16 @@ def wait_for_daemon(port: int, timeout: int = 30) -> bool:
     start = time.monotonic()
     while time.monotonic() - start < timeout:
         try:
-            urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2)
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2)
             return True
         except Exception:
             time.sleep(0.5)
     return False
 
 
-def send_hook(port: int, harness: str, payload: dict, *, auth_token: str = "", guard_home: str = "/tmp/guard-home") -> dict:
+def send_hook(port: int, harness: str, payload: dict, *, auth_token: str = "", guard_home: str = "/tmp/guard-home", workspace: str = "/root/workspace") -> dict:
     url = (f"http://127.0.0.1:{port}/v1/hooks/{harness}?"
-           f"guard-home={urllib.parse.quote(guard_home)}&home={urllib.parse.quote(guard_home)}&workspace=/workspace")
+           f"guard-home={urllib.parse.quote(guard_home)}&home={urllib.parse.quote(guard_home)}&workspace={urllib.parse.quote(workspace)}")
     headers = {"Content-Type": "application/json"}
     if auth_token:
         headers["X-Guard-Token"] = auth_token
@@ -212,10 +211,10 @@ def main():
         )
         auth_token = result.stdout.strip() if result.returncode == 0 else ""
 
-        # Create test files
-        subprocess.run(["docker", "exec", container_id, "mkdir", "-p", "/workspace/src"], check=True, timeout=5)
+        # Create test workspace and files
+        subprocess.run(["docker", "exec", container_id, "mkdir", "-p", "/root/workspace/src"], check=True, timeout=5)
         subprocess.run(["docker", "exec", container_id, "sh", "-c",
-                         'echo \'export const hello = "world";\' > /workspace/src/hello.ts'], check=True, timeout=5)
+                         'echo \'export const hello = "world";\' > /root/workspace/src/hello.ts'], check=True, timeout=5)
 
         passed, failed = run_tests(port, auth_token, harnesses)
         if failed > 0:
