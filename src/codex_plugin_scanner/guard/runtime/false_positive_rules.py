@@ -73,6 +73,7 @@ KNOWN_SKILL_DOC_ROOT_SUFFIXES = (
     ".codex/superpowers/skills",
     ".codex/skills",
     ".agents/skills",
+    ".claude/skills",
 )
 FD_OPTION_VALUE_FLAGS = frozenset(
     {
@@ -114,6 +115,34 @@ _PIPE_TO_EXFIL = re.compile(
 def target_is_known_skill_doc_path(target: str, *, home_dir: Path | None = None) -> bool:
     """Return true for known local skill-doc roots without resolving user path text."""
     if any(marker in target for marker in ("$", "`", "<", ">", "|", ";", "&")):
+        return False
+    # Handle skill:// URIs: resolve the skill name against known doc roots.
+    if target.startswith("skill://"):
+        skill_name = target[len("skill://"):].strip().strip("'\"")
+        if skill_name:
+            skill_name = os.path.normpath(skill_name).replace("\\", "/")
+            if (
+                not skill_name
+                or skill_name.startswith("..")
+                or skill_name == "."
+                or skill_name.startswith("/")
+            ):
+                return False
+            home = os.path.normpath(str(home_dir or Path.home())).replace("\\", "/")
+            for suffix in KNOWN_SKILL_DOC_ROOT_SUFFIXES:
+                root = f"{home}/{suffix}"
+                candidate_dir = f"{root}/{skill_name}"
+                candidate_file = f"{candidate_dir}/SKILL.md"
+                if not os.path.isfile(candidate_file):
+                    continue
+                # Skill directories are often symlinks managed by the harness
+                # (e.g. ~/.claude/skills/foo -> /project/.agents/skills/foo).
+                # Require SKILL.md to exist and not be a symlink escaping its dir.
+                real_candidate = os.path.realpath(candidate_dir)
+                real_file = os.path.realpath(candidate_file)
+                if real_file != real_candidate and not real_file.startswith(f"{real_candidate}/"):
+                    continue
+                return True
         return False
     if target == "~" or target.startswith("~/"):
         expanded = f"{home_dir or Path.home()}{target[1:]}"
