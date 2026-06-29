@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .actions import normalize_harness_payload
-from .hook_content_scanner import ContentScanner
+from .hook_content_scanner import ContentScanner, should_unsuppress_local_sample_secrets_for_paths
 from .hook_decision_cache import HookDecisionCache
 from .hook_review_types import HookReviewRequest, HookReviewResponse
 from .hook_source_read import (
@@ -42,6 +42,13 @@ HOOK_ENGINE_NORMAL_BUDGET_MS = 1000
 HOOK_SOURCE_FAST_PATH_BUDGET_MS = 250
 HOOK_SCANNER_DEFAULT_BUDGET_MS = 750
 ARBITRARY_STDOUT_FULL_ALLOW_BYTES = 256 * 1024
+
+
+def _target_paths(envelope: object) -> tuple[str, ...]:
+    target_paths = getattr(envelope, "target_paths", ())
+    if isinstance(target_paths, (list, tuple)):
+        return tuple(path for path in target_paths if isinstance(path, str) and path.strip())
+    return ()
 
 
 class HookFailSafe(RuntimeError):  # noqa: N818
@@ -177,7 +184,7 @@ class HookReviewEngine:
         config: GuardConfig,
         start: float,
     ) -> HookReviewResponse:
-        """Scan full tool output for PostToolUse file reads without guard_source_ref.
+        """Scan full tool output for PostToolUse file operations without guard_source_ref.
 
         This is the server-side fast path for all harnesses that do not
         generate ``guard_source_ref`` client-side (claude-code, codex,
@@ -185,14 +192,14 @@ class HookReviewEngine:
         payload, scans it for secrets, and returns ``allow_original``
         if clean.
 
-        Only ``file_read`` actions are eligible — shell commands, MCP
+        Only file read/write actions are eligible — shell commands, MCP
         tools, and other action types still need the full CLI policy/
         permission/approval engine and fall through to ``_review_standard``.
         """
         from .hook_output_text import extract_payload_output
 
         action_type = getattr(envelope, "action_type", None)
-        if action_type != "file_read":
+        if action_type not in {"file_read", "file_write"}:
             return self._review_standard(request, envelope, config, start)
 
         extracted = extract_payload_output(request.payload)
@@ -201,13 +208,16 @@ class HookReviewEngine:
             # No output text found in payload — fall back to excerpt path.
             return self._review_standard(request, envelope, config, start)
 
+        target_paths = _target_paths(envelope)
+        scan_local_samples = should_unsuppress_local_sample_secrets_for_paths(target_paths, cwd=request.cwd)
+
         if extracted.truncated:
             # Output too large to scan in full — scan the excerpt before returning.
             excerpt = extracted.text[:SOURCE_READ_FULL_MODEL_BYTES_P95_TARGET]
             deadline = start + (HOOK_SCANNER_DEFAULT_BUDGET_MS / 1000.0)
             scan_result = self.scanner.scan_text(
                 excerpt,
-                local_content=True,
+                local_content=scan_local_samples,
                 source_context=True,
                 max_bytes=SOURCE_READ_MAX_SCAN_BYTES,
                 deadline_monotonic=deadline,
@@ -234,7 +244,7 @@ class HookReviewEngine:
         deadline = start + (HOOK_SCANNER_DEFAULT_BUDGET_MS / 1000.0)
         scan_result = self.scanner.scan_text(
             extracted.text,
-            local_content=True,
+            local_content=scan_local_samples,
             source_context=True,
             max_bytes=SOURCE_READ_MAX_SCAN_BYTES,
             deadline_monotonic=deadline,
@@ -299,6 +309,9 @@ class HookReviewEngine:
         #
         # If the output summary is available and small enough, we can
         # scan the excerpt. But we never allow original without proof.
+        target_paths = _target_paths(envelope)
+        scan_local_samples = should_unsuppress_local_sample_secrets_for_paths(target_paths, cwd=request.cwd)
+
         output_summary = request.output_summary
         if output_summary is not None and output_summary.text_excerpt:
             excerpt = output_summary.text_excerpt
@@ -306,7 +319,7 @@ class HookReviewEngine:
             deadline = start + (HOOK_SCANNER_DEFAULT_BUDGET_MS / 1000.0)
             scan_result = self.scanner.scan_text(
                 excerpt,
-                local_content=True,
+                local_content=scan_local_samples,
                 source_context=False,
                 max_bytes=SOURCE_READ_MAX_SCAN_BYTES,
                 deadline_monotonic=deadline,

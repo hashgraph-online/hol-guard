@@ -4,12 +4,12 @@
 This test starts a real Guard daemon inside a Docker container, then sends
 HTTP hook payloads for each harness to /v1/hooks/{harness}, verifying:
 
-1. Pi PostToolUse with guard_source_ref returns allow_original (fast path)
-2. Pi PreToolUse falls through to legacy CLI
-3. All other harnesses (claude-code, codex, grok, zcode) fall through to
-   legacy CLI for PostToolUse (they don't generate guard_source_ref)
-4. All harnesses' PreToolUse falls through to legacy CLI
-5. Secret content is denied for all harnesses
+1. PreToolUse falls through to legacy CLI
+2. PostToolUse file reads without source_ref use output scanning
+3. PostToolUse with source_ref returns allow_original
+4. Docs/test fixture placeholder content is allowed for read and edit hooks
+5. Real credential-looking output is denied for every harness
+6. Fixture-prefixed realistic output stays denied in docs
 
 Usage:
     python tests/docker/test_all_harness_hooks.py
@@ -227,6 +227,115 @@ def run_tests(port: int, auth_token: str, harnesses: list[str]) -> tuple[int, in
             else:
                 print(f"  [FAIL] {harness} returned not_applicable for source_ref")
                 failed += 1
+
+        # Test 4: docs/test fixture samples do not block large review/security docs
+        result = send_hook(
+            port,
+            harness,
+            {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Read",
+                "tool_input": {"file_path": "docs/security-review.md"},
+                "tool_response": [
+                    {
+                        "type": "text",
+                        "text": "Review fixture notes: credential = 'fixture-only'\\n"
+                        "Security command examples stay inert in docs.\\n",
+                    }
+                ],
+            },
+            auth_token=auth_token,
+        )
+        if "error" in result:
+            print(f"  [FAIL] Docs fixture output error: {result}")
+            failed += 1
+        elif result.get("model_output_action") == "allow_original" or result.get("policy_action") == "allow":
+            print(f"  [PASS] {harness} docs fixture sample output allowed")
+            passed += 1
+        else:
+            print(f"  [FAIL] {harness} expected docs fixture allow, got {result}")
+            failed += 1
+
+        # Test 5: docs/test fixture samples do not block edit/write patch outputs
+        result = send_hook(
+            port,
+            harness,
+            {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Edit",
+                "tool_input": {
+                    "file_path": "docs/security-review.md",
+                    "old_string": "old",
+                    "new_string": "Review fixture notes: credential = 'fixture-only'\\n",
+                },
+                "tool_response": [
+                    {
+                        "type": "text",
+                        "text": "Applied patch to docs/security-review.md\\n"
+                        "Review fixture notes: credential = 'fixture-only'\\n",
+                    }
+                ],
+                "tool_response_summary": {
+                    "text_excerpt": "Applied patch to docs/security-review.md\\n"
+                    "Review fixture notes: credential = 'fixture-only'\\n",
+                    "excerpt_truncated": False,
+                },
+            },
+            auth_token=auth_token,
+        )
+        if "error" in result:
+            print(f"  [FAIL] Docs fixture edit output error: {result}")
+            failed += 1
+        elif result.get("policy_action") == "allow":
+            print(f"  [PASS] {harness} docs fixture edit output allowed")
+            passed += 1
+        else:
+            print(f"  [FAIL] {harness} expected docs fixture edit allow, got {result}")
+            failed += 1
+
+        # Test 6: real credential-looking output still blocks
+        result = send_hook(
+            port,
+            harness,
+            {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Read",
+                "tool_input": {"file_path": "src/config.ts"},
+                "tool_response": [{"type": "text", "text": "credential = 'prod-live-value'\\n"}],
+            },
+            auth_token=auth_token,
+        )
+        if "error" in result:
+            print(f"  [FAIL] Real credential output error: {result}")
+            failed += 1
+        elif result.get("model_output_action") == "block" or result.get("policy_action") == "block":
+            print(f"  [PASS] {harness} real credential output blocked")
+            passed += 1
+        else:
+            print(f"  [FAIL] {harness} expected credential block, got {result}")
+            failed += 1
+
+        # Test 7: fixture-prefixed realistic output still blocks in docs
+        result = send_hook(
+            port,
+            harness,
+            {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Read",
+                "tool_input": {"file_path": "docs/security-review.md"},
+                "tool_response": [{"type": "text", "text": "credential = 'fixture-prod-value'\\n"}],
+            },
+            auth_token=auth_token,
+        )
+        if "error" in result:
+            print(f"  [FAIL] Fixture-prefixed credential output error: {result}")
+            failed += 1
+        elif result.get("model_output_action") == "block" or result.get("policy_action") == "block":
+            print(f"  [PASS] {harness} fixture-prefixed credential output blocked")
+            passed += 1
+        else:
+            print(f"  [FAIL] {harness} expected fixture-prefixed credential block, got {result}")
+            failed += 1
 
     print(f"\n{'=' * 50}\n  RESULTS: {passed} passed, {failed} failed\n{'=' * 50}")
     return passed, failed

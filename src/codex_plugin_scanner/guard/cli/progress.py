@@ -7,22 +7,11 @@ All output goes to stderr so stdout stays clean for --json mode.
 from __future__ import annotations
 
 import sys
+from importlib.util import find_spec
 from types import TracebackType
+from typing import Any
 
-try:
-    from rich.console import Console
-    from rich.progress import (
-        BarColumn,
-        Progress,
-        SpinnerColumn,
-        TaskProgressColumn,
-        TextColumn,
-        TimeElapsedColumn,
-    )
-
-    _RICH_AVAILABLE = True
-except ImportError:
-    _RICH_AVAILABLE = False
+_rich_available = find_spec("rich") is not None
 
 
 class GuardProgress:
@@ -42,9 +31,21 @@ class GuardProgress:
         self._total = total
         self._completed = 0
         self._title = title
-        self._use_rich = use_rich and _RICH_AVAILABLE
+        self._use_rich = use_rich and _rich_available
+        self._progress: Any | None = None
+        self._task: Any | None = None
 
         if self._use_rich:
+            from rich.console import Console
+            from rich.progress import (
+                BarColumn,
+                Progress,
+                SpinnerColumn,
+                TaskProgressColumn,
+                TextColumn,
+                TimeElapsedColumn,
+            )
+
             self._progress = Progress(
                 SpinnerColumn(spinner_name="dots"),
                 BarColumn(bar_width=None, complete_style="green", finished_style="green"),
@@ -55,9 +56,6 @@ class GuardProgress:
                 transient=False,
                 expand=True,
             )
-            self._task: object | None = None
-        else:
-            self._progress = None  # type: ignore[assignment]
 
     # -- context manager protocol -------------------------------------------
 

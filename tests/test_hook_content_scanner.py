@@ -7,9 +7,10 @@ import time
 import pytest
 
 from codex_plugin_scanner.guard.runtime.hook_content_scanner import (
-    ContentScanner,
     HOOK_CONTENT_SCANNER_VERSION,
-    HOOK_SCANNER_MAX_MATCHES,
+    ContentScanner,
+    should_unsuppress_local_sample_secrets,
+    should_unsuppress_local_sample_secrets_for_paths,
 )
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import secret_content_rule_version
 
@@ -81,6 +82,40 @@ class TestDetectSecrets:
         result = scanner.scan_text(text, local_content=False, source_context=False)
         # Should not detect because it looks like a sample.
         assert all(m.classifier != "credential-assignment" for m in result.matches)
+
+
+class TestScanContext:
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "docs/security-review.md",
+            "tests/test_guard_hook_worker.py",
+            "fixtures/security/addendum.txt",
+            "examples/policy.mdx",
+        ],
+    )
+    def test_docs_and_fixtures_suppress_sample_assignment_retry(self, path: str) -> None:
+        assert should_unsuppress_local_sample_secrets(path) is False
+
+    @pytest.mark.parametrize("path", ["src/config.ts", "app/settings.py", None])
+    def test_source_paths_keep_local_sample_assignment_retry(self, path: str | None) -> None:
+        assert should_unsuppress_local_sample_secrets(path) is True
+
+    def test_absolute_paths_are_relativized_to_workspace(self) -> None:
+        cwd = "/Users/john/docs/project"
+        assert should_unsuppress_local_sample_secrets("/Users/john/docs/project/src/config.py", cwd=cwd) is True
+        assert should_unsuppress_local_sample_secrets("/Users/john/docs/project/docs/review.md", cwd=cwd) is False
+
+    def test_absolute_paths_outside_workspace_ignore_parent_segments(self) -> None:
+        assert should_unsuppress_local_sample_secrets("/Users/john/docs/project/src/config.py") is True
+
+    def test_mixed_targets_keep_sample_assignment_retry(self) -> None:
+        paths = ("docs/security-review.md", "src/config.py")
+        assert should_unsuppress_local_sample_secrets_for_paths(paths, cwd="/repo") is True
+
+    def test_all_docs_targets_suppress_sample_assignment_retry(self) -> None:
+        paths = ("docs/security-review.md", "tests/test_guard_hook_worker.py")
+        assert should_unsuppress_local_sample_secrets_for_paths(paths, cwd="/repo") is False
 
 
 class TestBudgetExhaustion:
