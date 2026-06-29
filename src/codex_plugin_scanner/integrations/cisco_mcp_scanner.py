@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import json
 import os
 import sys
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Iterable
 from dataclasses import dataclass
 from importlib import metadata as importlib_metadata
 from importlib.machinery import ModuleSpec
@@ -32,6 +33,7 @@ _EXCLUDED_DIRS = {
 }
 _SOURCE_SUFFIXES = {".cjs", ".js", ".json", ".jsx", ".mjs", ".py", ".ts", ".tsx"}
 _MAX_TARGET_SIZE_BYTES = 1_000_000
+_MAX_STATIC_TARGETS = 512
 T = TypeVar("T")
 
 
@@ -287,9 +289,9 @@ def _normalize_finding(plugin_dir: Path, file_path: Path, finding: object) -> Fi
     )
 
 
-def _collect_static_targets(plugin_dir: Path) -> tuple[_StaticScanTarget, ...]:
-    config_path = plugin_dir / ".mcp.json"
-    resolved_config_path = _safe_resolved_static_target(plugin_dir, config_path)
+def _collect_static_targets(plugin_dir: Path, config_path: Path | None = None) -> tuple[_StaticScanTarget, ...]:
+    effective_config_path = config_path or plugin_dir / ".mcp.json"
+    resolved_config_path = _safe_resolved_static_target(plugin_dir, effective_config_path)
     if resolved_config_path is None:
         return ()
 
@@ -300,37 +302,149 @@ def _collect_static_targets(plugin_dir: Path) -> tuple[_StaticScanTarget, ...]:
             targets.append(
                 _StaticScanTarget(
                     read_path=resolved_config_path,
-                    tool_name=config_path.name,
+                    tool_name=effective_config_path.name,
                     content_type="mcp-config",
                 )
             )
             seen_targets.add(resolved_config_path)
     except OSError:
         pass
-    for root, dirs, files in os.walk(plugin_dir, topdown=True):
+
+    default_config_path = plugin_dir / ".mcp.json"
+    is_default_config = _same_resolved_path(effective_config_path, default_config_path)
+    scan_roots = (plugin_dir,) if is_default_config else (resolved_config_path.parent,)
+    for scan_root in scan_roots:
+        _append_static_source_targets_from_tree(
+            plugin_dir=plugin_dir,
+            scan_root=scan_root,
+            config_path=resolved_config_path,
+            targets=targets,
+            seen_targets=seen_targets,
+        )
+
+    if not is_default_config:
+        _append_static_source_targets(
+            plugin_dir=plugin_dir,
+            candidates=_mcp_config_referenced_source_paths(
+                plugin_dir=plugin_dir,
+                config_path=resolved_config_path,
+            ),
+            targets=targets,
+            seen_targets=seen_targets,
+        )
+    return tuple(targets)
+
+
+def _append_static_source_targets_from_tree(
+    *,
+    plugin_dir: Path,
+    scan_root: Path,
+    config_path: Path,
+    targets: list[_StaticScanTarget],
+    seen_targets: set[Path],
+) -> None:
+    try:
+        scan_root.resolve(strict=True).relative_to(plugin_dir.resolve(strict=True))
+    except (OSError, RuntimeError, ValueError):
+        return
+    for root, dirs, files in os.walk(scan_root, topdown=True):
         dirs[:] = sorted(dir_name for dir_name in dirs if dir_name not in _EXCLUDED_DIRS)
         current_dir = Path(root)
-        for file_name in sorted(files):
-            file_path = current_dir / file_name
-            if file_path == config_path or file_path.suffix.lower() not in _SOURCE_SUFFIXES:
+        candidates = (
+            current_dir / file_name
+            for file_name in sorted(files)
+            if (current_dir / file_name).suffix.lower() in _SOURCE_SUFFIXES and current_dir / file_name != config_path
+        )
+        _append_static_source_targets(
+            plugin_dir=plugin_dir,
+            candidates=candidates,
+            targets=targets,
+            seen_targets=seen_targets,
+        )
+
+
+def _append_static_source_targets(
+    *,
+    plugin_dir: Path,
+    candidates: Iterable[Path],
+    targets: list[_StaticScanTarget],
+    seen_targets: set[Path],
+) -> None:
+    for candidate in candidates:
+        if len(targets) >= _MAX_STATIC_TARGETS:
+            return
+        if not isinstance(candidate, Path):
+            continue
+        if candidate.suffix.lower() not in _SOURCE_SUFFIXES:
+            continue
+        resolved_file_path = _safe_resolved_static_target(plugin_dir, candidate)
+        if resolved_file_path is None or resolved_file_path in seen_targets:
+            continue
+        try:
+            if resolved_file_path.stat().st_size > _MAX_TARGET_SIZE_BYTES:
                 continue
-            resolved_file_path = _safe_resolved_static_target(plugin_dir, file_path)
-            if resolved_file_path is None or resolved_file_path in seen_targets:
-                continue
-            try:
-                if resolved_file_path.stat().st_size > _MAX_TARGET_SIZE_BYTES:
-                    continue
-            except OSError:
-                continue
-            targets.append(
-                _StaticScanTarget(
-                    read_path=resolved_file_path,
-                    tool_name=resolved_file_path.name,
-                    content_type="mcp-source",
-                )
+        except OSError:
+            continue
+        targets.append(
+            _StaticScanTarget(
+                read_path=resolved_file_path,
+                tool_name=resolved_file_path.name,
+                content_type="mcp-source",
             )
-            seen_targets.add(resolved_file_path)
-    return tuple(targets)
+        )
+        seen_targets.add(resolved_file_path)
+
+
+def _mcp_config_referenced_source_paths(*, plugin_dir: Path, config_path: Path) -> tuple[Path, ...]:
+    try:
+        if config_path.stat().st_size > _MAX_TARGET_SIZE_BYTES:
+            return ()
+        config = json.loads(config_path.read_text(encoding="utf-8", errors="ignore"))
+    except (OSError, json.JSONDecodeError):
+        return ()
+
+    candidates: list[Path] = []
+    for value in _mcp_config_command_values(config):
+        raw_path = Path(value)
+        if raw_path.suffix.lower() not in _SOURCE_SUFFIXES:
+            continue
+        if raw_path.is_absolute():
+            candidates.append(raw_path)
+            continue
+        candidates.append(config_path.parent / raw_path)
+        candidates.append(plugin_dir / raw_path)
+    return tuple(candidates)
+
+
+def _mcp_config_command_values(config: object) -> tuple[str, ...]:
+    servers: list[object] = []
+    if isinstance(config, dict):
+        servers.append(config)
+        for key in ("mcpServers", "servers"):
+            collection = config.get(key)
+            if isinstance(collection, dict):
+                servers.extend(collection.values())
+            elif isinstance(collection, list):
+                servers.extend(collection)
+
+    values: list[str] = []
+    for server in servers:
+        if not isinstance(server, dict):
+            continue
+        command = server.get("command")
+        if isinstance(command, str) and command.strip():
+            values.append(command.strip())
+        args = server.get("args")
+        if isinstance(args, list):
+            values.extend(arg.strip() for arg in args if isinstance(arg, str) and arg.strip())
+    return tuple(values)
+
+
+def _same_resolved_path(left: Path, right: Path) -> bool:
+    try:
+        return left.resolve(strict=False) == right.resolve(strict=False)
+    except OSError:
+        return left == right
 
 
 def _safe_resolved_static_target(plugin_dir: Path, target: Path) -> Path | None:
@@ -441,10 +555,11 @@ def run_cisco_mcp_scan(
     plugin_dir: Path,
     mode: str = "auto",
     timeout_seconds: float | None = None,
+    config_path: Path | None = None,
 ) -> CiscoMcpScanSummary:
     """Run Cisco MCP scanner static analysis when available."""
 
-    config_path = plugin_dir / ".mcp.json"
+    effective_config_path = config_path or plugin_dir / ".mcp.json"
 
     if mode == "off":
         return _build_summary(
@@ -452,10 +567,10 @@ def run_cisco_mcp_scan(
             message="Cisco MCP scanning disabled by configuration.",
         )
 
-    if _safe_resolved_static_target(plugin_dir, config_path) is None:
+    if _safe_resolved_static_target(plugin_dir, effective_config_path) is None:
         return _build_summary(
             status=CiscoIntegrationStatus.SKIPPED,
-            message="No .mcp.json found; Cisco MCP scan skipped.",
+            message="No MCP configuration found; Cisco MCP scan skipped.",
         )
     runtime_message = cisco_runtime_unavailable_message()
     if runtime_message is not None:
@@ -492,7 +607,7 @@ def run_cisco_mcp_scan(
         for name, factory in components.items():
             analyzer_name = name.replace("Analyzer", "").lower()
             analyzers.append((analyzer_name, factory()))
-        targets = _collect_static_targets(plugin_dir)
+        targets = _collect_static_targets(plugin_dir, effective_config_path)
         scan_awaitable = _scan_targets_multi(plugin_dir, targets, tuple(analyzers))
         if timeout_seconds is not None:
             scan_awaitable = asyncio.wait_for(scan_awaitable, timeout=timeout_seconds)

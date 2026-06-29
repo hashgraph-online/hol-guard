@@ -38,9 +38,10 @@ def run_cisco_inventory_scans(
     remaining_timeout_seconds = timeout_seconds
     if mcp_mode != "off":
         mcp_started = time.perf_counter()
-        runs.append(
-            _run_mcp_inventory_scan(
+        runs.extend(
+            _run_mcp_inventory_scans(
                 context=context,
+                detection=detection,
                 mode=mcp_mode,
                 timeout_seconds=remaining_timeout_seconds,
             )
@@ -62,33 +63,65 @@ def run_cisco_inventory_scans(
     return tuple(runs)
 
 
-def _run_mcp_inventory_scan(
+def _run_mcp_inventory_scans(
     *,
     context: HarnessContext,
+    detection: object,
     mode: str,
     timeout_seconds: float | None,
+) -> tuple[CiscoInventoryRun, ...]:
+    targets = _mcp_scan_targets(context=context, detection=detection)
+    if not targets:
+        return (
+            CiscoInventoryRun(
+                source="cisco-mcp-scanner",
+                status="skipped",
+                message="No MCP configuration found; Cisco MCP inventory scan skipped.",
+                findings=(),
+                duration_ms=0,
+                metadata={"target": "missing", "targetsScanned": 0, "mode": mode},
+            ),
+        )
+    remaining_timeout_seconds = timeout_seconds
+    runs: list[CiscoInventoryRun] = []
+    for root, config_path in targets:
+        if remaining_timeout_seconds is not None and remaining_timeout_seconds <= 0:
+            runs.append(
+                _build_mcp_inventory_budget_exhausted_run(
+                    root=root,
+                    config_path=config_path,
+                    mode=mode,
+                    workspace_dir=context.workspace_dir,
+                )
+            )
+            continue
+        started = time.perf_counter()
+        runs.append(
+            _run_single_mcp_inventory_scan(
+                root=root,
+                config_path=config_path,
+                mode=mode,
+                timeout_seconds=remaining_timeout_seconds,
+                workspace_dir=context.workspace_dir,
+            )
+        )
+        remaining_timeout_seconds = _consume_timeout_budget(
+            remaining_timeout_seconds,
+            started_at=started,
+        )
+    return tuple(runs)
+
+
+def _run_single_mcp_inventory_scan(
+    *,
+    root: Path,
+    config_path: Path,
+    mode: str,
+    timeout_seconds: float | None,
+    workspace_dir: Path | None,
 ) -> CiscoInventoryRun:
-    root = _mcp_scan_root(context)
-    if root is None:
-        return CiscoInventoryRun(
-            source="cisco-mcp-scanner",
-            status="skipped",
-            message="No .mcp.json found; Cisco MCP inventory scan skipped.",
-            findings=(),
-            duration_ms=0,
-            metadata={"target": "missing", "targetsScanned": 0, "mode": mode},
-        )
-    if timeout_seconds is not None and timeout_seconds <= 0:
-        return CiscoInventoryRun(
-            source="cisco-mcp-scanner",
-            status="timed_out",
-            message="Cisco MCP inventory scan timed out before Guard could start it.",
-            findings=(),
-            duration_ms=0,
-            metadata={"target": root.name, "targetsScanned": 0, "mode": mode},
-        )
     started = time.perf_counter()
-    summary = run_cisco_mcp_scan(root, mode=mode, timeout_seconds=timeout_seconds)
+    summary = run_cisco_mcp_scan(root, mode=mode, timeout_seconds=timeout_seconds, config_path=config_path)
     duration_ms = int((time.perf_counter() - started) * 1000)
     return CiscoInventoryRun(
         source="cisco-mcp-scanner",
@@ -97,12 +130,33 @@ def _run_mcp_inventory_scan(
         findings=summary.findings,
         duration_ms=duration_ms,
         metadata={
-            "target": root.name,
+            "target": _safe_mcp_target_label(root=root, config_path=config_path, workspace_dir=workspace_dir),
+            "_targetPath": str(root),
+            "_configPath": str(config_path),
             "targetsScanned": summary.targets_scanned,
             "totalFindings": summary.total_findings,
             "findingsBySeverity": summary.findings_by_severity,
             "analyzersUsed": summary.analyzers_used,
             "scanMode": summary.scan_mode,
+            "mode": mode,
+        },
+    )
+
+
+def _build_mcp_inventory_budget_exhausted_run(
+    *, root: Path, config_path: Path, mode: str, workspace_dir: Path | None
+) -> CiscoInventoryRun:
+    return CiscoInventoryRun(
+        source="cisco-mcp-scanner",
+        status="timed_out",
+        message="Cisco MCP inventory scan timed out before Guard could start this configuration.",
+        findings=(),
+        duration_ms=0,
+        metadata={
+            "target": _safe_mcp_target_label(root=root, config_path=config_path, workspace_dir=workspace_dir),
+            "_targetPath": str(root),
+            "_configPath": str(config_path),
+            "targetsScanned": 0,
             "mode": mode,
         },
     )
@@ -197,15 +251,70 @@ def _build_skill_inventory_budget_exhausted_run(*, root: Path, mode: str) -> Cis
     )
 
 
-def _mcp_scan_root(context: HarnessContext) -> Path | None:
-    candidates = []
-    if context.workspace_dir is not None:
-        candidates.append(context.workspace_dir)
-    candidates.append(context.home_dir)
-    for candidate in candidates:
-        if (candidate / ".mcp.json").is_file():
-            return candidate
-    return None
+def _mcp_scan_targets(*, context: HarnessContext, detection: object) -> tuple[tuple[Path, Path], ...]:
+    targets: list[tuple[Path, Path]] = []
+    seen: set[str] = set()
+
+    for base_dir in (context.workspace_dir, context.home_dir):
+        if base_dir is None:
+            continue
+        config_path = base_dir / ".mcp.json"
+        if config_path.is_file():
+            _extend_unique_mcp_targets(targets, seen, root=base_dir, config_path=config_path)
+
+    for artifact in tuple(getattr(detection, "artifacts", ())):
+        if str(getattr(artifact, "artifact_type", "")) != "mcp_server":
+            continue
+        config_value = getattr(artifact, "config_path", None)
+        if not isinstance(config_value, str) or not config_value.strip():
+            continue
+        config_path = Path(config_value)
+        if not config_path.is_file():
+            continue
+        root = _mcp_scan_root_for_config(config_path, context=context)
+        _extend_unique_mcp_targets(targets, seen, root=root, config_path=config_path)
+
+    return tuple(targets)
+
+
+def _extend_unique_mcp_targets(
+    targets: list[tuple[Path, Path]],
+    seen: set[str],
+    *,
+    root: Path,
+    config_path: Path,
+) -> None:
+    try:
+        key = f"{root.resolve()}::{config_path.resolve()}"
+    except OSError:
+        return
+    if key in seen:
+        return
+    seen.add(key)
+    targets.append((root, config_path))
+
+
+def _mcp_scan_root_for_config(config_path: Path, *, context: HarnessContext) -> Path:
+    workspace_dir = context.workspace_dir
+    if workspace_dir is None:
+        return config_path.parent
+    try:
+        config_path.resolve().relative_to(workspace_dir.resolve())
+    except (OSError, ValueError):
+        return config_path.parent
+    return workspace_dir
+
+
+def _safe_mcp_target_label(*, root: Path, config_path: Path, workspace_dir: Path | None = None) -> str:
+    if workspace_dir is not None:
+        try:
+            return config_path.resolve().relative_to(workspace_dir.resolve()).as_posix()
+        except (OSError, ValueError):
+            pass
+    try:
+        return config_path.resolve().relative_to(root.resolve()).as_posix()
+    except (OSError, ValueError):
+        return config_path.name
 
 
 def _skill_scan_roots(*, harness: str, context: HarnessContext, detection: object) -> tuple[Path, ...]:
