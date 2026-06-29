@@ -93,6 +93,9 @@ _SENSITIVE_PATH_REASONS = {
 _SECRET_ASSIGNMENT_VALUE_PATTERN = r"(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"
 _HEDERA_PRIVATE_KEY_VALUE_PATTERN = r"(?:\"(?:0x)?[0-9a-f]{64,96}\"|'(?:0x)?[0-9a-f]{64,96}'|(?:0x)?[0-9a-f]{64,96}\b)"
 _SAMPLE_SECRET_VALUE_PATTERN = re.compile(r"(?i)\b(?:example|fake|dummy|invalid|test|canary)\b")
+_DOCUMENTATION_SAMPLE_SECRET_VALUE_PATTERN = re.compile(
+    r"(?i)^(?:fixture|placeholder)(?:[-_.]?(?:only|value|secret|credential|token|key|example|dummy|fake|test|sample|\d{1,4}))*$"
+)
 _SAMPLE_SUPPRESSIBLE_CONTENT_CLASSIFIERS = frozenset({"credential-assignment", "generic-bearer-token"})
 _SECRET_CONTENT_PATTERNS: tuple[tuple[str, str, SecretContentSensitivity, re.Pattern[str], str], ...] = (
     (
@@ -281,7 +284,12 @@ def classify_legacy_secret_path_families(text: str) -> set[str]:
     return {family for marker, family in LEGACY_SECRET_PATH_TEXT_MARKERS if marker in lowered}
 
 
-def classify_secret_content(text: str | None, *, suppress_samples: bool = True) -> tuple[SecretContentMatch, ...]:
+def classify_secret_content(
+    text: str | None,
+    *,
+    suppress_samples: bool = True,
+    documentation_sample_context: bool = False,
+) -> tuple[SecretContentMatch, ...]:
     if not isinstance(text, str) or not text.strip():
         return ()
     matches: list[SecretContentMatch] = []
@@ -290,7 +298,12 @@ def classify_secret_content(text: str | None, *, suppress_samples: bool = True) 
         if classifier in seen:
             continue
         if not any(
-            not _secret_content_match_is_sample(classifier=classifier, text=match.group(0), enabled=suppress_samples)
+            not _secret_content_match_is_sample(
+                classifier=classifier,
+                text=match.group(0),
+                enabled=suppress_samples,
+                documentation_sample_context=documentation_sample_context,
+            )
             for match in pattern.finditer(text)
         ):
             continue
@@ -311,9 +324,9 @@ def secret_content_rule_version() -> str:
 
     This lets caches invalidate when secret detection patterns change.
     The hash is deterministic across calls within one process and stable
-    as long as ``_SECRET_CONTENT_PATTERNS`` is unchanged.
+    as long as the content patterns or sample suppressors are unchanged.
     """
-    material = [
+    material: list[dict[str, object]] = [
         {
             "classifier": classifier,
             "family": family,
@@ -323,16 +336,56 @@ def secret_content_rule_version() -> str:
         }
         for classifier, family, sensitivity, pattern, _reason in _SECRET_CONTENT_PATTERNS
     ]
+    material.extend(
+        [
+            {
+                "classifier": "sample-secret-values",
+                "pattern": _SAMPLE_SECRET_VALUE_PATTERN.pattern,
+                "flags": _SAMPLE_SECRET_VALUE_PATTERN.flags,
+            },
+            {
+                "classifier": "documentation-sample-secret-values",
+                "pattern": _DOCUMENTATION_SAMPLE_SECRET_VALUE_PATTERN.pattern,
+                "flags": _DOCUMENTATION_SAMPLE_SECRET_VALUE_PATTERN.flags,
+            },
+        ]
+    )
     return hashlib.sha256(json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
-def _secret_content_match_is_sample(*, classifier: str, text: str, enabled: bool) -> bool:
+def _secret_content_match_is_sample(
+    *,
+    classifier: str,
+    text: str,
+    enabled: bool,
+    documentation_sample_context: bool,
+) -> bool:
     if not enabled or classifier not in _SAMPLE_SUPPRESSIBLE_CONTENT_CLASSIFIERS:
         return False
     if classifier == "generic-bearer-token":
         token = text.rsplit(None, 1)[-1]
-        return _SAMPLE_SECRET_VALUE_PATTERN.search(token) is not None and re.search(r"[A-Za-z0-9]{20,}", token) is None
-    return _SAMPLE_SECRET_VALUE_PATTERN.search(text) is not None
+        if _SAMPLE_SECRET_VALUE_PATTERN.search(token) is not None and re.search(r"[A-Za-z0-9]{20,}", token) is None:
+            return True
+        return documentation_sample_context and _DOCUMENTATION_SAMPLE_SECRET_VALUE_PATTERN.fullmatch(token) is not None
+    if _SAMPLE_SECRET_VALUE_PATTERN.search(text) is not None:
+        return True
+    if not documentation_sample_context:
+        return False
+    value = _extract_secret_assignment_value(text)
+    return value is not None and _DOCUMENTATION_SAMPLE_SECRET_VALUE_PATTERN.fullmatch(value) is not None
+
+
+def _extract_secret_assignment_value(text: str) -> str | None:
+    colon_index = text.find(":")
+    equals_index = text.find("=")
+    separator_indexes = [index for index in (colon_index, equals_index) if index >= 0]
+    if not separator_indexes:
+        return None
+    value = text[min(separator_indexes) + 1 :]
+    stripped = value.strip().rstrip(",}").strip()
+    if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {"'", '"'}:
+        stripped = stripped[1:-1]
+    return stripped or None
 
 
 def redacted_secret_path_context(path: str) -> str | None:
