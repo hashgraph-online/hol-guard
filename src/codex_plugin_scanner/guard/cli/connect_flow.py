@@ -6,6 +6,7 @@ import base64
 import http.server
 import json
 import secrets
+import sys
 import threading
 import time
 import urllib.error
@@ -37,6 +38,12 @@ from .oauth_client import (
     guard_api_base_path,
     resolve_guard_oauth_client_config,
 )
+
+_PROGRESS_PREFIX = "hol-guard:"
+
+def _progress(message: str) -> None:
+    """Print a progress message to stderr so the user sees activity during long operations."""
+    print(f"{_PROGRESS_PREFIX} {message}", file=sys.stderr, flush=True)
 
 DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
 DEFAULT_GUARD_CONNECT_URL = "https://hol.org/guard/connect"
@@ -1198,19 +1205,24 @@ def run_guard_browser_connect_command(
     wait_timeout_seconds: float = 180,
     include_sync_auth_context: bool = False,
 ) -> dict[str, object]:
+    _progress("Preparing Guard Cloud authorization...")
     prepare_guard_cloud_connect_authorization(store)
     device = store.get_device_metadata()
     _, allowed_origin = resolve_connect_url(connect_url)
     oauth_client = resolve_guard_oauth_client_config(allowed_origin)
     browser_opener = open_browser if open_browser is not None else __import__("webbrowser").open
+    _progress("Starting browser authorization session...")
     session = start_browser_session(
         connect_url=connect_url,
         machine_id=str(device["installation_id"]),
         machine_label=str(device["device_label"]),
     )
     try:
+        _progress("Opening browser for sign-in...")
         browser_opened = bool(browser_opener(session.authorize_url))
+        _progress("Waiting for authentication (complete sign-in in your browser)...")
         callback = session.wait_for_callback(wait_timeout_seconds)
+        _progress("Exchanging authorization code for tokens...")
         token_result = exchange_authorization_code(
             token_endpoint=oauth_client.token_endpoint,
             client_id=oauth_client.client_id,
@@ -1223,6 +1235,7 @@ def run_guard_browser_connect_command(
         session.close()
     if token_result.refresh_token is None:
         raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
+    _progress("Saving credentials locally...")
     timestamp = now or datetime.now(timezone.utc).isoformat()
     _persist_oauth_local_credentials(
         store=store,
