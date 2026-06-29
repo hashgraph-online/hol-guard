@@ -227,6 +227,16 @@ def build_remote_pair_status_payload(
             if isinstance(warning_items, list) and warning_items:
                 protection_reason = str(warning_items[0])
 
+    runtime_label = None
+    grant_id = None
+    if isinstance(credentials, dict):
+        label_value = credentials.get("runtime_label")
+        if isinstance(label_value, str) and label_value.strip():
+            runtime_label = label_value.strip()
+        grant_value = credentials.get("grant_id")
+        if isinstance(grant_value, str) and grant_value.strip():
+            grant_id = grant_value.strip()
+
     return _sanitize_remote_pair_payload(
         {
             "status": pairing_state,
@@ -234,6 +244,8 @@ def build_remote_pair_status_payload(
             "protection": protection_status,
             "protection_reason": protection_reason,
             "runtime": runtime_id,
+            "runtime_label": runtime_label,
+            "grant_id": grant_id,
             "workspace_id": store.get_cloud_workspace_id(),
             "machine_id": (
                 str(credentials.get("machine_id"))
