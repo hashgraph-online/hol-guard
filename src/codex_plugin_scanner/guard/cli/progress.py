@@ -13,7 +13,6 @@ try:
     from rich.console import Console
     from rich.progress import (
         BarColumn,
-        MofNCompleteColumn,
         Progress,
         SpinnerColumn,
         TaskProgressColumn,
