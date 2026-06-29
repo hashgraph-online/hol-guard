@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sys
 from types import TracebackType
+from typing import Any, cast
 
 try:
     from rich.console import Console
@@ -20,9 +21,16 @@ try:
         TimeElapsedColumn,
     )
 
-    _RICH_AVAILABLE = True
+    _rich_available = True
 except ImportError:
-    _RICH_AVAILABLE = False
+    Console = cast(Any, None)
+    Progress = cast(Any, None)
+    SpinnerColumn = cast(Any, None)
+    BarColumn = cast(Any, None)
+    TaskProgressColumn = cast(Any, None)
+    TextColumn = cast(Any, None)
+    TimeElapsedColumn = cast(Any, None)
+    _rich_available = False
 
 
 class GuardProgress:
@@ -42,7 +50,9 @@ class GuardProgress:
         self._total = total
         self._completed = 0
         self._title = title
-        self._use_rich = use_rich and _RICH_AVAILABLE
+        self._use_rich = use_rich and _rich_available
+        self._progress: Any | None = None
+        self._task: Any | None = None
 
         if self._use_rich:
             self._progress = Progress(
@@ -55,9 +65,8 @@ class GuardProgress:
                 transient=False,
                 expand=True,
             )
-            self._task: object | None = None
         else:
-            self._progress = None  # type: ignore[assignment]
+            self._progress = None
 
     # -- context manager protocol -------------------------------------------
 

@@ -468,6 +468,60 @@ class TestGuardApprovals:
         assert queued[0]["risk_signals"] == ["call arguments mention sensitive local files or secrets"]
         assert queued[0]["launch_summary"] == "Launches with `dangerous_delete .env`."
 
+    def test_guard_queue_preserves_exact_shell_command_after_redaction(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        artifact = GuardArtifact(
+            artifact_id="codex:runtime:project:danger_lab:shell_command",
+            name="danger_lab:shell_command",
+            harness="codex",
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+            command="bash -lc 'pnpm add @hashgraphonline/standards-sdk@0.1.184'",
+            metadata={
+                "tool_name": "bash",
+                "raw_command_text": "bash -lc 'pnpm add @hashgraphonline/standards-sdk@0.1.184'",
+            },
+        )
+        detection = HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(artifact.config_path,),
+            artifacts=(artifact,),
+        )
+
+        queued = queue_blocked_approvals(
+            detection=detection,
+            evaluation={
+                "artifacts": [
+                    {
+                        "artifact_id": artifact.artifact_id,
+                        "artifact_name": artifact.name,
+                        "artifact_hash": "hash-runtime",
+                        "artifact_type": artifact.artifact_type,
+                        "source_scope": artifact.source_scope,
+                        "config_path": artifact.config_path,
+                        "changed_fields": ["runtime_tool_call"],
+                        "policy_action": "require-reapproval",
+                        "launch_target": artifact.command,
+                        "risk_summary": "Shell command requires review.",
+                        "risk_signals": ["shell_command"],
+                    }
+                ]
+            },
+            store=store,
+            approval_center_url="http://127.0.0.1:4455",
+            now="2026-04-17T00:00:00+00:00",
+            redaction_level="partial",
+        )
+
+        assert queued[0]["raw_command_text"] == "bash -lc 'pnpm add @hashgraphonline/standards-sdk@0.1.184'"
+        assert queued[0]["raw_command_text"] != "tool action request • bash"
+        stored = store.get_approval_request(str(queued[0]["request_id"]))
+        assert stored is not None
+        assert stored["raw_command_text"] == "bash -lc 'pnpm add @hashgraphonline/standards-sdk@0.1.184'"
+
     def test_guard_queue_sends_only_request_notification_without_setup_preview(self, tmp_path, monkeypatch):
         notice_calls: list[str] = []
 

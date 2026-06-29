@@ -346,11 +346,14 @@ def validated_policy_bundle_payload(
     # bundleHash check below provides the primary integrity guarantee. Log
     # the mismatch but don't reject — blocking here prevents valid bundles
     # from being stored, which breaks per-rule enforcement.
-    if payload_hash is not None and payload_hash != computed_payload_hash and payload_hash != f"sha256:{computed_payload_hash}":
+    if (
+        payload_hash is not None
+        and payload_hash != computed_payload_hash
+        and payload_hash != f"sha256:{computed_payload_hash}"
+    ):
         import logging
-        logging.getLogger(__name__).warning(
-            "payload_hash_mismatch: portal=%s computed=%s", payload_hash, computed_payload_hash,
-        )
+
+        logging.getLogger(__name__).warning("payload_hash_mismatch")
     bundle_hash = _non_empty_string(policy_bundle.get("bundleHash"))
     if bundle_hash is None:
         return None, "invalid_bundle_hash"
