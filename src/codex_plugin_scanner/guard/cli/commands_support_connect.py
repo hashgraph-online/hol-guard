@@ -18,11 +18,6 @@ from .commands_parser_helpers import *
 from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_resolve_guard_sync_auth_context
 
 
-def _print_connect_progress(message: str) -> None:
-    """Print a progress message to stderr during connect flow so the user sees activity."""
-    print(f"hol-guard: {message}", file=sys.stderr, flush=True)
-
-
 def _connect_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
     resolver = globals().get("_resolve_guard_sync_auth_context")
     if callable(resolver):
@@ -268,12 +263,25 @@ def _finalize_guard_connect_payload(
         return payload
     payload["sync_attempted"] = True
     try:
-        _print_connect_progress("Syncing local proof to Guard Cloud...")
-        sync_payload = sync_local_guard_cloud_proof(
-            store,
-            auth_context=resolved_sync_auth_context,
-            now=now,
-        )
+        from .progress import GuardProgress
+
+        with GuardProgress(total=2, title="Guard Sync") as sync_bar:
+            sync_bar.step("Syncing local proof to Guard Cloud...")
+            sync_payload = sync_local_guard_cloud_proof(
+                store,
+                auth_context=resolved_sync_auth_context,
+                now=now,
+            )
+            sync_bar.step("Syncing supply chain state...")
+            try:
+                payload["supply_chain"] = sync_supply_chain_cloud_state(
+                    store,
+                    auth_context=resolved_sync_auth_context,
+                )
+                sync_bar.done("Guard Cloud sync complete")
+            except (GuardSyncNotConfiguredError, GuardSyncNotAvailableError, RuntimeError) as error:
+                payload["supply_chain_error"] = str(error)
+                sync_bar.done("Guard Cloud sync complete (supply chain skipped)")
     except GuardSyncNotAvailableError as error:
         store.record_latest_guard_connect_sync_result(
             status="connected",
@@ -331,7 +339,6 @@ def _finalize_guard_connect_payload(
             }
         )
         return payload
-    _print_connect_progress("Guard Cloud sync complete.")
     latest_state = store.record_latest_guard_connect_sync_success(
         sync_payload=sync_payload,
         now=str(sync_payload.get("synced_at") or now),
@@ -347,14 +354,6 @@ def _finalize_guard_connect_payload(
             "latest_connect_state": latest_state or store.get_latest_guard_connect_state(now=now),
         }
     )
-    try:
-        _print_connect_progress("Syncing supply chain state...")
-        payload["supply_chain"] = sync_supply_chain_cloud_state(
-            store,
-            auth_context=resolved_sync_auth_context,
-        )
-    except (GuardSyncNotConfiguredError, GuardSyncNotAvailableError, RuntimeError) as error:
-        payload["supply_chain_error"] = str(error)
     return payload
 
 def _filter_policy_items(items: list[dict[str, object]], *, active_only: bool) -> list[dict[str, object]]:

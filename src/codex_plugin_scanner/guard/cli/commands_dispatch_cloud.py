@@ -250,20 +250,26 @@ def _run_guard_sync_command(
     context = _require_guard_context(context)
     try:
         auth_context = _cloud_guard_sync_auth_context(store)
-        payload = sync_receipts(
-            store,
-            auth_context=auth_context,
-            home_dir=context.home_dir,
-            workspace_dir=context.workspace_dir,
-        )
-        with suppress(GuardSyncNotConfiguredError, RuntimeError):
-            payload["supply_chain"] = _validated_supply_chain_sync_payload(
-                sync_supply_chain_cloud_state(
-                    store,
-                    auth_context=auth_context,
-                    workspace_dir=context.workspace_dir,
-                )
+        from .progress import GuardProgress
+
+        with GuardProgress(total=2, title="Guard Sync") as bar:
+            bar.step("Syncing receipts to Guard Cloud...")
+            payload = sync_receipts(
+                store,
+                auth_context=auth_context,
+                home_dir=context.home_dir,
+                workspace_dir=context.workspace_dir,
             )
+            bar.step("Syncing supply chain state...")
+            with suppress(GuardSyncNotConfiguredError, RuntimeError):
+                payload["supply_chain"] = _validated_supply_chain_sync_payload(
+                    sync_supply_chain_cloud_state(
+                        store,
+                        auth_context=auth_context,
+                        workspace_dir=context.workspace_dir,
+                    )
+                )
+            bar.done("Sync complete")
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
         message = _guard_sync_failure_message(error)
         if getattr(args, "json", False):
