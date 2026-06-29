@@ -210,6 +210,8 @@ def _finalize_guard_connect_payload(
     connect_url: str,
     payload: dict[str, object],
     now: str,
+    home_dir: Path | None = None,
+    workspace_dir: Path | None = None,
 ) -> dict[str, object]:
     sync_auth_context = payload.pop(CONNECT_SYNC_AUTH_CONTEXT_KEY, None)
     resolved_sync_auth_context = sync_auth_context if isinstance(sync_auth_context, dict) else None
@@ -271,6 +273,8 @@ def _finalize_guard_connect_payload(
                 store,
                 auth_context=resolved_sync_auth_context,
                 now=now,
+                home_dir=home_dir,
+                workspace_dir=workspace_dir,
             )
             sync_bar.step("Syncing supply chain state...")
             try:
@@ -419,6 +423,8 @@ def _build_guard_device_connect_payload(
     announce_copy=None,
     ci_safe: bool = False,
     machine_label: str | None = None,
+    home_dir: Path | None = None,
+    workspace_dir: Path | None = None,
 ) -> tuple[dict[str, object] | None, int]:
     try:
         if use_browser_oauth:
@@ -460,6 +466,8 @@ def _build_guard_device_connect_payload(
         connect_url=connect_url,
         payload=payload,
         now=_now(),
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
     )
     return payload, 0
 

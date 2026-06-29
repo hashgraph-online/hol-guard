@@ -300,6 +300,57 @@ def test_sync_receipts_uploads_pending_guard_events(tmp_path) -> None:
         "/api/v1/guard/events",
     ]
     assert store.list_guard_events_v1(uploaded=False, limit=10) == []
+    assert result["aibom_inventory"]["synced"] is False
+    assert result["aibom_inventory"]["reason"] == "background_deferred"
+
+
+def test_sync_receipts_runs_aibom_when_deep_sync_is_requested(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path)
+    store.add_receipt(_receipt())
+    _EventIngestHandler.requests = []
+    server = HTTPServer(("127.0.0.1", 0), _EventIngestHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    calls: list[tuple[object, object]] = []
+
+    def fake_sync_aibom_snapshots_if_due(
+        current_store: GuardStore,
+        *,
+        generated_at: str,
+        auth_context: dict[str, object] | None = None,
+        home_dir=None,
+        workspace_dir=None,
+        **_kwargs: object,
+    ) -> dict[str, object]:
+        del current_store, generated_at, auth_context
+        calls.append((home_dir, workspace_dir))
+        return {"synced": True, "accepted": 1}
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.aibom_cli.sync_aibom_snapshots_if_due",
+        fake_sync_aibom_snapshots_if_due,
+    )
+    try:
+        _seed_guard_cloud(
+            store,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="token-1",
+        )
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+
+        result = sync_receipts(
+            store,
+            include_aibom=True,
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    assert calls == [(home_dir, workspace_dir)]
+    assert result["aibom_inventory"] == {"synced": True, "accepted": 1}
 
 
 def test_sync_receipts_keeps_receipt_success_when_v1_events_endpoint_is_missing(tmp_path) -> None:
