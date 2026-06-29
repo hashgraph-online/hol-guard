@@ -29,7 +29,7 @@ import stat
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
-from .hook_content_scanner import ContentScanMatch, ContentScanner
+from .hook_content_scanner import ContentScanMatch, ContentScanner, should_unsuppress_local_sample_secrets
 from .hook_decision_cache import HookDecisionCache, SourceReadCacheMaterial, hook_config_fingerprint
 from .hook_review_types import HookReviewRequest
 from .secret_sensitivity import classify_secret_path
@@ -299,7 +299,7 @@ def evaluate_source_file_ref(
     # 9. Streaming scan.
     scan_result = scanner.scan_text(
         text,
-        local_content=True,
+        local_content=should_unsuppress_local_sample_secrets(source_ref.path, cwd=request.cwd),
         source_context=True,
         max_bytes=SOURCE_READ_MAX_SCAN_BYTES,
         deadline_monotonic=deadline_monotonic,

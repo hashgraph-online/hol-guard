@@ -14,6 +14,7 @@ calls the network. It is safe to call from the daemon hot path.
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -191,7 +192,11 @@ def _scan_window(
     matches_by_classifier: dict[str, ContentScanMatch],
 ) -> None:
     """Classify one rolling window and merge new matches."""
-    suppressed_matches = classify_secret_content(window, suppress_samples=True)
+    suppressed_matches = classify_secret_content(
+        window,
+        suppress_samples=True,
+        documentation_sample_context=not local_content,
+    )
     for match in suppressed_matches:
         if match.classifier not in matches_by_classifier:
             matches_by_classifier[match.classifier] = ContentScanMatch(
@@ -214,6 +219,81 @@ def _scan_window(
                     sensitivity=match.sensitivity,
                     reason=match.reason,
                 )
+
+
+_DOCUMENTATION_OR_FIXTURE_SEGMENTS = frozenset(
+    {
+        "__fixtures__",
+        "__tests__",
+        "docs",
+        "documentation",
+        "examples",
+        "fixtures",
+        "samples",
+        "spec",
+        "test",
+        "tests",
+    }
+)
+_DOCUMENTATION_SUFFIXES = (".adoc", ".md", ".mdx", ".rst", ".txt")
+
+
+def should_unsuppress_local_sample_secrets(
+    path: str | None,
+    *,
+    cwd: str | os.PathLike[str] | None = None,
+) -> bool:
+    """Return whether local-content scanning should treat sample assignments as secrets.
+
+    Documentation, examples, tests, and fixture files often contain inert
+    placeholder assignments that agents need to read while editing reviews or
+    security guidance. Real credential formats remain blocked by the higher
+    confidence token classifiers; this helper only controls the medium generic
+    assignment retry for sample-looking values.
+    """
+    if path is None:
+        return True
+    normalized = _normalize_scan_context_path(path, cwd=cwd)
+    segments = tuple(segment for segment in normalized.split("/") if segment)
+    if not segments:
+        return True
+    if ".." in segments:
+        return True
+    if any(segment in _DOCUMENTATION_OR_FIXTURE_SEGMENTS for segment in segments):
+        return False
+    return not segments[-1].endswith(_DOCUMENTATION_SUFFIXES)
+
+
+def _normalize_scan_context_path(path: str, *, cwd: str | os.PathLike[str] | None) -> str:
+    raw_path = path.strip()
+    if not raw_path:
+        return ""
+    has_windows_drive = len(raw_path) >= 3 and raw_path[1] == ":" and raw_path[2] in {"\\", "/"}
+    is_absolute = raw_path.startswith(("/", "\\")) or has_windows_drive
+    if is_absolute:
+        if cwd is not None:
+            try:
+                rel_path = os.path.relpath(raw_path, os.fspath(cwd))
+            except ValueError:
+                rel_path = os.path.basename(raw_path)
+            else:
+                if rel_path == ".." or rel_path.startswith(f"..{os.sep}") or rel_path.startswith("../"):
+                    rel_path = os.path.basename(raw_path)
+            raw_path = rel_path
+        else:
+            raw_path = os.path.basename(raw_path)
+    return os.path.normpath(raw_path).replace("\\", "/").lower()
+
+
+def should_unsuppress_local_sample_secrets_for_paths(
+    paths: tuple[str, ...],
+    *,
+    cwd: str | os.PathLike[str] | None = None,
+) -> bool:
+    """Return False only when every known path is docs/test/fixture context."""
+    if not paths:
+        return True
+    return any(should_unsuppress_local_sample_secrets(path, cwd=cwd) for path in paths)
 
 
 def _truncate_to_byte_limit(text: str, max_bytes: int) -> str:
@@ -239,4 +319,6 @@ __all__ = [
     "ContentScanMatch",
     "ContentScanResult",
     "ContentScanner",
+    "should_unsuppress_local_sample_secrets",
+    "should_unsuppress_local_sample_secrets_for_paths",
 ]

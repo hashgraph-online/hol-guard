@@ -385,6 +385,118 @@ class TestHookWorkerAllHarnessFallback:
 class TestHookWorkerOutputScanning:
     """Tests for the server-side output scanning fast path."""
 
+    @pytest.mark.parametrize("harness", ["pi", "claude-code", "codex", "grok", "zcode"])
+    def test_documentation_fixture_sample_output_allows_original(
+        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path, harness: str
+    ) -> None:
+        """Docs and fixture examples should not block read outputs."""
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "docs/security-review.md"},
+            "tool_response": [
+                {
+                    "type": "text",
+                    "text": "Review fixture notes: credential = 'fixture-only'\\n"
+                    "Security command examples stay inert in docs.\\n",
+                }
+            ],
+        }
+
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness=harness,
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
+        assert result["policy_action"] == "allow"
+        if harness == "pi":
+            assert result["decision"] == "allow"
+            assert result["model_output_action"] == "allow_original"
+            assert result["reason_code"] == "output_scan_allow"
+        else:
+            assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
+
+    @pytest.mark.parametrize("harness", ["pi", "claude-code", "codex", "grok", "zcode"])
+    def test_documentation_fixture_patch_output_allows_original(
+        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path, harness: str
+    ) -> None:
+        """Docs fixture examples should not block edit/write post-tool outputs."""
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": "docs/security-review.md",
+                "old_string": "old",
+                "new_string": "Review fixture notes: credential = 'fixture-only'\\n",
+            },
+            "tool_response": [
+                {
+                    "type": "text",
+                    "text": "Applied patch to docs/security-review.md\\n"
+                    "Review fixture notes: credential = 'fixture-only'\\n",
+                }
+            ],
+            "tool_response_summary": {
+                "text_excerpt": "Applied patch to docs/security-review.md\\n"
+                "Review fixture notes: credential = 'fixture-only'\\n",
+                "excerpt_truncated": False,
+            },
+        }
+
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness=harness,
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
+        assert result["policy_action"] == "allow"
+        if harness == "pi":
+            assert result["decision"] == "allow"
+            assert result["model_output_action"] == "allow_original"
+            assert result["reason_code"] == "output_scan_allow"
+        else:
+            assert result["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
+
+    def test_source_ref_documentation_fixture_sample_allows_original(
+        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        """Pi/OMP source refs suppress inert docs fixture assignments."""
+        content = "Review fixture notes: credential = 'fixture-only'\\nSecurity command examples stay inert in docs.\\n"
+        file_path = workspace / "docs" / "security-review.md"
+        file_path.write_text(content)
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "docs/security-review.md"},
+            "guard_source_ref": {
+                "version": 1,
+                "path": "docs/security-review.md",
+                "output_sha256": sha256_text(content),
+                "output_chars": len(content),
+                "tool_input_path": "docs/security-review.md",
+            },
+        }
+
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="pi",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
+        assert result["decision"] == "allow"
+        assert result["model_output_action"] == "allow_original"
+        assert result["reason_code"] == "source_full_scan_allow"
+
     def test_secret_in_output_blocks(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
     ) -> None:
@@ -393,7 +505,7 @@ class TestHookWorkerOutputScanning:
             "hook_event_name": "PostToolUse",
             "tool_name": "Read",
             "tool_input": {"file_path": "src/config.ts"},
-            "tool_response": [{"type": "text", "text": "credential = 'fixture-only'\n"}],
+            "tool_response": [{"type": "text", "text": "credential = 'prod-live-value'\n"}],
         }
 
         result = worker.review_http_payload(
@@ -408,6 +520,78 @@ class TestHookWorkerOutputScanning:
         assert result["decision"] == "block"
         assert result["continue"] is False
         assert result["stopReason"] == result["reason"]
+        assert result["policy_action"] == "block"
+        assert result["model_output_action"] == "block"
+        assert result["reason_code"] == "output_secret_match"
+
+    def test_documentation_demo_secret_output_blocks(
+        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        """Docs relaxation does not suppress realistic non-placeholder secrets."""
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "docs/security-review.md"},
+            "tool_response": [{"type": "text", "text": "credential = 'demo-live-secret'\n"}],
+        }
+
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="claude-code",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
+        assert result["policy_action"] == "block"
+        assert result["model_output_action"] == "block"
+        assert result["reason_code"] == "output_secret_match"
+
+    def test_documentation_fixture_prefixed_secret_output_blocks(
+        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        """Docs relaxation only suppresses exact inert fixture placeholders."""
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "docs/security-review.md"},
+            "tool_response": [{"type": "text", "text": "credential = 'fixture-prod-value'\n"}],
+        }
+
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="claude-code",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
+        assert result["policy_action"] == "block"
+        assert result["model_output_action"] == "block"
+        assert result["reason_code"] == "output_secret_match"
+
+    def test_mixed_docs_and_source_paths_keep_secret_retry(
+        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        """Mixed target outputs do not inherit docs relaxation."""
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_paths": ["docs/security-review.md", "src/config.py"]},
+            "tool_response": [{"type": "text", "text": "credential = 'fixture-only'\n"}],
+        }
+
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="claude-code",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
         assert result["policy_action"] == "block"
         assert result["model_output_action"] == "block"
         assert result["reason_code"] == "output_secret_match"
