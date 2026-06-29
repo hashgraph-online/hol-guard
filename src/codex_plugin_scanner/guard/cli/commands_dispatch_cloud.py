@@ -68,6 +68,8 @@ def _run_guard_login_command(
         open_device_browser=False,
         wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
         announce_copy=None if getattr(args, "json", False) else _announce_guard_device_connect_copy,
+        home_dir=context.home_dir if context is not None else None,
+        workspace_dir=context.workspace_dir if context is not None else workspace,
     )
     if payload is None:
         return exit_code
@@ -145,6 +147,8 @@ def _run_guard_connect_command(
             open_device_browser=False,
             wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
             announce_copy=None if getattr(args, "json", False) else _announce_guard_device_connect_copy,
+            home_dir=context.home_dir if context is not None else None,
+            workspace_dir=context.workspace_dir if context is not None else workspace,
         )
         if payload is None:
             return exit_code
@@ -160,6 +164,8 @@ def _run_guard_connect_command(
             announce_copy=None if getattr(args, "json", False) else _announce_guard_device_connect_copy,
             ci_safe=ci_safe,
             machine_label=machine_label,
+            home_dir=context.home_dir if context is not None else None,
+            workspace_dir=context.workspace_dir if context is not None else workspace,
         )
         if payload is None:
             return exit_code
@@ -250,16 +256,29 @@ def _run_guard_sync_command(
     context = _require_guard_context(context)
     try:
         auth_context = _cloud_guard_sync_auth_context(store)
+        # Default CLI sync stays fast; --deep opts into foreground AIBOM refresh.
+        include_aibom = bool(getattr(args, "deep", False))
         from .progress import GuardProgress
 
         with GuardProgress(total=2, title="Guard Sync") as bar:
-            bar.step("Syncing receipts to Guard Cloud...")
-            payload = sync_receipts(
-                store,
-                auth_context=auth_context,
-                home_dir=context.home_dir,
-                workspace_dir=context.workspace_dir,
-            )
+            bar.step("Syncing receipts and Guard events to Guard Cloud...")
+            if include_aibom:
+                with store.hold_cloud_sync_lock():
+                    payload = sync_receipts(
+                        store,
+                        auth_context=auth_context,
+                        home_dir=context.home_dir,
+                        workspace_dir=context.workspace_dir,
+                        include_aibom=True,
+                    )
+            else:
+                payload = sync_receipts(
+                    store,
+                    auth_context=auth_context,
+                    home_dir=context.home_dir,
+                    workspace_dir=context.workspace_dir,
+                    include_aibom=False,
+                )
             bar.step("Syncing supply chain state...")
             with suppress(GuardSyncNotConfiguredError, RuntimeError):
                 payload["supply_chain"] = _validated_supply_chain_sync_payload(
@@ -519,7 +538,16 @@ def _run_guard_daemon_command(
         return _handle_daemon_repair(guard_home, getattr(args, "json", False))
     if daemon_command == "stop":
         return _handle_daemon_stop(guard_home, getattr(args, "json", False))
-    daemon = GuardDaemonServer(store, port=args.port or 0)
+    daemon_home_dir = context.home_dir if context is not None else None
+    daemon_workspace_dir = (
+        context.workspace_dir if context is not None and context.workspace_dir is not None else workspace
+    )
+    daemon = GuardDaemonServer(
+        store,
+        port=args.port or 0,
+        home_dir=daemon_home_dir,
+        workspace_dir=daemon_workspace_dir,
+    )
     if args.serve:
         daemon.serve()
         return 0

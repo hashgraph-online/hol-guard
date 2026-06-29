@@ -6906,9 +6906,12 @@ url = http://127.0.0.1:8787/guard-canary
             *,
             auth_context: dict[str, object] | None = None,
             now: str | None = None,
+            home_dir: Path | None = None,
+            workspace_dir: Path | None = None,
         ) -> dict[str, object]:
             del store
             assert auth_context is None
+            del home_dir, workspace_dir
             sync_calls.append("first-proof")
             return {
                 "synced_at": "2026-06-04T18:31:00+00:00",
@@ -6967,7 +6970,9 @@ url = http://127.0.0.1:8787/guard-canary
                 "--json",
             ]
         )
-        output = json.loads(capsys.readouterr().out)
+        captured = capsys.readouterr()
+        assert rc == 0, captured.err
+        output = json.loads(captured.out)
         latest_state = store.get_latest_guard_connect_state(now="2026-06-04T18:31:00+00:00")
 
         assert rc == 0

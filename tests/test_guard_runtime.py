@@ -3563,6 +3563,7 @@ clearer UX and an implementation plan with technical references.
             persist_sync_summary: bool = True,
             persist_connect_state: bool = True,
             auth_context: dict[str, object] | None = None,
+            **_kwargs: object,
         ) -> dict[str, object]:
             assert current_store is store
             assert persist_sync_summary is False
@@ -3659,6 +3660,7 @@ clearer UX and an implementation plan with technical references.
             persist_sync_summary: bool = True,
             persist_connect_state: bool = True,
             auth_context: dict[str, object] | None = None,
+            **_kwargs: object,
         ) -> dict[str, object]:
             assert current_store is store
             assert persist_sync_summary is False

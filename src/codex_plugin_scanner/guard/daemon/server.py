@@ -29,6 +29,7 @@ from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlu
 from ...version import __version__
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
+from ..aibom_cli import _AIBOM_AUTO_SYNC_INTERVAL_SECONDS, sync_aibom_snapshots_if_due
 from ..approval_gate import (
     ApprovalGateError,
     begin_totp_enrollment,
@@ -5188,7 +5189,11 @@ class GuardDaemonServer:
         *,
         bundle_refresh_backoff_seconds: float = _DEFAULT_SUPPLY_CHAIN_REFRESH_BACKOFF_SECONDS,
         bundle_refresh_interval_seconds: float | None = _DEFAULT_SUPPLY_CHAIN_REFRESH_INTERVAL_SECONDS,
+        aibom_refresh_backoff_seconds: float = _DEFAULT_SUPPLY_CHAIN_REFRESH_BACKOFF_SECONDS,
+        aibom_refresh_interval_seconds: float | None = float(_AIBOM_AUTO_SYNC_INTERVAL_SECONDS),
         idle_timeout_seconds: float | None = None,
+        home_dir: Path | None = None,
+        workspace_dir: Path | None = None,
     ) -> None:
         _validate_dashboard_bundle()
         self._server = _GuardDaemonHttpServer(
@@ -5207,6 +5212,11 @@ class GuardDaemonServer:
         self.port = self._server.daemon_port()
         self._bundle_refresh_backoff_seconds = bundle_refresh_backoff_seconds
         self._bundle_refresh_interval_seconds = bundle_refresh_interval_seconds
+        self._aibom_refresh_backoff_seconds = aibom_refresh_backoff_seconds
+        self._aibom_refresh_interval_seconds = aibom_refresh_interval_seconds
+        self._aibom_home_dir = home_dir.expanduser() if home_dir is not None else None
+        self._aibom_workspace_dir = workspace_dir.expanduser() if workspace_dir is not None else None
+        self._aibom_refresh_thread: threading.Thread | None = None
         self._bundle_refresh_thread: threading.Thread | None = None
         self._command_queue_worker: CommandQueueWorker | None = None
         self._thread: threading.Thread | None = None
@@ -5238,6 +5248,9 @@ class GuardDaemonServer:
         if self._bundle_refresh_thread is not None:
             self._bundle_refresh_thread.join(timeout=5)
             self._bundle_refresh_thread = None
+        if self._aibom_refresh_thread is not None:
+            self._aibom_refresh_thread.join(timeout=5)
+            self._aibom_refresh_thread = None
         self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
 
     def _begin_service(self) -> None:
@@ -5253,6 +5266,7 @@ class GuardDaemonServer:
         )
         self._start_watchdog()
         self._start_supply_chain_bundle_refresh()
+        self._start_aibom_inventory_refresh()
         self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
 
     def _serve_forever(self) -> None:
@@ -5345,6 +5359,113 @@ class GuardDaemonServer:
             except Exception as error:
                 self._server.store.set_sync_payload(
                     "supply_chain_bundle_daemon",
+                    {
+                        "error": str(error),
+                        "refreshed_at": refreshed_at,
+                        "status": "error",
+                    },
+                    refreshed_at,
+                )
+                wait_seconds = backoff_seconds
+            if self._shutdown_started.wait(wait_seconds):
+                return
+
+    def _start_aibom_inventory_refresh(self) -> None:
+        if self._aibom_refresh_interval_seconds is None or self._aibom_refresh_interval_seconds <= 0:
+            return
+        if self._aibom_refresh_thread is not None and self._aibom_refresh_thread.is_alive():
+            return
+        self._aibom_refresh_thread = threading.Thread(
+            target=self._refresh_aibom_inventory_loop,
+            daemon=True,
+        )
+        self._aibom_refresh_thread.start()
+
+    def _aibom_inventory_context_dirs(self) -> tuple[Path | None, Path | None]:
+        payload = self._server.store.get_sync_payload("aibom_inventory_context")
+        if isinstance(payload, dict):
+            home_value = payload.get("home_dir")
+            workspace_value = payload.get("workspace_dir")
+        else:
+            home_value = None
+            workspace_value = None
+        home_dir = (
+            Path(home_value).expanduser()
+            if isinstance(home_value, str) and home_value.strip()
+            else self._aibom_home_dir
+        )
+        workspace_dir = (
+            Path(workspace_value).expanduser()
+            if isinstance(workspace_value, str) and workspace_value.strip()
+            else self._aibom_workspace_dir
+        )
+        return home_dir, workspace_dir
+
+    def _refresh_aibom_inventory_loop(self) -> None:
+        interval_seconds = self._aibom_refresh_interval_seconds
+        if interval_seconds is None or interval_seconds <= 0:
+            return
+        backoff_seconds = (
+            self._aibom_refresh_backoff_seconds if self._aibom_refresh_backoff_seconds > 0 else interval_seconds
+        )
+        if self._shutdown_started.wait(interval_seconds):
+            return
+        while not self._shutdown_started.is_set():
+            refreshed_at = _now()
+            try:
+                home_dir, workspace_dir = self._aibom_inventory_context_dirs()
+                if workspace_dir is None:
+                    self._server.store.set_sync_payload(
+                        "aibom_inventory_daemon",
+                        {
+                            "status": "missing_workspace_context",
+                            "reason": "missing_workspace_context",
+                            "skipped": True,
+                            "refreshed_at": refreshed_at,
+                        },
+                        refreshed_at,
+                    )
+                    if self._shutdown_started.wait(backoff_seconds):
+                        return
+                    continue
+                auth_context = _resolve_guard_sync_auth_context(self._server.store)
+                with self._server.store.hold_cloud_sync_lock():
+                    summary = sync_aibom_snapshots_if_due(
+                        self._server.store,
+                        generated_at=refreshed_at,
+                        min_interval_seconds=max(int(interval_seconds), 1),
+                        auth_context=auth_context,
+                        home_dir=home_dir,
+                        workspace_dir=workspace_dir,
+                    )
+                status = "synced" if summary.get("synced") is True else str(summary.get("reason") or "skipped")
+                self._server.store.set_sync_payload(
+                    "aibom_inventory_daemon",
+                    {**summary, "status": status, "refreshed_at": refreshed_at},
+                    refreshed_at,
+                )
+                wait_seconds = interval_seconds
+            except GuardSyncAuthorizationExpiredError as error:
+                self._server.store.set_sync_payload(
+                    "aibom_inventory_daemon",
+                    {
+                        "status": "auth_expired",
+                        "refreshed_at": refreshed_at,
+                        "message": str(error),
+                    },
+                    refreshed_at,
+                )
+                wait_seconds = backoff_seconds
+            except GuardSyncNotConfiguredError:
+                self._server.store.set_sync_payload(
+                    "aibom_inventory_daemon",
+                    {"status": "not_configured", "refreshed_at": refreshed_at},
+                    refreshed_at,
+                )
+                wait_seconds = backoff_seconds
+            except Exception as error:
+                self._server.store.set_sync_payload(
+                    "aibom_inventory_daemon",
                     {
                         "error": str(error),
                         "refreshed_at": refreshed_at,
