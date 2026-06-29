@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import sys
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
@@ -15,6 +16,11 @@ if TYPE_CHECKING:
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_resolve_guard_sync_auth_context
+
+
+def _print_connect_progress(message: str) -> None:
+    """Print a progress message to stderr during connect flow so the user sees activity."""
+    print(f"hol-guard: {message}", file=sys.stderr, flush=True)
 
 
 def _connect_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
@@ -262,6 +268,7 @@ def _finalize_guard_connect_payload(
         return payload
     payload["sync_attempted"] = True
     try:
+        _print_connect_progress("Syncing local proof to Guard Cloud...")
         sync_payload = sync_local_guard_cloud_proof(
             store,
             auth_context=resolved_sync_auth_context,
@@ -324,6 +331,7 @@ def _finalize_guard_connect_payload(
             }
         )
         return payload
+    _print_connect_progress("Guard Cloud sync complete.")
     latest_state = store.record_latest_guard_connect_sync_success(
         sync_payload=sync_payload,
         now=str(sync_payload.get("synced_at") or now),
@@ -340,6 +348,7 @@ def _finalize_guard_connect_payload(
         }
     )
     try:
+        _print_connect_progress("Syncing supply chain state...")
         payload["supply_chain"] = sync_supply_chain_cloud_state(
             store,
             auth_context=resolved_sync_auth_context,
