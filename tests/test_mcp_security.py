@@ -76,6 +76,84 @@ def test_scan_ignores_excluded_descendants(monkeypatch, tmp_path: Path) -> None:
     assert all("node_modules" not in path for path in analyzed_paths)
 
 
+def test_scan_accepts_explicit_mcp_config_path(monkeypatch, tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    config_path = workspace / ".cursor" / "mcp.json"
+    config_path.parent.mkdir()
+    config_path.write_text(
+        json.dumps({"mcpServers": {"demo": {"command": "python", "args": ["server.py"]}}}),
+        encoding="utf-8",
+    )
+    (workspace / "server.py").write_text("print('hello')\n", encoding="utf-8")
+    (workspace / "unrelated.py").write_text("print('skip')\n", encoding="utf-8")
+    analyzed_paths: list[str] = []
+
+    class RecordingYaraAnalyzer:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            return None
+
+        async def analyze(self, content: str, context: dict[str, Any] | None = None) -> list[FakeCiscoFinding]:
+            analyzed_paths.append(str((context or {}).get("file_path", "")))
+            return []
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.integrations.cisco_mcp_scanner.cisco_runtime_unavailable_message",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.integrations.cisco_mcp_scanner._load_mcp_scanner_components",
+        lambda: {"YaraAnalyzer": RecordingYaraAnalyzer},
+    )
+
+    summary = run_cisco_mcp_scan(workspace, mode="on", config_path=config_path)
+
+    assert summary.status == CiscoIntegrationStatus.ENABLED
+    assert summary.targets_scanned == 2
+    assert str(config_path) in analyzed_paths
+    assert str(workspace / "server.py") in analyzed_paths
+    assert str(workspace / "unrelated.py") not in analyzed_paths
+
+
+def test_scan_resolves_nested_config_parent_relative_source_arg(monkeypatch, tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    config_path = workspace / ".cursor" / "mcp.json"
+    config_path.parent.mkdir()
+    config_path.write_text(
+        json.dumps({"mcpServers": {"demo": {"command": "python", "args": ["../server.py"]}}}),
+        encoding="utf-8",
+    )
+    (workspace / "server.py").write_text("print('hello')\n", encoding="utf-8")
+    (workspace / "unrelated.py").write_text("print('skip')\n", encoding="utf-8")
+    analyzed_paths: list[str] = []
+
+    class RecordingYaraAnalyzer:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            return None
+
+        async def analyze(self, content: str, context: dict[str, Any] | None = None) -> list[FakeCiscoFinding]:
+            analyzed_paths.append(str((context or {}).get("file_path", "")))
+            return []
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.integrations.cisco_mcp_scanner.cisco_runtime_unavailable_message",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.integrations.cisco_mcp_scanner._load_mcp_scanner_components",
+        lambda: {"YaraAnalyzer": RecordingYaraAnalyzer},
+    )
+
+    summary = run_cisco_mcp_scan(workspace, mode="on", config_path=config_path)
+
+    assert summary.status == CiscoIntegrationStatus.ENABLED
+    assert summary.targets_scanned == 2
+    assert str(config_path) in analyzed_paths
+    assert str(workspace / "server.py") in analyzed_paths
+    assert str(workspace / "unrelated.py") not in analyzed_paths
+
+
 def test_scan_includes_dist_descendants(monkeypatch, tmp_path: Path) -> None:
     plugin_dir = tmp_path / "plugin"
     _write_plugin(plugin_dir)

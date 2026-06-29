@@ -423,7 +423,7 @@ def test_inventory_snapshot_attaches_cisco_mcp_trust_layer_to_server_and_tool(tm
                 category="transport",
                 title="Critical transport finding",
                 description="Remote unauthenticated endpoint.",
-                file_path=str(mcp_file),
+                file_path=".mcp.json",
             ),
         ),
         duration_ms=21,
@@ -435,6 +435,7 @@ def test_inventory_snapshot_attaches_cisco_mcp_trust_layer_to_server_and_tool(tm
             "analyzersUsed": ["owasp"],
             "scanMode": "static",
             "mode": "auto",
+            "attestationBindings": {"deviceId": "local-device", "sequence": 1},
         },
     )
 
@@ -452,6 +453,15 @@ def test_inventory_snapshot_attaches_cisco_mcp_trust_layer_to_server_and_tool(tm
     server_layers = server_item.metadata.get("trustLayers")
     tool_layers = tool_item.metadata.get("trustLayers")
     assert isinstance(server_layers, list)
+    local_security = server_item.metadata.get("localSecurity")
+    assert isinstance(local_security, dict)
+    assert local_security.get("entityType") == "mcp_server"
+    safety = local_security.get("safety")
+    assert isinstance(safety, dict)
+    assert safety.get("score") == 70
+    findings = local_security.get("findings")
+    assert isinstance(findings, list)
+    assert findings[0].get("file") == ".mcp.json"
     assert any(
         isinstance(layer, dict)
         and layer.get("layerType") == "cisco_mcp_scanner"
@@ -465,10 +475,12 @@ def test_inventory_snapshot_attaches_cisco_mcp_trust_layer_to_server_and_tool(tm
     assert any(
         isinstance(layer, dict)
         and layer.get("layerType") == "cisco_mcp_scanner"
+        and layer.get("trustScore") == 70
         and isinstance(layer.get("metadata"), dict)
         and layer["metadata"].get("attestationStatus") == "unsigned"
         and layer["metadata"].get("attestation") is None
-        and layer["metadata"].get("inheritedFromServerItemId") == server_item.item_id
+        and layer["metadata"].get("attestationBindings") is None
+        and layer["metadata"].get("inheritedFromServerItemId") is None
         for layer in tool_layers
     )
     assert str(workspace) not in encoded
