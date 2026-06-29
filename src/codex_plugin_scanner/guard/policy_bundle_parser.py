@@ -352,8 +352,11 @@ def validated_policy_bundle_payload(
         and payload_hash != f"sha256:{computed_payload_hash}"
     ):
         import logging
+
         logging.getLogger(__name__).warning(
-            "payload_hash_mismatch: portal=%s computed=%s", payload_hash, computed_payload_hash,
+            "payload_hash_mismatch: portal=%s computed=%s",
+            payload_hash,
+            computed_payload_hash,
         )
     bundle_hash = _non_empty_string(policy_bundle.get("bundleHash"))
     if bundle_hash is None:
