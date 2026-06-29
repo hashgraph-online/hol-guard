@@ -855,6 +855,18 @@ def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(monkeypatch, tmp_
             ),
         ),
     )
+    server_item = next(item for item in snapshot.items if item.item_kind == "mcp_server")
+    local_security = server_item.metadata.get("localSecurity")
+    assert isinstance(local_security, dict)
+    assert local_security.get("entityType") == "mcp_server"
+    assert local_security.get("provider") == "cisco-mcp-scanner"
+    safety = local_security.get("safety")
+    assert isinstance(safety, dict)
+    assert safety.get("score") == 90
+    assert safety.get("targetsScanned") == 1
+    local_security_metadata = local_security.get("metadata")
+    assert isinstance(local_security_metadata, dict)
+    assert isinstance(local_security_metadata.get("evidenceHash"), str)
     search_tool = next(item for item in snapshot.items if item.item_id.endswith(":tool:search_docs"))
     delete_tool = next(item for item in snapshot.items if item.item_id.endswith(":tool:delete_docs"))
 

@@ -430,6 +430,7 @@ def inventory_snapshot_from_detection(
                 generated_at=generated_at,
                 home_dir=home_dir,
                 workspace_dir=workspace_dir,
+                cisco_runs=cisco_runs,
                 trust_attestation_context=trust_attestation_context,
             )
         )
@@ -724,6 +725,7 @@ def _mcp_tool_items_from_artifact(
     generated_at: str,
     home_dir: Path,
     workspace_dir: Path | None,
+    cisco_runs: tuple[object, ...] = (),
     trust_attestation_context: Mapping[str, object] | None = None,
 ) -> tuple[GuardAgentInventoryItem, ...]:
     artifact_type = str(getattr(artifact, "artifact_type", "unknown"))
@@ -787,6 +789,7 @@ def _mcp_tool_items_from_artifact(
             item_kind="mcp_tool",
             metadata=metadata,
             workspace_dir=workspace_dir,
+            cisco_runs=cisco_runs,
         )
         capabilities = _capabilities_for_mcp_tool(name, description, input_schema, safe_annotations)
         tool_item_id = f"{server_item.item_id}:tool:{name}"
@@ -807,9 +810,33 @@ def _mcp_tool_items_from_artifact(
             content_hash=semantic_hash,
             trust_attestation_context=trust_attestation_context,
         )
-        if inherited_layers:
-            tool_layers = metadata.get("trustLayers")
-            signed_tool_layers = list(tool_layers) if isinstance(tool_layers, list) else []
+        tool_layers = metadata.get("trustLayers")
+        signed_tool_layers = list(tool_layers) if isinstance(tool_layers, list) else []
+        normalized_tool_layers: list[dict[str, object]] = []
+        for layer in signed_tool_layers:
+            if isinstance(layer, dict) and layer.get("layerType") == "cisco_mcp_scanner":
+                raw_layer_metadata = layer.get("metadata")
+                layer_metadata = dict(raw_layer_metadata) if isinstance(raw_layer_metadata, dict) else {}
+                normalized_tool_layers.append(
+                    {
+                        **layer,
+                        "metadata": {
+                            **{
+                                key: value
+                                for key, value in layer_metadata.items()
+                                if key not in {"attestation", "attestationBindings"}
+                            },
+                            "attestationStatus": "unsigned",
+                        },
+                    }
+                )
+            elif isinstance(layer, dict):
+                normalized_tool_layers.append(layer)
+        signed_tool_layers = normalized_tool_layers
+        if signed_tool_layers:
+            metadata["trustLayers"] = signed_tool_layers
+        has_tool_cisco_layer = any(layer.get("layerType") == "cisco_mcp_scanner" for layer in signed_tool_layers)
+        if inherited_layers and not has_tool_cisco_layer:
             inherited_tool_layers: list[dict[str, object]] = []
             for layer in inherited_layers:
                 raw_layer_metadata = layer.get("metadata")
@@ -818,7 +845,11 @@ def _mcp_tool_items_from_artifact(
                     {
                         **layer,
                         "metadata": {
-                            **{key: value for key, value in layer_metadata.items() if key != "attestation"},
+                            **{
+                                key: value
+                                for key, value in layer_metadata.items()
+                                if key not in {"attestation", "attestationBindings"}
+                            },
                             "attestationStatus": "unsigned",
                             "inheritedFromServerItemId": server_item.item_id,
                         },

@@ -131,7 +131,7 @@ def apply_local_trust_metadata(
         )
     )
 
-    local_security = _local_skill_security_for_artifact(
+    local_security = _local_security_for_artifact(
         artifact,
         item_kind=item_kind,
         metadata=metadata,
@@ -145,6 +145,34 @@ def apply_local_trust_metadata(
     if trust_layers:
         enriched["trustLayers"] = _merge_trust_layers(metadata.get("trustLayers"), trust_layers)
     return enriched
+
+
+def _local_security_for_artifact(
+    artifact: object,
+    *,
+    item_kind: InventoryItemKind,
+    metadata: dict[str, object],
+    captured_at: str,
+    cisco_runs: tuple[object, ...],
+    workspace_dir: Path | None,
+) -> dict[str, object] | None:
+    skill_security = _local_skill_security_for_artifact(
+        artifact,
+        item_kind=item_kind,
+        metadata=metadata,
+        captured_at=captured_at,
+        cisco_runs=cisco_runs,
+        workspace_dir=workspace_dir,
+    )
+    if skill_security is not None:
+        return skill_security
+    return _local_mcp_security_for_artifact(
+        artifact,
+        item_kind=item_kind,
+        captured_at=captured_at,
+        cisco_runs=cisco_runs,
+        workspace_dir=workspace_dir,
+    )
 
 
 def _local_skill_security_for_artifact(
@@ -241,6 +269,152 @@ def _local_skill_security_for_artifact(
         "findings": findings,
         "metadata": metadata_payload,
     }
+
+
+def _local_mcp_security_for_artifact(
+    artifact: object,
+    *,
+    item_kind: InventoryItemKind,
+    captured_at: str,
+    cisco_runs: tuple[object, ...],
+    workspace_dir: Path | None,
+) -> dict[str, object] | None:
+    from .inventory_contract import _normalize_inventory_datetime
+
+    if item_kind != "mcp_server" or getattr(artifact, "artifact_type", None) != "mcp_server":
+        return None
+
+    trust_root = _trust_root_for_artifact(artifact, item_kind=item_kind, workspace_dir=workspace_dir)
+    if trust_root is None:
+        return None
+
+    run = next(
+        (
+            candidate
+            for candidate in cisco_runs
+            if getattr(candidate, "source", None) == "cisco-mcp-scanner"
+            and _matches_mcp_cisco_run(artifact, run=candidate)
+        ),
+        None,
+    )
+    if run is None:
+        return None
+
+    status = str(getattr(run, "status", "unknown"))
+    normalized_captured_at = _normalize_inventory_datetime(captured_at)
+    scan_root = _cisco_run_target_path(run) or trust_root
+    findings = _local_mcp_security_findings(run, scan_root=scan_root)
+    findings = sorted(
+        findings,
+        key=lambda finding: (finding.get("file", ""), finding.get("ruleId", ""), finding.get("message", "")),
+    )
+    severity_counts = _cisco_severity_counts(run)
+    analyzers_used = _cisco_analyzers_used(run)
+    score = _cisco_layer_score(severity_counts, analyzers_used=analyzers_used) if status == "enabled" else None
+    safety = None
+    if score is not None:
+        safety = {
+            "score": score,
+            "label": _local_skill_security_label(score),
+            "findingsTotal": len(findings),
+            "highFindings": sum(1 for finding in findings if finding["severity"] == "high"),
+            "scriptsTotal": _local_mcp_targets_total(run),
+            "targetsScanned": _local_mcp_targets_total(run),
+            "permissionsMissing": [],
+        }
+
+    run_metadata = getattr(run, "metadata", None)
+    metadata_payload: dict[str, object] = {
+        "scannerSource": str(getattr(run, "source", "unknown")),
+        "message": str(getattr(run, "message", "")),
+        "findingsBySeverity": severity_counts,
+        "totalFindings": len(findings),
+    }
+    duration_ms = getattr(run, "duration_ms", None)
+    if isinstance(duration_ms, int):
+        metadata_payload["durationMs"] = duration_ms
+    if isinstance(run_metadata, dict):
+        for key in ("analyzersUsed", "scanMode", "mode", "targetsScanned"):
+            value = run_metadata.get(key)
+            if value is not None:
+                metadata_payload[key] = value
+
+    metadata_payload["evidenceHash"] = guard_evidence_hash(
+        {
+            "capturedAt": normalized_captured_at,
+            "entityType": "mcp_server",
+            "findings": findings,
+            "provider": "cisco-mcp-scanner",
+            "safety": safety,
+            "source": "local_indexed",
+            "status": status,
+        }
+    )
+
+    return {
+        "entityType": "mcp_server",
+        "source": "local_indexed",
+        "provider": "cisco-mcp-scanner",
+        "status": status,
+        "capturedAt": normalized_captured_at,
+        "safety": safety,
+        "findings": findings,
+        "metadata": metadata_payload,
+    }
+
+
+def _local_mcp_security_findings(
+    run: object,
+    *,
+    scan_root: Path,
+) -> list[dict[str, object]]:
+    results: list[dict[str, object]] = []
+    try:
+        resolved_scan_root = scan_root.resolve()
+    except OSError:
+        resolved_scan_root = scan_root
+    for finding in tuple(getattr(run, "findings", ()) or ()):
+        file_path = getattr(finding, "file_path", None)
+        if isinstance(file_path, str) and file_path.strip():
+            raw_path = Path(file_path)
+            path = raw_path if raw_path.is_absolute() else scan_root / raw_path
+            if not _paths_related(scan_root, path):
+                continue
+            try:
+                relative_file = str(path.resolve().relative_to(resolved_scan_root))
+            except ValueError:
+                relative_file = path.name
+        else:
+            relative_file = ".mcp.json"
+
+        results.append(
+            {
+                "ruleId": str(getattr(finding, "rule_id", "unknown")),
+                "severity": _local_skill_security_severity(getattr(finding, "severity", None)),
+                "file": relative_file,
+                "message": _local_mcp_security_message(finding),
+            }
+        )
+    return results
+
+
+def _local_mcp_security_message(finding: object) -> str:
+    description = getattr(finding, "description", None)
+    if isinstance(description, str) and description.strip():
+        return description.strip()
+    title = getattr(finding, "title", None)
+    if isinstance(title, str) and title.strip():
+        return title.strip()
+    return "MCP security finding"
+
+
+def _local_mcp_targets_total(run: object) -> int:
+    metadata = getattr(run, "metadata", None)
+    if isinstance(metadata, dict):
+        value = metadata.get("targetsScanned")
+        if isinstance(value, int):
+            return max(0, value)
+    return 0
 
 
 def _local_skill_security_findings(
@@ -507,7 +681,14 @@ def _cisco_trust_layers_for_artifact(
                     label="Cisco Skill Scanner",
                 )
             )
-        if source == "cisco-mcp-scanner" and item_kind == "mcp_server" and _matches_mcp_cisco_run(artifact, run=run):
+        if (
+            source == "cisco-mcp-scanner"
+            and item_kind in {"mcp_server", "mcp_tool"}
+            and _matches_mcp_cisco_run(
+                artifact,
+                run=run,
+            )
+        ):
             layers.append(
                 _cisco_trust_layer(
                     run,
@@ -537,11 +718,16 @@ def _matches_skill_cisco_run(
 
 
 def _matches_mcp_cisco_run(artifact: object, *, run: object) -> bool:
-    run_target = _cisco_run_target_path(run)
+    run_config_path = _cisco_run_config_path(run)
     config_path = getattr(artifact, "config_path", None)
-    if run_target is None or not isinstance(config_path, str) or not config_path.strip():
+    if not isinstance(config_path, str) or not config_path.strip():
         return False
     path = Path(config_path)
+    if run_config_path is not None:
+        return _paths_related(path, run_config_path)
+    run_target = _cisco_run_target_path(run)
+    if run_target is None:
+        return False
     if path.is_file() and (_paths_related(path, run_target) or _paths_related(path.parent, run_target)):
         return True
     return _paths_related(path, run_target)
@@ -560,10 +746,23 @@ def _paths_related(left: Path, right: Path) -> bool:
     )
 
 
+def _cisco_run_config_path(run: object) -> Path | None:
+    metadata = getattr(run, "metadata", None)
+    if not isinstance(metadata, dict):
+        return None
+    config_path = metadata.get("_configPath")
+    if not isinstance(config_path, str) or not config_path.strip():
+        return None
+    return Path(config_path)
+
+
 def _cisco_run_target_path(run: object) -> Path | None:
     metadata = getattr(run, "metadata", None)
     if not isinstance(metadata, dict):
         return None
+    target = metadata.get("_targetPath")
+    if isinstance(target, str) and target.strip() and target != "missing":
+        return Path(target)
     target = metadata.get("target")
     if not isinstance(target, str) or not target.strip() or target == "missing":
         return None

@@ -215,7 +215,16 @@ def _add_artifact_entities(
 
 
 def _access_graph_entity_type(artifact_type: str) -> str:
-    if artifact_type in {"skill", "mcp_server", "tool", "repository", "agent", "policy", "integration"}:
+    if artifact_type in {
+        "skill",
+        "mcp_server",
+        "tool",
+        "repository",
+        "agent",
+        "policy",
+        "integration",
+        "instruction",
+    }:
         return artifact_type
     return "tool"
 
@@ -225,6 +234,8 @@ def _access_graph_artifact_edge_type(entity_type: str) -> str | None:
         return "agent_uses_skill"
     if entity_type == "mcp_server":
         return "agent_uses_mcp_server"
+    if entity_type == "instruction":
+        return "agent_uses_instruction"
     return None
 
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from types import SimpleNamespace
 
 import codex_plugin_scanner.guard.inventory_cisco as inventory_cisco
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -98,7 +97,12 @@ def test_cisco_inventory_scans_run_mcp_and_skill_scanners_with_required_mode(tmp
     )
     calls: list[tuple[str, Path, str, float | None]] = []
 
-    def fake_mcp_scan(plugin_dir: Path, mode: str, timeout_seconds: float | None = None) -> _McpSummary:
+    def fake_mcp_scan(
+        plugin_dir: Path,
+        mode: str,
+        timeout_seconds: float | None = None,
+        config_path: Path | None = None,
+    ) -> _McpSummary:
         calls.append(("mcp", plugin_dir, mode, timeout_seconds))
         return _McpSummary(
             status=CiscoIntegrationStatus.ENABLED,
@@ -144,6 +148,70 @@ def test_cisco_inventory_scans_run_mcp_and_skill_scanners_with_required_mode(tmp
     assert calls[1][3] is not None
     assert 0 < calls[1][3] <= 3.5
     assert all(run.status == "enabled" for run in runs)
+    mcp_run = next(run for run in runs if run.source == "cisco-mcp-scanner")
+    assert mcp_run.metadata["target"] == ".mcp.json"
+    assert mcp_run.metadata["_targetPath"] == str(workspace_dir)
+    assert mcp_run.metadata["_configPath"] == str(workspace_dir / ".mcp.json")
+
+
+def test_cisco_inventory_scans_use_detected_mcp_config_paths(tmp_path: Path, monkeypatch) -> None:
+    context = _ctx(tmp_path)
+    workspace_dir = context.workspace_dir
+    assert workspace_dir is not None
+    cursor_config = workspace_dir / ".cursor" / "mcp.json"
+    cursor_config.parent.mkdir(parents=True)
+    cursor_config.write_text('{"mcpServers": {"cursor-demo": {"command": "node"}}}\n', encoding="utf-8")
+    detection = HarnessDetection(
+        harness="cursor",
+        installed=True,
+        command_available=False,
+        config_paths=(str(cursor_config),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="cursor:project:mcp:cursor-demo",
+                name="cursor-demo",
+                harness="cursor",
+                artifact_type="mcp_server",
+                source_scope="project",
+                config_path=str(cursor_config),
+            ),
+        ),
+    )
+    calls: list[tuple[Path, Path | None]] = []
+
+    def fake_mcp_scan(
+        plugin_dir: Path,
+        mode: str,
+        timeout_seconds: float | None = None,
+        config_path: Path | None = None,
+    ) -> _McpSummary:
+        del mode, timeout_seconds
+        calls.append((plugin_dir, config_path))
+        return _McpSummary(
+            status=CiscoIntegrationStatus.ENABLED,
+            message="MCP scanner completed.",
+            findings=(),
+            targets_scanned=1,
+            analyzers_used=("yara",),
+            total_findings=0,
+            findings_by_severity={severity.value: 0 for severity in Severity},
+        )
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.inventory_cisco.run_cisco_mcp_scan", fake_mcp_scan)
+
+    runs = run_cisco_inventory_scans(
+        harness="cursor",
+        context=context,
+        detection=detection,
+        mcp_mode="on",
+        skill_mode="off",
+    )
+
+    assert calls == [(workspace_dir, cursor_config)]
+    assert len(runs) == 1
+    assert runs[0].metadata["target"] == ".cursor/mcp.json"
+    assert runs[0].metadata["_targetPath"] == str(workspace_dir)
+    assert runs[0].metadata["_configPath"] == str(cursor_config)
 
 
 def test_cisco_inventory_scans_preserve_timeout_status(tmp_path: Path, monkeypatch) -> None:
@@ -159,9 +227,14 @@ def test_cisco_inventory_scans_preserve_timeout_status(tmp_path: Path, monkeypat
         artifacts=(),
     )
 
-    def fake_mcp_scan(plugin_dir: Path, mode: str, timeout_seconds: float | None = None) -> object:
-        del plugin_dir, mode, timeout_seconds
-        return SimpleNamespace(
+    def fake_mcp_scan(
+        plugin_dir: Path,
+        mode: str,
+        timeout_seconds: float | None = None,
+        config_path: Path | None = None,
+    ) -> object:
+        del plugin_dir, mode, timeout_seconds, config_path
+        return _McpSummary(
             status=CiscoIntegrationStatus.TIMED_OUT,
             message="Cisco MCP scanner timed out.",
             findings=(),
@@ -363,9 +436,7 @@ def test_cisco_inventory_scans_collapse_detected_skill_roots_into_collection_dir
     assert [run.metadata["target"] for run in runs] == [str(skill_a.parent.parent)]
 
 
-def test_cisco_inventory_scans_share_timeout_budget_across_skill_collection_roots(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_cisco_inventory_scans_share_timeout_budget_across_skill_collection_roots(tmp_path: Path, monkeypatch) -> None:
     context = _ctx(tmp_path)
     home_dir = context.home_dir
     assert home_dir is not None

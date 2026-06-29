@@ -353,10 +353,7 @@ def validated_policy_bundle_payload(
     ):
         import logging
 
-        logging.getLogger(__name__).warning(
-            "payload_hash_mismatch: portal_present=true computed_payload_hash=%s",
-            computed_payload_hash,
-        )
+        logging.getLogger(__name__).warning("payload_hash_mismatch")
     bundle_hash = _non_empty_string(policy_bundle.get("bundleHash"))
     if bundle_hash is None:
         return None, "invalid_bundle_hash"

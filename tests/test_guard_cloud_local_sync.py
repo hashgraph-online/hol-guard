@@ -113,6 +113,32 @@ def test_evaluate_detection_queues_access_graph_snapshot_without_syncing(tmp_pat
     assert any(entity["entityType"] == "mcp_server" for entity in payload["payload"]["entities"])
 
 
+def test_evaluate_detection_queues_instruction_access_graph_edges(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
+    instruction_path = tmp_path / "workspace" / "AGENTS.md"
+    instruction_path.parent.mkdir(parents=True)
+    instruction_path.write_text("# Agent rules\n\nReview changes before using tools.\n", encoding="utf-8")
+    artifact = GuardArtifact(
+        artifact_id="codex:project:instruction:agents-md",
+        name="AGENTS.md",
+        harness="codex",
+        artifact_type="instruction",
+        source_scope="project",
+        config_path=str(instruction_path),
+    )
+    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
+
+    evaluation = evaluate_detection(_detection(artifact), store, config, default_action="allow", persist=True)
+    pending = store.list_guard_events_v1(uploaded=False, limit=10)
+    snapshot_events = [item for item in pending if item["event_type"] == "access_graph.snapshot"]
+    payload = snapshot_events[0]["payload"]
+    graph_payload = payload["payload"]
+
+    assert evaluation["blocked"] is False
+    assert any(entity["entityType"] == "instruction" for entity in graph_payload["entities"])
+    assert any(edge["edgeType"] == "agent_uses_instruction" for edge in graph_payload["edges"])
+
 def test_evaluate_detection_queues_access_graph_snapshot_without_cloud_workspace(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store)
