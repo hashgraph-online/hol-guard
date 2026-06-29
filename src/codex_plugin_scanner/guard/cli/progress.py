@@ -13,7 +13,6 @@ try:
     from rich.console import Console
     from rich.progress import (
         BarColumn,
-        MofNCompleteColumn,
         Progress,
         SpinnerColumn,
         TaskProgressColumn,
@@ -90,21 +89,21 @@ class GuardProgress:
         """Advance the progress bar and update the description.
 
         Call this *before* starting the next step so the spinner shows
-        the new label while the step runs.
+        the new label while the step runs. The bar advances immediately
+        so step 1 shows 1/total (not 0%) while it runs.
         """
         if self._use_rich and self._progress is not None and self._task is not None:
+            self._progress.advance(self._task)
             self._progress.update(self._task, description=description)
-            if self._completed > 0:
-                self._progress.advance(self._task)
             self._completed += 1
         else:
+            self._completed += 1
             pct = int(self._completed * 100 / self._total) if self._total else 0
             print(
                 f"hol-guard: [{pct:3d}%] {description}",
                 file=sys.stderr,
                 flush=True,
             )
-            self._completed += 1
 
     def done(self, description: str = "Complete") -> None:
         """Mark all steps as complete with a green checkmark."""
