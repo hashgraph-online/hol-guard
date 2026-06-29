@@ -1261,6 +1261,7 @@ def sync_receipts(
     auth_context: dict[str, object] | None = None,
     home_dir: Path | None = None,
     workspace_dir: Path | None = None,
+    include_aibom: bool = False,
 ) -> dict[str, object]:
     """Push local receipts to the configured sync endpoint."""
 
@@ -1360,6 +1361,13 @@ def sync_receipts(
             exceptions_payload.extend(item for item in exceptions if isinstance(item, dict))
         remote_decisions.update(_build_remote_policy_decisions(payload))
     now = _sync_timestamp(payload)
+    aibom_context: dict[str, object] = {}
+    if home_dir is not None:
+        aibom_context["home_dir"] = str(home_dir)
+    if workspace_dir is not None:
+        aibom_context["workspace_dir"] = str(workspace_dir)
+    if aibom_context:
+        store.set_sync_payload("aibom_inventory_context", aibom_context, now)
     persisted_cursor_rowid = latest_uploaded_rowid if latest_uploaded_rowid is not None else prior_receipt_cursor
     _persist_receipt_sync_cursor(
         store=store,
@@ -1562,15 +1570,26 @@ def sync_receipts(
     if remote_policy_sync_blocked:
         summary["remote_policy_sync_blocked"] = True
     summary["guard_events_v1"] = sync_guard_events(store, auth_context=resolved_auth_context)
-    from ..aibom_cli import sync_aibom_snapshots_if_due
+    if include_aibom:
+        from ..aibom_cli import sync_aibom_snapshots_if_due
 
-    summary["aibom_inventory"] = sync_aibom_snapshots_if_due(
-        store,
-        generated_at=now,
-        auth_context=resolved_auth_context,
-        home_dir=home_dir,
-        workspace_dir=workspace_dir,
-    )
+        summary["aibom_inventory"] = sync_aibom_snapshots_if_due(
+            store,
+            generated_at=now,
+            auth_context=resolved_auth_context,
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+        )
+    else:
+        summary["aibom_inventory"] = {
+            "synced": False,
+            "skipped": True,
+            "reason": "background_deferred",
+            "message": (
+                "AIBOM inventory refresh is deferred to the Guard daemon background lane; "
+                "run hol-guard guard sync --deep to refresh now."
+            ),
+        }
     if persist_sync_summary:
         store.set_sync_payload("sync_summary", summary, now)
     if persist_connect_state:
@@ -2174,6 +2193,9 @@ def sync_local_guard_cloud_proof(
     *,
     auth_context: dict[str, object] | None = None,
     now: str | None = None,
+    home_dir: Path | None = None,
+    workspace_dir: Path | None = None,
+    include_aibom: bool = False,
 ) -> dict[str, object]:
     """Publish the local Guard runtime session before syncing receipts."""
     resolved_now = now or _now()
@@ -2190,6 +2212,9 @@ def sync_local_guard_cloud_proof(
             persist_sync_summary=False,
             persist_connect_state=False,
             auth_context=resolved_auth_context,
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            include_aibom=include_aibom,
         )
         summary = dict(receipts_summary)
         summary.update(

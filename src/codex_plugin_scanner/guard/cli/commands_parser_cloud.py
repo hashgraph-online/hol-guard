@@ -129,6 +129,11 @@ def _configure_guard_cloud_parsers(
         help="Named connection profile to sync from. Defaults to 'default'.",
     )
     sync_parser.add_argument("--json", action="store_true")
+    sync_parser.add_argument(
+        "--deep",
+        action="store_true",
+        help="Also refresh AIBOM inventory during this foreground sync.",
+    )
 
     commands_parser = guard_subparsers.add_parser(
         "commands",
