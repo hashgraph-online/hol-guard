@@ -34,6 +34,24 @@ from codex_plugin_scanner.guard.models import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
+_AGENT_CONTEXT_ENV_MARKERS = (
+    "HOL_GUARD_HOOK_ARGV",
+    "HOL_GUARD_MANAGED_CURSOR_HOOK",
+    "HOL_GUARD_CURSOR_APPROVAL_BINDING",
+    "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF",
+    "CURSOR_SESSION_ID",
+    "CURSOR_TRACE_ID",
+    "CURSOR_TRANSCRIPT_PATH",
+    "CLAUDECODE",
+    "OPENCODE_CONFIG_CONTENT",
+    "CODEX_SANDBOX",
+)
+
+
+def _clear_agent_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in _AGENT_CONTEXT_ENV_MARKERS:
+        monkeypatch.delenv(key, raising=False)
+
 
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -467,6 +485,114 @@ class TestGuardApprovals:
         assert queued[0]["risk_summary"] == "Call arguments mention sensitive local files or secrets."
         assert queued[0]["risk_signals"] == ["call arguments mention sensitive local files or secrets"]
         assert queued[0]["launch_summary"] == "Launches with `dangerous_delete .env`."
+
+    @pytest.mark.parametrize(
+        ("artifact_name", "action_envelope_json", "expected"),
+        [
+            (
+                "Bash",
+                {
+                    "action_type": "shell_command",
+                    "tool_name": "Bash",
+                    "raw_command_text": "bash",
+                    "command": "pnpm install @hashgraphonline/standards-sdk",
+                },
+                "pnpm install @hashgraphonline/standards-sdk",
+            ),
+            (
+                "Read",
+                {
+                    "action_type": "file_read",
+                    "tool_name": "Read",
+                    "target_paths": ["~/workspace/.env.local"],
+                },
+                "Read ~/workspace/.env.local",
+            ),
+            (
+                "file_read_request",
+                {
+                    "action_type": "file_read_request",
+                    "tool_name": "file_read_request",
+                    "target_path": "~/workspace/.npmrc",
+                },
+                "Read ~/workspace/.npmrc",
+            ),
+            (
+                "mcp_tool",
+                {
+                    "action_type": "mcp_tool",
+                    "tool_name": "mcp_tool",
+                    "mcp_server": "linear",
+                    "mcp_tool": "create_issue",
+                },
+                "linear.create_issue",
+            ),
+            (
+                "package_request",
+                {
+                    "action_type": "package_script",
+                    "package_manager": "pnpm",
+                    "package_name": "tsx",
+                    "package_targets": ["tsx@4.20.3"],
+                },
+                "pnpm install tsx@4.20.3",
+            ),
+        ],
+    )
+    def test_guard_queue_preserves_exact_action_label_after_redaction(
+        self,
+        tmp_path,
+        artifact_name,
+        action_envelope_json,
+        expected,
+    ):
+        store = GuardStore(tmp_path / "guard-home")
+        artifact = GuardArtifact(
+            artifact_id=f"codex:runtime:project:{artifact_name}:review",
+            name=artifact_name,
+            harness="codex",
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+            metadata={"raw_command_text": artifact_name},
+        )
+        detection = HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(artifact.config_path,),
+            artifacts=(artifact,),
+        )
+
+        queued = queue_blocked_approvals(
+            detection=detection,
+            evaluation={
+                "artifacts": [
+                    {
+                        "artifact_id": artifact.artifact_id,
+                        "artifact_name": artifact.name,
+                        "artifact_hash": f"hash-{artifact_name}",
+                        "artifact_type": artifact.artifact_type,
+                        "source_scope": artifact.source_scope,
+                        "config_path": artifact.config_path,
+                        "changed_fields": ["runtime_tool_call"],
+                        "policy_action": "require-reapproval",
+                        "action_envelope_json": action_envelope_json,
+                    }
+                ]
+            },
+            store=store,
+            approval_center_url="http://127.0.0.1:4455",
+            now="2026-04-17T00:00:00+00:00",
+            redaction_level="partial",
+        )
+
+        stored = store.get_approval_request(queued[0]["request_id"])
+
+        assert queued[0]["raw_command_text"] == expected
+        assert stored is not None
+        assert stored["raw_command_text"] == expected
+        assert stored["raw_command_text"] not in {"Bash", "Read", "mcp_tool", "package_request"}
 
     def test_guard_queue_sends_only_request_notification_without_setup_preview(self, tmp_path, monkeypatch):
         notice_calls: list[str] = []
@@ -2786,7 +2912,8 @@ class TestGuardApprovals:
             == "HOL Guard needs a fresh approval because this action changed."
         )
 
-    def test_guard_approvals_cli_lists_and_resolves_requests(self, tmp_path, capsys):
+    def test_guard_approvals_cli_lists_and_resolves_requests(self, tmp_path, capsys, monkeypatch):
+        _clear_agent_context(monkeypatch)
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
         store.add_approval_request(
@@ -3208,7 +3335,13 @@ class TestGuardApprovals:
             )
         ]
 
-    def test_guard_approvals_cli_derives_workspace_scope_without_workspace_override(self, tmp_path, capsys):
+    def test_guard_approvals_cli_derives_workspace_scope_without_workspace_override(
+        self,
+        tmp_path,
+        capsys,
+        monkeypatch,
+    ):
+        _clear_agent_context(monkeypatch)
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
         store.add_approval_request(
