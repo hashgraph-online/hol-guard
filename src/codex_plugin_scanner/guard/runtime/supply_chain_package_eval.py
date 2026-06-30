@@ -1490,6 +1490,8 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
             source_url = _source_url_from_specifier(requested)
         if source_url is None:
             source_url = _source_url_from_raw_spec(raw_spec)
+        if source_url is not None:
+            requested = None
         if requested is None and ecosystem == "npm" and source_url is None:
             requested = "latest"
         if requested is None and ecosystem == "pypi" and source_url is None:

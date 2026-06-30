@@ -1667,7 +1667,7 @@ def test_guard_protect_retry_after_local_package_approval_reuses_recent_cloud_va
     assert store.list_approval_requests(status="pending", limit=None) == []
 
 
-def test_guard_protect_denied_retry_requeues_local_package_approval_for_saved_block(
+def test_guard_protect_denied_retry_surfaces_saved_block_clear_command_without_requeue(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys,
@@ -1745,42 +1745,13 @@ def test_guard_protect_denied_retry_requeues_local_package_approval_for_saved_bl
         isinstance(reason, dict) and reason.get("code") == "saved_package_block"
         for reason in retry_payload["supply_chain_evaluation"]["reasons"]
     )
-    assert isinstance(retry_payload["primary_approval_request_id"], str)
-    assert "http://127.0.0.1:5474/requests/" in retry_payload["review_hint"]
-    assert "http://127.0.0.1:5474/requests/" in retry_payload["supply_chain_evaluation"]["user_copy"][
-        "harness_message"
-    ]
-    assert len(pending) == 1
+    user_copy = retry_payload["supply_chain_evaluation"]["user_copy"]
+    assert "primary_approval_request_id" not in retry_payload
+    assert "hol-guard policies clear" in user_copy["harness_message"]
+    assert "--artifact-id" in user_copy["next_step"]
+    assert "--artifact-hash" in user_copy["next_step"]
+    assert pending == []
     assert len(resolved) == 1
-    apply_approval_resolution(
-        store=store,
-        request_id=str(retry_payload["primary_approval_request_id"]),
-        action="block",
-        scope="artifact",
-        workspace=None,
-        reason="still blocked",
-    )
-
-    second_retry_rc = main(
-        [
-            "guard",
-            "protect",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--json",
-            "--dry-run",
-            "npm",
-            "install",
-            "minimist@1.2.8",
-        ]
-    )
-    second_retry_payload = json.loads(capsys.readouterr().out)
-
-    assert second_retry_rc == 2
-    assert "primary_approval_request_id" not in second_retry_payload
-    assert store.list_approval_requests(status="pending", limit=None) == []
 
 
 def test_guard_protect_json_queues_local_approval_when_cached_advisory_overrides_bundle_allow(
@@ -1841,7 +1812,7 @@ def test_guard_protect_json_queues_local_approval_when_cached_advisory_overrides
     assert pending[0]["risk_summary"] != payload["supply_chain_evaluation"]["risk_summary"]
 
 
-def test_guard_protect_denied_retry_with_cloud_block_requeues_local_package_approval_for_saved_block(
+def test_guard_protect_denied_retry_with_cloud_block_surfaces_saved_block_clear_command_without_requeue(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys,
@@ -1919,12 +1890,12 @@ def test_guard_protect_denied_retry_with_cloud_block_requeues_local_package_appr
         isinstance(reason, dict) and reason.get("code") == "saved_package_block"
         for reason in retry_payload["supply_chain_evaluation"]["reasons"]
     )
-    assert isinstance(retry_payload["primary_approval_request_id"], str)
-    assert "http://127.0.0.1:5474/requests/" in retry_payload["review_hint"]
-    assert "http://127.0.0.1:5474/requests/" in retry_payload["supply_chain_evaluation"]["user_copy"][
-        "harness_message"
-    ]
-    assert len(pending) == 1
+    user_copy = retry_payload["supply_chain_evaluation"]["user_copy"]
+    assert "primary_approval_request_id" not in retry_payload
+    assert "hol-guard policies clear" in user_copy["harness_message"]
+    assert "--artifact-id" in user_copy["next_step"]
+    assert "--artifact-hash" in user_copy["next_step"]
+    assert pending == []
     assert len(resolved) == 1
 
 

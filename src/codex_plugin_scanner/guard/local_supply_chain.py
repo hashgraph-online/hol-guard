@@ -1432,17 +1432,51 @@ def _apply_stored_package_policy_override(
             reason_message="HOL Guard reused your saved approval for this package request.",
         )
     if action == "block":
+        clear_command = _saved_package_policy_clear_command(
+            artifact=artifact,
+            artifact_hash=artifact_hash,
+            workspace_dir=workspace_dir,
+        )
         return _package_policy_override_evaluation(
             evaluation,
             decision="block",
             policy_action="block",
             title="Blocked by saved policy",
             summary="HOL Guard kept this package blocked because a saved package policy already exists.",
-            harness_message="HOL Guard kept this package blocked because a saved package policy already exists.",
+            harness_message=(
+                "HOL Guard kept this package blocked because a saved package policy already exists. "
+                f"To reconsider, run `{clear_command}`, then retry the install."
+            ),
+            next_step=clear_command,
             reason_code="saved_package_block",
             reason_message="HOL Guard kept this package blocked because a saved package policy already exists.",
         )
     return evaluation
+
+
+def _saved_package_policy_clear_command(
+    *,
+    artifact: GuardArtifact,
+    artifact_hash: str,
+    workspace_dir: Path,
+) -> str:
+    return shlex.join(
+        (
+            "hol-guard",
+            "policies",
+            "clear",
+            "--harness",
+            artifact.harness,
+            "--scope",
+            "artifact",
+            "--artifact-id",
+            artifact.artifact_id,
+            "--artifact-hash",
+            artifact_hash,
+            "--policy-workspace",
+            str(workspace_dir),
+        )
+    )
 
 
 def recompute_package_protect_artifact_hash(
@@ -1619,6 +1653,7 @@ def _package_policy_override_evaluation(
     title: str,
     summary: str,
     harness_message: str,
+    next_step: str | None = None,
     reason_code: str,
     reason_message: str,
 ) -> Any:
@@ -1639,7 +1674,7 @@ def _package_policy_override_evaluation(
         user_copy=_supply_chain_package_eval_module().SupplyChainUserCopy(
             title=title,
             summary=summary,
-            next_step=None,
+            next_step=next_step,
             dashboard_url=None,
             harness_message=harness_message,
         ),
