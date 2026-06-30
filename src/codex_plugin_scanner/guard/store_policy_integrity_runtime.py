@@ -593,6 +593,7 @@ class StorePolicyIntegrityAdminMixin:
         scope: str | None = None,
         artifact_id: str | None = None,
         artifact_hash: str | None = None,
+        decision_ids: set[int] | None = None,
         artifact_id_is_null: bool = False,
         artifact_hash_is_null: bool = False,
         workspace: str | None = None,
@@ -603,6 +604,12 @@ class StorePolicyIntegrityAdminMixin:
         current_time = _now()
         conditions: list[str] = []
         params: list[object] = []
+        if decision_ids is not None:
+            if not decision_ids:
+                return 0
+            placeholders = ",".join("?" for _ in decision_ids)
+            conditions.append(f"decision_id in ({placeholders})")
+            params.extend(sorted(decision_ids))
         if harness is not None:
             conditions.append("harness = ?")
             params.append(harness)

@@ -1055,6 +1055,46 @@ def _policy_bundle_rule_matcher_families(rule: dict[str, object]) -> list[str]:
     return list(dict.fromkeys(family for family in derived if family in POLICY_BUNDLE_RULE_MATCHER_FAMILIES))
 
 
+def _policy_bundle_rule_saved_decision_families(rule: dict[str, object]) -> list[str]:
+    """Return rule families that can be represented without broadening scope.
+
+    Package-request bundle rules with no package-related scope cannot be
+    represented as local family decisions without becoming "all package
+    installs." Scoped package bundle rules retain the existing runtime
+    family-row behavior.
+    """
+    families = _policy_bundle_rule_matcher_families(rule)
+    if "package-request" not in families:
+        return families
+    if _policy_bundle_rule_has_package_scope(rule):
+        return families
+    return [family for family in families if family != "package-request"]
+
+
+def _policy_bundle_rule_has_package_scope(rule: dict[str, object]) -> bool:
+    artifact_type = non_empty_string(rule.get("artifactType"))
+    if artifact_type == "package_request":
+        return True
+    scope = rule.get("scope")
+    if not isinstance(scope, dict):
+        return False
+    package_scope_keys = (
+        "ecosystems",
+        "packages",
+        "packageNames",
+        "packageManagers",
+        "registries",
+        "sourceUrls",
+    )
+    for key in package_scope_keys:
+        value = scope.get(key)
+        if isinstance(value, list) and value:
+            return True
+        if non_empty_string(value) is not None:
+            return True
+    return False
+
+
 def _policy_bundle_rule_matches_local_scope(
     rule: dict[str, object],
     *,
@@ -1137,7 +1177,7 @@ def _build_policy_bundle_decisions(
             continue
         if _policy_bundle_rule_has_browser_scope(item):
             continue
-        matcher_families = _policy_bundle_rule_matcher_families(item)
+        matcher_families = _policy_bundle_rule_saved_decision_families(item)
         if not matcher_families:
             continue
         rule_id = non_empty_string(item.get("ruleId")) or "bundle-rule"

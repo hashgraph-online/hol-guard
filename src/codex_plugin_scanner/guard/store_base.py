@@ -665,8 +665,6 @@ class SystemKeyringSecretStore:
     def _supports_native_macos_security_reads(cls) -> bool:
         if sys.platform != "darwin":
             return False
-        if cls._test_keyring_module() is not None:
-            return True
         loader_ref = cls._load_keyring_module
         api_loader_ref = cls._load_macos_keyring_api_module
         cache_key = (id(loader_ref), id(api_loader_ref))
@@ -768,15 +766,22 @@ class SystemKeyringSecretStore:
 
     def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float = 0.0) -> str | None:
         _ = timeout_seconds
+        if sys.platform != "darwin" and self._test_keyring_module() is not None:
+            return self.get_secret(secret_id)
         if sys.platform == "darwin":
+            if (
+                self._test_keyring_module() is not None
+                and getattr(type(self)._get_secret_without_macos_ui, "__name__", "") == "_get_secret_without_macos_ui"
+            ):
+                return self.get_secret(secret_id)
             if self._supports_native_macos_security_reads():
                 return self._get_secret_without_macos_ui(secret_id)
+            if self._test_keyring_module() is not None:
+                return self.get_secret(secret_id)
             if self.service_name == _POLICY_INTEGRITY_SERVICE_NAME:
                 # Passive policy-integrity reads must fail closed when native
                 # no-UI access is unavailable.
                 return None
-            if self._test_keyring_module() is not None:
-                return self.get_secret(secret_id)
             return None
         if self._supports_native_macos_security_reads():
             return self._get_secret_without_macos_ui(secret_id)
@@ -1121,6 +1126,8 @@ def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
 
 def _build_policy_integrity_secret_store() -> SystemKeyringSecretStore | None:
     if sys.platform == "darwin":
+        if SystemKeyringSecretStore._test_keyring_module() is not None:
+            return SystemKeyringSecretStore(service_name=_POLICY_INTEGRITY_SERVICE_NAME)
         if not SystemKeyringSecretStore._backend_is_available():
             return None
         if not SystemKeyringSecretStore._supports_native_macos_security_reads():

@@ -112,6 +112,7 @@ def test_build_package_protect_payload_reprompts_after_manifest_edit_despite_sav
     assert baseline_rc == 0
     receipt = baseline_payload["receipt"]
     assert isinstance(receipt, dict)
+    store.ensure_policy_integrity_ready_for_write(now="2026-06-14T00:00:00Z")
     store.upsert_policy(
         PolicyDecision(
             harness="guard-cli",
@@ -147,3 +148,58 @@ def test_build_package_protect_payload_reprompts_after_manifest_edit_despite_sav
         isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
         for reason in evaluation.get("reasons", [])
     )
+
+
+def test_build_package_protect_payload_saved_hashless_block_clear_command_omits_artifact_hash(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    command = ["pnpm", "add", "left-pad"]
+
+    baseline_payload, baseline_rc = build_package_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=True,
+        now="2026-06-14T00:00:00Z",
+        config=None,
+        unsafe_raw_output=False,
+        timeout_seconds=30,
+    )
+    assert baseline_rc == 0
+    receipt = baseline_payload["receipt"]
+    assert isinstance(receipt, dict)
+    store.upsert_policy(
+        PolicyDecision(
+            harness="guard-cli",
+            scope="artifact",
+            action="block",
+            artifact_id=str(receipt["artifact_id"]),
+            artifact_hash=None,
+            workspace=str(workspace_dir),
+            publisher=None,
+            reason="keep blocked",
+        ),
+        "2026-06-14T00:00:00Z",
+    )
+
+    retry_payload, retry_rc = build_package_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=True,
+        now="2026-06-14T00:01:00Z",
+        config=None,
+        unsafe_raw_output=False,
+        timeout_seconds=30,
+    )
+
+    assert retry_rc == 2
+    user_copy = retry_payload["supply_chain_evaluation"]["user_copy"]
+    assert "hol-guard policies clear" in user_copy["harness_message"]
+    assert "--decision-id" in user_copy["next_step"]
+    assert "--artifact-hash" not in user_copy["next_step"]
+    assert "--artifact-id" in user_copy["next_step"]
+    assert str(workspace_dir) in user_copy["next_step"]

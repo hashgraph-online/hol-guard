@@ -323,6 +323,7 @@ def _run_guard_policies_command(
     if policies_command == "clear":
         harness = getattr(args, "harness", None)
         clear_all = bool(getattr(args, "all", False))
+        decision_ids = [int(value) for value in (getattr(args, "decision_ids", None) or [])]
         if clear_all and harness is not None:
             _emit(
                 "policies",
@@ -335,11 +336,11 @@ def _run_guard_policies_command(
                 getattr(args, "json", False),
             )
             return 2
-        if not clear_all and harness is None:
+        if not decision_ids and not clear_all and harness is None:
             _emit(
                 "policies",
                 {
-                    "error": "Choose --harness <name> or --all when clearing Guard rules.",
+                    "error": "Choose --decision-id <id>, --harness <name>, or --all when clearing Guard rules.",
                     "cleared": 0,
                 },
                 getattr(args, "json", False),
@@ -363,6 +364,7 @@ def _run_guard_policies_command(
                 scope=scope,
                 artifact_id=artifact_id,
                 artifact_hash=policy_artifact_hash,
+                decision_ids=set(decision_ids) if decision_ids else None,
                 workspace=str(policy_workspace) if isinstance(policy_workspace, Path) else policy_workspace,
                 publisher=publisher,
                 approval_gate_grant=approval_gate_grant,
@@ -380,6 +382,7 @@ def _run_guard_policies_command(
                 "scope": scope,
                 "artifact_id": artifact_id,
                 "artifact_hash": policy_artifact_hash,
+                "decision_ids": decision_ids,
                 "workspace": policy_workspace,
                 "publisher": publisher,
             },

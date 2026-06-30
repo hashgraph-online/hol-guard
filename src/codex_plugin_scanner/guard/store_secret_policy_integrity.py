@@ -217,6 +217,7 @@ class StoreSecretPolicyIntegrityMixin:
         return (
             isinstance(secret_store, SystemKeyringSecretStore)
             and sys.platform == "darwin"
+            and secret_store._test_keyring_module() is None
             and not secret_store._supports_native_macos_security_reads()
         )
 

@@ -26,6 +26,7 @@ from codex_plugin_scanner.guard.runtime.package_intent_common import (
     PackageIntent,
     build_package_request_artifact,
     js_target,
+    python_target,
 )
 from codex_plugin_scanner.guard.runtime.package_manifest_diff import _DeadlineExceededError
 from codex_plugin_scanner.guard.runtime.runner import GuardSyncAuthorizationExpiredError
@@ -438,6 +439,220 @@ def test_evaluate_package_request_artifact_posts_cloud_request_and_maps_block_re
     assert "minimist@1.2.8" in result.user_copy.harness_message
     assert "npm install minimist@1.2.9" in result.user_copy.harness_message
     assert "Review this request in HOL Guard, then retry." in result.user_copy.harness_message
+
+
+def test_evaluate_package_request_artifact_posts_latest_range_for_unversioned_scoped_npm_request(
+    tmp_path: Path,
+) -> None:
+    _EvaluateHandler.captured_headers = {}
+    _EvaluateHandler.captured_requests = []
+    _EvaluateHandler.response_payload = _cloud_response(
+        decision="allow",
+        enforcement="premium_cloud",
+        entitlement_state="premium",
+        package_name="cli",
+    )
+    server = HTTPServer(("127.0.0.1", 0), _EvaluateHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        store = GuardStore(tmp_path / "guard-home")
+        _seed_guard_cloud(
+            store,
+            workspace_id=WORKSPACE_ID,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="demo-token",
+        )
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        artifact = _artifact_for_targets("@stripe/cli", flags=("-g",))
+
+        result = evaluate_package_request_artifact(
+            artifact=artifact,
+            store=store,
+            workspace_dir=workspace_dir,
+            now="2026-05-19T00:00:00Z",
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    request_payload = _EvaluateHandler.captured_requests[0]
+    assert request_payload["packages"][0] == {
+        "dependencyPath": None,
+        "direct": True,
+        "ecosystem": "npm",
+        "name": "cli",
+        "namespace": "@stripe",
+        "range": "latest",
+    }
+    assert result.decision == "allow"
+
+
+def test_evaluate_package_request_artifact_does_not_convert_npm_source_specs_to_latest(
+    tmp_path: Path,
+) -> None:
+    _EvaluateHandler.captured_headers = {}
+    _EvaluateHandler.captured_requests = []
+    _EvaluateHandler.response_payload = _cloud_response(
+        decision="allow",
+        enforcement="premium_cloud",
+        entitlement_state="premium",
+        package_name="pkg",
+    )
+    server = HTTPServer(("127.0.0.1", 0), _EvaluateHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        store = GuardStore(tmp_path / "guard-home")
+        _seed_guard_cloud(
+            store,
+            workspace_id=WORKSPACE_ID,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="demo-token",
+        )
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        artifact = _artifact_for_targets("git+https://github.com/org/pkg.git")
+
+        evaluate_package_request_artifact(
+            artifact=artifact,
+            store=store,
+            workspace_dir=workspace_dir,
+            now="2026-05-19T00:00:00Z",
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    package_payload = _EvaluateHandler.captured_requests[0]["packages"][0]
+    assert package_payload["name"] == "pkg"
+    assert package_payload["sourceUrl"] == "git+https://github.com/org/pkg.git"
+    assert "range" not in package_payload
+    assert "version" not in package_payload
+
+
+def test_evaluate_package_request_artifact_posts_open_range_for_unversioned_pypi_request(
+    tmp_path: Path,
+) -> None:
+    _EvaluateHandler.captured_headers = {}
+    _EvaluateHandler.captured_requests = []
+    _EvaluateHandler.response_payload = _cloud_response(
+        decision="allow",
+        enforcement="premium_cloud",
+        entitlement_state="premium",
+        package_name="hol-guard",
+    )
+    server = HTTPServer(("127.0.0.1", 0), _EvaluateHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        store = GuardStore(tmp_path / "guard-home")
+        _seed_guard_cloud(
+            store,
+            workspace_id=WORKSPACE_ID,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="demo-token",
+        )
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        intent = PackageIntent(
+            package_manager="pipx",
+            intent_kind="install",
+            command_tokens=("pipx", "install", "hol-guard", "--force"),
+            redacted_command="pipx install hol-guard --force",
+            targets=(python_target("hol-guard"),),
+            manifest_paths=(),
+            lockfile_paths=(),
+            flags=("--force",),
+            notes=(),
+        )
+        artifact = build_package_request_artifact(
+            "guard-cli",
+            intent,
+            config_path="codex.json",
+            source_scope="project",
+        )
+
+        result = evaluate_package_request_artifact(
+            artifact=artifact,
+            store=store,
+            workspace_dir=workspace_dir,
+            now="2026-05-19T00:00:00Z",
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    package_payload = _EvaluateHandler.captured_requests[0]["packages"][0]
+    assert package_payload == {
+        "dependencyPath": None,
+        "direct": True,
+        "ecosystem": "pypi",
+        "name": "hol-guard",
+        "namespace": None,
+        "range": ">=0",
+    }
+    assert result.decision == "allow"
+
+
+def test_evaluate_package_request_artifact_does_not_convert_pypi_source_specs_to_open_range(
+    tmp_path: Path,
+) -> None:
+    _EvaluateHandler.captured_headers = {}
+    _EvaluateHandler.captured_requests = []
+    _EvaluateHandler.response_payload = _cloud_response(
+        decision="allow",
+        enforcement="premium_cloud",
+        entitlement_state="premium",
+        package_name="pkg",
+    )
+    server = HTTPServer(("127.0.0.1", 0), _EvaluateHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        store = GuardStore(tmp_path / "guard-home")
+        _seed_guard_cloud(
+            store,
+            workspace_id=WORKSPACE_ID,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="demo-token",
+        )
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        intent = PackageIntent(
+            package_manager="pip",
+            intent_kind="install",
+            command_tokens=("pip", "install", "pkg @ git+https://github.com/org/pkg.git"),
+            redacted_command="pip install 'pkg @ git+https://github.com/org/pkg.git'",
+            targets=(python_target("pkg @ git+https://github.com/org/pkg.git"),),
+            manifest_paths=(),
+            lockfile_paths=(),
+            flags=(),
+            notes=(),
+        )
+        artifact = build_package_request_artifact(
+            "guard-cli",
+            intent,
+            config_path="codex.json",
+            source_scope="project",
+        )
+
+        evaluate_package_request_artifact(
+            artifact=artifact,
+            store=store,
+            workspace_dir=workspace_dir,
+            now="2026-05-19T00:00:00Z",
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    package_payload = _EvaluateHandler.captured_requests[0]["packages"][0]
+    assert package_payload["name"] == "pkg"
+    assert package_payload["sourceUrl"] == "git+https://github.com/org/pkg.git"
+    assert "range" not in package_payload
+    assert "version" not in package_payload
 
 
 def test_evaluate_package_request_artifact_uses_cached_eval_before_network(
