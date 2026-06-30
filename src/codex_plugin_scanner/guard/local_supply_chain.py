@@ -1418,20 +1418,7 @@ def _apply_stored_package_policy_override(
     if not isinstance(decision, dict):
         return evaluation
     if _stored_package_policy_is_stale_policy_bundle_family(decision, store=store):
-        if _stored_package_policy_evaluation_requires_review(evaluation):
-            return evaluation
-        return _package_policy_override_evaluation(
-            evaluation,
-            decision="ask",
-            policy_action="require-reapproval",
-            title="Review package install",
-            summary="HOL Guard found an old Cloud package rule that needs review before this install continues.",
-            harness_message=(
-                "HOL Guard found an old Cloud package rule that needs review before this install continues."
-            ),
-            reason_code="stale_package_bundle_policy_review",
-            reason_message="HOL Guard found an old Cloud package rule that needs review before this install continues.",
-        )
+        return evaluation
     action = decision.get("action")
     if action == "allow":
         return _package_policy_override_evaluation(
