@@ -666,7 +666,7 @@ class SystemKeyringSecretStore:
         if sys.platform != "darwin":
             return False
         if cls._test_keyring_module() is not None:
-            return True
+            return False
         loader_ref = cls._load_keyring_module
         api_loader_ref = cls._load_macos_keyring_api_module
         cache_key = (id(loader_ref), id(api_loader_ref))
@@ -768,11 +768,13 @@ class SystemKeyringSecretStore:
 
     def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float = 0.0) -> str | None:
         _ = timeout_seconds
-        if self._test_keyring_module() is not None:
+        if sys.platform != "darwin" and self._test_keyring_module() is not None:
             return self.get_secret(secret_id)
         if sys.platform == "darwin":
             if self._supports_native_macos_security_reads():
                 return self._get_secret_without_macos_ui(secret_id)
+            if self._test_keyring_module() is not None:
+                return self.get_secret(secret_id)
             if self.service_name == _POLICY_INTEGRITY_SERVICE_NAME:
                 # Passive policy-integrity reads must fail closed when native
                 # no-UI access is unavailable.
@@ -1121,6 +1123,8 @@ def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
 
 def _build_policy_integrity_secret_store() -> SystemKeyringSecretStore | None:
     if sys.platform == "darwin":
+        if SystemKeyringSecretStore._test_keyring_module() is not None:
+            return SystemKeyringSecretStore(service_name=_POLICY_INTEGRITY_SERVICE_NAME)
         if not SystemKeyringSecretStore._backend_is_available():
             return None
         if not SystemKeyringSecretStore._supports_native_macos_security_reads():
@@ -1402,11 +1406,18 @@ def _policy_integrity_setup_safe_for_local_write(payload: Mapping[str, object]) 
     if not isinstance(counts, Mapping):
         return False
     eligible_invalid_rows = 0
+    total_rows = 0
     for status in _POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES:
         count = counts.get(status)
         if isinstance(count, int) and count > 0:
             eligible_invalid_rows += count
-    return eligible_invalid_rows > 0
+    for status in _POLICY_INTEGRITY_STATUSES:
+        count = counts.get(status)
+        if isinstance(count, int) and count > 0:
+            total_rows += count
+    if eligible_invalid_rows > 0:
+        return True
+    return payload.get("mode") == "degraded" and total_rows == 0
 
 
 def _family_key_value(family_key: str) -> str:

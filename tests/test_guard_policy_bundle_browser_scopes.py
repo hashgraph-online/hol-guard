@@ -306,12 +306,13 @@ class TestBrowserScopeDecisionNarrowing:
         decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
         assert len(decisions) > 0
 
-    def test_package_request_rule_does_not_create_saved_family_decision(self) -> None:
-        """Package bundle rules stay in package evaluation instead of saved-policy overrides."""
+    def test_package_request_rule_without_package_scope_does_not_create_saved_family_decision(self) -> None:
+        """Empty-scope package bundle rules stay out of saved-policy overrides."""
         from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
 
         rule = self._local_match_rule()
         rule["matcherFamilies"] = ["package-request"]
+        rule["scope"]["ecosystems"] = []
         bundle = _valid_bundle_with_rules([rule])
         decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
         assert decisions == []

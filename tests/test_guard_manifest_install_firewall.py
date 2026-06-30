@@ -112,6 +112,7 @@ def test_build_package_protect_payload_reprompts_after_manifest_edit_despite_sav
     assert baseline_rc == 0
     receipt = baseline_payload["receipt"]
     assert isinstance(receipt, dict)
+    store.ensure_policy_integrity_ready_for_write(now="2026-06-14T00:00:00Z")
     store.upsert_policy(
         PolicyDecision(
             harness="guard-cli",
