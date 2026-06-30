@@ -84,9 +84,9 @@ def _queue_local_protect_approvals(
 def _should_queue_local_protect_approval(response_payload: dict[str, object]) -> bool:
     if os.environ.get(SHIM_PROBE_ENV_VAR) == SHIM_PROBE_ENV_VALUE:
         return False
-    if os.environ.get("PYTEST_CURRENT_TEST") and os.environ.get("HOL_GUARD_TEST_SKIP_LOCAL_APPROVAL_QUEUE") == "1":
-        return False
-    return not _protect_has_reason_code(response_payload, "saved_package_block")
+    return not (
+        os.environ.get("PYTEST_CURRENT_TEST") and os.environ.get("HOL_GUARD_TEST_SKIP_LOCAL_APPROVAL_QUEUE") == "1"
+    )
 
 
 def _protect_request_artifact(response_payload: dict[str, object], *, workspace: Path) -> GuardArtifact | None:
@@ -224,16 +224,6 @@ def _protect_policy_action(response_payload: dict[str, object]) -> str | None:
     if not isinstance(supply_chain_evaluation, dict):
         return None
     return _optional_string(supply_chain_evaluation.get("policy_action"))
-
-
-def _protect_has_reason_code(response_payload: dict[str, object], reason_code: str) -> bool:
-    supply_chain_evaluation = response_payload.get("supply_chain_evaluation")
-    if not isinstance(supply_chain_evaluation, dict):
-        return False
-    reasons = supply_chain_evaluation.get("reasons")
-    if not isinstance(reasons, list):
-        return False
-    return any(_optional_string(item.get("code")) == reason_code for item in reasons if isinstance(item, dict))
 
 
 def _bind_protect_receipt_approval(response_payload: dict[str, object], *, store: GuardStore) -> None:

@@ -1484,7 +1484,11 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
             continue
         namespace, name = _split_namespace_name(package_name)
         requested = _optional_string(item.get("requested_specifier"))
-        exact_version = _exact_version(requested)
+        if requested is None and ecosystem == "npm":
+            requested = "latest"
+        exact_version = (
+            None if _npm_requested_specifier_is_dist_tag(requested, ecosystem=ecosystem) else _exact_version(requested)
+        )
         raw_spec = _optional_string(item.get("raw_spec")) or package_name
         source_url = _optional_string(item.get("source_url"))
         if source_url is None:
@@ -3790,6 +3794,15 @@ def _exact_version(value: str | None) -> str | None:
     if any(token in normalized for token in ("||", " - ", ",")):
         return None
     return normalized
+
+
+def _npm_requested_specifier_is_dist_tag(value: str | None, *, ecosystem: str) -> bool:
+    if ecosystem != "npm":
+        return False
+    normalized = _optional_string(value)
+    if normalized is None:
+        return False
+    return re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]*", normalized) is not None
 
 
 def _optional_string(value: object) -> str | None:

@@ -1667,7 +1667,7 @@ def test_guard_protect_retry_after_local_package_approval_reuses_recent_cloud_va
     assert store.list_approval_requests(status="pending", limit=None) == []
 
 
-def test_guard_protect_denied_retry_does_not_requeue_local_package_approval(
+def test_guard_protect_denied_retry_requeues_local_package_approval_for_saved_block(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys,
@@ -1745,8 +1745,12 @@ def test_guard_protect_denied_retry_does_not_requeue_local_package_approval(
         isinstance(reason, dict) and reason.get("code") == "saved_package_block"
         for reason in retry_payload["supply_chain_evaluation"]["reasons"]
     )
-    assert "primary_approval_request_id" not in retry_payload
-    assert pending == []
+    assert isinstance(retry_payload["primary_approval_request_id"], str)
+    assert "http://127.0.0.1:5474/requests/" in retry_payload["review_hint"]
+    assert "http://127.0.0.1:5474/requests/" in retry_payload["supply_chain_evaluation"]["user_copy"][
+        "harness_message"
+    ]
+    assert len(pending) == 1
     assert len(resolved) == 1
 
 
@@ -1808,7 +1812,7 @@ def test_guard_protect_json_queues_local_approval_when_cached_advisory_overrides
     assert pending[0]["risk_summary"] != payload["supply_chain_evaluation"]["risk_summary"]
 
 
-def test_guard_protect_denied_retry_with_cloud_block_does_not_requeue_local_package_approval(
+def test_guard_protect_denied_retry_with_cloud_block_requeues_local_package_approval_for_saved_block(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys,
@@ -1886,8 +1890,12 @@ def test_guard_protect_denied_retry_with_cloud_block_does_not_requeue_local_pack
         isinstance(reason, dict) and reason.get("code") == "saved_package_block"
         for reason in retry_payload["supply_chain_evaluation"]["reasons"]
     )
-    assert "primary_approval_request_id" not in retry_payload
-    assert pending == []
+    assert isinstance(retry_payload["primary_approval_request_id"], str)
+    assert "http://127.0.0.1:5474/requests/" in retry_payload["review_hint"]
+    assert "http://127.0.0.1:5474/requests/" in retry_payload["supply_chain_evaluation"]["user_copy"][
+        "harness_message"
+    ]
+    assert len(pending) == 1
     assert len(resolved) == 1
 
 
