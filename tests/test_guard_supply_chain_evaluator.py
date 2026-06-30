@@ -471,7 +471,12 @@ def test_evaluate_package_request_artifact_posts_latest_range_for_unversioned_sc
         )
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir()
-        artifact = _artifact_for_targets("@stripe/cli", flags=("-g",))
+        artifact = _artifact_for_targets(
+            "@stripe/cli",
+            flags=("-g",),
+            manifest_paths=("package.json",),
+            lockfile_paths=("package-lock.json",),
+        )
 
         result = evaluate_package_request_artifact(
             artifact=artifact,
@@ -491,6 +496,8 @@ def test_evaluate_package_request_artifact_posts_latest_range_for_unversioned_sc
         "namespace": "@stripe",
         "range": "latest",
     }
+    assert "lockfileContext" not in request_payload
+    assert "workspaceContext" not in request_payload
     assert result.decision == "allow"
 
 
