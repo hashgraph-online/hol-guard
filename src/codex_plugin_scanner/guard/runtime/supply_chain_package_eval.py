@@ -1564,7 +1564,7 @@ def _build_request_payload(
     policy_version: str,
 ) -> dict[str, object]:
     lockfile_context = _lockfile_context(workspace_dir, artifact)
-    return {
+    payload: dict[str, object] = {
         "commandShape": {
             "argCount": len(str(artifact.metadata.get("redacted_command") or "").split()),
             "flags": list(_string_tuple(artifact.metadata.get("flags"))),
@@ -1573,7 +1573,6 @@ def _build_request_payload(
             "verb": str(artifact.metadata.get("intent_kind") or "install"),
         },
         "harness": artifact.harness,
-        "lockfileContext": lockfile_context,
         "packages": [
             {
                 "direct": True,
@@ -1590,6 +1589,9 @@ def _build_request_payload(
         "policyVersion": policy_version,
         "workspaceFingerprint": workspace_fingerprint,
     }
+    if lockfile_context is not None:
+        payload["lockfileContext"] = lockfile_context
+    return payload
 
 
 def _lockfile_context(workspace_dir: Path | None, artifact: GuardArtifact) -> dict[str, object] | None:
