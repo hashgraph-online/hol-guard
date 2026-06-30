@@ -86,6 +86,11 @@ _TARBALL_SCAN_MAX_BYTES = 6 * 1024 * 1024
 _TARBALL_SCAN_MAX_FILES = 500
 _TARBALL_SCAN_MAX_PACKAGE_JSON_BYTES = 256 * 1024
 _CLOUD_VALIDATION_ERROR_CACHE_TTL_SECONDS = 15 * 60
+_REGISTRY_DEFAULT_RANGES = {
+    "npm": "latest",
+    "pypi": ">=0",
+}
+_DIST_TAG_RANGE_ECOSYSTEMS = {"npm"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -1492,12 +1497,10 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
             source_url = _source_url_from_raw_spec(raw_spec)
         if source_url is not None:
             requested = None
-        if requested is None and ecosystem == "npm" and source_url is None:
-            requested = "latest"
-        if requested is None and ecosystem == "pypi" and source_url is None:
-            requested = ">=0"
+        if requested is None and source_url is None:
+            requested = _default_registry_range(ecosystem)
         exact_version = (
-            None if _npm_requested_specifier_is_dist_tag(requested, ecosystem=ecosystem) else _exact_version(requested)
+            None if _requested_specifier_is_range(requested, ecosystem=ecosystem) else _exact_version(requested)
         )
         parsed.append(
             {
@@ -3800,11 +3803,17 @@ def _exact_version(value: str | None) -> str | None:
     return normalized
 
 
-def _npm_requested_specifier_is_dist_tag(value: str | None, *, ecosystem: str) -> bool:
-    if ecosystem != "npm":
-        return False
+def _default_registry_range(ecosystem: str) -> str | None:
+    return _REGISTRY_DEFAULT_RANGES.get(ecosystem)
+
+
+def _requested_specifier_is_range(value: str | None, *, ecosystem: str) -> bool:
     normalized = _optional_string(value)
     if normalized is None:
+        return False
+    if _exact_version(normalized) is None:
+        return True
+    if ecosystem not in _DIST_TAG_RANGE_ECOSYSTEMS:
         return False
     return re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]*", normalized) is not None
 
