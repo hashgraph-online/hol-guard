@@ -1554,6 +1554,24 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if body_error is not None:
             self._write_json({"error": body_error}, status=400)
             return
+        if parsed.path == "/v1/healthz/verify":
+            nonce = self._optional_string(payload.get("nonce")) if payload else None
+            if not nonce:
+                self._write_json({"error": "missing_nonce"}, status=400)
+                return
+            auth_token = self.server.auth_token  # type: ignore[attr-defined]
+            daemon_port = self.server.server_address[1]  # type: ignore[attr-defined]
+            # Bind the proof to this daemon's listening port so a relay attacker
+            # cannot proxy the nonce to the real daemon and reuse its proof from
+            # a different port. The hook includes the same port in its local HMAC.
+            proof_message = f"{daemon_port}:{nonce}"
+            proof = hmac.new(
+                auth_token.encode("utf-8"),
+                proof_message.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+            self._write_json({"proof": proof})
+            return
         if self._requires_header_token(parsed.path, path_parts) and not self._header_token_is_valid(payload=payload):
             if (
                 len(path_parts) == 4

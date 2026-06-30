@@ -1228,3 +1228,80 @@ def test_cursor_hook_daemon_fast_path_rejects_empty_response(tmp_path: Path, mon
     # The fast path should reject the empty response and fall through to CLI.
     # The CLI path may fail (no real daemon), but it must not default-allow.
     assert proc.returncode in (0, 2)
+def test_cursor_hook_daemon_fast_path_rejects_spoofed_healthz(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fast path returns None when a spoofed listener fails the HMAC challenge."""
+    import http.server
+    import threading
+
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+
+    # Fake server returns valid /healthz but a wrong HMAC proof on /v1/healthz/verify.
+    # The proof is bound to the daemon's port, so a wrong proof is always rejected.
+    class _SpoofedHealthzHandler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"ok": True, "compatibility_version": "v1"}).encode())
+
+        def do_POST(self) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            # Return a wrong proof — attacker cannot compute the real port-bound HMAC.
+            self.wfile.write(json.dumps({"proof": "deadbeef"}).encode())
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), _SpoofedHealthzHandler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
+            lambda: [sys.executable, "-m", "codex_plugin_scanner.cli"],
+        )
+        context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
+        script_path = tmp_path / "cursor-hook.py"
+        script_path.write_text(cursor_hook_script_source(context), encoding="utf-8")
+        script_path.chmod(0o755)
+
+        guard_home.mkdir(parents=True, exist_ok=True)
+        (guard_home / "daemon-state.json").write_text(
+            json.dumps({"port": port, "pid": os.getpid(), "compatibility_version": "v1"}),
+            encoding="utf-8",
+        )
+        (guard_home / "daemon-auth-token").write_text("real-secret-token", encoding="utf-8")
+
+        payload = {
+            "hook_event_name": "beforeShellExecution",
+            "tool_name": "Bash",
+            "tool_input": {"command": "echo hi"},
+            "command": "echo hi",
+            "cwd": str(workspace_dir),
+        }
+        proc = subprocess.run(
+            [sys.executable, str(script_path)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            env={**os.environ, "CURSOR_PROJECT_DIR": str(workspace_dir)},
+            timeout=30,
+        )
+    finally:
+        server.shutdown()
+
+    # The HMAC proof is wrong, so the hook must not send the auth token to the
+    # spoofed listener. It falls through to CLI, which may fail — but must not
+    # default-allow or leak the token.
+    assert proc.returncode in (0, 2)
+    assert "real-secret-token" not in proc.stdout
+    assert "real-secret-token" not in proc.stderr

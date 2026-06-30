@@ -646,6 +646,41 @@ def _daemon_hook_result(
     state_compat = state.get("compatibility_version")
     if isinstance(state_compat, str) and health_json.get("compatibility_version") != state_compat:
         return None
+    # Challenge-response: prove the listener knows the auth_token before sending it.
+    # A spoofed listener can return public healthz values but cannot forge the HMAC.
+    # The proof is bound to the daemon's listening port so a relay attacker cannot
+    # proxy the nonce to the real daemon and reuse its proof from a different port.
+    # Old daemons without /v1/healthz/verify return 404 — skip the check for compat.
+    nonce = os.urandom(16).hex()
+    proof_message = f"{port}:{nonce}"
+    try:
+        verify_req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/v1/healthz/verify",
+            data=json.dumps({"nonce": nonce}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with opener.open(verify_req, timeout=2) as verify_response:
+            verify_body = verify_response.read().decode("utf-8", errors="replace")
+            try:
+                verify_json = json.loads(verify_body)
+            except ValueError:
+                return None
+            if not isinstance(verify_json, dict) or not isinstance(verify_json.get("proof"), str):
+                return None
+            expected_proof = hmac.new(
+                auth_token.encode("utf-8"),
+                proof_message.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+            if not hmac.compare_digest(verify_json["proof"], expected_proof):
+                return None
+    except urllib.error.HTTPError as exc:
+        if exc.code != 404:
+            return None
+        # Old daemon without /v1/healthz/verify — proceed with healthz-only check.
+    except (OSError, urllib.error.URLError):
+        return None
     params = [("guard-home", GUARD_HOME)]
     if workspace:
         params.append(("workspace", workspace))
