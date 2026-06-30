@@ -295,6 +295,8 @@ _PROMPT_SENTENCE_BOUNDARY_PATTERN = re.compile(r"[!?;]|[.](?=\s|$)")
 _GUARD_SYNC_USER_AGENT = f"hol-guard/{__version__}"
 _SYNC_HTTP_TIMEOUT_SECONDS = 20
 _SYNC_HTTP_RETRY_TIMEOUT_SECONDS = 120
+_SYNC_RETRYABLE_GATEWAY_STATUS_CODES = frozenset({502, 503, 504, 522, 524})
+_SYNC_RETRYABLE_GATEWAY_MAX_ATTEMPTS = 2
 _RUNTIME_SYNC_TIMEOUT_SECONDS = 10
 _RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS = 90
 _RECEIPT_SYNC_BATCH_SIZE = 50
@@ -2077,6 +2079,18 @@ def _parse_retry_after_header(error: urllib.error.HTTPError) -> int:
         return 60
 
 
+def _retryable_gateway_http_error(error: urllib.error.HTTPError) -> bool:
+    return error.code in _SYNC_RETRYABLE_GATEWAY_STATUS_CODES
+
+
+def _retry_after_sleep_seconds(error: urllib.error.HTTPError, retry_timeout_seconds: int) -> int:
+    return min(_parse_retry_after_header(error), retry_timeout_seconds)
+
+
+def _request_for_gateway_retry(request: urllib.request.Request) -> urllib.request.Request:
+    return _refresh_guard_sync_request(request) or request
+
+
 def _record_guard_events_sync_failure(
     store: GuardStore,
     *,
@@ -3295,6 +3309,7 @@ def _urlopen_json_with_timeout_retry(
     retried_timeout = False
     nonce_retry_count = 0
     rate_limit_retry_count = 0
+    gateway_retry_count = 0
     while True:
         try:
             with urllib.request.urlopen(current_request, timeout=current_timeout_seconds) as response:
@@ -3308,6 +3323,14 @@ def _urlopen_json_with_timeout_retry(
                 if refreshed_request is None:
                     raise
                 current_request = refreshed_request
+                current_timeout_seconds = timeout_seconds
+                retried_timeout = False
+                continue
+            if _retryable_gateway_http_error(error) and gateway_retry_count < _SYNC_RETRYABLE_GATEWAY_MAX_ATTEMPTS:
+                retry_after = _retry_after_sleep_seconds(error, retry_timeout_seconds)
+                time.sleep(retry_after)
+                gateway_retry_count += 1
+                current_request = _request_for_gateway_retry(current_request)
                 current_timeout_seconds = timeout_seconds
                 retried_timeout = False
                 continue
@@ -3351,6 +3374,7 @@ def _urlopen_with_timeout_retry(
     retried_timeout = False
     nonce_retry_count = 0
     rate_limit_retry_count = 0
+    gateway_retry_count = 0
     while True:
         try:
             with urllib.request.urlopen(current_request, timeout=current_timeout_seconds):
@@ -3364,6 +3388,14 @@ def _urlopen_with_timeout_retry(
                 if refreshed_request is None:
                     raise
                 current_request = refreshed_request
+                current_timeout_seconds = timeout_seconds
+                retried_timeout = False
+                continue
+            if _retryable_gateway_http_error(error) and gateway_retry_count < _SYNC_RETRYABLE_GATEWAY_MAX_ATTEMPTS:
+                retry_after = _retry_after_sleep_seconds(error, retry_timeout_seconds)
+                time.sleep(retry_after)
+                gateway_retry_count += 1
+                current_request = _request_for_gateway_retry(current_request)
                 current_timeout_seconds = timeout_seconds
                 retried_timeout = False
                 continue
