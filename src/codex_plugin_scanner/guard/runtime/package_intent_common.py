@@ -77,6 +77,7 @@ def build_package_request_artifact(
     config_path: str,
     source_scope: str,
 ) -> GuardArtifact:
+    manifest_paths, lockfile_paths = _artifact_workspace_paths(intent)
     fingerprint = hashlib.sha256(
         json.dumps(
             {
@@ -85,8 +86,8 @@ def build_package_request_artifact(
                 "intent_kind": intent.intent_kind,
                 "redacted_command": intent.redacted_command,
                 "targets": [target.to_dict() for target in intent.targets],
-                "manifest_paths": list(intent.manifest_paths),
-                "lockfile_paths": list(intent.lockfile_paths),
+                "manifest_paths": list(manifest_paths),
+                "lockfile_paths": list(lockfile_paths),
             },
             sort_keys=True,
         ).encode("utf-8")
@@ -103,8 +104,8 @@ def build_package_request_artifact(
             "package_manager": intent.package_manager,
             "intent_kind": intent.intent_kind,
             "targets": [target.to_dict() for target in intent.targets],
-            "manifest_paths": list(intent.manifest_paths),
-            "lockfile_paths": list(intent.lockfile_paths),
+            "manifest_paths": list(manifest_paths),
+            "lockfile_paths": list(lockfile_paths),
             "flags": list(intent.flags),
             "notes": list(intent.notes),
             "redacted_command": intent.redacted_command,
@@ -114,6 +115,44 @@ def build_package_request_artifact(
             "runtime_request_reason": package_runtime_reason(intent),
         },
     )
+
+
+def _artifact_workspace_paths(intent: PackageIntent) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    if _is_global_package_install(intent):
+        return (), ()
+    return intent.manifest_paths, intent.lockfile_paths
+
+
+def _is_global_package_install(intent: PackageIntent) -> bool:
+    if intent.package_manager not in {"npm", "pnpm", "yarn"}:
+        return False
+    if "multiple-package-segments" in intent.notes:
+        return _all_package_segments_are_global(intent)
+    return any(_is_true_global_flag(flag) for flag in intent.flags)
+
+
+def _all_package_segments_are_global(intent: PackageIntent) -> bool:
+    segments = tuple(segment.strip() for segment in intent.redacted_command.split(" ; ") if segment.strip())
+    if not segments:
+        return False
+    return all(_segment_has_global_flag(segment) for segment in segments)
+
+
+def _segment_has_global_flag(segment: str) -> bool:
+    try:
+        tokens = shlex.split(segment)
+    except ValueError:
+        tokens = segment.split()
+    return any(_is_true_global_flag(token) for token in tokens)
+
+
+def _is_true_global_flag(flag: str) -> bool:
+    normalized = flag.strip().lower()
+    if normalized in {"-g", "--global"}:
+        return True
+    if normalized.startswith("--global="):
+        return normalized.split("=", 1)[1] not in {"", "0", "false", "no", "off"}
+    return normalized == "--location=global"
 
 
 def package_request_summary(intent: PackageIntent) -> str:
@@ -170,9 +209,19 @@ def redacted_command(tokens: tuple[str, ...]) -> str:
 
 def flag_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
     flags: list[str] = []
-    for token in tokens:
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
         if token.startswith("-"):
-            flags.append(token.split("=", 1)[0] if token.startswith("--") and "=" in token else token)
+            if token == "--location" and index + 1 < len(tokens) and not tokens[index + 1].startswith("-"):
+                flags.append(f"--location={tokens[index + 1]}")
+                index += 2
+                continue
+            if token.startswith(("--global=", "--location=")):
+                flags.append(token)
+            else:
+                flags.append(token.split("=", 1)[0] if token.startswith("--") and "=" in token else token)
+        index += 1
     return tuple(dict.fromkeys(flags))
 
 

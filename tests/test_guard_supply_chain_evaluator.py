@@ -25,6 +25,7 @@ from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.runtime.package_intent_common import (
     PackageIntent,
     build_package_request_artifact,
+    flag_tokens,
     js_target,
     python_target,
 )
@@ -218,13 +219,14 @@ def _artifact_for_targets(
     lockfile_paths: tuple[str, ...] = (),
     flags: tuple[str, ...] = (),
     notes: tuple[str, ...] = (),
+    redacted_command: str | None = None,
 ) -> object:
     command_tokens = tuple([package_manager, intent_kind, *targets])
     intent = PackageIntent(
         package_manager=package_manager,
         intent_kind=intent_kind,
         command_tokens=command_tokens,
-        redacted_command=" ".join(command_tokens),
+        redacted_command=redacted_command or " ".join(command_tokens),
         targets=tuple(js_target(target) for target in targets),
         manifest_paths=manifest_paths,
         lockfile_paths=lockfile_paths,
@@ -471,7 +473,12 @@ def test_evaluate_package_request_artifact_posts_latest_range_for_unversioned_sc
         )
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir()
-        artifact = _artifact_for_targets("@stripe/cli", flags=("-g",))
+        artifact = _artifact_for_targets(
+            "@stripe/cli",
+            flags=("-g",),
+            manifest_paths=("package.json",),
+            lockfile_paths=("package-lock.json",),
+        )
 
         result = evaluate_package_request_artifact(
             artifact=artifact,
@@ -491,7 +498,59 @@ def test_evaluate_package_request_artifact_posts_latest_range_for_unversioned_sc
         "namespace": "@stripe",
         "range": "latest",
     }
+    assert "lockfileContext" not in request_payload
+    assert "workspaceContext" not in request_payload
     assert result.decision == "allow"
+
+
+def test_global_false_package_request_keeps_workspace_context() -> None:
+    artifact = _artifact_for_targets(
+        "left-pad",
+        flags=("--global=false",),
+        manifest_paths=("package.json",),
+        lockfile_paths=("package-lock.json",),
+    )
+
+    assert artifact.metadata["manifest_paths"] == ["package.json"]
+    assert artifact.metadata["lockfile_paths"] == ["package-lock.json"]
+
+
+def test_flag_tokens_preserves_global_boolean_values() -> None:
+    assert flag_tokens(("install", "--global=false", "--location=project", "left-pad")) == (
+        "--global=false",
+        "--location=project",
+    )
+    assert flag_tokens(("install", "--location", "global", "left-pad")) == ("--location=global",)
+    assert flag_tokens(("install", "--location", "project", "left-pad")) == ("--location=project",)
+
+
+def test_merged_global_and_project_install_keeps_workspace_context() -> None:
+    artifact = _artifact_for_targets(
+        "eslint",
+        "left-pad",
+        flags=("-g",),
+        notes=("multiple-package-segments",),
+        manifest_paths=("package.json",),
+        lockfile_paths=("package-lock.json",),
+    )
+
+    assert artifact.metadata["manifest_paths"] == ["package.json"]
+    assert artifact.metadata["lockfile_paths"] == ["package-lock.json"]
+
+
+def test_merged_all_global_installs_omit_workspace_context() -> None:
+    artifact = _artifact_for_targets(
+        "eslint",
+        "typescript",
+        flags=("-g",),
+        notes=("multiple-package-segments",),
+        manifest_paths=("package.json",),
+        lockfile_paths=("package-lock.json",),
+        redacted_command="npm install -g eslint ; npm install -g typescript",
+    )
+
+    assert artifact.metadata["manifest_paths"] == []
+    assert artifact.metadata["lockfile_paths"] == []
 
 
 def test_evaluate_package_request_artifact_does_not_convert_npm_source_specs_to_latest(
@@ -902,10 +961,12 @@ def test_evaluate_package_request_artifact_fails_closed_on_untrusted_cloud_http_
         )
 
     monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", raise_http_error)
+    artifact = _artifact_for_targets("left-pad@1.0.0")
+    workspace_dir = tmp_path / "workspace"
     result = evaluate_package_request_artifact(
-        artifact=_artifact_for_targets("left-pad@1.0.0"),
+        artifact=artifact,
         store=store,
-        workspace_dir=tmp_path / "workspace",
+        workspace_dir=workspace_dir,
         now="2026-05-19T00:00:00Z",
     )
 
@@ -943,11 +1004,13 @@ def test_evaluate_package_request_artifact_strict_mode_blocks_on_cloud_unreachab
     def raise_timeout(*args: object, **kwargs: object) -> object:
         raise TimeoutError("network unreachable")
 
+    artifact = _artifact_for_targets("left-pad@1.0.0")
+    workspace_dir = tmp_path / "workspace"
     monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", raise_timeout)
     result = evaluate_package_request_artifact(
-        artifact=_artifact_for_targets("left-pad@1.0.0"),
+        artifact=artifact,
         store=store,
-        workspace_dir=tmp_path / "workspace",
+        workspace_dir=workspace_dir,
         now="2026-05-19T00:00:00Z",
     )
 
@@ -955,6 +1018,35 @@ def test_evaluate_package_request_artifact_strict_mode_blocks_on_cloud_unreachab
     assert result.policy_action == "block"
     assert result.enforcement == "premium_cloud"
     assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
+    cached = store.get_cached_supply_chain_evaluation(
+        workspace_id=WORKSPACE_ID,
+        package_intent_hash=result.package_intent_hash,
+        feed_snapshot_hash="feed-snapshot-1",
+        policy_hash="policy-hash-1",
+        scoring_version="scf-v1",
+        bundle_version="1747612800000-deadbeef",
+    )
+    assert isinstance(cached, dict)
+
+    monkeypatch.setattr(
+        evaluator_module,
+        "_urlopen_json_with_timeout_retry",
+        lambda *args, **kwargs: _cloud_response(
+            decision="monitor",
+            enforcement="premium_cloud",
+            entitlement_state="premium",
+            package_name="left-pad",
+        ),
+    )
+    retried = evaluate_package_request_artifact(
+        artifact=artifact,
+        store=store,
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:05:00Z",
+    )
+
+    assert retried.decision == "monitor"
+    assert not any(reason["code"] == "cloud_validation_error" for reason in retried.reasons)
 
 
 def test_evaluate_package_request_artifact_rejects_untrusted_cloud_endpoint_before_network(
