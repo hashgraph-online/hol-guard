@@ -2645,9 +2645,7 @@ def sync_managed_workspace_audits(
             cloud_visible_count = _int_value(final_response.get("totalPackages"))
             cloud_processed_count = _int_value(final_response.get("processedCount"))
             incomplete_cloud_projection = (
-                final_status == "completed"
-                and cloud_visible_count is not None
-                and cloud_visible_count < len(inventory)
+                final_status == "completed" and cloud_visible_count is not None and cloud_visible_count < len(inventory)
             )
             if incomplete_cloud_projection:
                 incomplete_jobs += 1

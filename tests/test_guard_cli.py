@@ -9196,16 +9196,18 @@ url = http://127.0.0.1:8787/guard-canary
             _fake_sync_supply_chain_cloud_state,
         )
 
-        rc = main([
-            "guard",
-            "supply-chain",
-            "sync",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--json",
-        ])
+        rc = main(
+            [
+                "guard",
+                "supply-chain",
+                "sync",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
@@ -9237,16 +9239,18 @@ url = http://127.0.0.1:8787/guard-canary
             _fail_sync,
         )
 
-        rc = main([
-            "guard",
-            "supply-chain",
-            "sync",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--json",
-        ])
+        rc = main(
+            [
+                "guard",
+                "supply-chain",
+                "sync",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 1
