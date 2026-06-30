@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.cli.commands_support_codex_tool_output_messages 
 )
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -116,12 +117,12 @@ class TestPiDetect:
         assert result.harness == "pi"
         assert any(path.endswith(".pi/agent/settings.json") for path in result.config_paths)
         artifact_ids = {artifact.artifact_id for artifact in result.artifacts}
-        assert f"pi:global:package:{stable_suffix('npm:@demo/pi-tools@1.2.3')}" in artifact_ids
-        assert "pi:global:extension:demo.ts" in artifact_ids
-        assert "pi:global:skill:skills/ship" in artifact_ids
-        assert "pi:global:prompt:review.md" in artifact_ids
-        assert "pi:global:theme:night.json" in artifact_ids
-        assert "pi:project:extension:local.ts" in artifact_ids
+        assert f"pi:pi-global:package:{stable_suffix('npm:@demo/pi-tools@1.2.3')}" in artifact_ids
+        assert "pi:pi-global:extension:demo.ts" in artifact_ids
+        assert "pi:pi-global:skill:skills/ship" in artifact_ids
+        assert "pi:pi-global:prompt:review.md" in artifact_ids
+        assert "pi:pi-global:theme:night.json" in artifact_ids
+        assert "pi:pi-project:extension:local.ts" in artifact_ids
 
     def test_detect_keeps_empty_settings_file(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
@@ -143,7 +144,40 @@ class TestPiDetect:
         result = get_adapter("pi").detect(ctx)
 
         assert str(ctx.home_dir / ".omp" / "agent" / "settings.json") in result.config_paths
-        assert "pi:global:extension:omp-ext.ts" in {artifact.artifact_id for artifact in result.artifacts}
+        assert "pi:omp-global:extension:omp-ext.ts" in {artifact.artifact_id for artifact in result.artifacts}
+
+    def test_pi_and_omp_managed_extensions_have_distinct_aibom_item_ids(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        _write_text(ctx.home_dir / ".pi" / "agent" / "extensions" / "hol-guard.ts", "export default 'pi';\n")
+        _write_text(ctx.home_dir / ".omp" / "agent" / "extensions" / "hol-guard.ts", "export default 'omp';\n")
+
+        detection = get_adapter("pi").detect(ctx)
+        snapshot = inventory_snapshot_from_detection(
+            detection,
+            generated_at="2026-06-29T00:00:00Z",
+            home_dir=ctx.home_dir,
+            workspace_dir=ctx.workspace_dir,
+        )
+
+        item_keys = [(item.item_kind, item.item_id) for item in snapshot.items]
+        assert len(item_keys) == len(set(item_keys))
+        assert {item.item_id for item in snapshot.items} >= {
+            "pi:pi-global:extension:hol-guard.ts",
+            "pi:omp-global:extension:hol-guard.ts",
+        }
+
+    def test_pi_and_omp_shared_configured_extension_keeps_both_scoped_items(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        shared_extension = tmp_path / "shared" / "hol-guard.ts"
+        _write_text(shared_extension, "export default 'shared';\n")
+        _write_json(ctx.home_dir / ".pi" / "agent" / "settings.json", {"extensions": [str(shared_extension)]})
+        _write_json(ctx.home_dir / ".omp" / "agent" / "settings.json", {"extensions": [str(shared_extension)]})
+
+        result = get_adapter("pi").detect(ctx)
+
+        artifact_ids = {artifact.artifact_id for artifact in result.artifacts}
+        assert "pi:pi-global:extension:hol-guard.ts" in artifact_ids
+        assert "pi:omp-global:extension:hol-guard.ts" in artifact_ids
 
     def test_detect_expands_configured_extension_glob(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
@@ -159,8 +193,8 @@ class TestPiDetect:
         result = get_adapter("pi").detect(ctx)
 
         artifact_ids = {artifact.artifact_id for artifact in result.artifacts}
-        assert "pi:project:extension:one.ts" in artifact_ids
-        assert "pi:project:extension:two.ts" in artifact_ids
+        assert "pi:pi-project:extension:one.ts" in artifact_ids
+        assert "pi:pi-project:extension:two.ts" in artifact_ids
         assert str(shared_root / "one.ts") in result.config_paths
 
     def test_root_skill_uses_stable_identity(self, tmp_path: Path) -> None:
@@ -170,7 +204,7 @@ class TestPiDetect:
         result = get_adapter("pi").detect(ctx)
 
         skills = [artifact for artifact in result.artifacts if artifact.artifact_type == "skill"]
-        assert skills[0].artifact_id == "pi:global:skill:skills"
+        assert skills[0].artifact_id == "pi:pi-global:skill:skills"
         assert skills[0].name == "skills"
 
 
