@@ -16,7 +16,7 @@ from ..cli.install_commands import (
     list_harness_setup_items,
     uninstall_confirmation_token,
 )
-from ..config import load_guard_config
+from ..config import VALID_RECEIPT_REDACTION_LEVELS, load_guard_config
 from ..local_supply_chain import (
     build_workspace_audit_payload,
     managed_install_audit_workspace_dirs,
@@ -25,6 +25,7 @@ from ..local_supply_chain import (
 )
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, DecisionScope, GuardAction, PolicyDecision
 from ..package_shim_status import record_package_shim_audit_result
+from ..redaction import redact_text
 from ..review_contracts import (
     GuardReviewContractError,
     build_local_review_request_claim,
@@ -418,6 +419,7 @@ def _is_guard_action(value: object) -> TypeGuard[GuardAction]:
 
 def _local_request_snapshot_items(store: GuardStore) -> list[dict[str, object]]:
     items: list[dict[str, object]] = []
+    redaction_level = _resolve_cloud_receipt_redaction_level(store)
     try:
         oauth = guard_review_oauth_metadata(store)
     except GuardReviewContractError:
@@ -445,7 +447,10 @@ def _local_request_snapshot_items(store: GuardStore) -> list[dict[str, object]]:
                     "claim": claim,
                     "localRequestId": request_id,
                     "requestKind": str(item.get("harness") or "guard-review"),
-                    "requestPayload": dict(item),
+                    "requestPayload": _cloud_safe_local_request_payload(
+                        item,
+                        redaction_level=redaction_level,
+                    ),
                     "localStatus": str(item.get("status") or status),
                     "firstSeenAt": created_at,
                     "lastSeenAt": last_seen_at,
@@ -453,6 +458,127 @@ def _local_request_snapshot_items(store: GuardStore) -> list[dict[str, object]]:
                 }
             )
     return items[:200]
+
+
+def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
+    payload = store.get_sync_payload("cloud_receipt_redaction_level")
+    if isinstance(payload, dict):
+        level = payload.get("level")
+        if isinstance(level, str) and level in VALID_RECEIPT_REDACTION_LEVELS:
+            return level
+    try:
+        config = load_guard_config(store.guard_home)
+        if config.receipt_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
+            return config.receipt_redaction_level
+    except Exception:
+        pass
+    return "full"
+
+
+def _optional_payload_mapping(value: object) -> dict[str, object] | None:
+    return dict(value) if isinstance(value, dict) else None
+
+
+def _cloud_safe_local_request_payload(
+    item: dict[str, object],
+    *,
+    redaction_level: str,
+) -> dict[str, object]:
+    payload: dict[str, object] = {}
+    for key in (
+        "request_id",
+        "status",
+        "harness",
+        "artifact_id",
+        "artifact_hash",
+        "policy_action",
+        "recommended_scope",
+        "created_at",
+        "last_seen_at",
+        "queue_group_id",
+        "review_kind",
+        "risk_category",
+        "capability_category",
+        "publisher",
+        "package_manager",
+        "package_name",
+    ):
+        value = item.get(key)
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            payload[key] = value
+
+    envelope = _optional_payload_mapping(item.get("action_envelope_json"))
+    safe_envelope = _cloud_safe_action_envelope(envelope, redaction_level=redaction_level)
+    if safe_envelope is not None:
+        payload["action_envelope_json"] = safe_envelope
+
+    if redaction_level == "full":
+        payload["raw_command_text"] = None
+        payload["command_text"] = None
+        return payload
+
+    command_text = _local_request_command_text(item, envelope)
+    if command_text:
+        scrubbed = redact_text(command_text).text
+        payload["raw_command_text"] = scrubbed
+        payload["command_text"] = scrubbed
+        payload_envelope = payload.get("action_envelope_json")
+        if isinstance(payload_envelope, dict):
+            payload_envelope["command"] = scrubbed
+    return payload
+
+
+def _local_request_command_text(
+    payload: dict[str, object],
+    envelope: dict[str, object] | None,
+) -> str | None:
+    for key in ("raw_command_text", "rawCommandText", "command_text", "commandText"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    if envelope is None:
+        return None
+    command = envelope.get("command")
+    return command.strip() if isinstance(command, str) and command.strip() else None
+
+
+def _cloud_safe_action_envelope(
+    envelope: dict[str, object] | None,
+    *,
+    redaction_level: str,
+) -> dict[str, object] | None:
+    if envelope is None:
+        return None
+    safe: dict[str, object] = {}
+    for key in (
+        "schema_version",
+        "action_id",
+        "harness",
+        "event_name",
+        "action_type",
+        "workspace_hash",
+        "tool_name",
+        "mcp_server",
+        "mcp_tool",
+        "target_path_count",
+        "network_host_count",
+        "package_manager",
+    ):
+        value = envelope.get(key)
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            safe[key] = value
+    if redaction_level != "full":
+        command = envelope.get("command")
+        if isinstance(command, str) and command.strip():
+            safe["command"] = redact_text(command).text
+    if redaction_level == "none":
+        for key in ("target_paths", "network_hosts", "package_name", "package_targets"):
+            value = envelope.get(key)
+            if isinstance(value, list):
+                safe[key] = [item for item in value if isinstance(item, str)]
+            elif isinstance(value, str):
+                safe[key] = value
+    return safe or None
 
 
 def _package_shim_context(

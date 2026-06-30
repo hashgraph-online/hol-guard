@@ -359,6 +359,87 @@ def test_local_request_snapshot_items_continues_when_request_claim_is_invalid(tm
     assert snapshot[0]["claim"] is None
 
 
+def test_local_request_snapshot_strips_command_when_redaction_is_full(tmp_path: Path) -> None:
+    class RequestStore(FakeStore):
+        def list_approval_requests(
+            self,
+            *,
+            status: str | None = "pending",
+            harness: str | None = None,
+            limit: int | None = 50,
+            cursor: str | None = None,
+            search: str | None = None,
+        ) -> list[dict[str, object]]:
+            del harness, limit, cursor, search
+            if status == "pending":
+                row = _approval_request_row("req-full-redaction")
+                row["raw_command_text"] = "sed -n '1,80p' .env"
+                row["rawCommandText"] = "cat PRIVATE_KEY_FILE"
+                row["commandText"] = "cat CREDENTIAL_FILE"
+                row["raw_target_paths"] = ["secret-config.txt"]
+                row["request_payload_json"] = {"command": "cat secret-config.txt"}
+                return [row]
+            return []
+
+    store = RequestStore(tmp_path / "guard-home")
+    store.payloads["cloud_receipt_redaction_level"] = {"level": "full"}
+
+    snapshot = command_executors._local_request_snapshot_items(store)
+
+    payload = snapshot[0]["requestPayload"]
+    assert isinstance(payload, dict)
+    envelope = payload["action_envelope_json"]
+    assert isinstance(envelope, dict)
+    assert payload["raw_command_text"] is None
+    assert payload["command_text"] is None
+    assert "rawCommandText" not in payload
+    assert "commandText" not in payload
+    assert "raw_target_paths" not in payload
+    assert "request_payload_json" not in payload
+    assert "command" not in envelope
+
+
+def test_local_request_snapshot_syncs_scrubbed_command_when_redaction_is_partial(tmp_path: Path) -> None:
+    class RequestStore(FakeStore):
+        def list_approval_requests(
+            self,
+            *,
+            status: str | None = "pending",
+            harness: str | None = None,
+            limit: int | None = 50,
+            cursor: str | None = None,
+            search: str | None = None,
+        ) -> list[dict[str, object]]:
+            del harness, limit, cursor, search
+            if status == "pending":
+                row = _approval_request_row("req-partial-redaction")
+                row["rawCommandText"] = "grep sk-test-token src/config.ts"
+                row["action_envelope_json"] = {
+                    "action_type": "shell_command",
+                    "command": "cat PRIVATE_KEY_FILE",
+                    "tool_name": "grep",
+                    "target_paths": ["src/config.ts"],
+                }
+                return [row]
+            return []
+
+    store = RequestStore(tmp_path / "guard-home")
+    store.payloads["cloud_receipt_redaction_level"] = {"level": "partial"}
+
+    snapshot = command_executors._local_request_snapshot_items(store)
+
+    payload = snapshot[0]["requestPayload"]
+    assert isinstance(payload, dict)
+    envelope = payload["action_envelope_json"]
+    assert isinstance(envelope, dict)
+    assert payload["raw_command_text"] == "grep sk-***** src/config.ts"
+    assert payload["command_text"] == "grep sk-***** src/config.ts"
+    assert "rawCommandText" not in payload
+    assert "commandText" not in payload
+    assert envelope["command"] == "grep sk-***** src/config.ts"
+    assert "target_paths" not in envelope
+
+
 def test_executor_rejects_remote_approval_without_trusted_keyring(tmp_path: Path) -> None:
     class RequestStore(FakeStore):
         def __init__(self, guard_home: Path) -> None:
