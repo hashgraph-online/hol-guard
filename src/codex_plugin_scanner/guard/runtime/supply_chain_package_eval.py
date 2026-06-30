@@ -1576,7 +1576,6 @@ def _build_request_payload(
         "packages": [
             {
                 "direct": True,
-                "dependencyPath": None,
                 "ecosystem": str(target["ecosystem"]),
                 "name": str(target["name"]),
                 "namespace": target["namespace"],
