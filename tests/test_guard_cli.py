@@ -9214,6 +9214,47 @@ url = http://127.0.0.1:8787/guard-canary
         assert output["workspace_audits"]["workspaces"][0]["package_count"] == 280
         assert output["workspace_audits"]["workspaces"][0]["cloud_visible_count"] == 280
 
+    def test_guard_supply_chain_sync_reports_unavailable_error(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_resolve_guard_sync_auth_context",
+            lambda _store: {
+                "access_token": "token",
+                "sync_url": "https://guard.example/api/guard/receipts/sync",
+            },
+        )
+
+        def _fail_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
+            raise guard_commands_module.GuardSyncNotAvailableError("Guard supply-chain audit is not available.")
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "sync_supply_chain_cloud_state",
+            _fail_sync,
+        )
+
+        rc = main([
+            "guard",
+            "supply-chain",
+            "sync",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output == {
+            "synced": False,
+            "error": "Guard supply-chain audit is not available.",
+        }
+
     def test_refresh_cloud_policy_bundle_records_auth_expired_reason(self, tmp_path, monkeypatch):
         home_dir = tmp_path / "home"
         _disable_oauth_persistence_assert(monkeypatch)

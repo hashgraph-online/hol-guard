@@ -423,6 +423,12 @@ def _run_guard_supply_chain_command(
             else:
                 print(message, file=sys.stderr)
             return 1
+        except GuardSyncNotAvailableError as error:
+            if getattr(args, "json", False):
+                _emit("supply-chain-sync", {"synced": False, "error": str(error)}, True)
+            else:
+                print(str(error), file=sys.stderr)
+            return 1
         except RuntimeError as error:
             if getattr(args, "json", False):
                 _emit("supply-chain-sync", {"synced": False, "error": str(error)}, True)
