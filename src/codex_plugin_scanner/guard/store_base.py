@@ -1409,18 +1409,11 @@ def _policy_integrity_setup_safe_for_local_write(payload: Mapping[str, object]) 
     if not isinstance(counts, Mapping):
         return False
     eligible_invalid_rows = 0
-    total_rows = 0
     for status in _POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES:
         count = counts.get(status)
         if isinstance(count, int) and count > 0:
             eligible_invalid_rows += count
-    for status in _POLICY_INTEGRITY_STATUSES:
-        count = counts.get(status)
-        if isinstance(count, int) and count > 0:
-            total_rows += count
-    if eligible_invalid_rows > 0:
-        return True
-    return payload.get("mode") == "degraded" and total_rows == 0
+    return eligible_invalid_rows > 0
 
 
 def _family_key_value(family_key: str) -> str:

@@ -3156,7 +3156,7 @@ class TestGuardApprovals:
 
         assert rc == 2
         assert "Guard rules clear" in output
-        assert "Choose --harness <name> or --all" in output
+        assert "Choose --decision-id <id>, --harness <name>, or --all" in output
 
     def test_guard_policies_list_uses_remembered_rule_copy(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
