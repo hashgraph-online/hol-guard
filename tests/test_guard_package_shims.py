@@ -1667,11 +1667,13 @@ def test_guard_protect_retry_after_local_package_approval_reuses_recent_cloud_va
     assert store.list_approval_requests(status="pending", limit=None) == []
 
 
-def test_guard_protect_denied_retry_does_not_requeue_local_package_approval(
+def test_guard_protect_denied_retry_surfaces_saved_block_clear_command_without_requeue(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    install_fake_system_keyring,
     capsys,
 ) -> None:
+    install_fake_system_keyring()
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
@@ -1745,7 +1747,11 @@ def test_guard_protect_denied_retry_does_not_requeue_local_package_approval(
         isinstance(reason, dict) and reason.get("code") == "saved_package_block"
         for reason in retry_payload["supply_chain_evaluation"]["reasons"]
     )
+    user_copy = retry_payload["supply_chain_evaluation"]["user_copy"]
     assert "primary_approval_request_id" not in retry_payload
+    assert "hol-guard policies clear" in user_copy["harness_message"]
+    assert "--artifact-id" in user_copy["next_step"]
+    assert "--artifact-hash" in user_copy["next_step"]
     assert pending == []
     assert len(resolved) == 1
 
@@ -1808,11 +1814,13 @@ def test_guard_protect_json_queues_local_approval_when_cached_advisory_overrides
     assert pending[0]["risk_summary"] != payload["supply_chain_evaluation"]["risk_summary"]
 
 
-def test_guard_protect_denied_retry_with_cloud_block_does_not_requeue_local_package_approval(
+def test_guard_protect_denied_retry_with_cloud_block_surfaces_saved_block_clear_command_without_requeue(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    install_fake_system_keyring,
     capsys,
 ) -> None:
+    install_fake_system_keyring()
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
@@ -1886,7 +1894,11 @@ def test_guard_protect_denied_retry_with_cloud_block_does_not_requeue_local_pack
         isinstance(reason, dict) and reason.get("code") == "saved_package_block"
         for reason in retry_payload["supply_chain_evaluation"]["reasons"]
     )
+    user_copy = retry_payload["supply_chain_evaluation"]["user_copy"]
     assert "primary_approval_request_id" not in retry_payload
+    assert "hol-guard policies clear" in user_copy["harness_message"]
+    assert "--artifact-id" in user_copy["next_step"]
+    assert "--artifact-hash" in user_copy["next_step"]
     assert pending == []
     assert len(resolved) == 1
 

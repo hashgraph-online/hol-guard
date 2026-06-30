@@ -1432,17 +1432,63 @@ def _apply_stored_package_policy_override(
             reason_message="HOL Guard reused your saved approval for this package request.",
         )
     if action == "block":
+        clear_command = _saved_package_policy_clear_command(
+            artifact=artifact,
+            artifact_hash=artifact_hash,
+            matched_policy=decision,
+            workspace_dir=workspace_dir,
+        )
         return _package_policy_override_evaluation(
             evaluation,
             decision="block",
             policy_action="block",
             title="Blocked by saved policy",
             summary="HOL Guard kept this package blocked because a saved package policy already exists.",
-            harness_message="HOL Guard kept this package blocked because a saved package policy already exists.",
+            harness_message=(
+                "HOL Guard kept this package blocked because a saved package policy already exists. "
+                f"To reconsider, run `{clear_command}`, then retry the install."
+            ),
+            next_step=clear_command,
             reason_code="saved_package_block",
             reason_message="HOL Guard kept this package blocked because a saved package policy already exists.",
         )
     return evaluation
+
+
+def _saved_package_policy_clear_command(
+    *,
+    artifact: GuardArtifact,
+    artifact_hash: str,
+    matched_policy: dict[str, object],
+    workspace_dir: Path,
+) -> str:
+    scope = _string_value(matched_policy.get("scope")) or "artifact"
+    command = [
+        "hol-guard",
+        "policies",
+        "clear",
+    ]
+    decision_id = matched_policy.get("decision_id")
+    if isinstance(decision_id, int):
+        command.extend(("--decision-id", str(decision_id)))
+    command.extend(("--harness", _string_value(matched_policy.get("harness")) or artifact.harness, "--scope", scope))
+    artifact_id = _string_value(matched_policy.get("artifact_id"))
+    if artifact_id is None and scope in {"artifact", "workspace", "harness", "global"}:
+        artifact_id = artifact.artifact_id
+    if artifact_id is not None:
+        command.extend(("--artifact-id", artifact_id))
+    matched_hash = _string_value(matched_policy.get("artifact_hash"))
+    if matched_hash is not None:
+        command.extend(("--artifact-hash", matched_hash))
+    policy_workspace = _string_value(matched_policy.get("workspace"))
+    if policy_workspace is None and scope in {"artifact", "workspace"}:
+        policy_workspace = str(workspace_dir)
+    if policy_workspace is not None:
+        command.extend(("--policy-workspace", policy_workspace))
+    publisher = _string_value(matched_policy.get("publisher"))
+    if publisher is not None:
+        command.extend(("--publisher", publisher))
+    return shlex.join(command)
 
 
 def recompute_package_protect_artifact_hash(
@@ -1619,6 +1665,7 @@ def _package_policy_override_evaluation(
     title: str,
     summary: str,
     harness_message: str,
+    next_step: str | None = None,
     reason_code: str,
     reason_message: str,
 ) -> Any:
@@ -1639,7 +1686,7 @@ def _package_policy_override_evaluation(
         user_copy=_supply_chain_package_eval_module().SupplyChainUserCopy(
             title=title,
             summary=summary,
-            next_step=None,
+            next_step=next_step,
             dashboard_url=None,
             harness_message=harness_message,
         ),

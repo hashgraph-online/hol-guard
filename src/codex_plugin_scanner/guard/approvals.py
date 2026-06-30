@@ -559,6 +559,11 @@ def apply_approval_resolution(
             decision,
             expires_at=_approval_once_policy_expires_at(resolved_at),
         )
+        store.ensure_policy_integrity_ready_for_write(
+            harness=once_decision.harness if once_decision.harness != "*" else None,
+            approval_gate_grant=resolved_gate_grant,
+            now=resolved_at,
+        )
         store.upsert_policy(
             once_decision,
             resolved_at,

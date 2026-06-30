@@ -1148,6 +1148,59 @@ def test_gr119_cli_clears_project_scope_without_clearing_exact_or_global(tmp_pat
     assert remaining_scopes == {"artifact", "global"}
 
 
+def test_policy_clear_by_decision_id_removes_only_that_row(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    now = "2026-05-13T00:00:00+00:00"
+    store.upsert_policy(
+        PolicyDecision(
+            harness="guard-cli",
+            scope="artifact",
+            action="block",
+            artifact_id="family:package-request",
+            artifact_hash=None,
+            workspace="/repo/app",
+        ),
+        now,
+    )
+    store.upsert_policy(
+        PolicyDecision(
+            harness="guard-cli",
+            scope="artifact",
+            action="block",
+            artifact_id="family:package-request",
+            artifact_hash="sha256-specific",
+            workspace="/repo/app",
+        ),
+        now,
+    )
+    hashless_id = int(
+        next(
+            policy["decision_id"]
+            for policy in store.list_policy_decisions("guard-cli")
+            if policy["artifact_hash"] is None
+        )
+    )
+
+    rc = main(
+        [
+            "guard",
+            "policies",
+            "clear",
+            "--home",
+            str(home_dir),
+            "--decision-id",
+            str(hashless_id),
+            "--json",
+        ]
+    )
+
+    remaining = store.list_policy_decisions("guard-cli")
+    assert rc == 0
+    assert len(remaining) == 1
+    assert remaining[0]["artifact_hash"] == "sha256-specific"
+
+
 def test_gr119_workspace_clear_matches_legacy_plaintext_workspace_policy(tmp_path: Path) -> None:
     store = _store(tmp_path)
     with sqlite3.connect(store.path) as connection:

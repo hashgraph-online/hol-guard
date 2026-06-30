@@ -86,6 +86,11 @@ _TARBALL_SCAN_MAX_BYTES = 6 * 1024 * 1024
 _TARBALL_SCAN_MAX_FILES = 500
 _TARBALL_SCAN_MAX_PACKAGE_JSON_BYTES = 256 * 1024
 _CLOUD_VALIDATION_ERROR_CACHE_TTL_SECONDS = 15 * 60
+_REGISTRY_DEFAULT_RANGES = {
+    "npm": "latest",
+    "pypi": ">=0",
+}
+_DIST_TAG_RANGE_ECOSYSTEMS = {"npm"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -1484,13 +1489,19 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
             continue
         namespace, name = _split_namespace_name(package_name)
         requested = _optional_string(item.get("requested_specifier"))
-        exact_version = _exact_version(requested)
         raw_spec = _optional_string(item.get("raw_spec")) or package_name
         source_url = _optional_string(item.get("source_url"))
         if source_url is None:
             source_url = _source_url_from_specifier(requested)
         if source_url is None:
             source_url = _source_url_from_raw_spec(raw_spec)
+        if source_url is not None:
+            requested = None
+        if requested is None and source_url is None:
+            requested = _default_registry_range(ecosystem)
+        exact_version = (
+            None if _requested_specifier_is_range(requested, ecosystem=ecosystem) else _exact_version(requested)
+        )
         parsed.append(
             {
                 "ecosystem": ecosystem,
@@ -1570,6 +1581,7 @@ def _build_request_payload(
                 "ecosystem": str(target["ecosystem"]),
                 "name": str(target["name"]),
                 "namespace": target["namespace"],
+                **({"sourceUrl": str(target["source_url"])} if target.get("source_url") else {}),
                 **({"version": str(target["version"])} if target.get("version") else {}),
                 **({"range": str(target["range"])} if target.get("range") else {}),
             }
@@ -3790,6 +3802,21 @@ def _exact_version(value: str | None) -> str | None:
     if any(token in normalized for token in ("||", " - ", ",")):
         return None
     return normalized
+
+
+def _default_registry_range(ecosystem: str) -> str | None:
+    return _REGISTRY_DEFAULT_RANGES.get(ecosystem)
+
+
+def _requested_specifier_is_range(value: str | None, *, ecosystem: str) -> bool:
+    normalized = _optional_string(value)
+    if normalized is None:
+        return False
+    if _exact_version(normalized) is None:
+        return True
+    if ecosystem not in _DIST_TAG_RANGE_ECOSYSTEMS:
+        return False
+    return re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]*", normalized) is not None
 
 
 def _optional_string(value: object) -> str | None:
