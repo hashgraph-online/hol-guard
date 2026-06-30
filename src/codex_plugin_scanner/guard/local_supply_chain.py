@@ -1435,6 +1435,7 @@ def _apply_stored_package_policy_override(
         clear_command = _saved_package_policy_clear_command(
             artifact=artifact,
             artifact_hash=artifact_hash,
+            matched_policy=decision,
             workspace_dir=workspace_dir,
         )
         return _package_policy_override_evaluation(
@@ -1458,25 +1459,36 @@ def _saved_package_policy_clear_command(
     *,
     artifact: GuardArtifact,
     artifact_hash: str,
+    matched_policy: dict[str, object],
     workspace_dir: Path,
 ) -> str:
-    return shlex.join(
-        (
-            "hol-guard",
-            "policies",
-            "clear",
-            "--harness",
-            artifact.harness,
-            "--scope",
-            "artifact",
-            "--artifact-id",
-            artifact.artifact_id,
-            "--artifact-hash",
-            artifact_hash,
-            "--policy-workspace",
-            str(workspace_dir),
-        )
-    )
+    scope = _string_value(matched_policy.get("scope")) or "artifact"
+    command = [
+        "hol-guard",
+        "policies",
+        "clear",
+        "--harness",
+        _string_value(matched_policy.get("harness")) or artifact.harness,
+        "--scope",
+        scope,
+    ]
+    artifact_id = _string_value(matched_policy.get("artifact_id"))
+    if artifact_id is None and scope in {"artifact", "workspace", "harness", "global"}:
+        artifact_id = artifact.artifact_id
+    if artifact_id is not None:
+        command.extend(("--artifact-id", artifact_id))
+    matched_hash = _string_value(matched_policy.get("artifact_hash"))
+    if matched_hash is not None:
+        command.extend(("--artifact-hash", matched_hash))
+    policy_workspace = _string_value(matched_policy.get("workspace"))
+    if policy_workspace is None and scope in {"artifact", "workspace"}:
+        policy_workspace = str(workspace_dir)
+    if policy_workspace is not None:
+        command.extend(("--policy-workspace", policy_workspace))
+    publisher = _string_value(matched_policy.get("publisher"))
+    if publisher is not None:
+        command.extend(("--publisher", publisher))
+    return shlex.join(command)
 
 
 def recompute_package_protect_artifact_hash(

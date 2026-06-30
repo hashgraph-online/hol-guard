@@ -527,6 +527,7 @@ def test_evaluate_package_request_artifact_does_not_convert_npm_source_specs_to_
 
     package_payload = _EvaluateHandler.captured_requests[0]["packages"][0]
     assert package_payload["name"] == "pkg"
+    assert package_payload["sourceUrl"] == "git+https://github.com/org/pkg.git"
     assert "range" not in package_payload
     assert "version" not in package_payload
 
@@ -649,6 +650,7 @@ def test_evaluate_package_request_artifact_does_not_convert_pypi_source_specs_to
 
     package_payload = _EvaluateHandler.captured_requests[0]["packages"][0]
     assert package_payload["name"] == "pkg"
+    assert package_payload["sourceUrl"] == "git+https://github.com/org/pkg.git"
     assert "range" not in package_payload
     assert "version" not in package_payload
 

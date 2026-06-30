@@ -1581,6 +1581,7 @@ def _build_request_payload(
                 "ecosystem": str(target["ecosystem"]),
                 "name": str(target["name"]),
                 "namespace": target["namespace"],
+                **({"sourceUrl": str(target["source_url"])} if target.get("source_url") else {}),
                 **({"version": str(target["version"])} if target.get("version") else {}),
                 **({"range": str(target["range"])} if target.get("range") else {}),
             }
