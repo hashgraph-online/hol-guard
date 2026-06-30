@@ -1554,6 +1554,19 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if body_error is not None:
             self._write_json({"error": body_error}, status=400)
             return
+        if parsed.path == "/v1/healthz/verify":
+            nonce = self._optional_string(payload.get("nonce")) if payload else None
+            if not nonce:
+                self._write_json({"error": "missing_nonce"}, status=400)
+                return
+            auth_token = self.server.auth_token  # type: ignore[attr-defined]
+            proof = hmac.new(
+                auth_token.encode("ascii"),
+                nonce.encode("ascii"),
+                hashlib.sha256,
+            ).hexdigest()
+            self._write_json({"proof": proof})
+            return
         if self._requires_header_token(parsed.path, path_parts) and not self._header_token_is_valid(payload=payload):
             if (
                 len(path_parts) == 4
