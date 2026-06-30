@@ -40,7 +40,10 @@ def _configure_guard_policy_parsers(
         dest="decision_ids",
         action="append",
         type=int,
-        help="Policy decision ID to preserve during migrate-local-integrity; repeat to keep multiple rows",
+        help=(
+            "Policy decision ID to clear or preserve during migrate-local-integrity; "
+            "repeat to target multiple rows"
+        ),
     )
     policies_parser.add_argument(
         "--preserve-all-local",

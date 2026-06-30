@@ -198,6 +198,7 @@ def test_build_package_protect_payload_saved_hashless_block_clear_command_omits_
     assert retry_rc == 2
     user_copy = retry_payload["supply_chain_evaluation"]["user_copy"]
     assert "hol-guard policies clear" in user_copy["harness_message"]
+    assert "--decision-id" in user_copy["next_step"]
     assert "--artifact-hash" not in user_copy["next_step"]
     assert "--artifact-id" in user_copy["next_step"]
     assert str(workspace_dir) in user_copy["next_step"]

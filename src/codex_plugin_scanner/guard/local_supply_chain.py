@@ -1467,11 +1467,11 @@ def _saved_package_policy_clear_command(
         "hol-guard",
         "policies",
         "clear",
-        "--harness",
-        _string_value(matched_policy.get("harness")) or artifact.harness,
-        "--scope",
-        scope,
     ]
+    decision_id = matched_policy.get("decision_id")
+    if isinstance(decision_id, int):
+        command.extend(("--decision-id", str(decision_id)))
+    command.extend(("--harness", _string_value(matched_policy.get("harness")) or artifact.harness, "--scope", scope))
     artifact_id = _string_value(matched_policy.get("artifact_id"))
     if artifact_id is None and scope in {"artifact", "workspace", "harness", "global"}:
         artifact_id = artifact.artifact_id
