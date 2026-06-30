@@ -768,6 +768,8 @@ class SystemKeyringSecretStore:
 
     def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float = 0.0) -> str | None:
         _ = timeout_seconds
+        if self._test_keyring_module() is not None:
+            return self.get_secret(secret_id)
         if sys.platform == "darwin":
             if self._supports_native_macos_security_reads():
                 return self._get_secret_without_macos_ui(secret_id)
@@ -775,8 +777,6 @@ class SystemKeyringSecretStore:
                 # Passive policy-integrity reads must fail closed when native
                 # no-UI access is unavailable.
                 return None
-            if self._test_keyring_module() is not None:
-                return self.get_secret(secret_id)
             return None
         if self._supports_native_macos_security_reads():
             return self._get_secret_without_macos_ui(secret_id)

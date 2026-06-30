@@ -110,6 +110,7 @@ class TestBrowserScopeValidation:
         from codex_plugin_scanner.guard.policy_bundle_parser import (
             _POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
         )
+
         assert "mcp-tool" in _POLICY_BUNDLE_RULE_MATCHER_FAMILIES
 
     def test_validated_payload_accepts_browser_scope(self) -> None:
@@ -141,11 +142,11 @@ class TestBrowserScopeValidation:
             "acknowledgements": [],
         }
         from codex_plugin_scanner.guard.policy_bundle_parser import computed_policy_bundle_hash
+
         bundle["bundleHash"] = computed_policy_bundle_hash(bundle)
         payload, error = validated_policy_bundle_payload(bundle)
         assert payload is not None
         assert error is None
-
 
 
 def _valid_bundle_with_rules(rules: list[dict[str, object]]) -> dict[str, object]:
@@ -199,6 +200,7 @@ class TestBrowserScopeDecisionNarrowing:
         from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
 
         rule = self._local_match_rule()
+        rule["scope"]["command"] = "python -m pytest"
         bundle = _valid_bundle_with_rules([rule])
         decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
         assert len(decisions) > 0
@@ -248,6 +250,7 @@ class TestBrowserScopeDecisionNarrowing:
 
         plain_rule = self._local_match_rule()
         plain_rule["ruleId"] = "plain-rule"
+        plain_rule["scope"]["command"] = "python -m pytest"
 
         bundle = _valid_bundle_with_rules([browser_rule, plain_rule])
         decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
@@ -273,6 +276,7 @@ class TestBrowserScopeDecisionNarrowing:
         from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
 
         rule = self._local_match_rule()
+        rule["scope"]["command"] = "python -m pytest"
         rule["scope"]["browserIntent"] = []
         rule["scope"]["origin"] = []
         bundle = _valid_bundle_with_rules([rule])
@@ -295,8 +299,41 @@ class TestBrowserScopeDecisionNarrowing:
         from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
 
         rule = self._local_match_rule()
+        rule["scope"]["command"] = "python -m pytest"
         rule["browserIntent"] = []
         rule["origin"] = []
         bundle = _valid_bundle_with_rules([rule])
         decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
         assert len(decisions) > 0
+
+    def test_package_request_rule_does_not_create_saved_family_decision(self) -> None:
+        """Package bundle rules stay in package evaluation instead of saved-policy overrides."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["matcherFamilies"] = ["package-request"]
+        bundle = _valid_bundle_with_rules([rule])
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+        assert decisions == []
+
+    def test_empty_scope_package_request_rule_does_not_block_all_installs(self) -> None:
+        """Regression: Cloud graph package defaults must not become a global install block."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = {
+            "ruleId": "policy-graph-default-high-block",
+            "action": "block",
+            "reason": "Block immediately high risk.",
+            "scope": {
+                "agents": [],
+                "devices": [],
+                "ecosystems": [],
+                "environments": [],
+                "harnesses": [],
+                "locations": [],
+            },
+            "matcherFamilies": ["package-request"],
+        }
+        bundle = _valid_bundle_with_rules([rule])
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+        assert decisions == []

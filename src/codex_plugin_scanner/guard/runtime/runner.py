@@ -1055,6 +1055,17 @@ def _policy_bundle_rule_matcher_families(rule: dict[str, object]) -> list[str]:
     return list(dict.fromkeys(family for family in derived if family in POLICY_BUNDLE_RULE_MATCHER_FAMILIES))
 
 
+def _policy_bundle_rule_saved_decision_families(rule: dict[str, object]) -> list[str]:
+    """Return rule families that can be represented without broadening scope.
+
+    Package-request rules can depend on package name, ecosystem, version,
+    source URL, severity, and signed supply-chain bundle state. A saved local
+    family decision cannot represent those constraints, so materializing one
+    would turn a narrow cloud rule into a broad "all package installs" rule.
+    """
+    return [family for family in _policy_bundle_rule_matcher_families(rule) if family != "package-request"]
+
+
 def _policy_bundle_rule_matches_local_scope(
     rule: dict[str, object],
     *,
@@ -1137,7 +1148,7 @@ def _build_policy_bundle_decisions(
             continue
         if _policy_bundle_rule_has_browser_scope(item):
             continue
-        matcher_families = _policy_bundle_rule_matcher_families(item)
+        matcher_families = _policy_bundle_rule_saved_decision_families(item)
         if not matcher_families:
             continue
         rule_id = non_empty_string(item.get("ruleId")) or "bundle-rule"
