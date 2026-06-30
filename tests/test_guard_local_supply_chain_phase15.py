@@ -558,28 +558,39 @@ def test_guard_supply_chain_scan_without_supported_manifests_returns_nonzero(tmp
     assert output["message"] == "No supported manifests or lockfiles found in this workspace."
 
 
-def test_guard_supply_chain_sync_alias_uses_bundle_sync(
+def test_guard_supply_chain_sync_alias_uses_cloud_state_sync(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
 ) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
+    captured: dict[str, object] = {}
 
     monkeypatch.setattr(
         commands_module,
-        "sync_supply_chain_bundle",
+        "_resolve_guard_sync_auth_context",
         lambda _store: {
-            "status": "synced",
-            "bundle_version": "1747612800000-deadbeef",
-            "workspace_id": WORKSPACE_ID,
-            "synced_at": "2026-05-19T12:00:00+00:00",
-            "tier": "premium",
-            "advisory_count": 1,
-            "package_count": 1,
-            "policy_hash": "policy-hash-1",
-            "feed_snapshot_hash": "feed-snapshot-1",
-            "ecosystem_support": [{"ecosystem": "npm", "support_level": "protected", "label": "Protected"}],
+            "access_token": "token",
+            "sync_url": "https://guard.example/api/guard/receipts/sync",
         },
+    )
+
+    def fake_sync_supply_chain_cloud_state(_store: GuardStore, **kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {
+            "status": "synced",
+            "synced_at": "2026-05-19T12:00:00+00:00",
+            "workspace_audits": {
+                "status": "synced",
+                "completed_jobs": 1,
+                "workspaces": [{"package_count": 3, "cloud_visible_count": 3}],
+            },
+        }
+
+    monkeypatch.setattr(
+        commands_module,
+        "sync_supply_chain_cloud_state",
+        fake_sync_supply_chain_cloud_state,
     )
 
     rc = main(
@@ -597,8 +608,15 @@ def test_guard_supply_chain_sync_alias_uses_bundle_sync(
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
+    assert captured["workspace_dir"] == workspace_dir
+    assert captured["auth_context"] == {
+        "access_token": "token",
+        "sync_url": "https://guard.example/api/guard/receipts/sync",
+    }
     assert output["status"] == "synced"
-    assert output["bundle_version"] == "1747612800000-deadbeef"
+    assert output["workspace_audits"]["completed_jobs"] == 1
+    assert output["workspace_audits"]["workspaces"][0]["cloud_visible_count"] == 3
+    assert "supply_chain" in output
 
 
 def test_guard_supply_chain_sync_alias_rejects_invalid_payload(
@@ -608,7 +626,15 @@ def test_guard_supply_chain_sync_alias_rejects_invalid_payload(
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
 
-    monkeypatch.setattr(commands_module, "sync_supply_chain_bundle", lambda _store: None)
+    monkeypatch.setattr(
+        commands_module,
+        "_resolve_guard_sync_auth_context",
+        lambda _store: {
+            "access_token": "token",
+            "sync_url": "https://guard.example/api/guard/receipts/sync",
+        },
+    )
+    monkeypatch.setattr(commands_module, "sync_supply_chain_cloud_state", lambda _store, **_kwargs: None)
 
     rc = main(
         [
