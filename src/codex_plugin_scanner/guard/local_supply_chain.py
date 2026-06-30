@@ -7,6 +7,7 @@ import inspect
 import json
 import os
 import shlex
+import socket
 import subprocess
 import threading
 import time
@@ -27,7 +28,7 @@ from .adapters.base import HarnessContext
 from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
 from .config import GuardConfig, resolve_risk_action
 from .models import GuardAction, GuardArtifact, GuardReceipt
-from .redaction import redact_text
+from .redaction import redact_local_path, redact_text
 from .runtime.package_intent_common import (
     PackageIntent,
     PackageIntentTarget,
@@ -2379,6 +2380,79 @@ def _run_cloud_workspace_audit(
     return (merged_response, None)
 
 
+def _codebase_label_from_remote(remote: str) -> str | None:
+    normalized_remote = remote.strip().rstrip("/")
+    if not normalized_remote:
+        return None
+    if "://" in normalized_remote:
+        parsed = urllib.parse.urlparse(normalized_remote)
+        path = parsed.path.lstrip("/")
+    elif ":" in normalized_remote:
+        path = normalized_remote.split(":", 1)[1]
+    else:
+        path = normalized_remote
+    label = path.strip("/")
+    if not label:
+        return None
+    return label[:-4] if label.endswith(".git") else label
+
+
+def _read_git_origin_codebase(workspace_dir: Path) -> str | None:
+    config_path = workspace_dir / ".git" / "config"
+    try:
+        config_text = config_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    in_origin = False
+    for raw_line in config_text.splitlines():
+        line = raw_line.strip()
+        if line.startswith("[") and line.endswith("]"):
+            in_origin = line == '[remote "origin"]'
+            continue
+        if not in_origin or not line.startswith("url") or "=" not in line:
+            continue
+        _key, _sep, value = line.partition("=")
+        return _codebase_label_from_remote(value)
+    return None
+
+
+def _safe_machine_name() -> str | None:
+    try:
+        machine = socket.gethostname().strip()
+    except OSError:
+        return None
+    return machine or None
+
+
+def _redacted_workspace_folder_path(workspace_dir: Path) -> str:
+    raw_path = str(workspace_dir)
+    redacted = redact_local_path(raw_path)
+    if redacted != raw_path or not workspace_dir.is_absolute():
+        return redacted
+    parts = [part for part in workspace_dir.parts if part not in {"", "/"}]
+    if len(parts) >= 2:
+        return f"…/{parts[-2]}/{parts[-1]}"
+    return f"…/{workspace_dir.name}"
+
+
+def _build_workspace_context_payload(
+    workspace_dir: Path,
+    manifest_paths: tuple[str, ...],
+    lockfile_paths: tuple[str, ...],
+) -> dict[str, object]:
+    codebase = _read_git_origin_codebase(workspace_dir) or workspace_dir.name
+    return {
+        "agent": _LOCAL_SUPPLY_CHAIN_HARNESS,
+        "codebase": codebase,
+        "folderPath": _redacted_workspace_folder_path(workspace_dir),
+        "lockfilePaths": list(lockfile_paths),
+        "machine": _safe_machine_name(),
+        "manifestPaths": list(manifest_paths),
+        "packageManager": _package_manager_for_scan(manifest_paths),
+        "workspaceName": workspace_dir.name,
+    }
+
+
 def _build_cloud_audit_payload(
     *,
     workspace_dir: Path,
@@ -2427,6 +2501,11 @@ def _build_cloud_audit_payload(
             for item in inventory
         ],
         "policyVersion": policy_version,
+        "workspaceContext": _build_workspace_context_payload(
+            workspace_dir,
+            manifest_paths,
+            lockfile_paths,
+        ),
         "workspaceFingerprint": workspace_fingerprint,
     }
     if payload["lockfileContext"] is None:
