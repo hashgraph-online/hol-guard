@@ -77,6 +77,7 @@ def build_package_request_artifact(
     config_path: str,
     source_scope: str,
 ) -> GuardArtifact:
+    manifest_paths, lockfile_paths = _artifact_workspace_paths(intent)
     fingerprint = hashlib.sha256(
         json.dumps(
             {
@@ -85,8 +86,8 @@ def build_package_request_artifact(
                 "intent_kind": intent.intent_kind,
                 "redacted_command": intent.redacted_command,
                 "targets": [target.to_dict() for target in intent.targets],
-                "manifest_paths": list(intent.manifest_paths),
-                "lockfile_paths": list(intent.lockfile_paths),
+                "manifest_paths": list(manifest_paths),
+                "lockfile_paths": list(lockfile_paths),
             },
             sort_keys=True,
         ).encode("utf-8")
@@ -103,8 +104,8 @@ def build_package_request_artifact(
             "package_manager": intent.package_manager,
             "intent_kind": intent.intent_kind,
             "targets": [target.to_dict() for target in intent.targets],
-            "manifest_paths": list(intent.manifest_paths),
-            "lockfile_paths": list(intent.lockfile_paths),
+            "manifest_paths": list(manifest_paths),
+            "lockfile_paths": list(lockfile_paths),
             "flags": list(intent.flags),
             "notes": list(intent.notes),
             "redacted_command": intent.redacted_command,
@@ -114,6 +115,26 @@ def build_package_request_artifact(
             "runtime_request_reason": package_runtime_reason(intent),
         },
     )
+
+
+def _artifact_workspace_paths(intent: PackageIntent) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    if _is_global_package_install(intent):
+        return (), ()
+    return intent.manifest_paths, intent.lockfile_paths
+
+
+def _is_global_package_install(intent: PackageIntent) -> bool:
+    if intent.package_manager not in {"npm", "pnpm", "yarn"}:
+        return False
+    for flag in intent.flags:
+        normalized = flag.strip().lower()
+        if normalized in {"-g", "--global"}:
+            return True
+        if normalized.startswith("--global="):
+            return normalized.split("=", 1)[1] not in {"", "0", "false", "no", "off"}
+        if normalized == "--location=global":
+            return True
+    return False
 
 
 def package_request_summary(intent: PackageIntent) -> str:
