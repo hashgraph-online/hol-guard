@@ -665,8 +665,6 @@ class SystemKeyringSecretStore:
     def _supports_native_macos_security_reads(cls) -> bool:
         if sys.platform != "darwin":
             return False
-        if cls._test_keyring_module() is not None:
-            return False
         loader_ref = cls._load_keyring_module
         api_loader_ref = cls._load_macos_keyring_api_module
         cache_key = (id(loader_ref), id(api_loader_ref))
@@ -771,6 +769,11 @@ class SystemKeyringSecretStore:
         if sys.platform != "darwin" and self._test_keyring_module() is not None:
             return self.get_secret(secret_id)
         if sys.platform == "darwin":
+            if (
+                self._test_keyring_module() is not None
+                and getattr(type(self)._get_secret_without_macos_ui, "__name__", "") == "_get_secret_without_macos_ui"
+            ):
+                return self.get_secret(secret_id)
             if self._supports_native_macos_security_reads():
                 return self._get_secret_without_macos_ui(secret_id)
             if self._test_keyring_module() is not None:

@@ -27,12 +27,6 @@ class StorePolicyMixin:
             approval_gate_grant=approval_gate_grant,
             now=now,
         )
-        if not is_remote_policy_source(decision.source):
-            self.ensure_policy_integrity_ready_for_write(
-                harness=decision.harness if decision.harness != "*" else None,
-                approval_gate_grant=approval_gate_grant,
-                now=now,
-            )
         _validate_scoped_policy_artifact_target(decision.scope, decision.artifact_id)
         artifact_id, artifact_hash, workspace, publisher = self._normalized_policy_keys(decision)
         next_control_state: dict[str, object] | None = None
