@@ -1241,6 +1241,7 @@ def test_cursor_hook_daemon_fast_path_rejects_spoofed_healthz(tmp_path: Path, mo
     workspace_dir.mkdir(parents=True, exist_ok=True)
 
     # Fake server returns valid /healthz but a wrong HMAC proof on /v1/healthz/verify.
+    # The proof is bound to the daemon's port, so a wrong proof is always rejected.
     class _SpoofedHealthzHandler(http.server.BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             self.send_response(200)
@@ -1252,7 +1253,7 @@ def test_cursor_hook_daemon_fast_path_rejects_spoofed_healthz(tmp_path: Path, mo
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            # Return a wrong proof — attacker cannot compute the real HMAC.
+            # Return a wrong proof — attacker cannot compute the real port-bound HMAC.
             self.wfile.write(json.dumps({"proof": "deadbeef"}).encode())
 
         def log_message(self, *args: object) -> None:

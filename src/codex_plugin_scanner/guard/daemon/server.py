@@ -1560,9 +1560,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self._write_json({"error": "missing_nonce"}, status=400)
                 return
             auth_token = self.server.auth_token  # type: ignore[attr-defined]
+            daemon_port = self.server.server_address[1]  # type: ignore[attr-defined]
+            # Bind the proof to this daemon's listening port so a relay attacker
+            # cannot proxy the nonce to the real daemon and reuse its proof from
+            # a different port. The hook includes the same port in its local HMAC.
+            proof_message = f"{daemon_port}:{nonce}"
             proof = hmac.new(
-                auth_token.encode("ascii"),
-                nonce.encode("ascii"),
+                auth_token.encode("utf-8"),
+                proof_message.encode("utf-8"),
                 hashlib.sha256,
             ).hexdigest()
             self._write_json({"proof": proof})
