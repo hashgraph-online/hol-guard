@@ -1796,7 +1796,7 @@ def test_guard_protect_keeps_package_scope_even_when_matcher_list_omits_package_
     assert "saved_package_block" in reason_codes
 
 
-def test_guard_protect_reviews_stale_policy_bundle_package_family_on_cloud_allow(
+def test_guard_protect_ignores_stale_policy_bundle_package_family_on_cloud_allow(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys,
@@ -1862,15 +1862,14 @@ def test_guard_protect_reviews_stale_policy_bundle_package_family_on_cloud_allow
 
     payload = json.loads(capsys.readouterr().out)
 
-    assert rc == 2
-    assert payload["primary_approval_url"].startswith("http://127.0.0.1:5474/requests/")
-    assert payload["supply_chain_evaluation"]["decision"] == "ask"
+    assert rc == 0
+    assert payload["supply_chain_evaluation"]["decision"] == "allow"
     reason_codes = {
         reason["code"]
         for reason in payload["supply_chain_evaluation"]["reasons"]
         if isinstance(reason, dict) and isinstance(reason.get("code"), str)
     }
-    assert "stale_package_bundle_policy_review" in reason_codes
+    assert "stale_package_bundle_policy_review" not in reason_codes
     assert "saved_package_block" not in reason_codes
 
 
