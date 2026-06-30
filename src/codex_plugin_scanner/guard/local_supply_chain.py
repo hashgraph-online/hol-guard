@@ -1417,6 +1417,21 @@ def _apply_stored_package_policy_override(
     )
     if not isinstance(decision, dict):
         return evaluation
+    if _stored_package_policy_is_stale_policy_bundle_family(decision, store=store):
+        if _stored_package_policy_evaluation_requires_review(evaluation):
+            return evaluation
+        return _package_policy_override_evaluation(
+            evaluation,
+            decision="ask",
+            policy_action="require-reapproval",
+            title="Review package install",
+            summary="HOL Guard found an old Cloud package rule that needs review before this install continues.",
+            harness_message=(
+                "HOL Guard found an old Cloud package rule that needs review before this install continues."
+            ),
+            reason_code="stale_package_bundle_policy_review",
+            reason_message="HOL Guard found an old Cloud package rule that needs review before this install continues.",
+        )
     action = decision.get("action")
     if action == "allow":
         return _package_policy_override_evaluation(
@@ -1453,6 +1468,66 @@ def _apply_stored_package_policy_override(
             reason_message="HOL Guard kept this package blocked because a saved package policy already exists.",
         )
     return evaluation
+
+
+def _stored_package_policy_is_stale_policy_bundle_family(decision: dict[str, object], *, store: Any) -> bool:
+    """Ignore package family rows only when the current bundle proves they are stale."""
+
+    if not (
+        _string_value(decision.get("source")) == "policy-bundle"
+        and _string_value(decision.get("artifact_id")) == "family:package-request"
+        and decision.get("artifact_hash") is None
+        and _string_value(decision.get("scope")) in {"harness", "global"}
+    ):
+        return False
+    owner = _string_value(decision.get("owner"))
+    if owner is None:
+        return False
+    get_sync_payload = getattr(store, "get_sync_payload", None)
+    if not callable(get_sync_payload):
+        return False
+    bundle = get_sync_payload("policy_bundle")
+    if not isinstance(bundle, dict):
+        return False
+    rules = bundle.get("rules")
+    if not isinstance(rules, list):
+        return False
+    matching_rules = [rule for rule in rules if isinstance(rule, dict) and _string_value(rule.get("ruleId")) == owner]
+    if not matching_rules:
+        return True
+    return not any(_policy_bundle_rule_has_package_scope(rule) for rule in matching_rules)
+
+
+def _stored_package_policy_evaluation_requires_review(evaluation: Any) -> bool:
+    policy_action = _string_value(getattr(evaluation, "policy_action", None))
+    decision = _string_value(getattr(evaluation, "decision", None))
+    return policy_action in {"block", "require-reapproval"} or decision in {"block", "ask"}
+
+
+def _policy_bundle_rule_has_package_scope(rule: dict[str, object]) -> bool:
+    if _string_value(rule.get("artifactType")) == "package_request":
+        return True
+    matcher_families = rule.get("matcherFamilies")
+    scope = rule.get("scope")
+    if _policy_bundle_scope_has_package_scope(scope):
+        return True
+    if isinstance(matcher_families, list) and "package-request" not in matcher_families:
+        return False
+    if not isinstance(scope, dict):
+        return isinstance(matcher_families, list) and "package-request" in matcher_families
+    return False
+
+
+def _policy_bundle_scope_has_package_scope(scope: object) -> bool:
+    if not isinstance(scope, dict):
+        return False
+    for key in ("ecosystems", "packages", "packageNames", "packageManagers", "registries", "sourceUrls"):
+        value = scope.get(key)
+        if isinstance(value, list) and value:
+            return True
+        if _string_value(value) is not None:
+            return True
+    return False
 
 
 def _saved_package_policy_clear_command(
