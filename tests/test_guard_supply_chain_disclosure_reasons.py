@@ -299,3 +299,10 @@ def test_policy_version_hash_consistency_between_cloud_request_and_local_evaluat
 
     assert request_payload["policyVersion"] == POLICY_HASH
     assert "lockfileContext" not in request_payload
+    assert request_payload["packages"][0].keys() == {
+        "direct",
+        "ecosystem",
+        "name",
+        "namespace",
+        "version",
+    }
