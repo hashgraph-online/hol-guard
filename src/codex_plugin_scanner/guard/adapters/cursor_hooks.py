@@ -650,7 +650,8 @@ def _daemon_hook_result(
     # A spoofed listener can return public healthz values but cannot forge the HMAC.
     # The proof is bound to the daemon's listening port so a relay attacker cannot
     # proxy the nonce to the real daemon and reuse its proof from a different port.
-    # Old daemons without /v1/healthz/verify return 404 — skip the check for compat.
+    # Old daemons without /v1/healthz/verify fail with HTTPError — return None to
+    # fall through to the CLI path. Never bypass the HMAC challenge.
     nonce = os.urandom(16).hex()
     proof_message = f"{port}:{nonce}"
     try:
@@ -675,11 +676,7 @@ def _daemon_hook_result(
             ).hexdigest()
             if not hmac.compare_digest(verify_json["proof"], expected_proof):
                 return None
-    except urllib.error.HTTPError as exc:
-        if exc.code != 404:
-            return None
-        # Old daemon without /v1/healthz/verify — proceed with healthz-only check.
-    except (OSError, urllib.error.URLError):
+    except (urllib.error.HTTPError, OSError, urllib.error.URLError):
         return None
     params = [("guard-home", GUARD_HOME)]
     if workspace:
