@@ -661,26 +661,24 @@ def _daemon_hook_result(
             method="POST",
         )
         with opener.open(verify_req, timeout=2) as verify_response:
-            if verify_response.status == 404:
-                # Old daemon without /v1/healthz/verify — proceed with healthz-only check.
-                pass
-            elif verify_response.status != 200:
+            verify_body = verify_response.read().decode("utf-8", errors="replace")
+            try:
+                verify_json = json.loads(verify_body)
+            except ValueError:
                 return None
-            else:
-                verify_body = verify_response.read().decode("utf-8", errors="replace")
-                try:
-                    verify_json = json.loads(verify_body)
-                except ValueError:
-                    return None
-                if not isinstance(verify_json, dict) or not isinstance(verify_json.get("proof"), str):
-                    return None
-                expected_proof = hmac.new(
-                    auth_token.encode("utf-8"),
-                    proof_message.encode("utf-8"),
-                    hashlib.sha256,
-                ).hexdigest()
-                if not hmac.compare_digest(verify_json["proof"], expected_proof):
-                    return None
+            if not isinstance(verify_json, dict) or not isinstance(verify_json.get("proof"), str):
+                return None
+            expected_proof = hmac.new(
+                auth_token.encode("utf-8"),
+                proof_message.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+            if not hmac.compare_digest(verify_json["proof"], expected_proof):
+                return None
+    except urllib.error.HTTPError as exc:
+        if exc.code != 404:
+            return None
+        # Old daemon without /v1/healthz/verify — proceed with healthz-only check.
     except (OSError, urllib.error.URLError):
         return None
     params = [("guard-home", GUARD_HOME)]
