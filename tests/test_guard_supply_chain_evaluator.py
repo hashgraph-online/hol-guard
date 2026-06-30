@@ -426,7 +426,13 @@ def test_evaluate_package_request_artifact_posts_cloud_request_and_maps_block_re
     assert request_payload["lockfileContext"]["fileName"] == "package-lock.json"
     assert request_payload["packages"][0]["name"] == "minimist"
     assert request_payload["packages"][0]["direct"] is True
-    assert request_payload["packages"][0]["dependencyPath"] is None
+    assert set(request_payload["packages"][0]) == {
+        "direct",
+        "ecosystem",
+        "name",
+        "namespace",
+        "version",
+    }
     assert request_payload["policyVersion"]
     assert request_payload["workspaceFingerprint"]
     assert result.decision == "block"
@@ -479,7 +485,6 @@ def test_evaluate_package_request_artifact_posts_latest_range_for_unversioned_sc
 
     request_payload = _EvaluateHandler.captured_requests[0]
     assert request_payload["packages"][0] == {
-        "dependencyPath": None,
         "direct": True,
         "ecosystem": "npm",
         "name": "cli",
@@ -586,7 +591,6 @@ def test_evaluate_package_request_artifact_posts_open_range_for_unversioned_pypi
 
     package_payload = _EvaluateHandler.captured_requests[0]["packages"][0]
     assert package_payload == {
-        "dependencyPath": None,
         "direct": True,
         "ecosystem": "pypi",
         "name": "hol-guard",
