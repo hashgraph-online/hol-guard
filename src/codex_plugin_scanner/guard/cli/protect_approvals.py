@@ -34,6 +34,8 @@ def _queue_local_protect_approvals(
     approval_item = _protect_approval_item(response_payload, workspace=workspace, artifact=artifact)
     if approval_item is None:
         return
+    if _protect_saved_block_reconsideration_already_resolved(response_payload, approval_item, store=store):
+        return
     try:
         approval_center_url = ensure_approval_daemon(guard_home)
     except RuntimeError:
@@ -224,6 +226,42 @@ def _protect_policy_action(response_payload: dict[str, object]) -> str | None:
     if not isinstance(supply_chain_evaluation, dict):
         return None
     return _optional_string(supply_chain_evaluation.get("policy_action"))
+
+
+def _protect_saved_block_reconsideration_already_resolved(
+    response_payload: dict[str, object],
+    approval_item: dict[str, object],
+    *,
+    store: GuardStore,
+) -> bool:
+    if not _protect_has_reason_code(response_payload, "saved_package_block"):
+        return False
+    artifact_id = _optional_string(approval_item.get("artifact_id"))
+    artifact_hash = _optional_string(approval_item.get("artifact_hash"))
+    if artifact_id is None or artifact_hash is None:
+        return False
+    for item in store.list_approval_requests(status="resolved", limit=None):
+        if not isinstance(item, dict):
+            continue
+        if _optional_string(item.get("artifact_id")) != artifact_id:
+            continue
+        if _optional_string(item.get("artifact_hash")) != artifact_hash:
+            continue
+        if _optional_string(item.get("resolution_action")) != "block":
+            continue
+        if "saved package policy already exists" in str(item.get("risk_summary") or "").lower():
+            return True
+    return False
+
+
+def _protect_has_reason_code(response_payload: dict[str, object], reason_code: str) -> bool:
+    supply_chain_evaluation = response_payload.get("supply_chain_evaluation")
+    if not isinstance(supply_chain_evaluation, dict):
+        return False
+    reasons = supply_chain_evaluation.get("reasons")
+    if not isinstance(reasons, list):
+        return False
+    return any(_optional_string(item.get("code")) == reason_code for item in reasons if isinstance(item, dict))
 
 
 def _bind_protect_receipt_approval(response_payload: dict[str, object], *, store: GuardStore) -> None:

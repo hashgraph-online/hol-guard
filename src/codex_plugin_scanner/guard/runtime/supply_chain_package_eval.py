@@ -1484,17 +1484,17 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
             continue
         namespace, name = _split_namespace_name(package_name)
         requested = _optional_string(item.get("requested_specifier"))
-        if requested is None and ecosystem == "npm":
-            requested = "latest"
-        exact_version = (
-            None if _npm_requested_specifier_is_dist_tag(requested, ecosystem=ecosystem) else _exact_version(requested)
-        )
         raw_spec = _optional_string(item.get("raw_spec")) or package_name
         source_url = _optional_string(item.get("source_url"))
         if source_url is None:
             source_url = _source_url_from_specifier(requested)
         if source_url is None:
             source_url = _source_url_from_raw_spec(raw_spec)
+        if requested is None and ecosystem == "npm" and source_url is None:
+            requested = "latest"
+        exact_version = (
+            None if _npm_requested_specifier_is_dist_tag(requested, ecosystem=ecosystem) else _exact_version(requested)
+        )
         parsed.append(
             {
                 "ecosystem": ecosystem,

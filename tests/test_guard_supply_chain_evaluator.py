@@ -488,6 +488,48 @@ def test_evaluate_package_request_artifact_posts_latest_range_for_unversioned_sc
     assert result.decision == "allow"
 
 
+def test_evaluate_package_request_artifact_does_not_convert_npm_source_specs_to_latest(
+    tmp_path: Path,
+) -> None:
+    _EvaluateHandler.captured_headers = {}
+    _EvaluateHandler.captured_requests = []
+    _EvaluateHandler.response_payload = _cloud_response(
+        decision="allow",
+        enforcement="premium_cloud",
+        entitlement_state="premium",
+        package_name="pkg",
+    )
+    server = HTTPServer(("127.0.0.1", 0), _EvaluateHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        store = GuardStore(tmp_path / "guard-home")
+        _seed_guard_cloud(
+            store,
+            workspace_id=WORKSPACE_ID,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="demo-token",
+        )
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        artifact = _artifact_for_targets("git+https://github.com/org/pkg.git")
+
+        evaluate_package_request_artifact(
+            artifact=artifact,
+            store=store,
+            workspace_dir=workspace_dir,
+            now="2026-05-19T00:00:00Z",
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    package_payload = _EvaluateHandler.captured_requests[0]["packages"][0]
+    assert package_payload["name"] == "pkg"
+    assert "range" not in package_payload
+    assert "version" not in package_payload
+
+
 def test_evaluate_package_request_artifact_uses_cached_eval_before_network(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

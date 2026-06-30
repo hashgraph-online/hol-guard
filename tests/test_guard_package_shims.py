@@ -1752,6 +1752,35 @@ def test_guard_protect_denied_retry_requeues_local_package_approval_for_saved_bl
     ]
     assert len(pending) == 1
     assert len(resolved) == 1
+    apply_approval_resolution(
+        store=store,
+        request_id=str(retry_payload["primary_approval_request_id"]),
+        action="block",
+        scope="artifact",
+        workspace=None,
+        reason="still blocked",
+    )
+
+    second_retry_rc = main(
+        [
+            "guard",
+            "protect",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+            "--dry-run",
+            "npm",
+            "install",
+            "minimist@1.2.8",
+        ]
+    )
+    second_retry_payload = json.loads(capsys.readouterr().out)
+
+    assert second_retry_rc == 2
+    assert "primary_approval_request_id" not in second_retry_payload
+    assert store.list_approval_requests(status="pending", limit=None) == []
 
 
 def test_guard_protect_json_queues_local_approval_when_cached_advisory_overrides_bundle_allow(
