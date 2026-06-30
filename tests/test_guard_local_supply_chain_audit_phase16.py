@@ -237,6 +237,71 @@ def test_sync_managed_workspace_audits_enqueues_persisted_job_mode_for_managed_w
     assert summary["workspaces"][0]["package_count"] == 1
 
 
+def test_sync_managed_workspace_audits_reports_partial_when_cloud_visible_count_is_lower(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(
+        workspace_dir / "package.json",
+        json.dumps({"name": "demo", "dependencies": {"react": "18.2.0"}}, sort_keys=True) + "\n",
+    )
+    _write_text(
+        workspace_dir / "package-lock.json",
+        json.dumps(
+            {
+                "name": "demo",
+                "lockfileVersion": 3,
+                "packages": {
+                    "": {"dependencies": {"react": "18.2.0"}},
+                    "node_modules/react": {"version": "18.2.0"},
+                    "node_modules/scheduler": {"version": "0.23.2"},
+                    "node_modules/loose-envify": {"version": "1.4.0"},
+                },
+            },
+            sort_keys=True,
+        )
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+    _seed_premium_pairing(store, now="2026-05-25T10:00:00+00:00")
+    store.set_managed_install("codex", True, str(workspace_dir), {}, "2026-05-25T10:00:00+00:00")
+
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "_enqueue_cloud_workspace_audit_job",
+        lambda **_kwargs: {"jobId": "job-1", "status": "queued"},
+    )
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "_poll_cloud_workspace_audit_job",
+        lambda **_kwargs: {
+            "jobId": "job-1",
+            "status": "completed",
+            "processedCount": 2,
+            "totalPackages": 2,
+        },
+    )
+
+    summary = local_supply_chain_module.sync_managed_workspace_audits(
+        store,
+        auth_context={
+            "access_token": "token",
+            "sync_url": "https://guard.example/api/guard/receipts/sync",
+        },
+    )
+
+    workspace = summary["workspaces"][0]
+    assert summary["status"] == "partial"
+    assert summary["incomplete_jobs"] == 1
+    assert workspace["status"] == "partial"
+    assert workspace["package_count"] == 3
+    assert workspace["cloud_visible_count"] == 2
+    assert "2 of 3 visible" in str(workspace["message"])
+
+
 def test_guard_supply_chain_audit_alias_accepts_sbom_input(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

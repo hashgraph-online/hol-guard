@@ -9163,6 +9163,57 @@ url = http://127.0.0.1:8787/guard-canary
         assert len(captured_auth_context) == 2
         assert captured_auth_context[0] == captured_auth_context[1]
 
+    def test_guard_supply_chain_sync_includes_workspace_audits(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        captured: dict[str, object] = {}
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_resolve_guard_sync_auth_context",
+            lambda _store: {
+                "access_token": "token",
+                "sync_url": "https://guard.example/api/guard/receipts/sync",
+            },
+        )
+
+        def _fake_sync_supply_chain_cloud_state(_store: GuardStore, **kwargs: object) -> dict[str, object]:
+            captured.update(kwargs)
+            return {
+                "synced_at": "2026-06-18T22:00:01Z",
+                "status": "synced",
+                "workspace_audits": {
+                    "status": "synced",
+                    "completed_jobs": 1,
+                    "workspaces": [{"package_count": 280, "cloud_visible_count": 280}],
+                },
+            }
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "sync_supply_chain_cloud_state",
+            _fake_sync_supply_chain_cloud_state,
+        )
+
+        rc = main([
+            "guard",
+            "supply-chain",
+            "sync",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert captured["workspace_dir"] == workspace_dir
+        assert output["workspace_audits"]["completed_jobs"] == 1
+        assert output["workspace_audits"]["workspaces"][0]["package_count"] == 280
+        assert output["workspace_audits"]["workspaces"][0]["cloud_visible_count"] == 280
+
     def test_refresh_cloud_policy_bundle_records_auth_expired_reason(self, tmp_path, monkeypatch):
         home_dir = tmp_path / "home"
         _disable_oauth_persistence_assert(monkeypatch)

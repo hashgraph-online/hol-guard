@@ -408,7 +408,14 @@ def _run_guard_supply_chain_command(
         return exit_code
     if supply_chain_command == "sync":
         try:
-            payload = _validated_supply_chain_sync_payload(sync_supply_chain_bundle(store))
+            auth_context = _cloud_guard_sync_auth_context(store)
+            payload = _validated_supply_chain_sync_payload(
+                sync_supply_chain_cloud_state(
+                    store,
+                    auth_context=auth_context,
+                    workspace_dir=workspace_dir,
+                )
+            )
         except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
             message = _guard_sync_failure_message(error)
             if getattr(args, "json", False):

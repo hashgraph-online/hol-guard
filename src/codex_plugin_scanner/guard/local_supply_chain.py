@@ -2597,6 +2597,7 @@ def sync_managed_workspace_audits(
     workspaces_payload: list[dict[str, object]] = []
     completed_jobs = 0
     failed_jobs = 0
+    incomplete_jobs = 0
     queued_jobs = 0
     skipped_workspaces = 0
     for candidate in _managed_workspace_audit_candidates(store, workspace_dir=workspace_dir):
@@ -2641,22 +2642,42 @@ def sync_managed_workspace_audits(
             final_status = (
                 str(final_response.get("status") or enqueue_response.get("status") or "queued").strip().lower()
             )
-            if final_status == "completed":
-                completed_jobs += 1
-            elif final_status == "failed":
-                failed_jobs += 1
+            cloud_visible_count = _int_value(final_response.get("totalPackages"))
+            cloud_processed_count = _int_value(final_response.get("processedCount"))
+            incomplete_cloud_projection = (
+                final_status == "completed"
+                and cloud_visible_count is not None
+                and cloud_visible_count < len(inventory)
+            )
+            if incomplete_cloud_projection:
+                incomplete_jobs += 1
+                workspace_status = "partial"
             else:
-                queued_jobs += 1
+                workspace_status = final_status
+                if final_status == "completed":
+                    completed_jobs += 1
+                elif final_status == "failed":
+                    failed_jobs += 1
+                else:
+                    queued_jobs += 1
+            message = final_response.get("error")
+            if incomplete_cloud_projection:
+                message = (
+                    "Guard Cloud accepted fewer package rows than hol-guard discovered "
+                    f"({cloud_visible_count} of {len(inventory)} visible)."
+                )
             workspaces_payload.append(
                 {
                     "workspace": workspace_label,
                     "workspace_fingerprint": request_payload.get("workspaceFingerprint"),
                     "job_id": job_id,
-                    "status": final_status,
+                    "status": workspace_status,
                     "package_count": len(inventory),
+                    "cloud_processed_count": cloud_processed_count,
+                    "cloud_visible_count": cloud_visible_count,
                     "manifest_paths": list(manifest_paths),
                     "lockfile_paths": list(lockfile_paths),
-                    "message": final_response.get("error"),
+                    "message": message,
                 }
             )
         except (
@@ -2675,9 +2696,9 @@ def sync_managed_workspace_audits(
                     "package_count": 0,
                 }
             )
-    if failed_jobs > 0 and completed_jobs == 0 and queued_jobs == 0:
+    if failed_jobs > 0 and completed_jobs == 0 and queued_jobs == 0 and incomplete_jobs == 0:
         status = "failed"
-    elif failed_jobs > 0:
+    elif failed_jobs > 0 or incomplete_jobs > 0:
         status = "partial"
     elif completed_jobs > 0 or queued_jobs > 0:
         status = "synced"
@@ -2690,6 +2711,7 @@ def sync_managed_workspace_audits(
         "completed_jobs": completed_jobs,
         "queued_jobs": queued_jobs,
         "failed_jobs": failed_jobs,
+        "incomplete_jobs": incomplete_jobs,
         "skipped_workspaces": skipped_workspaces,
         "workspaces": workspaces_payload,
     }
