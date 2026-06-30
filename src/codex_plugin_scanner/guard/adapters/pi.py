@@ -106,22 +106,23 @@ class PiHarnessAdapter(HarnessAdapter):
         found_paths: list[str] = []
         seen_keys: set[str] = set()
         roots = [
-            (self._global_root(context), "global"),
-            (self._omp_global_root(context), "global"),
+            (self._global_root(context), "global", "pi-global"),
+            (self._omp_global_root(context), "global", "omp-global"),
         ]
         project_root = self._project_root(context)
         if project_root is not None:
-            roots.append((project_root, "project"))
+            roots.append((project_root, "project", "pi-project"))
         omp_project_root = self._omp_project_root(context)
         if omp_project_root is not None:
-            roots.append((omp_project_root, "project"))
-        for root, scope in roots:
+            roots.append((omp_project_root, "project", "omp-project"))
+        for root, scope, id_scope in roots:
             self._append_settings_artifacts(
                 artifacts,
                 found_paths,
                 seen_keys,
                 settings_path=root / PI_SETTINGS_FILE,
                 scope=scope,
+                id_scope=id_scope,
                 extension_root=root / "extensions",
                 skill_root=root / "skills",
                 prompt_root=root / "prompts",
@@ -133,6 +134,7 @@ class PiHarnessAdapter(HarnessAdapter):
                 seen_keys,
                 extension_root=root / "extensions",
                 scope=scope,
+                id_scope=id_scope,
                 id_root=root / "extensions",
             )
             self._append_skill_artifacts(
@@ -141,6 +143,7 @@ class PiHarnessAdapter(HarnessAdapter):
                 seen_keys,
                 skill_root=root / "skills",
                 scope=scope,
+                id_scope=id_scope,
                 id_root=root / "skills",
             )
             self._append_prompt_artifacts(
@@ -149,6 +152,7 @@ class PiHarnessAdapter(HarnessAdapter):
                 seen_keys,
                 prompt_root=root / "prompts",
                 scope=scope,
+                id_scope=id_scope,
                 id_root=root / "prompts",
             )
             self._append_theme_artifacts(
@@ -157,6 +161,7 @@ class PiHarnessAdapter(HarnessAdapter):
                 seen_keys,
                 theme_root=root / "themes",
                 scope=scope,
+                id_scope=id_scope,
                 id_root=root / "themes",
             )
         command_available = self.resolved_executable(context) is not None
@@ -182,6 +187,7 @@ class PiHarnessAdapter(HarnessAdapter):
         *,
         settings_path: Path,
         scope: str,
+        id_scope: str,
         extension_root: Path,
         skill_root: Path,
         prompt_root: Path,
@@ -191,7 +197,7 @@ class PiHarnessAdapter(HarnessAdapter):
             return
         append_found_path(found_paths, settings_path)
         payload = json_payload(settings_path)
-        self._append_package_setting_artifacts(artifacts, seen_keys, settings_path, payload, scope)
+        self._append_package_setting_artifacts(artifacts, seen_keys, settings_path, payload, scope, id_scope)
         self._append_configured_resource_setting_artifacts(
             artifacts,
             found_paths,
@@ -199,6 +205,7 @@ class PiHarnessAdapter(HarnessAdapter):
             settings_path=settings_path,
             payload=payload,
             scope=scope,
+            id_scope=id_scope,
             key="extensions",
             artifact_type="extension",
             default_root=extension_root,
@@ -210,6 +217,7 @@ class PiHarnessAdapter(HarnessAdapter):
             settings_path=settings_path,
             payload=payload,
             scope=scope,
+            id_scope=id_scope,
             key="skills",
             artifact_type="skill",
             default_root=skill_root,
@@ -221,6 +229,7 @@ class PiHarnessAdapter(HarnessAdapter):
             settings_path=settings_path,
             payload=payload,
             scope=scope,
+            id_scope=id_scope,
             key="prompts",
             artifact_type="prompt",
             default_root=prompt_root,
@@ -232,6 +241,7 @@ class PiHarnessAdapter(HarnessAdapter):
             settings_path=settings_path,
             payload=payload,
             scope=scope,
+            id_scope=id_scope,
             key="themes",
             artifact_type="theme",
             default_root=theme_root,
@@ -244,6 +254,7 @@ class PiHarnessAdapter(HarnessAdapter):
         settings_path: Path,
         payload: dict[str, object],
         scope: str,
+        id_scope: str,
     ) -> None:
         values = payload.get("packages")
         if not isinstance(values, list):
@@ -251,7 +262,7 @@ class PiHarnessAdapter(HarnessAdapter):
         for value in values:
             if not isinstance(value, str) or not value.strip():
                 continue
-            artifact_id = f"pi:{scope}:package:{stable_suffix(value)}"
+            artifact_id = f"pi:{id_scope}:package:{stable_suffix(value)}"
             append_artifact(
                 artifacts,
                 seen_keys,
@@ -275,6 +286,7 @@ class PiHarnessAdapter(HarnessAdapter):
         settings_path: Path,
         payload: dict[str, object],
         scope: str,
+        id_scope: str,
         key: str,
         artifact_type: str,
         default_root: Path,
@@ -287,7 +299,7 @@ class PiHarnessAdapter(HarnessAdapter):
                 continue
             matches = resolve_configured_paths(settings_path, value)
             if not matches:
-                artifact_id = f"pi:{scope}:{artifact_type}:configured:{stable_suffix(value)}"
+                artifact_id = f"pi:{id_scope}:{artifact_type}:configured:{stable_suffix(value)}"
                 append_artifact(
                     artifacts,
                     seen_keys,
@@ -315,10 +327,11 @@ class PiHarnessAdapter(HarnessAdapter):
                             seen_keys,
                             extension_root=match,
                             scope=scope,
+                            id_scope=id_scope,
                             id_root=id_root,
                         )
                     elif match.suffix in EXTENSION_SUFFIXES:
-                        self._append_extension_file(artifacts, found_paths, seen_keys, match, scope, id_root)
+                        self._append_extension_file(artifacts, found_paths, seen_keys, match, scope, id_scope, id_root)
                 elif artifact_type == "skill":
                     if match.is_dir():
                         self._append_skill_artifacts(
@@ -327,10 +340,11 @@ class PiHarnessAdapter(HarnessAdapter):
                             seen_keys,
                             skill_root=match,
                             scope=scope,
+                            id_scope=id_scope,
                             id_root=id_root,
                         )
                     elif match.name == "SKILL.md":
-                        self._append_skill_file(artifacts, found_paths, seen_keys, match, scope, id_root)
+                        self._append_skill_file(artifacts, found_paths, seen_keys, match, scope, id_scope, id_root)
                 elif artifact_type == "prompt":
                     if match.is_dir():
                         self._append_prompt_artifacts(
@@ -339,10 +353,11 @@ class PiHarnessAdapter(HarnessAdapter):
                             seen_keys,
                             prompt_root=match,
                             scope=scope,
+                            id_scope=id_scope,
                             id_root=id_root,
                         )
                     elif match.suffix == ".md":
-                        self._append_prompt_file(artifacts, found_paths, seen_keys, match, scope, id_root)
+                        self._append_prompt_file(artifacts, found_paths, seen_keys, match, scope, id_scope, id_root)
                 elif artifact_type == "theme":
                     if match.is_dir():
                         self._append_theme_artifacts(
@@ -351,10 +366,11 @@ class PiHarnessAdapter(HarnessAdapter):
                             seen_keys,
                             theme_root=match,
                             scope=scope,
+                            id_scope=id_scope,
                             id_root=id_root,
                         )
                     elif match.suffix in THEME_SUFFIXES:
-                        self._append_theme_file(artifacts, found_paths, seen_keys, match, scope, id_root)
+                        self._append_theme_file(artifacts, found_paths, seen_keys, match, scope, id_scope, id_root)
 
     def _append_extension_artifacts(
         self,
@@ -364,13 +380,14 @@ class PiHarnessAdapter(HarnessAdapter):
         *,
         extension_root: Path,
         scope: str,
+        id_scope: str,
         id_root: Path,
     ) -> None:
         if not extension_root.is_dir():
             return
         for path in sorted(extension_root.rglob("*")):
             if path.is_file() and path.suffix in EXTENSION_SUFFIXES:
-                self._append_extension_file(artifacts, found_paths, seen_keys, path, scope, id_root)
+                self._append_extension_file(artifacts, found_paths, seen_keys, path, scope, id_scope, id_root)
 
     def _append_extension_file(
         self,
@@ -379,6 +396,7 @@ class PiHarnessAdapter(HarnessAdapter):
         seen_keys: set[str],
         path: Path,
         scope: str,
+        id_scope: str,
         id_root: Path,
     ) -> None:
         append_found_path(found_paths, path)
@@ -387,13 +405,13 @@ class PiHarnessAdapter(HarnessAdapter):
             artifacts,
             seen_keys,
             artifact(
-                artifact_id=f"pi:{scope}:extension:{relative}",
+                artifact_id=f"pi:{id_scope}:extension:{relative}",
                 name=relative,
                 artifact_type="extension",
                 scope=scope,
                 path=path,
             ),
-            dedupe_key=f"extension:{path.resolve()}",
+            dedupe_key=f"extension:{id_scope}:{path.resolve()}",
         )
 
     def _append_skill_artifacts(
@@ -404,12 +422,13 @@ class PiHarnessAdapter(HarnessAdapter):
         *,
         skill_root: Path,
         scope: str,
+        id_scope: str,
         id_root: Path,
     ) -> None:
         if not skill_root.is_dir():
             return
         for skill_path in sorted(skill_root.rglob("SKILL.md")):
-            self._append_skill_file(artifacts, found_paths, seen_keys, skill_path, scope, id_root)
+            self._append_skill_file(artifacts, found_paths, seen_keys, skill_path, scope, id_scope, id_root)
 
     def _append_skill_file(
         self,
@@ -418,6 +437,7 @@ class PiHarnessAdapter(HarnessAdapter):
         seen_keys: set[str],
         path: Path,
         scope: str,
+        id_scope: str,
         id_root: Path,
     ) -> None:
         append_found_path(found_paths, path)
@@ -427,13 +447,13 @@ class PiHarnessAdapter(HarnessAdapter):
             artifacts,
             seen_keys,
             artifact(
-                artifact_id=f"pi:{scope}:skill:{relative}",
+                artifact_id=f"pi:{id_scope}:skill:{relative}",
                 name=relative,
                 artifact_type="skill",
                 scope=scope,
                 path=path,
             ),
-            dedupe_key=f"skill:{path.resolve()}",
+            dedupe_key=f"skill:{id_scope}:{path.resolve()}",
         )
 
     def _append_prompt_artifacts(
@@ -444,12 +464,13 @@ class PiHarnessAdapter(HarnessAdapter):
         *,
         prompt_root: Path,
         scope: str,
+        id_scope: str,
         id_root: Path,
     ) -> None:
         if not prompt_root.is_dir():
             return
         for prompt_path in sorted(prompt_root.rglob("*.md")):
-            self._append_prompt_file(artifacts, found_paths, seen_keys, prompt_path, scope, id_root)
+            self._append_prompt_file(artifacts, found_paths, seen_keys, prompt_path, scope, id_scope, id_root)
 
     def _append_prompt_file(
         self,
@@ -458,6 +479,7 @@ class PiHarnessAdapter(HarnessAdapter):
         seen_keys: set[str],
         path: Path,
         scope: str,
+        id_scope: str,
         id_root: Path,
     ) -> None:
         append_found_path(found_paths, path)
@@ -466,13 +488,13 @@ class PiHarnessAdapter(HarnessAdapter):
             artifacts,
             seen_keys,
             artifact(
-                artifact_id=f"pi:{scope}:prompt:{relative}",
+                artifact_id=f"pi:{id_scope}:prompt:{relative}",
                 name=relative,
                 artifact_type="prompt",
                 scope=scope,
                 path=path,
             ),
-            dedupe_key=f"prompt:{path.resolve()}",
+            dedupe_key=f"prompt:{id_scope}:{path.resolve()}",
         )
 
     def _append_theme_artifacts(
@@ -483,13 +505,14 @@ class PiHarnessAdapter(HarnessAdapter):
         *,
         theme_root: Path,
         scope: str,
+        id_scope: str,
         id_root: Path,
     ) -> None:
         if not theme_root.is_dir():
             return
         for theme_path in sorted(theme_root.rglob("*")):
             if theme_path.is_file() and theme_path.suffix in THEME_SUFFIXES:
-                self._append_theme_file(artifacts, found_paths, seen_keys, theme_path, scope, id_root)
+                self._append_theme_file(artifacts, found_paths, seen_keys, theme_path, scope, id_scope, id_root)
 
     def _append_theme_file(
         self,
@@ -498,6 +521,7 @@ class PiHarnessAdapter(HarnessAdapter):
         seen_keys: set[str],
         path: Path,
         scope: str,
+        id_scope: str,
         id_root: Path,
     ) -> None:
         append_found_path(found_paths, path)
@@ -506,13 +530,13 @@ class PiHarnessAdapter(HarnessAdapter):
             artifacts,
             seen_keys,
             artifact(
-                artifact_id=f"pi:{scope}:theme:{relative}",
+                artifact_id=f"pi:{id_scope}:theme:{relative}",
                 name=relative,
                 artifact_type="theme",
                 scope=scope,
                 path=path,
             ),
-            dedupe_key=f"theme:{path.resolve()}",
+            dedupe_key=f"theme:{id_scope}:{path.resolve()}",
         )
 
     def install(self, context: HarnessContext) -> dict[str, object]:
