@@ -178,11 +178,7 @@ def test_unknown_package_disclosure_reason(tmp_path: Path, monkeypatch: pytest.M
     )
 
     assert any(reason["code"] == "no_cached_match" for package in result.packages for reason in package["reasons"])
-    assert any(
-        reason["code"] == "unidentified_package"
-        for package in result.packages
-        for reason in package["reasons"]
-    )
+    assert any(reason["code"] == "unidentified_package" for package in result.packages for reason in package["reasons"])
 
 
 def test_unidentified_package_reason_fires_for_supported_ecosystem(tmp_path: Path) -> None:
@@ -216,11 +212,7 @@ def test_unidentified_package_reason_absent_for_unsupported_ecosystem(tmp_path: 
         workspace_dir=workspace_dir,
         now="2026-05-19T00:00:00Z",
     )
-    assert all(
-        reason["code"] != "unidentified_package"
-        for package in result.packages
-        for reason in package["reasons"]
-    )
+    assert all(reason["code"] != "unidentified_package" for package in result.packages for reason in package["reasons"])
 
 
 def test_unknown_package_result_directly_skips_unidentified_for_unsupported() -> None:
@@ -269,11 +261,8 @@ def test_known_package_does_not_emit_unidentified_package(
         workspace_dir=tmp_path / "workspace",
         now="2026-05-19T00:00:00Z",
     )
-    assert all(
-        reason["code"] != "unidentified_package"
-        for package in result.packages
-        for reason in package["reasons"]
-    )
+    assert all(reason["code"] != "unidentified_package" for package in result.packages for reason in package["reasons"])
+
 
 def test_policy_version_hash_consistency_between_cloud_request_and_local_evaluation(
     tmp_path: Path,
@@ -309,3 +298,4 @@ def test_policy_version_hash_consistency_between_cloud_request_and_local_evaluat
     )
 
     assert request_payload["policyVersion"] == POLICY_HASH
+    assert "lockfileContext" not in request_payload
