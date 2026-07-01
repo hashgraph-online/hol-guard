@@ -3953,6 +3953,32 @@ def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
     return "full"
 
 
+def _cloud_sync_command_display_part(value: str) -> str:
+    return " ".join(_cloud_sync_sanitize_text(value, fallback="").split())
+
+
+def _cloud_sync_receipt_action_command(envelope: dict[str, object], *, redaction_level: str) -> str | None:
+    tool_name = _optional_string(envelope.get("tool_name"))
+    sanitized_tool_name = _cloud_sync_command_display_part(tool_name) if tool_name is not None else ""
+    command = _optional_string(envelope.get("command"))
+    if command is not None and command not in {"guard_commands_module"}:
+        if redaction_level == "full":
+            return sanitized_tool_name or None
+        return _cloud_sync_command_display_part(command)
+    target_paths = envelope.get("target_paths")
+    if sanitized_tool_name and isinstance(target_paths, list):
+        raw_targets = [target for target in target_paths[:3] if isinstance(target, str) and target.strip()]
+        if raw_targets and redaction_level == "full":
+            target_placeholder = "[targets withheld]" if len(raw_targets) > 1 else "[target withheld]"
+            return " ".join([sanitized_tool_name, target_placeholder])
+        targets = [_cloud_sync_command_display_part(target) for target in raw_targets]
+        targets = [target for target in targets if target]
+        if targets:
+            return " ".join([sanitized_tool_name, *targets])
+        return sanitized_tool_name
+    return None
+
+
 def _cloud_sync_receipt_payload(
     receipt: dict[str, object],
     *,
@@ -4010,28 +4036,23 @@ def _cloud_sync_receipt_payload(
         payload["publisher"] = publisher
     redacted_envelope = receipt.get("envelope_redacted_json")
     if isinstance(redacted_envelope, dict) and redacted_envelope:
-        # When redaction level is not "full", enrich the envelope with command text
-        # from the full envelope (already secret-scrubbed at source via redact_text)
-        if redaction_level != "full":
-            full_envelope = receipt.get("action_envelope_json")
-            if isinstance(full_envelope, dict):
-                enriched = dict(redacted_envelope)
-                command = full_envelope.get("command")
-                if isinstance(command, str) and command:
-                    enriched["command"] = command
-                if redaction_level == "none":
-                    target_paths = full_envelope.get("target_paths")
-                    if isinstance(target_paths, list):
-                        enriched["target_paths"] = target_paths
-                    network_hosts = full_envelope.get("network_hosts")
-                    if isinstance(network_hosts, list):
-                        enriched["network_hosts"] = network_hosts
-                    package_name = full_envelope.get("package_name")
-                    if isinstance(package_name, str) and package_name:
-                        enriched["package_name"] = package_name
-                payload["envelopeRedacted"] = enriched
-            else:
-                payload["envelopeRedacted"] = redacted_envelope
+        full_envelope = receipt.get("action_envelope_json")
+        if isinstance(full_envelope, dict):
+            enriched = dict(redacted_envelope)
+            command = _cloud_sync_receipt_action_command(full_envelope, redaction_level=redaction_level)
+            if command is not None:
+                enriched["command"] = command
+            if redaction_level == "none":
+                target_paths = full_envelope.get("target_paths")
+                if isinstance(target_paths, list):
+                    enriched["target_paths"] = target_paths
+                network_hosts = full_envelope.get("network_hosts")
+                if isinstance(network_hosts, list):
+                    enriched["network_hosts"] = network_hosts
+                package_name = full_envelope.get("package_name")
+                if isinstance(package_name, str) and package_name:
+                    enriched["package_name"] = package_name
+            payload["envelopeRedacted"] = enriched
         else:
             payload["envelopeRedacted"] = redacted_envelope
     return payload
