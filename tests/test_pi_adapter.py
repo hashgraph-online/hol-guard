@@ -77,8 +77,12 @@ class TestPiAdapterIdentity:
         assert flow["prompt_channel"] == "native-fallback"
         assert flow["auto_open_browser"] is True
         assert _approval_surface_policy_for_flow("auto-open-once", flow) == "auto-open-once"
-        assert _approval_open_key("pi", "pi:project:tool-a") == "pi-approval-center"
-        assert _approval_open_key("codex", "codex:project:tool-a") == "codex:project:tool-a"
+        assert (
+            _approval_open_key("pi", "pi:project:tool-a", {"guard_runtime_open_key": "runtime-1"})
+            == "pi-approval-center:runtime-1"
+        )
+        assert _approval_open_key("pi", "pi:project:tool-a", {}) == "pi:project:tool-a"
+        assert _approval_open_key("codex", "codex:project:tool-a", {}) == "codex:project:tool-a"
 
     def test_unmanaged_approval_flow_keeps_browser_fallback_visible(self) -> None:
         flow = get_adapter("pi").approval_flow(managed_install=None)

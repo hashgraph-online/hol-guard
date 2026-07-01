@@ -456,13 +456,9 @@ def _browser_url_for_review(browser_url: str | None, review_url: str | None) -> 
         return urlunparse(
             parsed_review._replace(fragment=_merged_fragment(parsed_review.fragment, parsed_browser.fragment))
         )
-    if _same_loopback_port(parsed_browser, parsed_review):
+    if _same_local_approval_port(parsed_browser, parsed_review):
         return urlunparse(
-            parsed_review._replace(
-                scheme=parsed_browser.scheme,
-                netloc=parsed_browser.netloc,
-                fragment=_merged_fragment(parsed_review.fragment, parsed_browser.fragment),
-            )
+            parsed_review._replace(fragment=_merged_fragment(parsed_review.fragment, parsed_browser.fragment))
         )
     return review_url
 
@@ -471,11 +467,11 @@ def _same_origin(left: ParseResult, right: ParseResult) -> bool:
     return (left.scheme, left.netloc) == (right.scheme, right.netloc)
 
 
-def _same_loopback_port(left: ParseResult, right: ParseResult) -> bool:
+def _same_local_approval_port(left: ParseResult, right: ParseResult) -> bool:
     left_host = left.hostname
     right_host = right.hostname
-    loopback_hosts = {"127.0.0.1", "::1", "localhost"}
-    if left_host not in loopback_hosts or right_host not in loopback_hosts:
+    local_hosts = {"0.0.0.0", "::", "127.0.0.1", "::1", "localhost"}
+    if left_host not in local_hosts or right_host not in local_hosts:
         return False
     try:
         return left.port == right.port

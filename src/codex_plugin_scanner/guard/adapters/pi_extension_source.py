@@ -43,6 +43,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         f"const GUARD_MAX_DEPTH = {GUARD_HOOK_MAX_DEPTH};\n"
         f"const GUARD_MAX_SERIALIZED_PAYLOAD_CHARS = {GUARD_HOOK_MAX_SERIALIZED_PAYLOAD_CHARS};\n"
         "const GUARD_SOURCE_REF_MAX_OUTPUT_CHARS = 5 * 1024 * 1024;\n"
+        "const GUARD_RUNTIME_OPEN_KEY = randomBytes(8).toString('hex');\n"
         "const GUARD_SOURCE_REF_ALLOWED_TOOL_NAMES = new Set([\n"
         '  "read", "read_file", "open_file", "view", "view_file", "cat_file", "Read", "View"\n'
         "]);\n"
@@ -350,6 +351,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    config_path: payload.config_path,\n"
         "    tool_name: payload.tool_name,\n"
         "    is_error: payload.is_error,\n"
+        "    guard_runtime_open_key: payload.guard_runtime_open_key,\n"
         "    guard_payload_ref: {\n"
         "      version: 1,\n"
         "      path,\n"
@@ -543,7 +545,8 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         '  pi.on("input", async (event, ctx) => {\n'
         '    if (event.source === "extension") return { action: "continue" };\n'
         "    const response = await runGuard(\n"
-        '      { hook_event_name: "UserPromptSubmit", prompt: event.text, config_path: GUARD_CONFIG_PATH },\n'
+        '      { hook_event_name: "UserPromptSubmit", prompt: event.text, config_path: GUARD_CONFIG_PATH,\n'
+        "        guard_runtime_open_key: GUARD_RUNTIME_OPEN_KEY },\n"
         "      ctx.cwd,\n"
         "    );\n"
         '    if (response.decision === "deny") {\n'
@@ -564,6 +567,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "        config_path: GUARD_CONFIG_PATH,\n"
         "        tool_name: event.toolName,\n"
         "        tool_input: toolInput,\n"
+        "        guard_runtime_open_key: GUARD_RUNTIME_OPEN_KEY,\n"
         "      },\n"
         "      ctx.cwd,\n"
         "    );\n"
@@ -609,6 +613,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "        tool_input: toolInput,\n"
         "        stdout: toolOutput,\n"
         "        is_error: event.isError === true,\n"
+        "        guard_runtime_open_key: GUARD_RUNTIME_OPEN_KEY,\n"
         "    };\n"
         "    if (sourceRef) {\n"
         "      guardPayload.guard_source_ref = sourceRef;\n"

@@ -2594,7 +2594,19 @@ class TestGuardSurfaceServer:
         parsed = urllib.parse.urlparse(result)
         fragment = urllib.parse.parse_qs(parsed.fragment)
 
-        assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "http://127.0.0.1:5474/requests/req-localhost"
+        assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "http://localhost:5474/requests/req-localhost"
+        assert fragment["guard-token"] == ["session-token"]
+
+    def test_browser_url_for_review_preserves_token_for_bind_host_alias(self) -> None:
+        browser_url = "http://0.0.0.0:5474#guard-token=session-token"
+        review_url = "http://127.0.0.1:5474/requests/req-bind-host"
+
+        result = _browser_url_for_review(browser_url, review_url)
+        assert result is not None
+        parsed = urllib.parse.urlparse(result)
+        fragment = urllib.parse.parse_qs(parsed.fragment)
+
+        assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "http://127.0.0.1:5474/requests/req-bind-host"
         assert fragment["guard-token"] == ["session-token"]
 
     def test_guard_daemon_rejects_legacy_browser_connect_pairing_endpoint(self, tmp_path) -> None:
