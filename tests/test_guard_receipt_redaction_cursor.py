@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard.runtime.runner import (
     _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER,
     _ensure_relaxed_receipt_redaction_resync,
     _persist_cloud_receipt_redaction_level,
+    _receipt_sync_cursor_rowids_from_batch,
     _receipt_sync_rows_with_command_detail_backfill,
 )
 from codex_plugin_scanner.guard.store import GuardStore
@@ -85,6 +86,19 @@ def test_cloud_receipt_redaction_tightening_keeps_receipt_cursor(tmp_path) -> No
         "last_rowid": 17,
         "synced_at": "2026-04-15T00:00:00Z",
     }
+
+
+def test_command_detail_backfill_rows_do_not_advance_receipt_cursor() -> None:
+    rowids = _receipt_sync_cursor_rowids_from_batch(
+        [
+            {"receipt_id": "cursor-1", "receipt_rowid": 101},
+            {"receipt_id": "backfill-1", "receipt_rowid": 5000},
+            {"receipt_id": "cursor-2", "receipt_rowid": 102},
+        ],
+        cursor_receipt_ids={"cursor-1", "cursor-2"},
+    )
+
+    assert rowids == [101, 102]
 
 
 def test_relaxed_redaction_sync_adds_recent_blocked_command_detail_backfill(tmp_path) -> None:

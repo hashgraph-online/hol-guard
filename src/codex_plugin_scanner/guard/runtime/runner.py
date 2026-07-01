@@ -1316,6 +1316,7 @@ def sync_receipts(
     _ensure_relaxed_receipt_redaction_resync(store, level=redaction_level, synced_at=local_guard_online_at)
     prior_receipt_cursor = _receipt_sync_cursor_rowid(store)
     receipts = _receipt_sync_rows_for_upload(store, cursor_rowid=prior_receipt_cursor)
+    cursor_receipt_ids = {item.get("receipt_id") for item in receipts if isinstance(item.get("receipt_id"), str)}
     receipts, command_detail_backfill_marker = _receipt_sync_rows_with_command_detail_backfill(
         store,
         receipts=receipts,
@@ -1376,8 +1377,11 @@ def sync_receipts(
             raise RuntimeError(_sync_http_error_message(error)) from error
         except OSError as error:
             raise RuntimeError(_sync_url_error_message(error)) from error
-        batch_rowids = [item.get("receipt_rowid") for item in receipt_batch]
-        for rowid in batch_rowids:
+        cursor_batch_rowids = _receipt_sync_cursor_rowids_from_batch(
+            receipt_batch,
+            cursor_receipt_ids=cursor_receipt_ids,
+        )
+        for rowid in cursor_batch_rowids:
             if isinstance(rowid, int) and (latest_uploaded_rowid is None or rowid > latest_uploaded_rowid):
                 latest_uploaded_rowid = rowid
         batch_synced_at = _sync_timestamp(payload)
@@ -3930,6 +3934,14 @@ def _receipt_sync_rows_with_command_detail_backfill(
         "limit": _RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT,
         "receipts": added,
     }
+
+
+def _receipt_sync_cursor_rowids_from_batch(
+    receipt_batch: Sequence[Mapping[str, object]],
+    *,
+    cursor_receipt_ids: set[object],
+) -> list[object]:
+    return [item.get("receipt_rowid") for item in receipt_batch if item.get("receipt_id") in cursor_receipt_ids]
 
 
 def _receipt_sync_context(
