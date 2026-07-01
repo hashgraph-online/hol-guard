@@ -175,7 +175,7 @@ def _review_runtime_artifact_hook(
                             config.approval_surface_policy,
                             approval_flow,
                         ),
-                        open_key=artifact_id,
+                        open_key=_approval_open_key(args.harness, artifact_id),
                         redaction_level=config.receipt_redaction_level,
                     )
                     operation = blocked_operation.get("operation")
@@ -374,7 +374,7 @@ def _review_runtime_artifact_hook(
                         config.approval_surface_policy,
                         approval_flow,
                     ),
-                    open_key=artifact_id,
+                    open_key=_approval_open_key(args.harness, artifact_id),
                     redaction_level=config.receipt_redaction_level,
                 )
                 operation = blocked_operation.get("operation")
@@ -439,6 +439,13 @@ def _review_runtime_artifact_hook(
     return None
 
 
+def _approval_open_key(harness: str, artifact_id: str) -> str:
+    if _canonical_harness_name(harness) == "pi":
+        return "pi-approval-center"
+    return artifact_id
+
+
 __all__ = [
+    "_approval_open_key",
     "_review_runtime_artifact_hook",
 ]

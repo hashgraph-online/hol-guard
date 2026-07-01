@@ -77,8 +77,6 @@ def _approval_surface_policy_for_browser(configured_policy: object, approval_flo
         return "notify-only"
     if approval_flow.get("auto_open_browser") is False:
         return "never-auto-open"
-    if approval_flow.get("prompt_channel") == "native-fallback":
-        return "never-auto-open"
     policy = str(configured_policy or "auto-open-once")
     if policy == "native-only":
         return "never-auto-open"

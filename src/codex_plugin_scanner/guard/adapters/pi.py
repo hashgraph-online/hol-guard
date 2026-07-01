@@ -49,7 +49,7 @@ class PiHarnessAdapter(HarnessAdapter):
                 "summary": self.approval_summary,
                 "fallback_hint": self.fallback_hint,
                 "prompt_channel": "native-fallback",
-                "auto_open_browser": False,
+                "auto_open_browser": True,
             }
         return {
             "tier": "approval-center",
