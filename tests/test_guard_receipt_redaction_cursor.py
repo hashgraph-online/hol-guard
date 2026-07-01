@@ -229,6 +229,51 @@ def test_receipt_sync_401_forces_oauth_refresh_before_retry(
     }
 
 
+def test_forced_oauth_refresh_persists_same_refresh_token_access_token(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path)
+    persisted: list[dict[str, object]] = []
+
+    class OAuthClient:
+        issuer = "http://127.0.0.1:3000"
+        token_endpoint = "http://127.0.0.1:3000/oauth/token"
+
+    def fake_refresh(**_kwargs: object) -> dict[str, object]:
+        return {
+            "access_token": "fresh-access-token",
+            "access_token_expires_at": "2026-04-15T00:30:00+00:00",
+            "refresh_token": "same-refresh-token",
+        }
+
+    monkeypatch.setattr(runner, "resolve_guard_oauth_client_config", lambda _issuer: OAuthClient())
+    monkeypatch.setattr(runner, "_oauth_dpop_key_material", lambda _credentials: None)
+    monkeypatch.setattr(runner, "_refresh_guard_oauth_access_token", fake_refresh)
+    monkeypatch.setattr(store, "set_oauth_local_credentials", lambda **kwargs: persisted.append(kwargs))
+
+    auth_context = runner._resolve_guard_sync_auth_context_from_oauth_credentials(
+        store,
+        {
+            "issuer": "http://127.0.0.1:3000",
+            "client_id": "guard-local-daemon",
+            "refresh_token": "same-refresh-token",
+            "access_token": "stale-access-token",
+            "access_token_expires_at": "2099-04-15T00:30:00+00:00",
+            "dpop_private_key_pem": "private-key",
+            "dpop_public_jwk": {"kty": "EC", "crv": "P-256"},
+            "dpop_public_jwk_thumbprint": "thumbprint",
+        },
+        force_refresh=True,
+    )
+
+    assert auth_context["access_token"] == "fresh-access-token"
+    assert persisted
+    assert persisted[0]["refresh_token"] == "same-refresh-token"
+    assert persisted[0]["access_token"] == "fresh-access-token"
+    assert persisted[0]["access_token_expires_at"] == "2026-04-15T00:30:00+00:00"
+
+
 def test_relaxed_redaction_sync_adds_recent_blocked_command_detail_backfill(tmp_path) -> None:
     store = GuardStore(tmp_path)
     store.add_receipt(
