@@ -1169,23 +1169,27 @@ function ReviewDecisionCard(props: {
   const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
   const pauseReason = whyPaused(item);
 
-  const evidenceItems: EvidenceItem[] = [];
+  const topAlertItems: EvidenceItem[] = [];
   if (pauseReason) {
-    evidenceItems.push({
+    topAlertItems.push({
       id: "why-paused",
       title: "Why paused",
       tone: "blue",
+      icon: HiMiniInformationCircle,
       content: <p className="text-sm text-brand-dark">{pauseReason}</p>,
     });
   }
   if (secondaryRiskSummary) {
-    evidenceItems.push({
+    topAlertItems.push({
       id: "secondary-risk",
       title: "Additional risk",
       tone: "amber",
+      icon: HiMiniExclamationTriangle,
       content: <p className="text-sm text-brand-dark">{secondaryRiskSummary}</p>,
     });
   }
+
+  const evidenceItems: EvidenceItem[] = [];
   const allSignals = item.decision_v2_json?.signals ?? [];
   if (allSignals.some((s) => s.category === "skill" || s.category === "mcp")) {
     evidenceItems.push({
@@ -1277,6 +1281,12 @@ function ReviewDecisionCard(props: {
         </div>
 
         <PrimaryActionCard item={item} />
+
+        {topAlertItems.length > 0 && (
+          <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
+            <ConsolidatedEvidenceAlert items={topAlertItems} />
+          </div>
+        )}
 
         {whatWouldHappen && (
           <div className="mt-5">

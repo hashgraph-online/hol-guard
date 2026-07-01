@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { HiMiniChevronRight, HiMiniInformationCircle } from "react-icons/hi2";
 
 export interface EvidenceItem {
@@ -6,6 +6,7 @@ export interface EvidenceItem {
   title: string;
   tone: "blue" | "purple" | "amber" | "slate";
   content: ReactNode;
+  icon?: ComponentType<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
 }
 
 /**
@@ -38,11 +39,13 @@ export function ConsolidatedEvidenceAlert({ items }: { items: EvidenceItem[] }) 
     slate: "text-slate-400",
   };
 
+  const Icon = current.icon ?? HiMiniInformationCircle;
+
   return (
     <div className="space-y-2">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2.5 min-w-0 flex-1">
-          <HiMiniInformationCircle
+          <Icon
             className={`mt-0.5 h-4 w-4 shrink-0 ${iconClasses[current.tone]}`}
             aria-hidden="true"
           />
