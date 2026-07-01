@@ -494,7 +494,7 @@ function requireReact_production() {
   react_production.useTransition = function() {
     return ReactSharedInternals.H.useTransition();
   };
-  react_production.version = "19.2.5";
+  react_production.version = "19.2.7";
   return react_production;
 }
 var hasRequiredReact;
@@ -516,7 +516,7 @@ var hasRequiredScheduler_production;
 function requireScheduler_production() {
   if (hasRequiredScheduler_production) return scheduler_production;
   hasRequiredScheduler_production = 1;
-  (function(exports$1) {
+  (function(exports) {
     function push(heap, node) {
       var index = heap.length;
       heap.push(node);
@@ -550,15 +550,15 @@ function requireScheduler_production() {
       var diff = a.sortIndex - b.sortIndex;
       return 0 !== diff ? diff : a.id - b.id;
     }
-    exports$1.unstable_now = void 0;
+    exports.unstable_now = void 0;
     if ("object" === typeof performance && "function" === typeof performance.now) {
       var localPerformance = performance;
-      exports$1.unstable_now = function() {
+      exports.unstable_now = function() {
         return localPerformance.now();
       };
     } else {
       var localDate = Date, initialTime = localDate.now();
-      exports$1.unstable_now = function() {
+      exports.unstable_now = function() {
         return localDate.now() - initialTime;
       };
     }
@@ -585,12 +585,12 @@ function requireScheduler_production() {
     }
     var isMessageLoopRunning = false, taskTimeoutID = -1, frameInterval = 5, startTime = -1;
     function shouldYieldToHost() {
-      return needsPaint ? true : exports$1.unstable_now() - startTime < frameInterval ? false : true;
+      return needsPaint ? true : exports.unstable_now() - startTime < frameInterval ? false : true;
     }
     function performWorkUntilDeadline() {
       needsPaint = false;
       if (isMessageLoopRunning) {
-        var currentTime = exports$1.unstable_now();
+        var currentTime = exports.unstable_now();
         startTime = currentTime;
         var hasMoreWork = true;
         try {
@@ -610,7 +610,7 @@ function requireScheduler_production() {
                     var continuationCallback = callback(
                       currentTask.expirationTime <= currentTime
                     );
-                    currentTime = exports$1.unstable_now();
+                    currentTime = exports.unstable_now();
                     if ("function" === typeof continuationCallback) {
                       currentTask.callback = continuationCallback;
                       advanceTimers(currentTime);
@@ -660,27 +660,27 @@ function requireScheduler_production() {
       };
     function requestHostTimeout(callback, ms) {
       taskTimeoutID = localSetTimeout(function() {
-        callback(exports$1.unstable_now());
+        callback(exports.unstable_now());
       }, ms);
     }
-    exports$1.unstable_IdlePriority = 5;
-    exports$1.unstable_ImmediatePriority = 1;
-    exports$1.unstable_LowPriority = 4;
-    exports$1.unstable_NormalPriority = 3;
-    exports$1.unstable_Profiling = null;
-    exports$1.unstable_UserBlockingPriority = 2;
-    exports$1.unstable_cancelCallback = function(task) {
+    exports.unstable_IdlePriority = 5;
+    exports.unstable_ImmediatePriority = 1;
+    exports.unstable_LowPriority = 4;
+    exports.unstable_NormalPriority = 3;
+    exports.unstable_Profiling = null;
+    exports.unstable_UserBlockingPriority = 2;
+    exports.unstable_cancelCallback = function(task) {
       task.callback = null;
     };
-    exports$1.unstable_forceFrameRate = function(fps) {
+    exports.unstable_forceFrameRate = function(fps) {
       0 > fps || 125 < fps ? console.error(
         "forceFrameRate takes a positive int between 0 and 125, forcing frame rates higher than 125 fps is not supported"
       ) : frameInterval = 0 < fps ? Math.floor(1e3 / fps) : 5;
     };
-    exports$1.unstable_getCurrentPriorityLevel = function() {
+    exports.unstable_getCurrentPriorityLevel = function() {
       return currentPriorityLevel;
     };
-    exports$1.unstable_next = function(eventHandler) {
+    exports.unstable_next = function(eventHandler) {
       switch (currentPriorityLevel) {
         case 1:
         case 2:
@@ -698,10 +698,10 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports$1.unstable_requestPaint = function() {
+    exports.unstable_requestPaint = function() {
       needsPaint = true;
     };
-    exports$1.unstable_runWithPriority = function(priorityLevel, eventHandler) {
+    exports.unstable_runWithPriority = function(priorityLevel, eventHandler) {
       switch (priorityLevel) {
         case 1:
         case 2:
@@ -720,8 +720,8 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports$1.unstable_scheduleCallback = function(priorityLevel, callback, options) {
-      var currentTime = exports$1.unstable_now();
+    exports.unstable_scheduleCallback = function(priorityLevel, callback, options) {
+      var currentTime = exports.unstable_now();
       "object" === typeof options && null !== options ? (options = options.delay, options = "number" === typeof options && 0 < options ? currentTime + options : currentTime) : options = currentTime;
       switch (priorityLevel) {
         case 1:
@@ -751,8 +751,8 @@ function requireScheduler_production() {
       options > currentTime ? (priorityLevel.sortIndex = options, push(timerQueue, priorityLevel), null === peek(taskQueue) && priorityLevel === peek(timerQueue) && (isHostTimeoutScheduled ? (localClearTimeout(taskTimeoutID), taskTimeoutID = -1) : isHostTimeoutScheduled = true, requestHostTimeout(handleTimeout, options - currentTime))) : (priorityLevel.sortIndex = timeout, push(taskQueue, priorityLevel), isHostCallbackScheduled || isPerformingWork || (isHostCallbackScheduled = true, isMessageLoopRunning || (isMessageLoopRunning = true, schedulePerformWorkUntilDeadline())));
       return priorityLevel;
     };
-    exports$1.unstable_shouldYield = shouldYieldToHost;
-    exports$1.unstable_wrapCallback = function(callback) {
+    exports.unstable_shouldYield = shouldYieldToHost;
+    exports.unstable_wrapCallback = function(callback) {
       var parentPriorityLevel = currentPriorityLevel;
       return function() {
         var previousPriorityLevel = currentPriorityLevel;
@@ -922,7 +922,7 @@ function requireReactDom_production() {
   reactDom_production.useFormStatus = function() {
     return ReactSharedInternals.H.useHostTransitionStatus();
   };
-  reactDom_production.version = "19.2.5";
+  reactDom_production.version = "19.2.7";
   return reactDom_production;
 }
 var hasRequiredReactDom;
@@ -12366,12 +12366,12 @@ function requireReactDomClient_production() {
     }
   };
   var isomorphicReactPackageVersion$jscomp$inline_1840 = React2.version;
-  if ("19.2.5" !== isomorphicReactPackageVersion$jscomp$inline_1840)
+  if ("19.2.7" !== isomorphicReactPackageVersion$jscomp$inline_1840)
     throw Error(
       formatProdErrorMessage(
         527,
         isomorphicReactPackageVersion$jscomp$inline_1840,
-        "19.2.5"
+        "19.2.7"
       )
     );
   ReactDOMSharedInternals.findDOMNode = function(componentOrElement) {
@@ -12389,10 +12389,10 @@ function requireReactDomClient_production() {
   };
   var internals$jscomp$inline_2347 = {
     bundleType: 0,
-    version: "19.2.5",
+    version: "19.2.7",
     rendererPackageName: "react-dom",
     currentDispatcherRef: ReactSharedInternals,
-    reconcilerVersion: "19.2.5"
+    reconcilerVersion: "19.2.7"
   };
   if ("undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__) {
     var hook$jscomp$inline_2348 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
@@ -12459,7 +12459,7 @@ function requireReactDomClient_production() {
     listenToAllSupportedEvents(container2);
     return new ReactDOMHydrationRoot(initialChildren);
   };
-  reactDomClient_production.version = "19.2.5";
+  reactDomClient_production.version = "19.2.7";
   return reactDomClient_production;
 }
 var hasRequiredClient;
@@ -13945,6 +13945,263 @@ function searchQueue(items, term) {
     return parts.join(" ").toLowerCase().includes(normalized);
   });
 }
+function getArtifactType(receipt) {
+  return (receipt.artifact_type ?? "").toLowerCase();
+}
+function getEnvelope(receipt) {
+  return receipt.action_envelope_json ?? null;
+}
+function humanFileName(artifactName) {
+  if (!artifactName) return "a file";
+  const name = artifactName.split("/").pop() ?? artifactName;
+  if (name === ".env") return "your secrets file";
+  if (name === ".npmrc") return "your npm config";
+  if (name.endsWith(".json")) return "a settings file";
+  if (name.endsWith(".js") || name.endsWith(".ts")) return "a script file";
+  if (name.endsWith(".sh")) return "a shell script";
+  if (name.endsWith(".py")) return "a Python script";
+  return name;
+}
+function resolveActionType(receipt) {
+  const envelope = getEnvelope(receipt);
+  const actionType = (envelope?.action_type ?? "").toLowerCase();
+  const artifactType = getArtifactType(receipt);
+  const artifactName = (receipt.artifact_name ?? "").toLowerCase();
+  if (actionType === "shell_command" || artifactType.includes("shell") || artifactType.includes("command")) return "Shell command";
+  if (artifactName === "bash" && receipt.provenance_summary?.trim().toLowerCase().startsWith("hook event for")) return "Shell command";
+  if (actionType === "prompt" || artifactType === "prompt_request") return "Prompt";
+  if (actionType === "file_read" || artifactType === "file_read_request" || artifactType.includes("file_read")) return "File read";
+  if (actionType === "file_write" || artifactType.includes("file_write") || artifactType.includes("write")) return "File write";
+  if (actionType === "mcp_tool" || artifactType === "tool_action_request" || artifactType.includes("mcp") || artifactType.includes("tool")) return "Tool call";
+  if (actionType === "package_script" || artifactType.includes("package") || artifactType.includes("supply_chain")) return "Package";
+  if (actionType === "network_request" || artifactType.includes("network")) return "Network request";
+  if (actionType === "config_change" || artifactType.includes("config")) return "Config change";
+  if (actionType === "browser_action" || artifactType.includes("browser")) return "Browser action";
+  if (actionType === "harness_start") return "Harness start";
+  if (artifactType.includes("plugin")) return "Plugin";
+  return "Action";
+}
+function looksLikeId(text) {
+  if (/^\w+:[a-f0-9]{8,}$/i.test(text)) return true;
+  if (/^[a-f0-9]{8,}$/i.test(text)) return true;
+  return false;
+}
+function resolveActionTitle(receipt) {
+  const envelope = getEnvelope(receipt);
+  const type = resolveActionType(receipt);
+  const command = envelope?.command?.trim();
+  if (type === "Shell command" && command && command.length > 0) {
+    return truncate(command, 80);
+  }
+  const targetPath = envelope?.target_paths?.[0]?.trim();
+  if ((type === "File read" || type === "File write") && targetPath && targetPath.length > 0) {
+    return truncate(targetPath, 80);
+  }
+  const promptText = (envelope?.prompt_text ?? envelope?.prompt_excerpt)?.trim();
+  if (type === "Prompt" && promptText && promptText.length > 0) {
+    return truncate(promptText, 80);
+  }
+  const host = envelope?.network_hosts?.[0]?.trim();
+  if (type === "Network request" && host && host.length > 0) {
+    return host;
+  }
+  const mcpTool = envelope?.mcp_tool?.trim() ?? envelope?.tool_name?.trim();
+  if (type === "Tool call" && mcpTool && mcpTool.length > 0) {
+    return mcpTool;
+  }
+  const packageName = envelope?.package_name?.trim();
+  if (type === "Package" && packageName && packageName.length > 0) {
+    return packageName;
+  }
+  const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
+  if (signals.length > 0 && signals[0]?.title) {
+    return signals[0].title;
+  }
+  const provenance = receipt.provenance_summary?.trim();
+  const artifactName = receipt.artifact_name?.trim();
+  if (provenance && provenance.toLowerCase().startsWith("hook event for") && artifactName && provenance.toLowerCase().endsWith(artifactName.toLowerCase())) {
+    return provenance;
+  }
+  if (artifactName && artifactName.length > 0 && !looksLikeId(artifactName)) {
+    return artifactName;
+  }
+  const caps = receipt.capabilities_summary?.trim();
+  if (caps && caps.length > 0 && !caps.startsWith("Guard local daemon completed")) {
+    return caps;
+  }
+  if (provenance && provenance.length > 0 && !provenance.toLowerCase().startsWith("hook event for")) {
+    return provenance;
+  }
+  const name = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
+  if (name && name.toLowerCase() !== type.toLowerCase()) {
+    return `${type}: ${name}`;
+  }
+  return type;
+}
+function resolveActionSubtitle(receipt) {
+  const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
+  const firstSignal = signals[0];
+  if (firstSignal?.plain_reason) {
+    return firstSignal.plain_reason;
+  }
+  const envelope = getEnvelope(receipt);
+  const type = resolveActionType(receipt);
+  const parts = [];
+  if (type === "Shell command" && envelope?.command) {
+    if (envelope.tool_name) parts.push(`via ${envelope.tool_name}`);
+  }
+  if ((type === "File read" || type === "File write") && envelope?.target_paths && envelope.target_paths.length > 1) {
+    parts.push(`${envelope.target_paths.length} paths`);
+  }
+  if (type === "Network request" && envelope?.network_hosts && envelope.network_hosts.length > 1) {
+    parts.push(`${envelope.network_hosts.length} hosts`);
+  }
+  const caps = receipt.capabilities_summary?.trim();
+  const provenance = receipt.provenance_summary?.trim();
+  const isCapsUseful = caps && caps !== "hook artifact · codex" && !caps.toLowerCase().startsWith("guard local daemon completed");
+  const isProvenanceUseful = provenance && provenance !== "hook artifact · codex" && !provenance.toLowerCase().startsWith("guard local daemon completed");
+  if (isCapsUseful) {
+    parts.push(caps);
+  } else if (isProvenanceUseful && provenance?.toLowerCase() !== caps?.toLowerCase() && provenance !== resolveActionTitle(receipt)) {
+    parts.push(provenance);
+  }
+  if (parts.length > 0) {
+    return parts.join(" · ");
+  }
+  return null;
+}
+function resolveActionDetail(receipt) {
+  const envelope = getEnvelope(receipt);
+  if (!envelope) return null;
+  return resolveActionEnvelopeDetailText(envelope, { mcpInputMaxLength: null });
+}
+function formatSubtitle(subtitle) {
+  if (subtitle.endsWith(".") || subtitle.endsWith("?") || subtitle.endsWith("!")) return subtitle + " ";
+  return subtitle + ". ";
+}
+function truncate(text, max) {
+  if (text.length <= max) return text;
+  return text.slice(0, max - 1) + "…";
+}
+function plainEnglishDescription(receipt) {
+  const app = harnessDisplayName(receipt.harness);
+  const type = resolveActionType(receipt);
+  const title = resolveActionTitle(receipt);
+  const subtitle = resolveActionSubtitle(receipt);
+  if (receipt.policy_decision === "allow") {
+    if (receipt.user_override !== null) {
+      return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} You reviewed and allowed it.` : `${app} ${pastTenseVerb(type)} ${title}. You reviewed and allowed it.`;
+    }
+    return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} Guard allowed it automatically.` : `${app} ${pastTenseVerb(type)} ${title}. Guard allowed it automatically.`;
+  }
+  return subtitle ? `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it: ${formatSubtitle(subtitle)}` : `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it.`;
+}
+function pastTenseVerb(type) {
+  switch (type) {
+    case "Shell command":
+      return "ran";
+    case "File read":
+      return "read";
+    case "File write":
+      return "wrote to";
+    case "Tool call":
+      return "used";
+    case "Package":
+      return "installed";
+    case "Network request":
+      return "made";
+    case "Prompt":
+      return "submitted";
+    case "Plugin":
+      return "loaded";
+    case "Config change":
+      return "changed";
+    case "Browser action":
+      return "performed";
+    case "Harness start":
+      return "started";
+    default:
+      return "ran";
+  }
+}
+function infinitiveVerb(type) {
+  switch (type) {
+    case "Shell command":
+      return "run";
+    case "File read":
+      return "read";
+    case "File write":
+      return "write to";
+    case "Tool call":
+      return "use";
+    case "Package":
+      return "install";
+    case "Network request":
+      return "make";
+    case "Prompt":
+      return "submit";
+    case "Plugin":
+      return "load";
+    case "Config change":
+      return "change";
+    case "Browser action":
+      return "perform";
+    case "Harness start":
+      return "start";
+    default:
+      return "run";
+  }
+}
+function plainEnglishRequestTitle(request) {
+  const category = detectCategory({
+    ...request,
+    timestamp: request.created_at,
+    policy_decision: request.policy_action === "block" ? "block" : "allow",
+    receipt_id: request.request_id
+  });
+  const app = harnessDisplayName(request.harness);
+  const name = humanFileName(request.artifact_name ?? request.artifact_id);
+  switch (category) {
+    case "secret":
+      return `${app} wants to read ${name}`;
+    case "network":
+      return `${app} wants to connect to a website`;
+    case "destructive":
+      return `${app} wants to run a destructive command`;
+    case "hidden":
+      return `${app} wants to run hidden code`;
+    case "file-write":
+      return `${app} wants to write to ${name}`;
+    case "tool-call":
+      return `${app} wants to use a tool`;
+    default:
+      return `${app} wants to do something with ${name}`;
+  }
+}
+function whyPaused(request) {
+  const category = detectCategory({
+    ...request,
+    timestamp: request.created_at,
+    policy_decision: request.policy_action === "block" ? "block" : "allow",
+    receipt_id: request.request_id
+  });
+  switch (category) {
+    case "secret":
+      return "This file may contain passwords or keys. Guard stops this by default.";
+    case "network":
+      return "This connects to an outside website. Guard stops new destinations by default.";
+    case "destructive":
+      return "This command could delete or overwrite your files. Guard stops this by default.";
+    case "hidden":
+      return "This code is hidden or encoded. Guard stops this by default.";
+    case "file-write":
+      return "This writes to a file on your computer. Guard stops this by default.";
+    case "tool-call":
+      return "This uses an outside tool. Guard stops new tools by default.";
+    default:
+      return "Guard paused this so you can review it first.";
+  }
+}
 const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
 const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
 function deriveDataFlowEvidence(item) {
@@ -14188,16 +14445,6 @@ function resolveSecondaryRiskSummary(item) {
     return null;
   }
   return summary;
-}
-function hasReviewEvidence(item) {
-  return (item.risk_signals?.length ?? 0) > 0 || hasRenderableDecisionEvidence(item) || resolveSecondaryRiskSummary(item) !== null || !!item.why_now;
-}
-function hasRenderableDecisionEvidence(item) {
-  const signals = item.decision_v2_json?.signals ?? [];
-  return signals.some((signal) => signal.category === "skill" || signal.category === "mcp") || deriveDataFlowEvidence(item) !== null || deriveSkillRiskSignals(item).length > 0 || deriveSupplyChainRiskSignals(item).length > 0 || deriveEncodedLayerSignals(item).length > 0 || hasSupplyChainArtifactEvidence(item);
-}
-function hasSupplyChainArtifactEvidence(item) {
-  return item.artifact_type === "supply_chain" || item.artifact_type === "package_request" || typeof item.artifact_type === "string" && item.artifact_type.endsWith("_package");
 }
 function duplicatesStoppedActionText(item, value) {
   const stoppedActionText = resolveStoppedCommandText(item);
@@ -16792,8 +17039,13 @@ async function fetchPackageFirewallStatus() {
   return normalizePackageFirewallStatus(await readJson("/v1/supply-chain/package-shims"));
 }
 async function startPackageFirewallConnect() {
-  const status = await startGuardCloudConnect();
-  return status.connect_flow;
+  return normalizePackageFirewallConnectFlow(
+    await readJson("/v1/supply-chain/package-shims/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    })
+  );
 }
 async function fetchSupplyChainBundle() {
   const wrapper = await readJson("/v1/supply-chain/bundle");
@@ -18284,263 +18536,6 @@ function EvidenceFilterBar({
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] text-slate-400", children: isFiltered ? `${filteredCount} of ${totalCount} shown` : `${totalCount} total` })
   ] });
-}
-function getArtifactType(receipt) {
-  return (receipt.artifact_type ?? "").toLowerCase();
-}
-function getEnvelope(receipt) {
-  return receipt.action_envelope_json ?? null;
-}
-function humanFileName(artifactName) {
-  if (!artifactName) return "a file";
-  const name = artifactName.split("/").pop() ?? artifactName;
-  if (name === ".env") return "your secrets file";
-  if (name === ".npmrc") return "your npm config";
-  if (name.endsWith(".json")) return "a settings file";
-  if (name.endsWith(".js") || name.endsWith(".ts")) return "a script file";
-  if (name.endsWith(".sh")) return "a shell script";
-  if (name.endsWith(".py")) return "a Python script";
-  return name;
-}
-function resolveActionType(receipt) {
-  const envelope = getEnvelope(receipt);
-  const actionType = (envelope?.action_type ?? "").toLowerCase();
-  const artifactType = getArtifactType(receipt);
-  const artifactName = (receipt.artifact_name ?? "").toLowerCase();
-  if (actionType === "shell_command" || artifactType.includes("shell") || artifactType.includes("command")) return "Shell command";
-  if (artifactName === "bash" && receipt.provenance_summary?.trim().toLowerCase().startsWith("hook event for")) return "Shell command";
-  if (actionType === "prompt" || artifactType === "prompt_request") return "Prompt";
-  if (actionType === "file_read" || artifactType === "file_read_request" || artifactType.includes("file_read")) return "File read";
-  if (actionType === "file_write" || artifactType.includes("file_write") || artifactType.includes("write")) return "File write";
-  if (actionType === "mcp_tool" || artifactType === "tool_action_request" || artifactType.includes("mcp") || artifactType.includes("tool")) return "Tool call";
-  if (actionType === "package_script" || artifactType.includes("package") || artifactType.includes("supply_chain")) return "Package";
-  if (actionType === "network_request" || artifactType.includes("network")) return "Network request";
-  if (actionType === "config_change" || artifactType.includes("config")) return "Config change";
-  if (actionType === "browser_action" || artifactType.includes("browser")) return "Browser action";
-  if (actionType === "harness_start") return "Harness start";
-  if (artifactType.includes("plugin")) return "Plugin";
-  return "Action";
-}
-function looksLikeId(text) {
-  if (/^\w+:[a-f0-9]{8,}$/i.test(text)) return true;
-  if (/^[a-f0-9]{8,}$/i.test(text)) return true;
-  return false;
-}
-function resolveActionTitle(receipt) {
-  const envelope = getEnvelope(receipt);
-  const type = resolveActionType(receipt);
-  const command = envelope?.command?.trim();
-  if (type === "Shell command" && command && command.length > 0) {
-    return truncate(command, 80);
-  }
-  const targetPath = envelope?.target_paths?.[0]?.trim();
-  if ((type === "File read" || type === "File write") && targetPath && targetPath.length > 0) {
-    return truncate(targetPath, 80);
-  }
-  const promptText = (envelope?.prompt_text ?? envelope?.prompt_excerpt)?.trim();
-  if (type === "Prompt" && promptText && promptText.length > 0) {
-    return truncate(promptText, 80);
-  }
-  const host = envelope?.network_hosts?.[0]?.trim();
-  if (type === "Network request" && host && host.length > 0) {
-    return host;
-  }
-  const mcpTool = envelope?.mcp_tool?.trim() ?? envelope?.tool_name?.trim();
-  if (type === "Tool call" && mcpTool && mcpTool.length > 0) {
-    return mcpTool;
-  }
-  const packageName = envelope?.package_name?.trim();
-  if (type === "Package" && packageName && packageName.length > 0) {
-    return packageName;
-  }
-  const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
-  if (signals.length > 0 && signals[0]?.title) {
-    return signals[0].title;
-  }
-  const provenance = receipt.provenance_summary?.trim();
-  const artifactName = receipt.artifact_name?.trim();
-  if (provenance && provenance.toLowerCase().startsWith("hook event for") && artifactName && provenance.toLowerCase().endsWith(artifactName.toLowerCase())) {
-    return provenance;
-  }
-  if (artifactName && artifactName.length > 0 && !looksLikeId(artifactName)) {
-    return artifactName;
-  }
-  const caps = receipt.capabilities_summary?.trim();
-  if (caps && caps.length > 0 && !caps.startsWith("Guard local daemon completed")) {
-    return caps;
-  }
-  if (provenance && provenance.length > 0 && !provenance.toLowerCase().startsWith("hook event for")) {
-    return provenance;
-  }
-  const name = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
-  if (name && name.toLowerCase() !== type.toLowerCase()) {
-    return `${type}: ${name}`;
-  }
-  return type;
-}
-function resolveActionSubtitle(receipt) {
-  const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
-  const firstSignal = signals[0];
-  if (firstSignal?.plain_reason) {
-    return firstSignal.plain_reason;
-  }
-  const envelope = getEnvelope(receipt);
-  const type = resolveActionType(receipt);
-  const parts = [];
-  if (type === "Shell command" && envelope?.command) {
-    if (envelope.tool_name) parts.push(`via ${envelope.tool_name}`);
-  }
-  if ((type === "File read" || type === "File write") && envelope?.target_paths && envelope.target_paths.length > 1) {
-    parts.push(`${envelope.target_paths.length} paths`);
-  }
-  if (type === "Network request" && envelope?.network_hosts && envelope.network_hosts.length > 1) {
-    parts.push(`${envelope.network_hosts.length} hosts`);
-  }
-  const caps = receipt.capabilities_summary?.trim();
-  const provenance = receipt.provenance_summary?.trim();
-  const isCapsUseful = caps && caps !== "hook artifact · codex" && !caps.toLowerCase().startsWith("guard local daemon completed");
-  const isProvenanceUseful = provenance && provenance !== "hook artifact · codex" && !provenance.toLowerCase().startsWith("guard local daemon completed");
-  if (isCapsUseful) {
-    parts.push(caps);
-  } else if (isProvenanceUseful && provenance?.toLowerCase() !== caps?.toLowerCase() && provenance !== resolveActionTitle(receipt)) {
-    parts.push(provenance);
-  }
-  if (parts.length > 0) {
-    return parts.join(" · ");
-  }
-  return null;
-}
-function resolveActionDetail(receipt) {
-  const envelope = getEnvelope(receipt);
-  if (!envelope) return null;
-  return resolveActionEnvelopeDetailText(envelope, { mcpInputMaxLength: null });
-}
-function formatSubtitle(subtitle) {
-  if (subtitle.endsWith(".") || subtitle.endsWith("?") || subtitle.endsWith("!")) return subtitle + " ";
-  return subtitle + ". ";
-}
-function truncate(text, max) {
-  if (text.length <= max) return text;
-  return text.slice(0, max - 1) + "…";
-}
-function plainEnglishDescription(receipt) {
-  const app = harnessDisplayName(receipt.harness);
-  const type = resolveActionType(receipt);
-  const title = resolveActionTitle(receipt);
-  const subtitle = resolveActionSubtitle(receipt);
-  if (receipt.policy_decision === "allow") {
-    if (receipt.user_override !== null) {
-      return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} You reviewed and allowed it.` : `${app} ${pastTenseVerb(type)} ${title}. You reviewed and allowed it.`;
-    }
-    return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} Guard allowed it automatically.` : `${app} ${pastTenseVerb(type)} ${title}. Guard allowed it automatically.`;
-  }
-  return subtitle ? `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it: ${formatSubtitle(subtitle)}` : `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it.`;
-}
-function pastTenseVerb(type) {
-  switch (type) {
-    case "Shell command":
-      return "ran";
-    case "File read":
-      return "read";
-    case "File write":
-      return "wrote to";
-    case "Tool call":
-      return "used";
-    case "Package":
-      return "installed";
-    case "Network request":
-      return "made";
-    case "Prompt":
-      return "submitted";
-    case "Plugin":
-      return "loaded";
-    case "Config change":
-      return "changed";
-    case "Browser action":
-      return "performed";
-    case "Harness start":
-      return "started";
-    default:
-      return "ran";
-  }
-}
-function infinitiveVerb(type) {
-  switch (type) {
-    case "Shell command":
-      return "run";
-    case "File read":
-      return "read";
-    case "File write":
-      return "write to";
-    case "Tool call":
-      return "use";
-    case "Package":
-      return "install";
-    case "Network request":
-      return "make";
-    case "Prompt":
-      return "submit";
-    case "Plugin":
-      return "load";
-    case "Config change":
-      return "change";
-    case "Browser action":
-      return "perform";
-    case "Harness start":
-      return "start";
-    default:
-      return "run";
-  }
-}
-function plainEnglishRequestTitle(request) {
-  const category = detectCategory({
-    ...request,
-    timestamp: request.created_at,
-    policy_decision: request.policy_action === "block" ? "block" : "allow",
-    receipt_id: request.request_id
-  });
-  const app = harnessDisplayName(request.harness);
-  const name = humanFileName(request.artifact_name ?? request.artifact_id);
-  switch (category) {
-    case "secret":
-      return `${app} wants to read ${name}`;
-    case "network":
-      return `${app} wants to connect to a website`;
-    case "destructive":
-      return `${app} wants to run a destructive command`;
-    case "hidden":
-      return `${app} wants to run hidden code`;
-    case "file-write":
-      return `${app} wants to write to ${name}`;
-    case "tool-call":
-      return `${app} wants to use a tool`;
-    default:
-      return `${app} wants to do something with ${name}`;
-  }
-}
-function whyPaused(request) {
-  const category = detectCategory({
-    ...request,
-    timestamp: request.created_at,
-    policy_decision: request.policy_action === "block" ? "block" : "allow",
-    receipt_id: request.request_id
-  });
-  switch (category) {
-    case "secret":
-      return "This file may contain passwords or keys. Guard stops this by default.";
-    case "network":
-      return "This connects to an outside website. Guard stops new destinations by default.";
-    case "destructive":
-      return "This command could delete or overwrite your files. Guard stops this by default.";
-    case "hidden":
-      return "This code is hidden or encoded. Guard stops this by default.";
-    case "file-write":
-      return "This writes to a file on your computer. Guard stops this by default.";
-    case "tool-call":
-      return "This uses an outside tool. Guard stops new tools by default.";
-    default:
-      return "Guard paused this so you can review it first.";
-  }
 }
 function hasMore(page, pageSize, total) {
   return (page + 1) * pageSize < total;
@@ -22997,6 +22992,62 @@ function buildDecisionPayload(input) {
     reason: input.reason
   };
 }
+function ConsolidatedEvidenceAlert({ items }) {
+  const [index, setIndex] = reactExports.useState(0);
+  reactExports.useEffect(() => {
+    if (index >= items.length) {
+      setIndex(0);
+    }
+  }, [items.length, index]);
+  const handleNext = reactExports.useCallback(() => {
+    setIndex((prev) => (prev + 1) % items.length);
+  }, [items.length]);
+  if (items.length === 0) return null;
+  const current = items[Math.min(index, items.length - 1)];
+  const hasMultiple = items.length > 1;
+  const iconClasses = {
+    blue: "text-brand-blue",
+    purple: "text-brand-purple",
+    amber: "text-brand-attention",
+    slate: "text-slate-400"
+  };
+  const Icon = current.icon ?? HiMiniInformationCircle;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5 min-w-0 flex-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          Icon,
+          {
+            className: `mt-0.5 h-4 w-4 shrink-0 ${iconClasses[current.tone]}`,
+            "aria-hidden": "true"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-w-0 flex-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: current.title }) })
+      ] }),
+      hasMultiple && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 shrink-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs font-medium text-muted-foreground tabular-nums", children: [
+          index + 1,
+          " of ",
+          items.length
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: handleNext,
+            className: "flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-brand-dark transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+            "aria-label": "Next insight",
+            children: [
+              "Next",
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+            ]
+          }
+        )
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-brand-dark", children: current.content })
+  ] });
+}
 function approvalGateCooldownLabel(seconds) {
   if (seconds === 0) return "Every approval";
   if (seconds === 900) return "15 minutes";
@@ -24997,8 +25048,77 @@ function ReviewDecisionCard(props) {
   const harnessName = harnessDisplayName(item.harness);
   const whatWouldHappen = buildWhatWouldHappen(item);
   const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
-  const hasEvidence = hasReviewEvidence(item);
   const pauseReason = whyPaused(item);
+  const topAlertItems = [];
+  if (secondaryRiskSummary) {
+    topAlertItems.push({
+      id: "secondary-risk",
+      title: "Additional risk",
+      tone: "amber",
+      icon: HiMiniExclamationTriangle,
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: secondaryRiskSummary })
+    });
+  }
+  if (pauseReason) {
+    topAlertItems.push({
+      id: "why-paused",
+      title: "Why paused",
+      tone: "blue",
+      icon: HiMiniInformationCircle,
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: pauseReason })
+    });
+  }
+  const evidenceItems = [];
+  const allSignals = item.decision_v2_json?.signals ?? [];
+  if (allSignals.some((s) => s.category === "skill" || s.category === "mcp")) {
+    evidenceItems.push({
+      id: "scanner",
+      title: "Scanner evidence",
+      tone: "blue",
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceSection, { signals: allSignals })
+    });
+  }
+  if (item.why_now) {
+    evidenceItems.push({
+      id: "why-now",
+      title: "Why now",
+      tone: "purple",
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: item.why_now })
+    });
+  }
+  if (deriveDataFlowEvidence(item) !== null) {
+    evidenceItems.push({
+      id: "data-flow",
+      title: "Data flow detected",
+      tone: "blue",
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx(DataFlowEvidenceCard, { item })
+    });
+  }
+  if (deriveSkillRiskSignals(item).length > 0) {
+    evidenceItems.push({
+      id: "skill-risk",
+      title: "Skill risk",
+      tone: "blue",
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx(SkillRiskCard, { item })
+    });
+  }
+  const isSupplyChainArtifact = item.artifact_type === "supply_chain" || item.artifact_type === "package_request" || typeof item.artifact_type === "string" && item.artifact_type.endsWith("_package");
+  if (deriveSupplyChainRiskSignals(item).length > 0 || isSupplyChainArtifact) {
+    evidenceItems.push({
+      id: "supply-chain",
+      title: "Supply chain risk",
+      tone: "amber",
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainRiskCard, { item })
+    });
+  }
+  if (deriveEncodedLayerSignals(item).length > 0) {
+    evidenceItems.push({
+      id: "decoded-layer",
+      title: "Decoded layer",
+      tone: "slate",
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx(DecodedLayerCard, { item })
+    });
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
     resolved && /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
@@ -25031,11 +25151,7 @@ function ReviewDecisionCard(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: item.policy_action === "block" ? "attention" : "info", children: item.policy_action === "block" ? "Blocked" : "Needs review" })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 rounded-xl border border-brand-blue/10 bg-brand-blue/[0.04] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: pauseReason }) }),
-      secondaryRiskSummary && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 rounded-xl border border-brand-attention/15 bg-brand-attention/[0.04] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: secondaryRiskSummary })
-      ] }) }),
+      topAlertItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: topAlertItems }, item.request_id) }),
       whatWouldHappen && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
@@ -25140,7 +25256,7 @@ function ReviewDecisionCard(props) {
         )
       ] })
     ] }),
-    hasEvidence && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
+    evidenceItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "button",
         {
@@ -25149,19 +25265,12 @@ function ReviewDecisionCard(props) {
           className: "flex w-full items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-brand-blue/20 rounded-lg px-2 py-1 -ml-2",
           "aria-expanded": showEvidence,
           children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Why Guard paused this" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Review details" }),
             showEvidence ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" })
           ]
         }
       ),
-      showEvidence && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 space-y-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceSection, { signals: item.decision_v2_json?.signals ?? [] }),
-        item.why_now && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-purple/15 bg-brand-purple/[0.04] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: item.why_now }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DataFlowEvidenceCard, { item }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SkillRiskCard, { item }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainRiskCard, { item }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DecodedLayerCard, { item })
-      ] })
+      showEvidence && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: evidenceItems }, item.request_id) })
     ] }),
     detail.receipt && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Last time" }),
@@ -26363,11 +26472,11 @@ export {
   HiMiniExclamationCircle as K,
   HiMiniClipboardDocumentCheck as L,
   HiMiniClipboard as M,
-  requireReact as N,
-  getDefaultExportFromCjs as O,
+  getDefaultExportFromCjs as N,
+  HiMiniKey as O,
   ProofStrip as P,
-  HiMiniKey as Q,
-  HiMiniLockClosed as R,
+  HiMiniLockClosed as Q,
+  React as R,
   SectionLabel as S,
   HiMiniBellAlert as T,
   HiMiniAdjustmentsHorizontal as U,
