@@ -3929,7 +3929,11 @@ def _receipt_sync_rows_with_command_detail_backfill(
         merged.append(row)
         seen_receipt_ids.add(receipt_id)
         added += 1
-    backfill_rowids = [row.get("receipt_rowid") for row in backfill_rows if isinstance(row.get("receipt_rowid"), int)]
+    backfill_rowids: list[int] = []
+    for row in backfill_rows:
+        receipt_rowid = row.get("receipt_rowid")
+        if isinstance(receipt_rowid, int):
+            backfill_rowids.append(receipt_rowid)
     next_before_rowid = min(backfill_rowids) if backfill_rowids else before_rowid
     complete = len(backfill_rows) < _RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT
     return merged, {
