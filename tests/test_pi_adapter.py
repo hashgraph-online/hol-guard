@@ -69,13 +69,21 @@ class TestPiAdapterIdentity:
         assert "omp" in contract.install_aliases
         assert "oh-my-pi" in contract.install_aliases
 
-    def test_approval_flow_uses_inline_pi_prompt_without_auto_opening_browser(self) -> None:
-        flow = get_adapter("pi").approval_flow()
+    def test_managed_approval_flow_uses_inline_pi_prompt_without_auto_opening_browser(self) -> None:
+        flow = get_adapter("pi").approval_flow(managed_install={"active": True, "manifest": {}})
 
         assert flow["tier"] == "native-or-center"
         assert flow["prompt_channel"] == "native"
         assert flow["auto_open_browser"] is False
         assert _approval_surface_policy_for_flow("auto-open-once", flow) == "notify-only"
+
+    def test_unmanaged_approval_flow_keeps_browser_fallback_visible(self) -> None:
+        flow = get_adapter("pi").approval_flow(managed_install=None)
+
+        assert flow["tier"] == "approval-center"
+        assert flow["prompt_channel"] == "browser"
+        assert flow["auto_open_browser"] is True
+        assert _approval_surface_policy_for_flow("auto-open-once", flow) == "auto-open-once"
 
 
 class TestPiDetect:

@@ -41,9 +41,23 @@ class PiHarnessAdapter(HarnessAdapter):
         "and uses a managed Pi extension to review prompts and tool calls inline."
     )
     fallback_hint = "Pi keeps the blocked request in Guard and shows the reason inline before you retry."
-    approval_tier = "native-or-center"
-    approval_prompt_channel = "native"
-    approval_auto_open_browser = False
+
+    def approval_flow(self, *, managed_install: dict[str, object] | None = None) -> dict[str, object]:
+        if isinstance(managed_install, dict) and bool(managed_install.get("active")):
+            return {
+                "tier": "native-or-center",
+                "summary": self.approval_summary,
+                "fallback_hint": self.fallback_hint,
+                "prompt_channel": "native",
+                "auto_open_browser": False,
+            }
+        return {
+            "tier": "approval-center",
+            "summary": "Guard routes Pi approvals through the local approval center.",
+            "fallback_hint": "Resolve pending Pi requests from the Guard approval center.",
+            "prompt_channel": "browser",
+            "auto_open_browser": True,
+        }
 
     @staticmethod
     def _global_root(context: HarnessContext) -> Path:

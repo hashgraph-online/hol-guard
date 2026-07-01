@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 
 from ..approvals import first_approval_url, queue_blocked_approvals
 from ..codex_resume import seed_request_resume_record
@@ -452,11 +452,35 @@ def _browser_url_for_review(browser_url: str | None, review_url: str | None) -> 
         return browser_url
     if not parsed_browser.scheme or not parsed_browser.netloc:
         return review_url
-    if (parsed_browser.scheme, parsed_browser.netloc) != (parsed_review.scheme, parsed_review.netloc):
-        return review_url
-    return urlunparse(
-        parsed_review._replace(fragment=_merged_fragment(parsed_review.fragment, parsed_browser.fragment))
-    )
+    if _same_origin(parsed_browser, parsed_review):
+        return urlunparse(
+            parsed_review._replace(fragment=_merged_fragment(parsed_review.fragment, parsed_browser.fragment))
+        )
+    if _same_loopback_port(parsed_browser, parsed_review):
+        return urlunparse(
+            parsed_review._replace(
+                scheme=parsed_browser.scheme,
+                netloc=parsed_browser.netloc,
+                fragment=_merged_fragment(parsed_review.fragment, parsed_browser.fragment),
+            )
+        )
+    return review_url
+
+
+def _same_origin(left: ParseResult, right: ParseResult) -> bool:
+    return (left.scheme, left.netloc) == (right.scheme, right.netloc)
+
+
+def _same_loopback_port(left: ParseResult, right: ParseResult) -> bool:
+    left_host = left.hostname
+    right_host = right.hostname
+    loopback_hosts = {"127.0.0.1", "::1", "localhost"}
+    if left_host not in loopback_hosts or right_host not in loopback_hosts:
+        return False
+    try:
+        return left.port == right.port
+    except ValueError:
+        return False
 
 
 def _merged_fragment(primary_fragment: str, extra_fragment: str) -> str:
