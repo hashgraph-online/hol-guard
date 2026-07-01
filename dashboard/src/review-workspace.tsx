@@ -1170,15 +1170,6 @@ function ReviewDecisionCard(props: {
   const pauseReason = whyPaused(item);
 
   const topAlertItems: EvidenceItem[] = [];
-  if (pauseReason) {
-    topAlertItems.push({
-      id: "why-paused",
-      title: "Why paused",
-      tone: "blue",
-      icon: HiMiniInformationCircle,
-      content: <p className="text-sm text-brand-dark">{pauseReason}</p>,
-    });
-  }
   if (secondaryRiskSummary) {
     topAlertItems.push({
       id: "secondary-risk",
@@ -1186,6 +1177,15 @@ function ReviewDecisionCard(props: {
       tone: "amber",
       icon: HiMiniExclamationTriangle,
       content: <p className="text-sm text-brand-dark">{secondaryRiskSummary}</p>,
+    });
+  }
+  if (pauseReason) {
+    topAlertItems.push({
+      id: "why-paused",
+      title: "Why paused",
+      tone: "blue",
+      icon: HiMiniInformationCircle,
+      content: <p className="text-sm text-brand-dark">{pauseReason}</p>,
     });
   }
 

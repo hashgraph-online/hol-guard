@@ -25050,15 +25050,6 @@ function ReviewDecisionCard(props) {
   const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
   const pauseReason = whyPaused(item);
   const topAlertItems = [];
-  if (pauseReason) {
-    topAlertItems.push({
-      id: "why-paused",
-      title: "Why paused",
-      tone: "blue",
-      icon: HiMiniInformationCircle,
-      content: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: pauseReason })
-    });
-  }
   if (secondaryRiskSummary) {
     topAlertItems.push({
       id: "secondary-risk",
@@ -25066,6 +25057,15 @@ function ReviewDecisionCard(props) {
       tone: "amber",
       icon: HiMiniExclamationTriangle,
       content: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: secondaryRiskSummary })
+    });
+  }
+  if (pauseReason) {
+    topAlertItems.push({
+      id: "why-paused",
+      title: "Why paused",
+      tone: "blue",
+      icon: HiMiniInformationCircle,
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: pauseReason })
     });
   }
   const evidenceItems = [];
