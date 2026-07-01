@@ -239,7 +239,7 @@ class StoreReceiptsRuntimeMixin:
         query = self._receipt_base_query(
             f"""
             where r.timestamp >= ?
-              and r.policy_decision in ('block', 'review', 'require-reapproval')
+              and r.policy_decision in ('block', 'review', 'require-reapproval', 'sandbox-required')
               and (e.envelope_full_json is not null or a.action_envelope_json is not null)
               {rowid_clause}
             order by r.rowid desc
