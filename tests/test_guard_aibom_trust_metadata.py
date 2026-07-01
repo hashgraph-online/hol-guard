@@ -870,6 +870,14 @@ def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(monkeypatch, tmp_
     search_tool = next(item for item in snapshot.items if item.item_id.endswith(":tool:search_docs"))
     delete_tool = next(item for item in snapshot.items if item.item_id.endswith(":tool:delete_docs"))
 
+    search_local_security = search_tool.metadata.get("localSecurity")
+    assert isinstance(search_local_security, dict)
+    assert search_local_security.get("entityType") == "mcp_tool"
+    assert search_local_security.get("provider") == "cisco-mcp-scanner"
+    search_safety = search_local_security.get("safety")
+    assert isinstance(search_safety, dict)
+    assert search_safety.get("score") == 90
+
     search_trust, search_metadata = _assert_local_trust(search_tool.metadata, trust_domain="mcp")
     _delete_trust, delete_metadata = _assert_local_trust(delete_tool.metadata, trust_domain="mcp")
     assert search_metadata.get("evidenceHash") != delete_metadata.get("evidenceHash")
@@ -909,8 +917,28 @@ def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(monkeypatch, tmp_
     )
     cisco_layer_metadata = cisco_layer.get("metadata")
     assert isinstance(cisco_layer_metadata, dict)
-    assert cisco_layer_metadata.get("attestationStatus") == "unsigned"
-    assert cisco_layer_metadata.get("attestation") is None
+    assert cisco_layer_metadata.get("attestationStatus") == "signed"
+    cisco_attestation = cisco_layer_metadata.get("attestation")
+    assert isinstance(cisco_attestation, dict)
+    cisco_layer_id = cisco_layer.get("layerId")
+    assert isinstance(cisco_layer_id, str)
+    cisco_layer_type = cisco_layer.get("layerType")
+    assert isinstance(cisco_layer_type, str)
+    verify_trust_attestation(
+        payload=build_trust_attestation_payload(
+            agent_id=snapshot.agent_id,
+            item_id=search_tool.item_id,
+            item_kind=search_tool.item_kind,
+            content_hash=search_tool.content_hash,
+            captured_at=str(cisco_layer.get("capturedAt")),
+            evidence_hash=str(cisco_layer_metadata.get("evidenceHash")),
+            scope="trust_layer",
+            layer_id=cisco_layer_id,
+            layer_type=cisco_layer_type,
+        ),
+        envelope=cisco_attestation,
+        trusted_keys=(verification_key,),
+    )
     assert search_trust.get("trustScore") is not None
 
 

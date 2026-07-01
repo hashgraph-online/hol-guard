@@ -166,7 +166,7 @@ def test_default_detector_registry_includes_cisco_sources() -> None:
     assert "cisco.mcp" in detector_ids
 
 
-def test_cisco_scanners_warn_and_skip_on_python_314(
+def test_skill_scanner_warns_on_python_314_but_mcp_scanner_checks_dependency(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -180,7 +180,7 @@ def test_cisco_scanners_warn_and_skip_on_python_314(
     assert mcp_summary.status is CiscoIntegrationStatus.UNAVAILABLE
     assert "Python 3.14+" in skill_summary.message
     assert "Python 3.10 through 3.13" in skill_summary.message
-    assert "Python 3.14+" in mcp_summary.message
+    assert "Cisco MCP scanner is required but not installed" in mcp_summary.message
 
 
 def test_guard_scan_skills_deep_uses_cisco_skill_scanner(

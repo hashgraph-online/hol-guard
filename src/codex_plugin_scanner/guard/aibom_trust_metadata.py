@@ -281,7 +281,10 @@ def _local_mcp_security_for_artifact(
 ) -> dict[str, object] | None:
     from .inventory_contract import _normalize_inventory_datetime
 
-    if item_kind != "mcp_server" or getattr(artifact, "artifact_type", None) != "mcp_server":
+    if item_kind not in {"mcp_server", "mcp_tool"} or getattr(artifact, "artifact_type", None) not in {
+        "mcp_server",
+        "mcp_tool",
+    }:
         return None
 
     trust_root = _trust_root_for_artifact(artifact, item_kind=item_kind, workspace_dir=workspace_dir)
@@ -342,7 +345,7 @@ def _local_mcp_security_for_artifact(
     metadata_payload["evidenceHash"] = guard_evidence_hash(
         {
             "capturedAt": normalized_captured_at,
-            "entityType": "mcp_server",
+            "entityType": item_kind,
             "findings": findings,
             "provider": "cisco-mcp-scanner",
             "safety": safety,
@@ -352,7 +355,7 @@ def _local_mcp_security_for_artifact(
     )
 
     return {
-        "entityType": "mcp_server",
+        "entityType": item_kind,
         "source": "local_indexed",
         "provider": "cisco-mcp-scanner",
         "status": status,
