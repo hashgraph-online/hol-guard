@@ -138,7 +138,7 @@ from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS, build
 from ..protect import build_protect_payload
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals, artifact_risk_signals_v2, artifact_risk_summary
-from ..runtime.actions import GuardActionEnvelope, normalize_harness_payload
+from ..runtime.actions import GuardActionEnvelope, command_text_from_tool_payload, normalize_harness_payload
 from ..runtime.cisco_preflight import (
     build_cisco_deep_scan_payload,
     cisco_risk_signal_v3_to_v2,
@@ -309,13 +309,7 @@ def _guard_risk_action_key(value: str) -> str:
 
 def _hook_command_text(payload: Mapping[str, object]) -> str | None:
     tool_input = payload.get("tool_input")
-    if not isinstance(tool_input, Mapping):
-        return None
-    for key in ("command", "cmd", "shell_command", "shellCommand", "pattern", "query", "search", "regex"):
-        value = tool_input.get(key)
-        if isinstance(value, str) and value.strip():
-            return value
-    return None
+    return command_text_from_tool_payload(payload.get("tool_name"), tool_input)
 
 
 _CLAUDE_GUARD_APPROVAL_HEADER = "HOL Guard"

@@ -199,6 +199,10 @@ def _codex_post_tool_command_texts(payload: dict[str, object]) -> tuple[str, ...
                 value = tool_input.get(key)
                 if isinstance(value, str) and value.strip():
                     candidates.append(f"cat -- {shlex.quote(value.strip())}")
+        if not candidates:
+            native_command = command_text_from_tool_payload(payload.get("tool_name"), tool_input)
+            if native_command is not None:
+                candidates.append(native_command)
         return tuple(dict.fromkeys(text for text in candidates if text))
     return ()
 

@@ -229,6 +229,7 @@ class TestPiInstall:
         assert 'pi.on("tool_result"' in text
         assert 'pi.on("input"' in text
         assert 'hook_event_name: "PostToolUse"' in text
+        assert "    return undefined;\n  });\n}" in text
         assert 'const GUARD_COMMAND_CANDIDATES = ["plugin-guard", "hol-guard"]' in text
         assert 'const GUARD_HOME =' in text
         assert "daemon-state.json" in text
@@ -463,6 +464,28 @@ class TestPiRuntime:
         assert artifact is not None
         assert artifact.harness == "pi"
         assert artifact.artifact_id.startswith("pi:")
+
+    def test_pi_grep_post_tool_output_records_rendered_command(self, tmp_path: Path) -> None:
+        payload = {
+            "tool_name": "grep",
+            "tool_input": {"pattern": "SupplyChainContextRow|context.*agent|context.*row", "path": "context"},
+            "tool_response": [{"type": "text", "text": "context/file.ts:2: credential = 'sk-test-secret'"}],
+            "stdout": "context/file.ts:2: credential = 'sk-test-secret'",
+        }
+
+        artifact = _codex_post_tool_output_artifact(
+            harness="pi",
+            payload=payload,
+            config_path="~/.omp/agent/settings.json",
+            source_scope="project",
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+        envelope = normalize_harness_payload("pi", "PostToolUse", payload, workspace=tmp_path, home_dir=tmp_path)
+
+        assert artifact is not None
+        assert artifact.metadata["command_text"] == "grep 'SupplyChainContextRow|context.*agent|context.*row' context"
+        assert envelope.command == "grep 'SupplyChainContextRow|context.*agent|context.*row' context"
 
     def test_pi_source_file_read_with_credential_like_code_does_not_block(self, tmp_path: Path) -> None:
         source_path = tmp_path / "src" / "lib" / "guard-notion-api.ts"

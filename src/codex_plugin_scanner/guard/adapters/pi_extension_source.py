@@ -650,5 +650,6 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "      return reviewedToolResult(reviewedContent, event.details, event.isError === true);\n"
         "    }\n"
         "    return undefined;\n"
+        "  });\n"
         "}\n"
     )
