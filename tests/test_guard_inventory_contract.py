@@ -468,6 +468,9 @@ def test_inventory_snapshot_attaches_cisco_mcp_trust_layer_to_server_and_tool(tm
         and layer.get("trustScore") == 70
         and isinstance(layer.get("metadata"), dict)
         and layer["metadata"].get("attestationStatus") == "unsigned"
+        and isinstance(layer["metadata"].get("evidence"), dict)
+        and layer["metadata"]["evidence"].get("status") == "enabled"
+        and layer["metadata"]["evidence"].get("trustScore") == 70
         and isinstance(layer["metadata"].get("evidenceHash"), str)
         for layer in server_layers
     )
@@ -483,6 +486,77 @@ def test_inventory_snapshot_attaches_cisco_mcp_trust_layer_to_server_and_tool(tm
         and layer["metadata"].get("inheritedFromServerItemId") is None
         for layer in tool_layers
     )
+    assert str(workspace) not in encoded
+
+
+def test_inventory_snapshot_attaches_cisco_unavailable_status_evidence(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    mcp_file = workspace / ".mcp.json"
+    mcp_file.write_text('{"mcpServers": {"local-demo": {"command": "python"}}}\n', encoding="utf-8")
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(str(mcp_file),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:project:mcp:local-demo",
+                name="local-demo",
+                harness="codex",
+                artifact_type="mcp_server",
+                source_scope="project",
+                config_path=str(mcp_file),
+                transport="stdio",
+            ),
+        ),
+    )
+    cisco_run = CiscoInventoryRun(
+        source="cisco-mcp-scanner",
+        status="unavailable",
+        message="Cisco MCP scanner runtime unavailable.",
+        findings=(),
+        duration_ms=7,
+        metadata={
+            "target": ".mcp.json",
+            "_targetPath": str(workspace),
+            "_configPath": str(mcp_file),
+            "targetsScanned": 0,
+            "totalFindings": 0,
+            "findingsBySeverity": {"critical": 0, "high": 0, "medium": 0, "low": 0},
+            "analyzersUsed": [],
+            "scanMode": "static",
+            "mode": "auto",
+        },
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-06-10T00:00:00Z",
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+        cisco_runs=(cisco_run,),
+    )
+    server_item = next(item for item in snapshot.items if item.item_kind == "mcp_server")
+    trust_layers = server_item.metadata.get("trustLayers")
+    encoded = json.dumps(serialize_inventory_snapshot(snapshot), sort_keys=True)
+
+    assert isinstance(trust_layers, list)
+    cisco_layer = next(
+        layer for layer in trust_layers if isinstance(layer, dict) and layer.get("layerType") == "cisco_mcp_scanner"
+    )
+    assert cisco_layer.get("status") == "unavailable"
+    assert cisco_layer.get("trustScore") is None
+    assert cisco_layer.get("trustComponents") == []
+    metadata = cisco_layer.get("metadata")
+    assert isinstance(metadata, dict)
+    assert metadata.get("evidenceSchemaVersion") == "guard-aibom-cisco-scanner-evidence.v1"
+    evidence = metadata.get("evidence")
+    assert isinstance(evidence, dict)
+    assert evidence.get("status") == "unavailable"
+    assert evidence.get("message") == "Cisco MCP scanner runtime unavailable."
+    assert evidence.get("totalFindings") == 0
+    assert evidence.get("targetsScanned") == 0
     assert str(workspace) not in encoded
 
 

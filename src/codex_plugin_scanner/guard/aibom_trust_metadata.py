@@ -878,6 +878,17 @@ def _cisco_trust_layer(
             if value is not None:
                 safe_metadata[key] = value
     safe_metadata["attestationStatus"] = "unsigned"
+    safe_metadata["evidenceSchemaVersion"] = "guard-aibom-cisco-scanner-evidence.v1"
+    safe_metadata["evidence"] = _cisco_evidence_payload(
+        layer_id=layer_id,
+        label=label,
+        status=status,
+        message=message,
+        captured_at=_normalize_inventory_datetime(captured_at),
+        trust_score=trust_score,
+        trust_components=trust_components,
+        metadata=safe_metadata,
+    )
     safe_metadata["evidenceHash"] = _trust_evidence_hash(
         {
             "capturedAt": _normalize_inventory_datetime(captured_at),
@@ -901,6 +912,45 @@ def _cisco_trust_layer(
         "capturedAt": _normalize_inventory_datetime(captured_at),
         "metadata": safe_metadata,
     }
+
+
+def _cisco_evidence_payload(
+    *,
+    layer_id: TrustLayerType,
+    label: str,
+    status: str,
+    message: str,
+    captured_at: object,
+    trust_score: int | None,
+    trust_components: list[dict[str, object]],
+    metadata: dict[str, object],
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "source": metadata.get("scannerSource", "unknown"),
+        "layerId": layer_id,
+        "label": label,
+        "status": status,
+        "message": message,
+        "capturedAt": captured_at,
+        "trustScore": trust_score,
+        "componentCount": len(trust_components),
+        "totalFindings": metadata.get("totalFindings", 0),
+        "findingsBySeverity": metadata.get("findingsBySeverity", {}),
+    }
+    for key in (
+        "analyzersUsed",
+        "policyName",
+        "scanMode",
+        "mode",
+        "targetsScanned",
+        "skillsScanned",
+        "skillsSkipped",
+        "durationMs",
+    ):
+        value = metadata.get(key)
+        if value is not None:
+            payload[key] = value
+    return payload
 
 
 def _cisco_severity_counts(run: object) -> dict[str, int]:
