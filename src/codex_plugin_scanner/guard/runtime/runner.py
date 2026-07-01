@@ -2957,6 +2957,7 @@ def _persist_rotated_oauth_refresh_token(
     refresh_token: str,
     access_token: str | None = None,
     access_token_expires_at: str | None = None,
+    force_primary_secret_rewrite: bool = False,
 ) -> None:
     issuer = _optional_string(credentials.get("issuer"))
     client_id = _optional_string(credentials.get("client_id"))
@@ -3007,6 +3008,7 @@ def _persist_rotated_oauth_refresh_token(
         access_token=access_token,
         access_token_expires_at=access_token_expires_at,
         now=_now(),
+        force_primary_secret_rewrite=force_primary_secret_rewrite,
     )
 
 
@@ -3064,6 +3066,7 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
             refresh_token=rotated_refresh_token,
             access_token=_optional_string(refreshed.get("access_token")),
             access_token_expires_at=_optional_string(refreshed.get("access_token_expires_at")),
+            force_primary_secret_rewrite=force_refresh,
         )
     sync_url = _validate_guard_sync_url(
         _oauth_sync_url_from_issuer(oauth_client.issuer),

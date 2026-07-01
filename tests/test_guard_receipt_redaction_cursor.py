@@ -272,6 +272,7 @@ def test_forced_oauth_refresh_persists_same_refresh_token_access_token(
     assert persisted[0]["refresh_token"] == "same-refresh-token"
     assert persisted[0]["access_token"] == "fresh-access-token"
     assert persisted[0]["access_token_expires_at"] == "2026-04-15T00:30:00+00:00"
+    assert persisted[0]["force_primary_secret_rewrite"] is True
 
 
 def test_relaxed_redaction_sync_adds_recent_blocked_command_detail_backfill(tmp_path) -> None:
