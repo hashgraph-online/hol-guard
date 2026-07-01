@@ -275,6 +275,32 @@ def test_forced_oauth_refresh_persists_same_refresh_token_access_token(
     assert persisted[0]["force_primary_secret_rewrite"] is True
 
 
+def test_oauth_local_credentials_forwards_primary_rewrite_flag(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path)
+    captured: list[dict[str, object]] = []
+
+    monkeypatch.setattr(store, "_set_oauth_local_credentials_unlocked", lambda **kwargs: captured.append(kwargs))
+
+    store.set_oauth_local_credentials(
+        issuer="http://127.0.0.1:3000",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token",
+        dpop_private_key_pem="private-key",
+        dpop_public_jwk={"kty": "EC"},
+        dpop_public_jwk_thumbprint="thumbprint",
+        now="2026-04-15T00:01:00Z",
+        access_token="access-token",
+        access_token_expires_at="2026-04-15T00:30:00Z",
+        force_primary_secret_rewrite=True,
+    )
+
+    assert captured
+    assert captured[0]["force_primary_secret_rewrite"] is True
+
+
 def test_relaxed_redaction_sync_adds_recent_blocked_command_detail_backfill(tmp_path) -> None:
     store = GuardStore(tmp_path)
     store.add_receipt(

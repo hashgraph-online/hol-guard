@@ -113,6 +113,7 @@ class StoreOAuthConnectMixin:
                 runtime_label=runtime_label,
                 access_token=access_token,
                 access_token_expires_at=access_token_expires_at,
+                force_primary_secret_rewrite=force_primary_secret_rewrite,
             )
 
     def _set_oauth_local_credentials_unlocked(
@@ -135,6 +136,7 @@ class StoreOAuthConnectMixin:
         runtime_label: str | None = None,
         access_token: str | None = None,
         access_token_expires_at: str | None = None,
+        force_primary_secret_rewrite: bool = False,
     ) -> None:
         normalized_issuer = resolve_guard_oauth_client_config(issuer).issuer
         secret_payload = {
