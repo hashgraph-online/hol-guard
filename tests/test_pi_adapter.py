@@ -13,11 +13,13 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
 from codex_plugin_scanner.guard.adapters.pi_support import stable_suffix
 from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload
+from codex_plugin_scanner.guard.cli.commands_hook_runtime_review import _approval_open_key
 from codex_plugin_scanner.guard.cli.commands_support_codex_tool_output_messages import (
     _codex_tool_output_request_summary,
     _codex_tool_output_runtime_reason,
     _codex_tool_output_runtime_summary,
 )
+from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _approval_surface_policy_for_flow
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
@@ -67,6 +69,28 @@ class TestPiAdapterIdentity:
         assert contract_for("omp") == contract
         assert "omp" in contract.install_aliases
         assert "oh-my-pi" in contract.install_aliases
+
+    def test_managed_approval_flow_auto_opens_approval_center_once_as_fallback(self) -> None:
+        flow = get_adapter("pi").approval_flow(managed_install={"active": True, "manifest": {}})
+
+        assert flow["tier"] == "approval-center"
+        assert flow["prompt_channel"] == "native-fallback"
+        assert flow["auto_open_browser"] is True
+        assert _approval_surface_policy_for_flow("auto-open-once", flow) == "auto-open-once"
+        assert (
+            _approval_open_key("pi", "pi:project:tool-a", {"guard_operation_open_key": "operation-1"})
+            == "pi-approval-center:operation-1"
+        )
+        assert _approval_open_key("pi", "pi:project:tool-a", {}) == "pi:project:tool-a"
+        assert _approval_open_key("codex", "codex:project:tool-a", {}) == "codex:project:tool-a"
+
+    def test_unmanaged_approval_flow_keeps_browser_fallback_visible(self) -> None:
+        flow = get_adapter("pi").approval_flow(managed_install=None)
+
+        assert flow["tier"] == "approval-center"
+        assert flow["prompt_channel"] == "browser"
+        assert flow["auto_open_browser"] is True
+        assert _approval_surface_policy_for_flow("auto-open-once", flow) == "auto-open-once"
 
 
 class TestPiDetect:
@@ -230,7 +254,7 @@ class TestPiInstall:
         assert 'pi.on("input"' in text
         assert 'hook_event_name: "PostToolUse"' in text
         assert 'const GUARD_COMMAND_CANDIDATES = ["plugin-guard", "hol-guard"]' in text
-        assert 'const GUARD_HOME =' in text
+        assert "const GUARD_HOME =" in text
         assert "daemon-state.json" in text
         assert "daemon-auth-token" in text
         assert "/v1/hooks/pi?" in text
@@ -328,7 +352,7 @@ class TestPiInstall:
         # review, not pre-emptively blocked.
         assert "HOL Guard blocked oversized Pi tool output before review" not in text
         assert "oversizeNotice" not in text
-        assert 'ctx.ui.notify(oversizeNotice' not in text
+        assert "ctx.ui.notify(oversizeNotice" not in text
         assert "const response = await runGuard(" in text
         # When truncated, the reviewed excerpt (not the full unreviewed output) is
         # returned to Pi so omitted content never reaches the model.
@@ -351,9 +375,9 @@ class TestPiInstall:
         assert "response.reviewed_output_sha256 === digest.sha256" in text
         # digestOutputText must only hash text-bearing fields, not metadata
         # like {type: "text"} — otherwise structured source reads never match
-        assert 'record.type === \'text\'' in text
-        assert 'record.text' in text
-        assert 'OUTPUT_TEXT_KEYS' in text
+        assert "record.type === 'text'" in text
+        assert "record.text" in text
+        assert "OUTPUT_TEXT_KEYS" in text
         # guard_payload_ref fallback still present
         assert "guard_payload_ref" in text
         # Reviewed excerpt still returned when not proven safe

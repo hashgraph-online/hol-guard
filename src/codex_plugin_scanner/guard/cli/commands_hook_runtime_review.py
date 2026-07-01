@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -175,7 +176,7 @@ def _review_runtime_artifact_hook(
                             config.approval_surface_policy,
                             approval_flow,
                         ),
-                        open_key=artifact_id,
+                        open_key=_approval_open_key(args.harness, artifact_id, payload_map),
                         redaction_level=config.receipt_redaction_level,
                     )
                     operation = blocked_operation.get("operation")
@@ -374,7 +375,7 @@ def _review_runtime_artifact_hook(
                         config.approval_surface_policy,
                         approval_flow,
                     ),
-                    open_key=artifact_id,
+                    open_key=_approval_open_key(args.harness, artifact_id, payload_map),
                     redaction_level=config.receipt_redaction_level,
                 )
                 operation = blocked_operation.get("operation")
@@ -439,6 +440,17 @@ def _review_runtime_artifact_hook(
     return None
 
 
+def _approval_open_key(harness: str, artifact_id: str, payload: Mapping[str, object] | None = None) -> str:
+    if _canonical_harness_name(harness) == "pi":
+        operation_open_key = (
+            _optional_string(payload.get("guard_operation_open_key")) if isinstance(payload, Mapping) else None
+        )
+        if operation_open_key is not None:
+            return f"pi-approval-center:{operation_open_key}"
+    return artifact_id
+
+
 __all__ = [
+    "_approval_open_key",
     "_review_runtime_artifact_hook",
 ]

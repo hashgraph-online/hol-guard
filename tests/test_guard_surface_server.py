@@ -26,7 +26,7 @@ from codex_plugin_scanner.guard.local_dashboard_session import (
     build_local_dashboard_session_token,
 )
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
-from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime
+from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime, _browser_url_for_review
 from codex_plugin_scanner.guard.schemas import build_surface_server_contract
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -2578,9 +2578,36 @@ class TestGuardSurfaceServer:
         opened_fragment = urllib.parse.parse_qs(opened_url.fragment)
 
         assert len(opened_urls) == 1
-        assert f"{opened_url.scheme}://{opened_url.netloc}{opened_url.path}" == f"http://127.0.0.1:{daemon.port}"
+        assert (
+            f"{opened_url.scheme}://{opened_url.netloc}{opened_url.path}"
+            == f"http://127.0.0.1:{daemon.port}/requests/{first_request_id}"
+        )
         assert opened_fragment["guard-token"][0].startswith("gld1.")
         assert opened_fragment["guard-token"] != [daemon._server.auth_token]
+
+    def test_browser_url_for_review_preserves_token_for_loopback_host_alias(self) -> None:
+        browser_url = "http://127.0.0.1:5474#guard-token=session-token"
+        review_url = "http://localhost:5474/requests/req-localhost"
+
+        result = _browser_url_for_review(browser_url, review_url)
+        assert result is not None
+        parsed = urllib.parse.urlparse(result)
+        fragment = urllib.parse.parse_qs(parsed.fragment)
+
+        assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "http://localhost:5474/requests/req-localhost"
+        assert fragment["guard-token"] == ["session-token"]
+
+    def test_browser_url_for_review_preserves_token_for_bind_host_alias(self) -> None:
+        browser_url = "http://0.0.0.0:5474#guard-token=session-token"
+        review_url = "http://127.0.0.1:5474/requests/req-bind-host"
+
+        result = _browser_url_for_review(browser_url, review_url)
+        assert result is not None
+        parsed = urllib.parse.urlparse(result)
+        fragment = urllib.parse.parse_qs(parsed.fragment)
+
+        assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "http://127.0.0.1:5474/requests/req-bind-host"
+        assert fragment["guard-token"] == ["session-token"]
 
     def test_guard_daemon_rejects_legacy_browser_connect_pairing_endpoint(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
