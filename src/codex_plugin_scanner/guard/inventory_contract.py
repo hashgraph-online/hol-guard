@@ -454,13 +454,12 @@ def inventory_snapshot_from_detection(
     )
     symlink_findings = _symlink_findings_from_items(harness, item_tuple) if include_symlinks else ()
     sources = (*config_sources, *_cisco_inventory_sources(cisco_runs))
-    snapshot_hash = fingerprint_mapping(
-        {
-            "agent_type": harness,
-            "generated_at": generated_at,
-            "item_ids": [item.item_id for item in items],
-            "finding_ids": [finding.finding_id for finding in cisco_findings],
-        }
+    snapshot_hash = _inventory_snapshot_content_hash(
+        agent_type=harness,
+        items=item_tuple,
+        findings=(*cisco_findings, *symlink_findings),
+        sources=sources,
+        runtime_version=runtime_version,
     )
     return GuardAgentInventorySnapshot(
         snapshot_id=f"{harness}:snapshot:{snapshot_hash[:24]}",
@@ -485,6 +484,90 @@ def fingerprint_text(value: str) -> str:
 def fingerprint_mapping(value: object) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return fingerprint_text(encoded)
+
+
+def _inventory_snapshot_content_hash(
+    *,
+    agent_type: str,
+    items: tuple[GuardAgentInventoryItem, ...],
+    findings: tuple[GuardAgentInventoryFinding, ...],
+    sources: tuple[GuardInventorySource, ...],
+    runtime_version: str | None,
+) -> str:
+    return fingerprint_mapping(
+        {
+            "agent_type": agent_type,
+            "runtime_version": runtime_version,
+            "items": [
+                {
+                    "capability_categories": item.capability_categories,
+                    "content_hash": item.content_hash,
+                    "drift_state": item.drift_state,
+                    "item_id": item.item_id,
+                    "item_kind": item.item_kind,
+                    "metadata": _stable_snapshot_value(item.metadata),
+                    "risk_level": item.risk_level,
+                    "scanner_sources": item.scanner_sources,
+                    "security_score": item.security_score,
+                    "source_fingerprint": item.source_fingerprint,
+                }
+                for item in sorted(items, key=lambda value: (value.item_kind, value.item_id))
+            ],
+            "findings": [
+                {
+                    "artifact_id": finding.artifact_id,
+                    "check_id": finding.check_id,
+                    "confidence": finding.confidence,
+                    "evidence": _stable_snapshot_value(finding.evidence),
+                    "finding_id": finding.finding_id,
+                    "severity": finding.severity,
+                    "source": finding.source,
+                    "summary": finding.summary,
+                    "title": finding.title,
+                }
+                for finding in sorted(findings, key=lambda value: (value.source, value.finding_id))
+            ],
+            "sources": [
+                {
+                    "detail": source.detail,
+                    "source_id": source.source_id,
+                    "source_type": source.source_type,
+                    "status": source.status,
+                }
+                for source in sorted(sources, key=lambda value: (value.source_type, value.source_id))
+            ],
+        }
+    )
+
+
+def _stable_snapshot_value(value: object) -> object:
+    if isinstance(value, dict):
+        return {
+            key: _stable_snapshot_value(item)
+            for key, item in sorted(value.items(), key=lambda entry: str(entry[0]))
+            if str(key)
+            not in {
+                "attestation",
+                "attestationBindings",
+                "capturedAt",
+                "duration_ms",
+                "durationMs",
+                "elapsedMs",
+                "evidenceHash",
+                "generatedAt",
+                "lastSeenAt",
+                "observedAt",
+                "scanDurationMs",
+                "syncedAt",
+            }
+        }
+    if isinstance(value, (list, tuple)):
+        return sorted((_stable_snapshot_value(item) for item in value), key=_stable_snapshot_sort_key)
+    return value
+
+
+def _stable_snapshot_sort_key(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
 
 def inventory_item_id(agent_type: str, item_kind: str, display_name: str, semantic_text: str) -> str:
@@ -614,7 +697,7 @@ def _item_from_artifact(
             "artifact_id": artifact_id,
             "artifact_type": artifact_type,
             "name": name,
-            "metadata": safe_metadata,
+            "metadata": _stable_snapshot_value(safe_metadata),
         }
     )
     content_hash = _resolve_item_content_hash(safe_metadata, semantic_text)
