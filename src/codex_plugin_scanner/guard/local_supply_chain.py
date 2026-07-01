@@ -2298,15 +2298,24 @@ def _run_cloud_workspace_audit(
         }
     else:
         request_url = _normalized_supply_chain_batch_url(str(resolved_auth_context["sync_url"]), workspace_id)
-        request_headers = runner._guard_sync_headers(resolved_auth_context, request_url=request_url, method="POST")
     aggregated_packages: list[dict[str, object]] = []
+    aggregated_processed_count = 0
     aggregated_reasons: list[dict[str, object]] = []
+    aggregated_total_packages = 0
     cursor: str | None = None
     last_response: dict[str, object] | None = None
     for _ in range(_CLOUD_AUDIT_MAX_PAGES):
         page_payload = dict(request_payload)
         if cursor is not None:
             page_payload["cursor"] = cursor
+        request_headers = (
+            {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            }
+            if resolved_auth_context is None
+            else runner._guard_sync_headers(resolved_auth_context, request_url=request_url, method="POST")
+        )
         request = urllib.request.Request(
             request_url,
             data=json.dumps(page_payload).encode("utf-8"),
@@ -2342,6 +2351,14 @@ def _run_cloud_workspace_audit(
             )
         last_response = response_payload
         response_packages = response_payload.get("packages")
+        page_processed_count = _int_value(response_payload.get("processedCount"))
+        page_total_packages = _int_value(response_payload.get("totalPackages"))
+        if page_total_packages is not None:
+            aggregated_total_packages = max(aggregated_total_packages, page_total_packages)
+        if page_processed_count is not None:
+            aggregated_processed_count += page_processed_count
+        elif isinstance(response_packages, list):
+            aggregated_processed_count += len(response_packages)
         if isinstance(response_packages, list):
             aggregated_packages.extend(item for item in response_packages if isinstance(item, dict))
         response_reasons = response_payload.get("reasons")
@@ -2363,6 +2380,8 @@ def _run_cloud_workspace_audit(
         return (None, None)
     merged_response = dict(last_response)
     merged_response["packages"] = aggregated_packages
+    merged_response["processedCount"] = aggregated_processed_count
+    merged_response["totalPackages"] = max(aggregated_total_packages, len(aggregated_packages))
     merged_response["reasons"] = aggregated_reasons
     return (merged_response, None)
 
