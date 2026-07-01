@@ -809,6 +809,19 @@ def _mcp_tool_items_from_artifact(
         )
         if tool_layer_dicts:
             metadata["trustLayers"] = tool_layer_dicts
+        metadata = _apply_tool_trust_attestation_metadata(
+            metadata,
+            harness=harness,
+            item_id=tool_item_id,
+            content_hash=semantic_hash,
+            trust_attestation_context=trust_attestation_context,
+        )
+        signed_tool_layers = metadata.get("trustLayers")
+        tool_layer_dicts = (
+            [layer for layer in signed_tool_layers if isinstance(layer, dict)]
+            if isinstance(signed_tool_layers, list)
+            else []
+        )
         has_tool_cisco_layer = any(layer.get("layerType") == "cisco_mcp_scanner" for layer in tool_layer_dicts)
         if inherited_layers and not has_tool_cisco_layer:
             inherited_tool_layers: list[dict[str, object]] = []
@@ -837,13 +850,6 @@ def _mcp_tool_items_from_artifact(
                     }
                 )
             metadata["trustLayers"] = [*tool_layer_dicts, *inherited_tool_layers]
-        metadata = _apply_tool_trust_attestation_metadata(
-            metadata,
-            harness=harness,
-            item_id=tool_item_id,
-            content_hash=semantic_hash,
-            trust_attestation_context=trust_attestation_context,
-        )
         tool_description = _inventory_item_description_module().resolve_inventory_item_description(
             harness=harness,
             item_kind="mcp_tool",
