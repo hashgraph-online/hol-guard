@@ -92,6 +92,7 @@ class StoreOAuthConnectMixin:
         runtime_label: str | None = None,
         access_token: str | None = None,
         access_token_expires_at: str | None = None,
+        force_primary_secret_rewrite: bool = False,
     ) -> None:
         with self.hold_oauth_credential_lock():
             self._set_oauth_local_credentials_unlocked(
@@ -112,6 +113,7 @@ class StoreOAuthConnectMixin:
                 runtime_label=runtime_label,
                 access_token=access_token,
                 access_token_expires_at=access_token_expires_at,
+                force_primary_secret_rewrite=force_primary_secret_rewrite,
             )
 
     def _set_oauth_local_credentials_unlocked(
@@ -134,6 +136,7 @@ class StoreOAuthConnectMixin:
         runtime_label: str | None = None,
         access_token: str | None = None,
         access_token_expires_at: str | None = None,
+        force_primary_secret_rewrite: bool = False,
     ) -> None:
         normalized_issuer = resolve_guard_oauth_client_config(issuer).issuer
         secret_payload = {
@@ -185,7 +188,8 @@ class StoreOAuthConnectMixin:
         # Metadata-only updates can skip the primary rewrite because the encrypted
         # fallback remains current and continues to backstop headless recovery.
         skip_primary_secret_rewrite = (
-            not secret_material_changed
+            not force_primary_secret_rewrite
+            and not secret_material_changed
             and isinstance(self._oauth_secret_store, FallbackSecretStore)
             and isinstance(self._oauth_secret_store.primary, SystemKeyringSecretStore)
             and isinstance(self._oauth_secret_store.fallback, EncryptedFileSecretStore)
