@@ -185,6 +185,75 @@ def test_inventory_snapshot_attaches_local_plugin_trust_resolution(tmp_path: Pat
     components = trust.get("trustComponents")
     assert isinstance(components, list)
     assert components
+    assert metadata.get("evidenceSchemaVersion") == "guard-aibom-local-baseline-evidence.v1"
+    evidence = metadata.get("evidence")
+    assert isinstance(evidence, dict)
+    assert evidence.get("source") == "hol-guard-local-baseline"
+    assert evidence.get("trustDomain") == "plugin"
+    assert evidence.get("componentCount") == len(components)
+    evidence_components = evidence.get("components")
+    assert isinstance(evidence_components, list)
+    assert evidence_components
+    trust_layers = plugin_item.metadata.get("trustLayers")
+    assert isinstance(trust_layers, list)
+    local_layer = next(
+        layer for layer in trust_layers if isinstance(layer, dict) and layer.get("layerType") == "local_baseline"
+    )
+    layer_metadata = local_layer.get("metadata")
+    assert isinstance(layer_metadata, dict)
+    layer_evidence = layer_metadata.get("evidence")
+    assert isinstance(layer_evidence, dict)
+    assert layer_evidence.get("source") == "hol-guard-local-baseline"
+
+
+def test_inventory_snapshot_id_uses_stable_content_hash(tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugin"
+    _write_good_plugin(plugin_dir)
+
+    first_snapshot = _snapshot_for_artifact(
+        artifact=GuardArtifact(
+            artifact_id="codex:project:plugin:trust-demo",
+            name="trust-demo",
+            harness="codex",
+            artifact_type="plugin",
+            source_scope="project",
+            config_path=str(plugin_dir),
+        ),
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=plugin_dir,
+    )
+    second_snapshot = _snapshot_for_artifact(
+        artifact=GuardArtifact(
+            artifact_id="codex:project:plugin:trust-demo",
+            name="trust-demo",
+            harness="codex",
+            artifact_type="plugin",
+            source_scope="project",
+            config_path=str(plugin_dir),
+        ),
+        generated_at="2026-06-10T12:05:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=plugin_dir,
+    )
+
+    assert second_snapshot.snapshot_id == first_snapshot.snapshot_id
+
+    changed_snapshot = _snapshot_for_artifact(
+        artifact=GuardArtifact(
+            artifact_id="codex:project:plugin:trust-demo-renamed",
+            name="trust-demo-renamed",
+            harness="codex",
+            artifact_type="plugin",
+            source_scope="project",
+            config_path=str(plugin_dir),
+        ),
+        generated_at="2026-06-10T12:10:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=plugin_dir,
+    )
+
+    assert changed_snapshot.snapshot_id != first_snapshot.snapshot_id
 
 
 def test_guard_evidence_hash_is_stable_across_key_order() -> None:
