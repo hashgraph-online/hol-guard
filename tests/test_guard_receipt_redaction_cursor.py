@@ -360,7 +360,7 @@ def test_relaxed_redaction_sync_adds_recent_blocked_command_detail_backfill(tmp_
     assert marker == {
         "level": "partial",
         "updated_at": "2026-04-15T00:01:00Z",
-        "days": 7,
+        "days": 30,
         "limit": 5000,
         "receipts": 1,
         "queried": 1,
