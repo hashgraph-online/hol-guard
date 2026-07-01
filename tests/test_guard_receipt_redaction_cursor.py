@@ -199,7 +199,7 @@ def test_capped_command_detail_backfill_pages_remaining_receipts(
         store.add_receipt(
             GuardReceipt(
                 receipt_id=f"guard-receipt-backfill-{index}",
-                timestamp=datetime(2026, 4, 15, 0, index, tzinfo=timezone.utc),
+                timestamp=f"2099-04-15T00:0{index}:00+00:00",
                 harness="codex",
                 artifact_id=f"codex:tool-action:backfill-{index}",
                 artifact_hash=f"hash-backfill-{index}",
