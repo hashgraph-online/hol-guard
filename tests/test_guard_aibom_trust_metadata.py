@@ -30,6 +30,7 @@ from codex_plugin_scanner.guard.runtime.trust_attestation import (
     sign_trust_attestation,
     verify_trust_attestation,
 )
+from codex_plugin_scanner.models import Finding, Severity
 from codex_plugin_scanner.trust_models import TrustDomainScore
 
 
@@ -209,6 +210,39 @@ def test_inventory_snapshot_attaches_local_plugin_trust_resolution(tmp_path: Pat
 def test_inventory_snapshot_id_uses_stable_content_hash(tmp_path: Path) -> None:
     plugin_dir = tmp_path / "plugin"
     _write_good_plugin(plugin_dir)
+    cisco_finding = Finding(
+        rule_id="mcp-verified-device-claim",
+        severity=Severity.LOW,
+        category="mcp",
+        title="Verified device claim",
+        description="Cisco MCP scan results.",
+        file_path=str(plugin_dir / "README.md"),
+        source="cisco-mcp-scanner",
+    )
+    first_cisco_run = CiscoInventoryRun(
+        source="cisco-mcp-scanner",
+        status="enabled",
+        message="Cisco MCP scan results.",
+        findings=(cisco_finding,),
+        duration_ms=41,
+        metadata={
+            "attestationBindings": [{"createdAt": "2026-06-10T12:00:00+00:00", "nonce": "one"}],
+            "duration_ms": 41,
+            "scanDurationMs": 41,
+        },
+    )
+    replayed_cisco_run = CiscoInventoryRun(
+        source="cisco-mcp-scanner",
+        status="enabled",
+        message="Cisco MCP scan results.",
+        findings=(cisco_finding,),
+        duration_ms=973,
+        metadata={
+            "attestationBindings": [{"createdAt": "2026-06-10T12:05:00+00:00", "nonce": "two"}],
+            "duration_ms": 973,
+            "scanDurationMs": 973,
+        },
+    )
 
     first_snapshot = _snapshot_for_artifact(
         artifact=GuardArtifact(
@@ -222,6 +256,7 @@ def test_inventory_snapshot_id_uses_stable_content_hash(tmp_path: Path) -> None:
         generated_at="2026-06-10T12:00:00+00:00",
         home_dir=tmp_path,
         workspace_dir=plugin_dir,
+        cisco_runs=(first_cisco_run,),
     )
     second_snapshot = _snapshot_for_artifact(
         artifact=GuardArtifact(
@@ -235,6 +270,7 @@ def test_inventory_snapshot_id_uses_stable_content_hash(tmp_path: Path) -> None:
         generated_at="2026-06-10T12:05:00+00:00",
         home_dir=tmp_path,
         workspace_dir=plugin_dir,
+        cisco_runs=(replayed_cisco_run,),
     )
 
     assert second_snapshot.snapshot_id == first_snapshot.snapshot_id
@@ -251,6 +287,7 @@ def test_inventory_snapshot_id_uses_stable_content_hash(tmp_path: Path) -> None:
         generated_at="2026-06-10T12:10:00+00:00",
         home_dir=tmp_path,
         workspace_dir=plugin_dir,
+        cisco_runs=(replayed_cisco_run,),
     )
 
     assert changed_snapshot.snapshot_id != first_snapshot.snapshot_id

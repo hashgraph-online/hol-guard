@@ -518,7 +518,7 @@ def _inventory_snapshot_content_hash(
                     "artifact_id": finding.artifact_id,
                     "check_id": finding.check_id,
                     "confidence": finding.confidence,
-                    "evidence": finding.evidence,
+                    "evidence": _stable_snapshot_value(finding.evidence),
                     "finding_id": finding.finding_id,
                     "severity": finding.severity,
                     "source": finding.source,
@@ -548,20 +548,26 @@ def _stable_snapshot_value(value: object) -> object:
             if str(key)
             not in {
                 "attestation",
+                "attestationBindings",
                 "capturedAt",
-                "createdAt",
+                "duration_ms",
+                "durationMs",
+                "elapsedMs",
                 "evidenceHash",
                 "generatedAt",
                 "lastSeenAt",
                 "observedAt",
+                "scanDurationMs",
                 "syncedAt",
-                "timestamp",
-                "updatedAt",
             }
         }
     if isinstance(value, (list, tuple)):
-        return [_stable_snapshot_value(item) for item in value]
+        return sorted((_stable_snapshot_value(item) for item in value), key=_stable_snapshot_sort_key)
     return value
+
+
+def _stable_snapshot_sort_key(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
 
 def inventory_item_id(agent_type: str, item_kind: str, display_name: str, semantic_text: str) -> str:
