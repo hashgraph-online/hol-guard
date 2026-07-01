@@ -73,6 +73,12 @@ def trust_resolution_from_domain(
         "specVersion": domain.spec_version,
         "trustDomain": domain.domain,
         "attestationStatus": "unsigned",
+        "evidenceSchemaVersion": "guard-aibom-local-baseline-evidence.v1",
+        "evidence": _local_baseline_evidence_payload(
+            domain,
+            captured_at=normalized_captured_at,
+            trust_components=trust_components,
+        ),
         "evidenceHash": _trust_evidence_hash(
             {
                 "capturedAt": normalized_captured_at,
@@ -604,6 +610,11 @@ def _trust_layer_from_domain(
 
     trust_components = _trust_components_from_domain(domain)
     normalized_captured_at = _normalize_inventory_datetime(captured_at)
+    evidence = _local_baseline_evidence_payload(
+        domain,
+        captured_at=normalized_captured_at,
+        trust_components=trust_components,
+    )
 
     return {
         "layerId": "local_baseline",
@@ -620,6 +631,8 @@ def _trust_layer_from_domain(
             "specVersion": domain.spec_version,
             "trustDomain": domain.domain,
             "attestationStatus": "unsigned",
+            "evidenceSchemaVersion": "guard-aibom-local-baseline-evidence.v1",
+            "evidence": evidence,
             "evidenceHash": _trust_evidence_hash(
                 {
                     "capturedAt": normalized_captured_at,
@@ -632,6 +645,36 @@ def _trust_layer_from_domain(
                 }
             ),
         },
+    }
+
+
+def _local_baseline_evidence_payload(
+    domain: TrustDomainScore,
+    *,
+    captured_at: object,
+    trust_components: list[dict[str, object]],
+) -> dict[str, object]:
+    return {
+        "source": "hol-guard-local-baseline",
+        "capturedAt": captured_at,
+        "trustDomain": domain.domain,
+        "profileId": domain.profile_id,
+        "profileVersion": domain.profile_version,
+        "specId": domain.spec_id,
+        "specVersion": domain.spec_version,
+        "componentCount": len(trust_components),
+        "components": [
+            {
+                "componentId": str(component.get("componentId", "")),
+                "confidence": component.get("confidence"),
+                "label": str(component.get("label", "")),
+                "score": component.get("score"),
+                "status": str(component.get("status", "")),
+                "summary": str(component.get("summary", "")),
+                "weight": component.get("weight"),
+            }
+            for component in trust_components
+        ],
     }
 
 
