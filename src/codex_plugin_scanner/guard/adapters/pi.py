@@ -36,12 +36,14 @@ class PiHarnessAdapter(HarnessAdapter):
     aliases = ("pi", "pi-agent", "pi-coding-agent", "omp", "oh-my-pi")
     executable = "pi"
     launcher_name = "pi"
-    approval_tier = "approval-center"
     approval_summary = (
         "Guard scans Pi packages, extensions, skills, prompts, and themes before launch "
         "and uses a managed Pi extension to review prompts and tool calls inline."
     )
     fallback_hint = "Pi keeps the blocked request in Guard and shows the reason inline before you retry."
+    approval_tier = "native-or-center"
+    approval_prompt_channel = "native"
+    approval_auto_open_browser = False
 
     @staticmethod
     def _global_root(context: HarnessContext) -> Path:

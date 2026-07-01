@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.cli.commands_support_codex_tool_output_messages 
     _codex_tool_output_runtime_reason,
     _codex_tool_output_runtime_summary,
 )
+from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _approval_surface_policy_for_flow
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
@@ -67,6 +68,14 @@ class TestPiAdapterIdentity:
         assert contract_for("omp") == contract
         assert "omp" in contract.install_aliases
         assert "oh-my-pi" in contract.install_aliases
+
+    def test_approval_flow_uses_inline_pi_prompt_without_auto_opening_browser(self) -> None:
+        flow = get_adapter("pi").approval_flow()
+
+        assert flow["tier"] == "native-or-center"
+        assert flow["prompt_channel"] == "native"
+        assert flow["auto_open_browser"] is False
+        assert _approval_surface_policy_for_flow("auto-open-once", flow) == "notify-only"
 
 
 class TestPiDetect:

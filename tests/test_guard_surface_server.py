@@ -2578,7 +2578,10 @@ class TestGuardSurfaceServer:
         opened_fragment = urllib.parse.parse_qs(opened_url.fragment)
 
         assert len(opened_urls) == 1
-        assert f"{opened_url.scheme}://{opened_url.netloc}{opened_url.path}" == f"http://127.0.0.1:{daemon.port}"
+        assert (
+            f"{opened_url.scheme}://{opened_url.netloc}{opened_url.path}"
+            == f"http://127.0.0.1:{daemon.port}/requests/{first_request_id}"
+        )
         assert opened_fragment["guard-token"][0].startswith("gld1.")
         assert opened_fragment["guard-token"] != [daemon._server.auth_token]
 
