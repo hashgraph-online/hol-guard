@@ -302,6 +302,8 @@ _RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS = 90
 _RECEIPT_SYNC_BATCH_SIZE = 50
 _RECEIPT_SYNC_CURSOR_PAGE_SIZE = 200
 _RECEIPT_SYNC_CURSOR_BACKFILL_ROWS = 200
+_RECEIPT_COMMAND_DETAIL_BACKFILL_DAYS = 7
+_RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT = 5000
 _PAIN_SIGNAL_TIMEOUT_SECONDS = 10
 _PAIN_SIGNAL_RETRY_TIMEOUT_SECONDS = 90
 _GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_MINUTES = 5  # single 404 shouldn't disable sync for a full day
@@ -1314,6 +1316,13 @@ def sync_receipts(
     _ensure_relaxed_receipt_redaction_resync(store, level=redaction_level, synced_at=local_guard_online_at)
     prior_receipt_cursor = _receipt_sync_cursor_rowid(store)
     receipts = _receipt_sync_rows_for_upload(store, cursor_rowid=prior_receipt_cursor)
+    cursor_receipt_ids = {item.get("receipt_id") for item in receipts if isinstance(item.get("receipt_id"), str)}
+    receipts, command_detail_backfill_marker = _receipt_sync_rows_with_command_detail_backfill(
+        store,
+        receipts=receipts,
+        redaction_level=redaction_level,
+        synced_at=local_guard_online_at,
+    )
     inventory = store.list_inventory()
     payload: dict[str, object] = {}
     receipts_stored_total = 0
@@ -1368,8 +1377,11 @@ def sync_receipts(
             raise RuntimeError(_sync_http_error_message(error)) from error
         except OSError as error:
             raise RuntimeError(_sync_url_error_message(error)) from error
-        batch_rowids = [item.get("receipt_rowid") for item in receipt_batch]
-        for rowid in batch_rowids:
+        cursor_batch_rowids = _receipt_sync_cursor_rowids_from_batch(
+            receipt_batch,
+            cursor_receipt_ids=cursor_receipt_ids,
+        )
+        for rowid in cursor_batch_rowids:
             if isinstance(rowid, int) and (latest_uploaded_rowid is None or rowid > latest_uploaded_rowid):
                 latest_uploaded_rowid = rowid
         batch_synced_at = _sync_timestamp(payload)
@@ -1411,6 +1423,12 @@ def sync_receipts(
         aibom_context["workspace_dir"] = str(workspace_dir)
     if aibom_context:
         store.set_sync_payload("aibom_inventory_context", aibom_context, now)
+    if command_detail_backfill_marker is not None:
+        store.set_sync_payload(
+            _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER,
+            command_detail_backfill_marker,
+            now,
+        )
     persisted_cursor_rowid = latest_uploaded_rowid if latest_uploaded_rowid is not None else prior_receipt_cursor
     _persist_receipt_sync_cursor(
         store=store,
@@ -3883,6 +3901,73 @@ def _receipt_sync_rows_for_upload(store: GuardStore, *, cursor_rowid: int | None
     return store.list_receipts_since_rowid(after_rowid=cursor_rowid, limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)
 
 
+def _receipt_sync_rows_with_command_detail_backfill(
+    store: GuardStore,
+    *,
+    receipts: list[dict[str, object]],
+    redaction_level: str,
+    synced_at: str,
+) -> tuple[list[dict[str, object]], dict[str, object] | None]:
+    if _receipt_redaction_level_rank(redaction_level) <= _receipt_redaction_level_rank("full"):
+        return receipts, None
+    marker = store.get_sync_payload(_RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER)
+    before_rowid = _receipt_command_detail_backfill_before_rowid(marker, redaction_level=redaction_level)
+    if isinstance(marker, dict) and marker.get("level") == redaction_level and marker.get("complete") is True:
+        return receipts, None
+    backfill_rows = store.list_receipts_for_command_detail_backfill(
+        limit=_RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT,
+        days=_RECEIPT_COMMAND_DETAIL_BACKFILL_DAYS,
+        before_rowid=before_rowid,
+    )
+    seen_receipt_ids = {item.get("receipt_id") for item in receipts if isinstance(item.get("receipt_id"), str)}
+    merged = list(receipts)
+    added = 0
+    for row in backfill_rows:
+        receipt_id = row.get("receipt_id")
+        if not isinstance(receipt_id, str) or receipt_id in seen_receipt_ids:
+            continue
+        merged.append(row)
+        seen_receipt_ids.add(receipt_id)
+        added += 1
+    backfill_rowids: list[int] = []
+    for row in backfill_rows:
+        receipt_rowid = row.get("receipt_rowid")
+        if isinstance(receipt_rowid, int):
+            backfill_rowids.append(receipt_rowid)
+    next_before_rowid = min(backfill_rowids) if backfill_rowids else before_rowid
+    complete = len(backfill_rows) < _RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT
+    return merged, {
+        "level": redaction_level,
+        "updated_at": synced_at,
+        "days": _RECEIPT_COMMAND_DETAIL_BACKFILL_DAYS,
+        "limit": _RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT,
+        "receipts": added,
+        "queried": len(backfill_rows),
+        "before_rowid": next_before_rowid,
+        "complete": complete,
+    }
+
+
+def _receipt_command_detail_backfill_before_rowid(marker: object, *, redaction_level: str) -> int | None:
+    if not isinstance(marker, dict) or marker.get("level") != redaction_level:
+        return None
+    value = marker.get("before_rowid")
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        parsed = int(value.strip())
+        return parsed if parsed > 0 else None
+    return None
+
+
+def _receipt_sync_cursor_rowids_from_batch(
+    receipt_batch: Sequence[Mapping[str, object]],
+    *,
+    cursor_receipt_ids: set[object],
+) -> list[object]:
+    return [item.get("receipt_rowid") for item in receipt_batch if item.get("receipt_id") in cursor_receipt_ids]
+
+
 def _receipt_sync_context(
     store: GuardStore,
     *,
@@ -3940,6 +4025,7 @@ _RECEIPT_REDACTION_LEVEL_RANK: dict[str, int] = {
     "none": 2,
 }
 _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER = "cloud_receipt_redaction_relaxed_resync_v1"
+_RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER = "cloud_receipt_command_detail_backfill_v1"
 
 
 def _receipt_redaction_level_rank(level: str | None) -> int:

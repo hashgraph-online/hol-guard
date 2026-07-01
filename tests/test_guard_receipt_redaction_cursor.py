@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
+import codex_plugin_scanner.guard.runtime.runner as runner
 from codex_plugin_scanner.guard.config import update_guard_settings
+from codex_plugin_scanner.guard.models import GuardReceipt
+from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.runner import (
+    _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER,
     _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER,
     _ensure_relaxed_receipt_redaction_resync,
     _persist_cloud_receipt_redaction_level,
+    _receipt_sync_cursor_rowids_from_batch,
+    _receipt_sync_rows_with_command_detail_backfill,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -79,6 +87,189 @@ def test_cloud_receipt_redaction_tightening_keeps_receipt_cursor(tmp_path) -> No
         "last_rowid": 17,
         "synced_at": "2026-04-15T00:00:00Z",
     }
+
+
+def test_command_detail_backfill_rows_do_not_advance_receipt_cursor() -> None:
+    rowids = _receipt_sync_cursor_rowids_from_batch(
+        [
+            {"receipt_id": "cursor-1", "receipt_rowid": 101},
+            {"receipt_id": "backfill-1", "receipt_rowid": 5000},
+            {"receipt_id": "cursor-2", "receipt_rowid": 102},
+        ],
+        cursor_receipt_ids={"cursor-1", "cursor-2"},
+    )
+
+    assert rowids == [101, 102]
+
+
+def test_relaxed_redaction_sync_adds_recent_blocked_command_detail_backfill(tmp_path) -> None:
+    store = GuardStore(tmp_path)
+    store.add_receipt(
+        GuardReceipt(
+            receipt_id="guard-receipt-backfill",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            harness="codex",
+            artifact_id="codex:tool-action:backfill",
+            artifact_hash="hash-backfill",
+            policy_decision="block",
+            capabilities_summary="tool action request",
+            changed_capabilities=(),
+            provenance_summary="",
+            user_override=None,
+            artifact_name="bash",
+            source_scope="project",
+            diff_summary=None,
+            approval_source=None,
+            approval_request_id=None,
+            scanner_evidence=(),
+            browser_intent=None,
+        ),
+        action_envelope=GuardActionEnvelope(
+            schema_version=1,
+            action_id="action-backfill",
+            harness="codex",
+            event_name="PreToolUse",
+            action_type="shell_command",
+            workspace=None,
+            workspace_hash="workspace",
+            tool_name="bash",
+            command="cd repo && npx vitest run example.test.ts --reporter=verbose",
+            prompt_excerpt=None,
+            prompt_text=None,
+            target_paths=(),
+            network_hosts=(),
+            mcp_server=None,
+            mcp_tool=None,
+            package_manager=None,
+            package_name=None,
+            package_intent_kind=None,
+            package_targets=(),
+            pre_execution_result="block",
+            script_name=None,
+            raw_payload_redacted={},
+        ),
+    )
+
+    rows, marker = _receipt_sync_rows_with_command_detail_backfill(
+        store,
+        receipts=[],
+        redaction_level="partial",
+        synced_at="2026-04-15T00:01:00Z",
+    )
+
+    assert [row["receipt_id"] for row in rows] == ["guard-receipt-backfill"]
+    assert marker == {
+        "level": "partial",
+        "updated_at": "2026-04-15T00:01:00Z",
+        "days": 7,
+        "limit": 5000,
+        "receipts": 1,
+        "queried": 1,
+        "before_rowid": 1,
+        "complete": True,
+    }
+
+
+def test_relaxed_redaction_command_detail_backfill_marker_prevents_repeat(tmp_path) -> None:
+    store = GuardStore(tmp_path)
+    store.set_sync_payload(
+        _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER,
+        {"level": "partial", "updated_at": "2026-04-15T00:01:00Z", "complete": True},
+        "2026-04-15T00:01:00Z",
+    )
+
+    rows, marker = _receipt_sync_rows_with_command_detail_backfill(
+        store,
+        receipts=[],
+        redaction_level="partial",
+        synced_at="2026-04-15T00:02:00Z",
+    )
+
+    assert rows == []
+    assert marker is None
+
+
+def test_capped_command_detail_backfill_pages_remaining_receipts(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(runner, "_RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT", 1)
+    store = GuardStore(tmp_path)
+    for index in range(2):
+        store.add_receipt(
+            GuardReceipt(
+                receipt_id=f"guard-receipt-backfill-{index}",
+                timestamp=f"2099-04-15T00:0{index}:00+00:00",
+                harness="codex",
+                artifact_id=f"codex:tool-action:backfill-{index}",
+                artifact_hash=f"hash-backfill-{index}",
+                policy_decision="block",
+                capabilities_summary="tool action request",
+                changed_capabilities=(),
+                provenance_summary="",
+                user_override=None,
+                artifact_name="bash",
+                source_scope="project",
+                diff_summary=None,
+                approval_source=None,
+                approval_request_id=None,
+                scanner_evidence=(),
+                browser_intent=None,
+            ),
+            action_envelope=GuardActionEnvelope(
+                schema_version=1,
+                action_id=f"action-backfill-{index}",
+                harness="codex",
+                event_name="PreToolUse",
+                action_type="shell_command",
+                workspace=None,
+                workspace_hash="workspace",
+                tool_name="bash",
+                command=f"cd repo && npm test -- --runInBand case-{index}",
+                prompt_excerpt=None,
+                prompt_text=None,
+                target_paths=(),
+                network_hosts=(),
+                mcp_server=None,
+                mcp_tool=None,
+                package_manager=None,
+                package_name=None,
+                package_intent_kind=None,
+                package_targets=(),
+                pre_execution_result="block",
+                script_name=None,
+                raw_payload_redacted={},
+            ),
+        )
+
+    first_rows, first_marker = _receipt_sync_rows_with_command_detail_backfill(
+        store,
+        receipts=[],
+        redaction_level="partial",
+        synced_at="2026-04-15T00:02:00Z",
+    )
+
+    assert [row["receipt_id"] for row in first_rows] == ["guard-receipt-backfill-1"]
+    assert first_marker is not None
+    assert first_marker["complete"] is False
+    assert first_marker["before_rowid"] == 2
+    store.set_sync_payload(
+        _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER,
+        first_marker,
+        "2026-04-15T00:02:00Z",
+    )
+
+    second_rows, second_marker = _receipt_sync_rows_with_command_detail_backfill(
+        store,
+        receipts=[],
+        redaction_level="partial",
+        synced_at="2026-04-15T00:03:00Z",
+    )
+
+    assert [row["receipt_id"] for row in second_rows] == ["guard-receipt-backfill-0"]
+    assert second_marker is not None
+    assert second_marker["complete"] is False
+    assert second_marker["before_rowid"] == 1
 
 
 def test_existing_relaxed_receipt_redaction_resets_cursor_once(tmp_path) -> None:
