@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 # ruff: noqa: F403,F405
 from .store_base import *
 
@@ -224,6 +226,26 @@ class StoreReceiptsRuntimeMixin:
         with self._connect() as connection:
             rows = connection.execute(query, params).fetchall()
         return [self._receipt_dict_from_row(row) for row in rows]
+
+    def list_receipts_for_command_detail_backfill(
+        self,
+        *,
+        limit: int = 2000,
+        days: int = 7,
+    ) -> list[dict[str, object]]:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=max(days, 1))).isoformat()
+        query = self._receipt_base_query(
+            """
+            where r.timestamp >= ?
+              and r.policy_decision in ('block', 'review', 'require-reapproval')
+              and (e.envelope_full_json is not null or a.action_envelope_json is not null)
+            order by r.rowid desc
+            limit ?
+            """
+        )
+        with self._connect() as connection:
+            rows = connection.execute(query, (cutoff, max(limit, 1))).fetchall()
+        return [self._receipt_dict_from_row(row) for row in reversed(rows)]
 
     def latest_receipt_rowid(self, *, harness: str | None = None) -> int | None:
         query = "select max(rowid) as max_rowid from runtime_receipts"
