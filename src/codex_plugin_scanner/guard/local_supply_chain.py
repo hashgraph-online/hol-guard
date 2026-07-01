@@ -2744,12 +2744,11 @@ def _inventory_summary(inventory: tuple[dict[str, object], ...]) -> dict[str, in
 
 def _normalized_supply_chain_batch_url(sync_url: str, workspace_id: str) -> str:
     parsed = urllib.parse.urlsplit(sync_url)
-    if parsed.path.rstrip("/") == "/api/guard/receipts/sync":
-        next_path = "/api/guard/supply-chain/evaluate/batch"
-    elif parsed.path.rstrip("/") == "/guard/receipts/sync":
-        next_path = "/guard/supply-chain/evaluate/batch"
+    sync_path = parsed.path.rstrip("/")
+    if sync_path.endswith("/receipts/sync"):
+        next_path = sync_path[: -len("/receipts/sync")] + "/supply-chain/evaluate/batch"
     else:
-        next_path = parsed.path.rstrip("/") + "/supply-chain/evaluate/batch"
+        next_path = sync_path + "/supply-chain/evaluate/batch"
     query_pairs = [
         (key, value)
         for key, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)

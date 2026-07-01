@@ -48,6 +48,15 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
 WORKSPACE_ID = "2de4fcb4-a5b2-447a-a67f-21c6eb4c5f3c"
 
 
+def test_normalized_supply_chain_batch_url_preserves_sync_prefix() -> None:
+    assert local_supply_chain_module._normalized_supply_chain_batch_url(
+        "https://guard.example/api/guard/receipts/sync", WORKSPACE_ID
+    ) == f"https://guard.example/api/guard/supply-chain/evaluate/batch?workspaceId={WORKSPACE_ID}"
+    assert local_supply_chain_module._normalized_supply_chain_batch_url(
+        "https://guard.example/registry/api/v1/guard/receipts/sync?workspaceId=old", WORKSPACE_ID
+    ) == f"https://guard.example/registry/api/v1/guard/supply-chain/evaluate/batch?workspaceId={WORKSPACE_ID}"
+
+
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
