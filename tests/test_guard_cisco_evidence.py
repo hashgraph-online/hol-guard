@@ -149,6 +149,8 @@ def test_guard_store_invalidates_scanner_cache_when_hash_or_version_changes(tmp_
 
 
 def test_skill_scanner_reports_timeout_without_marking_scan_failed(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(cisco_skill_scanner.sys, "version_info", (3, 13, 0))
+
     class SlowScanner:
         def __init__(self, policy: object) -> None:
             self.policy = policy

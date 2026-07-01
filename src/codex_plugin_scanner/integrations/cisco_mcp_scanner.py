@@ -18,7 +18,7 @@ from types import ModuleType
 from typing import Protocol, TypeGuard, TypeVar
 
 from ..models import Finding, Severity, severity_from_value
-from .cisco_skill_scanner import CiscoIntegrationStatus, cisco_runtime_unavailable_message
+from .cisco_skill_scanner import CiscoIntegrationStatus
 
 _EXCLUDED_DIRS = {
     ".codex-plugin",
@@ -65,6 +65,10 @@ class CiscoMcpScanSummary:
     total_findings: int
     findings_by_severity: dict[str, int]
     scan_mode: str = "static"
+
+
+def cisco_runtime_unavailable_message() -> str | None:
+    return None
 
 
 @dataclass(frozen=True, slots=True)
