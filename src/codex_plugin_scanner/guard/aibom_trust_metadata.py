@@ -881,7 +881,7 @@ def _cisco_trust_layer(
                 safe_metadata[key] = value
     safe_metadata["attestationStatus"] = "unsigned"
     safe_metadata["evidenceSchemaVersion"] = "guard-aibom-cisco-scanner-evidence.v1"
-    safe_metadata["evidence"] = _cisco_evidence_payload(
+    evidence_payload = _cisco_evidence_payload(
         layer_id=layer_id,
         label=label,
         status=status,
@@ -891,21 +891,8 @@ def _cisco_trust_layer(
         trust_components=trust_components,
         metadata=safe_metadata,
     )
-    safe_metadata["evidenceHash"] = _trust_evidence_hash(
-        {
-            "capturedAt": _normalize_inventory_datetime(captured_at),
-            "layerId": layer_id,
-            "layerType": layer_id,
-            "status": status,
-            "trustScore": trust_score,
-            "trustComponents": trust_components,
-            "metadata": {
-                key: value
-                for key, value in safe_metadata.items()
-                if key not in {"attestationStatus", "evidenceHash"} and value is not None
-            },
-        }
-    )
+    safe_metadata["evidence"] = evidence_payload
+    safe_metadata["evidenceHash"] = _trust_evidence_hash(evidence_payload)
 
     return {
         "layerId": layer_id,

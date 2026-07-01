@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.inventory_contract import (
     serialize_inventory_snapshot,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.runtime.evidence_hash import guard_evidence_hash
 from codex_plugin_scanner.models import Finding, Severity
 
 
@@ -559,6 +560,7 @@ def test_inventory_snapshot_attaches_cisco_unavailable_status_evidence(tmp_path:
     assert evidence.get("totalFindings") == 0
     assert evidence.get("targetsScanned") == 0
     assert "durationMs" not in evidence
+    assert metadata.get("evidenceHash") == guard_evidence_hash(evidence)
     assert str(workspace) not in encoded
 
 
