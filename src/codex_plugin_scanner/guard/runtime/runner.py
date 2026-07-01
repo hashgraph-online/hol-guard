@@ -1309,6 +1309,9 @@ def sync_receipts(
 
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
     sync_url = _normalized_receipts_sync_url(_validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context)))
+    local_guard_online_at = _now()
+    redaction_level = _resolve_cloud_receipt_redaction_level(store)
+    _ensure_relaxed_receipt_redaction_resync(store, level=redaction_level, synced_at=local_guard_online_at)
     prior_receipt_cursor = _receipt_sync_cursor_rowid(store)
     receipts = _receipt_sync_rows_for_upload(store, cursor_rowid=prior_receipt_cursor)
     inventory = store.list_inventory()
@@ -1324,8 +1327,6 @@ def sync_receipts(
     team_policy_pack_payload: dict[str, object] | None = None
     remote_decisions: set[PolicyDecision] = set()
     device_id, device_name = _guard_device_metadata(store)
-    redaction_level = _resolve_cloud_receipt_redaction_level(store)
-    local_guard_online_at = _now()
     sync_context = _receipt_sync_context(
         store=store,
         local_guard_online_at=local_guard_online_at,
@@ -1488,10 +1489,10 @@ def sync_receipts(
                 else None
             )
             if cloud_redaction_level and cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
-                store.set_sync_payload(
-                    "cloud_receipt_redaction_level",
-                    {"level": cloud_redaction_level, "updated_at": now},
-                    now,
+                _persist_cloud_receipt_redaction_level(
+                    store,
+                    level=cloud_redaction_level,
+                    synced_at=now,
                 )
             remote_decisions.update(
                 _build_policy_bundle_decisions(
@@ -3933,17 +3934,29 @@ def _persist_receipt_sync_cursor(
     store.set_sync_payload("receipt_sync_cursor", payload, synced_at)
 
 
-def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
-    """Resolve the receipt redaction level for cloud sync.
+_RECEIPT_REDACTION_LEVEL_RANK: dict[str, int] = {
+    "full": 0,
+    "partial": 1,
+    "none": 2,
+}
+_RELAXED_RECEIPT_REDACTION_RESYNC_MARKER = "cloud_receipt_redaction_relaxed_resync_v1"
 
-    Priority: cloud-configured level (from policy bundle downlink) >
-    local GuardConfig.receipt_redaction_level > 'full' (safest).
-    """
+
+def _receipt_redaction_level_rank(level: str | None) -> int:
+    if level is None:
+        return _RECEIPT_REDACTION_LEVEL_RANK["full"]
+    return _RECEIPT_REDACTION_LEVEL_RANK.get(level, _RECEIPT_REDACTION_LEVEL_RANK["full"])
+
+
+def _stored_cloud_receipt_redaction_level(store: GuardStore) -> str | None:
     payload = store.get_sync_payload("cloud_receipt_redaction_level")
-    if isinstance(payload, dict):
-        level = payload.get("level")
-        if isinstance(level, str) and level in VALID_RECEIPT_REDACTION_LEVELS:
-            return level
+    if not isinstance(payload, dict):
+        return None
+    level = payload.get("level")
+    return level if isinstance(level, str) and level in VALID_RECEIPT_REDACTION_LEVELS else None
+
+
+def _local_receipt_redaction_level(store: GuardStore) -> str:
     try:
         config = load_guard_config(store.guard_home)
         if config.receipt_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
@@ -3951,6 +3964,72 @@ def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
     except Exception:
         pass
     return "full"
+
+
+def _persist_cloud_receipt_redaction_level(store: GuardStore, *, level: str, synced_at: str) -> None:
+    previous_level = _stored_cloud_receipt_redaction_level(store) or _local_receipt_redaction_level(store)
+    if _receipt_redaction_level_rank(level) > _receipt_redaction_level_rank(previous_level):
+        store.set_sync_payload(
+            "receipt_sync_cursor",
+            {
+                "last_rowid": 0,
+                "synced_at": synced_at,
+                "reason": "cloud_receipt_redaction_level_relaxed",
+                "receipt_redaction_level": level,
+            },
+            synced_at,
+        )
+    store.set_sync_payload(
+        "cloud_receipt_redaction_level",
+        {"level": level, "updated_at": synced_at},
+        synced_at,
+    )
+    if _receipt_redaction_level_rank(level) > _receipt_redaction_level_rank("full"):
+        store.set_sync_payload(
+            _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER,
+            {"level": level, "updated_at": synced_at},
+            synced_at,
+        )
+
+
+def _ensure_relaxed_receipt_redaction_resync(
+    store: GuardStore,
+    *,
+    level: str,
+    synced_at: str,
+) -> None:
+    if _receipt_redaction_level_rank(level) <= _receipt_redaction_level_rank("full"):
+        return
+    marker = store.get_sync_payload(_RELAXED_RECEIPT_REDACTION_RESYNC_MARKER)
+    if isinstance(marker, dict) and marker.get("level") == level:
+        return
+    store.set_sync_payload(
+        "receipt_sync_cursor",
+        {
+            "last_rowid": 0,
+            "synced_at": synced_at,
+            "reason": "cloud_receipt_redaction_level_relaxed_existing",
+            "receipt_redaction_level": level,
+        },
+        synced_at,
+    )
+    store.set_sync_payload(
+        _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER,
+        {"level": level, "updated_at": synced_at},
+        synced_at,
+    )
+
+
+def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
+    """Resolve the receipt redaction level for cloud sync.
+
+    Priority: cloud-configured level (from policy bundle downlink) >
+    local GuardConfig.receipt_redaction_level > 'full' (safest).
+    """
+    level = _stored_cloud_receipt_redaction_level(store)
+    if level is not None:
+        return level
+    return _local_receipt_redaction_level(store)
 
 
 def _cloud_sync_command_display_part(value: str) -> str:
