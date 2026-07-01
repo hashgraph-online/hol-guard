@@ -1284,7 +1284,7 @@ function ReviewDecisionCard(props: {
 
         {topAlertItems.length > 0 && (
           <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
-            <ConsolidatedEvidenceAlert items={topAlertItems} />
+            <ConsolidatedEvidenceAlert key={item.request_id} items={topAlertItems} />
           </div>
         )}
 
