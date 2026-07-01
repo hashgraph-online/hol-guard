@@ -6,6 +6,7 @@ import hashlib
 import importlib
 import json
 import re
+import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PureWindowsPath
@@ -73,6 +74,8 @@ _COMMAND_KEYS = (
     "search",
     "regex",
 )
+_EXPLICIT_COMMAND_KEYS = ("command", "cmd", "shell_command", "shellCommand")
+_SEARCH_PATTERN_KEYS = ("pattern", "query", "search", "regex")
 _SENSITIVE_RAW_KEYS = frozenset(
     {
         "api_key",
@@ -524,7 +527,7 @@ def _normalize_action_payload(
     tool_input = _tool_input_from_payload(normalized_payload)
     if not tool_input and tool_call_input is not None:
         tool_input = tool_call_input
-    raw_command = _command_from_payload(tool_input)
+    raw_command = command_text_from_tool_payload(tool_name, tool_input)
     normalized_command, wrapper_chain = _normalized_shell_command(
         tool_name,
         raw_command,
@@ -735,6 +738,67 @@ def _command_from_payload(tool_input: Mapping[str, object]) -> str | None:
         value = tool_input.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
+    return None
+
+
+def command_text_from_tool_payload(tool_name: object, tool_input: object) -> str | None:
+    if not isinstance(tool_input, Mapping):
+        return None
+    for key in _EXPLICIT_COMMAND_KEYS:
+        value = tool_input.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    native_command = _native_tool_command_text(tool_name, tool_input)
+    if native_command is not None:
+        return native_command
+    return _command_from_payload(tool_input)
+
+
+def _native_tool_command_text(tool_name: object, tool_input: Mapping[str, object]) -> str | None:
+    if not isinstance(tool_name, str):
+        return None
+    normalized_tool = tool_name.strip().lower()
+    if normalized_tool in {"grep", "egrep", "fgrep", "rg"}:
+        return _grep_tool_command_text(normalized_tool, tool_input)
+    return None
+
+
+def _grep_tool_command_text(executable: str, tool_input: Mapping[str, object]) -> str | None:
+    pattern = _first_tool_input_string(tool_input, _SEARCH_PATTERN_KEYS)
+    if pattern is None:
+        return None
+    args = [executable]
+    if tool_input.get("ignoreCase") is True or tool_input.get("ignore_case") is True:
+        args.append("-i")
+    if tool_input.get("literal") is True or executable == "fgrep":
+        args.append("-F")
+    context_value = _nonnegative_int(tool_input.get("context"))
+    if context_value is not None and context_value > 0:
+        args.extend(["-C", str(context_value)])
+    glob_value = _first_tool_input_string(tool_input, ("glob", "include", "includes"))
+    if glob_value is not None:
+        args.extend(["--glob" if executable == "rg" else "--include", glob_value])
+    args.append(pattern)
+    path_value = _first_tool_input_string(tool_input, ("path", "file_path", "filePath", "filepath", "file", "filename"))
+    args.append(path_value or ".")
+    return shlex.join(args)
+
+
+def _first_tool_input_string(tool_input: Mapping[str, object], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        value = tool_input.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _nonnegative_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return max(value, 0)
+    if isinstance(value, float) and value.is_integer():
+        return max(int(value), 0)
     return None
 
 
