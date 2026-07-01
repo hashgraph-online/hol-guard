@@ -516,7 +516,7 @@ def test_inventory_snapshot_attaches_cisco_unavailable_status_evidence(tmp_path:
         status="unavailable",
         message="Cisco MCP scanner runtime unavailable.",
         findings=(),
-        duration_ms=7,
+        duration_ms=cast(Any, None),
         metadata={
             "target": ".mcp.json",
             "_targetPath": str(workspace),
@@ -551,12 +551,14 @@ def test_inventory_snapshot_attaches_cisco_unavailable_status_evidence(tmp_path:
     metadata = cisco_layer.get("metadata")
     assert isinstance(metadata, dict)
     assert metadata.get("evidenceSchemaVersion") == "guard-aibom-cisco-scanner-evidence.v1"
+    assert "durationMs" not in metadata
     evidence = metadata.get("evidence")
     assert isinstance(evidence, dict)
     assert evidence.get("status") == "unavailable"
     assert evidence.get("message") == "Cisco MCP scanner runtime unavailable."
     assert evidence.get("totalFindings") == 0
     assert evidence.get("targetsScanned") == 0
+    assert "durationMs" not in evidence
     assert str(workspace) not in encoded
 
 

@@ -860,10 +860,12 @@ def _cisco_trust_layer(
     safe_metadata: dict[str, object] = {
         "scannerSource": str(getattr(run, "source", "unknown")),
         "message": message,
-        "durationMs": getattr(run, "duration_ms", None) if isinstance(getattr(run, "duration_ms", None), int) else None,
         "totalFindings": sum(severity_counts.values()),
         "findingsBySeverity": severity_counts,
     }
+    duration_ms = getattr(run, "duration_ms", None)
+    if isinstance(duration_ms, int):
+        safe_metadata["durationMs"] = duration_ms
     if isinstance(run_metadata, dict):
         for key in (
             "analyzersUsed",
@@ -898,7 +900,9 @@ def _cisco_trust_layer(
             "trustScore": trust_score,
             "trustComponents": trust_components,
             "metadata": {
-                key: value for key, value in safe_metadata.items() if key not in {"attestationStatus", "evidenceHash"}
+                key: value
+                for key, value in safe_metadata.items()
+                if key not in {"attestationStatus", "evidenceHash"} and value is not None
             },
         }
     )
