@@ -45,10 +45,10 @@ class PiHarnessAdapter(HarnessAdapter):
     def approval_flow(self, *, managed_install: dict[str, object] | None = None) -> dict[str, object]:
         if isinstance(managed_install, dict) and bool(managed_install.get("active")):
             return {
-                "tier": "native-or-center",
+                "tier": "approval-center",
                 "summary": self.approval_summary,
                 "fallback_hint": self.fallback_hint,
-                "prompt_channel": "native",
+                "prompt_channel": "native-fallback",
                 "auto_open_browser": False,
             }
         return {
