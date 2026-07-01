@@ -380,8 +380,6 @@ def _approval_surface_policy_for_flow(config_policy: str, approval_flow: dict[st
         return "notify-only"
     if approval_flow.get("auto_open_browser") is False:
         return "never-auto-open"
-    if approval_flow.get("prompt_channel") == "native-fallback":
-        return "never-auto-open"
     return config_policy
 
 def _load_hook_payload(
