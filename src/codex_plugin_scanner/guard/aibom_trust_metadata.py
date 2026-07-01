@@ -860,10 +860,12 @@ def _cisco_trust_layer(
     safe_metadata: dict[str, object] = {
         "scannerSource": str(getattr(run, "source", "unknown")),
         "message": message,
-        "durationMs": getattr(run, "duration_ms", None) if isinstance(getattr(run, "duration_ms", None), int) else None,
         "totalFindings": sum(severity_counts.values()),
         "findingsBySeverity": severity_counts,
     }
+    duration_ms = getattr(run, "duration_ms", None)
+    if isinstance(duration_ms, int):
+        safe_metadata["durationMs"] = duration_ms
     if isinstance(run_metadata, dict):
         for key in (
             "analyzersUsed",
@@ -878,19 +880,19 @@ def _cisco_trust_layer(
             if value is not None:
                 safe_metadata[key] = value
     safe_metadata["attestationStatus"] = "unsigned"
-    safe_metadata["evidenceHash"] = _trust_evidence_hash(
-        {
-            "capturedAt": _normalize_inventory_datetime(captured_at),
-            "layerId": layer_id,
-            "layerType": layer_id,
-            "status": status,
-            "trustScore": trust_score,
-            "trustComponents": trust_components,
-            "metadata": {
-                key: value for key, value in safe_metadata.items() if key not in {"attestationStatus", "evidenceHash"}
-            },
-        }
+    safe_metadata["evidenceSchemaVersion"] = "guard-aibom-cisco-scanner-evidence.v1"
+    evidence_payload = _cisco_evidence_payload(
+        layer_id=layer_id,
+        label=label,
+        status=status,
+        message=message,
+        captured_at=_normalize_inventory_datetime(captured_at),
+        trust_score=trust_score,
+        trust_components=trust_components,
+        metadata=safe_metadata,
     )
+    safe_metadata["evidence"] = evidence_payload
+    safe_metadata["evidenceHash"] = _trust_evidence_hash(evidence_payload)
 
     return {
         "layerId": layer_id,
@@ -901,6 +903,45 @@ def _cisco_trust_layer(
         "capturedAt": _normalize_inventory_datetime(captured_at),
         "metadata": safe_metadata,
     }
+
+
+def _cisco_evidence_payload(
+    *,
+    layer_id: TrustLayerType,
+    label: str,
+    status: str,
+    message: str,
+    captured_at: object,
+    trust_score: int | None,
+    trust_components: list[dict[str, object]],
+    metadata: dict[str, object],
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "source": metadata.get("scannerSource", "unknown"),
+        "layerId": layer_id,
+        "label": label,
+        "status": status,
+        "message": message,
+        "capturedAt": captured_at,
+        "trustScore": trust_score,
+        "componentCount": len(trust_components),
+        "totalFindings": metadata.get("totalFindings", 0),
+        "findingsBySeverity": metadata.get("findingsBySeverity", {}),
+    }
+    for key in (
+        "analyzersUsed",
+        "policyName",
+        "scanMode",
+        "mode",
+        "targetsScanned",
+        "skillsScanned",
+        "skillsSkipped",
+        "durationMs",
+    ):
+        value = metadata.get(key)
+        if value is not None:
+            payload[key] = value
+    return payload
 
 
 def _cisco_severity_counts(run: object) -> dict[str, int]:
