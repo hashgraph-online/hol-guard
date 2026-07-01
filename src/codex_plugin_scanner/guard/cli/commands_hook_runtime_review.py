@@ -442,11 +442,11 @@ def _review_runtime_artifact_hook(
 
 def _approval_open_key(harness: str, artifact_id: str, payload: Mapping[str, object] | None = None) -> str:
     if _canonical_harness_name(harness) == "pi":
-        runtime_open_key = (
-            _optional_string(payload.get("guard_runtime_open_key")) if isinstance(payload, Mapping) else None
+        operation_open_key = (
+            _optional_string(payload.get("guard_operation_open_key")) if isinstance(payload, Mapping) else None
         )
-        if runtime_open_key is not None:
-            return f"pi-approval-center:{runtime_open_key}"
+        if operation_open_key is not None:
+            return f"pi-approval-center:{operation_open_key}"
     return artifact_id
 
 

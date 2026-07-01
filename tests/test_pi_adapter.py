@@ -78,8 +78,8 @@ class TestPiAdapterIdentity:
         assert flow["auto_open_browser"] is True
         assert _approval_surface_policy_for_flow("auto-open-once", flow) == "auto-open-once"
         assert (
-            _approval_open_key("pi", "pi:project:tool-a", {"guard_runtime_open_key": "runtime-1"})
-            == "pi-approval-center:runtime-1"
+            _approval_open_key("pi", "pi:project:tool-a", {"guard_operation_open_key": "operation-1"})
+            == "pi-approval-center:operation-1"
         )
         assert _approval_open_key("pi", "pi:project:tool-a", {}) == "pi:project:tool-a"
         assert _approval_open_key("codex", "codex:project:tool-a", {}) == "codex:project:tool-a"
@@ -254,7 +254,7 @@ class TestPiInstall:
         assert 'pi.on("input"' in text
         assert 'hook_event_name: "PostToolUse"' in text
         assert 'const GUARD_COMMAND_CANDIDATES = ["plugin-guard", "hol-guard"]' in text
-        assert 'const GUARD_HOME =' in text
+        assert "const GUARD_HOME =" in text
         assert "daemon-state.json" in text
         assert "daemon-auth-token" in text
         assert "/v1/hooks/pi?" in text
@@ -352,7 +352,7 @@ class TestPiInstall:
         # review, not pre-emptively blocked.
         assert "HOL Guard blocked oversized Pi tool output before review" not in text
         assert "oversizeNotice" not in text
-        assert 'ctx.ui.notify(oversizeNotice' not in text
+        assert "ctx.ui.notify(oversizeNotice" not in text
         assert "const response = await runGuard(" in text
         # When truncated, the reviewed excerpt (not the full unreviewed output) is
         # returned to Pi so omitted content never reaches the model.
@@ -375,9 +375,9 @@ class TestPiInstall:
         assert "response.reviewed_output_sha256 === digest.sha256" in text
         # digestOutputText must only hash text-bearing fields, not metadata
         # like {type: "text"} — otherwise structured source reads never match
-        assert 'record.type === \'text\'' in text
-        assert 'record.text' in text
-        assert 'OUTPUT_TEXT_KEYS' in text
+        assert "record.type === 'text'" in text
+        assert "record.text" in text
+        assert "OUTPUT_TEXT_KEYS" in text
         # guard_payload_ref fallback still present
         assert "guard_payload_ref" in text
         # Reviewed excerpt still returned when not proven safe
