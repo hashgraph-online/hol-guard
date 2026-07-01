@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, S as SectionLabel, o as HiMiniXMark, B as Badge, ad as Tag, aB as HiMiniCommandLine, x as HiMiniExclamationTriangle, b6 as scopeLabel, h as harnessDisplayName, A as ActionButton, b7 as guardAwareHref, m as formatRelativeTime$1, b8 as HiMiniDocumentText, d as HiMiniCheckCircle, b9 as HiMiniCloudArrowUp, ba as HiMiniCheck, bb as HiMiniCodeBracket, bc as HiMiniClipboardDocument, bd as HiMiniUsers, aL as HiMiniBeaker, be as HiMiniFolder, R as HiMiniLockClosed, l as HiMiniShieldCheck, bf as HiMiniInformationCircle, aT as HiMiniCloudArrowDown, aS as HiMiniArrowTopRightOnSquare, bg as HiMiniIdentification, bh as policyActionLabel, r as reactExports, bi as createCloudExceptionRequest, bj as HiMiniArrowRight, b as EmptyState, ae as HiMiniMagnifyingGlass, p as HiMiniChevronUp, q as HiMiniChevronDown, z as HiMiniChevronRight, bk as HiMiniPuzzlePiece, bl as HiMiniGlobeAlt, aJ as HiMiniClock, bm as fetchCloudExceptions, bn as fetchCloudExceptionRequests, bo as downloadBlob, bp as PolicyStatField, bq as PaginationControls, br as HiMiniNoSymbol, bs as HiMiniCube, ax as HiMiniArrowPath, t as HiMiniCloud, U as HiMiniAdjustmentsHorizontal, bt as HiMiniArrowDownTray, bu as HiMiniQueueList, y as HiMiniBolt, bv as HiMiniPlay, Z as fetchSettings, $ as updateSettings, b4 as WorkspacePageHeader, b5 as __vitePreload } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, S as SectionLabel, o as HiMiniXMark, B as Badge, ad as Tag, aB as HiMiniCommandLine, x as HiMiniExclamationTriangle, b6 as scopeLabel, h as harnessDisplayName, A as ActionButton, b7 as guardAwareHref, m as formatRelativeTime$1, b8 as HiMiniDocumentText, d as HiMiniCheckCircle, b9 as HiMiniCloudArrowUp, ba as HiMiniCheck, bb as HiMiniCodeBracket, bc as HiMiniClipboardDocument, bd as HiMiniUsers, aL as HiMiniBeaker, be as HiMiniFolder, Q as HiMiniLockClosed, l as HiMiniShieldCheck, bf as HiMiniInformationCircle, aT as HiMiniCloudArrowDown, aS as HiMiniArrowTopRightOnSquare, bg as HiMiniIdentification, bh as policyActionLabel, r as reactExports, bi as createCloudExceptionRequest, bj as HiMiniArrowRight, b as EmptyState, ae as HiMiniMagnifyingGlass, p as HiMiniChevronUp, q as HiMiniChevronDown, z as HiMiniChevronRight, bk as HiMiniPuzzlePiece, bl as HiMiniGlobeAlt, aJ as HiMiniClock, bm as fetchCloudExceptions, bn as fetchCloudExceptionRequests, bo as downloadBlob, bp as PolicyStatField, bq as PaginationControls, br as HiMiniNoSymbol, bs as HiMiniCube, ax as HiMiniArrowPath, t as HiMiniCloud, U as HiMiniAdjustmentsHorizontal, bt as HiMiniArrowDownTray, bu as HiMiniQueueList, y as HiMiniBolt, bv as HiMiniPlay, Z as fetchSettings, $ as updateSettings, b4 as WorkspacePageHeader, b5 as __vitePreload } from "../guard-dashboard.js";
 const CLOUD_EXCEPTION_EXPIRING_SOON_DAYS = 7;
 function parseCloudExceptionTimestamp(value) {
   if (!value || !value.trim()) {
@@ -4527,6 +4527,21 @@ function PolicyStrictModeCard({
     ] }) }) : null
   ] });
 }
+function isUnauthorizedError(error) {
+  return /HTTP Error 401|unauthorized/i.test(error.trim());
+}
+function humanizeStrictConfigError(error) {
+  if (isUnauthorizedError(error)) {
+    return {
+      title: "Guard Cloud authorization expired",
+      body: "Local remembered rules and strict config still apply on this device. Run connect again to refresh signed access."
+    };
+  }
+  return {
+    title: "Could not load strict config",
+    body: error || "Try again from Settings if the daemon is unavailable."
+  };
+}
 function PolicyStrictConfigTab({
   snapshot,
   cloudControlsUrl = null,
@@ -4667,11 +4682,21 @@ function PolicyStrictConfigTab({
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", "aria-busy": "true", children: [0, 1, 2].map((index) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-24 animate-pulse rounded-2xl border border-slate-200 bg-slate-100" }, index)) });
   }
   if (loadState === "error" || !settings) {
+    const is401 = loadError !== null && isUnauthorizedError(loadError);
+    const humanized = loadError !== null ? humanizeStrictConfigError(loadError) : { title: "Could not load strict config", body: "Try again from Settings if the daemon is unavailable." };
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
       {
-        title: "Could not load strict config",
-        body: loadError ?? "Try again from Settings if the daemon is unavailable."
+        title: humanized.title,
+        body: humanized.body,
+        action: is401 && cloudControlsUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "a",
+          {
+            href: cloudControlsUrl,
+            className: "inline-flex items-center gap-2 rounded-xl bg-brand-blue px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+            children: "Connect Guard Cloud"
+          }
+        ) : void 0
       }
     );
   }
