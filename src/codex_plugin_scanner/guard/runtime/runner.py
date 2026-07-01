@@ -1343,6 +1343,7 @@ def sync_receipts(
         device_name=device_name,
     )
     latest_uploaded_rowid: int | None = None
+    auth_refresh_retried = False
     for receipt_batch in _iter_receipt_sync_batches(receipts):
         body = json.dumps(
             {
@@ -1369,12 +1370,48 @@ def sync_receipts(
                 retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
             )
         except urllib.error.HTTPError as error:
-            if error.code == 403:
+            if error.code == 401:
+                if auth_context is None and not auth_refresh_retried:
+                    auth_refresh_retried = True
+                    resolved_auth_context = _resolve_guard_sync_auth_context(store, force_refresh=True)
+                    sync_url = _normalized_receipts_sync_url(
+                        _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
+                    )
+                    request = _guard_sync_request(
+                        resolved_auth_context,
+                        request_url=sync_url,
+                        method="POST",
+                        data=body,
+                        extra_headers=None,
+                    )
+                    try:
+                        payload = _urlopen_json_with_timeout_retry(
+                            request=request,
+                            timeout_seconds=_SYNC_HTTP_TIMEOUT_SECONDS,
+                            retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
+                        )
+                    except urllib.error.HTTPError as retry_error:
+                        if retry_error.code == 401:
+                            raise GuardSyncAuthorizationExpiredError(
+                                _guard_oauth_reauthorization_message()
+                            ) from retry_error
+                        if retry_error.code == 403:
+                            _is_plan, _msg = _check_plan_restriction_403(retry_error)
+                            if _is_plan:
+                                raise GuardSyncNotAvailableError(_msg) from retry_error
+                            raise RuntimeError(_msg) from retry_error
+                        raise RuntimeError(_sync_http_error_message(retry_error)) from retry_error
+                    except OSError as retry_error:
+                        raise RuntimeError(_sync_url_error_message(retry_error)) from retry_error
+                else:
+                    raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message()) from error
+            elif error.code == 403:
                 _is_plan, _msg = _check_plan_restriction_403(error)
                 if _is_plan:
                     raise GuardSyncNotAvailableError(_msg) from error
                 raise RuntimeError(_msg) from error
-            raise RuntimeError(_sync_http_error_message(error)) from error
+            else:
+                raise RuntimeError(_sync_http_error_message(error)) from error
         except OSError as error:
             raise RuntimeError(_sync_url_error_message(error)) from error
         cursor_batch_rowids = _receipt_sync_cursor_rowids_from_batch(
@@ -2978,6 +3015,7 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
     oauth_credentials: dict[str, object],
     *,
     persist_recovered_secret: bool = False,
+    force_refresh: bool = False,
 ) -> dict[str, object]:
     issuer = _optional_string(oauth_credentials.get("issuer"))
     client_id = _optional_string(oauth_credentials.get("client_id"))
@@ -2989,7 +3027,9 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
         oauth_client = resolve_guard_oauth_client_config(issuer)
     except ValueError as error:
         raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
-    cached_access_token = _cached_oauth_access_token(oauth_credentials, now=datetime.now(timezone.utc))
+    cached_access_token = (
+        None if force_refresh else _cached_oauth_access_token(oauth_credentials, now=datetime.now(timezone.utc))
+    )
     if cached_access_token is not None and not persist_recovered_secret:
         sync_url = _validate_guard_sync_url(
             _oauth_sync_url_from_issuer(oauth_client.issuer),
@@ -3066,6 +3106,7 @@ def _resolve_guard_sync_auth_context(
     store: GuardStore,
     *,
     allow_primary_repair: bool = True,
+    force_refresh: bool = False,
 ) -> dict[str, object]:
     if _test_sync_auth_context_override is not None:
         override = dict(_test_sync_auth_context_override)
@@ -3078,7 +3119,11 @@ def _resolve_guard_sync_auth_context(
         oauth_health = store.get_oauth_local_credential_health()
         oauth_credentials = store.get_oauth_local_credentials(allow_primary=allow_primary_repair)
         if oauth_credentials is not None:
-            return _resolve_guard_sync_auth_context_from_oauth_credentials(store, oauth_credentials)
+            return _resolve_guard_sync_auth_context_from_oauth_credentials(
+                store,
+                oauth_credentials,
+                force_refresh=force_refresh,
+            )
         if bool(oauth_health.get("configured")):
             recoverable_credentials = store.get_recoverable_oauth_local_credentials()
             if recoverable_credentials is not None:
@@ -3086,6 +3131,7 @@ def _resolve_guard_sync_auth_context(
                     store,
                     recoverable_credentials,
                     persist_recovered_secret=allow_primary_repair,
+                    force_refresh=force_refresh,
                 )
             raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
         raise GuardSyncNotConfiguredError("Guard is not logged in.")

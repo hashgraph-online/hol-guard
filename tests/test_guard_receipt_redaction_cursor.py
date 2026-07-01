@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import urllib.error
 from datetime import datetime, timezone
+
+import pytest
 
 import codex_plugin_scanner.guard.runtime.runner as runner
 from codex_plugin_scanner.guard.config import update_guard_settings
@@ -15,6 +18,61 @@ from codex_plugin_scanner.guard.runtime.runner import (
     _receipt_sync_rows_with_command_detail_backfill,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+def _store_blocked_command_receipt(store: GuardStore, receipt_id: str = "guard-receipt-sync-auth") -> None:
+    store.add_receipt(
+        GuardReceipt(
+            receipt_id=receipt_id,
+            timestamp=datetime(2026, 4, 15, tzinfo=timezone.utc).isoformat(),
+            harness="codex",
+            artifact_id="codex:tool-action:sync-auth",
+            artifact_hash="hash-sync-auth",
+            policy_decision="block",
+            capabilities_summary="tool action request",
+            changed_capabilities=(),
+            provenance_summary="",
+            user_override=None,
+            artifact_name="bash",
+            source_scope="project",
+            diff_summary=None,
+            approval_source=None,
+            approval_request_id=None,
+            scanner_evidence=(),
+            browser_intent=None,
+        ),
+        action_envelope=GuardActionEnvelope(
+            schema_version=1,
+            action_id="action-sync-auth",
+            harness="codex",
+            event_name="PreToolUse",
+            action_type="shell_command",
+            workspace=None,
+            workspace_hash="workspace",
+            tool_name="bash",
+            command="cd repo && npx vitest run example.test.ts --reporter=verbose",
+            prompt_excerpt=None,
+            prompt_text=None,
+            target_paths=(),
+            network_hosts=(),
+            mcp_server=None,
+            mcp_tool=None,
+            package_manager=None,
+            package_name=None,
+            package_intent_kind=None,
+            package_targets=(),
+        ),
+    )
+
+
+def _sync_unauthorized_error() -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(
+        "https://hol.org/api/guard/receipts/sync",
+        401,
+        "Unauthorized",
+        {},
+        None,
+    )
 
 
 def test_cloud_receipt_redaction_relaxation_resets_receipt_cursor_before_storing_level(tmp_path) -> None:
@@ -100,6 +158,75 @@ def test_command_detail_backfill_rows_do_not_advance_receipt_cursor() -> None:
     )
 
     assert rowids == [101, 102]
+
+
+def test_receipt_sync_401_with_explicit_auth_context_keeps_cursor_and_backfill_marker(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path)
+    _store_blocked_command_receipt(store)
+
+    def reject_sync(**_kwargs: object) -> dict[str, object]:
+        raise _sync_unauthorized_error()
+
+    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", reject_sync)
+
+    with pytest.raises(runner.GuardSyncAuthorizationExpiredError):
+        runner.sync_receipts(
+            store,
+            auth_context={
+                "sync_url": "https://hol.org/api/guard/receipts/sync",
+                "access_token": "stale",
+            },
+        )
+
+    assert store.get_sync_payload("receipt_sync_cursor") is None
+    assert store.get_sync_payload(_RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER) is None
+
+
+def test_receipt_sync_401_forces_oauth_refresh_before_retry(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path)
+    _store_blocked_command_receipt(store)
+    refresh_flags: list[bool] = []
+    post_attempts = 0
+
+    def resolve_auth_context(
+        _store: GuardStore,
+        *,
+        allow_primary_repair: bool = True,
+        force_refresh: bool = False,
+    ) -> dict[str, object]:
+        refresh_flags.append(force_refresh)
+        return {
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "access_token": "fresh" if force_refresh else "stale",
+        }
+
+    def post_sync(**_kwargs: object) -> dict[str, object]:
+        nonlocal post_attempts
+        post_attempts += 1
+        if post_attempts == 1:
+            raise _sync_unauthorized_error()
+        return {
+            "syncedAt": "2026-04-15T00:01:00Z",
+            "receiptsStored": 1,
+        }
+
+    monkeypatch.setattr(runner, "_resolve_guard_sync_auth_context", resolve_auth_context)
+    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", post_sync)
+
+    runner.sync_receipts(store)
+
+    assert refresh_flags[:2] == [False, True]
+    assert post_attempts >= 2
+    assert store.get_sync_payload("receipt_sync_cursor") == {
+        "last_rowid": 1,
+        "synced_at": "2026-04-15T00:01:00Z",
+    }
 
 
 def test_relaxed_redaction_sync_adds_recent_blocked_command_detail_backfill(tmp_path) -> None:
