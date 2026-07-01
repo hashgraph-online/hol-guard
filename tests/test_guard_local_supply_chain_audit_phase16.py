@@ -57,6 +57,96 @@ def test_normalized_supply_chain_batch_url_preserves_sync_prefix() -> None:
     ) == f"https://guard.example/registry/api/v1/guard/supply-chain/evaluate/batch?workspaceId={WORKSPACE_ID}"
 
 
+def test_cloud_workspace_audit_renews_dpop_proof_for_each_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = local_supply_chain_module._runtime_runner_module()
+    signed_proofs: list[str] = []
+    request_bodies: list[dict[str, object]] = []
+
+    def _fake_guard_sync_headers(
+        auth_context: dict[str, object],
+        *,
+        request_url: str,
+        method: str,
+    ) -> dict[str, str]:
+        del auth_context, request_url, method
+        proof = f"proof-{len(signed_proofs) + 1}"
+        signed_proofs.append(proof)
+        return {
+            "Authorization": "Bearer token",
+            "Content-Type": "application/json",
+            "DPoP": proof,
+        }
+
+    class _JsonResponse(io.StringIO):
+        def __enter__(self) -> _JsonResponse:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            self.close()
+
+    def _fake_urlopen(request: object, timeout: int) -> _JsonResponse:
+        del timeout
+        assert isinstance(request, local_supply_chain_module.urllib.request.Request)
+        dpop_header = dict(request.header_items()).get("Dpop")
+        assert dpop_header == f"proof-{len(request_bodies) + 1}"
+        body = request.data
+        assert isinstance(body, bytes)
+        request_bodies.append(json.loads(body.decode("utf-8")))
+        if len(request_bodies) == 1:
+            return _JsonResponse(
+                json.dumps(
+                    {
+                        "decision": "monitor",
+                        "packages": [{"ecosystem": "npm", "name": "react"}],
+                        "reasons": [],
+                        "nextCursor": "cursor-1",
+                        "processedCount": 2,
+                        "totalPackages": 3,
+                    }
+                )
+            )
+        return _JsonResponse(
+            json.dumps(
+                {
+                    "decision": "monitor",
+                    "packages": [{"ecosystem": "npm", "name": "scheduler"}],
+                    "processedCount": 1,
+                    "reasons": [],
+                    "totalPackages": 2,
+                }
+            )
+        )
+
+    monkeypatch.setattr(runner, "_guard_sync_headers", _fake_guard_sync_headers)
+    monkeypatch.setattr(local_supply_chain_module.urllib.request, "urlopen", _fake_urlopen)
+
+    response, fallback = local_supply_chain_module._run_cloud_workspace_audit(
+        auth_context={
+            "access_token": "token",
+            "sync_url": "https://guard.example/api/guard/receipts/sync",
+        },
+        request_payload={
+            "mode": "paged",
+            "packages": [
+                {"ecosystem": "npm", "name": "react"},
+                {"ecosystem": "npm", "name": "scheduler"},
+            ],
+            "pageSize": 1,
+            "workspaceFingerprint": "fingerprint-1",
+        },
+        workspace_id=WORKSPACE_ID,
+    )
+
+    assert fallback is None
+    assert response is not None
+    assert [item["name"] for item in response["packages"]] == ["react", "scheduler"]
+    assert response["processedCount"] == 3
+    assert response["totalPackages"] == 3
+    assert signed_proofs == ["proof-1", "proof-2"]
+    assert request_bodies[0].get("cursor") is None
+    assert request_bodies[1]["cursor"] == "cursor-1"
+
+
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
