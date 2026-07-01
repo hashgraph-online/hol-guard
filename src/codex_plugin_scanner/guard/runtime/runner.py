@@ -3911,11 +3911,13 @@ def _receipt_sync_rows_with_command_detail_backfill(
     if _receipt_redaction_level_rank(redaction_level) <= _receipt_redaction_level_rank("full"):
         return receipts, None
     marker = store.get_sync_payload(_RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER)
-    if isinstance(marker, dict) and marker.get("level") == redaction_level:
+    before_rowid = _receipt_command_detail_backfill_before_rowid(marker, redaction_level=redaction_level)
+    if isinstance(marker, dict) and marker.get("level") == redaction_level and marker.get("complete") is True:
         return receipts, None
     backfill_rows = store.list_receipts_for_command_detail_backfill(
         limit=_RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT,
         days=_RECEIPT_COMMAND_DETAIL_BACKFILL_DAYS,
+        before_rowid=before_rowid,
     )
     seen_receipt_ids = {item.get("receipt_id") for item in receipts if isinstance(item.get("receipt_id"), str)}
     merged = list(receipts)
@@ -3927,13 +3929,31 @@ def _receipt_sync_rows_with_command_detail_backfill(
         merged.append(row)
         seen_receipt_ids.add(receipt_id)
         added += 1
+    backfill_rowids = [row.get("receipt_rowid") for row in backfill_rows if isinstance(row.get("receipt_rowid"), int)]
+    next_before_rowid = min(backfill_rowids) if backfill_rowids else before_rowid
+    complete = len(backfill_rows) < _RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT
     return merged, {
         "level": redaction_level,
         "updated_at": synced_at,
         "days": _RECEIPT_COMMAND_DETAIL_BACKFILL_DAYS,
         "limit": _RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT,
         "receipts": added,
+        "queried": len(backfill_rows),
+        "before_rowid": next_before_rowid,
+        "complete": complete,
     }
+
+
+def _receipt_command_detail_backfill_before_rowid(marker: object, *, redaction_level: str) -> int | None:
+    if not isinstance(marker, dict) or marker.get("level") != redaction_level:
+        return None
+    value = marker.get("before_rowid")
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        parsed = int(value.strip())
+        return parsed if parsed > 0 else None
+    return None
 
 
 def _receipt_sync_cursor_rowids_from_batch(
