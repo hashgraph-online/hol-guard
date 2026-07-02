@@ -25,6 +25,15 @@ class CiscoInventoryRun:
     metadata: dict[str, object]
 
 
+def _local_scanner_metadata(metadata: dict[str, object]) -> dict[str, object]:
+    return {
+        **metadata,
+        "evidenceProvenance": "client_unverified",
+        "scannerAuthority": "local_reported",
+        "scannerVerificationRequired": "guard_cloud",
+    }
+
+
 def run_cisco_inventory_scans(
     *,
     harness: str,
@@ -79,7 +88,7 @@ def _run_mcp_inventory_scans(
                 message="No MCP configuration found; Cisco MCP inventory scan skipped.",
                 findings=(),
                 duration_ms=0,
-                metadata={"target": "missing", "targetsScanned": 0, "mode": mode},
+                metadata=_local_scanner_metadata({"target": "missing", "targetsScanned": 0, "mode": mode}),
             ),
         )
     remaining_timeout_seconds = timeout_seconds
@@ -129,7 +138,7 @@ def _run_single_mcp_inventory_scan(
         message=summary.message,
         findings=summary.findings,
         duration_ms=duration_ms,
-        metadata={
+        metadata=_local_scanner_metadata({
             "target": _safe_mcp_target_label(root=root, config_path=config_path, workspace_dir=workspace_dir),
             "_targetPath": str(root),
             "_configPath": str(config_path),
@@ -139,7 +148,7 @@ def _run_single_mcp_inventory_scan(
             "analyzersUsed": summary.analyzers_used,
             "scanMode": summary.scan_mode,
             "mode": mode,
-        },
+        }),
     )
 
 
@@ -152,13 +161,13 @@ def _build_mcp_inventory_budget_exhausted_run(
         message="Cisco MCP inventory scan timed out before Guard could start this configuration.",
         findings=(),
         duration_ms=0,
-        metadata={
+        metadata=_local_scanner_metadata({
             "target": _safe_mcp_target_label(root=root, config_path=config_path, workspace_dir=workspace_dir),
             "_targetPath": str(root),
             "_configPath": str(config_path),
             "targetsScanned": 0,
             "mode": mode,
-        },
+        }),
     )
 
 
@@ -179,7 +188,7 @@ def _run_skill_inventory_scans(
                 message="No skill directory found; Cisco skill inventory scan skipped.",
                 findings=(),
                 duration_ms=0,
-                metadata={"target": "missing", "skillsScanned": 0, "mode": mode},
+                metadata=_local_scanner_metadata({"target": "missing", "skillsScanned": 0, "mode": mode}),
             ),
         )
     remaining_timeout_seconds = timeout_seconds
@@ -218,7 +227,7 @@ def _run_single_skill_inventory_scan(
         message=summary.message,
         findings=summary.findings,
         duration_ms=duration_ms,
-        metadata={
+        metadata=_local_scanner_metadata({
             "target": str(root),
             "skillsScanned": summary.skills_scanned,
             "skillsSkipped": summary.skills_skipped,
@@ -227,7 +236,7 @@ def _run_single_skill_inventory_scan(
             "analyzersUsed": summary.analyzers_used,
             "policyName": summary.policy_name,
             "mode": mode,
-        },
+        }),
     )
 
 
@@ -238,7 +247,7 @@ def _build_skill_inventory_budget_exhausted_run(*, root: Path, mode: str) -> Cis
         message="Cisco skill scanner timed out before Guard could start this skill collection.",
         findings=(),
         duration_ms=0,
-        metadata={
+        metadata=_local_scanner_metadata({
             "target": str(root),
             "skillsScanned": 0,
             "skillsSkipped": (),
@@ -247,7 +256,7 @@ def _build_skill_inventory_budget_exhausted_run(*, root: Path, mode: str) -> Cis
             "analyzersUsed": (),
             "policyName": "balanced",
             "mode": mode,
-        },
+        }),
     )
 
 
