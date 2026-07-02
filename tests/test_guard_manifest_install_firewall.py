@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.local_supply_chain import build_package_protect_payload
-from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.models import GuardApprovalRequest, PolicyDecision
 from codex_plugin_scanner.guard.runtime.package_intent import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
@@ -144,6 +145,162 @@ def test_build_package_protect_payload_reprompts_after_manifest_edit_despite_sav
     evaluation = retry_payload["supply_chain_evaluation"]
     assert isinstance(evaluation, dict)
     assert evaluation["decision"] == "ask"
+    assert not any(
+        isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
+        for reason in evaluation.get("reasons", [])
+    )
+
+
+def test_workspace_package_approval_reuses_same_lockfile_across_worktrees(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    workspace_dir = tmp_path / "workspace"
+    worktree_dir = tmp_path / "workspace-worktree"
+    workspace_dir.mkdir()
+    worktree_dir.mkdir()
+    _write_pnpm_workspace(workspace_dir, extra_dependency="evilpkg")
+    _write_pnpm_workspace(worktree_dir, extra_dependency="evilpkg")
+    command = ["pnpm", "install"]
+
+    baseline_payload, baseline_rc = build_package_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=True,
+        now="2026-06-14T00:00:00Z",
+        config=None,
+        unsafe_raw_output=False,
+        timeout_seconds=30,
+    )
+    assert baseline_rc == 2
+    receipt = baseline_payload["receipt"]
+    assert isinstance(receipt, dict)
+    store.add_approval_request(
+        GuardApprovalRequest(
+            request_id="req-pnpm-workspace",
+            harness="guard-cli",
+            artifact_id=str(receipt["artifact_id"]),
+            artifact_name="pnpm install pnpm",
+            artifact_type="package_request",
+            artifact_hash=str(receipt["artifact_hash"]),
+            policy_action="require-reapproval",
+            recommended_scope="workspace",
+            changed_fields=("package_request",),
+            source_scope="project",
+            config_path=str(workspace_dir / "hol-guard.toml"),
+            workspace=str(workspace_dir),
+            launch_target="pnpm install",
+            review_command="hol-guard approvals approve req-pnpm-workspace",
+            approval_url="http://127.0.0.1:4455/approvals/req-pnpm-workspace",
+        ),
+        "2026-06-14T00:00:30Z",
+    )
+    apply_approval_resolution(
+        store=store,
+        request_id="req-pnpm-workspace",
+        action="allow",
+        scope="workspace",
+        workspace=str(workspace_dir),
+        reason="same dependency graph",
+        now="2026-06-14T00:01:00Z",
+    )
+
+    retry_payload, retry_rc = build_package_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=worktree_dir,
+        dry_run=True,
+        now="2026-06-14T00:02:00Z",
+        config=None,
+        unsafe_raw_output=False,
+        timeout_seconds=30,
+    )
+
+    assert retry_rc == 0
+    assert retry_payload["verdict"]["action"] == "allow"
+    retry_receipt = retry_payload["receipt"]
+    assert isinstance(retry_receipt, dict)
+    assert retry_receipt["artifact_id"] == receipt["artifact_id"]
+    assert retry_receipt["artifact_hash"] == receipt["artifact_hash"]
+    evaluation = retry_payload["supply_chain_evaluation"]
+    assert isinstance(evaluation, dict)
+    assert any(
+        isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
+        for reason in evaluation.get("reasons", [])
+    )
+
+
+def test_workspace_package_approval_still_reprompts_when_worktree_lockfile_changes(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    workspace_dir = tmp_path / "workspace"
+    worktree_dir = tmp_path / "workspace-worktree"
+    workspace_dir.mkdir()
+    worktree_dir.mkdir()
+    _write_pnpm_workspace(workspace_dir, extra_dependency="evilpkg")
+    _write_pnpm_workspace(worktree_dir, extra_dependency="evilpkg")
+    command = ["pnpm", "install"]
+
+    baseline_payload, baseline_rc = build_package_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=True,
+        now="2026-06-14T00:00:00Z",
+        config=None,
+        unsafe_raw_output=False,
+        timeout_seconds=30,
+    )
+    assert baseline_rc == 2
+    receipt = baseline_payload["receipt"]
+    assert isinstance(receipt, dict)
+    store.add_approval_request(
+        GuardApprovalRequest(
+            request_id="req-pnpm-workspace",
+            harness="guard-cli",
+            artifact_id=str(receipt["artifact_id"]),
+            artifact_name="pnpm install pnpm",
+            artifact_type="package_request",
+            artifact_hash=str(receipt["artifact_hash"]),
+            policy_action="require-reapproval",
+            recommended_scope="workspace",
+            changed_fields=("package_request",),
+            source_scope="project",
+            config_path=str(workspace_dir / "hol-guard.toml"),
+            workspace=str(workspace_dir),
+            launch_target="pnpm install",
+            review_command="hol-guard approvals approve req-pnpm-workspace",
+            approval_url="http://127.0.0.1:4455/approvals/req-pnpm-workspace",
+        ),
+        "2026-06-14T00:00:30Z",
+    )
+    apply_approval_resolution(
+        store=store,
+        request_id="req-pnpm-workspace",
+        action="allow",
+        scope="workspace",
+        workspace=str(workspace_dir),
+        reason="same dependency graph",
+        now="2026-06-14T00:01:00Z",
+    )
+    _write_pnpm_workspace(worktree_dir, extra_dependency="otherpkg")
+
+    retry_payload, retry_rc = build_package_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=worktree_dir,
+        dry_run=True,
+        now="2026-06-14T00:02:00Z",
+        config=None,
+        unsafe_raw_output=False,
+        timeout_seconds=30,
+    )
+
+    assert retry_rc == 2
+    assert retry_payload["verdict"]["action"] == "review"
+    retry_receipt = retry_payload["receipt"]
+    assert isinstance(retry_receipt, dict)
+    assert retry_receipt["artifact_hash"] != receipt["artifact_hash"]
+    evaluation = retry_payload["supply_chain_evaluation"]
+    assert isinstance(evaluation, dict)
     assert not any(
         isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
         for reason in evaluation.get("reasons", [])

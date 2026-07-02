@@ -191,6 +191,12 @@ class StorePolicyMixin:
     ) -> PolicyDecisionLookupResult:
         current_time = now or _now()
         workspace_key = _workspace_policy_key(workspace)
+        portable_workspace_key = _workspace_policy_key(
+            package_request_portable_workspace_scope(
+                artifact_id=artifact_id,
+                artifact_hash=artifact_hash,
+            )
+        )
         action_family_key = _artifact_family_key(artifact_id)
         runtime_exact_match_key = (
             _runtime_scoped_exact_match_key(artifact_id, runtime_exact_match_context)
@@ -245,7 +251,7 @@ class StorePolicyMixin:
                     )
                   )
                   or (
-                    scope = 'workspace' and (workspace = ? or workspace = ?) and (
+                    scope = 'workspace' and (workspace = ? or workspace = ? or workspace = ?) and (
                       artifact_id is null or (
                         artifact_id = ? and (
                           artifact_hash is null or (? is not null and artifact_hash = ?)
@@ -285,6 +291,7 @@ class StorePolicyMixin:
                     runtime_exact_match_key,
                     workspace_key,
                     workspace,
+                    portable_workspace_key,
                     artifact_id,
                     artifact_hash,
                     artifact_hash,
