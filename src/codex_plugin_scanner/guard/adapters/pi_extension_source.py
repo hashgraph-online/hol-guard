@@ -513,6 +513,14 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         '  return { decision: "allow" };\n'
         "}\n"
         "\n"
+        "function modelVisibleBlockedReason(reason: string): string {\n"
+        '  const prefix = "HOL Guard blocked this tool output before Pi could use it.";\n'
+        "  const approvalUrl = reason.match(/https?:\\/\\/\\S+/)?.[0]?.replace(/[.,;:]+$/, '');\n"
+        "  const approvalHint = approvalUrl ? ` Human approval is pending in HOL Guard: ${approvalUrl}.` : '';\n"
+        "  return `${prefix}${approvalHint} Do not retry the same tool call automatically; wait for the user to "
+        "approve or change the task.`;\n"
+        "}\n"
+        "\n"
         "function blockedToolResult(reason: string, details: unknown) {\n"
         "  return {\n"
         '    content: [{ type: "text", text: reason }],\n'
@@ -629,10 +637,11 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    );\n"
         '    if (response.decision === "deny") {\n'
         '      const reason = response.reason ?? "Blocked by HOL Guard.";\n'
+        "      const modelReason = modelVisibleBlockedReason(reason);\n"
         "      const toolCallId = toolCallIdKey(event.toolCallId);\n"
-        "      if (toolCallId) blockedToolResults.set(toolCallId, reason);\n"
+        "      if (toolCallId) blockedToolResults.set(toolCallId, modelReason);\n"
         '      ctx.ui.notify(reason, "warning");\n'
-        "      return blockedToolResult(reason, event.details);\n"
+        "      return blockedToolResult(modelReason, event.details);\n"
         "    }\n"
         "    if (outputTruncated) {\n"
         '      if (response.model_output_action === "allow_original" &&\n'

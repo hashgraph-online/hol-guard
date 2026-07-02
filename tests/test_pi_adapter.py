@@ -343,7 +343,12 @@ class TestPiInstall:
         assert "const blockedToolResults = new Map<string, string>();" in text
         assert 'pi.on("message_end"' in text
         assert "const toolCallId = toolCallIdKey(event.toolCallId);" in text
-        assert "if (toolCallId) blockedToolResults.set(toolCallId, reason);" in text
+        assert "function modelVisibleBlockedReason(reason: string): string" in text
+        assert "Do not retry the same tool call automatically" in text
+        assert "const modelReason = modelVisibleBlockedReason(reason);" in text
+        assert "if (toolCallId) blockedToolResults.set(toolCallId, modelReason);" in text
+        assert "return blockedToolResult(modelReason, event.details);" in text
+        assert "return blockedToolResult(reason, event.details);" not in text
         assert "blockedToolResults.delete(toolCallId);" in text
         # Oversized tool results are passed to Guard by reference for full
         # review, not pre-emptively blocked.
