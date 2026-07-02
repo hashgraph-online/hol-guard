@@ -15,7 +15,12 @@ from typing import Literal
 
 from ..adapters.base import HarnessContext
 from ..redaction import redact_sensitive_text
-from ..remote_pairing_constants import REMOTE_PAIRING_CODE_ALPHABET, REMOTE_PAIRING_CODE_PREFIX
+from ..remote_pairing_constants import (
+    REMOTE_PAIRING_CODE_ALPHABET,
+    REMOTE_PAIRING_CODE_MAX_LENGTH,
+    REMOTE_PAIRING_CODE_MIN_LENGTH,
+    REMOTE_PAIRING_CODE_PREFIX,
+)
 from ..store import GuardStore
 from .connect_flow import (
     CONNECT_REPAIR_COMMAND,
@@ -33,11 +38,11 @@ from .oauth_client import generate_dpop_key_pair, resolve_guard_oauth_client_con
 REMOTE_PAIRING_OAUTH_CLIENT_ID = "guard-local-daemon"
 REMOTE_PAIRING_RUNTIMES = frozenset({"openclaw", "hermes"})
 REMOTE_PAIRING_CODE_PATTERN = re.compile(
-    rf"^{REMOTE_PAIRING_CODE_PREFIX}-[{REMOTE_PAIRING_CODE_ALPHABET}]{{6}}$",
+    rf"^{REMOTE_PAIRING_CODE_PREFIX}-[{REMOTE_PAIRING_CODE_ALPHABET}]{{{REMOTE_PAIRING_CODE_MIN_LENGTH},{REMOTE_PAIRING_CODE_MAX_LENGTH}}}$",
     re.IGNORECASE,
 )
 REMOTE_PAIRING_CODE_REDACTION_PATTERN = re.compile(
-    rf"\b{REMOTE_PAIRING_CODE_PREFIX}-[{REMOTE_PAIRING_CODE_ALPHABET}]{{6}}\b",
+    rf"\b{REMOTE_PAIRING_CODE_PREFIX}-[{REMOTE_PAIRING_CODE_ALPHABET}]{{{REMOTE_PAIRING_CODE_MIN_LENGTH},{REMOTE_PAIRING_CODE_MAX_LENGTH}}}\b",
     re.IGNORECASE,
 )
 REMOTE_PAIR_COMMAND = "hol-guard remote-pair"
