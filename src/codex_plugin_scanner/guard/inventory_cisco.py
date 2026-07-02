@@ -138,17 +138,19 @@ def _run_single_mcp_inventory_scan(
         message=summary.message,
         findings=summary.findings,
         duration_ms=duration_ms,
-        metadata=_local_scanner_metadata({
-            "target": _safe_mcp_target_label(root=root, config_path=config_path, workspace_dir=workspace_dir),
-            "_targetPath": str(root),
-            "_configPath": str(config_path),
-            "targetsScanned": summary.targets_scanned,
-            "totalFindings": summary.total_findings,
-            "findingsBySeverity": summary.findings_by_severity,
-            "analyzersUsed": summary.analyzers_used,
-            "scanMode": summary.scan_mode,
-            "mode": mode,
-        }),
+        metadata=_local_scanner_metadata(
+            {
+                "target": _safe_mcp_target_label(root=root, config_path=config_path, workspace_dir=workspace_dir),
+                "_targetPath": str(root),
+                "_configPath": str(config_path),
+                "targetsScanned": summary.targets_scanned,
+                "totalFindings": summary.total_findings,
+                "findingsBySeverity": summary.findings_by_severity,
+                "analyzersUsed": summary.analyzers_used,
+                "scanMode": summary.scan_mode,
+                "mode": mode,
+            }
+        ),
     )
 
 
@@ -161,13 +163,15 @@ def _build_mcp_inventory_budget_exhausted_run(
         message="Cisco MCP inventory scan timed out before Guard could start this configuration.",
         findings=(),
         duration_ms=0,
-        metadata=_local_scanner_metadata({
-            "target": _safe_mcp_target_label(root=root, config_path=config_path, workspace_dir=workspace_dir),
-            "_targetPath": str(root),
-            "_configPath": str(config_path),
-            "targetsScanned": 0,
-            "mode": mode,
-        }),
+        metadata=_local_scanner_metadata(
+            {
+                "target": _safe_mcp_target_label(root=root, config_path=config_path, workspace_dir=workspace_dir),
+                "_targetPath": str(root),
+                "_configPath": str(config_path),
+                "targetsScanned": 0,
+                "mode": mode,
+            }
+        ),
     )
 
 
@@ -227,16 +231,18 @@ def _run_single_skill_inventory_scan(
         message=summary.message,
         findings=summary.findings,
         duration_ms=duration_ms,
-        metadata=_local_scanner_metadata({
-            "target": str(root),
-            "skillsScanned": summary.skills_scanned,
-            "skillsSkipped": summary.skills_skipped,
-            "totalFindings": summary.total_findings,
-            "findingsBySeverity": summary.findings_by_severity,
-            "analyzersUsed": summary.analyzers_used,
-            "policyName": summary.policy_name,
-            "mode": mode,
-        }),
+        metadata=_local_scanner_metadata(
+            {
+                "target": str(root),
+                "skillsScanned": summary.skills_scanned,
+                "skillsSkipped": summary.skills_skipped,
+                "totalFindings": summary.total_findings,
+                "findingsBySeverity": summary.findings_by_severity,
+                "analyzersUsed": summary.analyzers_used,
+                "policyName": summary.policy_name,
+                "mode": mode,
+            }
+        ),
     )
 
 
@@ -247,16 +253,18 @@ def _build_skill_inventory_budget_exhausted_run(*, root: Path, mode: str) -> Cis
         message="Cisco skill scanner timed out before Guard could start this skill collection.",
         findings=(),
         duration_ms=0,
-        metadata=_local_scanner_metadata({
-            "target": str(root),
-            "skillsScanned": 0,
-            "skillsSkipped": (),
-            "totalFindings": 0,
-            "findingsBySeverity": {},
-            "analyzersUsed": (),
-            "policyName": "balanced",
-            "mode": mode,
-        }),
+        metadata=_local_scanner_metadata(
+            {
+                "target": str(root),
+                "skillsScanned": 0,
+                "skillsSkipped": (),
+                "totalFindings": 0,
+                "findingsBySeverity": {},
+                "analyzersUsed": (),
+                "policyName": "balanced",
+                "mode": mode,
+            }
+        ),
     )
 
 
