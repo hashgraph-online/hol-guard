@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 # ruff: noqa: F403,F405
+from .approval_scope_support import package_request_portable_workspace_scope
 from .store_base import *
 
 
