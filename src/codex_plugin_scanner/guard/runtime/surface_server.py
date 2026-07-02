@@ -256,20 +256,22 @@ class GuardSurfaceRuntime:
             request_id = item.get("request_id")
             if isinstance(request_id, str):
                 seed_request_resume_record(self.store, request_id=request_id, now=_now())
+        approval_open_key = self._approval_surface_open_key(
+            queued,
+            fallback=open_key or str(waiting_operation["operation_id"]),
+        )
         review_url = first_approval_url(
             queued,
             harness=harness,
             approval_center_url=approval_center_url,
+            request_id=_request_id_from_open_key(approval_open_key),
         )
         surface = self.ensure_surface(
             surface="approval-center",
             approval_center_url=approval_center_url,
             browser_url=_browser_url_for_review(browser_url, review_url),
             approval_surface_policy=approval_surface_policy,
-            open_key=_approval_surface_open_key(
-                queued,
-                fallback=open_key or str(waiting_operation["operation_id"]),
-            ),
+            open_key=approval_open_key,
             opener=opener,
         )
         return {
@@ -373,6 +375,15 @@ class GuardSurfaceRuntime:
             self.record_surface_open(surface=surface, open_key=open_key)
         return {"surface": surface, "opened": True, "reason": "opened", "open_key": open_key}
 
+    def _approval_surface_open_key(self, queued: list[dict[str, object]], *, fallback: str) -> str:
+        request_keys = _approval_request_open_keys(queued)
+        for _request_id, open_key in request_keys:
+            if not self.has_surface_opened("approval-center", open_key):
+                return open_key
+        if request_keys:
+            return request_keys[0][1]
+        return fallback
+
     def _set_session_status(self, session_id: str, status: str) -> None:
         current = self.store.get_guard_session(session_id)
         if current is None:
@@ -466,12 +477,23 @@ def _browser_url_for_review(browser_url: str | None, review_url: str | None) -> 
     return review_url
 
 
-def _approval_surface_open_key(queued: list[dict[str, object]], *, fallback: str) -> str:
+def _approval_request_open_keys(queued: list[dict[str, object]]) -> list[tuple[str, str]]:
+    request_keys: list[tuple[str, str]] = []
     for item in queued:
         request_id = item.get("request_id")
         if isinstance(request_id, str) and request_id.strip():
-            return f"approval-request:{request_id.strip()}"
-    return fallback
+            stripped = request_id.strip()
+            request_keys.append((stripped, f"approval-request:{stripped}"))
+    return request_keys
+
+
+def _request_id_from_open_key(open_key: str) -> str | None:
+    prefix = "approval-request:"
+    if open_key.startswith(prefix):
+        request_id = open_key[len(prefix) :].strip()
+        if request_id:
+            return request_id
+    return None
 
 
 def _same_origin(left: ParseResult, right: ParseResult) -> bool:
