@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from datetime import datetime, timezone
 
 from codex_plugin_scanner.guard.models import GuardReceipt
@@ -10,6 +11,15 @@ from codex_plugin_scanner.guard.runtime.runner import (
     _receipt_sync_rows_with_command_detail_backfill,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+def _decode_transport_command(envelope: dict[str, object]) -> str | None:
+    encoded = envelope.get("commandEncoded")
+    if isinstance(encoded, str):
+        padded = encoded + "=" * (-len(encoded) % 4)
+        return base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
+    command = envelope.get("command")
+    return command if isinstance(command, str) else None
 
 
 def _store_command_receipt(
@@ -117,7 +127,8 @@ def test_redaction_disabled_backfill_payload_keeps_review_command_detail(tmp_pat
 
     envelope = payload["envelopeRedacted"]
     assert isinstance(envelope, dict)
-    assert envelope["command"] == "cd repo && npx vitest run example.test.ts --reporter=verbose"
+    assert envelope["commandTransport"] == "base64url-v1"
+    assert _decode_transport_command(envelope) == "cd repo && npx vitest run example.test.ts --reporter=verbose"
 
 
 def test_command_detail_backfill_pages_historical_receipts(monkeypatch, tmp_path) -> None:
