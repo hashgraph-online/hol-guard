@@ -29,7 +29,7 @@ def _local_scanner_metadata(metadata: dict[str, object]) -> dict[str, object]:
     return {
         **metadata,
         "evidenceProvenance": "client_unverified",
-        "scannerAuthority": "local_reported",
+        "scannerResolutionSource": "local_reported",
         "scannerVerificationRequired": "guard_cloud",
     }
 

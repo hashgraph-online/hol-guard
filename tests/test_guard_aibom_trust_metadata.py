@@ -1024,7 +1024,7 @@ def test_inventory_snapshot_attaches_mcp_tool_trust_resolution(monkeypatch, tmp_
     cisco_layer_metadata = cisco_layer.get("metadata")
     assert isinstance(cisco_layer_metadata, dict)
     assert cisco_layer_metadata.get("evidenceProvenance") == "client_unverified"
-    assert cisco_layer_metadata.get("scannerAuthority") == "local_reported"
+    assert cisco_layer_metadata.get("scannerResolutionSource") == "local_reported"
     assert cisco_layer_metadata.get("scannerVerificationRequired") == "guard_cloud"
     assert cisco_layer_metadata.get("attestationStatus") == "signed"
     cisco_attestation = cisco_layer_metadata.get("attestation")

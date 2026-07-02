@@ -68,7 +68,7 @@ def test_cisco_inventory_scans_report_missing_targets_without_running_dependenci
     assert all(run.status == "skipped" for run in runs)
     assert all(run.duration_ms == 0 for run in runs)
     assert all(run.metadata.get("evidenceProvenance") == "client_unverified" for run in runs)
-    assert all(run.metadata.get("scannerAuthority") == "local_reported" for run in runs)
+    assert all(run.metadata.get("scannerResolutionSource") == "local_reported" for run in runs)
     assert all(run.metadata.get("scannerVerificationRequired") == "guard_cloud" for run in runs)
 
 
