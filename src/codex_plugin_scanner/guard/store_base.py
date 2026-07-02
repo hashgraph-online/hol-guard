@@ -26,7 +26,6 @@ from uuid import uuid4
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from .approval_scope_support import package_request_portable_workspace_scope
 from .approval_gate import ApprovalGateGrant, require_policy_clear, require_policy_write, require_request_resolution
 from .cli.oauth_client import resolve_guard_oauth_client_config
 from .edge_events import build_receipt_event
