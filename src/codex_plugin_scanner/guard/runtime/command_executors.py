@@ -243,7 +243,7 @@ def _execute_approval_operation(
     generated_at: str,
 ) -> dict[str, object]:
     if operation == "guard.localRequests.snapshot":
-        return _result({"requests": _local_request_snapshot_items(store)}, generated_at=generated_at)
+        return _result(_local_request_snapshot_payload(store), generated_at=generated_at)
     if operation != "guard.approval.resolve":
         return {
             "failureCode": "unsupported_operation",
