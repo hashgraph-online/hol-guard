@@ -15,7 +15,11 @@ from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 from .adapters import get_adapter
 from .adapters.base import HarnessContext
 from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approval_decision
-from .approval_scope_support import resolve_request_workspace_scope, supported_request_scopes
+from .approval_scope_support import (
+    package_request_portable_workspace_scope,
+    resolve_request_workspace_scope,
+    supported_request_scopes,
+)
 from .cli.connect_flow import (
     connect_retry_refresh_race_from_reason,
     resolve_guard_cloud_repair_detail,
@@ -501,11 +505,18 @@ def apply_approval_resolution(
         raise ValueError(f"Unsupported approval scope: {scope}")
     if scope not in supported_request_scopes(request):
         raise ValueError("unsupported_request_scope")
-    resolved_workspace = resolve_request_workspace_scope(request, workspace) if scope == "workspace" else None
     workspace_artifact_id, workspace_artifact_hash = _workspace_policy_artifact_keys(request, scope)
     request_artifact_id = _string_or_none(request.get("artifact_id"))
     request_artifact_hash = _string_or_none(request.get("artifact_hash"))
     request_publisher = _string_or_none(request.get("publisher"))
+    resolved_workspace = resolve_request_workspace_scope(request, workspace) if scope == "workspace" else None
+    portable_package_workspace = package_request_portable_workspace_scope(
+        artifact_id=request_artifact_id,
+        artifact_hash=request_artifact_hash,
+        artifact_type=_string_or_none(request.get("artifact_type")),
+    )
+    if scope == "workspace" and portable_package_workspace is not None:
+        resolved_workspace = portable_package_workspace
     scoped_artifact_id = request_artifact_id if scope in {"artifact", "harness", "global"} else workspace_artifact_id
     scoped_artifact_hash = request_artifact_hash if scope == "artifact" else workspace_artifact_hash
     artifact_runtime_exact_match_key = _artifact_scope_runtime_exact_match_key(request, scope)
