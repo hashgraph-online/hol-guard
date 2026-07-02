@@ -334,6 +334,76 @@ def test_local_request_snapshot_items_continues_without_oauth_metadata(tmp_path:
     assert snapshot[0]["claim"] is None
 
 
+def test_local_request_snapshot_payload_includes_complete_pending_backlog(tmp_path: Path) -> None:
+    class ManyPendingStore(FakeStore):
+        def list_approval_requests(
+            self,
+            status: str | None = "pending",
+            harness: str | None = None,
+            limit: int | None = 50,
+            cursor: str | None = None,
+        ) -> list[dict[str, object]]:
+            del harness, cursor
+            if status == "pending":
+                rows = [_approval_request_row(f"req-pending-{index}") for index in range(225)]
+            elif status == "resolved":
+                rows = [
+                    {
+                        **_approval_request_row(f"req-resolved-{index}"),
+                        "status": "resolved",
+                        "resolved_at": "2026-07-02T12:00:00+00:00",
+                    }
+                    for index in range(3)
+                ]
+            else:
+                rows = []
+            return rows if limit is None else rows[:limit]
+
+    payload = command_executors._local_request_snapshot_payload(ManyPendingStore(tmp_path / "guard-home"))
+
+    assert payload["pendingComplete"] is True
+    assert payload["resolvedComplete"] is True
+    assert payload["pendingCount"] == 225
+    assert payload["resolvedCount"] == 3
+    assert len(payload["requests"]) == 228
+    assert {item["localRequestId"] for item in payload["requests"]} >= {
+        "req-pending-0",
+        "req-pending-224",
+        "req-resolved-2",
+    }
+
+
+def test_local_request_snapshot_payload_marks_pending_incomplete_when_truncated(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(command_executors, "LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT", 2)
+
+    class TruncatedPendingStore(FakeStore):
+        def list_approval_requests(
+            self,
+            status: str | None = "pending",
+            harness: str | None = None,
+            limit: int | None = 50,
+            cursor: str | None = None,
+        ) -> list[dict[str, object]]:
+            del harness, cursor
+            if status != "pending":
+                return []
+            rows = [_approval_request_row(f"req-pending-{index}") for index in range(3)]
+            return rows if limit is None else rows[:limit]
+
+    payload = command_executors._local_request_snapshot_payload(TruncatedPendingStore(tmp_path / "guard-home"))
+
+    assert payload["pendingComplete"] is False
+    assert payload["resolvedComplete"] is True
+    assert payload["pendingCount"] == 2
+    assert [item["localRequestId"] for item in payload["requests"]] == [
+        "req-pending-0",
+        "req-pending-1",
+    ]
+
+
 def test_local_request_snapshot_items_continues_when_request_claim_is_invalid(tmp_path: Path) -> None:
     class MalformedRequestStore(FakeStore):
         def list_approval_requests(

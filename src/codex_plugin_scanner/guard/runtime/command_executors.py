@@ -69,6 +69,8 @@ APPROVAL_OPERATIONS: tuple[str, ...] = (
 )
 SUPPORTED_COMMAND_OPERATIONS: tuple[str, ...] = (*PACKAGE_SHIM_OPERATIONS, *APP_OPERATIONS, *APPROVAL_OPERATIONS)
 COMMAND_OPERATION_SCHEMA_VERSIONS: dict[str, int] = {operation: 1 for operation in SUPPORTED_COMMAND_OPERATIONS}
+LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = 10_000
+LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = 500
 
 
 def execute_guard_command_job(
@@ -458,6 +460,76 @@ def _local_request_snapshot_items(store: GuardStore) -> list[dict[str, object]]:
                 }
             )
     return items[:200]
+
+
+def _local_request_snapshot_payload(store: GuardStore) -> dict[str, object]:
+    pending_items, pending_complete = _local_request_snapshot_items_for_status(
+        store,
+        status="pending",
+        limit=LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT,
+    )
+    resolved_items, resolved_complete = _local_request_snapshot_items_for_status(
+        store,
+        status="resolved",
+        limit=LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT,
+    )
+    return {
+        "requests": [*pending_items, *resolved_items],
+        "pendingComplete": pending_complete,
+        "resolvedComplete": resolved_complete,
+        "pendingLimit": LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT,
+        "resolvedLimit": LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT,
+        "pendingCount": len(pending_items),
+        "resolvedCount": len(resolved_items),
+    }
+
+
+def _local_request_snapshot_items_for_status(
+    store: GuardStore,
+    *,
+    status: str,
+    limit: int,
+) -> tuple[list[dict[str, object]], bool]:
+    items: list[dict[str, object]] = []
+    redaction_level = _resolve_cloud_receipt_redaction_level(store)
+    try:
+        oauth = guard_review_oauth_metadata(store)
+    except GuardReviewContractError:
+        oauth = None
+    rows = store.list_approval_requests(status=status, limit=limit + 1)
+    for item in rows[:limit]:
+        request_id = item.get("request_id")
+        if not isinstance(request_id, str) or not request_id:
+            continue
+        created_at = str(item.get("created_at") or _now())
+        last_seen_at = str(item.get("last_seen_at") or created_at)
+        resolved_at = item.get("resolved_at")
+        claim = None
+        if oauth is not None:
+            try:
+                claim = build_local_review_request_claim(
+                    request_row=item,
+                    oauth=oauth,
+                    store=store,
+                )
+            except GuardReviewContractError:
+                claim = None
+        items.append(
+            {
+                "claim": claim,
+                "localRequestId": request_id,
+                "requestKind": str(item.get("harness") or "guard-review"),
+                "requestPayload": _cloud_safe_local_request_payload(
+                    item,
+                    redaction_level=redaction_level,
+                ),
+                "localStatus": str(item.get("status") or status),
+                "firstSeenAt": created_at,
+                "lastSeenAt": last_seen_at,
+                "resolvedAt": str(resolved_at) if isinstance(resolved_at, str) and resolved_at else None,
+            }
+        )
+    return items, len(rows) <= limit
 
 
 def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
