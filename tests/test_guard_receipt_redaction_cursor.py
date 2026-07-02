@@ -361,7 +361,7 @@ def test_relaxed_redaction_sync_adds_recent_blocked_command_detail_backfill(tmp_
         "level": "partial",
         "updated_at": "2026-04-15T00:01:00Z",
         "days": 30,
-        "limit": 5000,
+        "limit": 1000,
         "receipts": 1,
         "queried": 1,
         "before_rowid": 1,
