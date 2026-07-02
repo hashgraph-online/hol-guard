@@ -420,46 +420,17 @@ def _is_guard_action(value: object) -> TypeGuard[GuardAction]:
 
 
 def _local_request_snapshot_items(store: GuardStore) -> list[dict[str, object]]:
-    items: list[dict[str, object]] = []
-    redaction_level = _resolve_cloud_receipt_redaction_level(store)
-    try:
-        oauth = guard_review_oauth_metadata(store)
-    except GuardReviewContractError:
-        oauth = None
-    for status in ("pending", "resolved"):
-        for item in store.list_approval_requests(status=status, limit=100):
-            request_id = item.get("request_id")
-            if not isinstance(request_id, str) or not request_id:
-                continue
-            created_at = str(item.get("created_at") or _now())
-            last_seen_at = str(item.get("last_seen_at") or created_at)
-            resolved_at = item.get("resolved_at")
-            claim = None
-            if oauth is not None:
-                try:
-                    claim = build_local_review_request_claim(
-                        request_row=item,
-                        oauth=oauth,
-                        store=store,
-                    )
-                except GuardReviewContractError:
-                    claim = None
-            items.append(
-                {
-                    "claim": claim,
-                    "localRequestId": request_id,
-                    "requestKind": str(item.get("harness") or "guard-review"),
-                    "requestPayload": _cloud_safe_local_request_payload(
-                        item,
-                        redaction_level=redaction_level,
-                    ),
-                    "localStatus": str(item.get("status") or status),
-                    "firstSeenAt": created_at,
-                    "lastSeenAt": last_seen_at,
-                    "resolvedAt": str(resolved_at) if isinstance(resolved_at, str) and resolved_at else None,
-                }
-            )
-    return items[:200]
+    pending_items, _ = _local_request_snapshot_items_for_status(
+        store,
+        status="pending",
+        limit=100,
+    )
+    resolved_items, _ = _local_request_snapshot_items_for_status(
+        store,
+        status="resolved",
+        limit=100,
+    )
+    return [*pending_items, *resolved_items]
 
 
 def _local_request_snapshot_payload(store: GuardStore) -> dict[str, object]:
