@@ -52,6 +52,9 @@ def test_normalize_and_validate_pairing_code_shape() -> None:
     assert normalize_remote_pairing_code(" hlg-abc123 ") == "HLG-ABC123"
     assert is_remote_pairing_code_shape("HLG-ABCI12") is False
     assert is_remote_pairing_code_shape("HLG-7K3D29") is True
+    assert is_remote_pairing_code_shape("HLG-F9Y38G8EYLPQ3JUV735Y") is True
+    assert is_remote_pairing_code_shape("HLG-ABC") is False
+    assert is_remote_pairing_code_shape("HLG-ABCD1234EFGH5678IJKL9012MNOP3456QRST7890") is False
 
 
 def test_redact_remote_pairing_text_masks_code() -> None:
@@ -59,6 +62,9 @@ def test_redact_remote_pairing_text_masks_code() -> None:
     assert "HLG-7K3D29" not in redacted
     assert "HLG-******" in redacted
     assert "sk-live-secret" not in redacted
+    long_redacted = redact_remote_pairing_text("Pairing failed for HLG-F9Y38G8EYLPQ3JUV735Y with token sk-live-secret")
+    assert "HLG-F9Y38G8EYLPQ3JUV735Y" not in long_redacted
+    assert "HLG-******" in long_redacted
 
 
 def test_claim_remote_pairing_intent_posts_expected_payload(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -111,6 +117,51 @@ def test_claim_remote_pairing_intent_posts_expected_payload(monkeypatch: pytest.
     assert body["installationId"] == "install-1"
     assert body["label"] == "Hosted OpenClaw"
     assert body["capabilitySummary"] == {"userSpaceInstall": True}
+
+
+def test_claim_remote_pairing_intent_accepts_server_generated_long_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Server-generated pairing codes are 20 chars, not the legacy 6."""
+    captured: dict[str, object] = {}
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "intentId": "intent-2",
+                    "state": "connected",
+                    "tokens": {
+                        "access_token": _fake_access_token(),
+                        "token_type": "Bearer",
+                        "expires_in": 3600,
+                        "refresh_token": "refresh-token-value",
+                    },
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(request, timeout=30):
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        return _Response()
+
+    payload = claim_remote_pairing_intent(
+        claim_url="https://hol.org/api/guard/remote-pairing/claim",
+        pair_code="HLG-F9Y38G8EYLPQ3JUV735Y",
+        runtime="hermes",
+        installation_id="install-2",
+        label="Hosted Hermes",
+        public_dpop_jwk={"kty": "EC", "crv": "P-256", "x": "abc", "y": "def"},
+        urlopen=fake_urlopen,
+    )
+
+    assert payload["intentId"] == "intent-2"
+    body = captured["body"]
+    assert isinstance(body, dict)
+    assert body["pairCode"] == "HLG-F9Y38G8EYLPQ3JUV735Y"
 
 
 def test_run_guard_remote_pair_command_persists_credentials_and_installs_runtime(
