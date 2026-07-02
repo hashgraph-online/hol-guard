@@ -17,7 +17,7 @@ from ..store import GuardStore
 from .command_executors import (
     COMMAND_OPERATION_SCHEMA_VERSIONS,
     SUPPORTED_COMMAND_OPERATIONS,
-    _local_request_snapshot_items,
+    _local_request_snapshot_payload,
     command_job_operation,
     execute_guard_command_job,
 )
@@ -246,7 +246,7 @@ def _lease_payload(store: GuardStore) -> dict[str, object]:
 
 def _local_requests_snapshot(store: GuardStore) -> dict[str, object]:
     try:
-        return {"requests": _local_request_snapshot_items(store)}
+        return _local_request_snapshot_payload(store)
     except Exception as exc:
         _LOGGER.warning("Guard command local request snapshot failed: %s", _redacted_error(exc))
         return {"requests": []}
