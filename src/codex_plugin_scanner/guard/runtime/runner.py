@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
@@ -303,7 +304,7 @@ _RECEIPT_SYNC_BATCH_SIZE = 50
 _RECEIPT_SYNC_CURSOR_PAGE_SIZE = 200
 _RECEIPT_SYNC_CURSOR_BACKFILL_ROWS = 200
 _RECEIPT_COMMAND_DETAIL_BACKFILL_DAYS = 30
-_RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT = 5000
+_RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT = 1000
 _PAIN_SIGNAL_TIMEOUT_SECONDS = 10
 _PAIN_SIGNAL_RETRY_TIMEOUT_SECONDS = 90
 _GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_MINUTES = 5  # single 404 shouldn't disable sync for a full day
@@ -4176,6 +4177,10 @@ def _cloud_sync_command_display_part(value: str) -> str:
     return " ".join(_cloud_sync_sanitize_text(value, fallback="").split())
 
 
+def _cloud_sync_transport_encode_text(value: str) -> str:
+    return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii").rstrip("=")
+
+
 def _cloud_sync_receipt_action_command(envelope: dict[str, object], *, redaction_level: str) -> str | None:
     tool_name = _optional_string(envelope.get("tool_name"))
     sanitized_tool_name = _cloud_sync_command_display_part(tool_name) if tool_name is not None else ""
@@ -4260,7 +4265,9 @@ def _cloud_sync_receipt_payload(
             enriched = dict(redacted_envelope)
             command = _cloud_sync_receipt_action_command(full_envelope, redaction_level=redaction_level)
             if command is not None:
-                enriched["command"] = command
+                enriched.pop("command", None)
+                enriched["commandEncoded"] = _cloud_sync_transport_encode_text(command)
+                enriched["commandTransport"] = "base64url-v1"
             if redaction_level == "none":
                 target_paths = full_envelope.get("target_paths")
                 if isinstance(target_paths, list):
