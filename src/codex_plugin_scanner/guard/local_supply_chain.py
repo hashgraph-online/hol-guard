@@ -26,6 +26,7 @@ from codex_plugin_scanner.path_support import resolve_path_within_allowed_roots,
 
 from .adapters.base import HarnessContext
 from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
+from .approval_scope_support import package_request_portable_workspace_scope
 from .config import GuardConfig, resolve_risk_action
 from .models import GuardAction, GuardArtifact, GuardReceipt
 from .redaction import redact_local_path, redact_text
@@ -1408,14 +1409,22 @@ def _apply_stored_package_policy_override(
     workspace_dir: Path,
     now: str,
 ) -> Any:
-    decision = store.resolve_policy_decision(
-        artifact.harness,
-        artifact.artifact_id,
-        artifact_hash,
-        str(workspace_dir),
-        artifact.publisher,
-        now,
-    )
+    decision = None
+    for policy_workspace in _package_policy_workspace_candidates(
+        artifact=artifact,
+        artifact_hash=artifact_hash,
+        workspace_dir=workspace_dir,
+    ):
+        decision = store.resolve_policy_decision(
+            artifact.harness,
+            artifact.artifact_id,
+            artifact_hash,
+            policy_workspace,
+            artifact.publisher,
+            now,
+        )
+        if isinstance(decision, dict):
+            break
     if not isinstance(decision, dict):
         return evaluation
     if _stored_package_policy_is_stale_policy_bundle_family(decision, store=store):
@@ -1456,6 +1465,24 @@ def _apply_stored_package_policy_override(
             reason_message="HOL Guard kept this package blocked because a saved package policy already exists.",
         )
     return evaluation
+
+
+def _package_policy_workspace_candidates(
+    *,
+    artifact: GuardArtifact,
+    artifact_hash: str,
+    workspace_dir: Path,
+) -> tuple[str, ...]:
+    candidates: list[str] = []
+    portable_workspace = package_request_portable_workspace_scope(
+        artifact_id=artifact.artifact_id,
+        artifact_hash=artifact_hash,
+        artifact_type=artifact.artifact_type,
+    )
+    if portable_workspace is not None:
+        candidates.append(portable_workspace)
+    candidates.append(str(workspace_dir))
+    return tuple(dict.fromkeys(candidates))
 
 
 def _stored_package_policy_is_stale_policy_bundle_family(decision: dict[str, object], *, store: Any) -> bool:

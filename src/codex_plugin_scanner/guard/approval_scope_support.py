@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -47,6 +49,26 @@ def resolve_request_workspace_scope(
     return workspace
 
 
+def package_request_portable_workspace_scope(
+    *,
+    artifact_id: str | None,
+    artifact_hash: str | None,
+    artifact_type: str | None = None,
+) -> str | None:
+    if not _is_package_request_artifact(artifact_id=artifact_id, artifact_type=artifact_type):
+        return None
+    if artifact_hash is None or not artifact_hash.strip() or artifact_hash == "unknown":
+        return None
+    material = {
+        "artifact_hash": artifact_hash.strip(),
+        "artifact_id": artifact_id.strip() if artifact_id is not None else None,
+        "scope": "package-request-workspace",
+        "version": 1,
+    }
+    digest = hashlib.sha256(json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return f"package-request-workspace:v1:{digest}"
+
+
 def _derived_workspace_scope_target(request: Mapping[str, object]) -> str | None:
     stored_workspace = _string_or_none(request.get("workspace"))
     if stored_workspace is not None:
@@ -61,6 +83,12 @@ def _derived_workspace_scope_target(request: Mapping[str, object]) -> str | None
     parent = config_file.parent
     workspace_root = parent.parent if parent.name.startswith(".") else parent
     return str(workspace_root)
+
+
+def _is_package_request_artifact(*, artifact_id: str | None, artifact_type: str | None) -> bool:
+    if artifact_type == "package_request":
+        return True
+    return isinstance(artifact_id, str) and ":package-request:" in artifact_id
 
 
 def _request_scoped_family_key(request: Mapping[str, object]) -> str | None:
