@@ -8,7 +8,10 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
-from codex_plugin_scanner.guard.local_supply_chain import build_package_protect_payload
+from codex_plugin_scanner.guard.local_supply_chain import (
+    _package_policy_workspace_candidates,
+    build_package_protect_payload,
+)
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, PolicyDecision
 from codex_plugin_scanner.guard.runtime.package_intent import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
@@ -227,6 +230,29 @@ def test_workspace_package_approval_reuses_same_lockfile_across_worktrees(tmp_pa
         isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
         for reason in evaluation.get("reasons", [])
     )
+
+
+def test_package_policy_workspace_candidates_prefer_portable_scope(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_pnpm_workspace(workspace_dir, extra_dependency="evilpkg")
+    intent = parse_package_intent("pnpm install", workspace=workspace_dir)
+    assert intent is not None
+    artifact = build_package_request_artifact(
+        "guard-cli",
+        intent,
+        config_path="hol-guard.toml",
+        source_scope="project",
+    )
+
+    candidates = _package_policy_workspace_candidates(
+        artifact=artifact,
+        artifact_hash="hash-package",
+        workspace_dir=workspace_dir,
+    )
+
+    assert candidates[0].startswith("package-request-workspace:v1:")
+    assert candidates[1] == str(workspace_dir)
 
 
 def test_workspace_package_approval_still_reprompts_when_worktree_lockfile_changes(tmp_path: Path) -> None:

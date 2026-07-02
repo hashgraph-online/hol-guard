@@ -1473,7 +1473,7 @@ def _package_policy_workspace_candidates(
     artifact_hash: str,
     workspace_dir: Path,
 ) -> tuple[str, ...]:
-    candidates = [str(workspace_dir)]
+    candidates: list[str] = []
     portable_workspace = package_request_portable_workspace_scope(
         artifact_id=artifact.artifact_id,
         artifact_hash=artifact_hash,
@@ -1481,6 +1481,7 @@ def _package_policy_workspace_candidates(
     )
     if portable_workspace is not None:
         candidates.append(portable_workspace)
+    candidates.append(str(workspace_dir))
     return tuple(dict.fromkeys(candidates))
 
 
