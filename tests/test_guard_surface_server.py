@@ -1911,6 +1911,98 @@ class TestGuardSurfaceServer:
 
         assert store.list_guard_operations(session_id=str(session["session_id"])) == []
 
+    def test_surface_runtime_opens_new_request_when_mixed_with_reused_request(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        runtime = GuardSurfaceRuntime(store)
+        opened_urls: list[str] = []
+        session = runtime.start_session(
+            harness="pi",
+            surface="harness-adapter",
+            workspace=str(tmp_path / "workspace"),
+            client_name="pi-hook",
+        )
+        artifact_a = GuardArtifact(
+            artifact_id="pi:project:tool-output:a",
+            name="Bash credential-looking output",
+            harness="pi",
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path="~/.pi/agent/settings.json",
+            metadata={},
+        )
+        artifact_b = GuardArtifact(
+            artifact_id="pi:project:tool-output:b",
+            name="Bash credential-looking output",
+            harness="pi",
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path="~/.pi/agent/settings.json",
+            metadata={},
+        )
+
+        def block_payload(*artifacts: GuardArtifact) -> tuple[dict[str, object], dict[str, object]]:
+            return (
+                {
+                    "harness": "pi",
+                    "installed": True,
+                    "command_available": True,
+                    "config_paths": ["~/.pi/agent/settings.json"],
+                    "artifacts": [artifact.to_dict() for artifact in artifacts],
+                },
+                {
+                    "artifacts": [
+                        {
+                            "artifact_id": artifact.artifact_id,
+                            "artifact_name": artifact.name,
+                            "artifact_hash": f"hash-{artifact.artifact_id[-1]}",
+                            "artifact_type": artifact.artifact_type,
+                            "source_scope": artifact.source_scope,
+                            "config_path": artifact.config_path,
+                            "policy_action": "require-reapproval",
+                            "changed_fields": ["tool_response"],
+                            "launch_target": f"rg deps.config #{artifact.artifact_id[-1]}",
+                        }
+                        for artifact in artifacts
+                    ]
+                },
+            )
+
+        detection, evaluation = block_payload(artifact_a)
+        first = runtime.queue_blocked_operation(
+            session_id=str(session["session_id"]),
+            operation_type="tool_call",
+            harness="pi",
+            metadata={"event": "PostToolUse"},
+            detection=detection,
+            evaluation=evaluation,
+            approval_center_url="http://127.0.0.1:5474",
+            browser_url="http://127.0.0.1:5474#guard-token=session-token",
+            approval_surface_policy="auto-open-once",
+            open_key="pi-run",
+            opener=lambda url: opened_urls.append(url) or True,
+        )
+        detection, evaluation = block_payload(artifact_a, artifact_b)
+        second = runtime.queue_blocked_operation(
+            session_id=str(session["session_id"]),
+            operation_type="tool_call",
+            harness="pi",
+            metadata={"event": "PostToolUse"},
+            detection=detection,
+            evaluation=evaluation,
+            approval_center_url="http://127.0.0.1:5474",
+            browser_url="http://127.0.0.1:5474#guard-token=session-token",
+            approval_surface_policy="auto-open-once",
+            open_key="pi-run",
+            opener=lambda url: opened_urls.append(url) or True,
+        )
+
+        first_request_id = str(first["approval_requests"][0]["request_id"])
+        second_request_id = str(second["approval_requests"][1]["request_id"])
+        assert str(second["approval_requests"][0]["request_id"]) == first_request_id
+        assert len(opened_urls) == 2
+        assert urllib.parse.urlparse(opened_urls[0]).path == f"/requests/{first_request_id}"
+        assert urllib.parse.urlparse(opened_urls[1]).path == f"/requests/{second_request_id}"
+
     def test_surface_runtime_preserves_prompt_request_explanation(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         runtime = GuardSurfaceRuntime(store)
@@ -2549,9 +2641,10 @@ class TestGuardSurfaceServer:
             with urllib.request.urlopen(first_block_request, timeout=5) as response:
                 first_block_response = json.loads(response.read().decode("utf-8"))
 
+            second_block_payload = {**block_payload, "open_key": "run-operation-retry"}
             second_block_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/operations/block",
-                data=json.dumps(block_payload).encode("utf-8"),
+                data=json.dumps(second_block_payload).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
                     "X-Guard-Token": auth_token,
@@ -2570,6 +2663,7 @@ class TestGuardSurfaceServer:
         assert len(first_block_response["approval_requests"]) == 1
         assert first_items[0]["item_type"] == "approval_requested"
         first_request_id = first_block_response["approval_requests"][0]["request_id"]
+        assert second_block_response["approval_requests"][0]["request_id"] == first_request_id
         assert first_items[0]["payload"]["approval_requests"][0]["request_id"] == first_request_id
         assert first_block_response["surface"]["opened"] is True
         assert second_block_response["surface"]["opened"] is False

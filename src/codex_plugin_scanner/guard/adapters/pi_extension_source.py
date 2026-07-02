@@ -322,10 +322,6 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  return trimmed.length > 0 ? trimmed : null;\n"
         "}\n"
         "\n"
-        "function guardOpenKey(): string {\n"
-        "  return randomBytes(8).toString('hex');\n"
-        "}\n"
-        "\n"
         "function base64Url(value: Buffer): string {\n"
         "  return value.toString('base64url');\n"
         "}\n"
@@ -354,7 +350,6 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    config_path: payload.config_path,\n"
         "    tool_name: payload.tool_name,\n"
         "    is_error: payload.is_error,\n"
-        "    guard_operation_open_key: payload.guard_operation_open_key,\n"
         "    guard_payload_ref: {\n"
         "      version: 1,\n"
         "      path,\n"
@@ -518,6 +513,14 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         '  return { decision: "allow" };\n'
         "}\n"
         "\n"
+        "function modelVisibleBlockedReason(reason: string): string {\n"
+        '  const prefix = "HOL Guard blocked this tool output before Pi could use it.";\n'
+        "  const approvalUrl = reason.match(/https?:\\/\\/\\S+/)?.[0]?.replace(/[.,;:]+$/, '');\n"
+        "  const approvalHint = approvalUrl ? ` Human approval is pending in HOL Guard: ${approvalUrl}.` : '';\n"
+        "  return `${prefix}${approvalHint} Do not retry the same tool call automatically; wait for the user to "
+        "approve or change the task.`;\n"
+        "}\n"
+        "\n"
         "function blockedToolResult(reason: string, details: unknown) {\n"
         "  return {\n"
         '    content: [{ type: "text", text: reason }],\n'
@@ -548,8 +551,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         '  pi.on("input", async (event, ctx) => {\n'
         '    if (event.source === "extension") return { action: "continue" };\n'
         "    const response = await runGuard(\n"
-        '      { hook_event_name: "UserPromptSubmit", prompt: event.text, config_path: GUARD_CONFIG_PATH,\n'
-        "        guard_operation_open_key: guardOpenKey() },\n"
+        '      { hook_event_name: "UserPromptSubmit", prompt: event.text, config_path: GUARD_CONFIG_PATH },\n'
         "      ctx.cwd,\n"
         "    );\n"
         '    if (response.decision === "deny") {\n'
@@ -570,7 +572,6 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "        config_path: GUARD_CONFIG_PATH,\n"
         "        tool_name: event.toolName,\n"
         "        tool_input: toolInput,\n"
-        "        guard_operation_open_key: guardOpenKey(),\n"
         "      },\n"
         "      ctx.cwd,\n"
         "    );\n"
@@ -616,7 +617,6 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "        tool_input: toolInput,\n"
         "        stdout: toolOutput,\n"
         "        is_error: event.isError === true,\n"
-        "        guard_operation_open_key: guardOpenKey(),\n"
         "    };\n"
         "    if (sourceRef) {\n"
         "      guardPayload.guard_source_ref = sourceRef;\n"
@@ -637,10 +637,11 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    );\n"
         '    if (response.decision === "deny") {\n'
         '      const reason = response.reason ?? "Blocked by HOL Guard.";\n'
+        "      const modelReason = modelVisibleBlockedReason(reason);\n"
         "      const toolCallId = toolCallIdKey(event.toolCallId);\n"
-        "      if (toolCallId) blockedToolResults.set(toolCallId, reason);\n"
+        "      if (toolCallId) blockedToolResults.set(toolCallId, modelReason);\n"
         '      ctx.ui.notify(reason, "warning");\n'
-        "      return blockedToolResult(reason, event.details);\n"
+        "      return blockedToolResult(modelReason, event.details);\n"
         "    }\n"
         "    if (outputTruncated) {\n"
         '      if (response.model_output_action === "allow_original" &&\n'

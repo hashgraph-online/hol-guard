@@ -12,8 +12,8 @@ from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
 from codex_plugin_scanner.guard.adapters.pi_support import stable_suffix
+from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload
-from codex_plugin_scanner.guard.cli.commands_hook_runtime_review import _approval_open_key
 from codex_plugin_scanner.guard.cli.commands_support_codex_tool_output_messages import (
     _codex_tool_output_request_summary,
     _codex_tool_output_runtime_reason,
@@ -22,7 +22,9 @@ from codex_plugin_scanner.guard.cli.commands_support_codex_tool_output_messages 
 from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _approval_surface_policy_for_flow
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
+from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -77,12 +79,6 @@ class TestPiAdapterIdentity:
         assert flow["prompt_channel"] == "native-fallback"
         assert flow["auto_open_browser"] is True
         assert _approval_surface_policy_for_flow("auto-open-once", flow) == "auto-open-once"
-        assert (
-            _approval_open_key("pi", "pi:project:tool-a", {"guard_operation_open_key": "operation-1"})
-            == "pi-approval-center:operation-1"
-        )
-        assert _approval_open_key("pi", "pi:project:tool-a", {}) == "pi:project:tool-a"
-        assert _approval_open_key("codex", "codex:project:tool-a", {}) == "codex:project:tool-a"
 
     def test_unmanaged_approval_flow_keeps_browser_fallback_visible(self) -> None:
         flow = get_adapter("pi").approval_flow(managed_install=None)
@@ -347,7 +343,12 @@ class TestPiInstall:
         assert "const blockedToolResults = new Map<string, string>();" in text
         assert 'pi.on("message_end"' in text
         assert "const toolCallId = toolCallIdKey(event.toolCallId);" in text
-        assert "if (toolCallId) blockedToolResults.set(toolCallId, reason);" in text
+        assert "function modelVisibleBlockedReason(reason: string): string" in text
+        assert "Do not retry the same tool call automatically" in text
+        assert "const modelReason = modelVisibleBlockedReason(reason);" in text
+        assert "if (toolCallId) blockedToolResults.set(toolCallId, modelReason);" in text
+        assert "return blockedToolResult(modelReason, event.details);" in text
+        assert "return blockedToolResult(reason, event.details);" not in text
         assert "blockedToolResults.delete(toolCallId);" in text
         # Oversized tool results are passed to Guard by reference for full
         # review, not pre-emptively blocked.
@@ -570,6 +571,67 @@ class TestPiRuntime:
             "and merging stderr into stdout can forward real local secrets to Pi. If you only need "
             "the exit status, rerun without `2>&1` or keep stderr out of model-visible output."
         )
+
+    def test_pi_repeated_blocked_tool_output_reuses_pending_approval(self, tmp_path: Path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        command = 'cd /tmp/fix-skills-503-rb && rg "deps.config" src/api/server/internal/routes.ts 2>&1 | head -5'
+
+        def queue_for(output: str) -> list[dict[str, object]]:
+            payload = {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": command},
+                "stdout": output,
+            }
+            artifact = _codex_post_tool_output_artifact(
+                harness="pi",
+                payload=payload,
+                config_path="~/.pi/agent/settings.json",
+                source_scope="project",
+                cwd=tmp_path,
+                home_dir=tmp_path,
+            )
+            assert artifact is not None
+            return queue_blocked_approvals(
+                detection=HarnessDetection(
+                    harness="pi",
+                    installed=True,
+                    command_available=True,
+                    config_paths=("~/.pi/agent/settings.json",),
+                    artifacts=(artifact,),
+                ),
+                evaluation={
+                    "artifacts": [
+                        {
+                            "artifact_id": artifact.artifact_id,
+                            "artifact_name": artifact.name,
+                            "artifact_hash": artifact_hash(artifact),
+                            "policy_action": "require-reapproval",
+                            "changed_fields": ["tool_response"],
+                            "artifact_type": artifact.artifact_type,
+                            "source_scope": artifact.source_scope,
+                            "config_path": artifact.config_path,
+                            "launch_target": artifact.metadata["command_text"],
+                            "risk_summary": artifact.metadata["runtime_request_summary"],
+                            "action_envelope_json": normalize_harness_payload(
+                                "pi",
+                                "PostToolUse",
+                                payload,
+                                workspace=tmp_path,
+                                home_dir=tmp_path,
+                            ).to_dict(),
+                        }
+                    ]
+                },
+                store=store,
+                approval_center_url="http://127.0.0.1:5474",
+            )
+
+        first = queue_for("sk-live-abcdefghijklmnopqrstuvwxyz1234567890")
+        second = queue_for("sk-live-abcdefghijklmnopqrstuvwxyz1234567899")
+
+        assert first[0]["request_id"] == second[0]["request_id"]
+        assert store.get_approval_request(str(first[0]["request_id"]))["dedupe_count"] == 2
 
     def test_pi_block_emits_native_json_and_stderr(self, tmp_path: Path) -> None:
         store = GuardStore(tmp_path / ".hol-guard")
