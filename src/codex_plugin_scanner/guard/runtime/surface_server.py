@@ -266,7 +266,10 @@ class GuardSurfaceRuntime:
             approval_center_url=approval_center_url,
             browser_url=_browser_url_for_review(browser_url, review_url),
             approval_surface_policy=approval_surface_policy,
-            open_key=open_key or str(waiting_operation["operation_id"]),
+            open_key=_approval_surface_open_key(
+                queued,
+                fallback=open_key or str(waiting_operation["operation_id"]),
+            ),
             opener=opener,
         )
         return {
@@ -461,6 +464,14 @@ def _browser_url_for_review(browser_url: str | None, review_url: str | None) -> 
             parsed_review._replace(fragment=_merged_fragment(parsed_review.fragment, parsed_browser.fragment))
         )
     return review_url
+
+
+def _approval_surface_open_key(queued: list[dict[str, object]], *, fallback: str) -> str:
+    for item in queued:
+        request_id = item.get("request_id")
+        if isinstance(request_id, str) and request_id.strip():
+            return f"approval-request:{request_id.strip()}"
+    return fallback
 
 
 def _same_origin(left: ParseResult, right: ParseResult) -> bool:

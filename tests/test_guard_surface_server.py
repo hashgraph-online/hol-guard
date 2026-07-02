@@ -2549,9 +2549,10 @@ class TestGuardSurfaceServer:
             with urllib.request.urlopen(first_block_request, timeout=5) as response:
                 first_block_response = json.loads(response.read().decode("utf-8"))
 
+            second_block_payload = {**block_payload, "open_key": "run-operation-retry"}
             second_block_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/operations/block",
-                data=json.dumps(block_payload).encode("utf-8"),
+                data=json.dumps(second_block_payload).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
                     "X-Guard-Token": auth_token,
@@ -2570,6 +2571,7 @@ class TestGuardSurfaceServer:
         assert len(first_block_response["approval_requests"]) == 1
         assert first_items[0]["item_type"] == "approval_requested"
         first_request_id = first_block_response["approval_requests"][0]["request_id"]
+        assert second_block_response["approval_requests"][0]["request_id"] == first_request_id
         assert first_items[0]["payload"]["approval_requests"][0]["request_id"] == first_request_id
         assert first_block_response["surface"]["opened"] is True
         assert second_block_response["surface"]["opened"] is False
