@@ -880,9 +880,6 @@ def _cisco_trust_layer(
             if value is not None:
                 safe_metadata[key] = value
     safe_metadata["attestationStatus"] = "unsigned"
-    safe_metadata["evidenceProvenance"] = "client_unverified"
-    safe_metadata["scannerResolutionSource"] = "local_reported"
-    safe_metadata["scannerVerificationRequired"] = "guard_cloud"
     safe_metadata["evidenceSchemaVersion"] = "guard-aibom-cisco-scanner-evidence.v1"
     evidence_payload = _cisco_evidence_payload(
         layer_id=layer_id,
