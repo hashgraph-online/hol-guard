@@ -28,7 +28,7 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
 ]
 dependencies = [
-    "rich>=14.0,<15",
+    "rich>=14.0,<16",
     "cryptography>=49.0.0",
     "keyring>=25.0",
     "packaging>=24.0",
