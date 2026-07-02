@@ -6,7 +6,12 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from .remote_pairing_constants import REMOTE_PAIRING_CODE_ALPHABET
+from .remote_pairing_constants import (
+    REMOTE_PAIRING_CODE_ALPHABET,
+    REMOTE_PAIRING_CODE_MAX_LENGTH,
+    REMOTE_PAIRING_CODE_MIN_LENGTH,
+    REMOTE_PAIRING_CODE_PREFIX,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,7 +98,7 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     (
         "remote-pairing-code",
         re.compile(
-            rf"\bHLG-[{REMOTE_PAIRING_CODE_ALPHABET}]{{6}}\b",
+            rf"\b{REMOTE_PAIRING_CODE_PREFIX}-[{REMOTE_PAIRING_CODE_ALPHABET}]{{{REMOTE_PAIRING_CODE_MIN_LENGTH},{REMOTE_PAIRING_CODE_MAX_LENGTH}}}\b",
             re.IGNORECASE,
         ),
         "HLG-******",
