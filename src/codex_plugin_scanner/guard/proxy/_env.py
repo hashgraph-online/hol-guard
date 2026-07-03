@@ -19,5 +19,6 @@ def _build_scrubbed_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     """
     env = {k: v for k, v in os.environ.items() if k not in _GUARD_TOKEN_ENV_VARS}
     if extra:
-        env.update(extra)
+        # Filter extra to prevent re-injecting scrubbed tokens via caller-provided env.
+        env.update({k: v for k, v in extra.items() if k not in _GUARD_TOKEN_ENV_VARS})
     return env

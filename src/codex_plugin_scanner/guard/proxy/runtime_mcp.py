@@ -27,7 +27,6 @@ from ..mcp_tool_calls import (
     tool_call_risk_summary,
 )
 from ..models import GuardAction, HarnessDetection
-from ._env import _build_scrubbed_env
 from ..policy.engine import build_decision_v2
 from ..runtime.browser_mcp_intent import normalize_browser_mcp_intent
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
@@ -36,6 +35,7 @@ from ..runtime.signals import RiskSeverityLabel, RiskSignalV2
 from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
+from ._env import _build_scrubbed_env
 from .stdio import (
     ProxyIoTimeoutError,
     _blocked_tool_response,

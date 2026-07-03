@@ -35,6 +35,12 @@ class TestBuildScrubbedEnv:
         env = _build_scrubbed_env({"MCP_SERVER_PORT": "8080"})
         assert env["MCP_SERVER_PORT"] == "8080"
 
+    def test_extra_env_cannot_reinject_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Tokens in extra are also scrubbed — defense-in-depth against re-injection."""
+        monkeypatch.setenv("HERMES_GUARD_TOKEN", "secret")
+        env = _build_scrubbed_env({"HERMES_GUARD_TOKEN": "still-secret"})
+        assert "HERMES_GUARD_TOKEN" not in env, "Caller-provided extra env must not re-inject scrubbed tokens"
+
     def test_no_extra_returns_clean_dict(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("HERMES_GUARD_TOKEN", "secret")
         env = _build_scrubbed_env()
@@ -48,9 +54,7 @@ class TestBuildScrubbedEnv:
 class TestStdioProxyScrubbing:
     """Integration test: StdioGuardProxy._start_process uses scrubbed env."""
 
-    def test_stdio_proxy_scrubs_hermes_guard_token(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_stdio_proxy_scrubs_hermes_guard_token(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """Verify that _start_process strips HERMES_GUARD_TOKEN from the child env."""
         from codex_plugin_scanner.guard.proxy.stdio import StdioGuardProxy
 
@@ -82,26 +86,63 @@ class TestStdioProxyScrubbing:
             )
             proxy._start_process()
 
-        assert "HERMES_GUARD_TOKEN" not in captured_env, (
-            "HERMES_GUARD_TOKEN leaked into stdio proxy subprocess env"
-        )
+        assert "HERMES_GUARD_TOKEN" not in captured_env, "HERMES_GUARD_TOKEN leaked into stdio proxy subprocess env"
         assert captured_env.get("PATH") == "/usr/bin:/bin"
 
 
 class TestRuntimeMcpProxyScrubbing:
     """Integration test: RuntimeMcpGuardProxy._start_process uses scrubbed env."""
 
-    def test_runtime_mcp_proxy_passes_explicit_scrubbed_env(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """Verify _start_process passes env=_build_scrubbed_env() to subprocess.Popen."""
-        import inspect
-
+    def test_runtime_mcp_proxy_scrubs_hermes_guard_token(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """Verify that _start_process strips HERMES_GUARD_TOKEN from the child env."""
+        from codex_plugin_scanner.guard.adapters.base import HarnessContext
         from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
 
-        source = inspect.getsource(RuntimeMcpGuardProxy._start_process)
-        assert "env=_build_scrubbed_env()" in source, (
-            "RuntimeMcpGuardProxy._start_process must pass env=_build_scrubbed_env() "
-            "to subprocess.Popen — without it, os.environ (including inherited "
-            "HERMES_GUARD_TOKEN) leaks to user MCP servers"
+        monkeypatch.setenv("HERMES_GUARD_TOKEN", "leak-me-please")
+        monkeypatch.setenv("PATH", "/usr/bin:/bin")
+
+        captured_env: dict[str, str] = {}
+
+        class FakePopen:
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                captured_env.update(kwargs.get("env", {}))
+                self.stdin = None
+                self.stdout = None
+                self.returncode = 0
+
+            def poll(self) -> int:
+                return 0
+
+            def wait(self, timeout: float | None = None) -> int:
+                return 0
+
+            def terminate(self) -> None:
+                pass
+
+        context = HarnessContext(
+            home_dir=tmp_path,
+            workspace_dir=tmp_path,
+            guard_home=tmp_path,
         )
+
+        # Build minimal mocks for required constructor args
+        store = type("MockStore", (), {"get_managed_install": lambda self, h: None})()
+        config = type("MockConfig", (), {})()
+
+        with mock.patch("codex_plugin_scanner.guard.proxy.runtime_mcp.subprocess.Popen", FakePopen):
+            proxy = RuntimeMcpGuardProxy(
+                harness="codex",
+                server_name="test",
+                command=["echo", "hello"],
+                context=context,
+                store=store,
+                config=config,
+                source_scope="project",
+                config_path=str(tmp_path / ".mcp.json"),
+            )
+            proxy._start_process()
+
+        assert "HERMES_GUARD_TOKEN" not in captured_env, (
+            "HERMES_GUARD_TOKEN leaked into runtime_mcp proxy subprocess env"
+        )
+        assert captured_env.get("PATH") == "/usr/bin:/bin"
