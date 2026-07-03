@@ -101,18 +101,28 @@ class HermesHarnessAdapter(HarnessAdapter):
         )
         config_yaml_path = context.home_dir / ".hermes" / "config.yaml"
         previous_managed_names = _read_managed_server_names(context)
-        new_managed_names, previous_guard_section = _write_guard_to_hermes_config_yaml(
+        new_managed_names, previous_guard_section, config_written = _write_guard_to_hermes_config_yaml(
             context=context,
             config_yaml_path=config_yaml_path,
             overlay_servers=overlay_servers,
             managed_names=previous_managed_names,
         )
-        # Only update the manifest if config.yaml was actually written.
-        # If the write bailed out (parse error, missing PyYAML), preserve the
-        # existing manifest so uninstall can still clean up prior entries.
-        if new_managed_names:
+        # Update manifests if config.yaml was actually written (not bailed out).
+        # We always write both manifests — even if new_managed_names is empty
+        # (no MCP servers to proxy) or previous_guard_section is None (no
+        # existing guard section), because the guard section was still written
+        # and uninstall needs to know to remove it.
+        if config_written:
+            # Always write the manifest — even an empty list clears stale
+            # entries from a prior install that had more servers.
             _write_managed_server_names(context, new_managed_names)
-            _write_previous_guard_section(context, previous_guard_section)
+            # On reinstall, don't overwrite the saved previous guard section —
+            # the one from the first install captured the user's original. If
+            # we overwrote it with the Guard-managed section, uninstall would
+            # restore Guard's defaults instead of removing the section.
+            existing_previous_guard = _previous_guard_section_path(context)
+            if not existing_previous_guard.exists():
+                _write_previous_guard_section(context, previous_guard_section)
         manifest = {
             "harness": self.harness,
             "active": True,
@@ -1232,7 +1242,7 @@ def _write_guard_to_hermes_config_yaml(
     config_yaml_path: Path,
     overlay_servers: dict[str, dict[str, object]],
     managed_names: list[str],
-) -> tuple[list[str], dict[str, object] | None]:
+) -> tuple[list[str], dict[str, object] | None, bool]:
     """Write Guard-managed MCP proxy entries and guard section into Hermes config.yaml.
 
     Replaces Guard-managed entries (identified by ``managed_names`` from the
@@ -1240,9 +1250,11 @@ def _write_guard_to_hermes_config_yaml(
     MCP servers — including any that happen to start with ``guard-`` — are
     preserved.
 
-    Returns a tuple of ``(new_managed_names, previous_guard_section)``.
+    Returns a tuple of ``(new_managed_names, previous_guard_section, config_written)``.
     ``previous_guard_section`` is the user's existing ``guard`` section (or
     ``None`` if there wasn't one) so that ``uninstall()`` can restore it.
+    ``config_written`` is ``True`` if config.yaml was written, ``False`` if the
+    write bailed out (parse error, missing PyYAML).
     """
     config_yaml_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1251,7 +1263,7 @@ def _write_guard_to_hermes_config_yaml(
     if _yaml is None:
         # Without PyYAML we can't safely read or round-trip YAML; bail out
         # without claiming to have written anything.
-        return [], None
+        return [], None, False
 
     if config_yaml_path.exists():
         try:
@@ -1263,10 +1275,10 @@ def _write_guard_to_hermes_config_yaml(
                 pass
             else:
                 # Config contains a scalar/list — bail out, don't risk clobbering.
-                return [], None
+                return [], None, False
         except Exception:
             # Parse error — bail out rather than overwriting the user's config.
-            return [], None
+            return [], None, False
 
     # Capture the user's existing guard section so uninstall can restore it.
     previous_guard = existing.get(_GUARD_CONFIG_KEY)
@@ -1307,7 +1319,7 @@ def _write_guard_to_hermes_config_yaml(
         _yaml.dump(existing, default_flow_style=False, sort_keys=False),
         encoding="utf-8",
     )
-    return new_managed, previous_guard
+    return new_managed, previous_guard, True
 
 
 def _remove_guard_from_hermes_config_yaml(
