@@ -17,6 +17,7 @@ from ..store import GuardStore
 
 LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = 125
 LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = 25
+LOCAL_REQUEST_CURSORLESS_FALLBACK_LIMIT = 500
 _LOCAL_REQUEST_SNAPSHOT_CURSOR_SYNC_KEY = "guard_command_local_request_snapshot_cursor"
 
 
@@ -78,7 +79,18 @@ def _local_request_snapshot_items_for_status(
     if not rows and isinstance(cursor, str) and cursor:
         cursor = None
         rows = store.list_approval_requests(status=status, limit=limit + 1)
-    for item in rows[:limit]:
+    cursor_supported = True
+    if len(rows) > limit:
+        rows, cursor_supported = _expand_cursorless_small_backlog(
+            store,
+            status=status,
+            rows=rows,
+            limit=limit,
+        )
+        if not cursor_supported:
+            cursor = None
+    page_limit = min(limit if cursor_supported else LOCAL_REQUEST_CURSORLESS_FALLBACK_LIMIT, len(rows))
+    for item in rows[:page_limit]:
         request_id = item.get("request_id")
         if not isinstance(request_id, str) or not request_id:
             continue
@@ -110,10 +122,33 @@ def _local_request_snapshot_items_for_status(
                 "resolvedAt": str(resolved_at) if isinstance(resolved_at, str) and resolved_at else None,
             }
         )
-    if rows:
+    if cursor_supported and len(rows) > limit:
         cursor_state[status] = _local_request_snapshot_next_cursor(rows, limit)
         _save_local_request_snapshot_cursor_state(store, cursor_state)
-    return items, cursor is None and len(rows) <= limit
+    complete_limit = limit if cursor_supported else LOCAL_REQUEST_CURSORLESS_FALLBACK_LIMIT
+    return items, cursor is None and len(rows) <= complete_limit
+
+
+def _expand_cursorless_small_backlog(
+    store: GuardStore,
+    *,
+    status: str,
+    rows: list[dict[str, object]],
+    limit: int,
+) -> tuple[list[dict[str, object]], bool]:
+    next_cursor = _local_request_snapshot_next_cursor(rows, limit)
+    if next_cursor is None or not rows:
+        return rows, True
+    probe = store.list_approval_requests(status=status, limit=1, cursor=next_cursor)
+    first_request_id = rows[0].get("request_id")
+    probe_request_id = probe[0].get("request_id") if probe else None
+    if not isinstance(first_request_id, str) or probe_request_id != first_request_id:
+        return rows, True
+    fallback_rows = store.list_approval_requests(
+        status=status,
+        limit=LOCAL_REQUEST_CURSORLESS_FALLBACK_LIMIT + 1,
+    )
+    return fallback_rows, False
 
 
 def _local_request_snapshot_cursor_state(store: GuardStore) -> dict[str, object]:
