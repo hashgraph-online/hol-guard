@@ -122,8 +122,11 @@ def _local_request_snapshot_items_for_status(
                 "resolvedAt": str(resolved_at) if isinstance(resolved_at, str) and resolved_at else None,
             }
         )
-    if cursor_supported and len(rows) > limit:
-        cursor_state[status] = _local_request_snapshot_next_cursor(rows, limit)
+    if cursor_supported:
+        if len(rows) > limit:
+            cursor_state[status] = _local_request_snapshot_next_cursor(rows, limit)
+        else:
+            cursor_state.pop(status, None)
         _save_local_request_snapshot_cursor_state(store, cursor_state)
     complete_limit = limit if cursor_supported else LOCAL_REQUEST_CURSORLESS_FALLBACK_LIMIT
     return items, cursor is None and len(rows) <= complete_limit
