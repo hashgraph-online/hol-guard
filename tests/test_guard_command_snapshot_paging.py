@@ -6,7 +6,7 @@ import base64
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime import command_executors
+from codex_plugin_scanner.guard.runtime import command_executors, local_request_snapshots
 
 
 class PagingStore:
@@ -72,6 +72,48 @@ def _approval_request_row(index: int) -> dict[str, object]:
             "tool_name": "Bash",
         },
     }
+
+
+def test_local_request_snapshot_payload_stays_under_cloud_byte_budget(tmp_path: Path) -> None:
+    class HugePayloadStore(PagingStore):
+        def list_approval_requests(
+            self,
+            *,
+            status: str | None = "pending",
+            harness: str | None = None,
+            limit: int | None = 50,
+            cursor: str | None = None,
+            search: str | None = None,
+        ) -> list[dict[str, object]]:
+            rows = super().list_approval_requests(
+                status=status,
+                harness=harness,
+                limit=limit,
+                cursor=cursor,
+                search=search,
+            )
+            for row in rows:
+                row["risk_summary"] = "SECRET_TOKEN=" + ("x" * 20_000)
+                row["why_now"] = "review context " + ("y" * 20_000)
+                envelope = row["action_envelope_json"]
+                if isinstance(envelope, dict):
+                    envelope["command"] = "npm install minimist@1.2.8 " + ("--flag value " * 2_000)
+            return rows
+
+    store = HugePayloadStore(tmp_path / "guard-home")
+    store.payloads["cloud_receipt_redaction_level"] = {"level": "none"}
+    payload = command_executors._local_request_snapshot_payload(store)
+
+    payload_size = len(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+    assert payload_size <= local_request_snapshots.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES
+    assert payload["pendingComplete"] is False
+    assert payload["pendingCount"] == command_executors.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
+    first_request = payload["requests"][0]
+    assert isinstance(first_request, dict)
+    request_payload = first_request["requestPayload"]
+    assert isinstance(request_payload, dict)
+    assert "truncated" in str(request_payload["risk_summary"])
+    assert "truncated" in str(request_payload["command_text"])
 
 
 def test_local_request_snapshot_pages_large_pending_backlog(tmp_path: Path) -> None:
