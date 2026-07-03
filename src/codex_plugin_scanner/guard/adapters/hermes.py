@@ -1,7 +1,7 @@
 """Hermes harness adapter.
 
 Discovers Hermes skills (SKILL.md + subdirectory files) and MCP servers
-configured in ~/.hermes/config.yaml or ~/.hermes/mcp_servers.json.
+configured in the Hermes config directory (default ~/.hermes, or $HERMES_HOME).
 """
 
 from __future__ import annotations
@@ -9,6 +9,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -60,6 +61,19 @@ _HERMES_MANAGED_APPROVAL_TIER = "native-or-center"
 _HERMES_MANAGED_PROMPT_CHANNEL = "native"
 
 
+def _hermes_home(context: HarnessContext) -> Path:
+    """Resolve the Hermes home directory.
+
+    Hermes reads its config from ``get_hermes_home()`` which checks the
+    ``HERMES_HOME`` env var first, falling back to ``~/.hermes``.  Guard must
+    use the same resolution so config.yaml is written where Hermes expects it.
+    """
+    env_home = os.environ.get("HERMES_HOME")
+    if env_home and env_home.strip():
+        return Path(env_home.strip())
+    return context.home_dir / ".hermes"
+
+
 def _manifest_notes(payload: dict[str, object]) -> list[str]:
     notes = payload.get("notes")
     if not isinstance(notes, list):
@@ -91,7 +105,7 @@ class HermesHarnessAdapter(HarnessAdapter):
             overlay_path=overlay_path,
             pretool_path=pretool_path,
         )
-        source_configs = _load_mcp_server_sources(context.home_dir / ".hermes")
+        source_configs = _load_mcp_server_sources(_hermes_home(context))
         overlay_servers = _overlay_servers(context=context, source_configs=source_configs)
         cloud_identity = cloud_agent_identity_hints(context, runtime=self.harness)
         overlay_path.write_text(json.dumps(overlay_servers, indent=2) + "\n", encoding="utf-8")
@@ -99,7 +113,7 @@ class HermesHarnessAdapter(HarnessAdapter):
             json.dumps(_pretool_payload(context=context), indent=2) + "\n",
             encoding="utf-8",
         )
-        config_yaml_path = context.home_dir / ".hermes" / "config.yaml"
+        config_yaml_path = _hermes_home(context) / "config.yaml"
         previous_managed_names = _read_managed_server_names(context)
         new_managed_names, previous_guard_section, config_written = _write_guard_to_hermes_config_yaml(
             context=context,
@@ -165,7 +179,7 @@ class HermesHarnessAdapter(HarnessAdapter):
             if path.exists():
                 path.unlink()
                 removed_paths.append(str(path))
-        config_yaml_path = context.home_dir / ".hermes" / "config.yaml"
+        config_yaml_path = _hermes_home(context) / "config.yaml"
         managed_names = _read_managed_server_names(context)
         previous_guard = _read_previous_guard_section(context)
         _remove_guard_from_hermes_config_yaml(
@@ -250,7 +264,7 @@ class HermesHarnessAdapter(HarnessAdapter):
         }
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
-        hermes_home = context.home_dir / ".hermes"
+        hermes_home = _hermes_home(context)
         artifacts: list[GuardArtifact] = []
         found_paths: list[str] = []
 
