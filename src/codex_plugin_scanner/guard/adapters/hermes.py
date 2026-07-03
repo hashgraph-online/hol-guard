@@ -99,10 +99,25 @@ class HermesHarnessAdapter(HarnessAdapter):
             json.dumps(_pretool_payload(context=context), indent=2) + "\n",
             encoding="utf-8",
         )
+        config_yaml_path = context.home_dir / ".hermes" / "config.yaml"
+        previous_managed_names = _read_managed_server_names(context)
+        new_managed_names, previous_guard_section = _write_guard_to_hermes_config_yaml(
+            context=context,
+            config_yaml_path=config_yaml_path,
+            overlay_servers=overlay_servers,
+            managed_names=previous_managed_names,
+        )
+        # Only update the manifest if config.yaml was actually written.
+        # If the write bailed out (parse error, missing PyYAML), preserve the
+        # existing manifest so uninstall can still clean up prior entries.
+        if new_managed_names:
+            _write_managed_server_names(context, new_managed_names)
+            _write_previous_guard_section(context, previous_guard_section)
         manifest = {
             "harness": self.harness,
             "active": True,
             "config_path": str(overlay_path),
+            "hermes_config_yaml_path": str(config_yaml_path),
             **shim_manifest,
             "install_state": install_state,
             "managed_root": str(managed_root),
@@ -117,6 +132,7 @@ class HermesHarnessAdapter(HarnessAdapter):
             "servers": _manifest_servers(source_configs),
             "notes": [
                 "Guard generated a Hermes MCP overlay and pre-tool hook bundle.",
+                "Guard wrote Guard-managed MCP proxy entries into the Hermes config.yaml.",
                 *_manifest_notes(shim_manifest),
             ],
         }
@@ -139,9 +155,22 @@ class HermesHarnessAdapter(HarnessAdapter):
             if path.exists():
                 path.unlink()
                 removed_paths.append(str(path))
-        if manifest_path.exists():
-            manifest_path.unlink()
-            removed_paths.append(str(manifest_path))
+        config_yaml_path = context.home_dir / ".hermes" / "config.yaml"
+        managed_names = _read_managed_server_names(context)
+        previous_guard = _read_previous_guard_section(context)
+        _remove_guard_from_hermes_config_yaml(
+            config_yaml_path=config_yaml_path,
+            managed_names=managed_names,
+            previous_guard=previous_guard,
+        )
+        managed_servers_manifest = _managed_servers_manifest_path(context)
+        if managed_servers_manifest.exists():
+            managed_servers_manifest.unlink()
+            removed_paths.append(str(managed_servers_manifest))
+        previous_guard_manifest = _previous_guard_section_path(context)
+        if previous_guard_manifest.exists():
+            previous_guard_manifest.unlink()
+            removed_paths.append(str(previous_guard_manifest))
         return {
             "harness": self.harness,
             "active": False,
@@ -149,7 +178,7 @@ class HermesHarnessAdapter(HarnessAdapter):
             **shim_manifest,
             "removed_paths": removed_paths,
             "notes": [
-                "Guard removed the managed Hermes overlay bundle and kept user Hermes config untouched.",
+                "Guard removed the managed Hermes overlay bundle and cleaned Guard-managed entries from config.yaml.",
                 *_manifest_notes(shim_manifest),
             ],
         }
@@ -947,6 +976,8 @@ def _load_mcp_server_sources(hermes_home: Path) -> dict[str, dict[str, object]]:
         for name, config in _parse_mcp_from_yaml(yaml_path).items():
             if config.get("enabled", True) is False:
                 continue
+            if name.startswith(_GUARD_MCP_SERVER_PREFIX):
+                continue
             sources[f"yaml:{name}"] = {
                 "name": name,
                 "source": "yaml",
@@ -957,6 +988,8 @@ def _load_mcp_server_sources(hermes_home: Path) -> dict[str, dict[str, object]]:
     if json_path.is_file():
         for name, config in _parse_mcp_from_json(json_path).items():
             if config.get("enabled", True) is False:
+                continue
+            if name.startswith(_GUARD_MCP_SERVER_PREFIX):
                 continue
             sources[f"json:{name}"] = {
                 "name": name,
@@ -1081,6 +1114,243 @@ def _manifest_env(env: object) -> dict[str, str]:
         for key, value in env.items()
         if isinstance(key, str) and isinstance(value, (str, int, float, bool))
     }
+
+
+# Marker prefix for Guard-managed MCP server names in Hermes config.yaml.
+# Using a prefix makes it easy to identify Guard entries while remaining
+# distinct from user-configured servers that might coincidentally start with
+# the same prefix.  The manifest file is the source of truth for which
+# entries Guard owns — the prefix alone is not sufficient because a user
+# may have pre-existing servers named ``guard-*``.
+_GUARD_MCP_SERVER_PREFIX = "guard-"
+
+# Key used for the Guard section in Hermes config.yaml.
+_GUARD_CONFIG_KEY = "guard"
+
+# Default Guard Cloud consumer API base URL.  Used when the issuer cannot be
+# resolved from the local Guard store (e.g. not yet connected).
+_DEFAULT_GUARD_CONSUMER_BASE_URL = "https://hol.org/api/v1/consumer"
+
+# State key used by the Guard store for the OAuth local credentials payload.
+_OAUTH_LOCAL_CREDENTIALS_STATE_KEY = "oauth_local_credentials"
+
+
+def _resolve_guard_consumer_base_url(context: HarnessContext) -> str:
+    """Resolve the Guard Cloud consumer API base URL from the local Guard store.
+
+    Reads the OAuth issuer from ``guard.db`` and derives the consumer API URL.
+    Falls back to the default ``hol.org`` endpoint when the issuer cannot be
+    resolved (e.g. not yet connected).
+    """
+    db_path = context.guard_home / "guard.db"
+    if not db_path.exists():
+        return _DEFAULT_GUARD_CONSUMER_BASE_URL
+    try:
+        import sqlite3
+
+        db_uri = f"{db_path.resolve().as_uri()}?mode=ro"
+        connection = sqlite3.connect(db_uri, uri=True)
+        try:
+            row = connection.execute(
+                "select payload_json from sync_state where state_key = ?",
+                (_OAUTH_LOCAL_CREDENTIALS_STATE_KEY,),
+            ).fetchone()
+        finally:
+            connection.close()
+    except Exception:
+        return _DEFAULT_GUARD_CONSUMER_BASE_URL
+    if row is None:
+        return _DEFAULT_GUARD_CONSUMER_BASE_URL
+    try:
+        payload = json.loads(str(row[0]))
+    except (json.JSONDecodeError, TypeError):
+        return _DEFAULT_GUARD_CONSUMER_BASE_URL
+    issuer = payload.get("issuer") if isinstance(payload, dict) else None
+    if not isinstance(issuer, str) or not issuer.strip():
+        return _DEFAULT_GUARD_CONSUMER_BASE_URL
+    # Derive the consumer API base URL from the issuer origin.
+    # The issuer is a full URL like https://hol.org — the consumer API is at
+    # {origin}/api/v1/consumer.
+    from urllib.parse import urlsplit
+
+    parsed = urlsplit(issuer.strip())
+    if not parsed.scheme or not parsed.netloc:
+        return _DEFAULT_GUARD_CONSUMER_BASE_URL
+    return f"{parsed.scheme}://{parsed.netloc}/api/v1/consumer"
+
+
+# Filename under the managed root that records which config.yaml mcp_servers
+# entries were created by Guard.  This avoids deleting user-owned servers that
+# happen to share the ``guard-`` prefix.
+_GUARD_MANAGED_SERVERS_MANIFEST = "managed-servers.json"
+
+# Filename under the managed root that records the user's existing guard
+# section so it can be restored on uninstall.
+_GUARD_PREVIOUS_SECTION_MANIFEST = "previous-guard-section.json"
+
+
+def _managed_servers_manifest_path(context: HarnessContext) -> Path:
+    return _managed_root(context) / _GUARD_MANAGED_SERVERS_MANIFEST
+
+
+def _read_managed_server_names(context: HarnessContext) -> list[str]:
+    path = _managed_servers_manifest_path(context)
+    data = _json_payload(path)
+    names = data.get("servers")
+    if not isinstance(names, list):
+        return []
+    return [str(n) for n in names if isinstance(n, str)]
+
+
+def _write_managed_server_names(context: HarnessContext, names: list[str]) -> None:
+    path = _managed_servers_manifest_path(context)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"servers": names}, indent=2) + "\n", encoding="utf-8")
+
+
+def _previous_guard_section_path(context: HarnessContext) -> Path:
+    return _managed_root(context) / _GUARD_PREVIOUS_SECTION_MANIFEST
+
+
+def _read_previous_guard_section(context: HarnessContext) -> dict[str, object] | None:
+    data = _json_payload(_previous_guard_section_path(context))
+    section = data.get("guard")
+    if not isinstance(section, dict):
+        return None
+    return section
+
+
+def _write_previous_guard_section(context: HarnessContext, section: dict[str, object] | None) -> None:
+    path = _previous_guard_section_path(context)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"guard": section}, indent=2) + "\n", encoding="utf-8")
+
+
+def _write_guard_to_hermes_config_yaml(
+    *,
+    context: HarnessContext,
+    config_yaml_path: Path,
+    overlay_servers: dict[str, dict[str, object]],
+    managed_names: list[str],
+) -> tuple[list[str], dict[str, object] | None]:
+    """Write Guard-managed MCP proxy entries and guard section into Hermes config.yaml.
+
+    Replaces Guard-managed entries (identified by ``managed_names`` from the
+    manifest, not by prefix) with the current overlay servers.  User-configured
+    MCP servers — including any that happen to start with ``guard-`` — are
+    preserved.
+
+    Returns a tuple of ``(new_managed_names, previous_guard_section)``.
+    ``previous_guard_section`` is the user's existing ``guard`` section (or
+    ``None`` if there wasn't one) so that ``uninstall()`` can restore it.
+    """
+    config_yaml_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Load existing config.
+    existing: dict[str, Any] = {}
+    if _yaml is None:
+        # Without PyYAML we can't safely read or round-trip YAML; bail out
+        # without claiming to have written anything.
+        return [], None
+
+    if config_yaml_path.exists():
+        try:
+            raw = _yaml.safe_load(config_yaml_path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                existing = raw
+            elif raw is None:
+                # Empty YAML document — treat as empty config, not a clobber risk.
+                pass
+            else:
+                # Config contains a scalar/list — bail out, don't risk clobbering.
+                return [], None
+        except Exception:
+            # Parse error — bail out rather than overwriting the user's config.
+            return [], None
+
+    # Capture the user's existing guard section so uninstall can restore it.
+    previous_guard = existing.get(_GUARD_CONFIG_KEY)
+    if not isinstance(previous_guard, dict):
+        previous_guard = None
+
+    # Build the new mcp_servers dict: keep user servers, remove old Guard entries
+    # (identified by the manifest, not by prefix — avoids deleting user servers
+    # that happen to start with the same prefix).
+    managed_set = set(managed_names)
+    mcp_servers = existing.get("mcp_servers")
+    if not isinstance(mcp_servers, dict):
+        mcp_servers = {}
+    cleaned: dict[str, Any] = {
+        name: cfg for name, cfg in mcp_servers.items() if isinstance(name, str) and name not in managed_set
+    }
+    # Add current overlay servers with Guard prefix.
+    new_managed: list[str] = []
+    for overlay_name, overlay_config in overlay_servers.items():
+        key = f"{_GUARD_MCP_SERVER_PREFIX}{overlay_name}"
+        cleaned[key] = overlay_config
+        new_managed.append(key)
+    existing["mcp_servers"] = cleaned
+
+    # Write the guard section so Hermes's guard_runtime_policy.py activates.
+    existing[_GUARD_CONFIG_KEY] = {
+        "enabled": True,
+        "base_url": _resolve_guard_consumer_base_url(context),
+        "timeout_seconds": 5,
+        "cache_ttl_seconds": 60,
+        "fail_open": True,
+        "token_env_var": "HERMES_GUARD_TOKEN",
+        "enforce_mcp_tools": True,
+        "pain_signals_enabled": True,
+    }
+
+    config_yaml_path.write_text(
+        _yaml.dump(existing, default_flow_style=False, sort_keys=False),
+        encoding="utf-8",
+    )
+    return new_managed, previous_guard
+
+
+def _remove_guard_from_hermes_config_yaml(
+    *,
+    config_yaml_path: Path,
+    managed_names: list[str],
+    previous_guard: dict[str, object] | None = None,
+) -> None:
+    """Remove Guard-managed entries from Hermes config.yaml.
+
+    Removes the MCP server entries listed in ``managed_names`` (from the
+    manifest) and restores the user's previous ``guard`` section if one was
+    saved during install.  User-configured servers — even those that happen
+    to start with ``guard-`` — are preserved.
+    """
+    if not config_yaml_path.exists():
+        return
+    if _yaml is None:
+        return
+
+    try:
+        raw = _yaml.safe_load(config_yaml_path.read_text(encoding="utf-8"))
+    except Exception:
+        return
+    if not isinstance(raw, dict):
+        return
+
+    managed_set = set(managed_names)
+    mcp_servers = raw.get("mcp_servers")
+    if isinstance(mcp_servers, dict):
+        cleaned = {name: cfg for name, cfg in mcp_servers.items() if isinstance(name, str) and name not in managed_set}
+        raw["mcp_servers"] = cleaned
+
+    # Restore the user's previous guard section, or remove it if there wasn't one.
+    if previous_guard is not None:
+        raw[_GUARD_CONFIG_KEY] = previous_guard
+    else:
+        raw.pop(_GUARD_CONFIG_KEY, None)
+
+    config_yaml_path.write_text(
+        _yaml.dump(raw, default_flow_style=False, sort_keys=False),
+        encoding="utf-8",
+    )
 
 
 def _install_state(

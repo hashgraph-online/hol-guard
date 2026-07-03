@@ -89,6 +89,195 @@ def test_install_generates_guard_managed_overlay_and_pretool_files(tmp_path: Pat
     assert manifest["servers"]["yaml:remote-docs"]["headers"] == {"Authorization": "Bearer test-token"}
 
 
+def test_install_writes_guard_mcp_proxy_entries_to_config_yaml(tmp_path: Path):
+    """Guard install writes Guard-prefixed MCP proxy entries into ~/.hermes/config.yaml."""
+    import yaml as pyyaml
+
+    _write(
+        tmp_path / ".hermes" / "config.yaml",
+        ('mcp_servers:\n  github:\n    command: "npx"\n    args: ["-y", "@modelcontextprotocol/server-github"]\n'),
+    )
+    context = _ctx(tmp_path)
+    adapter = HermesHarnessAdapter()
+
+    adapter.install(context)
+
+    config_path = tmp_path / ".hermes" / "config.yaml"
+    config = pyyaml.safe_load(config_path.read_text(encoding="utf-8"))
+
+    # Guard-managed proxy entries should be prefixed with "guard-".
+    guard_servers = {k: v for k, v in config["mcp_servers"].items() if k.startswith("guard-")}
+    assert len(guard_servers) == 1
+    assert "guard-github" in guard_servers
+    assert guard_servers["guard-github"]["command"] == str(Path(sys.executable))
+
+    # User-configured servers should be preserved.
+    assert "github" in config["mcp_servers"]
+
+
+def test_install_writes_guard_section_to_config_yaml(tmp_path: Path):
+    """Guard install writes a guard section so Hermes's guard_runtime_policy.py activates."""
+    import yaml as pyyaml
+
+    _write(
+        tmp_path / ".hermes" / "config.yaml",
+        "mcp_servers:\n  github:\n    command: npx\n",
+    )
+    context = _ctx(tmp_path)
+    adapter = HermesHarnessAdapter()
+
+    adapter.install(context)
+
+    config_path = tmp_path / ".hermes" / "config.yaml"
+    config = pyyaml.safe_load(config_path.read_text(encoding="utf-8"))
+
+    assert "guard" in config
+    assert config["guard"]["enabled"] is True
+    assert config["guard"]["token_env_var"] == "HERMES_GUARD_TOKEN"
+    assert config["guard"]["enforce_mcp_tools"] is True
+
+
+def test_install_is_idempotent_for_config_yaml(tmp_path: Path):
+    """Running install twice should not duplicate Guard entries in config.yaml."""
+    import yaml as pyyaml
+
+    _write(
+        tmp_path / ".hermes" / "config.yaml",
+        "mcp_servers:\n  github:\n    command: npx\n",
+    )
+    context = _ctx(tmp_path)
+    adapter = HermesHarnessAdapter()
+
+    adapter.install(context)
+    adapter.install(context)
+
+    config_path = tmp_path / ".hermes" / "config.yaml"
+    config = pyyaml.safe_load(config_path.read_text(encoding="utf-8"))
+
+    guard_servers = [k for k in config["mcp_servers"] if k.startswith("guard-")]
+    assert len(guard_servers) == 1
+
+
+def test_uninstall_removes_guard_entries_from_config_yaml(tmp_path: Path):
+    """Uninstall should remove Guard-managed entries but preserve user servers."""
+    import yaml as pyyaml
+
+    _write(
+        tmp_path / ".hermes" / "config.yaml",
+        "mcp_servers:\n  github:\n    command: npx\n",
+    )
+    context = _ctx(tmp_path)
+    adapter = HermesHarnessAdapter()
+
+    adapter.install(context)
+    adapter.uninstall(context)
+
+    config_path = tmp_path / ".hermes" / "config.yaml"
+    config = pyyaml.safe_load(config_path.read_text(encoding="utf-8"))
+
+    # User server preserved.
+    assert "github" in config["mcp_servers"]
+    # Guard entries removed.
+    assert not any(k.startswith("guard-") for k in config["mcp_servers"])
+    # Guard section removed.
+    assert "guard" not in config
+
+
+def test_install_preserves_user_mcp_servers_in_config_yaml(tmp_path: Path):
+    """Install should not modify or remove user-configured MCP servers."""
+    import yaml as pyyaml
+
+    _write(
+        tmp_path / ".hermes" / "config.yaml",
+        (
+            "mcp_servers:\n"
+            "  lean-ctx:\n"
+            '    command: "/usr/local/bin/lean-ctx"\n'
+            "    env:\n"
+            '      LEAN_CTX_DATA_DIR: "/tmp/data"\n'
+            "  github:\n"
+            '    command: "npx"\n'
+        ),
+    )
+    context = _ctx(tmp_path)
+    adapter = HermesHarnessAdapter()
+
+    adapter.install(context)
+
+    config_path = tmp_path / ".hermes" / "config.yaml"
+    config = pyyaml.safe_load(config_path.read_text(encoding="utf-8"))
+
+    # User servers are unchanged.
+    assert config["mcp_servers"]["lean-ctx"]["command"] == "/usr/local/bin/lean-ctx"
+    assert config["mcp_servers"]["lean-ctx"]["env"]["LEAN_CTX_DATA_DIR"] == "/tmp/data"
+    assert config["mcp_servers"]["github"]["command"] == "npx"
+
+
+def test_uninstall_preserves_user_servers_with_guard_prefix(tmp_path: Path):
+    """User-owned servers named guard-* must not be deleted on uninstall."""
+    import yaml as pyyaml
+
+    _write(
+        tmp_path / ".hermes" / "config.yaml",
+        (
+            "mcp_servers:\n"
+            "  github:\n"
+            '    command: "npx"\n'
+            "  guard-internal:\n"
+            '    command: "/usr/local/bin/custom-guard-tool"\n'
+        ),
+    )
+    context = _ctx(tmp_path)
+    adapter = HermesHarnessAdapter()
+
+    adapter.install(context)
+    adapter.uninstall(context)
+
+    config_path = tmp_path / ".hermes" / "config.yaml"
+    config = pyyaml.safe_load(config_path.read_text(encoding="utf-8"))
+
+    # User-owned server with guard- prefix must be preserved.
+    assert "guard-internal" in config["mcp_servers"]
+    assert config["mcp_servers"]["guard-internal"]["command"] == "/usr/local/bin/custom-guard-tool"
+    # Guard-managed entries must be removed.
+    assert "guard-github" not in config["mcp_servers"]
+    # User server without prefix must also be preserved.
+    assert "github" in config["mcp_servers"]
+    # Guard section must be removed.
+    assert "guard" not in config
+
+
+def test_uninstall_restores_user_guard_section(tmp_path: Path):
+    """User's existing guard section must be restored after uninstall."""
+    import yaml as pyyaml
+
+    _write(
+        tmp_path / ".hermes" / "config.yaml",
+        (
+            "mcp_servers:\n"
+            "  github:\n"
+            '    command: "npx"\n'
+            "guard:\n"
+            "  enabled: false\n"
+            '  base_url: "https://custom.example.com/api"\n'
+            "  fail_open: false\n"
+        ),
+    )
+    context = _ctx(tmp_path)
+    adapter = HermesHarnessAdapter()
+
+    adapter.install(context)
+    adapter.uninstall(context)
+
+    config_path = tmp_path / ".hermes" / "config.yaml"
+    config = pyyaml.safe_load(config_path.read_text(encoding="utf-8"))
+
+    # User's guard section must be restored, not Guard's defaults.
+    assert config["guard"]["enabled"] is False
+    assert config["guard"]["base_url"] == "https://custom.example.com/api"
+    assert config["guard"]["fail_open"] is False
+
+
 def test_inventory_snapshot_redacts_hermes_skills_and_mcp_config(tmp_path: Path) -> None:
     _write(
         tmp_path / ".hermes" / "skills" / "ops" / "reviewer" / "SKILL.md",

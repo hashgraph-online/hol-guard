@@ -465,6 +465,23 @@ def _iter_hint_occurrences(text: str, hint: str) -> list[tuple[int, int]]:
         current_pos = start + 1
 
 
+def _resolve_hermes_guard_access_token(store: GuardStore) -> str | None:
+    """Best-effort retrieval of the current Guard OAuth access token for Hermes runtime.
+
+    Returns ``None`` if credentials are not configured or the token cannot be resolved.
+    Hermes's ``guard_runtime_policy.py`` defaults to ``fail_open=True`` when no token
+    is available, so this is non-fatal.
+    """
+    try:
+        auth_context = _resolve_guard_sync_auth_context(store)
+    except Exception:
+        return None
+    token = auth_context.get("access_token")
+    if isinstance(token, str) and token:
+        return token
+    return None
+
+
 def guard_run(
     harness: str,
     context: HarnessContext,
@@ -527,6 +544,10 @@ def guard_run(
     if os.name == "nt":
         environment["USERPROFILE"] = str(context.home_dir)
     environment.update(adapter.launch_environment(context))
+    if harness == "hermes":
+        _hermes_token = _resolve_hermes_guard_access_token(store)
+        if _hermes_token is not None:
+            environment["HERMES_GUARD_TOKEN"] = _hermes_token
     try:
         result = subprocess.run(command, cwd=context.workspace_dir or Path.cwd(), check=False, env=environment)
     except FileNotFoundError as error:
