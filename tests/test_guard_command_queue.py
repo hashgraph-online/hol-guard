@@ -404,6 +404,63 @@ def test_local_request_snapshot_payload_marks_pending_incomplete_when_truncated(
     ]
 
 
+def test_local_request_snapshot_payload_keeps_pending_complete_when_resolved_truncated(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class StatusSplitStore(FakeStore):
+        def list_approval_requests(
+            self,
+            status: str | None = "pending",
+            harness: str | None = None,
+            limit: int | None = 50,
+            cursor: str | None = None,
+        ) -> list[dict[str, object]]:
+            del harness, cursor
+            if status == "pending":
+                rows = [_approval_request_row("req-pending-0")]
+            elif status == "resolved":
+                rows = [
+                    {
+                        **_approval_request_row("req-resolved-0"),
+                        "status": "resolved",
+                        "resolved_at": "2026-07-02T12:00:00+00:00",
+                        "action_envelope_json": {
+                            "action_type": "shell_command",
+                            "command": "x" * 20_000,
+                            "tool_name": "Bash",
+                        },
+                    }
+                ]
+            else:
+                rows = []
+            return rows if limit is None else rows[:limit]
+
+    store = StatusSplitStore(tmp_path / "guard-home")
+    pending_items, pending_complete = command_executors._local_request_snapshot_items_for_status(
+        store,
+        status="pending",
+        limit=command_executors.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT,
+    )
+    pending_only_bytes = len(
+        json.dumps({"requests": pending_items}, separators=(",", ":"), sort_keys=True).encode(
+            "utf-8",
+        ),
+    )
+    monkeypatch.setattr(
+        command_executors,
+        "LOCAL_REQUEST_SNAPSHOT_MAX_BYTES",
+        pending_only_bytes + 512,
+    )
+
+    payload = command_executors._local_request_snapshot_payload(store)
+
+    assert pending_complete is True
+    assert payload["pendingComplete"] is True
+    assert payload["resolvedComplete"] is False
+    assert [item["localRequestId"] for item in payload["requests"]] == ["req-pending-0"]
+
+
 def test_local_request_snapshot_byte_cap_truncates_large_payloads() -> None:
     items = [{"localRequestId": f"req-large-{index}", "rawCommandText": "x" * 12_000} for index in range(400)]
 
