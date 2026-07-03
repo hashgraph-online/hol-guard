@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import tempfile
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -47,6 +49,7 @@ from ..store import GuardStore
 _GUARD_REVIEW_MEMORY_REGISTRY_SYNC_KEY = "guard_review_memory_registry"
 _GUARD_REVIEW_MEMORY_VERSION_SYNC_KEY = "guard_review_memory_policy_version"
 _GUARD_REVIEW_MEMORY_ACK_SYNC_KEY = "guard_review_memory_last_ack"
+_LOCAL_REQUEST_SNAPSHOT_CURSOR_SYNC_KEY = "guard_command_local_request_snapshot_cursor"
 
 PACKAGE_SHIM_OPERATIONS: tuple[str, ...] = (
     "guard.packageShims.status",
@@ -69,8 +72,8 @@ APPROVAL_OPERATIONS: tuple[str, ...] = (
 )
 SUPPORTED_COMMAND_OPERATIONS: tuple[str, ...] = (*PACKAGE_SHIM_OPERATIONS, *APP_OPERATIONS, *APPROVAL_OPERATIONS)
 COMMAND_OPERATION_SCHEMA_VERSIONS: dict[str, int] = {operation: 1 for operation in SUPPORTED_COMMAND_OPERATIONS}
-LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = 10_000
-LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = 500
+LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = 125
+LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = 25
 
 
 def execute_guard_command_job(
@@ -467,7 +470,16 @@ def _local_request_snapshot_items_for_status(
         oauth = guard_review_oauth_metadata(store)
     except GuardReviewContractError:
         oauth = None
-    rows = store.list_approval_requests(status=status, limit=limit + 1)
+    cursor_state = _local_request_snapshot_cursor_state(store)
+    cursor = cursor_state.get(status)
+    rows = store.list_approval_requests(
+        status=status,
+        limit=limit + 1,
+        cursor=cursor if isinstance(cursor, str) and cursor else None,
+    )
+    if not rows and isinstance(cursor, str) and cursor:
+        cursor = None
+        rows = store.list_approval_requests(status=status, limit=limit + 1)
     for item in rows[:limit]:
         request_id = item.get("request_id")
         if not isinstance(request_id, str) or not request_id:
@@ -500,7 +512,46 @@ def _local_request_snapshot_items_for_status(
                 "resolvedAt": str(resolved_at) if isinstance(resolved_at, str) and resolved_at else None,
             }
         )
-    return items, len(rows) <= limit
+    if rows:
+        cursor_state[status] = _local_request_snapshot_next_cursor(rows, limit)
+        _save_local_request_snapshot_cursor_state(store, cursor_state)
+    return items, cursor is None and len(rows) <= limit
+
+
+def _local_request_snapshot_cursor_state(store: GuardStore) -> dict[str, object]:
+    value = store.get_sync_payload(_LOCAL_REQUEST_SNAPSHOT_CURSOR_SYNC_KEY)
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _save_local_request_snapshot_cursor_state(
+    store: GuardStore,
+    state: dict[str, object],
+) -> None:
+    cleaned = {
+        key: value
+        for key, value in state.items()
+        if key in {"pending", "resolved"} and isinstance(value, str) and value
+    }
+    store.set_sync_payload(_LOCAL_REQUEST_SNAPSHOT_CURSOR_SYNC_KEY, cleaned, _now())
+
+
+def _local_request_snapshot_next_cursor(
+    rows: list[dict[str, object]],
+    limit: int,
+) -> str | None:
+    if len(rows) <= limit:
+        return None
+    last_item = rows[limit - 1]
+    payload = {
+        "last_seen_at": str(last_item.get("last_seen_at") or last_item.get("created_at") or ""),
+        "request_id": str(last_item.get("request_id") or ""),
+    }
+    if not payload["last_seen_at"] or not payload["request_id"]:
+        return None
+    encoded = base64.urlsafe_b64encode(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8"),
+    ).decode("ascii")
+    return encoded.rstrip("=")
 
 
 def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
