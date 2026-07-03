@@ -79,6 +79,7 @@ def test_local_request_snapshot_pages_large_pending_backlog(tmp_path: Path) -> N
 
     first_payload = command_executors._local_request_snapshot_payload(store)
     second_payload = command_executors._local_request_snapshot_payload(store)
+    third_payload = command_executors._local_request_snapshot_payload(store)
 
     assert first_payload["pendingComplete"] is False
     assert first_payload["pendingCount"] == command_executors.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
@@ -88,3 +89,7 @@ def test_local_request_snapshot_pages_large_pending_backlog(tmp_path: Path) -> N
     assert second_payload["pendingCount"] == 5
     assert second_payload["requests"][0]["localRequestId"] == "req-pending-125"
     assert second_payload["requests"][-1]["localRequestId"] == "req-pending-129"
+    assert third_payload["pendingComplete"] is False
+    assert third_payload["pendingCount"] == command_executors.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
+    assert third_payload["requests"][0]["localRequestId"] == "req-pending-000"
+    assert third_payload["requests"][-1]["localRequestId"] == "req-pending-124"
