@@ -278,6 +278,27 @@ def test_uninstall_restores_user_guard_section(tmp_path: Path):
     assert config["guard"]["fail_open"] is False
 
 
+def test_reinstall_does_not_prevent_guard_section_removal(tmp_path: Path):
+    """Guard section must be removed after install -> reinstall -> uninstall."""
+    import yaml as pyyaml
+
+    _write(
+        tmp_path / ".hermes" / "config.yaml",
+        "mcp_servers:\n  github:\n    command: npx\n",
+    )
+    context = _ctx(tmp_path)
+    adapter = HermesHarnessAdapter()
+
+    adapter.install(context)
+    adapter.install(context)
+    adapter.uninstall(context)
+
+    config = pyyaml.safe_load((tmp_path / ".hermes" / "config.yaml").read_text(encoding="utf-8"))
+    assert "guard" not in config
+    assert "github" in config["mcp_servers"]
+    assert "guard-github" not in config["mcp_servers"]
+
+
 def test_inventory_snapshot_redacts_hermes_skills_and_mcp_config(tmp_path: Path) -> None:
     _write(
         tmp_path / ".hermes" / "skills" / "ops" / "reviewer" / "SKILL.md",
