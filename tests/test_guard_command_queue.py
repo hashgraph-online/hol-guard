@@ -568,6 +568,7 @@ def test_local_request_snapshot_syncs_display_fields_when_command_missing(tmp_pa
             row["artifact_label"] = "grep credential-looking output"
             row["source_label"] = "Pi"
             row["trigger_summary"] = "Tool output contains credential-looking material."
+            row["why_now"] = "Guard paused this output before delivery."
             row["risk_headline"] = "Credential-looking output reached the harness."
             row["risk_summary"] = "Guard stopped post-tool output before the harness saw it."
             row["raw_command_text"] = None
@@ -586,6 +587,7 @@ def test_local_request_snapshot_syncs_display_fields_when_command_missing(tmp_pa
     assert payload["artifact_label"] == "grep credential-looking output"
     assert payload["source_label"] == "Pi"
     assert payload["trigger_summary"] == "Tool output contains credential-looking material."
+    assert payload["why_now"] == "Guard paused this output before delivery."
     assert payload["risk_headline"] == "Credential-looking output reached the harness."
     assert payload["risk_summary"] == "Guard stopped post-tool output before the harness saw it."
     assert payload["raw_command_text"] is None
