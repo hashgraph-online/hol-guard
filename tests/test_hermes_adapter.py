@@ -329,6 +329,37 @@ def test_install_honors_hermes_home_env_var(tmp_path: Path, monkeypatch):
         assert "guard" not in default_config, "Guard must not write to default ~/.hermes when HERMES_HOME is set"
 
 
+def test_uninstall_uses_recorded_config_path_when_env_var_unset(tmp_path: Path, monkeypatch):
+    """Uninstall must use the config.yaml path recorded during install, not recompute from env."""
+    import yaml as pyyaml
+
+    custom_home = tmp_path / "custom-hermes"
+    _write(
+        custom_home / "config.yaml",
+        "mcp_servers:\n  github:\n    command: npx\n",
+    )
+
+    # Install with HERMES_HOME set to custom directory
+    monkeypatch.setenv("HERMES_HOME", str(custom_home))
+    context = _ctx(tmp_path)
+    adapter = HermesHarnessAdapter()
+    adapter.install(context)
+
+    # Verify config was written to custom home
+    config = pyyaml.safe_load((custom_home / "config.yaml").read_text(encoding="utf-8"))
+    assert "guard" in config
+
+    # Uninstall with HERMES_HOME unset — must still clean up the custom config
+    monkeypatch.delenv("HERMES_HOME")
+    adapter.uninstall(context)
+
+    config_after = pyyaml.safe_load((custom_home / "config.yaml").read_text(encoding="utf-8"))
+    assert "guard" not in config_after, "Uninstall must remove guard section from the recorded path"
+    assert "guard-github" not in config_after.get("mcp_servers", {}), (
+        "Uninstall must remove guard-managed MCP servers from the recorded path"
+    )
+
+
 def test_inventory_snapshot_redacts_hermes_skills_and_mcp_config(tmp_path: Path) -> None:
     _write(
         tmp_path / ".hermes" / "skills" / "ops" / "reviewer" / "SKILL.md",

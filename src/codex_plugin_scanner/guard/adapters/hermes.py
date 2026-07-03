@@ -179,7 +179,12 @@ class HermesHarnessAdapter(HarnessAdapter):
             if path.exists():
                 path.unlink()
                 removed_paths.append(str(path))
-        config_yaml_path = _hermes_home(context) / "config.yaml"
+        config_yaml_path_str = manifest.get("hermes_config_yaml_path")
+        config_yaml_path = (
+            Path(config_yaml_path_str)
+            if isinstance(config_yaml_path_str, str) and config_yaml_path_str
+            else _hermes_home(context) / "config.yaml"
+        )
         managed_names = _read_managed_server_names(context)
         previous_guard = _read_previous_guard_section(context)
         _remove_guard_from_hermes_config_yaml(
