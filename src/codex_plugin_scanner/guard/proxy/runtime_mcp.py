@@ -27,6 +27,7 @@ from ..mcp_tool_calls import (
     tool_call_risk_summary,
 )
 from ..models import GuardAction, HarnessDetection
+from ._env import _build_scrubbed_env
 from ..policy.engine import build_decision_v2
 from ..runtime.browser_mcp_intent import normalize_browser_mcp_intent
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
@@ -269,6 +270,7 @@ class RuntimeMcpGuardProxy:
             stderr=None,
             text=True,
             cwd=self.context.workspace_dir,
+            env=_build_scrubbed_env(),
         )
 
     def _handle_message(
