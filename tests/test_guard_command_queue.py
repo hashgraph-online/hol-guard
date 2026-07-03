@@ -345,7 +345,7 @@ def test_local_request_snapshot_payload_includes_complete_pending_backlog(tmp_pa
         ) -> list[dict[str, object]]:
             del harness, cursor
             if status == "pending":
-                rows = [_approval_request_row(f"req-pending-{index}") for index in range(225)]
+                rows = [_approval_request_row(f"req-pending-{index}") for index in range(125)]
             elif status == "resolved":
                 rows = [
                     {
@@ -363,12 +363,12 @@ def test_local_request_snapshot_payload_includes_complete_pending_backlog(tmp_pa
 
     assert payload["pendingComplete"] is True
     assert payload["resolvedComplete"] is True
-    assert payload["pendingCount"] == 225
+    assert payload["pendingCount"] == 125
     assert payload["resolvedCount"] == 3
-    assert len(payload["requests"]) == 228
+    assert len(payload["requests"]) == 128
     assert {item["localRequestId"] for item in payload["requests"]} >= {
         "req-pending-0",
-        "req-pending-224",
+        "req-pending-124",
         "req-resolved-2",
     }
 
@@ -404,6 +404,23 @@ def test_local_request_snapshot_payload_marks_pending_incomplete_when_truncated(
     ]
 
 
+def test_local_request_snapshot_byte_cap_truncates_large_payloads() -> None:
+    items = [
+        {"localRequestId": f"req-large-{index}", "rawCommandText": "x" * 12_000}
+        for index in range(400)
+    ]
+
+    selected, complete = command_executors._local_request_snapshot_byte_capped_items(
+        items,
+        max_bytes=command_executors.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES,
+    )
+    encoded = json.dumps({"requests": selected}, separators=(",", ":")).encode("utf-8")
+
+    assert len(encoded) <= command_executors.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES
+    assert complete is False
+    assert 0 < len(selected) < len(items)
+
+
 def test_local_request_snapshot_operation_uses_complete_payload(tmp_path: Path) -> None:
     class ManyPendingStore(FakeStore):
         def list_approval_requests(
@@ -417,7 +434,7 @@ def test_local_request_snapshot_operation_uses_complete_payload(tmp_path: Path) 
         ) -> list[dict[str, object]]:
             del harness, cursor, search
             if status == "pending":
-                rows = [_approval_request_row(f"req-pending-{index}") for index in range(225)]
+                rows = [_approval_request_row(f"req-pending-{index}") for index in range(125)]
                 return rows if limit is None else rows[:limit]
             if status == "resolved":
                 rows = [_approval_request_row("req-resolved")]
@@ -435,11 +452,11 @@ def test_local_request_snapshot_operation_uses_complete_payload(tmp_path: Path) 
 
     assert payload["pendingComplete"] is True
     assert payload["resolvedComplete"] is True
-    assert payload["pendingCount"] == 225
-    assert len(payload["requests"]) == 226
+    assert payload["pendingCount"] == 125
+    assert len(payload["requests"]) == 126
     assert payload["requests"][0]["localRequestId"] == "req-pending-0"
-    assert payload["requests"][224]["localRequestId"] == "req-pending-224"
-    assert payload["requests"][225]["localRequestId"] == "req-resolved"
+    assert payload["requests"][124]["localRequestId"] == "req-pending-124"
+    assert payload["requests"][125]["localRequestId"] == "req-resolved"
 
 
 def test_local_request_snapshot_items_continues_when_request_claim_is_invalid(tmp_path: Path) -> None:

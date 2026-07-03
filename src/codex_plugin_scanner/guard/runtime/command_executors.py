@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -69,8 +70,9 @@ APPROVAL_OPERATIONS: tuple[str, ...] = (
 )
 SUPPORTED_COMMAND_OPERATIONS: tuple[str, ...] = (*PACKAGE_SHIM_OPERATIONS, *APP_OPERATIONS, *APPROVAL_OPERATIONS)
 COMMAND_OPERATION_SCHEMA_VERSIONS: dict[str, int] = {operation: 1 for operation in SUPPORTED_COMMAND_OPERATIONS}
-LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = 10_000
-LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = 500
+LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = 200
+LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = 50
+LOCAL_REQUEST_SNAPSHOT_MAX_BYTES = 600_000
 
 
 def execute_guard_command_job(
@@ -444,15 +446,37 @@ def _local_request_snapshot_payload(store: GuardStore) -> dict[str, object]:
         status="resolved",
         limit=LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT,
     )
+    requests, byte_complete = _local_request_snapshot_byte_capped_items(
+        [*pending_items, *resolved_items],
+        max_bytes=LOCAL_REQUEST_SNAPSHOT_MAX_BYTES,
+    )
     return {
-        "requests": [*pending_items, *resolved_items],
-        "pendingComplete": pending_complete,
-        "resolvedComplete": resolved_complete,
+        "requests": requests,
+        "pendingComplete": pending_complete and byte_complete,
+        "resolvedComplete": resolved_complete and byte_complete,
         "pendingLimit": LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT,
         "resolvedLimit": LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT,
         "pendingCount": len(pending_items),
         "resolvedCount": len(resolved_items),
     }
+
+
+def _local_request_snapshot_byte_capped_items(
+    items: list[dict[str, object]],
+    *,
+    max_bytes: int,
+) -> tuple[list[dict[str, object]], bool]:
+    selected: list[dict[str, object]] = []
+    base_bytes = len(b'{"requests":[]}')
+    used_bytes = base_bytes
+    for item in items:
+        item_bytes = len(json.dumps(item, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+        separator_bytes = 1 if selected else 0
+        if selected and used_bytes + separator_bytes + item_bytes > max_bytes:
+            return selected, False
+        selected.append(item)
+        used_bytes += separator_bytes + item_bytes
+    return selected, True
 
 
 def _local_request_snapshot_items_for_status(
