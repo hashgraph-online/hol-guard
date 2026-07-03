@@ -112,7 +112,13 @@ class HermesHarnessAdapter(HarnessAdapter):
         # existing manifest so uninstall can still clean up prior entries.
         if new_managed_names:
             _write_managed_server_names(context, new_managed_names)
-            _write_previous_guard_section(context, previous_guard_section)
+            # On reinstall, don't overwrite the saved previous guard section —
+            # the one from the first install captured the user's original. If
+            # we overwrote it with the Guard-managed section, uninstall would
+            # restore Guard's defaults instead of removing the section.
+            existing_previous_guard = _previous_guard_section_path(context)
+            if not existing_previous_guard.exists():
+                _write_previous_guard_section(context, previous_guard_section)
         manifest = {
             "harness": self.harness,
             "active": True,
