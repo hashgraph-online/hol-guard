@@ -18,6 +18,9 @@ from ..store import GuardStore
 LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = 125
 LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = 25
 LOCAL_REQUEST_CURSORLESS_FALLBACK_LIMIT = 500
+LOCAL_REQUEST_SNAPSHOT_MAX_BYTES = 900_000
+LOCAL_REQUEST_TEXT_FIELD_MAX_CHARS = 256
+LOCAL_REQUEST_COMMAND_FIELD_MAX_CHARS = 1_024
 _LOCAL_REQUEST_SNAPSHOT_CURSOR_SYNC_KEY = "guard_command_local_request_snapshot_cursor"
 
 
@@ -54,6 +57,7 @@ def local_request_snapshot_payload(store: GuardStore) -> dict[str, object]:
         "resolvedLimit": LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT,
         "pendingCount": len(pending_items),
         "resolvedCount": len(resolved_items),
+        "maxBytes": LOCAL_REQUEST_SNAPSHOT_MAX_BYTES,
     }
 
 
@@ -242,7 +246,9 @@ def _cloud_safe_local_request_payload(
         "package_name",
     ):
         value = item.get(key)
-        if isinstance(value, (str, int, float, bool)) or value is None:
+        if isinstance(value, str):
+            payload[key] = _bounded_text(value)
+        elif isinstance(value, (int, float, bool)) or value is None:
             payload[key] = value
 
     envelope = _optional_payload_mapping(item.get("action_envelope_json"))
@@ -257,7 +263,7 @@ def _cloud_safe_local_request_payload(
 
     command_text = _local_request_command_text(item, envelope)
     if command_text:
-        scrubbed = redact_text(command_text).text
+        scrubbed = _bounded_command(redact_text(command_text).text)
         payload["raw_command_text"] = scrubbed
         payload["command_text"] = scrubbed
         payload_envelope = payload.get("action_envelope_json")
@@ -303,20 +309,32 @@ def _cloud_safe_action_envelope(
         "package_manager",
     ):
         value = envelope.get(key)
-        if isinstance(value, (str, int, float, bool)) or value is None:
+        if isinstance(value, str):
+            safe[key] = _bounded_text(value)
+        elif isinstance(value, (int, float, bool)) or value is None:
             safe[key] = value
     if redaction_level != "full":
         command = envelope.get("command")
         if isinstance(command, str) and command.strip():
-            safe["command"] = redact_text(command).text
+            safe["command"] = _bounded_command(redact_text(command).text)
     if redaction_level == "none":
         for key in ("target_paths", "network_hosts", "package_name", "package_targets"):
             value = envelope.get(key)
             if isinstance(value, list):
-                safe[key] = [item for item in value if isinstance(item, str)]
+                safe[key] = [_bounded_text(item) for item in value if isinstance(item, str)]
             elif isinstance(value, str):
-                safe[key] = value
+                safe[key] = _bounded_text(value)
     return safe or None
+
+
+def _bounded_text(value: str, *, max_chars: int = LOCAL_REQUEST_TEXT_FIELD_MAX_CHARS) -> str:
+    if len(value) <= max_chars:
+        return value
+    return f"{value[:max_chars]}...[truncated {len(value) - max_chars} chars]"
+
+
+def _bounded_command(value: str) -> str:
+    return _bounded_text(value, max_chars=LOCAL_REQUEST_COMMAND_FIELD_MAX_CHARS)
 
 
 def _now() -> str:
