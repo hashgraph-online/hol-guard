@@ -21,9 +21,9 @@ class PagingStore:
         del now
         self.payloads[key] = payload
 
-    def get_oauth_local_credentials(self, *, allow_primary: bool = False) -> dict[str, object]:
+    def get_oauth_local_credentials(self, *, allow_primary: bool = False) -> object | None:
         del allow_primary
-        return {}
+        return None
 
     def list_approval_requests(
         self,
