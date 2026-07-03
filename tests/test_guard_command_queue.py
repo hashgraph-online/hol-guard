@@ -421,6 +421,32 @@ def test_local_request_snapshot_byte_cap_truncates_large_payloads() -> None:
     assert 0 < len(selected) < len(items)
 
 
+def test_local_request_snapshot_byte_cap_compacts_oversized_first_item() -> None:
+    items = [
+        {
+            "localRequestId": "req-oversized",
+            "status": "pending",
+            "harness": "cursor",
+            "rawCommandText": "x" * (command_executors.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES + 100_000),
+            "actionEnvelope": {
+                "command": "y" * (command_executors.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES + 100_000),
+            },
+        },
+        {"localRequestId": "req-next"},
+    ]
+
+    selected, complete = command_executors._local_request_snapshot_byte_capped_items(
+        items,
+        max_bytes=command_executors.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES,
+    )
+    encoded = json.dumps({"requests": selected}, separators=(",", ":")).encode("utf-8")
+
+    assert len(encoded) <= command_executors.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES
+    assert complete is False
+    assert [item["localRequestId"] for item in selected] == ["req-oversized"]
+    assert str(selected[0]["rawCommandText"]).endswith("...[truncated]")
+
+
 def test_local_request_snapshot_operation_uses_complete_payload(tmp_path: Path) -> None:
     class ManyPendingStore(FakeStore):
         def list_approval_requests(

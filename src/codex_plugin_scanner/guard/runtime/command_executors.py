@@ -73,6 +73,8 @@ COMMAND_OPERATION_SCHEMA_VERSIONS: dict[str, int] = {operation: 1 for operation 
 LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = 200
 LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = 50
 LOCAL_REQUEST_SNAPSHOT_MAX_BYTES = 600_000
+LOCAL_REQUEST_SNAPSHOT_MAX_STRING_CHARS = 2_000
+LOCAL_REQUEST_SNAPSHOT_MAX_LIST_ITEMS = 20
 
 
 def execute_guard_command_job(
@@ -472,11 +474,67 @@ def _local_request_snapshot_byte_capped_items(
     for item in items:
         item_bytes = len(json.dumps(item, separators=(",", ":"), sort_keys=True).encode("utf-8"))
         separator_bytes = 1 if selected else 0
-        if selected and used_bytes + separator_bytes + item_bytes > max_bytes:
+        if used_bytes + separator_bytes + item_bytes > max_bytes:
+            if not selected:
+                compact_item = _compact_local_request_snapshot_item(item)
+                compact_bytes = len(
+                    json.dumps(compact_item, separators=(",", ":"), sort_keys=True).encode("utf-8"),
+                )
+                if used_bytes + compact_bytes <= max_bytes:
+                    selected.append(compact_item)
             return selected, False
         selected.append(item)
         used_bytes += separator_bytes + item_bytes
     return selected, True
+
+
+def _compact_local_request_snapshot_item(item: dict[str, object]) -> dict[str, object]:
+    compact = {
+        key: _compact_local_request_snapshot_value(value)
+        for key, value in item.items()
+    }
+    compact_bytes = len(json.dumps(compact, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+    if compact_bytes <= LOCAL_REQUEST_SNAPSHOT_MAX_BYTES:
+        return compact
+    safe_keys = (
+        "localRequestId",
+        "status",
+        "harness",
+        "artifactId",
+        "artifactName",
+        "artifactType",
+        "policyAction",
+        "recommendedScope",
+        "createdAt",
+        "lastSeenAt",
+        "riskHeadline",
+        "riskSummary",
+        "rawCommandText",
+        "reviewCommand",
+    )
+    return {
+        key: compact[key]
+        for key in safe_keys
+        if key in compact
+    }
+
+
+def _compact_local_request_snapshot_value(value: object) -> object:
+    if isinstance(value, str):
+        if len(value) <= LOCAL_REQUEST_SNAPSHOT_MAX_STRING_CHARS:
+            return value
+        return f"{value[:LOCAL_REQUEST_SNAPSHOT_MAX_STRING_CHARS]}...[truncated]"
+    if isinstance(value, list):
+        return [
+            _compact_local_request_snapshot_value(item)
+            for item in value[:LOCAL_REQUEST_SNAPSHOT_MAX_LIST_ITEMS]
+        ]
+    if isinstance(value, dict):
+        return {
+            str(key): _compact_local_request_snapshot_value(item)
+            for key, item in value.items()
+        }
+    return value
 
 
 def _local_request_snapshot_items_for_status(
