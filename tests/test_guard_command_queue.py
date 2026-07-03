@@ -548,6 +548,50 @@ def test_local_request_snapshot_syncs_scrubbed_command_when_redaction_is_partial
     assert "target_paths" not in envelope
 
 
+def test_local_request_snapshot_syncs_display_fields_when_command_missing(tmp_path: Path) -> None:
+    class RequestStore(FakeStore):
+        def list_approval_requests(
+            self,
+            *,
+            status: str | None = "pending",
+            harness: str | None = None,
+            limit: int | None = 50,
+            cursor: str | None = None,
+            search: str | None = None,
+        ) -> list[dict[str, object]]:
+            del harness, limit, cursor, search
+            if status != "pending":
+                return []
+            row = _approval_request_row("req-display-fields")
+            row["artifact_type"] = "tool_action_request"
+            row["artifact_name"] = "grep credential-looking output"
+            row["artifact_label"] = "grep credential-looking output"
+            row["source_label"] = "Pi"
+            row["trigger_summary"] = "Tool output contains credential-looking material."
+            row["risk_headline"] = "Credential-looking output reached the harness."
+            row["risk_summary"] = "Guard stopped post-tool output before the harness saw it."
+            row["raw_command_text"] = None
+            row["action_envelope_json"] = None
+            return [row]
+
+    store = RequestStore(tmp_path / "guard-home")
+    store.payloads["cloud_receipt_redaction_level"] = {"level": "full"}
+
+    snapshot = command_executors._local_request_snapshot_items(store)
+
+    payload = snapshot[0]["requestPayload"]
+    assert isinstance(payload, dict)
+    assert payload["artifact_name"] == "grep credential-looking output"
+    assert payload["artifact_type"] == "tool_action_request"
+    assert payload["artifact_label"] == "grep credential-looking output"
+    assert payload["source_label"] == "Pi"
+    assert payload["trigger_summary"] == "Tool output contains credential-looking material."
+    assert payload["risk_headline"] == "Credential-looking output reached the harness."
+    assert payload["risk_summary"] == "Guard stopped post-tool output before the harness saw it."
+    assert payload["raw_command_text"] is None
+    assert payload["command_text"] is None
+
+
 def test_executor_rejects_remote_approval_without_trusted_keyring(tmp_path: Path) -> None:
     class RequestStore(FakeStore):
         def __init__(self, guard_home: Path) -> None:
