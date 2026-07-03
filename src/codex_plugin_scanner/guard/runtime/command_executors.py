@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -69,8 +70,11 @@ APPROVAL_OPERATIONS: tuple[str, ...] = (
 )
 SUPPORTED_COMMAND_OPERATIONS: tuple[str, ...] = (*PACKAGE_SHIM_OPERATIONS, *APP_OPERATIONS, *APPROVAL_OPERATIONS)
 COMMAND_OPERATION_SCHEMA_VERSIONS: dict[str, int] = {operation: 1 for operation in SUPPORTED_COMMAND_OPERATIONS}
-LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = 10_000
-LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = 500
+LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = 200
+LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = 50
+LOCAL_REQUEST_SNAPSHOT_MAX_BYTES = 600_000
+LOCAL_REQUEST_SNAPSHOT_MAX_STRING_CHARS = 2_000
+LOCAL_REQUEST_SNAPSHOT_MAX_LIST_ITEMS = 20
 
 
 def execute_guard_command_job(
@@ -444,15 +448,110 @@ def _local_request_snapshot_payload(store: GuardStore) -> dict[str, object]:
         status="resolved",
         limit=LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT,
     )
+    requests, pending_byte_complete, resolved_byte_complete = _local_request_snapshot_byte_capped_statuses(
+        pending_items,
+        resolved_items,
+        max_bytes=LOCAL_REQUEST_SNAPSHOT_MAX_BYTES,
+    )
     return {
-        "requests": [*pending_items, *resolved_items],
-        "pendingComplete": pending_complete,
-        "resolvedComplete": resolved_complete,
+        "requests": requests,
+        "pendingComplete": pending_complete and pending_byte_complete,
+        "resolvedComplete": resolved_complete and resolved_byte_complete,
         "pendingLimit": LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT,
         "resolvedLimit": LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT,
         "pendingCount": len(pending_items),
         "resolvedCount": len(resolved_items),
     }
+
+
+def _local_request_snapshot_byte_capped_statuses(
+    pending_items: list[dict[str, object]],
+    resolved_items: list[dict[str, object]],
+    *,
+    max_bytes: int,
+) -> tuple[list[dict[str, object]], bool, bool]:
+    selected, pending_complete = _local_request_snapshot_byte_capped_items(
+        pending_items,
+        max_bytes=max_bytes,
+    )
+    if not pending_complete:
+        return selected, False, False
+
+    selected, resolved_complete = _local_request_snapshot_byte_capped_items(
+        resolved_items,
+        existing_items=selected,
+        max_bytes=max_bytes,
+    )
+    return selected, True, resolved_complete
+
+
+def _local_request_snapshot_byte_capped_items(
+    items: list[dict[str, object]],
+    *,
+    max_bytes: int,
+    existing_items: list[dict[str, object]] | None = None,
+) -> tuple[list[dict[str, object]], bool]:
+    selected: list[dict[str, object]] = list(existing_items or [])
+    initial_len = len(selected)
+    for item in items:
+        candidate = [*selected, item]
+        candidate_bytes = len(
+            json.dumps({"requests": candidate}, separators=(",", ":"), sort_keys=True).encode(
+                "utf-8",
+            ),
+        )
+        if candidate_bytes > max_bytes:
+            if len(selected) == initial_len:
+                compact_item = _compact_local_request_snapshot_item(item)
+                compact_candidate = [*selected, compact_item]
+                compact_bytes = len(
+                    json.dumps(
+                        {"requests": compact_candidate},
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    ).encode("utf-8"),
+                )
+                if compact_bytes <= max_bytes:
+                    selected.append(compact_item)
+            return selected, False
+        selected.append(item)
+    return selected, True
+
+
+def _compact_local_request_snapshot_item(item: dict[str, object]) -> dict[str, object]:
+    compact = {key: _compact_local_request_snapshot_value(value) for key, value in item.items()}
+    compact_bytes = len(json.dumps(compact, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+    if compact_bytes <= LOCAL_REQUEST_SNAPSHOT_MAX_BYTES:
+        return compact
+    safe_keys = (
+        "localRequestId",
+        "status",
+        "harness",
+        "artifactId",
+        "artifactName",
+        "artifactType",
+        "policyAction",
+        "recommendedScope",
+        "createdAt",
+        "lastSeenAt",
+        "riskHeadline",
+        "riskSummary",
+        "rawCommandText",
+        "reviewCommand",
+    )
+    return {key: compact[key] for key in safe_keys if key in compact}
+
+
+def _compact_local_request_snapshot_value(value: object) -> object:
+    if isinstance(value, str):
+        if len(value) <= LOCAL_REQUEST_SNAPSHOT_MAX_STRING_CHARS:
+            return value
+        return f"{value[:LOCAL_REQUEST_SNAPSHOT_MAX_STRING_CHARS]}...[truncated]"
+    if isinstance(value, list):
+        return [_compact_local_request_snapshot_value(item) for item in value[:LOCAL_REQUEST_SNAPSHOT_MAX_LIST_ITEMS]]
+    if isinstance(value, dict):
+        return {str(key): _compact_local_request_snapshot_value(item) for key, item in value.items()}
+    return value
 
 
 def _local_request_snapshot_items_for_status(

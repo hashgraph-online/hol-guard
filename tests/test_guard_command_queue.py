@@ -345,7 +345,7 @@ def test_local_request_snapshot_payload_includes_complete_pending_backlog(tmp_pa
         ) -> list[dict[str, object]]:
             del harness, cursor
             if status == "pending":
-                rows = [_approval_request_row(f"req-pending-{index}") for index in range(225)]
+                rows = [_approval_request_row(f"req-pending-{index}") for index in range(125)]
             elif status == "resolved":
                 rows = [
                     {
@@ -363,12 +363,12 @@ def test_local_request_snapshot_payload_includes_complete_pending_backlog(tmp_pa
 
     assert payload["pendingComplete"] is True
     assert payload["resolvedComplete"] is True
-    assert payload["pendingCount"] == 225
+    assert payload["pendingCount"] == 125
     assert payload["resolvedCount"] == 3
-    assert len(payload["requests"]) == 228
+    assert len(payload["requests"]) == 128
     assert {item["localRequestId"] for item in payload["requests"]} >= {
         "req-pending-0",
-        "req-pending-224",
+        "req-pending-124",
         "req-resolved-2",
     }
 
@@ -404,6 +404,103 @@ def test_local_request_snapshot_payload_marks_pending_incomplete_when_truncated(
     ]
 
 
+def test_local_request_snapshot_payload_keeps_pending_complete_when_resolved_truncated(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class StatusSplitStore(FakeStore):
+        def list_approval_requests(
+            self,
+            status: str | None = "pending",
+            harness: str | None = None,
+            limit: int | None = 50,
+            cursor: str | None = None,
+        ) -> list[dict[str, object]]:
+            del harness, cursor
+            if status == "pending":
+                rows = [_approval_request_row("req-pending-0")]
+            elif status == "resolved":
+                rows = [
+                    {
+                        **_approval_request_row("req-resolved-0"),
+                        "status": "resolved",
+                        "resolved_at": "2026-07-02T12:00:00+00:00",
+                        "action_envelope_json": {
+                            "action_type": "shell_command",
+                            "command": "x" * 20_000,
+                            "tool_name": "Bash",
+                        },
+                    }
+                ]
+            else:
+                rows = []
+            return rows if limit is None else rows[:limit]
+
+    store = StatusSplitStore(tmp_path / "guard-home")
+    pending_items, pending_complete = command_executors._local_request_snapshot_items_for_status(
+        store,
+        status="pending",
+        limit=command_executors.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT,
+    )
+    pending_only_bytes = len(
+        json.dumps({"requests": pending_items}, separators=(",", ":"), sort_keys=True).encode(
+            "utf-8",
+        ),
+    )
+    monkeypatch.setattr(
+        command_executors,
+        "LOCAL_REQUEST_SNAPSHOT_MAX_BYTES",
+        pending_only_bytes + 512,
+    )
+
+    payload = command_executors._local_request_snapshot_payload(store)
+
+    assert pending_complete is True
+    assert payload["pendingComplete"] is True
+    assert payload["resolvedComplete"] is False
+    assert [item["localRequestId"] for item in payload["requests"]] == ["req-pending-0"]
+
+
+def test_local_request_snapshot_byte_cap_truncates_large_payloads() -> None:
+    items = [{"localRequestId": f"req-large-{index}", "rawCommandText": "x" * 12_000} for index in range(400)]
+
+    selected, complete = command_executors._local_request_snapshot_byte_capped_items(
+        items,
+        max_bytes=command_executors.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES,
+    )
+    encoded = json.dumps({"requests": selected}, separators=(",", ":")).encode("utf-8")
+
+    assert len(encoded) <= command_executors.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES
+    assert complete is False
+    assert 0 < len(selected) < len(items)
+
+
+def test_local_request_snapshot_byte_cap_compacts_oversized_first_item() -> None:
+    items = [
+        {
+            "localRequestId": "req-oversized",
+            "status": "pending",
+            "harness": "cursor",
+            "rawCommandText": "x" * (command_executors.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES + 100_000),
+            "actionEnvelope": {
+                "command": "y" * (command_executors.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES + 100_000),
+            },
+        },
+        {"localRequestId": "req-next"},
+    ]
+
+    selected, complete = command_executors._local_request_snapshot_byte_capped_items(
+        items,
+        max_bytes=command_executors.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES,
+    )
+    encoded = json.dumps({"requests": selected}, separators=(",", ":")).encode("utf-8")
+
+    assert len(encoded) <= command_executors.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES
+    assert complete is False
+    assert [item["localRequestId"] for item in selected] == ["req-oversized"]
+    assert str(selected[0]["rawCommandText"]).endswith("...[truncated]")
+
+
 def test_local_request_snapshot_operation_uses_complete_payload(tmp_path: Path) -> None:
     class ManyPendingStore(FakeStore):
         def list_approval_requests(
@@ -417,7 +514,7 @@ def test_local_request_snapshot_operation_uses_complete_payload(tmp_path: Path) 
         ) -> list[dict[str, object]]:
             del harness, cursor, search
             if status == "pending":
-                rows = [_approval_request_row(f"req-pending-{index}") for index in range(225)]
+                rows = [_approval_request_row(f"req-pending-{index}") for index in range(125)]
                 return rows if limit is None else rows[:limit]
             if status == "resolved":
                 rows = [_approval_request_row("req-resolved")]
@@ -435,11 +532,11 @@ def test_local_request_snapshot_operation_uses_complete_payload(tmp_path: Path) 
 
     assert payload["pendingComplete"] is True
     assert payload["resolvedComplete"] is True
-    assert payload["pendingCount"] == 225
-    assert len(payload["requests"]) == 226
+    assert payload["pendingCount"] == 125
+    assert len(payload["requests"]) == 126
     assert payload["requests"][0]["localRequestId"] == "req-pending-0"
-    assert payload["requests"][224]["localRequestId"] == "req-pending-224"
-    assert payload["requests"][225]["localRequestId"] == "req-resolved"
+    assert payload["requests"][124]["localRequestId"] == "req-pending-124"
+    assert payload["requests"][125]["localRequestId"] == "req-resolved"
 
 
 def test_local_request_snapshot_items_continues_when_request_claim_is_invalid(tmp_path: Path) -> None:
@@ -1814,6 +1911,7 @@ def test_executor_ignores_stale_remote_approval_request_id(tmp_path: Path) -> No
     assert result["failureCode"] == "remote_approval_request_id_mismatch"
     assert store.claimed_receipts == []
 
+
 def test_executor_releases_remote_once_receipt_when_resolution_not_applied(tmp_path: Path) -> None:
     class ApprovalStore(FakeStore):
         def __init__(self, guard_home: Path) -> None:
@@ -2092,6 +2190,7 @@ def test_executor_rejects_overbroad_signed_allow_memory_rules(tmp_path: Path) ->
     assert result["data"]["decisionMemoryAck"]["rejectedRuleIds"] == ["review-memory:receipt-team"]
     assert store.policies == [([], "2026-06-13T00:00:00+00:00", True)]
     assert store.get_sync_payload("guard_review_memory_policy_version") is None
+
 
 def test_executor_rejects_tampered_decision_memory_bundle_hash(tmp_path: Path) -> None:
     store = _oauth_store(tmp_path)
