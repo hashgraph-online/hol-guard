@@ -35,6 +35,7 @@ from ..runtime.signals import RiskSeverityLabel, RiskSignalV2
 from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
+from ._env import _build_scrubbed_env
 from .stdio import (
     ProxyIoTimeoutError,
     _blocked_tool_response,
@@ -269,6 +270,7 @@ class RuntimeMcpGuardProxy:
             stderr=None,
             text=True,
             cwd=self.context.workspace_dir,
+            env=_build_scrubbed_env(),
         )
 
     def _handle_message(

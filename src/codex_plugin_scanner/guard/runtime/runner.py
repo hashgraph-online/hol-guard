@@ -547,6 +547,10 @@ def guard_run(
     if harness == "hermes":
         _hermes_token = _resolve_hermes_guard_access_token(store)
         if _hermes_token is not None:
+            # The token is needed by Hermes's guard_runtime_policy.py to call
+            # the Guard policy API.  It must NOT leak to user-configured MCP
+            # server subprocesses; the proxy layer scrubs it before launching
+            # those processes (see proxy._build_scrubbed_env).
             environment["HERMES_GUARD_TOKEN"] = _hermes_token
     try:
         result = subprocess.run(command, cwd=context.workspace_dir or Path.cwd(), check=False, env=environment)

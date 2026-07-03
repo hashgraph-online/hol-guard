@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import io
 import json
-import os
 import queue
 import select
 import subprocess
@@ -30,6 +29,7 @@ from ..receipts import build_receipt
 from ..runtime.secret_file_requests import build_file_read_request_artifact, extract_sensitive_file_read_request
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
+from ._env import _build_scrubbed_env
 
 _DEFAULT_PROXY_RESPONSE_TIMEOUT_SECONDS = 30.0
 _PROXY_TERMINATION_TIMEOUT_SECONDS = 1.0
@@ -339,7 +339,7 @@ class StdioGuardProxy:
             stderr=None,
             text=True,
             cwd=self.cwd,
-            env={**os.environ, **self.env},
+            env=_build_scrubbed_env(self.env),
         )
 
     def _forward_message(
