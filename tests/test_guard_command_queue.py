@@ -405,10 +405,7 @@ def test_local_request_snapshot_payload_marks_pending_incomplete_when_truncated(
 
 
 def test_local_request_snapshot_byte_cap_truncates_large_payloads() -> None:
-    items = [
-        {"localRequestId": f"req-large-{index}", "rawCommandText": "x" * 12_000}
-        for index in range(400)
-    ]
+    items = [{"localRequestId": f"req-large-{index}", "rawCommandText": "x" * 12_000} for index in range(400)]
 
     selected, complete = command_executors._local_request_snapshot_byte_capped_items(
         items,
@@ -1857,6 +1854,7 @@ def test_executor_ignores_stale_remote_approval_request_id(tmp_path: Path) -> No
     assert result["failureCode"] == "remote_approval_request_id_mismatch"
     assert store.claimed_receipts == []
 
+
 def test_executor_releases_remote_once_receipt_when_resolution_not_applied(tmp_path: Path) -> None:
     class ApprovalStore(FakeStore):
         def __init__(self, guard_home: Path) -> None:
@@ -2135,6 +2133,7 @@ def test_executor_rejects_overbroad_signed_allow_memory_rules(tmp_path: Path) ->
     assert result["data"]["decisionMemoryAck"]["rejectedRuleIds"] == ["review-memory:receipt-team"]
     assert store.policies == [([], "2026-06-13T00:00:00+00:00", True)]
     assert store.get_sync_payload("guard_review_memory_policy_version") is None
+
 
 def test_executor_rejects_tampered_decision_memory_bundle_hash(tmp_path: Path) -> None:
     store = _oauth_store(tmp_path)

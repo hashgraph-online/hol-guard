@@ -489,10 +489,7 @@ def _local_request_snapshot_byte_capped_items(
 
 
 def _compact_local_request_snapshot_item(item: dict[str, object]) -> dict[str, object]:
-    compact = {
-        key: _compact_local_request_snapshot_value(value)
-        for key, value in item.items()
-    }
+    compact = {key: _compact_local_request_snapshot_value(value) for key, value in item.items()}
     compact_bytes = len(json.dumps(compact, separators=(",", ":"), sort_keys=True).encode("utf-8"))
     if compact_bytes <= LOCAL_REQUEST_SNAPSHOT_MAX_BYTES:
         return compact
@@ -512,11 +509,7 @@ def _compact_local_request_snapshot_item(item: dict[str, object]) -> dict[str, o
         "rawCommandText",
         "reviewCommand",
     )
-    return {
-        key: compact[key]
-        for key in safe_keys
-        if key in compact
-    }
+    return {key: compact[key] for key in safe_keys if key in compact}
 
 
 def _compact_local_request_snapshot_value(value: object) -> object:
@@ -525,15 +518,9 @@ def _compact_local_request_snapshot_value(value: object) -> object:
             return value
         return f"{value[:LOCAL_REQUEST_SNAPSHOT_MAX_STRING_CHARS]}...[truncated]"
     if isinstance(value, list):
-        return [
-            _compact_local_request_snapshot_value(item)
-            for item in value[:LOCAL_REQUEST_SNAPSHOT_MAX_LIST_ITEMS]
-        ]
+        return [_compact_local_request_snapshot_value(item) for item in value[:LOCAL_REQUEST_SNAPSHOT_MAX_LIST_ITEMS]]
     if isinstance(value, dict):
-        return {
-            str(key): _compact_local_request_snapshot_value(item)
-            for key, item in value.items()
-        }
+        return {str(key): _compact_local_request_snapshot_value(item) for key, item in value.items()}
     return value
 
 
