@@ -21,6 +21,7 @@ from .command_executors import (
     command_job_operation,
     execute_guard_command_job,
 )
+from ..cli.update_commands import build_guard_update_status_payload, run_guard_update
 from .runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncNotConfiguredError,
@@ -44,6 +45,8 @@ _DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
 _MIN_RETRY_WAIT_SECONDS = 0.1
 _REQUEST_TIMEOUT_SECONDS = 35
 _RETRY_TIMEOUT_SECONDS = 60
+AUTO_UPDATE_THROTTLE_HOURS = 6
+AUTO_UPDATE_STATE_KEY = "guard_auto_update_state"
 _LOGGER = logging.getLogger(__name__)
 _LEASE_LOCAL_REQUEST_SNAPSHOT_KEYS = (
     "requests",
@@ -400,6 +403,59 @@ def _retry_pending_result(
     _save_state(store, state)
     return True
 
+def _maybe_auto_update(store: GuardStore, context: HarnessContext) -> None:
+    """Check for available updates and self-apply if auto-update is enabled.
+
+    Throttled to once per AUTO_UPDATE_THROTTLE_HOURS. Only runs when the
+    command queue is enabled and no job was leased. Source/editable installs
+    are excluded by build_guard_update_status_payload's auto_updatable flag.
+    """
+    raw = store.get_kv(AUTO_UPDATE_STATE_KEY) if hasattr(store, "get_kv") else None
+    state: dict[str, object] = json.loads(raw) if isinstance(raw, str) and raw else {}
+    last_check = state.get("last_check_at")
+    if isinstance(last_check, str):
+        try:
+            last_dt = datetime.fromisoformat(last_check)
+            elapsed = (datetime.now(timezone.utc) - last_dt).total_seconds()
+            if elapsed < AUTO_UPDATE_THROTTLE_HOURS * 3600:
+                return
+        except (ValueError, TypeError):
+            pass
+    try:
+        status = build_guard_update_status_payload()
+    except Exception:
+        _LOGGER.debug("Auto-update version check failed", exc_info=True)
+        return
+    now_str = _now()
+    state["last_check_at"] = now_str
+    state["last_status"] = status
+    if not status.get("auto_updatable") or status.get("blocked_reason"):
+        if hasattr(store, "set_kv"):
+            store.set_kv(AUTO_UPDATE_STATE_KEY, json.dumps(state))
+        return
+    if not status.get("update_available"):
+        if hasattr(store, "set_kv"):
+            store.set_kv(AUTO_UPDATE_STATE_KEY, json.dumps(state))
+        return
+    _LOGGER.info("Auto-update: applying update %s -> %s", status.get("current_version"), status.get("latest_version"))
+    try:
+        update_payload, exit_code = run_guard_update(
+            dry_run=False,
+            context=context,
+            store=None,
+            workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
+            now=now_str,
+        )
+        state["last_update_result"] = update_payload
+        state["last_update_exit_code"] = exit_code
+        state["last_update_at"] = now_str
+    except Exception:
+        _LOGGER.warning("Auto-update failed", exc_info=True)
+        state["last_update_error"] = True
+    finally:
+        if hasattr(store, "set_kv"):
+            store.set_kv(AUTO_UPDATE_STATE_KEY, json.dumps(state))
+
 
 def _resolve_command_queue_auth_context(
     store: GuardStore,
@@ -451,6 +507,7 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
             }
         )
         _save_state(store, state)
+        _maybe_auto_update(store, context)
         return command_queue_status(store)
     state.update(
         {
