@@ -2177,8 +2177,15 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
         return summary
 
     monkeypatch.setattr(daemon_server, "sync_local_guard_cloud_proof", fake_sync_local_guard_cloud_proof, raising=False)
+    monkeypatch.setattr(
+        daemon_server,
+        "sync_supply_chain_cloud_state",
+        lambda current_store, **kwargs: {"synced_at": "2026-05-23T17:18:40.061Z", "workspace_audits": {}},
+        raising=False,
+    )
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon._headless_cloud_sync_interval_seconds = 0
     daemon.start()
     try:
         token = _dashboard_token_for(store)
@@ -2237,8 +2244,15 @@ def test_headless_app_scan_does_not_spawn_unbounded_cloud_sync_threads(
         blocking_sync_local_guard_cloud_proof,
         raising=False,
     )
+    monkeypatch.setattr(
+        daemon_server,
+        "sync_supply_chain_cloud_state",
+        lambda current_store, **kwargs: {"synced_at": "2026-05-23T17:18:40.061Z", "workspace_audits": {}},
+        raising=False,
+    )
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon._headless_cloud_sync_interval_seconds = 0
     daemon.start()
     try:
         token = _dashboard_token_for(store)
