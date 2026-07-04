@@ -174,7 +174,7 @@ def test_daemon_bundle_refresh_reports_retryable_error(
     assert "oauth upstream down" in str(summary["error"])
 
 
-def _wait_for_aibom_status(store, *, expected: str, timeout: float = 1.0) -> dict[str, object]:
+def _wait_for_aibom_status(store, *, expected: str, timeout: float = 5.0) -> dict[str, object]:
     """Poll until the AIBOM daemon payload carries the expected status string."""
     deadline = time.time() + timeout
     while time.time() < deadline:

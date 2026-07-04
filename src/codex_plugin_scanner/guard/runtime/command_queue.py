@@ -262,11 +262,7 @@ def _local_requests_snapshot(store: GuardStore) -> dict[str, object]:
         return {"requests": []}
     if not isinstance(payload, dict):
         return {"requests": []}
-    return {
-        key: payload[key]
-        for key in _LEASE_LOCAL_REQUEST_SNAPSHOT_KEYS
-        if key in payload
-    }
+    return {key: payload[key] for key in _LEASE_LOCAL_REQUEST_SNAPSHOT_KEYS if key in payload}
 
 
 def _repair_guard_cloud_authorization(store: GuardStore) -> dict[str, bool]:
