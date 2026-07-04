@@ -70,6 +70,7 @@ SUPPORTED_COMMAND_OPERATIONS: tuple[str, ...] = (*PACKAGE_SHIM_OPERATIONS, *APP_
 COMMAND_OPERATION_SCHEMA_VERSIONS: dict[str, int] = {operation: 1 for operation in SUPPORTED_COMMAND_OPERATIONS}
 LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = local_request_snapshots.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
 LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = local_request_snapshots.LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT
+LOCAL_REQUEST_SNAPSHOT_MAX_BYTES = local_request_snapshots.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES
 
 
 def execute_guard_command_job(
@@ -425,7 +426,34 @@ def _local_request_snapshot_items(store: GuardStore) -> list[dict[str, object]]:
 def _local_request_snapshot_payload(store: GuardStore) -> dict[str, object]:
     local_request_snapshots.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
     local_request_snapshots.LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT
+    local_request_snapshots.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES = LOCAL_REQUEST_SNAPSHOT_MAX_BYTES
     return local_request_snapshots.local_request_snapshot_payload(store)
+
+
+def _local_request_snapshot_items_for_status(
+    store: GuardStore,
+    *,
+    status: str,
+    limit: int,
+) -> tuple[list[dict[str, object]], bool]:
+    return local_request_snapshots._local_request_snapshot_items_for_status(
+        store,
+        status=status,
+        limit=limit,
+    )
+
+
+def _local_request_snapshot_byte_capped_items(
+    items: list[dict[str, object]],
+    *,
+    max_bytes: int,
+    existing_items: list[dict[str, object]] | None = None,
+) -> tuple[list[dict[str, object]], bool]:
+    return local_request_snapshots._local_request_snapshot_byte_capped_items(
+        items,
+        max_bytes=max_bytes,
+        existing_items=existing_items,
+    )
 
 
 def _package_shim_context(

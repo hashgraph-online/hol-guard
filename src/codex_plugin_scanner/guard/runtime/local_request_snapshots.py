@@ -19,6 +19,8 @@ LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = 125
 LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = 25
 LOCAL_REQUEST_CURSORLESS_FALLBACK_LIMIT = 500
 LOCAL_REQUEST_SNAPSHOT_MAX_BYTES = 900_000
+LOCAL_REQUEST_SNAPSHOT_MAX_STRING_CHARS = 2_000
+LOCAL_REQUEST_SNAPSHOT_MAX_LIST_ITEMS = 20
 LOCAL_REQUEST_TEXT_FIELD_MAX_CHARS = 256
 LOCAL_REQUEST_COMMAND_FIELD_MAX_CHARS = 1_024
 _LOCAL_REQUEST_SNAPSHOT_CURSOR_SYNC_KEY = "guard_command_local_request_snapshot_cursor"
@@ -49,16 +51,112 @@ def local_request_snapshot_payload(store: GuardStore) -> dict[str, object]:
         status="resolved",
         limit=LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT,
     )
+    requests, pending_byte_complete, resolved_byte_complete = _local_request_snapshot_byte_capped_statuses(
+        pending_items,
+        resolved_items,
+        max_bytes=LOCAL_REQUEST_SNAPSHOT_MAX_BYTES,
+    )
     return {
-        "requests": [*pending_items, *resolved_items],
-        "pendingComplete": pending_complete,
-        "resolvedComplete": resolved_complete,
+        "requests": requests,
+        "pendingComplete": pending_complete and pending_byte_complete,
+        "resolvedComplete": resolved_complete and resolved_byte_complete,
         "pendingLimit": LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT,
         "resolvedLimit": LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT,
         "pendingCount": len(pending_items),
         "resolvedCount": len(resolved_items),
         "maxBytes": LOCAL_REQUEST_SNAPSHOT_MAX_BYTES,
     }
+
+
+def _local_request_snapshot_byte_capped_statuses(
+    pending_items: list[dict[str, object]],
+    resolved_items: list[dict[str, object]],
+    *,
+    max_bytes: int,
+) -> tuple[list[dict[str, object]], bool, bool]:
+    selected, pending_complete = _local_request_snapshot_byte_capped_items(
+        pending_items,
+        max_bytes=max_bytes,
+    )
+    if not pending_complete:
+        return selected, False, False
+
+    selected, resolved_complete = _local_request_snapshot_byte_capped_items(
+        resolved_items,
+        existing_items=selected,
+        max_bytes=max_bytes,
+    )
+    return selected, True, resolved_complete
+
+
+def _local_request_snapshot_byte_capped_items(
+    items: list[dict[str, object]],
+    *,
+    max_bytes: int,
+    existing_items: list[dict[str, object]] | None = None,
+) -> tuple[list[dict[str, object]], bool]:
+    selected: list[dict[str, object]] = list(existing_items or [])
+    initial_len = len(selected)
+    for item in items:
+        candidate = [*selected, item]
+        candidate_bytes = len(
+            json.dumps({"requests": candidate}, separators=(",", ":"), sort_keys=True).encode("utf-8"),
+        )
+        if candidate_bytes > max_bytes:
+            if len(selected) == initial_len:
+                compact_item = _compact_local_request_snapshot_item(item)
+                compact_candidate = [*selected, compact_item]
+                compact_bytes = len(
+                    json.dumps({"requests": compact_candidate}, separators=(",", ":"), sort_keys=True).encode("utf-8"),
+                )
+                if compact_bytes <= max_bytes:
+                    selected.append(compact_item)
+            return selected, False
+        selected.append(item)
+    return selected, True
+
+
+def _compact_local_request_snapshot_item(item: dict[str, object]) -> dict[str, object]:
+    compact = {key: _compact_local_request_snapshot_value(value) for key, value in item.items()}
+    compact_bytes = len(json.dumps(compact, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+    if compact_bytes <= LOCAL_REQUEST_SNAPSHOT_MAX_BYTES:
+        return compact
+
+    safe_keys = (
+        "localRequestId",
+        "requestKind",
+        "requestPayload",
+        "localStatus",
+        "firstSeenAt",
+        "lastSeenAt",
+        "resolvedAt",
+        "status",
+        "harness",
+        "artifactId",
+        "artifactName",
+        "artifactType",
+        "policyAction",
+        "recommendedScope",
+        "rawCommandText",
+        "reviewCommand",
+        "actionEnvelope",
+    )
+    reduced = {key: compact[key] for key in safe_keys if key in compact}
+    if reduced:
+        return reduced
+    return compact
+
+
+def _compact_local_request_snapshot_value(value: object) -> object:
+    if isinstance(value, str):
+        if len(value) <= LOCAL_REQUEST_SNAPSHOT_MAX_STRING_CHARS:
+            return value
+        return f"{value[:LOCAL_REQUEST_SNAPSHOT_MAX_STRING_CHARS]}...[truncated]"
+    if isinstance(value, list):
+        return [_compact_local_request_snapshot_value(item) for item in value[:LOCAL_REQUEST_SNAPSHOT_MAX_LIST_ITEMS]]
+    if isinstance(value, dict):
+        return {str(key): _compact_local_request_snapshot_value(item) for key, item in value.items()}
+    return value
 
 
 def _local_request_snapshot_items_for_status(
@@ -93,7 +191,7 @@ def _local_request_snapshot_items_for_status(
         )
         if not cursor_supported:
             cursor = None
-    page_limit = min(limit if cursor_supported else LOCAL_REQUEST_CURSORLESS_FALLBACK_LIMIT, len(rows))
+    page_limit = min(limit, len(rows))
     for item in rows[:page_limit]:
         request_id = item.get("request_id")
         if not isinstance(request_id, str) or not request_id:
@@ -132,7 +230,7 @@ def _local_request_snapshot_items_for_status(
         else:
             cursor_state.pop(status, None)
         _save_local_request_snapshot_cursor_state(store, cursor_state)
-    complete_limit = limit if cursor_supported else LOCAL_REQUEST_CURSORLESS_FALLBACK_LIMIT
+    complete_limit = limit
     return items, cursor is None and len(rows) <= complete_limit
 
 
