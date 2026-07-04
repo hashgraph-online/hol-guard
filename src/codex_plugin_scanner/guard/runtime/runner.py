@@ -3503,6 +3503,17 @@ def _urlopen_with_timeout_retry(
             with urllib.request.urlopen(current_request, timeout=current_timeout_seconds):
                 return
         except urllib.error.HTTPError as error:
+            if error.code == 401:
+                error_payload = _http_error_payload(error)
+                dpop_nonce = _dpop_nonce_from_http_error(error, error_payload)
+                if dpop_nonce is not None and nonce_retry_count < 3:
+                    nonce_retry_count += 1
+                    retry_request = _guard_sync_request_with_nonce(current_request, dpop_nonce)
+                    if retry_request is not None:
+                        current_request = retry_request
+                        current_timeout_seconds = timeout_seconds
+                        retried_timeout = False
+                        continue
             if error.code == 429 and rate_limit_retry_count < 2:
                 retry_after = _parse_retry_after_header(error)
                 time.sleep(min(retry_after, 120))

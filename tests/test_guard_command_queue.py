@@ -1515,8 +1515,8 @@ def test_poll_once_keeps_auth_expired_state_when_auth_refresh_fails(
         "2026-06-23T10:00:00+00:00",
     )
 
-    def fake_auth_context(current_store, *, allow_primary_repair: bool = True):
-        del current_store, allow_primary_repair
+    def fake_auth_context(current_store, *, allow_primary_repair: bool = True, force_refresh: bool = False):
+        del current_store, allow_primary_repair, force_refresh
         raise guard_runner_module.GuardSyncAuthorizationExpiredError(existing_error)
 
     monkeypatch.setattr(command_queue, "_resolve_guard_sync_auth_context", fake_auth_context)
@@ -1536,8 +1536,8 @@ def test_poll_once_repairs_oauth_storage_and_retries_before_leasing(
     store = _oauth_store(tmp_path)
     resolve_calls = {"count": 0}
 
-    def fake_auth_context(current_store, *, allow_primary_repair: bool = True):
-        del current_store, allow_primary_repair
+    def fake_auth_context(current_store, *, allow_primary_repair: bool = True, force_refresh: bool = False):
+        del current_store, allow_primary_repair, force_refresh
         resolve_calls["count"] += 1
         if resolve_calls["count"] == 1:
             raise guard_runner_module.GuardSyncNotConfiguredError("Guard is not logged in.")
