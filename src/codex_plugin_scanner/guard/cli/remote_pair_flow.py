@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -21,6 +22,7 @@ from ..remote_pairing_constants import (
     REMOTE_PAIRING_CODE_MIN_LENGTH,
     REMOTE_PAIRING_CODE_PREFIX,
 )
+from ..runtime.runner import sync_runtime_session
 from ..store import GuardStore
 from .connect_flow import (
     CONNECT_REPAIR_COMMAND,
@@ -262,6 +264,38 @@ def build_remote_pair_status_payload(
     )
 
 
+def _sync_runtime_session_after_pair(
+    store: GuardStore,
+    *,
+    runtime: str,
+    label: str,
+) -> None:
+    """Best-effort runtime session sync so the agent appears in Guard Cloud immediately.
+
+    The remote-pair flow installs local protection but previously never pushed a runtime
+    session to Guard Cloud.  The protect dashboard reads runtime sessions to determine
+    which harnesses are "connected".  Without this sync the dashboard shows the agent as
+    unconnected even though the local install succeeded.
+
+    Failures are swallowed so that a transient network error does not roll back a
+    successful pairing.  The daemon's periodic sync will retry.
+    """
+    with contextlib.suppress(Exception):
+        sync_runtime_session(
+            store,
+            session={
+                "harness": runtime,
+                "surface": "remote-pair",
+                "status": "active",
+                "client_name": runtime,
+                "client_title": label,
+                "client_version": None,
+                "workspace": "remote-agent",
+                "capabilities": ["hosted-runtime", "guard-cloud-sync"],
+            },
+        )
+
+
 def run_guard_remote_pair_command(
     *,
     store: GuardStore,
@@ -351,6 +385,8 @@ def run_guard_remote_pair_command(
         warnings = verification_block.get("warnings")
         if isinstance(warnings, list) and warnings:
             protection_reason = str(warnings[0])
+
+    _sync_runtime_session_after_pair(store, runtime=runtime, label=resolved_label)
 
     sync_url = _oauth_sync_url_from_issuer(oauth_client.issuer)
     return _sanitize_remote_pair_payload(

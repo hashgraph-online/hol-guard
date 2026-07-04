@@ -323,3 +323,118 @@ def test_claim_remote_pairing_intent_surfaces_api_error(monkeypatch: pytest.Monk
             public_dpop_jwk={"kty": "EC", "crv": "P-256", "x": "abc", "y": "def"},
             urlopen=fake_urlopen,
         )
+
+
+def test_run_guard_remote_pair_command_syncs_runtime_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Remote-pair must push a runtime session to Guard Cloud so the protect dashboard shows it."""
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.remote_pair_flow.os.geteuid",
+        lambda: 1000,
+        raising=False,
+    )
+
+    def fake_claim(**_kwargs: object) -> dict[str, object]:
+        return {
+            "intentId": "intent-42",
+            "state": "connected",
+            "tokens": {
+                "access_token": _fake_access_token(),
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "refresh_token": "refresh-token-value",
+                "scope": "guard:runtime.sync guard:offline_access",
+            },
+        }
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.remote_pair_flow.claim_remote_pairing_intent",
+        fake_claim,
+    )
+
+    captured_sessions: list[dict[str, object]] = []
+
+    def fake_sync(store_arg, *, session):
+        captured_sessions.append(dict(session))
+        return {"synced_at": "2025-01-01T00:00:00Z", "runtime_session_id": "rt-1"}
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.remote_pair_flow.sync_runtime_session",
+        fake_sync,
+    )
+
+    payload = run_guard_remote_pair_command(
+        store=store,
+        context=context,
+        connect_url="https://hol.org/guard/connect",
+        runtime="hermes",
+        pair_code="HLG-7K3D29",
+        label="Hosted Hermes",
+        no_root=True,
+    )
+
+    assert payload["status"] == "connected"
+    assert len(captured_sessions) == 1
+    session = captured_sessions[0]
+    assert session["harness"] == "hermes"
+    assert session["status"] == "active"
+    assert session["surface"] == "remote-pair"
+    assert session["client_title"] == "Hosted Hermes"
+
+
+def test_run_guard_remote_pair_command_swallows_sync_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A transient sync failure must not roll back a successful pairing."""
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.remote_pair_flow.os.geteuid",
+        lambda: 1000,
+        raising=False,
+    )
+
+    def fake_claim(**_kwargs: object) -> dict[str, object]:
+        return {
+            "intentId": "intent-42",
+            "state": "connected",
+            "tokens": {
+                "access_token": _fake_access_token(),
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "refresh_token": "refresh-token-value",
+                "scope": "guard:runtime.sync guard:offline_access",
+            },
+        }
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.remote_pair_flow.claim_remote_pairing_intent",
+        fake_claim,
+    )
+
+    def fake_sync(_store, *, _session):
+        raise RuntimeError("network is down")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.remote_pair_flow.sync_runtime_session",
+        fake_sync,
+    )
+
+    payload = run_guard_remote_pair_command(
+        store=store,
+        context=context,
+        connect_url="https://hol.org/guard/connect",
+        runtime="hermes",
+        pair_code="HLG-7K3D29",
+        label="Hosted Hermes",
+        no_root=True,
+    )
+
+    # Pairing still succeeds despite sync failure
+    assert payload["status"] == "connected"
+    assert payload["pairing"] == "connected"
