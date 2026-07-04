@@ -9,6 +9,7 @@ import {
   fetchPolicy,
   fetchReceipts,
   fetchRequest,
+  fetchApprovalPage,
   fetchAllPendingRequests,
   fetchInboxState,
   fetchRuntimeSnapshot,
@@ -240,6 +241,33 @@ export function App() {
   const [guardVersion, setGuardVersion] = useState<string | null>(null);
   const resolutionInFlight = useRef(false);
   const bulkApproveInFlight = useRef(false);
+  const queuedItems = requests.kind === "ready" ? requests.items : [];
+  const activeRequestId = requestId ?? queuedItems[0]?.request_id ?? null;
+
+  useEffect(() => {
+    if (activeRequestId === null) {
+      setDetail({ kind: "idle" });
+      return;
+    }
+    let cancelled = false;
+    setDetail({ kind: "loading" });
+    loadDetail(activeRequestId).then((nextState) => {
+      if (!cancelled) {
+        setDetail(nextState);
+        if (nextState.kind === "ready") {
+          setRequests((current) => {
+            if (current.kind !== "ready" || current.items.some((item) => item.request_id === nextState.item.request_id)) {
+              return current;
+            }
+            return { kind: "ready", items: [nextState.item, ...current.items] };
+          });
+        }
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRequestId]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -264,7 +292,15 @@ export function App() {
     let pollId: number | undefined;
     let refreshInFlight = false;
     let clearedQueue = false;
-    const needsFullQueue = view === "inbox" || requestId !== null;
+    const needsFullQueue = view === "inbox" && requestId === null;
+    const needsQueuePage = view === "inbox" || requestId !== null;
+    const needsRuntimeReceipts =
+      view === "home" ||
+      view === "fleet" ||
+      view === "app-detail" ||
+      view === "supply-chain" ||
+      view === "audit" ||
+      view === "feed-health";
     const loadApprovalQueue = () => {
       if (refreshInFlight || cancelled || resolutionInFlight.current) {
         return;
@@ -285,13 +321,26 @@ export function App() {
                 setRequests({ kind: "error", message });
               }
             })
+        : needsQueuePage
+          ? fetchApprovalPage({ status: "pending", limit: 200 })
+              .then((page) => {
+                if (!cancelled && !resolutionInFlight.current) {
+                  setRequests({ kind: "ready", items: page.items });
+                }
+              })
+              .catch((error: unknown) => {
+                if (!cancelled && !resolutionInFlight.current) {
+                  const message = error instanceof Error ? error.message : queueErrorMessage;
+                  setRequests({ kind: "error", message });
+                }
+              })
         : Promise.resolve().then(() => {
             if (!cancelled && !resolutionInFlight.current && !clearedQueue) {
               setRequests({ kind: "ready", items: [] });
               clearedQueue = true;
             }
           });
-      const runtimeSnapshot = fetchRuntimeSnapshot({ includeItems: false })
+      const runtimeSnapshot = fetchRuntimeSnapshot({ includeItems: false, includeReceipts: needsRuntimeReceipts })
         .then((snapshot) => {
           if (!cancelled && !resolutionInFlight.current) {
             setRuntime({ kind: "ready", snapshot });
@@ -318,6 +367,10 @@ export function App() {
   }, [view, requestId]);
 
   useEffect(() => {
+    const needsInventory = view === "fleet" || view === "app-detail";
+    if (!needsInventory) {
+      return;
+    }
     let cancelled = false;
     fetchInventory()
       .then((items) => {
@@ -333,7 +386,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -344,44 +397,72 @@ export function App() {
         }
       })
       .catch(() => {});
-    fetchGuardUpdateStatus()
-      .then((status) => {
-        if (!cancelled && status.current_version) {
-          setGuardVersion(status.current_version);
-        }
-      })
-      .catch(() => {});
+    if (view === "about") {
+      fetchGuardUpdateStatus()
+        .then((status) => {
+          if (!cancelled && status.current_version) {
+            setGuardVersion(status.current_version);
+          }
+        })
+        .catch(() => {});
+    }
     return () => { cancelled = true; };
-  }, []);
+  }, [view]);
 
   useEffect(() => {
+    const needsReceipts =
+      view === "evidence" ||
+      view === "app-detail" ||
+      view === "supply-chain" ||
+      view === "audit" ||
+      view === "feed-health";
+    const needsPolicies =
+      view === "home" ||
+      view === "fleet" ||
+      view === "app-detail" ||
+      view === "supply-chain" ||
+      view === "audit" ||
+      view === "feed-health" ||
+      view === "policy";
+    if (!needsReceipts && !needsPolicies) {
+      return;
+    }
     let cancelled = false;
-    Promise.allSettled([fetchReceipts(), fetchPolicies()])
+    Promise.allSettled([
+      needsReceipts ? fetchReceipts() : Promise.resolve<GuardReceipt[] | null>(null),
+      needsPolicies ? fetchPolicies() : Promise.resolve<GuardPolicyDecision[] | null>(null),
+    ])
       .then(([receiptsResult, policiesResult]) => {
         if (cancelled) {
           return;
         }
-        if (receiptsResult.status === "fulfilled") {
-          setReceipts({ kind: "ready", items: receiptsResult.value });
-        } else {
-          setReceipts({
-            kind: "error",
-            message: receiptsResult.reason instanceof Error ? receiptsResult.reason.message : "Unable to load local approval history."
-          });
+        if (needsReceipts) {
+          if (receiptsResult.status === "fulfilled" && receiptsResult.value !== null) {
+            setReceipts({ kind: "ready", items: receiptsResult.value });
+          } else {
+            const reason = receiptsResult.status === "rejected" ? receiptsResult.reason : null;
+            setReceipts({
+              kind: "error",
+              message: reason instanceof Error ? reason.message : "Unable to load local approval history."
+            });
+          }
         }
-        if (policiesResult.status === "fulfilled") {
-          setPolicies({ kind: "ready", items: policiesResult.value });
-        } else {
-          setPolicies({
-            kind: "error",
-            message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load saved approvals."
-          });
+        if (needsPolicies) {
+          if (policiesResult.status === "fulfilled" && policiesResult.value !== null) {
+            setPolicies({ kind: "ready", items: policiesResult.value });
+          } else {
+            const reason = policiesResult.status === "rejected" ? policiesResult.reason : null;
+            setPolicies({
+              kind: "error",
+              message: reason instanceof Error ? reason.message : "Unable to load saved approvals."
+            });
+          }
         }
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [view]);
 
   useEffect(() => {
     if (view !== "fleet") {
@@ -407,26 +488,6 @@ export function App() {
       cancelled = true;
     };
   }, [view]);
-
-  const queuedItems = requests.kind === "ready" ? requests.items : [];
-  const activeRequestId = requestId ?? queuedItems[0]?.request_id ?? null;
-
-  useEffect(() => {
-    if (activeRequestId === null) {
-      setDetail({ kind: "idle" });
-      return;
-    }
-    let cancelled = false;
-    setDetail({ kind: "loading" });
-    loadDetail(activeRequestId).then((nextState) => {
-      if (!cancelled) {
-        setDetail(nextState);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeRequestId]);
 
   const handleOpenInbox = useCallback(() => navigate("/inbox"), []);
   const handleOpenFleet = useCallback(() => navigate(PROTECT_ROUTE), []);
@@ -802,6 +863,7 @@ export function App() {
       onRetry={handleRetry}
       onRepair={handleRepair}
       onGuardReconnected={handleRetry}
+      enableUpdateStatus={view !== "inbox"}
       onClearEvidence={handleClearEvidence}
       fleetContent={
         runtime.kind === "ready" ? (

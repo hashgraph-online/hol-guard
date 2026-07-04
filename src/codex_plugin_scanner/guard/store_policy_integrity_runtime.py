@@ -56,8 +56,6 @@ class StorePolicyIntegrityAdminMixin:
         query += " where " + " and ".join(conditions)
         query += " order by updated_at desc"
         with self._connect() as connection:
-            state = self._refresh_policy_integrity_state(connection, now=_now(), create_key=True)
-            key, key_id = self._policy_integrity_secret_material(create=True)
             rows = connection.execute(query, params).fetchall()
             lookup_items = [
                 (
@@ -68,6 +66,15 @@ class StorePolicyIntegrityAdminMixin:
                 for row in rows
             ]
             source_context_index = build_policy_source_context_index(connection, items=lookup_items)
+            needs_local_integrity = any(not is_remote_policy_source(str(row["source"])) for row in rows)
+            state: Mapping[str, object] | None = None
+            key: bytes | None = None
+            key_id: str | None = None
+            trusted_generation: int | None = None
+            if needs_local_integrity:
+                state = self._refresh_policy_integrity_state(connection, now=_now(), create_key=True)
+                key, key_id = self._policy_integrity_secret_material(create=True)
+                trusted_generation = _mapping_int(state, "generation")
             items: list[dict[str, object]] = []
             for row in rows:
                 payload = self._policy_decision_dict_from_row(
@@ -76,7 +83,8 @@ class StorePolicyIntegrityAdminMixin:
                     source_context_index=source_context_index,
                 )
                 if not is_remote_policy_source(str(row["source"])):
-                    trusted_generation = _mapping_int(state, "generation")
+                    if state is None:
+                        continue
                     integrity_result = self._policy_integrity_result_for_row(
                         row,
                         mode=str(state.get("mode") or "degraded"),

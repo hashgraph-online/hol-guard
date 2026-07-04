@@ -1032,13 +1032,18 @@ export async function fetchAllPendingRequests(): Promise<GuardApprovalRequest[]>
   return items;
 }
 
-function runtimeSnapshotSearchParams(input: { activeRequestId?: string; includeItems?: boolean } = {}): URLSearchParams {
+function runtimeSnapshotSearchParams(
+  input: { activeRequestId?: string; includeItems?: boolean; includeReceipts?: boolean } = {},
+): URLSearchParams {
   const params = new URLSearchParams();
   if (input.activeRequestId) {
     params.set("active_request_id", input.activeRequestId);
   }
   if (input.includeItems === false) {
     params.set("include_items", "0");
+  }
+  if (input.includeReceipts === false) {
+    params.set("include_receipts", "0");
   }
   return params;
 }
@@ -1053,7 +1058,7 @@ export async function fetchInboxState(input: { activeRequestId?: string } = {}):
   }
   const [snapshotPayload, items] = await Promise.all([
     readJson<RuntimeSnapshotPayload>(
-      queuePath("/v1/runtime", runtimeSnapshotSearchParams({ ...input, includeItems: false })),
+      queuePath("/v1/runtime", runtimeSnapshotSearchParams({ ...input, includeItems: false, includeReceipts: false })),
     ),
     fetchAllPendingRequests(),
   ]);
@@ -1082,7 +1087,9 @@ export async function fetchApprovalPage(input: GuardApprovalPageFilters = {}): P
   return normalizeApprovalPage(payload, input.status ?? "pending");
 }
 
-export async function fetchRuntimeSnapshot(input: { includeItems?: boolean } = {}): Promise<GuardRuntimeSnapshot> {
+export async function fetchRuntimeSnapshot(
+  input: { includeItems?: boolean; includeReceipts?: boolean } = {},
+): Promise<GuardRuntimeSnapshot> {
   if (isGuardDemoMode()) {
     return buildDemoRuntimeSnapshot();
   }
@@ -1101,6 +1108,7 @@ export async function fetchQueueSummary(input: { activeRequestId?: string } = {}
   if (input.activeRequestId) {
     params.set("active_request_id", input.activeRequestId);
   }
+  params.set("include_receipts", "0");
   const snapshot = await readJson<RuntimeSnapshotPayload>(queuePath("/v1/runtime", params));
   return normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count);
 }

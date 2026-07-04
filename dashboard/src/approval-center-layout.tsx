@@ -87,6 +87,7 @@ type LayoutProps = {
   onClearEvidence?: () => void;
   onRetryResume?: () => void;
   onGuardReconnected?: () => void;
+  enableUpdateStatus?: boolean;
 };
 
 function renderInboxContent(props: LayoutProps): ReactNode {
@@ -215,7 +216,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     updatePhase,
     onUpdateGuard,
     onReinstallGuard,
-  } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
+  } = useGuardUpdate({ onReconnected: props.onGuardReconnected, enabled: props.enableUpdateStatus });
 
   return (
     <div className="min-h-screen bg-white text-brand-dark">

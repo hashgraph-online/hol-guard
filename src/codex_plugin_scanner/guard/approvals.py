@@ -1060,7 +1060,7 @@ def build_runtime_snapshot(
     active_is_pending = active_request is not None and active_request.get("status") == "pending"
     first_request_id = str(queue_items[0]["request_id"]) if queue_items else None
     next_request_id = active_request_id if active_is_pending else first_request_id
-    latest_receipts = store.list_receipts(limit=receipt_limit)
+    latest_receipts = store.list_receipts(limit=receipt_limit) if receipt_limit > 0 else []
     snapshot_now = now or _now()
     config = load_guard_config(store.guard_home)
     latest_connect_state = _build_latest_connect_state(store, snapshot_now)

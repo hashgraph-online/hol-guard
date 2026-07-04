@@ -142,9 +142,10 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
   );
 }
 
-export function useGuardUpdate(options?: { onReconnected?: () => void }) {
+export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?: boolean }) {
+  const enabled = options?.enabled !== false;
   const [updateStatus, setUpdateStatus] = useState<GuardUpdateStatus | null>(null);
-  const [updatePhase, setUpdatePhase] = useState<GuardUpdatePhase>("checking");
+  const [updatePhase, setUpdatePhase] = useState<GuardUpdatePhase>(enabled ? "checking" : "idle");
   const reconnectStartedAt = useRef<number | null>(null);
   const updatePhaseRef = useRef<GuardUpdatePhase>("checking");
 
@@ -153,6 +154,9 @@ export function useGuardUpdate(options?: { onReconnected?: () => void }) {
   }, [updatePhase]);
 
   const refreshUpdateStatus = useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
     try {
       const status = await fetchGuardUpdateStatus();
       setUpdateStatus(status);
@@ -164,9 +168,13 @@ export function useGuardUpdate(options?: { onReconnected?: () => void }) {
         setUpdatePhase("idle");
       }
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) {
+      setUpdatePhase("idle");
+      return;
+    }
     let cancelled = false;
     void fetchGuardUpdateStatus()
       .then((status) => {
@@ -190,7 +198,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void }) {
       cancelled = true;
       window.clearInterval(pollId);
     };
-  }, [refreshUpdateStatus]);
+  }, [enabled, refreshUpdateStatus]);
 
   const waitForReconnect = useCallback(
     async (expectedPreviousVersion: string, expectedLatestVersion: string | null): Promise<boolean> => {
