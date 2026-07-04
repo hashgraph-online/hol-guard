@@ -1236,6 +1236,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/runtime":
             _maybe_queue_first_cloud_sync(store=store)
             config = load_guard_config(store.guard_home)
+            include_receipts = self._query_bool(parsed.query, "include_receipts", default=True)
             snapshot = build_runtime_snapshot(
                 store=store,
                 approval_center_url=(
@@ -1243,6 +1244,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 ),
                 active_request_id=self._query_string(parsed.query, "active_request_id"),
                 include_items=self._query_bool(parsed.query, "include_items", default=True),
+                receipt_limit=25 if include_receipts else 0,
             )
             self._write_json({**snapshot, "security_level": config.security_level})
             return

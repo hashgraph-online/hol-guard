@@ -29,6 +29,7 @@ from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.models import (
     GuardApprovalRequest,
     GuardArtifact,
+    GuardReceipt,
     HarnessDetection,
     PolicyDecision,
 )
@@ -1804,6 +1805,39 @@ class TestGuardApprovals:
         assert snapshot_payload["pending_count"] == 3
         assert snapshot_payload["items"] == []
         assert snapshot_payload["queue_summary"]["remaining_pending_count"] == 3
+
+    def test_guard_daemon_runtime_snapshot_can_omit_latest_receipts_for_request_pages(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        store.add_receipt(
+            GuardReceipt(
+                receipt_id="receipt-heavy-1",
+                timestamp="2026-04-11T00:00:00+00:00",
+                harness="codex",
+                artifact_id="codex:project:tool",
+                artifact_hash="hash-heavy-1",
+                policy_decision="allow",
+                capabilities_summary="capabilities",
+                changed_capabilities=("command",),
+                provenance_summary="provenance",
+                scanner_evidence=({"detector": "fixture", "detail": "x" * 10_000},),
+            )
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/runtime?include_items=0&include_receipts=0",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
+                snapshot_payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert snapshot_payload["receipt_count"] == 1
+        assert snapshot_payload["latest_receipts"] == []
 
     def test_guard_daemon_updates_runtime_heartbeat_while_serving_requests(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")

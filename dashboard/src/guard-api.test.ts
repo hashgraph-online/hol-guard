@@ -832,6 +832,7 @@ const queueSummary = await fetchQueueSummary({ activeRequestId: "req-active" });
 const runtimeUrl = new URL(fetchQueueCalls[0].url);
 
 assert(runtimeUrl.searchParams.get("active_request_id") === "req-active", "L079: fetchQueueSummary forwards active request id");
+assert(runtimeUrl.searchParams.get("include_receipts") === "0", "L079: fetchQueueSummary skips receipt payloads");
 assert(queueSummary.remaining_pending_count === 2, "L079: fetchQueueSummary returns queue count");
 assert(queueSummary.next_selectable_request_id === "req-next", "L079: fetchQueueSummary returns next selectable id");
 

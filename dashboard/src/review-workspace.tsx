@@ -211,7 +211,8 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
 
   const activeRequest =
     activeRequestId !== null
-      ? requests.find((r) => r.request_id === activeRequestId) ?? null
+      ? requests.find((r) => r.request_id === activeRequestId) ??
+        (detail?.item.request_id === activeRequestId ? detail.item : null)
       : null;
 
   useEffect(() => {
@@ -237,20 +238,24 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
     if (filteredRequests.length === 0) {
       return;
     }
-    const activeInRequests = requests.some((item) => item.request_id === activeRequestId);
+    const activeInRequests =
+      requests.some((item) => item.request_id === activeRequestId) ||
+      detail?.item.request_id === activeRequestId;
     if (activeRequestId !== null && activeInRequests) {
       return;
     }
     props.onOpenRequest(filteredRequests[0].request_id);
-  }, [activeRequestId, requests, filteredRequests, props.onOpenRequest]);
+  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, props.onOpenRequest]);
 
   useEffect(() => {
     if (pagedRequests.length === 0) return;
-    const activeOnPage = pagedRequests.some((item) => item.request_id === activeRequestId);
+    const activeOnPage =
+      pagedRequests.some((item) => item.request_id === activeRequestId) ||
+      detail?.item.request_id === activeRequestId;
     if (!activeOnPage) {
       props.onOpenRequest(pagedRequests[0].request_id);
     }
-  }, [currentPage, pagedRequests, activeRequestId, props.onOpenRequest]);
+  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, props.onOpenRequest]);
 
   const bulkApprove = useQueueBulkApprove({
     items: filteredRequests,
