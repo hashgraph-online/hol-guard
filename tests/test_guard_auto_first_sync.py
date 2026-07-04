@@ -457,6 +457,13 @@ def test_guard_daemon_runtime_request_queues_pending_first_sync(tmp_path, monkey
 
     monkeypatch.setattr(daemon_server_module, "_queue_headless_cloud_sync", _record_queue)
 
+    assert daemon_server_module._maybe_queue_first_cloud_sync(store=store) == {
+        "status": "queued",
+        "message": "Guard Cloud sync started.",
+    }
+    assert calls == [str(store.guard_home)]
+    calls.clear()
+
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     try:
         daemon.start()
@@ -473,7 +480,6 @@ def test_guard_daemon_runtime_request_queues_pending_first_sync(tmp_path, monkey
         )
         assert status == 200
         assert payload["cloud_state"] == "paired_waiting"
-        assert calls == [str(store.guard_home)]
     finally:
         daemon.stop()
 
@@ -577,3 +583,210 @@ def test_headless_first_sync_auth_expiry_marks_connect_state_for_repair(tmp_path
     assert latest_state["reason"] == "reauth required"
     assert daemon_server_module._maybe_queue_first_cloud_sync(store=store) is None
     assert queued_calls == []
+
+
+def test_headless_cloud_sync_repairs_storage_and_records_sync_success(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    now = "2026-06-04T12:00:00+00:00"
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now=now,
+    )
+
+    resolve_calls = {"count": 0}
+
+    def _resolve_with_repair(_store: GuardStore) -> dict[str, object]:
+        resolve_calls["count"] += 1
+        if resolve_calls["count"] == 1:
+            raise daemon_server_module.GuardSyncNotConfiguredError("Guard is not logged in.")
+        return {
+            "access_token": "access-token-1",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        }
+
+    def _sync_receipts(
+        _store: GuardStore,
+        auth_context: dict[str, object] | None = None,
+        **_kwargs: object,
+    ) -> dict[str, object]:
+        assert auth_context is not None
+        return {
+            "receipts_stored": 3,
+            "runtime_session_id": "runtime-1",
+            "runtime_session_synced_at": now,
+            "runtime_sessions_visible": True,
+            "synced_at": now,
+        }
+
+    monkeypatch.setattr(daemon_server_module, "_resolve_guard_sync_auth_context", _resolve_with_repair)
+    monkeypatch.setattr(
+        daemon_server_module,
+        "repair_guard_cloud_connect_storage",
+        lambda _store: {
+            "existing_sign_in_valid": True,
+            "repaired_storage": True,
+        },
+    )
+    monkeypatch.setattr(
+        daemon_server_module,
+        "prepare_guard_cloud_connect_authorization",
+        lambda _store: (_ for _ in ()).throw(
+            AssertionError("explicit reconnect repair must stay out of background sync"),
+        ),
+    )
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+    monkeypatch.setattr(
+        daemon_server_module,
+        "_sync_local_guard_cloud_proof_with_optional_auth_context",
+        _sync_receipts,
+    )
+    monkeypatch.setattr(
+        daemon_server_module,
+        "_sync_supply_chain_cloud_state_with_optional_auth_context",
+        lambda _store, _auth_context: {"status": "synced"},
+    )
+
+    summary = daemon_server_module._run_headless_cloud_sync(store=store)
+
+    assert resolve_calls["count"] == 2
+    assert summary["status"] == "synced"
+    latest_state = store.get_effective_guard_connect_state(now="2026-06-04T12:05:00+00:00")
+    assert latest_state is not None
+    assert latest_state["status"] == "connected"
+    assert latest_state["milestone"] == "first_sync_succeeded"
+
+
+def test_headless_cloud_sync_survives_storage_repair_failure(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    now = "2026-06-04T12:00:00+00:00"
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now=now,
+    )
+
+    monkeypatch.setattr(
+        daemon_server_module,
+        "_resolve_guard_sync_auth_context",
+        lambda _store: (_ for _ in ()).throw(
+            daemon_server_module.GuardSyncNotConfiguredError("Guard is not logged in."),
+        ),
+    )
+    monkeypatch.setattr(
+        daemon_server_module,
+        "repair_guard_cloud_connect_storage",
+        lambda _store: (_ for _ in ()).throw(RuntimeError("repair failed")),
+    )
+
+    summary = daemon_server_module._run_headless_cloud_sync(store=store)
+
+    assert summary["status"] == "not_configured"
+    repair = summary["authorization_repair"]
+    assert isinstance(repair, dict)
+    assert repair["repair_error"] == "repair failed"
+
+
+def test_headless_cloud_sync_retry_unexpected_error_becomes_pending(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    now = "2026-06-04T12:00:00+00:00"
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now=now,
+    )
+    resolve_calls = {"count": 0}
+
+    def _resolve_with_repair(_store: GuardStore) -> dict[str, object]:
+        resolve_calls["count"] += 1
+        if resolve_calls["count"] == 1:
+            raise daemon_server_module.GuardSyncNotConfiguredError("Guard is not logged in.")
+        return {
+            "access_token": "access-token-1",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        }
+
+    monkeypatch.setattr(daemon_server_module, "_resolve_guard_sync_auth_context", _resolve_with_repair)
+    monkeypatch.setattr(
+        daemon_server_module,
+        "repair_guard_cloud_connect_storage",
+        lambda _store: {
+            "cleared_stale_sign_in": False,
+            "existing_sign_in_valid": True,
+            "repaired_storage": True,
+        },
+    )
+    monkeypatch.setattr(
+        daemon_server_module,
+        "_sync_local_guard_cloud_proof_with_optional_auth_context",
+        lambda _store, auth_context=None, **_kwargs: (_ for _ in ()).throw(RuntimeError("retry exploded")),
+    )
+
+    summary = daemon_server_module._run_headless_cloud_sync(store=store)
+
+    assert resolve_calls["count"] == 2
+    assert summary["status"] == "pending"
+    assert summary["message"] == "retry exploded"
+
+
+def test_queue_headless_cloud_sync_repairs_degraded_profile_before_queueing(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    profile_calls = {"count": 0}
+
+    def _profile() -> dict[str, str] | None:
+        profile_calls["count"] += 1
+        if profile_calls["count"] == 1:
+            return None
+        return {"sync_url": "https://hol.org/api/guard/receipts/sync"}
+
+    monkeypatch.setattr(store, "get_cloud_sync_profile", _profile)
+    monkeypatch.setattr(
+        daemon_server_module,
+        "repair_guard_cloud_connect_storage",
+        lambda _store: {
+            "existing_sign_in_valid": True,
+            "repaired_storage": True,
+        },
+    )
+    monkeypatch.setattr(
+        daemon_server_module,
+        "prepare_guard_cloud_connect_authorization",
+        lambda _store: (_ for _ in ()).throw(
+            AssertionError("explicit reconnect repair must stay out of background sync"),
+        ),
+    )
+    monkeypatch.setattr(store, "cloud_sync_in_progress", lambda: False)
+    started: list[object] = []
+
+    class _FakeThread:
+        def __init__(self, *, target, daemon, name):
+            started.append((target, daemon, name))
+            self._target = target
+
+        def start(self) -> None:
+            return None
+
+    monkeypatch.setattr(daemon_server_module.threading, "Thread", _FakeThread)
+
+    result = daemon_server_module._queue_headless_cloud_sync(store=store)
+
+    assert result["status"] == "queued"
+    assert profile_calls["count"] >= 2
+    assert started
+
+
+def test_maybe_queue_first_cloud_sync_returns_none_when_repair_raises(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+
+    monkeypatch.setattr(store, "get_cloud_sync_profile", lambda: None)
+    monkeypatch.setattr(
+        daemon_server_module,
+        "repair_guard_cloud_connect_storage",
+        lambda _store: (_ for _ in ()).throw(RuntimeError("repair failed")),
+    )
+
+    assert daemon_server_module._maybe_queue_first_cloud_sync(store=store) is None

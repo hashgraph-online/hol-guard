@@ -20,6 +20,7 @@ import time
 import uuid
 import webbrowser
 from collections.abc import Mapping
+from contextlib import suppress
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -141,6 +142,7 @@ from ..runtime.runner import (
     _policy_bundle_is_version_downgrade,
     _resolve_guard_sync_auth_context,
     prepare_guard_cloud_connect_authorization,
+    repair_guard_cloud_connect_storage,
     sync_local_guard_cloud_proof,
     sync_supply_chain_bundle,
 )
@@ -190,6 +192,8 @@ _SUPPLY_CHAIN_PACKAGE_ACTIONS = {
 _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS = 1_500
 _SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS = 180
 _LOCAL_DASHBOARD_SESSION_REFRESH_GRACE_SECONDS = 7 * 24 * 60 * 60
+_DEFAULT_HEADLESS_CLOUD_SYNC_INTERVAL_SECONDS = 30.0
+_DEFAULT_HEADLESS_CLOUD_SYNC_BACKOFF_SECONDS = 10.0
 
 
 class _HookPathValidationError(ValueError):
@@ -582,10 +586,11 @@ def _headless_action_state_payload(
 def _run_headless_cloud_sync(
     *,
     store: GuardStore,
-) -> None:
+) -> dict[str, object]:
     recorded_at = _now()
     summary: dict[str, object]
-    try:
+
+    def _perform_sync() -> dict[str, object]:
         auth_context = _resolve_guard_sync_auth_context(store)
         sync_payload = _sync_local_guard_cloud_proof_with_optional_auth_context(
             store,
@@ -595,7 +600,14 @@ def _run_headless_cloud_sync(
             store,
             auth_context,
         )
-        summary = {
+        latest_state = store.get_latest_guard_connect_state(now=recorded_at) or {}
+        request_id = latest_state.get("request_id") if isinstance(latest_state, dict) else None
+        store.record_latest_guard_connect_sync_success(
+            sync_payload=sync_payload,
+            now=recorded_at,
+            request_id=request_id if isinstance(request_id, str) and request_id else None,
+        )
+        return {
             "status": "synced",
             "synced_at": sync_payload.get("synced_at"),
             "receipts_stored": sync_payload.get("receipts_stored", 0),
@@ -604,27 +616,123 @@ def _run_headless_cloud_sync(
             "runtime_sessions_visible": sync_payload.get("runtime_sessions_visible"),
             "supply_chain": supply_chain_payload,
         }
+
+    def _safe_storage_repair() -> dict[str, object]:
+        try:
+            return repair_guard_cloud_connect_storage(store)
+        except Exception as repair_error:
+            return {
+                "cleared_stale_sign_in": False,
+                "existing_sign_in_valid": False,
+                "repaired_storage": False,
+                "repair_error": str(repair_error),
+            }
+
+    try:
+        summary = _perform_sync()
     except GuardSyncAuthorizationExpiredError as error:
+        auth_error = error
+        repair = _safe_storage_repair()
+        if repair.get("existing_sign_in_valid"):
+            try:
+                summary = _perform_sync()
+            except GuardSyncAuthorizationExpiredError as retry_error:
+                auth_error = retry_error
+            except GuardSyncNotConfiguredError as retry_error:
+                store.record_latest_guard_connect_sync_result(
+                    status="retry_required",
+                    milestone="first_sync_failed",
+                    now=recorded_at,
+                    reason=str(retry_error),
+                )
+                summary = {
+                    "status": "not_configured",
+                    "message": str(retry_error),
+                    "authorization_repair": repair,
+                }
+                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
+                return summary
+            except GuardSyncNotAvailableError as retry_error:
+                summary = {
+                    "status": "not_available",
+                    "message": str(retry_error),
+                    "authorization_repair": repair,
+                }
+                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
+                return summary
+            except Exception as retry_error:
+                summary = {
+                    "status": "pending",
+                    "message": str(retry_error),
+                    "authorization_repair": repair,
+                }
+                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
+                return summary
+            else:
+                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
+                return summary
         store.record_latest_guard_connect_sync_result(
             status="retry_required",
             milestone="first_sync_failed",
             now=recorded_at,
-            reason=str(error),
+            reason=str(auth_error),
         )
         summary = {
             "status": "auth_expired",
-            "message": str(error),
+            "message": str(auth_error),
+            "authorization_repair": repair,
         }
     except GuardSyncNotConfiguredError as error:
+        config_error = error
+        repair = _safe_storage_repair()
+        if repair.get("existing_sign_in_valid"):
+            try:
+                summary = _perform_sync()
+            except GuardSyncAuthorizationExpiredError as retry_error:
+                store.record_latest_guard_connect_sync_result(
+                    status="retry_required",
+                    milestone="first_sync_failed",
+                    now=recorded_at,
+                    reason=str(retry_error),
+                )
+                summary = {
+                    "status": "auth_expired",
+                    "message": str(retry_error),
+                    "authorization_repair": repair,
+                }
+                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
+                return summary
+            except GuardSyncNotConfiguredError as retry_error:
+                config_error = retry_error
+            except GuardSyncNotAvailableError as retry_error:
+                summary = {
+                    "status": "not_available",
+                    "message": str(retry_error),
+                    "authorization_repair": repair,
+                }
+                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
+                return summary
+            except Exception as retry_error:
+                summary = {
+                    "status": "pending",
+                    "message": str(retry_error),
+                    "authorization_repair": repair,
+                }
+                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
+                return summary
+            else:
+                store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
+                return summary
         store.record_latest_guard_connect_sync_result(
             status="retry_required",
             milestone="first_sync_failed",
             now=recorded_at,
-            reason=str(error),
+            reason=str(config_error),
         )
         summary = {
             "status": "not_configured",
-            "message": str(error),
+            "message": str(config_error),
+            "authorization_repair": repair,
         }
     except GuardSyncNotAvailableError as error:
         summary = {
@@ -637,12 +745,16 @@ def _run_headless_cloud_sync(
             "message": str(error),
         }
     store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
+    return summary
 
 
 def _queue_headless_cloud_sync(
     *,
     store: GuardStore,
 ) -> dict[str, object]:
+    if store.get_cloud_sync_profile() is None:
+        with suppress(Exception):
+            repair_guard_cloud_connect_storage(store)
     if store.get_cloud_sync_profile() is None:
         return {
             "status": "not_configured",
@@ -684,10 +796,21 @@ def _queue_headless_cloud_sync(
 
 def _maybe_queue_first_cloud_sync(*, store: GuardStore) -> dict[str, object] | None:
     if store.get_cloud_sync_profile() is None:
+        try:
+            repair_guard_cloud_connect_storage(store)
+        except Exception:
+            return None
+    if store.get_cloud_sync_profile() is None:
         return None
     oauth_health = store.get_oauth_local_credential_health()
     if bool(oauth_health.get("configured")) and str(oauth_health.get("state") or "") == "degraded":
-        return None
+        try:
+            repair_guard_cloud_connect_storage(store)
+        except Exception:
+            return None
+        oauth_health = store.get_oauth_local_credential_health()
+        if bool(oauth_health.get("configured")) and str(oauth_health.get("state") or "") == "degraded":
+            return None
     latest_state = store.get_effective_guard_connect_state(now=_now())
     if latest_state is None:
         return None
@@ -5234,11 +5357,14 @@ class GuardDaemonServer:
         self._bundle_refresh_interval_seconds = bundle_refresh_interval_seconds
         self._aibom_refresh_backoff_seconds = aibom_refresh_backoff_seconds
         self._aibom_refresh_interval_seconds = aibom_refresh_interval_seconds
+        self._headless_cloud_sync_backoff_seconds = _DEFAULT_HEADLESS_CLOUD_SYNC_BACKOFF_SECONDS
+        self._headless_cloud_sync_interval_seconds = _DEFAULT_HEADLESS_CLOUD_SYNC_INTERVAL_SECONDS
         self._aibom_home_dir = home_dir.expanduser() if home_dir is not None else None
         self._aibom_workspace_dir = workspace_dir.expanduser() if workspace_dir is not None else None
         self._aibom_refresh_thread: threading.Thread | None = None
         self._bundle_refresh_thread: threading.Thread | None = None
         self._command_queue_worker: CommandQueueWorker | None = None
+        self._headless_cloud_sync_thread: threading.Thread | None = None
         self._thread: threading.Thread | None = None
         self._watchdog_thread: threading.Thread | None = None
         self._shutdown_started = threading.Event()
@@ -5271,6 +5397,9 @@ class GuardDaemonServer:
         if self._aibom_refresh_thread is not None:
             self._aibom_refresh_thread.join(timeout=5)
             self._aibom_refresh_thread = None
+        if self._headless_cloud_sync_thread is not None:
+            self._headless_cloud_sync_thread.join(timeout=5)
+            self._headless_cloud_sync_thread = None
         self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
 
     def _begin_service(self) -> None:
@@ -5285,6 +5414,7 @@ class GuardDaemonServer:
             last_heartbeat_at=_now(),
         )
         self._start_watchdog()
+        self._start_headless_cloud_sync()
         self._start_supply_chain_bundle_refresh()
         self._start_aibom_inventory_refresh()
         self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
@@ -5313,6 +5443,32 @@ class GuardDaemonServer:
             return
         self._watchdog_thread = threading.Thread(target=self._watch_for_idle_shutdown, daemon=True)
         self._watchdog_thread.start()
+
+    def _start_headless_cloud_sync(self) -> None:
+        if self._headless_cloud_sync_interval_seconds <= 0:
+            return
+        if self._headless_cloud_sync_thread is not None and self._headless_cloud_sync_thread.is_alive():
+            return
+        self._headless_cloud_sync_thread = threading.Thread(
+            target=self._refresh_headless_cloud_sync_loop,
+            daemon=True,
+            name="guard-headless-cloud-sync-loop",
+        )
+        self._headless_cloud_sync_thread.start()
+
+    def _refresh_headless_cloud_sync_loop(self) -> None:
+        interval_seconds = self._headless_cloud_sync_interval_seconds
+        backoff_seconds = (
+            self._headless_cloud_sync_backoff_seconds
+            if self._headless_cloud_sync_backoff_seconds > 0
+            else interval_seconds
+        )
+        while not self._shutdown_started.is_set():
+            summary = _run_headless_cloud_sync(store=self._server.store)
+            status = str(summary.get("status") or "")
+            wait_seconds = interval_seconds if status == "synced" else backoff_seconds
+            if self._shutdown_started.wait(wait_seconds):
+                return
 
     def _watch_for_idle_shutdown(self) -> None:
         idle_timeout_seconds = self._server.idle_timeout_seconds
