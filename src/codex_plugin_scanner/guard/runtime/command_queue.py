@@ -45,6 +45,15 @@ _MIN_RETRY_WAIT_SECONDS = 0.1
 _REQUEST_TIMEOUT_SECONDS = 35
 _RETRY_TIMEOUT_SECONDS = 60
 _LOGGER = logging.getLogger(__name__)
+_LEASE_LOCAL_REQUEST_SNAPSHOT_KEYS = (
+    "requests",
+    "pendingComplete",
+    "resolvedComplete",
+    "pendingLimit",
+    "resolvedLimit",
+    "pendingCount",
+    "resolvedCount",
+)
 
 
 def _now() -> str:
@@ -247,10 +256,17 @@ def _lease_payload(store: GuardStore) -> dict[str, object]:
 
 def _local_requests_snapshot(store: GuardStore) -> dict[str, object]:
     try:
-        return _local_request_snapshot_payload(store)
+        payload = _local_request_snapshot_payload(store)
     except Exception as exc:
         _LOGGER.warning("Guard command local request snapshot failed: %s", _redacted_error(exc))
         return {"requests": []}
+    if not isinstance(payload, dict):
+        return {"requests": []}
+    return {
+        key: payload[key]
+        for key in _LEASE_LOCAL_REQUEST_SNAPSHOT_KEYS
+        if key in payload
+    }
 
 
 def _repair_guard_cloud_authorization(store: GuardStore) -> dict[str, bool]:
