@@ -820,6 +820,7 @@ def test_poll_once_leases_heartbeats_executes_and_posts_result(
                 "resolvedComplete": True,
                 "pendingLimit": command_executors.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT,
                 "resolvedLimit": command_executors.LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT,
+                "maxBytes": command_executors.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES,
                 "pendingCount": 0,
                 "resolvedCount": 0,
             },
