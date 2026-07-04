@@ -2793,9 +2793,20 @@ def clear_revoked_guard_oauth_sign_in(store: GuardStore) -> bool:
     return False
 
 
+def repair_guard_cloud_connect_storage(store: GuardStore) -> dict[str, object]:
+    """Repair local OAuth storage without clearing sign-in state."""
+    repaired_storage = store.repair_oauth_local_credential_storage_from_primary()
+    existing_sign_in_valid = store.get_oauth_local_credentials(allow_primary=True) is not None
+    return {
+        "cleared_stale_sign_in": False,
+        "existing_sign_in_valid": existing_sign_in_valid,
+        "repaired_storage": repaired_storage,
+    }
+
+
 def prepare_guard_cloud_connect_authorization(store: GuardStore) -> dict[str, object]:
     """Repair local OAuth storage and clear revoked sign-in before reconnect."""
-    repaired_storage = store.repair_oauth_local_credential_storage_from_primary()
+    repaired_storage = repair_guard_cloud_connect_storage(store)["repaired_storage"]
     cleared_stale_sign_in = clear_revoked_guard_oauth_sign_in(store)
     existing_sign_in_valid = store.get_oauth_local_credentials(allow_primary=True) is not None
     return {

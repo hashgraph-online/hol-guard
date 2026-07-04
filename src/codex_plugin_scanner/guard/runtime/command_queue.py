@@ -29,6 +29,7 @@ from .runner import (
     _sync_http_error_message,
     _sync_url_error_message,
     _urlopen_json_with_timeout_retry,
+    repair_guard_cloud_connect_storage,
 )
 
 COMMAND_QUEUE_STATE_KEY = "guard_command_queue_state"
@@ -252,6 +253,33 @@ def _local_requests_snapshot(store: GuardStore) -> dict[str, object]:
         return {"requests": []}
 
 
+def _repair_guard_cloud_authorization(store: GuardStore) -> dict[str, bool]:
+    try:
+        result = repair_guard_cloud_connect_storage(store)
+    except Exception as exc:
+        _LOGGER.warning("Guard command authorization repair failed: %s", _redacted_error(exc))
+        return {
+            "cleared_stale_sign_in": False,
+            "existing_sign_in_valid": False,
+            "repaired_storage": False,
+        }
+    return {
+        "cleared_stale_sign_in": bool(result.get("cleared_stale_sign_in")),
+        "existing_sign_in_valid": bool(result.get("existing_sign_in_valid")),
+        "repaired_storage": bool(result.get("repaired_storage")),
+    }
+
+
+def _resolve_guard_sync_auth_context_with_repair(store: GuardStore) -> dict[str, object]:
+    try:
+        return _resolve_guard_sync_auth_context(store)
+    except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError):
+        repair = _repair_guard_cloud_authorization(store)
+        if repair["existing_sign_in_valid"]:
+            return _resolve_guard_sync_auth_context(store)
+        raise
+
+
 def _job_id(job: dict[str, object]) -> str:
     job_id = job.get("id")
     if not isinstance(job_id, str) or not job_id:
@@ -355,7 +383,7 @@ def _retry_pending_result(
 
 
 def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[str, object]:
-    auth_context = _resolve_guard_sync_auth_context(store)
+    auth_context = _resolve_guard_sync_auth_context_with_repair(store)
     state = _load_state(store)
     state.update(
         {
