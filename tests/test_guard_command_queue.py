@@ -820,7 +820,6 @@ def test_poll_once_leases_heartbeats_executes_and_posts_result(
                 "resolvedComplete": True,
                 "pendingLimit": command_executors.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT,
                 "resolvedLimit": command_executors.LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT,
-                "maxBytes": command_executors.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES,
                 "pendingCount": 0,
                 "resolvedCount": 0,
             },
@@ -837,6 +836,40 @@ def test_poll_once_leases_heartbeats_executes_and_posts_result(
     assert "machineInstallationId" not in calls[1][2]
     assert "machineInstallationId" not in calls[2][2]
     assert "machineInstallationId" not in calls[3][2]
+
+
+def test_lease_payload_strips_local_snapshot_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _oauth_store(tmp_path)
+    monkeypatch.setattr(
+        command_queue,
+        "_local_request_snapshot_payload",
+        lambda _store: {
+            "requests": [],
+            "pendingComplete": True,
+            "resolvedComplete": True,
+            "pendingLimit": 125,
+            "resolvedLimit": 25,
+            "pendingCount": 0,
+            "resolvedCount": 0,
+            "maxBytes": 900000,
+            "debugOnly": "drop-me",
+        },
+    )
+
+    payload = command_queue._lease_payload(store)
+
+    assert payload["localRequestsSnapshot"] == {
+        "requests": [],
+        "pendingComplete": True,
+        "resolvedComplete": True,
+        "pendingLimit": 125,
+        "resolvedLimit": 25,
+        "pendingCount": 0,
+        "resolvedCount": 0,
+    }
 
 
 def test_executor_app_remove_never_uses_local_daemon_client(
