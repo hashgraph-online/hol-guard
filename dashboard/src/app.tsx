@@ -367,7 +367,7 @@ export function App() {
   }, [view, requestId]);
 
   useEffect(() => {
-    const needsInventory = view === "fleet" || view === "app-detail";
+    const needsInventory = view === "app-detail";
     if (!needsInventory) {
       return;
     }
