@@ -494,7 +494,7 @@ function requireReact_production() {
   react_production.useTransition = function() {
     return ReactSharedInternals.H.useTransition();
   };
-  react_production.version = "19.2.7";
+  react_production.version = "19.2.5";
   return react_production;
 }
 var hasRequiredReact;
@@ -516,7 +516,7 @@ var hasRequiredScheduler_production;
 function requireScheduler_production() {
   if (hasRequiredScheduler_production) return scheduler_production;
   hasRequiredScheduler_production = 1;
-  (function(exports) {
+  (function(exports$1) {
     function push(heap, node) {
       var index = heap.length;
       heap.push(node);
@@ -550,15 +550,15 @@ function requireScheduler_production() {
       var diff = a.sortIndex - b.sortIndex;
       return 0 !== diff ? diff : a.id - b.id;
     }
-    exports.unstable_now = void 0;
+    exports$1.unstable_now = void 0;
     if ("object" === typeof performance && "function" === typeof performance.now) {
       var localPerformance = performance;
-      exports.unstable_now = function() {
+      exports$1.unstable_now = function() {
         return localPerformance.now();
       };
     } else {
       var localDate = Date, initialTime = localDate.now();
-      exports.unstable_now = function() {
+      exports$1.unstable_now = function() {
         return localDate.now() - initialTime;
       };
     }
@@ -585,12 +585,12 @@ function requireScheduler_production() {
     }
     var isMessageLoopRunning = false, taskTimeoutID = -1, frameInterval = 5, startTime = -1;
     function shouldYieldToHost() {
-      return needsPaint ? true : exports.unstable_now() - startTime < frameInterval ? false : true;
+      return needsPaint ? true : exports$1.unstable_now() - startTime < frameInterval ? false : true;
     }
     function performWorkUntilDeadline() {
       needsPaint = false;
       if (isMessageLoopRunning) {
-        var currentTime = exports.unstable_now();
+        var currentTime = exports$1.unstable_now();
         startTime = currentTime;
         var hasMoreWork = true;
         try {
@@ -610,7 +610,7 @@ function requireScheduler_production() {
                     var continuationCallback = callback(
                       currentTask.expirationTime <= currentTime
                     );
-                    currentTime = exports.unstable_now();
+                    currentTime = exports$1.unstable_now();
                     if ("function" === typeof continuationCallback) {
                       currentTask.callback = continuationCallback;
                       advanceTimers(currentTime);
@@ -660,27 +660,27 @@ function requireScheduler_production() {
       };
     function requestHostTimeout(callback, ms) {
       taskTimeoutID = localSetTimeout(function() {
-        callback(exports.unstable_now());
+        callback(exports$1.unstable_now());
       }, ms);
     }
-    exports.unstable_IdlePriority = 5;
-    exports.unstable_ImmediatePriority = 1;
-    exports.unstable_LowPriority = 4;
-    exports.unstable_NormalPriority = 3;
-    exports.unstable_Profiling = null;
-    exports.unstable_UserBlockingPriority = 2;
-    exports.unstable_cancelCallback = function(task) {
+    exports$1.unstable_IdlePriority = 5;
+    exports$1.unstable_ImmediatePriority = 1;
+    exports$1.unstable_LowPriority = 4;
+    exports$1.unstable_NormalPriority = 3;
+    exports$1.unstable_Profiling = null;
+    exports$1.unstable_UserBlockingPriority = 2;
+    exports$1.unstable_cancelCallback = function(task) {
       task.callback = null;
     };
-    exports.unstable_forceFrameRate = function(fps) {
+    exports$1.unstable_forceFrameRate = function(fps) {
       0 > fps || 125 < fps ? console.error(
         "forceFrameRate takes a positive int between 0 and 125, forcing frame rates higher than 125 fps is not supported"
       ) : frameInterval = 0 < fps ? Math.floor(1e3 / fps) : 5;
     };
-    exports.unstable_getCurrentPriorityLevel = function() {
+    exports$1.unstable_getCurrentPriorityLevel = function() {
       return currentPriorityLevel;
     };
-    exports.unstable_next = function(eventHandler) {
+    exports$1.unstable_next = function(eventHandler) {
       switch (currentPriorityLevel) {
         case 1:
         case 2:
@@ -698,10 +698,10 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports.unstable_requestPaint = function() {
+    exports$1.unstable_requestPaint = function() {
       needsPaint = true;
     };
-    exports.unstable_runWithPriority = function(priorityLevel, eventHandler) {
+    exports$1.unstable_runWithPriority = function(priorityLevel, eventHandler) {
       switch (priorityLevel) {
         case 1:
         case 2:
@@ -720,8 +720,8 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports.unstable_scheduleCallback = function(priorityLevel, callback, options) {
-      var currentTime = exports.unstable_now();
+    exports$1.unstable_scheduleCallback = function(priorityLevel, callback, options) {
+      var currentTime = exports$1.unstable_now();
       "object" === typeof options && null !== options ? (options = options.delay, options = "number" === typeof options && 0 < options ? currentTime + options : currentTime) : options = currentTime;
       switch (priorityLevel) {
         case 1:
@@ -751,8 +751,8 @@ function requireScheduler_production() {
       options > currentTime ? (priorityLevel.sortIndex = options, push(timerQueue, priorityLevel), null === peek(taskQueue) && priorityLevel === peek(timerQueue) && (isHostTimeoutScheduled ? (localClearTimeout(taskTimeoutID), taskTimeoutID = -1) : isHostTimeoutScheduled = true, requestHostTimeout(handleTimeout, options - currentTime))) : (priorityLevel.sortIndex = timeout, push(taskQueue, priorityLevel), isHostCallbackScheduled || isPerformingWork || (isHostCallbackScheduled = true, isMessageLoopRunning || (isMessageLoopRunning = true, schedulePerformWorkUntilDeadline())));
       return priorityLevel;
     };
-    exports.unstable_shouldYield = shouldYieldToHost;
-    exports.unstable_wrapCallback = function(callback) {
+    exports$1.unstable_shouldYield = shouldYieldToHost;
+    exports$1.unstable_wrapCallback = function(callback) {
       var parentPriorityLevel = currentPriorityLevel;
       return function() {
         var previousPriorityLevel = currentPriorityLevel;
@@ -922,7 +922,7 @@ function requireReactDom_production() {
   reactDom_production.useFormStatus = function() {
     return ReactSharedInternals.H.useHostTransitionStatus();
   };
-  reactDom_production.version = "19.2.7";
+  reactDom_production.version = "19.2.5";
   return reactDom_production;
 }
 var hasRequiredReactDom;
@@ -12366,12 +12366,12 @@ function requireReactDomClient_production() {
     }
   };
   var isomorphicReactPackageVersion$jscomp$inline_1840 = React2.version;
-  if ("19.2.7" !== isomorphicReactPackageVersion$jscomp$inline_1840)
+  if ("19.2.5" !== isomorphicReactPackageVersion$jscomp$inline_1840)
     throw Error(
       formatProdErrorMessage(
         527,
         isomorphicReactPackageVersion$jscomp$inline_1840,
-        "19.2.7"
+        "19.2.5"
       )
     );
   ReactDOMSharedInternals.findDOMNode = function(componentOrElement) {
@@ -12389,10 +12389,10 @@ function requireReactDomClient_production() {
   };
   var internals$jscomp$inline_2347 = {
     bundleType: 0,
-    version: "19.2.7",
+    version: "19.2.5",
     rendererPackageName: "react-dom",
     currentDispatcherRef: ReactSharedInternals,
-    reconcilerVersion: "19.2.7"
+    reconcilerVersion: "19.2.5"
   };
   if ("undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__) {
     var hook$jscomp$inline_2348 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
@@ -12459,7 +12459,7 @@ function requireReactDomClient_production() {
     listenToAllSupportedEvents(container2);
     return new ReactDOMHydrationRoot(initialChildren);
   };
-  reactDomClient_production.version = "19.2.7";
+  reactDomClient_production.version = "19.2.5";
   return reactDomClient_production;
 }
 var hasRequiredClient;
@@ -15818,6 +15818,9 @@ function runtimeSnapshotSearchParams(input = {}) {
   if (input.includeItems === false) {
     params.set("include_items", "0");
   }
+  if (input.includeReceipts === false) {
+    params.set("include_receipts", "0");
+  }
   return params;
 }
 async function fetchInboxState(input = {}) {
@@ -15827,7 +15830,7 @@ async function fetchInboxState(input = {}) {
   }
   const [snapshotPayload, items] = await Promise.all([
     readJson(
-      queuePath("/v1/runtime", runtimeSnapshotSearchParams({ ...input, includeItems: false }))
+      queuePath("/v1/runtime", runtimeSnapshotSearchParams({ ...input, includeItems: false, includeReceipts: false }))
     ),
     fetchAllPendingRequests()
   ]);
@@ -17351,14 +17354,18 @@ function GuardUpdatePanel(props) {
   ] });
 }
 function useGuardUpdate(options) {
+  const enabled = options?.enabled !== false;
   const [updateStatus, setUpdateStatus] = reactExports.useState(null);
-  const [updatePhase, setUpdatePhase] = reactExports.useState("checking");
+  const [updatePhase, setUpdatePhase] = reactExports.useState(enabled ? "checking" : "idle");
   const reconnectStartedAt = reactExports.useRef(null);
   const updatePhaseRef = reactExports.useRef("checking");
   reactExports.useEffect(() => {
     updatePhaseRef.current = updatePhase;
   }, [updatePhase]);
   const refreshUpdateStatus = reactExports.useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
     try {
       const status = await fetchGuardUpdateStatus();
       setUpdateStatus(status);
@@ -17370,8 +17377,12 @@ function useGuardUpdate(options) {
         setUpdatePhase("idle");
       }
     }
-  }, []);
+  }, [enabled]);
   reactExports.useEffect(() => {
+    if (!enabled) {
+      setUpdatePhase("idle");
+      return;
+    }
     let cancelled = false;
     void fetchGuardUpdateStatus().then((status) => {
       if (!cancelled && (updatePhaseRef.current === "checking" || updatePhaseRef.current === "idle")) {
@@ -17393,7 +17404,7 @@ function useGuardUpdate(options) {
       cancelled = true;
       window.clearInterval(pollId);
     };
-  }, [refreshUpdateStatus]);
+  }, [enabled, refreshUpdateStatus]);
   const waitForReconnect = reactExports.useCallback(
     async (expectedPreviousVersion, expectedLatestVersion) => {
       reconnectStartedAt.current = Date.now();
@@ -24212,7 +24223,7 @@ function ReviewWorkspace(props) {
   const pageStart = (currentPage - 1) * QUEUE_PAGE_SIZE;
   const pagedRequests = filteredRequests.slice(pageStart, pageStart + QUEUE_PAGE_SIZE);
   const categoryOptions = reactExports.useMemo(() => queueCategoriesForItems(requests), [requests]);
-  const activeRequest = activeRequestId !== null ? requests.find((r) => r.request_id === activeRequestId) ?? null : null;
+  const activeRequest = activeRequestId !== null ? requests.find((r) => r.request_id === activeRequestId) ?? (detail?.item.request_id === activeRequestId ? detail.item : null) : null;
   reactExports.useEffect(() => {
     function handleKeyDown(event) {
       if (pagedRequests.length === 0) return;
@@ -24235,19 +24246,19 @@ function ReviewWorkspace(props) {
     if (filteredRequests.length === 0) {
       return;
     }
-    const activeInRequests = requests.some((item) => item.request_id === activeRequestId);
+    const activeInRequests = requests.some((item) => item.request_id === activeRequestId) || detail?.item.request_id === activeRequestId;
     if (activeRequestId !== null && activeInRequests) {
       return;
     }
     props.onOpenRequest(filteredRequests[0].request_id);
-  }, [activeRequestId, requests, filteredRequests, props.onOpenRequest]);
+  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, props.onOpenRequest]);
   reactExports.useEffect(() => {
     if (pagedRequests.length === 0) return;
-    const activeOnPage = pagedRequests.some((item) => item.request_id === activeRequestId);
+    const activeOnPage = pagedRequests.some((item) => item.request_id === activeRequestId) || detail?.item.request_id === activeRequestId;
     if (!activeOnPage) {
       props.onOpenRequest(pagedRequests[0].request_id);
     }
-  }, [currentPage, pagedRequests, activeRequestId, props.onOpenRequest]);
+  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, props.onOpenRequest]);
   const bulkApprove = useQueueBulkApprove({
     items: filteredRequests,
     approvalGate: props.approvalGate ?? null,
@@ -25597,7 +25608,7 @@ function ApprovalCenterLayout(props) {
     updatePhase,
     onUpdateGuard,
     onReinstallGuard
-  } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
+  } = useGuardUpdate({ onReconnected: props.onGuardReconnected, enabled: props.enableUpdateStatus });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-screen bg-white text-brand-dark", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ShellHeader,
@@ -25904,6 +25915,32 @@ function App() {
   const [guardVersion, setGuardVersion] = reactExports.useState(null);
   const resolutionInFlight = reactExports.useRef(false);
   const bulkApproveInFlight = reactExports.useRef(false);
+  const queuedItems = requests.kind === "ready" ? requests.items : [];
+  const activeRequestId = requestId ?? queuedItems[0]?.request_id ?? null;
+  reactExports.useEffect(() => {
+    if (activeRequestId === null) {
+      setDetail({ kind: "idle" });
+      return;
+    }
+    let cancelled = false;
+    setDetail({ kind: "loading" });
+    loadDetail(activeRequestId).then((nextState) => {
+      if (!cancelled) {
+        setDetail(nextState);
+        if (nextState.kind === "ready") {
+          setRequests((current) => {
+            if (current.kind !== "ready" || current.items.some((item) => item.request_id === nextState.item.request_id)) {
+              return current;
+            }
+            return { kind: "ready", items: [nextState.item, ...current.items] };
+          });
+        }
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRequestId]);
   reactExports.useEffect(() => {
     function handleKeyDown(event) {
       const target = event.target;
@@ -25926,7 +25963,9 @@ function App() {
     let pollId;
     let refreshInFlight = false;
     let clearedQueue = false;
-    const needsFullQueue = view === "inbox" || requestId !== null;
+    const needsFullQueue = view === "inbox" && requestId === null;
+    const needsQueuePage = view === "inbox" || requestId !== null;
+    const needsRuntimeReceipts = view === "home" || view === "fleet" || view === "app-detail" || view === "supply-chain" || view === "audit" || view === "feed-health";
     const loadApprovalQueue = () => {
       if (refreshInFlight || cancelled || resolutionInFlight.current) {
         return;
@@ -25934,22 +25973,38 @@ function App() {
       refreshInFlight = true;
       const queueErrorMessage = "Unable to load the local approval queue.";
       const runtimeErrorMessage = "Unable to load the local runtime snapshot.";
-      const pendingRequests = needsFullQueue ? fetchAllPendingRequests().then((items) => {
-        if (!cancelled && !resolutionInFlight.current) {
-          setRequests({ kind: "ready", items });
-        }
-      }).catch((error) => {
-        if (!cancelled && !resolutionInFlight.current) {
-          const message = error instanceof Error ? error.message : queueErrorMessage;
-          setRequests({ kind: "error", message });
-        }
-      }) : Promise.resolve().then(() => {
-        if (!cancelled && !resolutionInFlight.current && !clearedQueue) {
-          setRequests({ kind: "ready", items: [] });
-          clearedQueue = true;
-        }
-      });
-      const runtimeSnapshot = fetchRuntimeSnapshot({ includeItems: false }).then((snapshot) => {
+      let pendingRequests;
+      if (needsFullQueue) {
+        pendingRequests = fetchAllPendingRequests().then((items) => {
+          if (!cancelled && !resolutionInFlight.current) {
+            setRequests({ kind: "ready", items });
+          }
+        }).catch((error) => {
+          if (!cancelled && !resolutionInFlight.current) {
+            const message = error instanceof Error ? error.message : queueErrorMessage;
+            setRequests({ kind: "error", message });
+          }
+        });
+      } else if (needsQueuePage) {
+        pendingRequests = fetchApprovalPage({ status: "pending", limit: 200 }).then((page) => {
+          if (!cancelled && !resolutionInFlight.current) {
+            setRequests({ kind: "ready", items: page.items });
+          }
+        }).catch((error) => {
+          if (!cancelled && !resolutionInFlight.current) {
+            const message = error instanceof Error ? error.message : queueErrorMessage;
+            setRequests({ kind: "error", message });
+          }
+        });
+      } else {
+        pendingRequests = Promise.resolve().then(() => {
+          if (!cancelled && !resolutionInFlight.current && !clearedQueue) {
+            setRequests({ kind: "ready", items: [] });
+            clearedQueue = true;
+          }
+        });
+      }
+      const runtimeSnapshot = fetchRuntimeSnapshot({ includeItems: false, includeReceipts: needsRuntimeReceipts }).then((snapshot) => {
         if (!cancelled && !resolutionInFlight.current) {
           setRuntime({ kind: "ready", snapshot });
         }
@@ -25973,6 +26028,10 @@ function App() {
     };
   }, [view, requestId]);
   reactExports.useEffect(() => {
+    const needsInventory = view === "app-detail";
+    if (!needsInventory) {
+      return;
+    }
     let cancelled = false;
     fetchInventory().then((items) => {
       if (!cancelled) {
@@ -25986,7 +26045,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [view]);
   reactExports.useEffect(() => {
     let cancelled = false;
     fetchSettings().then((payload) => {
@@ -25995,43 +26054,59 @@ function App() {
       }
     }).catch(() => {
     });
-    fetchGuardUpdateStatus().then((status) => {
-      if (!cancelled && status.current_version) {
-        setGuardVersion(status.current_version);
-      }
-    }).catch(() => {
-    });
+    if (view === "about") {
+      fetchGuardUpdateStatus().then((status) => {
+        if (!cancelled && status.current_version) {
+          setGuardVersion(status.current_version);
+        }
+      }).catch(() => {
+      });
+    }
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [view]);
   reactExports.useEffect(() => {
+    const needsReceipts = view === "evidence" || view === "app-detail" || view === "supply-chain" || view === "audit" || view === "feed-health";
+    const needsPolicies = view === "home" || view === "fleet" || view === "app-detail" || view === "supply-chain" || view === "audit" || view === "feed-health" || view === "policy";
+    if (!needsReceipts && !needsPolicies) {
+      return;
+    }
     let cancelled = false;
-    Promise.allSettled([fetchReceipts(), fetchPolicies()]).then(([receiptsResult, policiesResult]) => {
+    Promise.allSettled([
+      needsReceipts ? fetchReceipts() : Promise.resolve(null),
+      needsPolicies ? fetchPolicies() : Promise.resolve(null)
+    ]).then(([receiptsResult, policiesResult]) => {
       if (cancelled) {
         return;
       }
-      if (receiptsResult.status === "fulfilled") {
-        setReceipts({ kind: "ready", items: receiptsResult.value });
-      } else {
-        setReceipts({
-          kind: "error",
-          message: receiptsResult.reason instanceof Error ? receiptsResult.reason.message : "Unable to load local approval history."
-        });
+      if (needsReceipts) {
+        if (receiptsResult.status === "fulfilled" && receiptsResult.value !== null) {
+          setReceipts({ kind: "ready", items: receiptsResult.value });
+        } else {
+          const reason = receiptsResult.status === "rejected" ? receiptsResult.reason : null;
+          setReceipts({
+            kind: "error",
+            message: reason instanceof Error ? reason.message : "Unable to load local approval history."
+          });
+        }
       }
-      if (policiesResult.status === "fulfilled") {
-        setPolicies({ kind: "ready", items: policiesResult.value });
-      } else {
-        setPolicies({
-          kind: "error",
-          message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load saved approvals."
-        });
+      if (needsPolicies) {
+        if (policiesResult.status === "fulfilled" && policiesResult.value !== null) {
+          setPolicies({ kind: "ready", items: policiesResult.value });
+        } else {
+          const reason = policiesResult.status === "rejected" ? policiesResult.reason : null;
+          setPolicies({
+            kind: "error",
+            message: reason instanceof Error ? reason.message : "Unable to load saved approvals."
+          });
+        }
       }
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [view]);
   reactExports.useEffect(() => {
     if (view !== "fleet") {
       return;
@@ -26054,24 +26129,6 @@ function App() {
       cancelled = true;
     };
   }, [view]);
-  const queuedItems = requests.kind === "ready" ? requests.items : [];
-  const activeRequestId = requestId ?? queuedItems[0]?.request_id ?? null;
-  reactExports.useEffect(() => {
-    if (activeRequestId === null) {
-      setDetail({ kind: "idle" });
-      return;
-    }
-    let cancelled = false;
-    setDetail({ kind: "loading" });
-    loadDetail(activeRequestId).then((nextState) => {
-      if (!cancelled) {
-        setDetail(nextState);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeRequestId]);
   const handleOpenInbox = reactExports.useCallback(() => navigate("/inbox"), []);
   const handleOpenFleet = reactExports.useCallback(() => navigate(PROTECT_ROUTE), []);
   const handleOpenEvidence = reactExports.useCallback(() => navigate("/evidence"), []);
@@ -26403,6 +26460,7 @@ function App() {
         onRetry: handleRetry,
         onRepair: handleRepair,
         onGuardReconnected: handleRetry,
+        enableUpdateStatus: view !== "inbox",
         onClearEvidence: handleClearEvidence,
         fleetContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           FleetWorkspace,
@@ -26472,11 +26530,11 @@ export {
   HiMiniExclamationCircle as K,
   HiMiniClipboardDocumentCheck as L,
   HiMiniClipboard as M,
-  getDefaultExportFromCjs as N,
-  HiMiniKey as O,
+  requireReact as N,
+  getDefaultExportFromCjs as O,
   ProofStrip as P,
-  HiMiniLockClosed as Q,
-  React as R,
+  HiMiniKey as Q,
+  HiMiniLockClosed as R,
   SectionLabel as S,
   HiMiniBellAlert as T,
   HiMiniAdjustmentsHorizontal as U,
