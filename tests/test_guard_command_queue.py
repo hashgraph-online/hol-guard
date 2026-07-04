@@ -4,8 +4,9 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
+import urllib.error
 
+import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -1066,6 +1067,60 @@ def test_poll_once_persists_result_retry_when_result_upload_fails(
     assert isinstance(state, dict)
     assert state["state"] == "result_pending"
     assert isinstance(state["pending_result"], dict)
+
+
+def test_poll_once_persists_result_when_result_upload_http_error(tmp_path: Path, monkeypatch) -> None:
+    """Regression: HTTPError 500/429 on result upload must persist pending_result (PR #1308)."""
+    store = FakeStore(tmp_path / "guard-home")
+
+    monkeypatch.setattr(
+        command_queue,
+        "_resolve_guard_sync_auth_context",
+        lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
+    )
+    monkeypatch.setattr(command_executors, "package_shim_status", lambda context: {"active_managers": []})
+
+    class FakeHTTPError(urllib.error.HTTPError):
+        def __init__(self) -> None:
+            super().__init__(
+                "https://hol.test/api/guard/commands/job-3/result",
+                500,
+                "Internal Server Error",
+                {},
+                None,
+            )
+
+    def fake_json_request(
+        auth_context: dict[str, object],
+        *,
+        method: str,
+        path: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        if path == "/lease":
+            return {
+                "item": {
+                    "id": "job-3",
+                    "leaseId": "lease-3",
+                    "operation": "guard.packageShims.status",
+                }
+            }
+        if path.endswith("/result"):
+            raise FakeHTTPError()
+        return {"ok": True}
+
+    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+
+    with pytest.raises(urllib.error.HTTPError):
+        command_queue.poll_command_queue_once(store, _context(tmp_path))
+
+    state = store.get_sync_payload(command_queue.COMMAND_QUEUE_STATE_KEY)
+    assert isinstance(state, dict)
+    assert state["state"] == "result_pending"
+    pending = state["pending_result"]
+    assert isinstance(pending, dict)
+    assert pending["job"]["id"] == "job-3"
+    assert "payload" in pending
 
 
 def test_poll_once_clears_active_job_when_heartbeat_fails(tmp_path: Path, monkeypatch) -> None:
