@@ -251,7 +251,7 @@ class StoreReceiptsRuntimeMixin:
                 (cutoff, before_rowid, max(limit, 1)) if before_rowid is not None else (cutoff, max(limit, 1))
             )
             rows = connection.execute(query, params).fetchall()
-        return [self._receipt_dict_from_row(row) for row in reversed(rows)]
+        return [self._receipt_dict_from_row(row) for row in rows]
 
     def latest_receipt_rowid(self, *, harness: str | None = None) -> int | None:
         query = "select max(rowid) as max_rowid from runtime_receipts"
