@@ -304,7 +304,7 @@ _RECEIPT_SYNC_BATCH_SIZE = 50
 _RECEIPT_SYNC_CURSOR_PAGE_SIZE = 200
 _RECEIPT_SYNC_CURSOR_BACKFILL_ROWS = 200
 _RECEIPT_COMMAND_DETAIL_BACKFILL_DAYS = 30
-_RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT = 1000
+_RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT = 200
 _PAIN_SIGNAL_TIMEOUT_SECONDS = 10
 _PAIN_SIGNAL_RETRY_TIMEOUT_SECONDS = 90
 _GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_MINUTES = 5  # single 404 shouldn't disable sync for a full day
@@ -1370,6 +1370,7 @@ def sync_receipts(
     )
     latest_uploaded_rowid: int | None = None
     auth_refresh_retried = False
+    persisted_command_detail_backfill_marker = command_detail_backfill_marker
     for receipt_batch in _iter_receipt_sync_batches(receipts):
         body = json.dumps(
             {
@@ -1448,6 +1449,18 @@ def sync_receipts(
             if isinstance(rowid, int) and (latest_uploaded_rowid is None or rowid > latest_uploaded_rowid):
                 latest_uploaded_rowid = rowid
         batch_synced_at = _sync_timestamp(payload)
+        updated_command_detail_backfill_marker = _advance_command_detail_backfill_marker(
+            persisted_command_detail_backfill_marker,
+            receipt_batch=receipt_batch,
+            synced_at=batch_synced_at,
+        )
+        if updated_command_detail_backfill_marker is not None:
+            persisted_command_detail_backfill_marker = updated_command_detail_backfill_marker
+            store.set_sync_payload(
+                _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER,
+                persisted_command_detail_backfill_marker,
+                batch_synced_at,
+            )
         if latest_uploaded_rowid is not None:
             _persist_receipt_sync_cursor(
                 store=store,
@@ -1486,10 +1499,10 @@ def sync_receipts(
         aibom_context["workspace_dir"] = str(workspace_dir)
     if aibom_context:
         store.set_sync_payload("aibom_inventory_context", aibom_context, now)
-    if command_detail_backfill_marker is not None:
+    if persisted_command_detail_backfill_marker is not None:
         store.set_sync_payload(
             _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER,
-            command_detail_backfill_marker,
+            persisted_command_detail_backfill_marker,
             now,
         )
     persisted_cursor_rowid = latest_uploaded_rowid if latest_uploaded_rowid is not None else prior_receipt_cursor
@@ -4017,7 +4030,7 @@ def _receipt_sync_rows_with_command_detail_backfill(
         receipt_id = row.get("receipt_id")
         if not isinstance(receipt_id, str) or receipt_id in seen_receipt_ids:
             continue
-        merged.append(row)
+        merged.append({**row, _RECEIPT_COMMAND_DETAIL_BACKFILL_FLAG: True})
         seen_receipt_ids.add(receipt_id)
         added += 1
     backfill_rowids: list[int] = []
@@ -4049,6 +4062,28 @@ def _receipt_command_detail_backfill_before_rowid(marker: object, *, redaction_l
         parsed = int(value.strip())
         return parsed if parsed > 0 else None
     return None
+
+
+def _advance_command_detail_backfill_marker(
+    marker: dict[str, object] | None,
+    *,
+    receipt_batch: Sequence[Mapping[str, object]],
+    synced_at: str,
+) -> dict[str, object] | None:
+    if marker is None:
+        return None
+    backfill_rowids = [
+        receipt_rowid
+        for item in receipt_batch
+        if item.get(_RECEIPT_COMMAND_DETAIL_BACKFILL_FLAG) is True
+        and isinstance((receipt_rowid := item.get("receipt_rowid")), int)
+    ]
+    if not backfill_rowids:
+        return None
+    updated_marker = dict(marker)
+    updated_marker["before_rowid"] = min(backfill_rowids)
+    updated_marker["updated_at"] = synced_at
+    return updated_marker
 
 
 def _receipt_sync_cursor_rowids_from_batch(
@@ -4117,6 +4152,7 @@ _RECEIPT_REDACTION_LEVEL_RANK: dict[str, int] = {
 }
 _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER = "cloud_receipt_redaction_relaxed_resync_v1"
 _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER = "cloud_receipt_command_detail_backfill_v2"
+_RECEIPT_COMMAND_DETAIL_BACKFILL_FLAG = "__command_detail_backfill"
 
 
 def _receipt_redaction_level_rank(level: str | None) -> int:

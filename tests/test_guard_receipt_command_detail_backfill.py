@@ -9,6 +9,7 @@ from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.runner import (
     _cloud_sync_receipt_payload,
     _receipt_sync_rows_with_command_detail_backfill,
+    sync_receipts,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -148,7 +149,7 @@ def test_command_detail_backfill_pages_historical_receipts(monkeypatch, tmp_path
         synced_at="2026-07-02T00:00:00+00:00",
     )
 
-    assert [row["receipt_id"] for row in first_rows] == ["guard-receipt-page-1", "guard-receipt-page-2"]
+    assert [row["receipt_id"] for row in first_rows] == ["guard-receipt-page-2", "guard-receipt-page-1"]
     assert first_marker is not None
     assert first_marker["queried"] == 2
     assert first_marker["receipts"] == 2
@@ -167,3 +168,75 @@ def test_command_detail_backfill_pages_historical_receipts(monkeypatch, tmp_path
     assert second_marker["queried"] == 1
     assert second_marker["receipts"] == 1
     assert second_marker["complete"] is True
+
+
+def test_sync_receipts_persists_command_detail_backfill_progress_after_partial_success(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    store = GuardStore(tmp_path)
+    for index in range(6):
+        _store_command_receipt(
+            store,
+            receipt_id=f"guard-receipt-progress-{index}",
+        )
+
+    monkeypatch.setattr(guard_runner, "_RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT", 6)
+    monkeypatch.setattr(guard_runner, "_RECEIPT_SYNC_BATCH_SIZE", 2)
+    monkeypatch.setattr(guard_runner, "_resolve_cloud_receipt_redaction_level", lambda _store: "none")
+    monkeypatch.setattr(guard_runner, "_guard_sync_request", lambda *args, **kwargs: object())
+    monkeypatch.setattr(guard_runner, "_receipt_sync_rows_for_upload", lambda _store, cursor_rowid: [])
+
+    attempted_batches = {"count": 0}
+
+    def _fake_sync(**kwargs):
+        attempted_batches["count"] += 1
+        if attempted_batches["count"] == 1:
+            return {"syncedAt": "2026-07-04T00:00:00+00:00", "receiptsStored": 2}
+        raise OSError("network down")
+
+    monkeypatch.setattr(guard_runner, "_urlopen_json_with_timeout_retry", _fake_sync)
+
+    preview_rows, preview_marker = _receipt_sync_rows_with_command_detail_backfill(
+        store,
+        receipts=[],
+        redaction_level="none",
+        synced_at="2026-07-04T00:00:00+00:00",
+    )
+    assert preview_marker is not None
+    first_batch_rowids = [
+        row["receipt_rowid"]
+        for row in preview_rows[:2]
+        if isinstance(row.get("receipt_rowid"), int)
+    ]
+    assert len(first_batch_rowids) == 2
+
+    try:
+        sync_receipts(
+            store,
+            persist_sync_summary=False,
+            persist_connect_state=False,
+            auth_context={"sync_url": "https://hol.org/api/guard/receipts/sync", "access_token": "token"},
+        )
+    except RuntimeError as error:
+        assert "network down" in str(error)
+    else:
+        raise AssertionError("sync_receipts should fail after the second batch")
+
+    marker = store.get_sync_payload("cloud_receipt_command_detail_backfill_v2")
+    assert isinstance(marker, dict)
+    assert marker["before_rowid"] == min(first_batch_rowids)
+
+    remaining_rows, _ = _receipt_sync_rows_with_command_detail_backfill(
+        store,
+        receipts=[],
+        redaction_level="none",
+        synced_at="2026-07-04T00:01:00+00:00",
+    )
+    remaining_rowids = [
+        row["receipt_rowid"]
+        for row in remaining_rows
+        if isinstance(row.get("receipt_rowid"), int)
+    ]
+    assert remaining_rowids
+    assert all(rowid < min(first_batch_rowids) for rowid in remaining_rowids)
