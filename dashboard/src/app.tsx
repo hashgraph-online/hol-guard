@@ -308,38 +308,41 @@ export function App() {
       refreshInFlight = true;
       const queueErrorMessage = "Unable to load the local approval queue.";
       const runtimeErrorMessage = "Unable to load the local runtime snapshot.";
-      const pendingRequests = needsFullQueue
-        ? fetchAllPendingRequests()
-            .then((items) => {
-              if (!cancelled && !resolutionInFlight.current) {
-                setRequests({ kind: "ready", items });
-              }
-            })
-            .catch((error: unknown) => {
-              if (!cancelled && !resolutionInFlight.current) {
-                const message = error instanceof Error ? error.message : queueErrorMessage;
-                setRequests({ kind: "error", message });
-              }
-            })
-        : needsQueuePage
-          ? fetchApprovalPage({ status: "pending", limit: 200 })
-              .then((page) => {
-                if (!cancelled && !resolutionInFlight.current) {
-                  setRequests({ kind: "ready", items: page.items });
-                }
-              })
-              .catch((error: unknown) => {
-                if (!cancelled && !resolutionInFlight.current) {
-                  const message = error instanceof Error ? error.message : queueErrorMessage;
-                  setRequests({ kind: "error", message });
-                }
-              })
-        : Promise.resolve().then(() => {
-            if (!cancelled && !resolutionInFlight.current && !clearedQueue) {
-              setRequests({ kind: "ready", items: [] });
-              clearedQueue = true;
+      let pendingRequests: Promise<void>;
+      if (needsFullQueue) {
+        pendingRequests = fetchAllPendingRequests()
+          .then((items) => {
+            if (!cancelled && !resolutionInFlight.current) {
+              setRequests({ kind: "ready", items });
+            }
+          })
+          .catch((error: unknown) => {
+            if (!cancelled && !resolutionInFlight.current) {
+              const message = error instanceof Error ? error.message : queueErrorMessage;
+              setRequests({ kind: "error", message });
             }
           });
+      } else if (needsQueuePage) {
+        pendingRequests = fetchApprovalPage({ status: "pending", limit: 200 })
+          .then((page) => {
+            if (!cancelled && !resolutionInFlight.current) {
+              setRequests({ kind: "ready", items: page.items });
+            }
+          })
+          .catch((error: unknown) => {
+            if (!cancelled && !resolutionInFlight.current) {
+              const message = error instanceof Error ? error.message : queueErrorMessage;
+              setRequests({ kind: "error", message });
+            }
+          });
+      } else {
+        pendingRequests = Promise.resolve().then(() => {
+          if (!cancelled && !resolutionInFlight.current && !clearedQueue) {
+            setRequests({ kind: "ready", items: [] });
+            clearedQueue = true;
+          }
+        });
+      }
       const runtimeSnapshot = fetchRuntimeSnapshot({ includeItems: false, includeReceipts: needsRuntimeReceipts })
         .then((snapshot) => {
           if (!cancelled && !resolutionInFlight.current) {
