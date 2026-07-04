@@ -1496,6 +1496,41 @@ def test_poll_once_keeps_auth_expired_state_when_auth_refresh_fails(
     assert status["last_error"] == existing_error
 
 
+def test_poll_once_repairs_oauth_storage_and_retries_before_leasing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    store = _oauth_store(tmp_path)
+    resolve_calls = {"count": 0}
+
+    def fake_auth_context(current_store, *, allow_primary_repair: bool = True):
+        del current_store, allow_primary_repair
+        resolve_calls["count"] += 1
+        if resolve_calls["count"] == 1:
+            raise guard_runner_module.GuardSyncNotConfiguredError("Guard is not logged in.")
+        return {
+            "access_token": "access-token-1",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        }
+
+    def fake_repair(current_store):
+        del current_store
+        return {
+            "existing_sign_in_valid": True,
+            "repaired_storage": True,
+        }
+
+    monkeypatch.setattr(command_queue, "_resolve_guard_sync_auth_context", fake_auth_context)
+    monkeypatch.setattr(command_queue, "repair_guard_cloud_connect_storage", fake_repair)
+    monkeypatch.setattr(command_queue, "_json_request", lambda *args, **kwargs: {})
+
+    status = command_queue.poll_command_queue_once(store, _context(tmp_path))
+
+    assert resolve_calls["count"] == 2
+    assert status["state"] == "idle"
+    assert status["last_poll_was_empty"] is True
+
+
 def test_commands_status_outputs_command_queue_state(tmp_path: Path, capsys, monkeypatch) -> None:
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
