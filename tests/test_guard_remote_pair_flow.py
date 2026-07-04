@@ -417,7 +417,7 @@ def test_run_guard_remote_pair_command_swallows_sync_failure(
         fake_claim,
     )
 
-    def fake_sync(_store, *, _session):
+    def fake_sync(_store, *, session):
         raise RuntimeError("network is down")
 
     monkeypatch.setattr(
