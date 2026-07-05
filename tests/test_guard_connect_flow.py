@@ -217,7 +217,7 @@ def test_daemon_guard_cloud_connect_persists_oauth_state_for_dashboard(
             grant_id="grant-123",
             machine_id="machine-123",
             supply_chain_entitlement={
-                "supply_chain_entitlement_expires_at": "2026-07-05T01:39:51+00:00",
+                "supply_chain_entitlement_expires_at": "2027-07-05T01:39:51+00:00",
                 "supply_chain_firewall": True,
                 "supply_chain_plan_id": "team",
             },
@@ -493,7 +493,7 @@ def test_browser_connect_caches_paid_package_firewall_entitlement(tmp_path: Path
             grant_id="grant-1",
             machine_id="machine-1",
             supply_chain_entitlement={
-                "supply_chain_entitlement_expires_at": "2026-07-05T01:39:51+00:00",
+                "supply_chain_entitlement_expires_at": "2027-07-05T01:39:51+00:00",
                 "supply_chain_firewall": True,
                 "supply_chain_plan_id": "pro",
             },
@@ -560,7 +560,7 @@ def test_browser_connect_persists_oauth_state_when_macos_keychain_readback_succe
             grant_id="grant-1",
             machine_id="machine-1",
             supply_chain_entitlement={
-                "supply_chain_entitlement_expires_at": "2026-07-05T01:39:51+00:00",
+                "supply_chain_entitlement_expires_at": "2027-07-05T01:39:51+00:00",
                 "supply_chain_firewall": True,
                 "supply_chain_plan_id": "pro",
             },
@@ -697,7 +697,7 @@ def test_sync_local_guard_cloud_proof_repairs_degraded_oauth_from_encrypted_fall
         dpop_public_jwk_thumbprint="thumbprint-old",
         grant_id="grant-old",
         machine_id="machine-old",
-        supply_chain_entitlement_expires_at="2026-07-05T01:39:51+00:00",
+        supply_chain_entitlement_expires_at="2027-07-05T01:39:51+00:00",
         supply_chain_firewall=True,
         supply_chain_plan_id="team",
         workspace_id="workspace-1",
@@ -721,7 +721,7 @@ def test_sync_local_guard_cloud_proof_repairs_degraded_oauth_from_encrypted_fall
             "access_token": "access-token-1",
             "refresh_token": "refresh-token-new",
             "package_firewall_entitlement": {
-                "supply_chain_entitlement_expires_at": "2026-07-05T01:39:51+00:00",
+                "supply_chain_entitlement_expires_at": "2027-07-05T01:39:51+00:00",
                 "supply_chain_firewall": True,
                 "supply_chain_plan_id": "team",
             },

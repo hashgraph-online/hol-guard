@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
+import urllib.error
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import urllib.error
-
 import pytest
+
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -2431,3 +2431,217 @@ def test_executor_rejects_loose_policy_memory_payload(tmp_path: Path) -> None:
     )
     assert "failureCode" in result
     assert "missing" in result["failureCode"]
+
+
+def test_executor_rejects_remote_approval_for_unsupported_scope(tmp_path: Path) -> None:
+    class UnsupportedScopeStore(FakeStore):
+        def __init__(self, guard_home: Path) -> None:
+            super().__init__(guard_home)
+            self.claimed_receipts: list[str] = []
+            self.resolved: list[dict[str, object]] = []
+            self.request_row = _approval_request_row(
+                "request-broad-scope",
+                policy_action="require-reapproval",
+                recommended_scope="workspace",
+            )
+
+        def get_approval_request(self, request_id: str) -> dict[str, object] | None:
+            return self.request_row if request_id == "request-broad-scope" else None
+
+        def claim_remote_once_receipt(
+            self,
+            receipt_id: str,
+            *,
+            request_id: str,
+            claimed_at: str,
+        ) -> bool:
+            del request_id, claimed_at
+            self.claimed_receipts.append(receipt_id)
+            return True
+
+        def resolve_request_with_signed_remote_result(
+            self,
+            request_id: str,
+            *,
+            resolution_action: str,
+            resolution_scope: str,
+            reason: str | None,
+            resolved_at: str,
+        ) -> dict[str, object]:
+            self.resolved.append(
+                {
+                    "request_id": request_id,
+                    "resolution_action": resolution_action,
+                    "resolution_scope": resolution_scope,
+                    "reason": reason,
+                    "resolved_at": resolved_at,
+                }
+            )
+            return {"resolved": True, "resolved_request": {"request_id": request_id}}
+
+    store = UnsupportedScopeStore(tmp_path / "guard-home")
+    remote_approval = _signed_remote_approval(store, store.request_row)
+
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {
+                "localRequestId": "request-broad-scope",
+                "action": "allow_once",
+                "remoteApproval": remote_approval,
+            },
+        },
+        context=_context(tmp_path),
+        store=store,  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert result["failureCode"] == "remote_approval_not_permitted"
+    assert store.claimed_receipts == []
+    assert store.resolved == []
+
+
+def test_executor_resolves_one_time_scope_with_allow(tmp_path: Path) -> None:
+    """Prove `recommended_scope='one-time'` flows into `resolution_scope` on allow."""
+
+    class OneTimeAllowStore(FakeStore):
+        def __init__(self, guard_home: Path) -> None:
+            super().__init__(guard_home)
+            self.request_row = _approval_request_row(
+                "request-ot-allow",
+                policy_action="require-reapproval",
+                recommended_scope="one-time",
+            )
+            self.resolved: list[dict[str, object]] = []
+            self.claimed_receipts: list[dict[str, str]] = []
+
+        def get_approval_request(self, request_id: str) -> dict[str, object] | None:
+            return self.request_row if request_id == "request-ot-allow" else None
+
+        def claim_remote_once_receipt(
+            self,
+            receipt_id: str,
+            *,
+            request_id: str,
+            claimed_at: str,
+        ) -> bool:
+            self.claimed_receipts.append({"receipt_id": receipt_id})
+            return True
+
+        def resolve_request_with_signed_remote_result(
+            self,
+            request_id: str,
+            *,
+            resolution_action: str,
+            resolution_scope: str,
+            reason: str | None,
+            resolved_at: str,
+        ) -> dict[str, object]:
+            self.resolved.append(
+                {
+                    "request_id": request_id,
+                    "resolution_action": resolution_action,
+                    "resolution_scope": resolution_scope,
+                }
+            )
+            return {"resolved": True, "resolved_request": {"request_id": request_id}}
+
+    store = OneTimeAllowStore(tmp_path / "guard-home")
+    remote_approval = _signed_remote_approval(store, store.request_row)
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {
+                "action": "allow_once",
+                "localRequestId": "request-ot-allow",
+                "remoteApproval": remote_approval,
+            },
+        },
+        context=_context(tmp_path),
+        store=store,  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert result["generatedAt"] == "2026-06-13T00:00:00+00:00"
+    assert result["data"]["status"] == "completed"
+    assert store.resolved == [
+        {
+            "request_id": "request-ot-allow",
+            "resolution_action": "allow",
+            "resolution_scope": "one-time",
+        }
+    ]
+    assert len(store.claimed_receipts) == 1
+
+
+def test_executor_resolves_one_time_scope_with_block(tmp_path: Path) -> None:
+    """Prove `recommended_scope='one-time'` flows into `resolution_scope` on block."""
+
+    class OneTimeBlockStore(FakeStore):
+        def __init__(self, guard_home: Path) -> None:
+            super().__init__(guard_home)
+            self.request_row = _approval_request_row(
+                "request-ot-block",
+                policy_action="require-reapproval",
+                recommended_scope="one-time",
+            )
+            self.resolved: list[dict[str, object]] = []
+            self.claimed_receipts: list[dict[str, str]] = []
+
+        def get_approval_request(self, request_id: str) -> dict[str, object] | None:
+            return self.request_row if request_id == "request-ot-block" else None
+
+        def claim_remote_once_receipt(
+            self,
+            receipt_id: str,
+            *,
+            request_id: str,
+            claimed_at: str,
+        ) -> bool:
+            self.claimed_receipts.append({"receipt_id": receipt_id})
+            return True
+
+        def resolve_request_with_signed_remote_result(
+            self,
+            request_id: str,
+            *,
+            resolution_action: str,
+            resolution_scope: str,
+            reason: str | None,
+            resolved_at: str,
+        ) -> dict[str, object]:
+            self.resolved.append(
+                {
+                    "request_id": request_id,
+                    "resolution_action": resolution_action,
+                    "resolution_scope": resolution_scope,
+                }
+            )
+            return {"resolved": True, "resolved_request": {"request_id": request_id}}
+
+    store = OneTimeBlockStore(tmp_path / "guard-home")
+    remote_approval = _signed_remote_approval(store, store.request_row, decision="block")
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {
+                "action": "allow_once",
+                "localRequestId": "request-ot-block",
+                "remoteApproval": remote_approval,
+            },
+        },
+        context=_context(tmp_path),
+        store=store,  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert result["generatedAt"] == "2026-06-13T00:00:00+00:00"
+    assert result["data"]["status"] == "completed"
+    assert store.resolved == [
+        {
+            "request_id": "request-ot-block",
+            "resolution_action": "block",
+            "resolution_scope": "one-time",
+        }
+    ]
+    assert len(store.claimed_receipts) == 1
