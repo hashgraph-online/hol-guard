@@ -7,7 +7,6 @@ are excluded by build_guard_update_status_payload's auto_updatable flag.
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -25,10 +24,10 @@ _LOGGER = logging.getLogger(__name__)
 
 def maybe_auto_update(store: GuardStore, context: HarnessContext) -> None:
     """Check for available updates and self-apply if auto-update is enabled."""
-    raw = store.get_kv(AUTO_UPDATE_STATE_KEY) if hasattr(store, "get_kv") else None
+    raw = store.get_sync_payload(AUTO_UPDATE_STATE_KEY)
     try:
-        state: dict[str, object] = json.loads(raw) if isinstance(raw, str) and raw else {}
-    except (json.JSONDecodeError, TypeError):
+        state: dict[str, object] = dict(raw) if isinstance(raw, dict) else {}
+    except (TypeError, ValueError):
         state = {}
     last_check = state.get("last_check_at")
     if isinstance(last_check, str):
@@ -48,12 +47,10 @@ def maybe_auto_update(store: GuardStore, context: HarnessContext) -> None:
     state["last_check_at"] = now_str
     state["last_status"] = status
     if not status.get("auto_updatable") or status.get("blocked_reason"):
-        if hasattr(store, "set_kv"):
-            store.set_kv(AUTO_UPDATE_STATE_KEY, json.dumps(state))
+        store.set_sync_payload(AUTO_UPDATE_STATE_KEY, state, now_str)
         return
     if not status.get("update_available"):
-        if hasattr(store, "set_kv"):
-            store.set_kv(AUTO_UPDATE_STATE_KEY, json.dumps(state))
+        store.set_sync_payload(AUTO_UPDATE_STATE_KEY, state, now_str)
         return
     _LOGGER.info(
         "Auto-update: applying update %s -> %s",
@@ -75,5 +72,4 @@ def maybe_auto_update(store: GuardStore, context: HarnessContext) -> None:
         _LOGGER.warning("Auto-update failed", exc_info=True)
         state["last_update_error"] = True
     finally:
-        if hasattr(store, "set_kv"):
-            store.set_kv(AUTO_UPDATE_STATE_KEY, json.dumps(state))
+        store.set_sync_payload(AUTO_UPDATE_STATE_KEY, state, now_str)

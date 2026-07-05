@@ -34,16 +34,16 @@ def _make_job(operation: str, payload: dict[str, object] | None = None) -> dict[
 
 
 class _FakeStore:
-    """Minimal fake store with get_kv/set_kv for auto-update state."""
+    """Minimal fake store with get_sync_payload/set_sync_payload for auto-update state."""
 
     def __init__(self) -> None:
-        self._kv_data: dict[str, str] = {}
+        self._kv_data: dict[str, object] = {}
 
-    def get_kv(self, key: str) -> str | None:
+    def get_sync_payload(self, key: str) -> object:
         return self._kv_data.get(key)
 
-    def set_kv(self, key: str, value: str) -> None:
-        self._kv_data[key] = value
+    def set_sync_payload(self, key: str, payload: object, now: str) -> None:
+        self._kv_data[key] = payload
 
 
 class TestAppUpdateOperations:
@@ -129,9 +129,7 @@ class TestAutoUpdateThrottle:
         context = _make_context(tmp_path)
         store = _FakeStore()
         recent = datetime.now(timezone.utc)
-        store._kv_data[auto_update.AUTO_UPDATE_STATE_KEY] = (
-            '{"last_check_at": "' + recent.isoformat() + '"}'
-        )
+        store._kv_data[auto_update.AUTO_UPDATE_STATE_KEY] = {"last_check_at": recent.isoformat()}
         with patch.object(auto_update, "build_guard_update_status_payload") as mock:
             auto_update.maybe_auto_update(store, context)
         mock.assert_not_called()
@@ -142,9 +140,7 @@ class TestAutoUpdateThrottle:
         context = _make_context(tmp_path)
         store = _FakeStore()
         old = datetime(2026, 7, 3, 0, 0, 0, tzinfo=timezone.utc)
-        store._kv_data[auto_update.AUTO_UPDATE_STATE_KEY] = (
-            '{"last_check_at": "' + old.isoformat() + '"}'
-        )
+        store._kv_data[auto_update.AUTO_UPDATE_STATE_KEY] = {"last_check_at": old.isoformat()}
         status = {
             "current_version": "2.0.967",
             "latest_version": "2.0.970",
