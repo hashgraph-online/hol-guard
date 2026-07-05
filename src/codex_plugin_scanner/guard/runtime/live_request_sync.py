@@ -13,15 +13,12 @@ This eliminates the root cause of stale "pending" rows accumulating in the
 Cloud when >125 pending requests existed locally.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import urllib.error
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from ..config import VALID_RECEIPT_REDACTION_LEVELS, load_guard_config
 from ..redaction import redact_text
 from ..review_contracts import (
     GuardReviewContractError,
@@ -35,7 +32,7 @@ from .local_request_snapshots import (
 )
 
 if TYPE_CHECKING:
-    from .command_queue import _GuardSyncAuthorizationExpiredError, _GuardSyncNotConfiguredError
+    pass
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -183,7 +180,6 @@ def _build_live_request_event(
 
     created_at = str(item.get("created_at") or _now())
     last_seen_at = str(item.get("last_seen_at") or created_at)
-    resolved_at = item.get("resolved_at")
     expires_at = item.get("expires_at")
 
     request_payload = _cloud_safe_local_request_payload(item, redaction_level=redaction_level)
@@ -235,9 +231,7 @@ def _build_sync_events(
     if not rows:
         return events
 
-    has_more = len(rows) > LIVE_REQUEST_SYNC_BATCH_SIZE
     page_rows = rows[:LIVE_REQUEST_SYNC_BATCH_SIZE]
-
     for item in page_rows:
         sequence = _next_local_event_sequence(store)
         event = _build_live_request_event(
@@ -263,7 +257,12 @@ def _post_sync_events(
     cursor: str | None,
     events: list[dict[str, object]],
 ) -> dict[str, object]:
-    from .command_queue import _guard_sync_request, _urlopen_json_with_timeout_retry, _REQUEST_TIMEOUT_SECONDS, _RETRY_TIMEOUT_SECONDS
+    from .command_queue import (
+        _guard_sync_request,
+        _urlopen_json_with_timeout_retry,
+        _REQUEST_TIMEOUT_SECONDS,
+        _RETRY_TIMEOUT_SECONDS,
+    )
 
     request_url = _resolve_sync_url(auth_context, "/api/guard/live-requests/sync")
     payload: dict[str, object] = {
