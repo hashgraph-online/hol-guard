@@ -255,7 +255,7 @@ def _post_sync_events(
     cursor: str | None,
     events: list[dict[str, object]],
 ) -> dict[str, object]:
-    from ..runner import _guard_sync_request, _urlopen_json_with_timeout_retry
+    from .runner import _guard_sync_request, _urlopen_json_with_timeout_retry
 
     request_url = _resolve_sync_url(auth_context, "/api/guard/live-requests/sync")
     payload: dict[str, object] = {
