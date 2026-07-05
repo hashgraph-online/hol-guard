@@ -22,7 +22,6 @@ from .command_executors import (
     command_job_operation,
     execute_guard_command_job,
 )
-from .live_request_sync import sync_live_requests_once
 from .runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncNotConfiguredError,
@@ -435,6 +434,8 @@ def _sync_live_requests_best_effort(store: GuardStore, auth_context: dict[str, o
     accumulation bug caused by the capped snapshot approach.
     """
     try:
+        from .live_request_sync import sync_live_requests_once
+
         sync_live_requests_once(store, auth_context)
     except Exception as exc:
         _LOGGER.debug("Guard live request sync skipped: %s", _redacted_error(exc))

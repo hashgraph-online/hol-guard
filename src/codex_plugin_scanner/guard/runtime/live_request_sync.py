@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 from ..redaction import redact_text
 from ..review_contracts import (
     GuardReviewContractError,
+    GuardReviewOAuthMetadata,
     build_local_review_request_claim,
     guard_review_oauth_metadata,
 )
@@ -140,18 +141,17 @@ def _build_display_command(item: dict[str, object], redaction_level: str) -> tup
         raw_command = display_command
     elif redaction_level == "partial":
         raw_command = display_command
-        redacted_command = redact_text(display_command, level="partial")
+        redacted_command = redact_text(display_command)
     else:
-        redacted_command = redact_text(display_command, level="full")
-
+        redacted_command = redact_text(display_command)
     return display_command, display_summary, raw_command, redacted_command
 
 
 def _build_live_request_event(
     item: dict[str, object],
     *,
+    oauth: GuardReviewOAuthMetadata | None,
     redaction_level: str,
-    oauth: dict[str, object] | None,
     store: GuardStore,
     event_sequence: int,
 ) -> dict[str, object] | None:
@@ -332,8 +332,10 @@ def sync_live_requests_once(
                 events=events,
             )
 
-            accepted = int(response.get("accepted") or 0)
-            rejected = int(response.get("rejected") or 0)
+            accepted_val = response.get("accepted")
+            rejected_val = response.get("rejected")
+            accepted = int(accepted_val) if isinstance(accepted_val, (int, float)) else 0
+            rejected = int(rejected_val) if isinstance(rejected_val, (int, float)) else 0
             total_accepted += accepted
             total_rejected += rejected
 
