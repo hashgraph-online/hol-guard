@@ -401,6 +401,7 @@ def _retry_pending_result(
     _save_state(store, state)
     return True
 
+
 def _maybe_auto_update(store: GuardStore, context: HarnessContext) -> None:
     """Delegate to auto_update.maybe_auto_update."""
     maybe_auto_update(store, context)
