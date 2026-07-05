@@ -16,6 +16,10 @@ from ..cli.install_commands import (
     list_harness_setup_items,
     uninstall_confirmation_token,
 )
+from ..cli.update_commands import (
+    build_guard_update_status_payload,
+    run_guard_update,
+)
 from ..config import load_guard_config
 from ..local_supply_chain import (
     build_workspace_audit_payload,
@@ -61,6 +65,8 @@ APP_OPERATIONS: tuple[str, ...] = (
     "guard.app.repair",
     "guard.app.connect",
     "guard.app.remove",
+    "guard.app.update",
+    "guard.app.updateCheck",
 )
 APPROVAL_OPERATIONS: tuple[str, ...] = (
     "guard.approval.resolve",
@@ -203,6 +209,16 @@ def _execute_app_operation(
             return _result({"items": list_harness_setup_items(context, store)}, generated_at=generated_at)
         get_adapter(harness)
         return _result(build_harness_verification(harness, context, store, surface=surface), generated_at=generated_at)
+    if operation == "guard.app.update":
+        return _result(
+            _execute_app_update(context=context, store=store, generated_at=generated_at),
+            generated_at=generated_at,
+        )
+    if operation == "guard.app.updateCheck":
+        return _result(
+            _execute_app_update_check(generated_at=generated_at),
+            generated_at=generated_at,
+        )
     if harness is None:
         return {"failureCode": "harness_required", "failureMessage": "App command requires a harness."}
     get_adapter(harness)
@@ -233,6 +249,30 @@ def _execute_app_operation(
         "failureCode": "unsupported_operation",
         "failureMessage": f"Unsupported app operation: {operation}",
     }
+
+
+def _execute_app_update(
+    *,
+    context: HarnessContext,
+    store: GuardStore,
+    generated_at: str,
+) -> dict[str, object]:
+    update_payload, exit_code = run_guard_update(
+        dry_run=False,
+        context=context,
+        store=store,
+        workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
+        now=generated_at,
+    )
+    return {
+        "update": update_payload,
+        "exitCode": exit_code,
+        "succeeded": exit_code == 0,
+    }
+
+
+def _execute_app_update_check(generated_at: str) -> dict[str, object]:
+    return build_guard_update_status_payload()
 
 
 def _execute_approval_operation(
