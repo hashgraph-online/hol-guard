@@ -38,12 +38,15 @@ def maybe_auto_update(store: GuardStore, context: HarnessContext) -> None:
                 return
         except (ValueError, TypeError):
             pass
+    now_str = datetime.now(timezone.utc).isoformat()
     try:
         status = build_guard_update_status_payload()
     except Exception:
         _LOGGER.debug("Auto-update version check failed", exc_info=True)
+        state["last_check_at"] = now_str
+        state["last_check_error"] = True
+        store.set_sync_payload(AUTO_UPDATE_STATE_KEY, state, now_str)
         return
-    now_str = datetime.now(timezone.utc).isoformat()
     state["last_check_at"] = now_str
     state["last_status"] = status
     if not status.get("auto_updatable") or status.get("blocked_reason"):
