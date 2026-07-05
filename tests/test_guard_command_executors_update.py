@@ -121,28 +121,28 @@ class TestAppUpdateOperations:
 
 
 class TestAutoUpdateThrottle:
-    """Verify auto-update throttling in _maybe_auto_update."""
+    """Verify auto-update throttling in maybe_auto_update."""
 
     def test_auto_update_skipped_within_throttle_window(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.runtime import command_queue
+        from codex_plugin_scanner.guard.runtime import auto_update
 
         context = _make_context(tmp_path)
         store = _FakeStore()
         recent = datetime.now(timezone.utc)
-        store._kv_data[command_queue.AUTO_UPDATE_STATE_KEY] = (
+        store._kv_data[auto_update.AUTO_UPDATE_STATE_KEY] = (
             '{"last_check_at": "' + recent.isoformat() + '"}'
         )
-        with patch.object(command_queue, "build_guard_update_status_payload") as mock:
-            command_queue._maybe_auto_update(store, context)
+        with patch.object(auto_update, "build_guard_update_status_payload") as mock:
+            auto_update.maybe_auto_update(store, context)
         mock.assert_not_called()
 
     def test_auto_update_runs_after_throttle_window(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.runtime import command_queue
+        from codex_plugin_scanner.guard.runtime import auto_update
 
         context = _make_context(tmp_path)
         store = _FakeStore()
         old = datetime(2026, 7, 3, 0, 0, 0, tzinfo=timezone.utc)
-        store._kv_data[command_queue.AUTO_UPDATE_STATE_KEY] = (
+        store._kv_data[auto_update.AUTO_UPDATE_STATE_KEY] = (
             '{"last_check_at": "' + old.isoformat() + '"}'
         )
         status = {
@@ -152,13 +152,13 @@ class TestAutoUpdateThrottle:
             "update_available": True,
             "blocked_reason": None,
         }
-        with patch.object(command_queue, "build_guard_update_status_payload", return_value=status):
-            with patch.object(command_queue, "run_guard_update", return_value=({"changed": True}, 0)) as mock_update:
-                command_queue._maybe_auto_update(store, context)
+        with patch.object(auto_update, "build_guard_update_status_payload", return_value=status):
+            with patch.object(auto_update, "run_guard_update", return_value=({"changed": True}, 0)) as mock_update:
+                auto_update.maybe_auto_update(store, context)
         mock_update.assert_called_once()
 
     def test_auto_update_skipped_when_not_auto_updatable(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.runtime import command_queue
+        from codex_plugin_scanner.guard.runtime import auto_update
 
         context = _make_context(tmp_path)
         store = _FakeStore()
@@ -169,13 +169,13 @@ class TestAutoUpdateThrottle:
             "update_available": True,
             "blocked_reason": "This install was set up from local source code.",
         }
-        with patch.object(command_queue, "build_guard_update_status_payload", return_value=status):
-            with patch.object(command_queue, "run_guard_update") as mock_update:
-                command_queue._maybe_auto_update(store, context)
+        with patch.object(auto_update, "build_guard_update_status_payload", return_value=status):
+            with patch.object(auto_update, "run_guard_update") as mock_update:
+                auto_update.maybe_auto_update(store, context)
         mock_update.assert_not_called()
 
     def test_auto_update_skipped_when_no_update_available(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.runtime import command_queue
+        from codex_plugin_scanner.guard.runtime import auto_update
 
         context = _make_context(tmp_path)
         store = _FakeStore()
@@ -186,7 +186,24 @@ class TestAutoUpdateThrottle:
             "update_available": False,
             "blocked_reason": None,
         }
-        with patch.object(command_queue, "build_guard_update_status_payload", return_value=status):
-            with patch.object(command_queue, "run_guard_update") as mock_update:
-                command_queue._maybe_auto_update(store, context)
+        with patch.object(auto_update, "build_guard_update_status_payload", return_value=status):
+            with patch.object(auto_update, "run_guard_update") as mock_update:
+                auto_update.maybe_auto_update(store, context)
         mock_update.assert_not_called()
+
+    def test_auto_update_handles_malformed_state(self, tmp_path: Path) -> None:
+        from codex_plugin_scanner.guard.runtime import auto_update
+
+        context = _make_context(tmp_path)
+        store = _FakeStore()
+        store._kv_data[auto_update.AUTO_UPDATE_STATE_KEY] = "not valid json{{"
+        status = {
+            "current_version": "2.0.970",
+            "latest_version": "2.0.970",
+            "auto_updatable": True,
+            "update_available": False,
+            "blocked_reason": None,
+        }
+        with patch.object(auto_update, "build_guard_update_status_payload", return_value=status):
+            auto_update.maybe_auto_update(store, context)
+        # Should not crash — malformed state is treated as empty
