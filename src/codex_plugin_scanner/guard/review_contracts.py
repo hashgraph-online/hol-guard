@@ -26,7 +26,7 @@ from .policy_bundle_trusted_keys import (
 _LOCAL_REVIEW_REQUEST_CONTRACT_VERSION = "guard.local-review-request.v1"
 _REMOTE_APPROVAL_CONTRACT_VERSION = "guard.remote-approval.v1"
 _DECISION_MEMORY_BUNDLE_CONTRACT_VERSION = "guard.decision-memory-bundle.v1"
-_REMOTE_APPROVAL_REQUIRED_SCOPE = "artifact"
+_REMOTE_APPROVAL_ALLOWED_SCOPES = frozenset(("artifact", "one-time"))
 _REMOTE_APPROVAL_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
 _DECISION_MEMORY_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
 _CLAIM_HASH_KEYS = ("claimHash",)
@@ -363,7 +363,7 @@ def payload_hash_for_remote_approval_envelope(envelope: dict[str, object]) -> st
 def validated_remote_approval_envelope(envelope: dict[str, object], *, store) -> dict[str, object]:
     if envelope.get("contractVersion") != _REMOTE_APPROVAL_CONTRACT_VERSION:
         raise GuardReviewContractError("unsupported_remote_approval_contract")
-    if envelope.get("scope") != _REMOTE_APPROVAL_REQUIRED_SCOPE:
+    if envelope.get("scope") not in _REMOTE_APPROVAL_ALLOWED_SCOPES:
         raise GuardReviewContractError("invalid_remote_approval_scope")
     issued_at = _parse_iso_timestamp(envelope.get("issuedAt"), field_name="issued_at")
     expires_at = _parse_iso_timestamp(envelope.get("expiresAt"), field_name="expires_at")
@@ -408,6 +408,10 @@ def validate_remote_approval_request_binding(
     expected_claim = build_local_review_request_claim(request_row=request_row, oauth=oauth, store=store)
     if _non_empty_string(envelope.get("sourceClaimHash")) != _non_empty_string(expected_claim.get("claimHash")):
         raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
+    envelope_scope = _non_empty_string(envelope.get("scope"))
+    request_scope = _non_empty_string(request_row.get("recommended_scope"))
+    if envelope_scope != request_scope:
+        raise GuardReviewContractError("remote_approval_scope_mismatch")
 
 
 def payload_hash_for_decision_memory_bundle(bundle: dict[str, object]) -> str:
