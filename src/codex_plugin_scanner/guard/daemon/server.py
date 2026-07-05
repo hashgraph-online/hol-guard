@@ -2405,7 +2405,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         request_policy_action = self._optional_string(request_row.get("policy_action"))
         request_recommended_scope = self._optional_string(request_row.get("recommended_scope"))
-        if request_policy_action not in {"review", "require-reapproval"} or request_recommended_scope != "artifact":
+        if request_policy_action not in {"pause", "review", "require-reapproval"} or request_recommended_scope not in {
+            "artifact",
+            "one-time",
+        }:
             self._write_json({"error": "remote_once_not_permitted"}, status=409)
             return
         try:
@@ -2449,7 +2452,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             result = self.server.store.resolve_request_with_signed_remote_result(  # type: ignore[attr-defined]
                 request_id,
                 resolution_action=resolution_action,
-                resolution_scope="artifact",
+                resolution_scope=request_recommended_scope or "artifact",
                 reason="Guard Cloud signed remote approval",
                 resolved_at=_now(),
             )
@@ -2472,7 +2475,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "receipt_id": receipt_id,
                 "request_id": request_id,
                 "review_command": self._optional_string(resolved_request.get("review_command")),
-                "scope": "artifact",
+                "scope": request_recommended_scope or "artifact",
             },
             resolved_at,
         )

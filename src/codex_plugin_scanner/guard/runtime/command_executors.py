@@ -320,6 +320,13 @@ def _execute_approval_operation(
         oauth=oauth,
         store=store,
     )
+    request_policy_action = _optional_string(request_row.get("policy_action"))
+    resolution_scope = _optional_string(request_row.get("recommended_scope"))
+    if request_policy_action not in {"pause", "review", "require-reapproval"} or resolution_scope not in {
+        "artifact",
+        "one-time",
+    }:
+        raise ValueError("remote_approval_not_permitted")
     receipt_id = _optional_string(envelope.get("receiptId"))
     if receipt_id is None:
         raise ValueError("invalid_remote_approval_receipt")
@@ -333,12 +340,13 @@ def _execute_approval_operation(
     if envelope_decision not in {"allow_once", "block"}:
         store.release_remote_once_receipt(receipt_id)
         raise ValueError("invalid_remote_approval_decision")
+    resolution_scope = resolution_scope or "artifact"
     resolution_action = "block" if envelope_decision == "block" else "allow"
     try:
         result = store.resolve_request_with_signed_remote_result(
             local_request_id,
             resolution_action=resolution_action,
-            resolution_scope="artifact",
+            resolution_scope=resolution_scope,
             reason=_optional_string(payload.get("reason")) or "Guard Cloud signed remote approval",
             resolved_at=generated_at,
         )

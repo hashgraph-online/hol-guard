@@ -26,7 +26,7 @@ def _seed_paid_oauth_entitlement(home_dir: Path) -> None:
         dpop_public_jwk_thumbprint="thumbprint-1",
         grant_id="grant-1",
         machine_id="machine-1",
-        supply_chain_entitlement_expires_at="2026-07-05T01:39:51+00:00",
+        supply_chain_entitlement_expires_at="2027-07-05T01:39:51+00:00",
         supply_chain_firewall=True,
         supply_chain_plan_id="pro",
         workspace_id="workspace-1",
