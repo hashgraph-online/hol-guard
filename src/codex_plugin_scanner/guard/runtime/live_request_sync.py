@@ -173,9 +173,7 @@ def _build_live_request_event(
         except GuardReviewContractError:
             claim = None
 
-    display_command, display_summary, raw_command, redacted_command = _build_display_command(
-        item, redaction_level
-    )
+    display_command, display_summary, raw_command, redacted_command = _build_display_command(item, redaction_level)
     display_provenance = _resolve_display_provenance(item, redaction_level)
 
     created_at = str(item.get("created_at") or _now())
@@ -304,11 +302,13 @@ def sync_live_requests_once(
     state = _load_sync_state(store)
     cursor = _load_sync_cursor(store)
 
-    state.update({
-        "state": "syncing",
-        "last_sync_attempt_at": _now(),
-        "last_error": None,
-    })
+    state.update(
+        {
+            "state": "syncing",
+            "last_sync_attempt_at": _now(),
+            "last_error": None,
+        }
+    )
     _save_sync_state(store, state)
 
     total_accepted = 0
@@ -354,20 +354,24 @@ def sync_live_requests_once(
 
         _save_sync_cursor(store, new_cursor)
 
-        state.update({
-            "state": "idle",
-            "last_sync_at": _now(),
-            "last_success_at": _now(),
-            "synced_count": total_accepted,
-            "rejected_count": total_rejected,
-            "last_error": all_errors[0] if all_errors else None,
-            "cursor": new_cursor,
-        })
+        state.update(
+            {
+                "state": "idle",
+                "last_sync_at": _now(),
+                "last_success_at": _now(),
+                "synced_count": total_accepted,
+                "rejected_count": total_rejected,
+                "last_error": all_errors[0] if all_errors else None,
+                "cursor": new_cursor,
+            }
+        )
         _save_sync_state(store, state)
 
         _LOGGER.info(
             "Guard live request sync complete: accepted=%d rejected=%d batches=%d",
-            total_accepted, total_rejected, batches,
+            total_accepted,
+            total_rejected,
+            batches,
         )
         return {
             "synced": total_accepted,
@@ -379,21 +383,25 @@ def sync_live_requests_once(
 
     except urllib.error.HTTPError as error:
         error_msg = f"HTTP {error.code}: {error.reason}"
-        state.update({
-            "state": "error",
-            "last_error": error_msg,
-            "last_error_at": _now(),
-        })
+        state.update(
+            {
+                "state": "error",
+                "last_error": error_msg,
+                "last_error_at": _now(),
+            }
+        )
         _save_sync_state(store, state)
         _LOGGER.warning("Guard live request sync failed: %s", error_msg)
         raise
     except Exception as error:
         error_msg = str(error)
-        state.update({
-            "state": "error",
-            "last_error": error_msg,
-            "last_error_at": _now(),
-        })
+        state.update(
+            {
+                "state": "error",
+                "last_error": error_msg,
+                "last_error_at": _now(),
+            }
+        )
         _save_sync_state(store, state)
         _LOGGER.warning("Guard live request sync failed: %s", error_msg)
         raise

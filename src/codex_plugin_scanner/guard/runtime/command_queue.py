@@ -425,6 +425,7 @@ def _resolve_command_queue_auth_context(
             return _resolve_guard_sync_auth_context(store)
         raise
 
+
 def _sync_live_requests_best_effort(store: GuardStore, auth_context: dict[str, object]) -> None:
     """Sync local approval requests to Cloud live request table.
 
