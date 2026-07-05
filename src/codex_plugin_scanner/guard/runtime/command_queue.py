@@ -14,6 +14,7 @@ from urllib.parse import urlparse, urlunparse
 from ...version import __version__
 from ..adapters.base import HarnessContext
 from ..store import GuardStore
+from .auto_update import maybe_auto_update
 from .command_executors import (
     COMMAND_OPERATION_SCHEMA_VERSIONS,
     SUPPORTED_COMMAND_OPERATIONS,
@@ -21,7 +22,6 @@ from .command_executors import (
     command_job_operation,
     execute_guard_command_job,
 )
-from .auto_update import maybe_auto_update
 from .runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncNotConfiguredError,
@@ -43,6 +43,7 @@ _DEFAULT_LEASE_WAIT_MS = 25_000
 _DEFAULT_POLL_INTERVAL_SECONDS = 2.0
 _DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
 _MIN_RETRY_WAIT_SECONDS = 0.1
+_REQUEST_TIMEOUT_SECONDS = 35
 _RETRY_TIMEOUT_SECONDS = 60
 _LOGGER = logging.getLogger(__name__)
 _LEASE_LOCAL_REQUEST_SNAPSHOT_KEYS = (

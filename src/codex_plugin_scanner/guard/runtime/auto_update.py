@@ -23,7 +23,7 @@ AUTO_UPDATE_STATE_KEY = "guard_auto_update_state"
 _LOGGER = logging.getLogger(__name__)
 
 
-def maybe_auto_update(store: "GuardStore", context: "HarnessContext") -> None:
+def maybe_auto_update(store: GuardStore, context: HarnessContext) -> None:
     """Check for available updates and self-apply if auto-update is enabled."""
     raw = store.get_kv(AUTO_UPDATE_STATE_KEY) if hasattr(store, "get_kv") else None
     try:
