@@ -172,7 +172,8 @@ def _local_request_snapshot_items_for_status(
     except GuardReviewContractError:
         oauth = None
     cursor_state = _local_request_snapshot_cursor_state(store)
-    cursor = cursor_state.get(status)
+    use_cursor = status != "pending"
+    cursor = cursor_state.get(status) if use_cursor else None
     rows = store.list_approval_requests(
         status=status,
         limit=limit + 1,
@@ -224,7 +225,7 @@ def _local_request_snapshot_items_for_status(
                 "resolvedAt": str(resolved_at) if isinstance(resolved_at, str) and resolved_at else None,
             }
         )
-    if cursor_supported:
+    if cursor_supported and use_cursor:
         if len(rows) > limit:
             cursor_state[status] = _local_request_snapshot_next_cursor(rows, limit)
         else:
