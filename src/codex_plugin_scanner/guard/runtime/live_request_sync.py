@@ -258,10 +258,10 @@ def _post_sync_events(
     events: list[dict[str, object]],
 ) -> dict[str, object]:
     from .command_queue import (
-        _guard_sync_request,
-        _urlopen_json_with_timeout_retry,
         _REQUEST_TIMEOUT_SECONDS,
         _RETRY_TIMEOUT_SECONDS,
+        _guard_sync_request,
+        _urlopen_json_with_timeout_retry,
     )
 
     request_url = _resolve_sync_url(auth_context, "/api/guard/live-requests/sync")
