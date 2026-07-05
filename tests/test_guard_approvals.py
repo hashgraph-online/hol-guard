@@ -1102,7 +1102,7 @@ class TestGuardApprovals:
         assert pending == []
         assert decisions[0]["harness"] == "*"
 
-    def test_guard_artifact_approval_once_uses_transient_exact_replay(self, tmp_path):
+    def test_guard_package_artifact_approval_reuses_transient_exact_replay(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         artifact_id = "guard-cli:project:package-request:impeccable"
         artifact_hash = "hash-impeccable"
@@ -1155,11 +1155,20 @@ class TestGuardApprovals:
             str(tmp_path / "workspace"),
             now="2026-04-11T00:04:00+00:00",
         )
+        changed_request = store.resolve_policy_decision(
+            "guard-cli",
+            artifact_id,
+            "hash-changed",
+            str(tmp_path / "workspace"),
+            now="2026-04-11T00:05:00+00:00",
+        )
 
         assert resolved["status"] == "resolved"
         assert first_retry is not None
         assert first_retry["action"] == "allow"
-        assert second_retry is None
+        assert second_retry is not None
+        assert second_retry["action"] == "allow"
+        assert changed_request is None
 
     def test_guard_saved_scope_repairs_integrity_before_policy_write(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
@@ -1274,7 +1283,7 @@ class TestGuardApprovals:
                     "action": "allow",
                     "approval_id": "approval-race",
                     "artifact_hash": "hash-impeccable",
-                    "artifact_id": "guard-cli:project:package-request:impeccable",
+                    "artifact_id": "guard-cli:project:tool-action:impeccable",
                     "created_at": "2026-04-11T00:00:00+00:00",
                     "expires_at": "2026-04-11T00:05:00+00:00",
                     "harness": "guard-cli",
@@ -1286,7 +1295,7 @@ class TestGuardApprovals:
         claimed = GuardStore._claim_local_once_approval_locked(
             FakeConnection(),
             harness="guard-cli",
-            artifact_id="guard-cli:project:package-request:impeccable",
+            artifact_id="guard-cli:project:tool-action:impeccable",
             artifact_hash="hash-impeccable",
             workspace=None,
             publisher=None,
