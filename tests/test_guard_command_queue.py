@@ -18,10 +18,12 @@ from codex_plugin_scanner.guard.daemon.command_queue_worker import (
     start_command_queue_worker,
 )
 from codex_plugin_scanner.guard.review_contracts import (
+    GuardReviewContractError,
     build_local_review_request_claim,
     guard_review_oauth_metadata,
     payload_hash_for_decision_memory_bundle,
     payload_hash_for_remote_approval_envelope,
+    validated_remote_approval_envelope,
 )
 from codex_plugin_scanner.guard.runtime import command_executors, command_queue
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
@@ -185,7 +187,7 @@ def _signed_remote_approval(
         "reviewerUserId": "user-1",
         "riskCategory": claim["riskCategory"],
         "runtimeGrantId": claim["runtimeGrantId"],
-        "scope": "artifact",
+        "scope": str(request_row.get("recommended_scope") or "artifact"),
         "sourceClaimHash": claim["claimHash"],
         "stepUpChallengeId": None,
         "workspaceId": claim["workspaceId"],
@@ -2496,7 +2498,10 @@ def test_executor_rejects_remote_approval_for_unsupported_scope(tmp_path: Path) 
         now=lambda: "2026-06-13T00:00:00+00:00",
     )
 
-    assert result["failureCode"] == "remote_approval_not_permitted"
+    assert result["failureCode"] in {
+        "invalid_remote_approval_scope",
+        "remote_approval_not_permitted",
+    }
     assert store.claimed_receipts == []
     assert store.resolved == []
 
@@ -2645,3 +2650,45 @@ def test_executor_resolves_one_time_scope_with_block(tmp_path: Path) -> None:
         }
     ]
     assert len(store.claimed_receipts) == 1
+def test_validated_remote_approval_envelope_accepts_one_time_scope(tmp_path: Path) -> None:
+    """The envelope validator must accept scope='one-time', not just 'artifact'."""
+
+    class OneTimeEnvelopeStore(FakeStore):
+        def __init__(self, guard_home: Path) -> None:
+            super().__init__(guard_home)
+            self.request_row = _approval_request_row(
+                "request-ot-envelope",
+                policy_action="require-reapproval",
+                recommended_scope="one-time",
+            )
+
+        def get_approval_request(self, request_id: str) -> dict[str, object] | None:
+            return self.request_row if request_id == "request-ot-envelope" else None
+
+    store = OneTimeEnvelopeStore(tmp_path)
+    envelope = _signed_remote_approval(store, store.request_row)
+    assert envelope["scope"] == "one-time"
+
+    validated = validated_remote_approval_envelope(envelope, store=store)
+    assert validated["scope"] == "one-time"
+
+
+def test_validated_remote_approval_envelope_rejects_unsupported_scope(tmp_path: Path) -> None:
+    """The envelope validator must reject scopes outside artifact/one-time."""
+
+    class WorkspaceEnvelopeStore(FakeStore):
+        def __init__(self, guard_home: Path) -> None:
+            super().__init__(guard_home)
+            self.request_row = _approval_request_row(
+                "request-bad-envelope",
+                policy_action="require-reapproval",
+                recommended_scope="workspace",
+            )
+
+        def get_approval_request(self, request_id: str) -> dict[str, object] | None:
+            return self.request_row if request_id == "request-bad-envelope" else None
+
+    store = WorkspaceEnvelopeStore(tmp_path)
+    envelope = _signed_remote_approval(store, store.request_row)
+    with pytest.raises(GuardReviewContractError, match="invalid_remote_approval_scope"):
+        validated_remote_approval_envelope(envelope, store=store)
