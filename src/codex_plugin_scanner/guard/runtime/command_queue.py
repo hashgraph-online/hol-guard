@@ -425,6 +425,22 @@ def _resolve_command_queue_auth_context(
         raise
 
 
+def _sync_live_requests_best_effort(store: GuardStore, auth_context: dict[str, object]) -> None:
+    """Sync local approval requests to Cloud live request table.
+
+    Best-effort: failures are logged but do not block the command queue lease.
+    The dedicated endpoint uses cursor-based pagination to ensure all requests
+    are synced regardless of backlog size, eliminating the stale-row
+    accumulation bug caused by the capped snapshot approach.
+    """
+    try:
+        from .live_request_sync import sync_live_requests_once
+
+        sync_live_requests_once(store, auth_context)
+    except Exception as exc:
+        _LOGGER.debug("Guard live request sync skipped: %s", _redacted_error(exc))
+
+
 def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[str, object]:
     auth_context = _resolve_command_queue_auth_context(store)
     state = _load_state(store)
@@ -437,6 +453,7 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
         }
     )
     _save_state(store, state)
+    _sync_live_requests_best_effort(store, auth_context)
     if _retry_pending_result(store, auth_context, state):
         return command_queue_status(store)
     lease_response = _json_request(
