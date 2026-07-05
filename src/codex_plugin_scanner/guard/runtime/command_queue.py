@@ -14,6 +14,7 @@ from urllib.parse import urlparse, urlunparse
 from ...version import __version__
 from ..adapters.base import HarnessContext
 from ..store import GuardStore
+from .auto_update import maybe_auto_update
 from .command_executors import (
     COMMAND_OPERATION_SCHEMA_VERSIONS,
     SUPPORTED_COMMAND_OPERATIONS,
@@ -401,6 +402,11 @@ def _retry_pending_result(
     return True
 
 
+def _maybe_auto_update(store: GuardStore, context: HarnessContext) -> None:
+    """Delegate to auto_update.maybe_auto_update."""
+    maybe_auto_update(store, context)
+
+
 def _resolve_command_queue_auth_context(
     store: GuardStore,
     *,
@@ -451,6 +457,7 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
             }
         )
         _save_state(store, state)
+        _maybe_auto_update(store, context)
         return command_queue_status(store)
     state.update(
         {
