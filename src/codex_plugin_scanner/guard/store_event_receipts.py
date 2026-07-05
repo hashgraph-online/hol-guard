@@ -8,6 +8,10 @@ from __future__ import annotations
 from .store_base import *
 
 
+def _local_once_approval_is_reusable(artifact_id: str) -> bool:
+    return ":package-request:" in artifact_id
+
+
 class StoreEventReceiptsMixin:
     def record_local_once_approval(
         self,
@@ -83,12 +87,13 @@ class StoreEventReceiptsMixin:
         ).fetchone()
         if row is None:
             return None
-        claim_cursor = connection.execute(
-            "update guard_local_once_approvals set claimed_at = ? where approval_id = ? and claimed_at is null",
-            (now, str(row["approval_id"])),
-        )
-        if claim_cursor.rowcount != 1:
-            return None
+        if not _local_once_approval_is_reusable(str(row["artifact_id"])):
+            claim_cursor = connection.execute(
+                "update guard_local_once_approvals set claimed_at = ? where approval_id = ? and claimed_at is null",
+                (now, str(row["approval_id"])),
+            )
+            if claim_cursor.rowcount != 1:
+                return None
         return {
             "action": str(row["action"]),
             "approval_id": str(row["approval_id"]),
