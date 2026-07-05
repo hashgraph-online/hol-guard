@@ -141,9 +141,9 @@ def _build_display_command(item: dict[str, object], redaction_level: str) -> tup
         raw_command = display_command
     elif redaction_level == "partial":
         raw_command = display_command
-        redacted_command = redact_text(display_command)
+        redacted_command = redact_text(display_command).text
     else:
-        redacted_command = redact_text(display_command)
+        redacted_command = redact_text(display_command).text
     return display_command, display_summary, raw_command, redacted_command
 
 
@@ -255,12 +255,7 @@ def _post_sync_events(
     cursor: str | None,
     events: list[dict[str, object]],
 ) -> dict[str, object]:
-    from .command_queue import (
-        _REQUEST_TIMEOUT_SECONDS,
-        _RETRY_TIMEOUT_SECONDS,
-        _guard_sync_request,
-        _urlopen_json_with_timeout_retry,
-    )
+    from ..runner import _guard_sync_request, _urlopen_json_with_timeout_retry
 
     request_url = _resolve_sync_url(auth_context, "/api/guard/live-requests/sync")
     payload: dict[str, object] = {
@@ -279,8 +274,8 @@ def _post_sync_events(
     )
     return _urlopen_json_with_timeout_retry(
         request=request,
-        timeout_seconds=_REQUEST_TIMEOUT_SECONDS,
-        retry_timeout_seconds=_RETRY_TIMEOUT_SECONDS,
+        timeout_seconds=35,
+        retry_timeout_seconds=60,
     )
 
 
