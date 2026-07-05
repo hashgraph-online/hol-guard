@@ -64,7 +64,7 @@ def maybe_auto_update(store: GuardStore, context: HarnessContext) -> None:
         update_payload, exit_code = run_guard_update(
             dry_run=False,
             context=context,
-            store=None,
+            store=store,
             workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
             now=now_str,
         )

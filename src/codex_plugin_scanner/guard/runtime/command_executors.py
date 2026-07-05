@@ -211,7 +211,7 @@ def _execute_app_operation(
         return _result(build_harness_verification(harness, context, store, surface=surface), generated_at=generated_at)
     if operation == "guard.app.update":
         return _result(
-            _execute_app_update(context=context, generated_at=generated_at),
+            _execute_app_update(context=context, store=store, generated_at=generated_at),
             generated_at=generated_at,
         )
     if operation == "guard.app.updateCheck":
@@ -254,12 +254,13 @@ def _execute_app_operation(
 def _execute_app_update(
     *,
     context: HarnessContext,
+    store: GuardStore,
     generated_at: str,
 ) -> dict[str, object]:
     update_payload, exit_code = run_guard_update(
         dry_run=False,
         context=context,
-        store=None,
+        store=store,
         workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
         now=generated_at,
     )
