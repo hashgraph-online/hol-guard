@@ -23,6 +23,7 @@ from codex_plugin_scanner.guard.review_contracts import (
     guard_review_oauth_metadata,
     payload_hash_for_decision_memory_bundle,
     payload_hash_for_remote_approval_envelope,
+    validate_remote_approval_request_binding,
     validated_remote_approval_envelope,
 )
 from codex_plugin_scanner.guard.runtime import command_executors, command_queue
@@ -155,6 +156,7 @@ def _signed_remote_approval(
     *,
     decision: str = "allow_once",
     receipt_id: str = "cloud-receipt-1",
+    scope: str | None = None,
 ) -> dict[str, object]:
     oauth = guard_review_oauth_metadata(store)
     claim = build_local_review_request_claim(
@@ -187,7 +189,7 @@ def _signed_remote_approval(
         "reviewerUserId": "user-1",
         "riskCategory": claim["riskCategory"],
         "runtimeGrantId": claim["runtimeGrantId"],
-        "scope": str(request_row.get("recommended_scope") or "artifact"),
+        "scope": scope if scope is not None else str(request_row.get("recommended_scope") or "artifact"),
         "sourceClaimHash": claim["claimHash"],
         "stepUpChallengeId": None,
         "workspaceId": claim["workspaceId"],
@@ -2497,11 +2499,7 @@ def test_executor_rejects_remote_approval_for_unsupported_scope(tmp_path: Path) 
         store=store,  # type: ignore[arg-type]
         now=lambda: "2026-06-13T00:00:00+00:00",
     )
-
-    assert result["failureCode"] in {
-        "invalid_remote_approval_scope",
-        "remote_approval_not_permitted",
-    }
+    assert result["failureCode"] == "invalid_remote_approval_scope"
     assert store.claimed_receipts == []
     assert store.resolved == []
 
@@ -2692,3 +2690,98 @@ def test_validated_remote_approval_envelope_rejects_unsupported_scope(tmp_path: 
     envelope = _signed_remote_approval(store, store.request_row)
     with pytest.raises(GuardReviewContractError, match="invalid_remote_approval_scope"):
         validated_remote_approval_envelope(envelope, store=store)
+
+
+def test_binding_rejects_remote_approval_envelope_scope_mismatch(tmp_path: Path) -> None:
+    """A signed envelope whose scope differs from the request recommended_scope is rejected."""
+
+    class MismatchScopeStore(FakeStore):
+        def __init__(self, guard_home: Path) -> None:
+            super().__init__(guard_home)
+            self.request_row = _approval_request_row(
+                "request-scope-mismatch",
+                policy_action="require-reapproval",
+                recommended_scope="artifact",
+            )
+
+        def get_approval_request(self, request_id: str) -> dict[str, object] | None:
+            return self.request_row if request_id == "request-scope-mismatch" else None
+
+    store = MismatchScopeStore(tmp_path)
+    # Build a validly-signed envelope with scope='one-time' against an 'artifact' request.
+    envelope = _signed_remote_approval(store, store.request_row, scope="one-time")
+    oauth = guard_review_oauth_metadata(store)
+    with pytest.raises(GuardReviewContractError, match="remote_approval_scope_mismatch"):
+        validate_remote_approval_request_binding(
+            envelope=envelope,
+            request_row=store.request_row,
+            oauth=oauth,
+            store=store,
+        )
+
+
+def test_executor_rejects_remote_approval_envelope_scope_mismatch(tmp_path: Path) -> None:
+    """A one-time envelope cannot bind to an artifact request through the executor path."""
+
+    class MismatchScopeExecutorStore(FakeStore):
+        def __init__(self, guard_home: Path) -> None:
+            super().__init__(guard_home)
+            self.claimed_receipts: list[str] = []
+            self.resolved: list[dict[str, object]] = []
+            self.request_row = _approval_request_row(
+                "request-scope-mismatch-exec",
+                policy_action="require-reapproval",
+                recommended_scope="artifact",
+            )
+
+        def get_approval_request(self, request_id: str) -> dict[str, object] | None:
+            return self.request_row if request_id == "request-scope-mismatch-exec" else None
+
+        def claim_remote_once_receipt(
+            self,
+            receipt_id: str,
+            *,
+            request_id: str,
+            claimed_at: str,
+        ) -> bool:
+            del request_id, claimed_at
+            self.claimed_receipts.append(receipt_id)
+            return True
+
+        def resolve_request_with_signed_remote_result(
+            self,
+            request_id: str,
+            *,
+            resolution_action: str,
+            resolution_scope: str,
+            reason: str | None,
+            signed_remote_result: dict[str, object],
+        ) -> dict[str, object]:
+            del resolution_action, resolution_scope, reason, signed_remote_result
+            self.resolved.append({"request_id": request_id})
+            return {"resolved": True, "resolved_request": {"request_id": request_id}}
+
+    store = MismatchScopeExecutorStore(tmp_path / "guard-home")
+    # Envelope scope is 'one-time' but the request recommends 'artifact'.
+    remote_approval = _signed_remote_approval(
+        store,
+        store.request_row,
+        receipt_id="cloud-receipt-scope-mismatch",
+        scope="one-time",
+    )
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.approval.resolve",
+            "payload": {
+                "localRequestId": "request-scope-mismatch-exec",
+                "action": "allow_once",
+                "remoteApproval": remote_approval,
+            },
+        },
+        context=_context(tmp_path),
+        store=store,  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+    assert result["failureCode"] == "remote_approval_scope_mismatch"
+    assert store.claimed_receipts == []
+    assert store.resolved == []

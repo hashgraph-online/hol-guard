@@ -408,6 +408,10 @@ def validate_remote_approval_request_binding(
     expected_claim = build_local_review_request_claim(request_row=request_row, oauth=oauth, store=store)
     if _non_empty_string(envelope.get("sourceClaimHash")) != _non_empty_string(expected_claim.get("claimHash")):
         raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
+    envelope_scope = _non_empty_string(envelope.get("scope"))
+    request_scope = _non_empty_string(request_row.get("recommended_scope"))
+    if envelope_scope != request_scope:
+        raise GuardReviewContractError("remote_approval_scope_mismatch")
 
 
 def payload_hash_for_decision_memory_bundle(bundle: dict[str, object]) -> str:
