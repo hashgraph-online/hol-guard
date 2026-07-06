@@ -34,13 +34,35 @@ function approvalBlockedReason(response: GuardResponse, fallbackReason: string):
   if (!approvalUrl) return reason;
   const urlLine = `HOL Guard approval page: ${approvalUrl}`;
   const waitLine = 'HOL Guard is already waiting for this approval and will resume this Pi session automatically after the user approves.';
-  const askLine = `If you ask the user about this HOL Guard approval, include an option labeled "I've approved this request in HOL Guard" and include this exact URL: ${approvalUrl}`;
-  const additions = [urlLine, waitLine, askLine].filter(line => !reason.includes(line));
+  const noAskLine = 'Do not call ask for this HOL Guard approval as the approval mechanism; HOL Guard is already polling the request.';
+  const askFallbackLine = `If you are already showing a broader recovery menu, include an option labeled "I've approved this request in HOL Guard" and include this exact URL: ${approvalUrl}`;
+  const additions = [urlLine, waitLine, noAskLine, askFallbackLine].filter(line => !reason.includes(line));
   if (additions.length === 0) return reason;
   return `${reason}\n\n${additions.join('\n')}`;
 }
 
-function openApprovalUrl(response: GuardResponse, openedApprovalUrls: Set<string>): void {
+function trySpawnOpen(command: string, args: string[]): Promise<boolean> {
+  return new Promise(resolve => {
+    let settled = false;
+    const settle = (opened: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(opened);
+    };
+    try {
+      const child = spawn(command, args, { detached: true, stdio: 'ignore' });
+      child.once('spawn', () => {
+        child.unref();
+        settle(true);
+      });
+      child.once('error', () => settle(false));
+    } catch {
+      settle(false);
+    }
+  });
+}
+
+async function openApprovalUrl(response: GuardResponse, openedApprovalUrls: Set<string>): Promise<void> {
   const approvalUrl = approvalUrlFromResponse(response);
   if (!approvalUrl || openedApprovalUrls.has(approvalUrl)) return;
   openedApprovalUrls.add(approvalUrl);
@@ -59,11 +81,7 @@ function openApprovalUrl(response: GuardResponse, openedApprovalUrls: Set<string
     ];
   }
   for (const [command, args] of commands) {
-    try {
-      const child = spawn(command, args, { detached: true, stdio: 'ignore' });
-      child.unref();
-      return;
-    } catch {}
+    if (await trySpawnOpen(command, args)) return;
   }
 }
 
