@@ -2209,7 +2209,7 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
     assert payload["receipt"]["operation"] == "scan"
     assert payload["cloud_sync"] == {
         "status": "queued",
-        "message": "Guard Cloud sync started.",
+        "message": "Cloud sync started.",
     }
     assert sync_finished.wait(timeout=2)
     assert sync_calls == ["runtime", "receipts"]
@@ -2289,12 +2289,12 @@ def test_headless_app_scan_does_not_spawn_unbounded_cloud_sync_threads(
     assert first_status == 200
     assert first_payload["cloud_sync"] == {
         "status": "queued",
-        "message": "Guard Cloud sync started.",
+        "message": "Cloud sync started.",
     }
     assert second_status == 200
     assert second_payload["cloud_sync"] == {
         "status": "in_progress",
-        "message": "Guard Cloud sync already running.",
+        "message": "Cloud sync already running.",
     }
     assert len(sync_calls) == 1
 
