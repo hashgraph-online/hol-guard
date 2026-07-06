@@ -378,6 +378,37 @@ def test_local_request_snapshot_payload_includes_complete_pending_backlog(tmp_pa
     }
 
 
+def test_local_request_snapshot_payload_includes_resolution_memory_fields(tmp_path: Path) -> None:
+    class ResolvedDecisionStore(FakeStore):
+        def list_approval_requests(
+            self,
+            status: str | None = "pending",
+            harness: str | None = None,
+            limit: int | None = 50,
+            cursor: str | None = None,
+        ) -> list[dict[str, object]]:
+            del harness, cursor
+            if status != "resolved":
+                return []
+            rows = [
+                {
+                    **_approval_request_row("req-resolved-memory"),
+                    "resolution_action": "allow",
+                    "resolution_scope": "project",
+                    "resolved_at": "2026-07-02T12:00:00+00:00",
+                    "status": "resolved",
+                },
+            ]
+            return rows if limit is None else rows[:limit]
+
+    payload = command_executors._local_request_snapshot_payload(ResolvedDecisionStore(tmp_path / "guard-home"))
+
+    [request] = payload["requests"]
+    assert request["localRequestId"] == "req-resolved-memory"
+    assert request["requestPayload"]["resolution_action"] == "allow"
+    assert request["requestPayload"]["resolution_scope"] == "project"
+
+
 def test_local_request_snapshot_payload_marks_pending_incomplete_when_truncated(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
