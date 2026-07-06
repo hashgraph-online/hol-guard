@@ -256,28 +256,23 @@ def _run_guard_sync_command(
     context = _require_guard_context(context)
     try:
         auth_context = _cloud_guard_sync_auth_context(store)
-        # Default CLI sync stays fast; --deep opts into foreground AIBOM refresh.
-        include_aibom = bool(getattr(args, "deep", False))
+        # The stale AIBOM UX tells users to run `hol-guard sync`; default sync must
+        # therefore enter the due-gated inventory refresh path. `--deep` forces an
+        # immediate foreground AIBOM refresh even when the recent-sync throttle would
+        # otherwise skip it.
+        force_aibom = bool(getattr(args, "deep", False))
         from .progress import GuardProgress
 
         with GuardProgress(total=2, title="Guard Sync") as bar:
-            bar.step("Syncing receipts and Guard events to Guard Cloud...")
-            if include_aibom:
-                with store.hold_cloud_sync_lock():
-                    payload = sync_receipts(
-                        store,
-                        auth_context=auth_context,
-                        home_dir=context.home_dir,
-                        workspace_dir=context.workspace_dir,
-                        include_aibom=True,
-                    )
-            else:
+            bar.step("Syncing receipts, Guard events, and inventory to Guard Cloud...")
+            with store.hold_cloud_sync_lock():
                 payload = sync_receipts(
                     store,
                     auth_context=auth_context,
                     home_dir=context.home_dir,
                     workspace_dir=context.workspace_dir,
-                    include_aibom=False,
+                    include_aibom=True,
+                    force_aibom=force_aibom,
                 )
             bar.step("Syncing supply chain state...")
             with suppress(GuardSyncNotConfiguredError, RuntimeError):

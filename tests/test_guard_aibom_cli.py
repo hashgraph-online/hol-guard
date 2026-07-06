@@ -299,6 +299,38 @@ def test_sync_aibom_snapshots_if_due_retries_empty_sync_after_interval(
     assert summary.get("synced") is True
 
 
+def test_sync_aibom_snapshots_if_due_force_bypasses_recent_sync(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from codex_plugin_scanner.guard import aibom_cli
+    from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots_if_due
+
+    store = GuardStore(tmp_path / "guard")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    calls: list[str] = []
+
+    def _fake_sync(*_args, **_kwargs):
+        calls.append("sync")
+        return {"synced": True, "synced_at": "2026-06-10T12:56:00+00:00", "snapshots": 1, "accepted": 1}
+
+    monkeypatch.setattr(aibom_cli, "sync_aibom_snapshots", _fake_sync)
+    store.set_sync_payload(
+        "aibom_sync_summary",
+        {"synced": True, "synced_at": "2026-06-10T12:55:00+00:00"},
+        "2026-06-10T12:55:00+00:00",
+    )
+
+    summary = sync_aibom_snapshots_if_due(
+        store,
+        generated_at="2026-06-10T12:56:00+00:00",
+        force=True,
+    )
+
+    assert calls == ["sync"]
+    assert summary.get("synced") is True
+
+
 def test_inventory_snapshot_event_includes_device_id() -> None:
     snapshot = GuardAgentInventorySnapshot(
         snapshot_id="snapshot-aibom-1",

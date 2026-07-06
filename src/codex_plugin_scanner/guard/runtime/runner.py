@@ -1332,6 +1332,7 @@ def sync_receipts(
     home_dir: Path | None = None,
     workspace_dir: Path | None = None,
     include_aibom: bool = False,
+    force_aibom: bool = False,
 ) -> dict[str, object]:
     """Push local receipts to the configured sync endpoint."""
 
@@ -1714,6 +1715,7 @@ def sync_receipts(
             store,
             generated_at=now,
             auth_context=resolved_auth_context,
+            force=force_aibom,
             home_dir=home_dir,
             workspace_dir=workspace_dir,
         )

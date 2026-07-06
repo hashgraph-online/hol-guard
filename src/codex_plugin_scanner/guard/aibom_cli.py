@@ -333,6 +333,7 @@ def sync_aibom_snapshots_if_due(
     *,
     generated_at: str,
     min_interval_seconds: int = _AIBOM_AUTO_SYNC_INTERVAL_SECONDS,
+    force: bool = False,
     options: AibomCliOptions | None = None,
     auth_context: dict[str, object] | None = None,
     home_dir: Path | None = None,
@@ -349,7 +350,7 @@ def sync_aibom_snapshots_if_due(
             "skipped": True,
             "reason": "guard_events_endpoint_unavailable",
         }
-    if not _aibom_sync_is_due(
+    if not force and not _aibom_sync_is_due(
         store,
         generated_at=generated_at,
         min_interval_seconds=min_interval_seconds,
