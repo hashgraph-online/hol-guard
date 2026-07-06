@@ -9,14 +9,16 @@ APPROVAL_RESUME_HELPERS_SOURCE = r"""function sleep(ms: number): Promise<void> {
 }
 
 function approvalRequestId(response: GuardResponse): string | null {
-  return typeof response.approval_request_id === 'string' && response.approval_request_id.trim()
-    ? response.approval_request_id.trim()
-    : null;
+  if (typeof response.approval_request_id !== 'string') return null;
+  const requestId = response.approval_request_id.trim();
+  if (!requestId) return null;
+  return requestId;
 }
 
 function approvalPollPath(response: GuardResponse, requestId: string): string {
   const rawPath = typeof response.resume_poll_path === 'string' ? response.resume_poll_path.trim() : '';
-  return rawPath.startsWith('/v1/requests/') ? rawPath : `/v1/requests/${encodeURIComponent(requestId)}`;
+  if (rawPath.startsWith('/v1/requests/')) return rawPath;
+  return `/v1/requests/${encodeURIComponent(requestId)}`;
 }
 
 function approvalUrlFromResponse(response: GuardResponse): string | null {
@@ -32,9 +34,10 @@ function approvalBlockedReason(response: GuardResponse, fallbackReason: string):
   if (!approvalUrl) return reason;
   const urlLine = `HOL Guard approval page: ${approvalUrl}`;
   const waitLine = 'HOL Guard is already waiting for this approval and will resume this Pi session automatically after the user approves.';
-  const askLine = `Do not call ask for this HOL Guard approval. If you mention the approval to the user, include this exact URL: ${approvalUrl}`;
+  const askLine = `If you ask the user about this HOL Guard approval, include an option labeled "I've approved this request in HOL Guard" and include this exact URL: ${approvalUrl}`;
   const additions = [urlLine, waitLine, askLine].filter(line => !reason.includes(line));
-  return additions.length > 0 ? `${reason}\n\n${additions.join('\n')}` : reason;
+  if (additions.length === 0) return reason;
+  return `${reason}\n\n${additions.join('\n')}`;
 }
 
 function openApprovalUrl(response: GuardResponse, openedApprovalUrls: Set<string>): void {
