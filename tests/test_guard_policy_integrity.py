@@ -3166,6 +3166,26 @@ def test_trust_cli_bare_combined_command_routes_to_guard() -> None:
     ]
 
 
+def test_doctor_harness_arg_routes_to_guard() -> None:
+    """Regression: hol-guard doctor codex (without --json) must route to guard doctor codex,
+    not fall through to the scanner-level doctor command which treats 'codex' as a
+    plugin directory path and fails with 'is not a directory'."""
+    for harness in ("codex", "claude-code", "cursor", "opencode", "gemini"):
+        assert _resolve_legacy_args(["doctor", harness], program_mode="combined", program_name="hol-guard") == [
+            "guard",
+            "doctor",
+            harness,
+        ]
+
+
+def test_doctor_non_harness_path_stays_scanner_level() -> None:
+    """doctor /path/to/plugin should still route to scanner-level doctor, not guard."""
+    assert _resolve_legacy_args(["doctor", "/path/to/plugin"], program_mode="combined", program_name="hol-guard") == [
+        "doctor",
+        "/path/to/plugin",
+    ]
+
+
 def test_trust_cli_no_ui_probe_requires_no_ui_flag(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "home"
 
