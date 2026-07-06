@@ -135,6 +135,7 @@ def _finalize_runtime_artifact_hook(
             emit_pi_hook_response(
                 policy_action=policy_action,
                 reason=native_block_reason,
+                approval_payload=response_payload,
                 output_stream=output_stream,
             )
         elif _canonical_harness_name(args.harness) == "zcode":
@@ -217,6 +218,7 @@ def _finalize_runtime_artifact_hook(
             emit_pi_hook_response(
                 policy_action=policy_action,
                 reason=runtime_reason,
+                approval_payload=response_payload,
                 output_stream=output_stream,
             )
             _record_harness_usage_for_hook(

@@ -6,6 +6,7 @@ import json
 import urllib.request
 from pathlib import Path
 
+from codex_plugin_scanner.guard.adapters.pi_hooks import pi_hook_response_from_guard
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
@@ -83,3 +84,24 @@ def test_pi_approval_with_session_id_metadata_does_not_attempt_codex_resume(tmp_
     assert "codex_resume" not in payload
     assert payload["copy"]["body"] == "Return to Pi and retry"
     assert store.list_events(event_name="codex/thread_resume") == []
+
+
+def test_pi_hook_response_includes_resume_poll_metadata_for_pending_approval() -> None:
+    payload = pi_hook_response_from_guard(
+        policy_action="require-reapproval",
+        reason="Open HOL Guard to approve this request.",
+        approval_payload={
+            "primary_approval_request_id": "req-pi",
+            "primary_approval_url": "http://127.0.0.1:5474/requests/req-pi",
+            "approval_center_url": "http://127.0.0.1:5474",
+        },
+    )
+
+    assert payload == {
+        "decision": "deny",
+        "reason": "Open HOL Guard to approve this request.",
+        "approval_request_id": "req-pi",
+        "resume_poll_path": "/v1/requests/req-pi",
+        "approval_url": "http://127.0.0.1:5474/requests/req-pi",
+        "approval_center_url": "http://127.0.0.1:5474",
+    }
