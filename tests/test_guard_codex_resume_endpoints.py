@@ -485,6 +485,9 @@ def test_request_resume_status_endpoint_requires_guard_token(tmp_path: Path) -> 
 
     assert status == 401
     assert payload["error"] == "unauthorized"
+    events = store.list_events(event_name="daemon.auth.unauthorized")
+    assert events[-1]["payload"]["method"] == "GET"
+    assert events[-1]["payload"]["path"] == "/v1/requests/req-auth/resume"
 
 
 def test_request_resume_retry_endpoint_requires_guard_token(tmp_path: Path) -> None:
@@ -504,6 +507,9 @@ def test_request_resume_retry_endpoint_requires_guard_token(tmp_path: Path) -> N
 
     assert status == 401
     assert payload["error"] == "unauthorized"
+    events = store.list_events(event_name="daemon.auth.unauthorized")
+    assert events[-1]["payload"]["method"] == "POST"
+    assert events[-1]["payload"]["path"] == "/v1/requests/req-auth-post/resume"
 
 
 def test_codex_allow_resume_prompt_includes_exact_command_when_metadata_is_present(
