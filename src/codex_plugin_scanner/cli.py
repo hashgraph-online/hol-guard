@@ -11,6 +11,7 @@ from .argparse_utils import FriendlyArgumentParser, should_default_to_scan_targe
 from .cli_ui import build_cli_epilog, build_plain_text, build_scan_help_epilog
 from .ecosystems.registry import list_supported_ecosystems
 from .guard.cli import add_guard_parser, add_guard_root_parser, run_guard_command
+from .guard.product_model import SUPPORTED_HARNESS_VALUES
 from .reporting import format_json as render_json
 from .rules import get_rule_spec
 from .version import __version__
@@ -212,7 +213,8 @@ def _resolve_legacy_args(
         is_hol_guard_default_doctor = _is_hol_guard_program(program_name) and (
             len(argv) == 1 or "-h" in argv[1:] or "--help" in argv[1:]
         )
-        if has_guard_doctor_flag or is_hol_guard_default_doctor:
+        has_harness_arg = len(argv) >= 2 and not argv[1].startswith("-") and argv[1] in SUPPORTED_HARNESS_VALUES
+        if has_guard_doctor_flag or is_hol_guard_default_doctor or has_harness_arg:
             return ["guard", *argv]
     known_commands = {
         "scan",
