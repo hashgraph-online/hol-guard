@@ -322,10 +322,10 @@ def _execute_approval_operation(
     )
     request_policy_action = _optional_string(request_row.get("policy_action"))
     resolution_scope = _optional_string(request_row.get("recommended_scope"))
-    if request_policy_action not in {"pause", "review", "require-reapproval"} or resolution_scope not in {
-        "artifact",
-        "one-time",
-    }:
+    if (
+        request_policy_action not in {"block", "pause", "review", "require-reapproval"}
+        or resolution_scope not in DECISION_SCOPE_VALUES
+    ):
         raise ValueError("remote_approval_not_permitted")
     receipt_id = _optional_string(envelope.get("receiptId"))
     if receipt_id is None:
