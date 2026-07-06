@@ -62,9 +62,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  reviewed_output_sha256?: string;\n"
         '  notice?: "none" | "excerpt" | "warning";\n'
         "  reason_code?: string;\n"
-        "};\n"
-        + CONTENT_REVIEW_HELPERS_SOURCE
-        + "type GuardDaemonConnection = { port: number; authToken: string };\n"
+        "};\n" + CONTENT_REVIEW_HELPERS_SOURCE + "type GuardDaemonConnection = { port: number; authToken: string };\n"
         "\n"
         "function loadGuardDaemonConnection(): GuardDaemonConnection | null {\n"
         "  let port = 0;\n"
