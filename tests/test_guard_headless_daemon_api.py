@@ -251,6 +251,7 @@ def _signed_remote_approval_for_request(
     machine_id: str | None = None,
     device_id: str | None = None,
     workspace_id: str | None = None,
+    scope: str | None = None,
 ) -> dict[str, object]:
     request_row = store.get_approval_request(request_id)
     assert isinstance(request_row, dict)
@@ -285,7 +286,7 @@ def _signed_remote_approval_for_request(
         "reviewerUserId": "user-1",
         "riskCategory": claim["riskCategory"],
         "runtimeGrantId": claim["runtimeGrantId"],
-        "scope": "artifact",
+        "scope": scope or claim["recommendedScope"],
         "sourceClaimHash": claim["claimHash"],
         "stepUpChallengeId": None,
         "verificationKeys": review_verification_keys(),
@@ -2630,7 +2631,11 @@ def test_headless_api_rejects_missing_auth_and_bad_harness(tmp_path: Path) -> No
 def test_headless_remote_once_applies_pending_request_and_records_receipt(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1", now="2026-06-13T00:00:00+00:00")
-    request = _remote_once_request("req-remote-once")
+    request = _remote_once_request(
+        "req-remote-once",
+        policy_action="block",
+        recommended_scope="workspace",
+    )
     store.add_approval_request(request, "2026-05-14T11:59:00+00:00")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -2660,7 +2665,7 @@ def test_headless_remote_once_applies_pending_request_and_records_receipt(tmp_pa
     assert payload["operation"] == "remote_once"
     assert payload["status"] == "completed"
     assert payload["resolved_request"]["request_id"] == "req-remote-once"
-    assert payload["resolved_request"]["resolution_scope"] == "artifact"
+    assert payload["resolved_request"]["resolution_scope"] == "workspace"
     events = store.list_events(limit=5, event_name="approval.remote_once_applied")
     assert events[0]["payload"]["receipt_id"] == "cloud-receipt-1"
     # Remote-once must resolve the queued request without persisting an artifact policy.
@@ -2758,6 +2763,7 @@ def test_headless_remote_once_rejects_payload_scope_spoofing(tmp_path: Path) -> 
             store,
             "req-remote-spoof",
             receipt_id="cloud-receipt-spoof",
+            scope="artifact",
         )
         status, payload = _read_json_response(
             _request(
@@ -2774,8 +2780,8 @@ def test_headless_remote_once_rejects_payload_scope_spoofing(tmp_path: Path) -> 
     finally:
         daemon.stop()
 
-    assert status == 409
-    assert payload["error"] == "remote_once_not_permitted"
+    assert status == 400
+    assert payload["error"] == "remote_approval_scope_mismatch"
 
 
 def test_headless_remote_once_rejects_wrong_target_and_does_not_apply(

@@ -2405,10 +2405,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         request_policy_action = self._optional_string(request_row.get("policy_action"))
         request_recommended_scope = self._optional_string(request_row.get("recommended_scope"))
-        if request_policy_action not in {"pause", "review", "require-reapproval"} or request_recommended_scope not in {
-            "artifact",
-            "one-time",
-        }:
+        if (
+            request_policy_action not in {"block", "pause", "review", "require-reapproval"}
+            or request_recommended_scope not in DECISION_SCOPE_VALUES
+        ):
             self._write_json({"error": "remote_once_not_permitted"}, status=409)
             return
         try:
