@@ -343,6 +343,8 @@ def _cloud_safe_local_request_payload(
         "publisher",
         "package_manager",
         "package_name",
+        "resolution_action",
+        "resolution_scope",
     ):
         value = item.get(key)
         if isinstance(value, str):
