@@ -512,6 +512,35 @@ def test_request_resume_retry_endpoint_requires_guard_token(tmp_path: Path) -> N
     assert events[-1]["payload"]["path"] == "/v1/requests/req-auth-post/resume"
 
 
+@pytest.mark.parametrize("action", ["approve", "block"])
+def test_request_resolution_endpoint_requires_guard_token_and_records_audit(
+    tmp_path: Path,
+    action: str,
+) -> None:
+    request_id = f"req-auth-{action}"
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request(request_id), "2026-05-19T10:00:00+00:00")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        status, payload = _post_json_without_token(
+            daemon.port,
+            f"/v1/requests/{request_id}/{action}",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 401
+    assert payload["error"] == "unauthorized"
+    assert payload["recovery"]["code"] == "session_stale"
+    events = store.list_events(event_name="daemon.auth.unauthorized")
+    assert events[-1]["payload"]["method"] == "POST"
+    assert events[-1]["payload"]["path"] == f"/v1/requests/{request_id}/{action}"
+    assert events[-1]["payload"]["has_guard_token"] is False
+
+
 def test_codex_allow_resume_prompt_includes_exact_command_when_metadata_is_present(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
