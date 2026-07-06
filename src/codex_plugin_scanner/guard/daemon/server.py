@@ -130,6 +130,7 @@ from ..review_contracts import (
     validate_remote_approval_request_binding,
     validated_remote_approval_envelope,
 )
+from ..runtime.live_request_sync import LiveRequestSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncNotAvailableError,
@@ -758,21 +759,21 @@ def _queue_headless_cloud_sync(
     if store.get_cloud_sync_profile() is None:
         return {
             "status": "not_configured",
-            "message": "Guard Cloud sync is not paired on this machine.",
+            "message": "Cloud sync is not paired on this machine.",
         }
     store_key = _headless_cloud_sync_store_key(store)
     with _HEADLESS_CLOUD_SYNC_STATE_LOCK:
         if store_key in _HEADLESS_CLOUD_SYNC_IN_FLIGHT:
             return {
                 "status": "in_progress",
-                "message": "Guard Cloud sync already running.",
+                "message": "Cloud sync already running.",
             }
         # This probe only short-circuits obviously overlapping cross-process work.
         # sync_local_guard_cloud_proof() still acquires the real cloud sync lock.
         if store.cloud_sync_in_progress():
             return {
                 "status": "in_progress",
-                "message": "Guard Cloud sync already running.",
+                "message": "Cloud sync already running.",
             }
         _HEADLESS_CLOUD_SYNC_IN_FLIGHT.add(store_key)
 
@@ -790,7 +791,7 @@ def _queue_headless_cloud_sync(
     ).start()
     return {
         "status": "queued",
-        "message": "Guard Cloud sync started.",
+        "message": "Cloud sync started.",
     }
 
 
@@ -5368,6 +5369,7 @@ class GuardDaemonServer:
         self._bundle_refresh_thread: threading.Thread | None = None
         self._command_queue_worker: CommandQueueWorker | None = None
         self._headless_cloud_sync_thread: threading.Thread | None = None
+        self._live_request_sync_worker: LiveRequestSyncWorker | None = None
         self._thread: threading.Thread | None = None
         self._watchdog_thread: threading.Thread | None = None
         self._shutdown_started = threading.Event()
@@ -5404,6 +5406,7 @@ class GuardDaemonServer:
             self._headless_cloud_sync_thread.join(timeout=5)
             self._headless_cloud_sync_thread = None
         self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
+        self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
 
     def _begin_service(self) -> None:
         self._shutdown_started.clear()
@@ -5421,6 +5424,10 @@ class GuardDaemonServer:
         self._start_supply_chain_bundle_refresh()
         self._start_aibom_inventory_refresh()
         self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
+        self._live_request_sync_worker = start_cloud_sync_sync_worker(
+            self._server.store,
+            self._live_request_sync_worker,
+        )
 
     def _serve_forever(self) -> None:
         try:
