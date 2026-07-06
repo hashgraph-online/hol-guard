@@ -120,9 +120,10 @@ function truncateText(value: string, limit = GUARD_TEXT_LIMIT_CHARS): string {
 
 function boundValue(value: unknown, depth = 0, seen = new WeakSet<object>()): BoundedValue {
   if (typeof value === 'string') {
-    return value.length <= GUARD_TEXT_LIMIT_CHARS
-      ? { value, truncated: false }
-      : { value: truncateText(value), truncated: true };
+    if (value.length <= GUARD_TEXT_LIMIT_CHARS) {
+      return { value, truncated: false };
+    }
+    return { value: truncateText(value), truncated: true };
   }
   if (value === undefined) return { value: undefined, truncated: false };
   if (typeof value === 'bigint') return { value: value.toString(), truncated: false };
