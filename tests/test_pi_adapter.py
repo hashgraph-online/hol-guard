@@ -257,6 +257,8 @@ class TestPiInstall:
         assert "/v1/hooks/pi?" in text
         assert "approval_request_id?: string" in text
         assert "pollApprovalResolution" in text
+        assert "GUARD_APPROVAL_RESUME_FETCH_TIMEOUT_MS" in text
+        assert "controller?.abort()" in text
         assert "pi.sendMessage(" in text
         assert "hol_guard_approval_resume" in text
         assert "triggerTurn: true, deliverAs: 'nextTurn'" in text
