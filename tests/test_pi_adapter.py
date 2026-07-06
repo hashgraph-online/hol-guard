@@ -255,6 +255,11 @@ class TestPiInstall:
         assert "daemon-state.json" in text
         assert "daemon-auth-token" in text
         assert "/v1/hooks/pi?" in text
+        assert "approval_request_id?: string" in text
+        assert "pollApprovalResolution" in text
+        assert "pi.sendMessage(" in text
+        assert "hol_guard_approval_resume" in text
+        assert "triggerTurn: true, deliverAs: 'nextTurn'" in text
         assert "guardPayload.tool_response = event.content" in text
         assert "const GUARD_CONFIG_PATH =" in text
         assert "config_path: GUARD_CONFIG_PATH" in text
@@ -283,7 +288,7 @@ class TestPiInstall:
         assert "for (const command of GUARD_COMMAND_CANDIDATES)" in text
         assert "resultError?.code === 'ENOENT'" in text
         assert "async function daemonGuardResponse(" in text
-        assert "await fetch(`http://127.0.0.1:${port}/v1/hooks/pi?" in text
+        assert "await fetch(`http://127.0.0.1:${connection.port}/v1/hooks/pi?" in text
         assert "const daemonResponse = await daemonGuardResponse(serializedPayload, cwd);" in text
         assert "const response = await runGuard(" in text
         assert "if (result.error) {" in text

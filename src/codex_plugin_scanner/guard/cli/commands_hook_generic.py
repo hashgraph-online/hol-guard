@@ -215,6 +215,7 @@ def _run_hook_generic_payload(
             emit_pi_hook_response(
                 policy_action=policy_action,
                 reason=block_reason,
+                approval_payload=payload_map,
                 output_stream=output_stream,
             )
         elif _canonical_harness_name(args.harness) == "zcode":
@@ -271,6 +272,7 @@ def _run_hook_generic_payload(
             emit_pi_hook_response(
                 policy_action=policy_action,
                 reason=reason,
+                approval_payload=payload_map,
                 output_stream=output_stream,
             )
             return 0 if policy_action not in {"block", "sandbox-required", "require-reapproval"} else 2
