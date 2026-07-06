@@ -9108,6 +9108,7 @@ url = http://127.0.0.1:8787/guard-canary
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir()
         captured_auth_context: list[dict[str, object]] = []
+        captured_receipt_kwargs: list[dict[str, object]] = []
 
         monkeypatch.setattr(
             guard_commands_module,
@@ -9124,6 +9125,7 @@ url = http://127.0.0.1:8787/guard-canary
         )
 
         def _fake_sync_receipts(_store: GuardStore, **kwargs: object) -> dict[str, object]:
+            captured_receipt_kwargs.append(dict(kwargs))
             auth_context = kwargs.get("auth_context")
             assert isinstance(auth_context, dict)
             captured_auth_context.append(auth_context)
@@ -9162,6 +9164,53 @@ url = http://127.0.0.1:8787/guard-canary
         assert output["supply_chain"]["workspace_audits"]["completed_jobs"] == 1
         assert len(captured_auth_context) == 2
         assert captured_auth_context[0] == captured_auth_context[1]
+        assert captured_receipt_kwargs[0]["include_aibom"] is True
+        assert captured_receipt_kwargs[0]["force_aibom"] is False
+
+    def test_guard_sync_deep_forces_aibom_refresh(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        captured_receipt_kwargs: list[dict[str, object]] = []
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_resolve_guard_sync_auth_context",
+            lambda _store: {
+                "access_token": "token",
+                "sync_url": "https://hol.org/api/guard/receipts/sync",
+            },
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_require_guard_context",
+            lambda _context: HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+        )
+
+        def _fake_sync_receipts(_store: GuardStore, **kwargs: object) -> dict[str, object]:
+            captured_receipt_kwargs.append(dict(kwargs))
+            return {
+                "synced_at": "2026-06-18T22:00:00Z",
+                "receipts_stored": 2,
+            }
+
+        monkeypatch.setattr(guard_commands_module, "sync_receipts", _fake_sync_receipts)
+        monkeypatch.setattr(
+            guard_commands_module,
+            "sync_supply_chain_cloud_state",
+            lambda *_args, **_kwargs: {
+                "synced_at": "2026-06-18T22:00:01Z",
+                "status": "synced",
+            },
+        )
+
+        sync_rc = main(["guard", "sync", "--deep", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert sync_rc == 0
+        assert output["receipts_stored"] == 2
+        assert captured_receipt_kwargs[0]["include_aibom"] is True
+        assert captured_receipt_kwargs[0]["force_aibom"] is True
 
     def test_guard_supply_chain_sync_includes_workspace_audits(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
