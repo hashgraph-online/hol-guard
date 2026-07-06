@@ -20,9 +20,10 @@ function approvalPollPath(response: GuardResponse, requestId: string): string {
 }
 
 function approvalUrlFromResponse(response: GuardResponse): string | null {
-  return typeof response.approval_url === 'string' && response.approval_url.trim()
-    ? response.approval_url.trim()
-    : null;
+  if (typeof response.approval_url !== 'string') return null;
+  const approvalUrl = response.approval_url.trim();
+  if (!approvalUrl) return null;
+  return approvalUrl;
 }
 
 function approvalBlockedReason(response: GuardResponse, fallbackReason: string): string {
