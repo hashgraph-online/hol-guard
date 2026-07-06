@@ -613,7 +613,7 @@ def test_daemon_workspace_audit_persists_receipt_and_queues_cloud_sync(
     assert payload["result"]["evaluation"]["decision"] in {"block", "ask", "monitor", "warn"}
     assert payload["cloud_sync"] == {
         "status": "queued",
-        "message": "Guard Cloud sync started.",
+        "message": "Cloud sync started.",
     }
     assert sync_finished.wait(timeout=2)
     receipts = store.list_receipts(limit=5, harness="package-firewall")

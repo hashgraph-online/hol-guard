@@ -117,7 +117,7 @@ def test_finalize_guard_connect_payload_keeps_first_sync_pending_on_sync_lock_ti
         **_kwargs: object,
     ) -> dict[str, object]:
         assert auth_context is None
-        raise TimeoutError("Timed out waiting for Guard Cloud sync lock.")
+        raise TimeoutError("Timed out waiting for cloud sync lock.")
 
     monkeypatch.setattr(guard_commands_module, "sync_local_guard_cloud_proof", _raise_timeout_error)
 
@@ -131,7 +131,7 @@ def test_finalize_guard_connect_payload_keeps_first_sync_pending_on_sync_lock_ti
     assert payload["status"] == "connected"
     assert payload["milestone"] == "first_sync_pending"
     assert payload["sync_succeeded"] is False
-    assert payload["sync_error"] == "Timed out waiting for Guard Cloud sync lock."
+    assert payload["sync_error"] == "Timed out waiting for cloud sync lock."
     assert "retry automatically" in str(payload["repair_message"])
 
 
@@ -370,7 +370,7 @@ def test_daemon_finalize_guard_connect_payload_keeps_first_sync_pending_on_sync_
         **_kwargs: object,
     ) -> dict[str, object]:
         assert auth_context is None
-        raise TimeoutError("Timed out waiting for Guard Cloud sync lock.")
+        raise TimeoutError("Timed out waiting for cloud sync lock.")
 
     monkeypatch.setattr(daemon_server_module, "sync_local_guard_cloud_proof", _raise_timeout_error)
 
@@ -384,7 +384,7 @@ def test_daemon_finalize_guard_connect_payload_keeps_first_sync_pending_on_sync_
     assert payload["status"] == "connected"
     assert payload["milestone"] == "first_sync_pending"
     assert payload["sync_succeeded"] is False
-    assert payload["sync_error"] == "Timed out waiting for Guard Cloud sync lock."
+    assert payload["sync_error"] == "Timed out waiting for cloud sync lock."
     assert "retry while the daemon is running" in str(payload["repair_message"])
 
 
@@ -408,7 +408,7 @@ def test_queue_headless_cloud_sync_respects_same_process_in_flight_marker(tmp_pa
 
     assert payload == {
         "status": "in_progress",
-        "message": "Guard Cloud sync already running.",
+        "message": "Cloud sync already running.",
     }
 
 
@@ -426,7 +426,7 @@ def test_queue_headless_cloud_sync_respects_cross_process_sync_lock(tmp_path, mo
 
     assert payload == {
         "status": "in_progress",
-        "message": "Guard Cloud sync already running.",
+        "message": "Cloud sync already running.",
     }
 
 
@@ -453,13 +453,13 @@ def test_guard_daemon_runtime_request_queues_pending_first_sync(tmp_path, monkey
 
     def _record_queue(*, store: GuardStore) -> dict[str, object]:
         calls.append(str(store.guard_home))
-        return {"status": "queued", "message": "Guard Cloud sync started."}
+        return {"status": "queued", "message": "Cloud sync started."}
 
     monkeypatch.setattr(daemon_server_module, "_queue_headless_cloud_sync", _record_queue)
 
     assert daemon_server_module._maybe_queue_first_cloud_sync(store=store) == {
         "status": "queued",
-        "message": "Guard Cloud sync started.",
+        "message": "Cloud sync started.",
     }
     assert calls == [str(store.guard_home)]
     calls.clear()
@@ -561,7 +561,7 @@ def test_headless_first_sync_auth_expiry_marks_connect_state_for_repair(tmp_path
 
     def _record_queue(*, store: GuardStore) -> dict[str, object]:
         queued_calls.append(str(store.guard_home))
-        return {"status": "queued", "message": "Guard Cloud sync started."}
+        return {"status": "queued", "message": "Cloud sync started."}
 
     monkeypatch.setattr(daemon_server_module, "sync_local_guard_cloud_proof", _raise_auth_expired)
     monkeypatch.setattr(
