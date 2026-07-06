@@ -256,6 +256,10 @@ class TestPiInstall:
         assert "daemon-auth-token" in text
         assert "/v1/hooks/pi?" in text
         assert "approval_request_id?: string" in text
+        assert "approvalBlockedReason" in text
+        assert "Do not call ask for this HOL Guard approval" in text
+        assert "openApprovalUrl(response, openedApprovalUrls)" in text
+        assert "spawn(command, args, { detached: true, stdio: 'ignore' })" in text
         assert "pollApprovalResolution" in text
         assert "GUARD_APPROVAL_RESUME_FETCH_TIMEOUT_MS" in text
         assert "controller?.abort()" in text
