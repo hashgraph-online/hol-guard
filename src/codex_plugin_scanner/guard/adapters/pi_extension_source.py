@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .pi_extension_approval_source import APPROVAL_RESUME_HELPERS_SOURCE
 from .pi_extension_content_source import CONTENT_REVIEW_HELPERS_SOURCE
 
 GUARD_HOOK_TIMEOUT_MS = 10_000
@@ -25,7 +26,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
     home_dir_is_default_json = "true" if home_dir.resolve() == Path.home().resolve() else "false"
     config_path_json = json.dumps(str(settings_path))
     return (
-        'import { spawnSync } from "node:child_process";\n'
+        'import { spawn, spawnSync } from "node:child_process";\n'
         'import { createCipheriv, createHash, randomBytes } from "node:crypto";\n'
         'import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";\n'
         'import { tmpdir } from "node:os";\n'
@@ -249,85 +250,10 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  if (isError) result.isError = true;\n"
         "  return result;\n"
         "}\n"
-        "\n"
-        "function sleep(ms: number): Promise<void> {\n"
-        "  return new Promise(resolve => setTimeout(resolve, ms));\n"
-        "}\n"
-        "\n"
-        "function approvalRequestId(response: GuardResponse): string | null {\n"
-        "  return typeof response.approval_request_id === 'string' && response.approval_request_id.trim()\n"
-        "    ? response.approval_request_id.trim()\n"
-        "    : null;\n"
-        "}\n"
-        "\n"
-        "function approvalPollPath(response: GuardResponse, requestId: string): string {\n"
-        "  const rawPath = typeof response.resume_poll_path === 'string' ? response.resume_poll_path.trim() : '';\n"
-        "  return rawPath.startsWith('/v1/requests/') ? rawPath : `/v1/requests/${encodeURIComponent(requestId)}`;\n"
-        "}\n"
-        "\n"
-        "function approvalResumeMessage(details: {\n"
-        "  kind: 'input' | 'tool_call';\n"
-        "  requestId: string;\n"
-        "  prompt?: string;\n"
-        "  toolName?: string;\n"
-        "}): string {\n"
-        "  if (details.kind === 'input') {\n"
-        "    return [\n"
-        "      'HOL Guard approved the Pi user prompt that was blocked in this session.',\n"
-        "      'Continue with the approved request now; do not ask the user to retry it manually.',\n"
-        "      details.prompt ? `Approved prompt:\\n${details.prompt}` : '',\n"
-        "    ].filter(Boolean).join('\\n\\n');\n"
-        "  }\n"
-        "  const toolPart = details.toolName ? ` for ${details.toolName}` : '';\n"
-        "  return [\n"
-        "    `HOL Guard approved the blocked Pi tool call${toolPart}.`,\n"
-        "    'Continue the original user task now. Retry that tool call once if it is still required; '\n"
-        "      + 'the saved HOL Guard approval should allow it.',\n"
-        "    'Do not ask the user to retry the same action manually.',\n"
-        "  ].join('\\n\\n');\n"
-        "}\n"
-        "\n"
-        "async function pollApprovalResolution(\n"
-        "  requestId: string,\n"
-        "  pollPath: string,\n"
-        "): Promise<'allow' | 'block' | null> {\n"
-        "  if (typeof fetch !== 'function') return null;\n"
-        "  const startedAt = Date.now();\n"
-        "  while (Date.now() - startedAt <= GUARD_APPROVAL_RESUME_MAX_WAIT_MS) {\n"
-        "    const connection = loadGuardDaemonConnection();\n"
-        "    if (!connection) return null;\n"
-        "    const controller = typeof AbortController === 'function' ? new AbortController() : undefined;\n"
-        "    const timeoutHandle = setTimeout(\n"
-        "      () => controller?.abort(),\n"
-        "      GUARD_APPROVAL_RESUME_FETCH_TIMEOUT_MS,\n"
-        "    );\n"
-        "    try {\n"
-        "      const response = await fetch(`http://127.0.0.1:${connection.port}${pollPath}`, {\n"
-        "        method: 'GET',\n"
-        "        headers: { 'X-Guard-Token': connection.authToken },\n"
-        "        signal: controller?.signal,\n"
-        "      });\n"
-        "      if (response.status === 404) return null;\n"
-        "      if (response.ok) {\n"
-        "        const item = (await response.json()) as { status?: unknown; resolution_action?: unknown };\n"
-        "        if (item.status === 'resolved') {\n"
-        "          if (item.resolution_action === 'allow') return 'allow';\n"
-        "          if (item.resolution_action === 'block') return 'block';\n"
-        "          return null;\n"
-        "        }\n"
-        "      }\n"
-        "    } catch {\n"
-        "    } finally {\n"
-        "      clearTimeout(timeoutHandle);\n"
-        "    }\n"
-        "    await sleep(GUARD_APPROVAL_RESUME_POLL_INTERVAL_MS);\n"
-        "  }\n"
-        "  return null;\n"
-        "}\n"
-        "\n"
-        "export default function (pi: ExtensionAPI) {\n"
+        "\n" + APPROVAL_RESUME_HELPERS_SOURCE + "export default function (pi: ExtensionAPI) {\n"
         "  const blockedToolResults = new Map<string, string>();\n"
         "  const pendingApprovalResumes = new Set<string>();\n"
+        "  const openedApprovalUrls = new Set<string>();\n"
         "  function scheduleApprovalResume(\n"
         "    response: GuardResponse,\n"
         "    ctx: { ui: { notify(message: string, kind?: 'info' | 'warning'): void } },\n"
@@ -336,6 +262,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "    const requestId = approvalRequestId(response);\n"
         "    if (!requestId || pendingApprovalResumes.has(requestId)) return;\n"
         "    pendingApprovalResumes.add(requestId);\n"
+        "    void openApprovalUrl(response, openedApprovalUrls);\n"
         "    const pollPath = approvalPollPath(response, requestId);\n"
         "    void (async () => {\n"
         "      try {\n"
@@ -367,8 +294,9 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "      ctx.cwd,\n"
         "    );\n"
         '    if (response.decision === "deny") {\n'
+        '      const reason = approvalBlockedReason(response, response.reason ?? "Blocked by HOL Guard.");\n'
         "      scheduleApprovalResume(response, ctx, { kind: 'input', prompt: event.text });\n"
-        '      ctx.ui.notify(response.reason ?? "Blocked by HOL Guard.", "warning");\n'
+        '      ctx.ui.notify(reason, "warning");\n'
         '      return { action: "handled", handled: true };\n'
         "    }\n"
         '    return { action: "continue" };\n'
@@ -389,9 +317,10 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "      ctx.cwd,\n"
         "    );\n"
         '    if (response.decision === "deny") {\n'
+        '      const reason = approvalBlockedReason(response, response.reason ?? "Blocked by HOL Guard.");\n'
         "      scheduleApprovalResume(response, ctx, { kind: 'tool_call', toolName: event.toolName });\n"
-        '      ctx.ui.notify(response.reason ?? "Blocked by HOL Guard.", "warning");\n'
-        '      return { block: true, reason: response.reason ?? "Blocked by HOL Guard." };\n'
+        '      ctx.ui.notify(reason, "warning");\n'
+        "      return { block: true, reason };\n"
         "    }\n"
         "    return undefined;\n"
         "  });\n"
