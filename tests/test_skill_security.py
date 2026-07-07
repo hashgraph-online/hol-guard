@@ -345,7 +345,7 @@ def test_cisco_skill_scanner_rejects_shadowed_import_from_cwd(tmp_path: Path, mo
     """A skill_scanner module shadowed in the CWD must not be imported during sync."""
     from codex_plugin_scanner.integrations.cisco_skill_scanner import _is_safe_sys_path_entry
 
-    # CWD and relative paths are unsafe
+    # Empty, relative, and bare CWD are unsafe
     assert _is_safe_sys_path_entry("") is False
     assert _is_safe_sys_path_entry(".") is False
     assert _is_safe_sys_path_entry("relative/path") is False
@@ -357,10 +357,9 @@ def test_cisco_skill_scanner_rejects_shadowed_import_from_cwd(tmp_path: Path, mo
     cwd = str(Path.cwd().resolve())
     assert _is_safe_sys_path_entry(cwd) is False
 
-    # Subdirectory of CWD is unsafe
-    subdir = str(Path.cwd().resolve() / "subdir")
-    assert _is_safe_sys_path_entry(subdir) is False
-
+    # Ancestor of CWD is unsafe (could contain shadowing dirs)
+    parent = str(Path.cwd().resolve().parent)
+    assert _is_safe_sys_path_entry(parent) is False
 
 def test_cisco_skill_scanner_validates_import_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """_validate_skill_scanner_import must reject modules originating from CWD."""

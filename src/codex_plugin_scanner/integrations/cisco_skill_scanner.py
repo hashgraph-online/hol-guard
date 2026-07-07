@@ -96,12 +96,28 @@ def _scan_directory_payload(skills_dir: Path, policy_name: str) -> dict[str, obj
     return payload if isinstance(payload, dict) else {}
 
 
-def _is_safe_sys_path_entry(entry: str) -> bool:
-    """Return True only for absolute paths inside a legitimate site-packages or venv.
+def _is_inside_prefix(path: Path) -> bool:
+    """Return True if ``path`` is inside the active venv or stdlib prefix.
 
-    Rejects empty strings, relative paths, and the current working directory,
-    which could shadow the real ``skill_scanner`` package from an attacker-controlled
-    checkout.
+    Paths inside ``sys.prefix`` or ``sys.base_prefix`` are trusted even when
+    they happen to live under CWD (e.g. a local ``.venv/`` directory).
+    """
+    for prefix in (sys.prefix, sys.base_prefix):
+        try:
+            path.relative_to(Path(prefix).resolve())
+            return True
+        except ValueError:
+            pass
+    return False
+
+
+def _is_safe_sys_path_entry(entry: str) -> bool:
+    """Return True for ``sys.path`` entries safe to pass to the scanner subprocess.
+
+    Rejects empty strings, relative paths, and bare CWD — which could shadow the
+    real ``skill_scanner`` package from an attacker-controlled checkout. Paths
+    inside the active venv or stdlib prefix are always allowed, even if they
+    live under CWD (common for local ``.venv/`` setups).
     """
     if not entry or not entry.strip():
         return False
@@ -109,22 +125,21 @@ def _is_safe_sys_path_entry(entry: str) -> bool:
     if not path.is_absolute():
         return False
     resolved = path.resolve()
+
+    # Always trust venv/stdlib prefixes, even inside CWD.
+    if _is_inside_prefix(resolved):
+        return True
+
     cwd = Path.cwd().resolve()
     if resolved == cwd:
         return False
-    # Reject entries that are ancestors or children of CWD (repo checkouts).
-    try:
-        resolved.relative_to(cwd)
-        return False
-    except ValueError:
-        pass
+    # Reject entries that are ancestors of CWD (could contain shadowing dirs).
     try:
         cwd.relative_to(resolved)
         return False
     except ValueError:
         pass
     return True
-
 
 def _validate_skill_scanner_import() -> None:
     """Ensure ``skill_scanner`` resolves to a legitimate installed package.
@@ -158,18 +173,20 @@ def _validate_skill_scanner_import() -> None:
     origin = Path(spec.origin).resolve()
     cwd = Path.cwd().resolve()
 
-    # Reject if the module originates from CWD or a relative path.
-    if origin == cwd:
-        raise ImportError(
-            "skill_scanner resolves to the current directory; refusing to import a shadowed module."
-        )
-    try:
-        origin.relative_to(cwd)
-        raise ImportError(
-            "skill_scanner resolves inside the current working directory; refusing to import a shadowed module."
-        )
-    except ValueError:
-        pass
+    # Trust origins inside the active venv/stdlib, even if under CWD.
+    if not _is_inside_prefix(origin):
+        # Reject if the module originates from CWD or a relative path.
+        if origin == cwd:
+            raise ImportError(
+                "skill_scanner resolves to the current directory; refusing to import a shadowed module."
+            )
+        try:
+            origin.relative_to(cwd)
+            raise ImportError(
+                "skill_scanner resolves inside the current working directory; refusing to import a shadowed module."
+            )
+        except ValueError:
+            pass
 
     # Verify the spec's submodule search locations are also safe.
     search_locations = getattr(spec, "submodule_search_locations", None) or []
@@ -177,6 +194,8 @@ def _validate_skill_scanner_import() -> None:
         if not location:
             continue
         loc_path = Path(location).resolve()
+        if _is_inside_prefix(loc_path):
+            continue
         if loc_path == cwd:
             raise ImportError(
                 "skill_scanner search path includes the current directory; refusing to import a shadowed module."
