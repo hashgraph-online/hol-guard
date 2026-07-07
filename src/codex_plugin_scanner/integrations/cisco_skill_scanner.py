@@ -158,7 +158,7 @@ def _validate_skill_scanner_import() -> None:
         # has __spec__ = None. Treat as not-a-real-package: if it's already
         # in sys.modules (test mock), let __import__ handle it; otherwise raise.
         if "skill_scanner" not in sys.modules:
-            raise ImportError("skill_scanner package not found")
+            raise ImportError("skill_scanner package not found") from None
         return
     if spec is None:
         # Not installed as a real package. If it's already in sys.modules
@@ -371,7 +371,8 @@ def run_cisco_skill_scan(
     except ImportError:
         if mode == "on":
             return _build_unavailable_summary(
-                "Cisco skill scanner is required but not installed or resolves to an unsafe path. Ensure package dependencies are installed from a trusted source.",
+                "Cisco skill scanner is required but not installed or resolves to an unsafe path."
+                " Ensure package dependencies are installed from a trusted source.",
                 status=CiscoIntegrationStatus.UNAVAILABLE,
             )
         return _build_unavailable_summary(
