@@ -1450,6 +1450,17 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
         body = Table.grid(padding=(0, 1))
         milestone = str(payload.get("milestone") or "")
         body.add_row("Browser opened", _bool_label(bool(payload.get("browser_opened"))))
+        user_code = payload.get("user_code")
+        if isinstance(user_code, str) and user_code.strip():
+            next_action = payload.get("next_action")
+            next_action_target = next_action.get("target") if isinstance(next_action, dict) else None
+            approval_url = (
+                payload.get("verification_uri_complete") or payload.get("verification_uri") or next_action_target
+            )
+            body.add_row("Approval code", user_code.strip())
+            if isinstance(approval_url, str) and approval_url.strip():
+                body.add_row("Approval URL", approval_url.strip())
+            body.add_row("Browser prompt", f"Enter code {user_code.strip()}")
         body.add_row(
             "Browser paired",
             _bool_label(bool(payload.get("completed_at")) or str(payload.get("status") or "") == "connected"),
