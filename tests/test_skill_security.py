@@ -109,7 +109,7 @@ def test_run_cisco_skill_scan_on_mode_requires_cisco_dependency_when_missing(mon
     summary = run_cisco_skill_scan(FIXTURES / "good-plugin" / "skills", mode="on", policy_name="balanced")
 
     assert summary.status == CiscoIntegrationStatus.UNAVAILABLE
-    assert "Ensure package dependencies are installed." in summary.message
+    assert "Ensure package dependencies are installed" in summary.message
 
 
 def test_scan_plugin_includes_cisco_findings(monkeypatch):
@@ -341,3 +341,55 @@ def test_scan_plugin_ignores_symlinked_skill_files_outside_plugin_root(tmp_path)
 
     assert analyzable_check.applicable is False
     assert "outside the plugin root" in analyzable_check.message
+def test_cisco_skill_scanner_rejects_shadowed_import_from_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A skill_scanner module shadowed in the CWD must not be imported during sync."""
+    from codex_plugin_scanner.integrations.cisco_skill_scanner import _is_safe_sys_path_entry
+
+    # CWD and relative paths are unsafe
+    assert _is_safe_sys_path_entry("") is False
+    assert _is_safe_sys_path_entry(".") is False
+    assert _is_safe_sys_path_entry("relative/path") is False
+
+    # Absolute paths outside CWD are safe
+    assert _is_safe_sys_path_entry("/usr/lib/python3.13/site-packages") is True
+
+    # CWD as absolute path is unsafe
+    cwd = str(Path.cwd().resolve())
+    assert _is_safe_sys_path_entry(cwd) is False
+
+    # Subdirectory of CWD is unsafe
+    subdir = str(Path.cwd().resolve() / "subdir")
+    assert _is_safe_sys_path_entry(subdir) is False
+
+
+def test_cisco_skill_scanner_validates_import_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """_validate_skill_scanner_import must reject modules originating from CWD."""
+    from codex_plugin_scanner.integrations import cisco_skill_scanner as scanner_mod
+    from codex_plugin_scanner.integrations.cisco_skill_scanner import _validate_skill_scanner_import
+    import importlib.util
+
+    # When skill_scanner is not installed and not in sys.modules, it should raise ImportError
+    monkeypatch.delitem(sys.modules, "skill_scanner", raising=False)
+    monkeypatch.delitem(sys.modules, "skill_scanner.core", raising=False)
+    monkeypatch.delitem(sys.modules, "skill_scanner.core.scan_policy", raising=False)
+
+    # Mock find_spec to return None (simulating package not installed)
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+
+    with pytest.raises(ImportError, match="skill_scanner package not found"):
+        _validate_skill_scanner_import()
+
+    # Restore real find_spec and mock a spec with CWD origin to test shadowing rejection
+    monkeypatch.undo()
+    monkeypatch.delitem(sys.modules, "skill_scanner", raising=False)
+
+    cwd_origin = str(Path.cwd().resolve() / "skill_scanner" / "__init__.py")
+    fake_spec = importlib.util.spec_from_file_location(
+        "skill_scanner",
+        cwd_origin,
+        submodule_search_locations=[str(Path.cwd().resolve() / "skill_scanner")],
+    )
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: fake_spec)
+
+    with pytest.raises(ImportError, match="shadowed module"):
+        _validate_skill_scanner_import()
