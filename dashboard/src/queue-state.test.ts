@@ -437,6 +437,31 @@ const promptTextResults = searchQueue([BASE_REQUEST, longPromptItem], "zigzag-xy
 assert(promptTextResults.length === 1, "T-QS-38a: searchQueue matches full prompt_text not just prompt_excerpt");
 assert(promptTextResults[0].request_id === "req-long-prompt", "T-QS-38b: searchQueue returns correct item for prompt_text search");
 
+const rawCommandSummaryItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-raw-command-summary",
+  artifact_name: "Bash",
+  raw_command_text: "hol-guard approvals bulk allow once",
+};
+
+const rawCommandResults = searchQueue([BASE_REQUEST, rawCommandSummaryItem], "bulk");
+assert(rawCommandResults.length === 1, "T-QS-38c: searchQueue matches raw command text from queue summaries");
+assert(rawCommandResults[0].request_id === "req-raw-command-summary", "T-QS-38d: searchQueue returns raw-command summary matches");
+
+const rawPayloadCommandItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-raw-payload-command",
+  action_envelope_json: {
+    ...shellEnvelope,
+    command: null,
+    raw_payload_redacted: { commandText: "python manage.py bulk_import --dry-run" },
+  },
+};
+
+const rawPayloadResults = searchQueue([BASE_REQUEST, rawPayloadCommandItem], "bulk_import");
+assert(rawPayloadResults.length === 1, "T-QS-38e: searchQueue matches command text preserved in redacted raw payloads");
+assert(rawPayloadResults[0].request_id === "req-raw-payload-command", "T-QS-38f: searchQueue returns raw-payload command matches");
+
 assert(
   resolveStaleRequestRecovery("req-1", [BASE_REQUEST, req2]) === "req-1",
   "T-QS-39: resolveStaleRequestRecovery returns active ID when request is still in queue"
