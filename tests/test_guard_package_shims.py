@@ -652,6 +652,41 @@ def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path
     assert marker_payload["cwd"] == str(workspace_dir)
 
 
+def test_package_manager_shim_runs_homebrew_monitor_only_command_once(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    marker_path = tmp_path / "brew-monitor.json"
+    write_fake_manager_script(fake_bin=fake_bin, manager="brew", marker_path=marker_path, exit_code=0)
+    shim_path = _install_single_manager_shim(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        manager="brew",
+        capsys=capsys,
+    )
+    env = dict(os.environ)
+    env["PATH"] = f"{shim_path.parent}{os.pathsep}{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+
+    result = subprocess.run(
+        [str(shim_path), "install", "--cask", "firefox"],
+        cwd=workspace_dir,
+        env=env,
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=30,
+    )
+
+    assert marker_path.exists(), f"stdout={result.stdout!r} stderr={result.stderr!r} returncode={result.returncode}"
+    marker_payload = json.loads(marker_path.read_text(encoding="utf-8"))
+
+    assert result.returncode == 0
+    assert marker_payload["argv"][1:] == ["install", "--cask", "firefox"]
+    assert marker_payload["cwd"] == str(workspace_dir)
+
+
 def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
@@ -696,6 +731,11 @@ def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Pa
     ("manager", "argv", "expected"),
     [
         ("bun", ("add", "minimist@1.2.9"), True),
+        ("brew", ("install", "jq"), True),
+        ("brew", ("install", "--cask", "firefox"), True),
+        ("brew", ("tap", "user/repository"), True),
+        ("brew", ("bundle", "install"), True),
+        ("brew", ("info", "jq"), False),
         ("pip", ("install", "requests==2.32.3"), True),
         ("pip", ("--isolated", "install", "requests==2.32.3"), True),
         ("npm", ("install", "minimist@1.2.9"), True),

@@ -73,6 +73,7 @@ def test_supported_managers_snapshot() -> None:
     this list. If managers change, update the snapshot in the portal.
     """
     expected = (
+        "brew",
         "bun",
         "bundle",
         "cargo",

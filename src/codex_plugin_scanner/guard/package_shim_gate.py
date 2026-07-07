@@ -8,6 +8,7 @@ from pathlib import Path
 
 _PACKAGE_SHIM_PARSER_MANAGERS = frozenset(
     {
+        "brew",
         "bun",
         "bundle",
         "cargo",

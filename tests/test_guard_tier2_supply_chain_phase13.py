@@ -312,8 +312,9 @@ def test_evaluate_package_request_artifact_warns_for_system_package_managers_in_
 
     assert result.decision == "warn"
     assert result.policy_action == "warn"
+    assert result.packages[0]["ecosystem"] == "homebrew"
     assert result.packages[0]["supportLevel"] == "monitor-only"
-    assert result.packages[0]["reasons"][0]["code"] == "system_package_manager_monitor_only"
+    assert result.packages[0]["reasons"][0]["code"] == "homebrew_package_manager_monitor_only"
 
 
 def test_evaluate_package_request_artifact_uses_monitor_only_fallback_for_unsupported_ecosystems(

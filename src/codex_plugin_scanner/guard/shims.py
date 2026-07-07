@@ -40,6 +40,7 @@ class HarnessContextLike(Protocol):
 HarnessContext = HarnessContextLike
 
 _PACKAGE_SHIM_COMMANDS = {
+    "brew": "brew",
     "bun": "bun",
     "bundle": "bundle",
     "cargo": "cargo",

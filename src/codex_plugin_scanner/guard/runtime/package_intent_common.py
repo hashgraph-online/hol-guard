@@ -349,6 +349,15 @@ def composer_target(spec: str) -> PackageIntentTarget:
     return PackageIntentTarget("packagist", package_name, spec, requested_specifier)
 
 
+def homebrew_target(spec: str, *, cask: bool = False) -> PackageIntentTarget:
+    ecosystem = "homebrew-cask" if cask else "homebrew"
+    return PackageIntentTarget(ecosystem, spec or None, spec, None)
+
+
+def homebrew_tap_target(spec: str, *, source_url: str | None = None) -> PackageIntentTarget:
+    return PackageIntentTarget("homebrew-tap", spec or None, spec, None, source_url=source_url)
+
+
 def split_python_specifier(spec: str) -> tuple[str, str | None]:
     matched = _PYTHON_VERSION_RE.match(spec.strip())
     if matched is None:
