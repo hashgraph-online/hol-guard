@@ -185,6 +185,7 @@ def _run_hook_copilot_pretool(
             signals=decision.signals,
             risk_categories=decision.risk_categories,
             remember=False,
+            arguments=runtime_arguments,
         )
         if _should_emit_copilot_hook_response(args):
             _record_harness_usage_for_hook(
@@ -205,6 +206,7 @@ def _run_hook_copilot_pretool(
                 now=now,
                 signals=decision.signals,
                 risk_categories=decision.risk_categories,
+                arguments=runtime_arguments,
             )
         if _should_emit_copilot_hook_response(args):
             _record_harness_usage_for_hook(
@@ -307,8 +309,6 @@ def _run_hook_copilot_permission_request(
         )
         response_payload["approval_requests"] = queued
         policy_action = "allow"
-        response_payload["policy_action"] = "allow"
-    if policy_action == "allow":
         allow_tool_call(
             store=store,
             artifact=runtime_artifact,
@@ -318,6 +318,7 @@ def _run_hook_copilot_permission_request(
             signals=decision.signals,
             risk_categories=decision.risk_categories,
             remember=False,
+            arguments=runtime_arguments,
         )
         if _should_emit_copilot_hook_response(args):
             _record_harness_usage_for_hook(
@@ -344,6 +345,7 @@ def _run_hook_copilot_permission_request(
         now=now,
         signals=decision.signals,
         risk_categories=decision.risk_categories,
+        arguments=runtime_arguments,
     )
     approval_center_url = ensure_guard_daemon(guard_home)
     approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)

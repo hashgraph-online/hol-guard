@@ -264,7 +264,8 @@ class StoreConnectionSchemaMixin:
               artifact_name text,
               source_scope text,
               scanner_evidence_json text not null default '[]',
-              timestamp text not null
+              timestamp text not null,
+              raw_command_text text
             )
             """,
             """
@@ -481,6 +482,7 @@ class StoreConnectionSchemaMixin:
             self._ensure_runtime_receipts_column(connection, "diff_summary", "text")
             self._ensure_runtime_receipts_column(connection, "approval_source", "text")
             self._ensure_runtime_receipts_column(connection, "approval_request_id", "text")
+            self._ensure_runtime_receipts_column(connection, "raw_command_text", "text")
             self._ensure_runtime_receipt_envelopes_table(connection)
             if not self._schema_version_applied(connection, version=5):
                 self._migrate_v5_receipt_envelopes(connection)
@@ -637,7 +639,8 @@ class StoreConnectionSchemaMixin:
               timestamp text not null,
               diff_summary text,
               approval_source text,
-              approval_request_id text
+              approval_request_id text,
+              raw_command_text text
             )
             """
         )
@@ -647,13 +650,13 @@ class StoreConnectionSchemaMixin:
               rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
               capabilities_summary, changed_capabilities_json, provenance_summary, user_override,
               artifact_name, source_scope, scanner_evidence_json, timestamp, diff_summary,
-              approval_source, approval_request_id
+              approval_source, approval_request_id, raw_command_text
             )
             select
               rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
               capabilities_summary, changed_capabilities_json, provenance_summary, user_override,
               artifact_name, source_scope, scanner_evidence_json, timestamp, diff_summary,
-              approval_source, null
+              approval_source, null, null
             from runtime_receipts
             """
         )

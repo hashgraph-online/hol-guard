@@ -24,9 +24,9 @@ class StoreReceiptsRuntimeMixin:
                   receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
                   changed_capabilities_json,
                   provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
-                  diff_summary, approval_source, approval_request_id, timestamp
+                  diff_summary, approval_source, approval_request_id, timestamp, raw_command_text
                 )
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     receipt.receipt_id,
@@ -45,6 +45,7 @@ class StoreReceiptsRuntimeMixin:
                     receipt.approval_source,
                     receipt.approval_request_id,
                     receipt.timestamp,
+                    receipt.raw_command_text,
                 ),
             )
             if action_envelope is not None:
@@ -156,6 +157,7 @@ class StoreReceiptsRuntimeMixin:
               r.approval_source,
               r.approval_request_id,
               r.timestamp,
+              r.raw_command_text,
               e.envelope_full_json as envelope_full_json,
               e.envelope_redacted_json as envelope_redacted_json,
               a.action_envelope_json as approval_envelope_json
@@ -189,6 +191,7 @@ class StoreReceiptsRuntimeMixin:
                 "approval_source": row["approval_source"],
                 "approval_request_id": row["approval_request_id"],
                 "timestamp": str(row["timestamp"]),
+                "raw_command_text": row["raw_command_text"],
                 "action_envelope_json": envelope,
                 "envelope_redacted_json": _json_object(row["envelope_redacted_json"]),
             }

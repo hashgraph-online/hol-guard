@@ -91,6 +91,7 @@ def build_receipt(
     diff_summary: str | None = None,
     approval_source: str | None = None,
     approval_request_id: str | None = None,
+    raw_command_text: str | None = None,
 ) -> GuardReceipt:
     """Create a runtime receipt."""
 
@@ -116,4 +117,5 @@ def build_receipt(
         approval_source=approval_source,
         approval_request_id=approval_request_id,
         scanner_evidence=tuple(dict(item) for item in scanner_evidence),
+        raw_command_text=raw_command_text,
     )
