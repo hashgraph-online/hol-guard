@@ -35,6 +35,59 @@ class ToolCallDecision:
     risk_categories: tuple[str, ...] = ()
 
 
+_MCP_COMMAND_ARGUMENT_KEYS: tuple[str, ...] = (
+    "command",
+    "cmd",
+    "shell_command",
+    "shellCommand",
+    "script",
+    "expression",
+    "code",
+    "query",
+)
+
+_MCP_PATH_ARGUMENT_KEYS: tuple[str, ...] = (
+    "path",
+    "file_path",
+    "filePath",
+    "filepath",
+    "directory",
+    "dir",
+    "cwd",
+    "working_dir",
+    "workingDir",
+    "url",
+    "uri",
+)
+
+
+def extract_mcp_command_text(
+    artifact: GuardArtifact,
+    arguments: object,
+) -> str | None:
+    """Extract a human-readable command string from MCP tool call arguments.
+
+    For tools like ctx_shell/bash the primary argument is a ``command`` string.
+    For file/path tools we surface the path. For other tools we return None so
+    the UI falls back to the artifact name.
+    """
+    if not isinstance(arguments, Mapping):
+        return None
+
+    tool_name = artifact.name
+    for key in _MCP_COMMAND_ARGUMENT_KEYS:
+        value = arguments.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    for key in _MCP_PATH_ARGUMENT_KEYS:
+        value = arguments.get(key)
+        if isinstance(value, str) and value.strip():
+            return f"{tool_name} {value.strip()}"
+
+    return None
+
+
 def build_tool_call_artifact(
     *,
     harness: str,
@@ -667,6 +720,7 @@ def allow_tool_call(
     remember: bool,
     risk_categories: tuple[str, ...] = (),
     approval_gate_grant: ApprovalGateGrant | None = None,
+    arguments: object = None,
 ) -> GuardReceipt:
     if remember:
         store.upsert_policy(
@@ -691,6 +745,7 @@ def allow_tool_call(
         now=now,
         approved=True,
     )
+    raw_command_text = extract_mcp_command_text(artifact, arguments)
     receipt = build_receipt(
         harness=artifact.harness,
         artifact_id=artifact.artifact_id,
@@ -709,6 +764,7 @@ def allow_tool_call(
                 risk_categories=risk_categories,
             ),
         ),
+        raw_command_text=raw_command_text,
     )
     store.add_receipt(receipt)
     store.add_event(
@@ -734,6 +790,7 @@ def block_tool_call(
     now: str,
     signals: tuple[str, ...],
     risk_categories: tuple[str, ...] = (),
+    arguments: object = None,
 ) -> GuardReceipt:
     store.record_inventory_artifact(
         artifact=artifact,
@@ -743,6 +800,7 @@ def block_tool_call(
         now=now,
         approved=False,
     )
+    raw_command_text = extract_mcp_command_text(artifact, arguments)
     receipt = build_receipt(
         harness=artifact.harness,
         artifact_id=artifact.artifact_id,
@@ -761,6 +819,7 @@ def block_tool_call(
                 risk_categories=risk_categories,
             ),
         ),
+        raw_command_text=raw_command_text,
     )
     store.add_receipt(receipt)
     store.add_event(

@@ -389,6 +389,7 @@ class RuntimeMcpGuardProxy:
                             signals=decision.signals,
                             risk_categories=decision.risk_categories,
                             remember=True,
+                            arguments=arguments,
                         )
                     except ApprovalGateError:
                         return self._queue_approval_center_response(
@@ -423,6 +424,7 @@ class RuntimeMcpGuardProxy:
                         now=_now(),
                         signals=decision.signals,
                         risk_categories=decision.risk_categories,
+                        arguments=arguments,
                     )
                     return _blocked_tool_response(
                         message.get("id"),
@@ -441,6 +443,7 @@ class RuntimeMcpGuardProxy:
                         now=_now(),
                         signals=decision.signals,
                         risk_categories=decision.risk_categories,
+                        arguments=arguments,
                     )
                     return _blocked_tool_response(
                         message.get("id"),
@@ -544,6 +547,7 @@ class RuntimeMcpGuardProxy:
                     now=_now(),
                     signals=decision.signals,
                     risk_categories=decision.risk_categories,
+                    arguments=arguments,
                 )
                 return _blocked_tool_response(
                     message.get("id"),
@@ -562,6 +566,7 @@ class RuntimeMcpGuardProxy:
                     now=_now(),
                     signals=decision.signals,
                     risk_categories=decision.risk_categories,
+                    arguments=arguments,
                 )
                 return _blocked_tool_response(
                     message.get("id"),
@@ -672,6 +677,7 @@ class RuntimeMcpGuardProxy:
                         signals=remember_signals,
                         risk_categories=remember_risk_categories,
                         remember=True,
+                        arguments=params.get("arguments"),
                     )
                 except ApprovalGateError:
                     return self._queue_approval_center_response(
@@ -732,6 +738,7 @@ class RuntimeMcpGuardProxy:
                         signals=remember_signals,
                         risk_categories=remember_risk_categories,
                         remember=True,
+                        arguments=params.get("arguments"),
                     )
                 except ApprovalGateError:
                     return self._queue_approval_center_response(
@@ -879,6 +886,7 @@ class RuntimeMcpGuardProxy:
                 signals=signals,
                 risk_categories=risk_categories,
                 remember=remember,
+                arguments=params.get("arguments"),
             )
         except ApprovalGateError:
             if remember:
@@ -1221,6 +1229,7 @@ class RuntimeMcpGuardProxy:
             now=_now(),
             signals=signals,
             risk_categories=tool_call_risk_categories(artifact, params.get("arguments")),
+            arguments=params.get("arguments"),
         )
         request_id = str(queued[0]["request_id"]) if queued else "unknown"
         review_url = first_approval_url(queued, approval_center_url=approval_center_url) or approval_center_url
