@@ -86,6 +86,7 @@ def _build_unavailable_summary(message: str, *, status: CiscoIntegrationStatus) 
 
 
 def _scan_directory_payload(skills_dir: Path, policy_name: str) -> dict[str, object]:
+    _validate_skill_scanner_import()
     from skill_scanner import SkillScanner
     from skill_scanner.core.scan_policy import ScanPolicy
 
@@ -93,6 +94,126 @@ def _scan_directory_payload(skills_dir: Path, policy_name: str) -> dict[str, obj
     report = scanner.scan_directory(skills_dir)
     payload = report.to_dict()
     return payload if isinstance(payload, dict) else {}
+
+
+def _is_inside_prefix(path: Path) -> bool:
+    """Return True if ``path`` is inside the active venv or stdlib prefix.
+
+    Paths inside ``sys.prefix`` or ``sys.base_prefix`` are trusted even when
+    they happen to live under CWD (e.g. a local ``.venv/`` directory).
+    """
+    for prefix in (sys.prefix, sys.base_prefix):
+        try:
+            path.relative_to(Path(prefix).resolve())
+            return True
+        except ValueError:
+            pass
+    return False
+
+
+def _is_safe_sys_path_entry(entry: str) -> bool:
+    """Return True for ``sys.path`` entries safe to pass to the scanner subprocess.
+
+    Rejects empty strings, relative paths, and bare CWD — which could shadow the
+    real ``skill_scanner`` package from an attacker-controlled checkout. Paths
+    inside the active venv or stdlib prefix are always allowed, even if they
+    live under CWD (common for local ``.venv/`` setups).
+    """
+    if not entry or not entry.strip():
+        return False
+    path = Path(entry)
+    if not path.is_absolute():
+        return False
+    resolved = path.resolve()
+
+    # Always trust venv/stdlib prefixes, even inside CWD.
+    if _is_inside_prefix(resolved):
+        return True
+
+    cwd = Path.cwd().resolve()
+    if resolved == cwd:
+        return False
+    # Reject entries that are ancestors of CWD (could contain shadowing dirs).
+    try:
+        cwd.relative_to(resolved)
+        return False
+    except ValueError:
+        pass
+    return True
+
+
+def _validate_skill_scanner_import() -> None:
+    """Ensure ``skill_scanner`` resolves to a legitimate installed package.
+
+    Raises ``ImportError`` if the package is shadowed by a file or directory in
+    the current working directory or a relative ``sys.path`` entry, which would
+    allow an attacker-controlled checkout to execute arbitrary code during a
+    default Guard sync.
+    """
+    import importlib.util
+
+    try:
+        spec = importlib.util.find_spec("skill_scanner")
+    except (ValueError, ModuleNotFoundError):
+        # find_spec raises ValueError when a mock module in sys.modules
+        # has __spec__ = None. Treat as not-a-real-package: if it's already
+        # in sys.modules (test mock), let __import__ handle it; otherwise raise.
+        if "skill_scanner" not in sys.modules:
+            raise ImportError("skill_scanner package not found") from None
+        return
+    if spec is None:
+        # Not installed as a real package. If it's already in sys.modules
+        # (e.g. test mock), let __import__ handle it. Otherwise raise.
+        if "skill_scanner" not in sys.modules:
+            raise ImportError("skill_scanner package not found")
+        return
+    if spec.origin is None:
+        # Namespace package (no __init__.py) — origin is None but search
+        # locations may still point to CWD. Fall through to check them below
+        # rather than skipping validation entirely.
+        pass
+    else:
+        origin = Path(spec.origin).resolve()
+        cwd = Path.cwd().resolve()
+        if not _is_inside_prefix(origin):
+            if origin == cwd:
+                raise ImportError(
+                    "skill_scanner resolves to the current directory; refusing to import a shadowed module."
+                )
+            try:
+                origin.relative_to(cwd)
+                raise ImportError(
+                    "skill_scanner resolves inside the current working directory; refusing to import a shadowed module."
+                )
+            except ValueError:
+                pass
+    # Verify the spec's submodule search locations are also safe.
+    cwd = Path.cwd().resolve()
+    search_locations = getattr(spec, "submodule_search_locations", None) or []
+    for location in search_locations:
+        if not location:
+            continue
+        loc_path = Path(location).resolve()
+        if _is_inside_prefix(loc_path):
+            continue
+        if loc_path == cwd:
+            raise ImportError(
+                "skill_scanner search path includes the current directory; refusing to import a shadowed module."
+            )
+        try:
+            loc_path.relative_to(cwd)
+            raise ImportError(
+                "skill_scanner search path includes a CWD-relative entry; refusing to import a shadowed module."
+            )
+        except ValueError:
+            pass
+
+
+def _safe_import_skill_scanner() -> None:
+    """Validate and import ``skill_scanner`` with shadowing protection."""
+    _validate_skill_scanner_import()
+    __import__("skill_scanner")
+    __import__("skill_scanner.core.scan_policy")
 
 
 _SUBPROCESS_SCAN_SNIPPET = """
@@ -118,7 +239,12 @@ def _scan_directory_with_timeout(
     os.close(file_descriptor)
 
     env = os.environ.copy()
-    env["PYTHONPATH"] = os.pathsep.join(str(path) for path in sys.path)
+    # Filter sys.path to exclude CWD and relative paths that could shadow
+    # the real skill_scanner package from an attacker-controlled checkout.
+    safe_path_entries = [str(path) for path in sys.path if isinstance(path, str) and _is_safe_sys_path_entry(path)]
+    env["PYTHONPATH"] = os.pathsep.join(safe_path_entries)
+    # PYTHONSAFEPATH disables automatic CWD insertion into sys.path in the child.
+    env["PYTHONSAFEPATH"] = "1"
     try:
         try:
             result = subprocess.run(
@@ -241,16 +367,16 @@ def run_cisco_skill_scan(
         )
 
     try:
-        __import__("skill_scanner")
-        __import__("skill_scanner.core.scan_policy")
+        _safe_import_skill_scanner()
     except ImportError:
         if mode == "on":
             return _build_unavailable_summary(
-                "Cisco skill scanner is required but not installed. Ensure package dependencies are installed.",
+                "Cisco skill scanner is required but not installed or resolves to an unsafe path."
+                " Ensure package dependencies are installed from a trusted source.",
                 status=CiscoIntegrationStatus.UNAVAILABLE,
             )
         return _build_unavailable_summary(
-            "Cisco skill scanner not installed; deep skill scan skipped.",
+            "Cisco skill scanner not installed or resolves to an unsafe path; deep skill scan skipped.",
             status=CiscoIntegrationStatus.UNAVAILABLE,
         )
 
