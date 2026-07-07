@@ -82,6 +82,7 @@ def test_parse_protect_json_output_ignores_trailing_manager_stdout() -> None:
 
 def test_manager_probe_args_include_dry_run_for_npm() -> None:
     assert manager_probe_args("npm") == ("install", "--dry-run", "lodash@4.17.21")
+    assert manager_probe_args("brew") == ("install", "--dry-run", "jq")
 
 
 def test_shim_execution_helper_records_fake_manager_invocation(tmp_path: Path) -> None:

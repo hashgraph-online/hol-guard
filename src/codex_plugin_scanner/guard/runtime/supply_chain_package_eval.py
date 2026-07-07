@@ -1433,6 +1433,8 @@ def _heuristic_result(
             if local_python_result is not None:
                 package_result = local_python_result
         ecosystem = _optional_string(target.get("ecosystem")) or "npm"
+        if package_result is None and ecosystem in {"homebrew", "homebrew-cask", "homebrew-tap"}:
+            package_result = _homebrew_package_monitor_result(target)
         if package_result is None and ecosystem == "system":
             package_result = _system_package_monitor_result(target)
         if package_result is None and ecosystem == "unsupported":
@@ -2031,6 +2033,30 @@ def _system_package_monitor_result(target: dict[str, object]) -> dict[str, objec
         message=(
             "Guard treats system package managers as monitor-only coverage today and will not "
             "pretend advisory blocking."
+        ),
+        severity="low",
+    )
+
+
+def _homebrew_package_monitor_result(target: dict[str, object]) -> dict[str, object]:
+    command = _optional_string(target.get("redacted_command")) or ""
+    signals = detect_supply_chain_risk(command)
+    if signals:
+        strongest = sorted(signals, key=lambda item: _severity_rank_value(item.severity), reverse=True)[0]
+        return _heuristic_package_result(
+            target=target,
+            decision="warn",
+            code="homebrew_package_manager_generic_risk",
+            message=strongest.plain_reason,
+            severity=strongest.severity,
+        )
+    return _heuristic_package_result(
+        target=target,
+        decision="warn",
+        code="homebrew_package_manager_monitor_only",
+        message=(
+            "Guard intercepts Homebrew requests today, records formula, cask, tap, and Brewfile intent, "
+            "and treats them as monitor-only until Homebrew advisory enforcement is available."
         ),
         severity="low",
     )

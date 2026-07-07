@@ -84,6 +84,10 @@ _MANAGER_GLOBAL_OPTIONS: dict[str, _GlobalOptionConfig] = {
         subcommands=frozenset({"add", "pip", "sync"}),
         value_options=frozenset({"--cache-dir", "--directory", "--index", "--python", "--project"}),
     ),
+    "brew": _GlobalOptionConfig(
+        subcommands=frozenset({"bundle", "install", "reinstall", "tap", "upgrade"}),
+        value_options=frozenset({"--cache", "--cellar", "--prefix", "--repository"}),
+    ),
     "poetry": _GlobalOptionConfig(
         subcommands=frozenset({"add", "install"}),
         value_options=frozenset({"--directory", "-C"}),

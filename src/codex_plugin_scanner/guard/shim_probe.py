@@ -9,6 +9,7 @@ SHIM_PROBE_ENV_VAR = "HOL_GUARD_SHIM_PROBE"
 SHIM_PROBE_ENV_VALUE = "1"
 
 _PACKAGE_SHIM_PROBE_ARGS: dict[str, tuple[str, ...]] = {
+    "brew": ("install", "--dry-run", "jq"),
     "npm": ("install", "--dry-run", "lodash@4.17.21"),
     "npx": ("-y", "lodash@4.17.21"),
     "pnpm": ("add", "--dry-run", "lodash@4.17.21"),

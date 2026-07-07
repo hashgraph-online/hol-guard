@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from codex_plugin_scanner.guard.runtime.package_intent import (
     parse_manifest_dependency_changes,
     parse_package_intent,
@@ -12,6 +14,8 @@ def test_parse_package_intent_supports_cargo_path_system_and_unsupported_package
     cargo_path = parse_package_intent("cargo add demo --path crates/demo")
     cargo_path_equals = parse_package_intent("cargo add demo --path=crates/demo")
     brew = parse_package_intent("brew install ripgrep fd")
+    brew_cask = parse_package_intent("brew install --cask firefox")
+    brew_tap = parse_package_intent("brew tap user/repository https://example.com/user/homebrew-repository.git")
     apt = parse_package_intent("apt-get install jq")
     pacman = parse_package_intent("pacman -Syu jq")
     helm = parse_package_intent("helm install ingress ingress-nginx/ingress-nginx")
@@ -26,9 +30,16 @@ def test_parse_package_intent_supports_cargo_path_system_and_unsupported_package
 
     assert brew is not None
     assert brew.package_manager == "brew"
-    assert brew.targets[0].ecosystem == "system"
+    assert brew.targets[0].ecosystem == "homebrew"
     assert brew.targets[0].package_name == "ripgrep"
     assert brew.targets[1].package_name == "fd"
+    assert brew_cask is not None
+    assert brew_cask.targets[0].ecosystem == "homebrew-cask"
+    assert brew_cask.targets[0].package_name == "firefox"
+    assert brew_tap is not None
+    assert brew_tap.targets[0].ecosystem == "homebrew-tap"
+    assert brew_tap.targets[0].package_name == "user/repository"
+    assert brew_tap.targets[0].source_url == "https://example.com/user/homebrew-repository.git"
 
     assert apt is not None
     assert apt.package_manager == "apt-get"
@@ -42,6 +53,33 @@ def test_parse_package_intent_supports_cargo_path_system_and_unsupported_package
     assert helm.package_manager == "helm"
     assert helm.targets[0].ecosystem == "unsupported"
     assert helm.targets[0].package_name == "ingress-nginx/ingress-nginx"
+
+
+def test_parse_package_intent_supports_brew_bundle_brewfile(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "Brewfile").write_text(
+        "\n".join(
+            (
+                'tap "user/repository", "https://example.com/user/homebrew-repository.git"',
+                'brew "ruby"',
+                'cask "firefox"',
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    intent = parse_package_intent("brew bundle install", workspace=workspace)
+
+    assert intent is not None
+    assert intent.package_manager == "brew"
+    assert intent.intent_kind == "sync"
+    assert intent.manifest_paths == ("Brewfile",)
+    assert [(target.ecosystem, target.package_name) for target in intent.targets] == [
+        ("homebrew-tap", "user/repository"),
+        ("homebrew", "ruby"),
+        ("homebrew-cask", "firefox"),
+    ]
 
 
 def test_parse_manifest_dependency_changes_supports_tier2_lockfiles_and_cargo_workspaces() -> None:
