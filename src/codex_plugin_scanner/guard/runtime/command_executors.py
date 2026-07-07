@@ -719,7 +719,9 @@ def command_job_operation(job: dict[str, object]) -> str:
 
 
 def _job_payload(job: dict[str, object]) -> dict[str, object]:
-    payload = job.get("payload")
+    payload = job.get("operationPayload")
+    if not isinstance(payload, dict):
+        payload = job.get("payload")
     return dict(payload) if isinstance(payload, dict) else {}
 
 

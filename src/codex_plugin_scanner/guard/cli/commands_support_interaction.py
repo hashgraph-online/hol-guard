@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ._commands_shared import _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS, _hook_command_text, _now
-    from .commands_support_hook_payload import _browser_url_with_guard_params
 
 
 from ._commands_shared import *
@@ -159,11 +158,8 @@ def _open_guard_cloud_app(
     opener: GuardBrowserOpener,
 ) -> dict[str, object]:
     daemon_url = ensure_guard_daemon(guard_home)
-    auth_token = load_guard_daemon_auth_token(guard_home)
     public_url, browser_url = _guard_cloud_app_urls(
         harness=harness,
-        daemon_url=daemon_url,
-        auth_token=auth_token,
     )
     browser_opened = bool(browser_url and opener(browser_url))
     payload: dict[str, object] = {
@@ -183,8 +179,6 @@ def _open_guard_cloud_app(
 def _guard_cloud_app_error_payload(*, harness: str, error: str) -> dict[str, object]:
     public_url, _browser_url = _guard_cloud_app_urls(
         harness=harness,
-        daemon_url="",
-        auth_token=None,
     )
     return {
         "app_url": public_url,
@@ -202,21 +196,12 @@ def _guard_cloud_app_error_payload(*, harness: str, error: str) -> dict[str, obj
 def _guard_cloud_app_urls(
     *,
     harness: str,
-    daemon_url: str,
-    auth_token: str | None,
-) -> tuple[str, str | None]:
+) -> tuple[str, str]:
     safe_harness = urllib.parse.quote(harness.strip() or "codex", safe="")
     parsed = urllib.parse.urlparse(f"{DEFAULT_GUARD_APPS_URL}/{safe_harness}")
     public_url = urllib.parse.urlunparse(parsed._replace(fragment=""))
-    if auth_token is None:
-        return public_url, None
-    browser_url = _browser_url_with_guard_params(
-        public_url,
-        auth_token=auth_token,
-        surface="cloud-dashboard",
-        daemon_url=daemon_url,
-    )
-    return public_url, browser_url
+    # OAuth app connect must not hand local daemon URLs or dashboard tokens to Cloud.
+    return public_url, public_url
 
 def _build_cisco_scan_options(mode: str) -> ScanOptions:
     return ScanOptions(cisco_skill_scan=mode, cisco_mcp_scan=mode)

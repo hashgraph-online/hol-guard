@@ -1762,6 +1762,42 @@ def test_executor_dispatches_app_connect(tmp_path: Path, monkeypatch) -> None:
     assert isinstance(result["data"], dict)
 
 
+def test_executor_dispatches_app_connect_from_operation_payload(tmp_path: Path, monkeypatch) -> None:
+    calls: list[tuple[str, str | None, str | None]] = []
+
+    def fake_apply_managed_install(
+        command: str,
+        requested_harness: str | None,
+        install_all: bool,
+        context: HarnessContext,
+        store: object,
+        workspace: str | None,
+        now: str,
+        *,
+        surface: str | None = None,
+    ) -> dict[str, object]:
+        del context, store, workspace, now
+        assert install_all is False
+        calls.append((command, requested_harness, surface))
+        return {"managed_install": {"harness": requested_harness}, "surface": surface}
+
+    monkeypatch.setattr(command_executors, "apply_managed_install", fake_apply_managed_install)
+
+    result = command_executors.execute_guard_command_job(
+        {
+            "operation": "guard.app.connect",
+            "operationPayload": {"harness": "codex", "surface": "cli"},
+        },
+        context=_context(tmp_path),
+        store=FakeStore(tmp_path / "guard-home"),  # type: ignore[arg-type]
+        now=lambda: "2026-06-13T00:00:00+00:00",
+    )
+
+    assert calls == [("install", "codex", "cli")]
+    assert result["generatedAt"] == "2026-06-13T00:00:00+00:00"
+    assert isinstance(result["data"], dict)
+
+
 def test_executor_returns_waiting_local_confirm_for_package_shim_remove(tmp_path: Path) -> None:
     result = command_executors.execute_guard_command_job(
         {
