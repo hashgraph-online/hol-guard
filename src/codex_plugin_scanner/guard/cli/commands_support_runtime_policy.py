@@ -132,6 +132,7 @@ def _native_approval_center_context(response_payload: dict[str, object], *, harn
         "bundle",
         "mvn",
         "gradle",
+        "brew",
     }:
         harness_label = "package install"
     return (

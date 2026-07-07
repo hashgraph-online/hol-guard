@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..protect import _collect_package_specs
+from .homebrew_intent import parse_brew_intent
 from .mcp_protection import _command_name, _package_token
 from .package_intent_common import (
     IntentKind,
@@ -78,7 +79,7 @@ def parse_package_intent(command_text: str, *, workspace: Path | None = None) ->
         "bundle": _parse_bundle_intent,
         "bundler": _parse_bundle_intent,
         "gem": _parse_gem_intent,
-        "brew": _parse_system_package_intent,
+        "brew": parse_brew_intent,
         "apt": _parse_system_package_intent,
         "apt-get": _parse_system_package_intent,
         "yum": _parse_system_package_intent,
