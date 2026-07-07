@@ -141,6 +141,7 @@ def _is_safe_sys_path_entry(entry: str) -> bool:
         pass
     return True
 
+
 def _validate_skill_scanner_import() -> None:
     """Ensure ``skill_scanner`` resolves to a legitimate installed package.
 
@@ -207,11 +208,13 @@ def _validate_skill_scanner_import() -> None:
         except ValueError:
             pass
 
+
 def _safe_import_skill_scanner() -> None:
     """Validate and import ``skill_scanner`` with shadowing protection."""
     _validate_skill_scanner_import()
     __import__("skill_scanner")
     __import__("skill_scanner.core.scan_policy")
+
 
 _SUBPROCESS_SCAN_SNIPPET = """
 from pathlib import Path
@@ -238,10 +241,7 @@ def _scan_directory_with_timeout(
     env = os.environ.copy()
     # Filter sys.path to exclude CWD and relative paths that could shadow
     # the real skill_scanner package from an attacker-controlled checkout.
-    safe_path_entries = [
-        str(path) for path in sys.path
-        if isinstance(path, str) and _is_safe_sys_path_entry(path)
-    ]
+    safe_path_entries = [str(path) for path in sys.path if isinstance(path, str) and _is_safe_sys_path_entry(path)]
     env["PYTHONPATH"] = os.pathsep.join(safe_path_entries)
     # PYTHONSAFEPATH disables automatic CWD insertion into sys.path in the child.
     env["PYTHONSAFEPATH"] = "1"
