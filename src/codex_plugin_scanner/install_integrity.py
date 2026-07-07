@@ -105,38 +105,74 @@ def _read_version_via_ast(version_file: Path) -> str | None:
     except (OSError, SyntaxError):
         return None
     for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if (
-                    isinstance(target, ast.Name)
-                    and target.id == "__version__"
-                    and isinstance(node.value, ast.Constant)
-                    and isinstance(node.value.value, str)
-                ):
-                    return node.value.value
+        # Support both plain assignments (__version__ = "...") and annotated
+        # assignments (__version__: str = "...").
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            assign_targets = [node.target]
+            assign_value = node.value
+        elif isinstance(node, ast.Assign):
+            assign_targets = node.targets
+            assign_value = node.value
+        else:
+            continue
+        if not isinstance(assign_value, ast.Constant) or not isinstance(assign_value.value, str):
+            continue
+        for target in assign_targets:
+            if isinstance(target, ast.Name) and target.id == "__version__":
+                return assign_value.value
     return None
 
 
 _RELEASE_SEGMENT_RE = re.compile(r"\d+(?:\.\d+)*")
 _PRE_RELEASE_RE = re.compile(r"(a|b|rc|alpha|beta|pre|preview)(\d*)", re.IGNORECASE)
+_POST_RELEASE_RE = re.compile(r"\.(post|rev|r)(\d*)", re.IGNORECASE)
+_DEV_RELEASE_RE = re.compile(r"\.?(dev)(\d*)", re.IGNORECASE)
+
+# Sort sentinels for PEP 440 ordering: dev < pre < final < post.
+_DEV_SENTINEL = -3
+_PRE_SENTINEL = -2
+_FINAL_SENTINEL = 0
+_POST_SENTINEL = 1
 
 
 def _parse_version(value: str) -> tuple[int, ...]:
     """Parse a version string into a comparable tuple.
 
-    Numeric release segments are compared as integers. A pre-release suffix
-    (rc, beta, alpha) sorts BEFORE the same version without one, matching
-    PEP 440 ordering for the common cases this check encounters.
+    Numeric release segments are compared as integers, with PEP 440 suffix
+    ordering: dev < pre-release (a/b/rc) < final < post-release.
     """
     match = _RELEASE_SEGMENT_RE.search(value)
     if not match:
         return (0,)
     release = tuple(int(part) for part in match.group(0).split("."))
-    pre_match = _PRE_RELEASE_RE.search(value[match.end() :])
+    suffix = value[match.end() :]
+    pre_match = _PRE_RELEASE_RE.search(suffix)
+    post_match = _POST_RELEASE_RE.search(suffix)
+    dev_match = _DEV_RELEASE_RE.search(suffix)
+    if dev_match:
+        dev_number = int(dev_match.group(2)) if dev_match.group(2) else 0
+        return (*release, _DEV_SENTINEL, dev_number)
     if pre_match:
-        # Pre-release: append a marker so 2.0.1rc1 < 2.0.1.
-        # Use negative sentinel: release + (-1, pre_number).
         pre_number = int(pre_match.group(2)) if pre_match.group(2) else 0
-        return (*release, -1, pre_number)
-    # Final release: append a positive sentinel so it sorts after pre-releases.
-    return (*release, 0)
+        # Rank the pre-release type so a < b < rc (PEP 440).
+        pre_type_rank = _pre_release_type_rank(pre_match.group(1))
+        return (*release, _PRE_SENTINEL, pre_type_rank, pre_number)
+    if post_match:
+        post_number = int(post_match.group(2)) if post_match.group(2) else 0
+        return (*release, _POST_SENTINEL, post_number)
+    return (*release, _FINAL_SENTINEL)
+
+
+_PRE_RELEASE_TYPE_RANK = {
+    "a": 0,
+    "alpha": 0,
+    "b": 1,
+    "beta": 1,
+    "pre": 2,
+    "preview": 2,
+    "rc": 2,
+}
+
+
+def _pre_release_type_rank(label: str) -> int:
+    return _PRE_RELEASE_TYPE_RANK.get(label.lower(), 0)

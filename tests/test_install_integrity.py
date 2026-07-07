@@ -45,6 +45,21 @@ class TestParseVersion:
     def test_pre_release_ordering(self) -> None:
         assert _parse_version("2.0.1rc1") < _parse_version("2.0.1rc2")
 
+    def test_post_release_sorts_after_final(self) -> None:
+        assert _parse_version("2.0.1") < _parse_version("2.0.1.post1")
+
+    def test_dev_release_sorts_before_pre(self) -> None:
+        assert _parse_version("2.0.1.dev1") < _parse_version("2.0.1rc1")
+
+    def test_full_pep440_ordering(self) -> None:
+        assert (
+            _parse_version("2.0.1.dev1")
+            < _parse_version("2.0.1a1")
+            < _parse_version("2.0.1rc1")
+            < _parse_version("2.0.1")
+            < _parse_version("2.0.1.post1")
+        )
+
 
 class TestReadVersionViaAst:
     def test_reads_version_without_executing(self, tmp_path: Path) -> None:
@@ -60,6 +75,11 @@ class TestReadVersionViaAst:
         version_file = tmp_path / "version.py"
         version_file.write_text('OTHER = "1.0.0"\n')
         assert _read_version_via_ast(version_file) is None
+
+    def test_reads_annotated_assignment(self, tmp_path: Path) -> None:
+        version_file = tmp_path / "version.py"
+        version_file.write_text('__version__: str = "8.8.8"\n')
+        assert _read_version_via_ast(version_file) == "8.8.8"
 
 
 class TestDetectShadowedInstall:
