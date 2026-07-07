@@ -13933,10 +13933,15 @@ function searchQueue(items, term) {
       item.launch_summary ?? "",
       item.why_now ?? "",
       envelope?.command ?? "",
+      item.raw_command_text ?? "",
+      item.fallback_cli_command ?? "",
+      item.review_command ?? "",
       envelope?.prompt_text ?? envelope?.prompt_excerpt ?? "",
       envelope?.mcp_server ?? "",
       envelope?.mcp_tool ?? "",
       envelope?.package_name ?? "",
+      envelope?.script_name ?? "",
+      JSON.stringify(envelope?.raw_payload_redacted ?? {}),
       category.label,
       category.shortLabel,
       ...envelope?.network_hosts ?? [],
@@ -24883,7 +24888,7 @@ function iconForQueueCategory(categoryId) {
 }
 function queueItemPreview(item) {
   const envelope = item.action_envelope_json;
-  return envelope?.command ?? envelope?.mcp_tool ?? (envelope?.prompt_text ?? envelope?.prompt_excerpt) ?? envelope?.package_name ?? displayArtifactName(item);
+  return envelope?.command ?? item.raw_command_text ?? envelope?.mcp_tool ?? (envelope?.prompt_text ?? envelope?.prompt_excerpt) ?? envelope?.package_name ?? displayArtifactName(item);
 }
 function ReviewDecisionCard(props) {
   const detail = props.detail;

@@ -147,6 +147,8 @@ export type GuardApprovalRequest = {
   resolved_at: string | null;
   action_envelope_json?: GuardActionEnvelope | null;
   decision_v2_json?: GuardDecisionV2 | null;
+  fallback_cli_command?: string | null;
+  raw_command_text?: string | null;
   action_identity?: string | null;
   queue_group_id?: string | null;
   dedupe_count?: number;
