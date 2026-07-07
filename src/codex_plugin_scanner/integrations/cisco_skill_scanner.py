@@ -167,28 +167,27 @@ def _validate_skill_scanner_import() -> None:
             raise ImportError("skill_scanner package not found")
         return
     if spec.origin is None:
-        # Namespace package or already-loaded mock; let __import__ handle it.
-        return
-
-    origin = Path(spec.origin).resolve()
-    cwd = Path.cwd().resolve()
-
-    # Trust origins inside the active venv/stdlib, even if under CWD.
-    if not _is_inside_prefix(origin):
-        # Reject if the module originates from CWD or a relative path.
-        if origin == cwd:
-            raise ImportError(
-                "skill_scanner resolves to the current directory; refusing to import a shadowed module."
-            )
-        try:
-            origin.relative_to(cwd)
-            raise ImportError(
-                "skill_scanner resolves inside the current working directory; refusing to import a shadowed module."
-            )
-        except ValueError:
-            pass
-
+        # Namespace package (no __init__.py) — origin is None but search
+        # locations may still point to CWD. Fall through to check them below
+        # rather than skipping validation entirely.
+        pass
+    else:
+        origin = Path(spec.origin).resolve()
+        cwd = Path.cwd().resolve()
+        if not _is_inside_prefix(origin):
+            if origin == cwd:
+                raise ImportError(
+                    "skill_scanner resolves to the current directory; refusing to import a shadowed module."
+                )
+            try:
+                origin.relative_to(cwd)
+                raise ImportError(
+                    "skill_scanner resolves inside the current working directory; refusing to import a shadowed module."
+                )
+            except ValueError:
+                pass
     # Verify the spec's submodule search locations are also safe.
+    cwd = Path.cwd().resolve()
     search_locations = getattr(spec, "submodule_search_locations", None) or []
     for location in search_locations:
         if not location:
@@ -207,7 +206,6 @@ def _validate_skill_scanner_import() -> None:
             )
         except ValueError:
             pass
-
 
 def _safe_import_skill_scanner() -> None:
     """Validate and import ``skill_scanner`` with shadowing protection."""
