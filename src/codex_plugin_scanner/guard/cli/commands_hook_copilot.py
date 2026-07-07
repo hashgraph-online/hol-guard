@@ -309,6 +309,8 @@ def _run_hook_copilot_permission_request(
         )
         response_payload["approval_requests"] = queued
         policy_action = "allow"
+        response_payload["policy_action"] = "allow"
+    if policy_action == "allow":
         allow_tool_call(
             store=store,
             artifact=runtime_artifact,
