@@ -304,6 +304,10 @@ def main(argv: list[str] | None = None) -> int:
         program_name=program_name,
     )
     args = parser.parse_args(resolved_argv)
+    # Surface silent stale-install shadowing before dispatching. Non-fatal.
+    from .install_integrity import warn_if_shadowed
+
+    warn_if_shadowed()
     if program_mode == "guard":
         try:
             return run_guard_command(args)
