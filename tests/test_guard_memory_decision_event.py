@@ -45,6 +45,44 @@ class TestMemoryPatternFingerprint:
         assert express is not None
         assert lodash.fingerprint != express.fingerprint
 
+    def test_package_install_skips_flags(self) -> None:
+        global_install = build_memory_pattern_fingerprint(command="npm install -g pm2")
+        plain_install = build_memory_pattern_fingerprint(command="npm install pm2")
+        assert global_install is not None
+        assert plain_install is not None
+        assert global_install.fingerprint == plain_install.fingerprint
+        assert global_install.components["package"] == "pm2"
+
+    def test_package_install_skips_save_flag(self) -> None:
+        with_flag = build_memory_pattern_fingerprint(command="npm install --save lodash")
+        without_flag = build_memory_pattern_fingerprint(command="npm install lodash")
+        assert with_flag is not None
+        assert without_flag is not None
+        assert with_flag.fingerprint == without_flag.fingerprint
+
+    def test_scoped_package_preserved(self) -> None:
+        scoped = build_memory_pattern_fingerprint(command="npm install @types/node")
+        assert scoped is not None
+        assert scoped.components["package"] == "@types/node"
+
+    def test_mcp_tool_from_artifact_id_when_command_absent(self) -> None:
+        candidate = build_memory_pattern_fingerprint(
+            command=None,
+            artifact_id="mcp:lean_ctx:ctx_search",
+        )
+        assert candidate is not None
+        assert candidate.kind == "mcp_tool_pattern"
+        assert candidate.components["server"] == "lean_ctx"
+        assert candidate.components["tool"] == "ctx_search"
+
+    def test_file_read_recognizes_file_read_artifact_type(self) -> None:
+        candidate = build_memory_pattern_fingerprint(
+            command="read src/lib/index.ts",
+            artifact_type="file_read",
+        )
+        assert candidate is not None
+        assert candidate.kind == "file_read_pattern"
+
     def test_mcp_tool_groups_by_server_and_tool(self) -> None:
         event = build_memory_pattern_fingerprint(command="mcp__lean_ctx__ctx_search pattern='memory'")
         assert event is not None

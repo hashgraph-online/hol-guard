@@ -170,12 +170,22 @@ def _try_package_install(
     add_managers = {"cargo", "go", "uv"}
     install_subcommand = bool(subcommand and subcommand in _PACKAGE_INSTALL_SUBCOMMANDS)
     add_subcommand = manager in add_managers and subcommand == "add"
-    package_index: int | None = 2 if (install_subcommand or add_subcommand) else None
-    if package_index is None or package_index >= len(tokens):
+    is_install = install_subcommand or add_subcommand
+    if not is_install:
         return None
-    raw_package = tokens[package_index]
+    # Skip flags/options between the subcommand and the package name so commands
+    # like ``npm install -g pm2`` or ``pip install -U requests`` resolve the
+    # package rather than the flag.
+    raw_package: str | None = None
+    for token in tokens[2:]:
+        if token.startswith("-"):
+            continue
+        raw_package = token
+        break
+    if raw_package is None:
+        return None
     package = _strip_package_version(raw_package)
-    if not package or package.startswith("-"):
+    if not package:
         return None
     ecosystem = _ecosystem_for_manager(manager)
     components = {
@@ -194,10 +204,19 @@ def _try_package_install(
 
 def _strip_package_version(raw_package: str) -> str:
     package = raw_package.strip().strip("\"'").strip()
-    for separator in ("@", "==", ">=", "<=", "!=", "~=", ">", "<"):
+    # Preserve npm scopes: a leading ``@`` denotes a scoped package
+    # (``@types/node``), not a version separator. Only ``@`` that appears after
+    # the first character pins a version (``lodash@1.0``).
+    is_scoped = package.startswith("@")
+    for separator in ("==", ">=", "<=", "!=", "~=", ">", "<"):
         if separator in package:
             package = package.split(separator, 1)[0]
-    package = package.split("@", 1)[0]
+    if is_scoped:
+        # Scoped package: keep the leading scope, drop only a trailing version.
+        if "@" in package[1:]:
+            package = package[0] + package[1:].split("@", 1)[0]
+    else:
+        package = package.split("@", 1)[0]
     return package.strip().lower()
 
 
@@ -222,9 +241,9 @@ def _try_mcp_tool(
     harness: str | None,
     artifact_id: str | None,
 ) -> MemoryPatternFingerprint | None:
-    if command is None:
-        return None
-    match = re.search(r"mcp__([a-z0-9_-]+)__([a-z0-9_]+)", command, re.IGNORECASE)
+    match = None
+    if command:
+        match = re.search(r"mcp__([a-z0-9_-]+)__([a-z0-9_]+)", command, re.IGNORECASE)
     if match:
         server = match.group(1).lower()
         tool = match.group(2).lower()
@@ -260,7 +279,13 @@ def _try_file_read(
     harness: str | None,
     artifact_type: str | None,
 ) -> MemoryPatternFingerprint | None:
-    if artifact_type is None or artifact_type.lower() not in {"file", "path", "config"}:
+    if artifact_type is None or artifact_type.lower() not in {
+        "file",
+        "path",
+        "config",
+        "file_read",
+        "file_read_request",
+    }:
         return None
     tokens = _split_command(command)
     if not tokens:
@@ -315,7 +340,7 @@ def _try_shell_command(
         return None
     # Normalize the subcommand family for common multi-word tools.
     subcommand = tokens[1].lower().lstrip("-")
-    if not subcommand or subcommand.startswith("-"):
+    if not subcommand:
         return None
     components: dict[str, str] = {"executable": executable, "subcommand": subcommand}
     # Capture a concrete target for git/docker/gh/rg families when present.
