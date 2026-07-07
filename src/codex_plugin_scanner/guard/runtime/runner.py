@@ -4340,6 +4340,9 @@ def _cloud_sync_receipt_payload(
         "recommendation": _cloud_sync_recommendation(policy_decision),
         "summary": summary,
     }
+    raw_command_text = _optional_string(receipt.get("raw_command_text"))
+    if raw_command_text is not None:
+        payload["raw_command_text"] = _cloud_sync_command_display_part(raw_command_text)
     publisher = _optional_string(receipt.get("publisher"))
     if publisher is not None:
         payload["publisher"] = publisher
