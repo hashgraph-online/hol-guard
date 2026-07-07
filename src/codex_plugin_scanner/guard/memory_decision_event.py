@@ -18,7 +18,6 @@ from dataclasses import asdict, dataclass, field
 from typing import Literal
 
 from .memory_pattern_fingerprint import (
-    MemoryPatternFingerprint,
     build_memory_pattern_fingerprint,
 )
 
@@ -145,8 +144,14 @@ def build_memory_decision_event(
         redaction_state=redaction_state,
     )
 
+    # Build the fingerprint from the real command when redaction permits it.
+    # When raw_command is withheld, do NOT fall back to review_command: that
+    # field commonly holds the approval wrapper ("hol-guard approvals approve
+    # <id>") which would produce an over-broad, useless command fingerprint.
+    # Fall back to artifact identity only.
+    fingerprint_command = raw_command if redaction_state != "withheld" else None
     pattern = build_memory_pattern_fingerprint(
-        command=raw_command or review_command,
+        command=fingerprint_command,
         artifact_type=artifact_type,
         artifact_id=artifact_id,
         artifact_name=artifact_name,
@@ -196,16 +201,6 @@ def event_to_cloud_payload(event: GuardMemoryDecisionEventV1) -> dict[str, objec
     payload = event.to_payload()
     payload["contractVersion"] = MEMORY_DECISION_EVENT_CONTRACT_VERSION
     return payload
-
-
-def event_pattern(event: GuardMemoryDecisionEventV1) -> MemoryPatternFingerprint | None:
-    if event.memory_pattern_fingerprint and event.memory_pattern_kind:
-        return MemoryPatternFingerprint(
-            fingerprint=event.memory_pattern_fingerprint,
-            kind=event.memory_pattern_kind,  # type: ignore[arg-type]
-            components=dict(event.memory_pattern_components),
-        )
-    return None
 
 
 def _normalize_decision_action(action: str) -> MemoryDecisionAction | None:

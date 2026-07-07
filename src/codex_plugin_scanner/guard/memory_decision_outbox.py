@@ -47,6 +47,7 @@ def enqueue_memory_decision_event(
         workspace_id = _resolve_workspace_id(store)
         device_id, machine_installation_id = _resolve_device_metadata(store)
         owner_user_id = _resolve_owner_user_id(store)
+        machine_id = _resolve_oauth_machine_id(store) or machine_installation_id
         redaction_enabled = _resolve_redaction_enabled(store)
 
         event = build_memory_decision_event(
@@ -57,7 +58,7 @@ def enqueue_memory_decision_event(
             owner_user_id=owner_user_id,
             workspace_id=workspace_id,
             device_id=device_id,
-            machine_id=machine_installation_id,
+            machine_id=machine_id,
             machine_installation_id=machine_installation_id,
             source=source,
             redaction_enabled=redaction_enabled,
@@ -119,6 +120,23 @@ def _resolve_owner_user_id(store: Any) -> str | None:
         value = credentials.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
+    return None
+
+
+def _resolve_oauth_machine_id(store: Any) -> str | None:
+    """Return the OAuth grant's machine id, distinct from the installation id.
+
+    The installation id (from device metadata) and the OAuth machine id can
+    differ; the OAuth credential payload carries the real machine id seeded at
+    connect time. Falls back to None so callers can default to the installation
+    id.
+    """
+    credentials = _oauth_credentials(store)
+    if not credentials:
+        return None
+    value = credentials.get("machine_id")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
     return None
 
 
