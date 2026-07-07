@@ -50,6 +50,25 @@ _READ_CHUNK_BYTES = 65536
 _CURSOR_RULE_PATTERNS = ("*.mdc", "*.md")
 _CODEX_WORKSPACE_SKILL_ROOTS = (".agents/skills",)
 _CODEX_HOME_SKILL_ROOTS = (".codex/skills", ".agents/skills")
+
+# Harnesses that natively discover skills from the shared ``.agents/skills``
+# workspace directory.  Other harnesses (e.g. Hermes, Copilot, Antigravity)
+# use their own skill directories and must not pick up Codex/OpenClaw-style
+# workspace skills.
+_WORKSPACE_CODEX_SKILL_HARNESSES = frozenset(
+    {
+        "codex",
+        "openclaw",
+        "opencode",
+        "claude-code",
+        "cursor",
+        "gemini",
+        "grok",
+        "kimi",
+        "pi",
+        "zcode",
+    }
+)
 _STANDARDS_CONTEXT_ROOTS = (".", ".agents/context", "docs")
 _ROOT_INSTRUCTION_ROLE_NAMES: tuple[tuple[str, InstructionRole], ...] = (
     ("CLAUDE.md", "claude_md"),
@@ -180,7 +199,7 @@ def discover_shared_workspace_aibom_artifacts(
     artifacts.extend(_discover_agents_md(harness, workspace_dir=workspace_dir))
     artifacts.extend(_discover_standards_context_files(harness, workspace_dir=workspace_dir))
     artifacts.extend(_discover_cursor_rules(harness, workspace_dir=workspace_dir))
-    if harness != "codex":
+    if harness in _WORKSPACE_CODEX_SKILL_HARNESSES:
         artifacts.extend(
             _discover_codex_skills(
                 harness,

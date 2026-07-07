@@ -495,3 +495,83 @@ def test_cursor_detect_extends_workspace_aibom(tmp_path: Path) -> None:
     )
 
     assert any(artifact.artifact_type == "instruction" for artifact in extended.artifacts)
+
+
+def test_workspace_skills_excluded_for_hermes(tmp_path: Path) -> None:
+    """Hermes uses ~/.hermes/skills/, not .agents/skills/.
+
+    Workspace-level ``.agents/skills/`` is a Codex/OpenClaw convention.
+    Hermes (and other harnesses that don't natively scan it) must not pick
+    up those skills in their inventory snapshots, otherwise skills from
+    one harness leak into another harness's Protection Graph.
+    """
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    skill_dir = workspace / ".agents" / "skills" / "bare-metal-server"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: bare-metal-server\ndescription: test\n---\nbody\n",
+        encoding="utf-8",
+    )
+
+    # Hermes must NOT discover .agents/skills/
+    hermes_artifacts = discover_shared_workspace_aibom_artifacts(
+        "hermes",
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+    )
+    hermes_skill_names = {
+        a.name for a in hermes_artifacts if a.artifact_type == "skill"
+    }
+    assert "bare-metal-server" not in hermes_skill_names
+
+    # Codex and OpenClaw SHOULD discover .agents/skills/
+    for harness in ("codex", "openclaw"):
+        artifacts = discover_shared_workspace_aibom_artifacts(
+            harness,
+            home_dir=tmp_path,
+            workspace_dir=workspace,
+        )
+        skill_names = {
+            a.name for a in artifacts if a.artifact_type == "skill"
+        }
+        assert "bare-metal-server" in skill_names, f"{harness} should discover .agents/skills/"
+
+    # Copilot and Antigravity also don't use .agents/skills/
+    for harness in ("copilot", "antigravity"):
+        artifacts = discover_shared_workspace_aibom_artifacts(
+            harness,
+            home_dir=tmp_path,
+            workspace_dir=workspace,
+        )
+        skill_names = {
+            a.name for a in artifacts if a.artifact_type == "skill"
+        }
+        assert "bare-metal-server" not in skill_names, f"{harness} should not discover .agents/skills/"
+
+
+def test_workspace_skills_excluded_for_hermes_inventory_snapshot(tmp_path: Path) -> None:
+    """Full inventory snapshot for Hermes must not include workspace .agents/skills/."""
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    skill_dir = workspace / ".agents" / "skills" / "bare-metal-server"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: bare-metal-server\ndescription: test\n---\nbody\n",
+        encoding="utf-8",
+    )
+    context = HarnessContext(
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+        guard_home=tmp_path / ".guard",
+    )
+    snapshot = HermesHarnessAdapter().inventory_snapshot(
+        context,
+        generated_at="2026-01-01T00:00:00Z",
+    )
+    skill_names = {
+        item.metadata.get("skill_name") or item.display_name
+        for item in snapshot.items
+        if item.item_kind == "skill"
+    }
+    assert "bare-metal-server" not in skill_names
