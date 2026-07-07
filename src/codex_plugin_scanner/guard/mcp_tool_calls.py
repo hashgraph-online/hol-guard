@@ -87,6 +87,7 @@ def extract_mcp_command_text(
 
     return None
 
+
 def build_tool_call_artifact(
     *,
     harness: str,
@@ -778,6 +779,7 @@ def allow_tool_call(
         now,
     )
     return receipt
+
 
 def block_tool_call(
     *,
