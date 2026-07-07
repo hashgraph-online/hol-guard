@@ -537,8 +537,8 @@ def test_workspace_skills_excluded_for_hermes(tmp_path: Path) -> None:
         }
         assert "bare-metal-server" in skill_names, f"{harness} should discover .agents/skills/"
 
-    # Copilot and Antigravity also don't use .agents/skills/
-    for harness in ("copilot", "antigravity"):
+    # Copilot also doesn't use .agents/skills/
+    for harness in ("copilot",):
         artifacts = discover_shared_workspace_aibom_artifacts(
             harness,
             home_dir=tmp_path,

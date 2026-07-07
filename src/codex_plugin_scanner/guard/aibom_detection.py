@@ -52,23 +52,18 @@ _CODEX_WORKSPACE_SKILL_ROOTS = (".agents/skills",)
 _CODEX_HOME_SKILL_ROOTS = (".codex/skills", ".agents/skills")
 
 # Harnesses that natively discover skills from the shared ``.agents/skills``
-# workspace directory.  Other harnesses (e.g. Hermes, Copilot, Antigravity)
-# use their own skill directories and must not pick up Codex/OpenClaw-style
-# workspace skills.
-_WORKSPACE_CODEX_SKILL_HARNESSES = frozenset(
-    {
-        "codex",
-        "openclaw",
-        "opencode",
-        "claude-code",
-        "cursor",
-        "gemini",
-        "grok",
-        "kimi",
-        "pi",
-        "zcode",
-    }
-)
+# workspace directory.  Other harnesses (e.g. Hermes, Copilot) use their own
+# skill directories and must not pick up Codex/OpenClaw-style workspace skills.
+# Keep this set in sync with CANONICAL_HARNESS_VALUES in product_model.py.
+_WORKSPACE_CODEX_SKILL_HARNESSES = frozenset({
+    "codex",
+    "openclaw",
+    "opencode",
+    "claude-code",
+    "cursor",
+    "gemini",
+    "pi",
+})
 _STANDARDS_CONTEXT_ROOTS = (".", ".agents/context", "docs")
 _ROOT_INSTRUCTION_ROLE_NAMES: tuple[tuple[str, InstructionRole], ...] = (
     ("CLAUDE.md", "claude_md"),
