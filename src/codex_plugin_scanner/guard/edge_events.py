@@ -64,6 +64,33 @@ def build_approval_event(
     )
 
 
+def build_memory_decision_event_envelope(
+    *,
+    request_id: str,
+    decision_action: str,
+    occurred_at: str,
+    payload: dict[str, object],
+    device_id: str | None = None,
+    workspace_id: str | None = None,
+) -> GuardEventV1:
+    """Wrap a memory decision payload in the v1 cloud event envelope.
+
+    The event id and idempotency key include the decision action so an approve
+    and a block on the same request at the same instant stay distinct.
+    """
+    fingerprint = _fingerprint("approval.memory_decision", request_id, decision_action, occurred_at)
+    return GuardEventV1(
+        event_id=f"guard-event-{fingerprint[:32]}",
+        idempotency_key=f"approval.memory_decision:{request_id}:{decision_action}:{occurred_at}",
+        event_type="approval.memory_decision",
+        source="approval-center",
+        occurred_at=occurred_at,
+        workspace_id=workspace_id,
+        device_id=device_id,
+        payload=payload,
+    )
+
+
 def build_policy_event(
     *,
     policy_key: str,

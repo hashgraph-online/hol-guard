@@ -34,6 +34,7 @@ from .desktop_notifications import (
 from .incident import build_incident_context
 from .local_dashboard_session import build_local_dashboard_session_token
 from .local_supply_chain import build_local_supply_chain_posture
+from .memory_decision_outbox import enqueue_memory_decision_event
 from .models import (
     DECISION_SCOPE_VALUES,
     GUARD_ACTION_VALUES,
@@ -851,6 +852,41 @@ def _record_resolution_event(
             "local_once_fallback": local_once_fallback,
         },
         resolved_at,
+    )
+    _enqueue_memory_decision_for_resolution(
+        store,
+        request_id=request_id,
+        action=action,
+        scope=scope,
+        resolved_at=resolved_at,
+    )
+
+
+def _enqueue_memory_decision_for_resolution(
+    store: GuardStore,
+    *,
+    request_id: str,
+    action: str,
+    scope: str,
+    resolved_at: str,
+) -> None:
+    """Feed the local-to-cloud memory candidate pipeline for this decision.
+
+    Defensive by design: a missing request, missing cloud pairing, or any store
+    error must never break the local approval that already succeeded.
+    """
+    try:
+        request = store.get_approval_request(request_id)
+    except Exception:
+        request = None
+    if not request:
+        return
+    enqueue_memory_decision_event(
+        store,
+        request=request,
+        action=action,
+        scope=scope,
+        resolved_at=resolved_at,
     )
 
 
