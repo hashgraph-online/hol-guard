@@ -419,19 +419,9 @@ def list_approval_requests(
         clauses.append("created_at < ?")
         params.append(created_before)
     if search is not None:
-        search_clause = (
-            "(lower(artifact_name) like lower(?)"
-            " or lower(artifact_id) like lower(?)"
-            " or lower(coalesce(risk_summary, '')) like lower(?)"
-            " or lower(coalesce(launch_target, '')) like lower(?)"
-            " or lower(coalesce(action_identity, '')) like lower(?)"
-            " or lower(coalesce(action_envelope_json, '')) like lower(?)"
-            " or lower(coalesce(decision_v2_json, '')) like lower(?)"
-            " or lower(config_path) like lower(?))"
-        )
+        search_clause, search_params = _approval_search_clause(search)
         clauses.append(search_clause)
-        pattern = f"%{search}%"
-        params.extend([pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern])
+        params.extend(search_params)
     where_clause = f"where {' and '.join(clauses)}" if clauses else ""
     query = f"""
         select request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
@@ -492,6 +482,31 @@ def _column_expr(existing: set[str], column_name: str, fallback_sql: str) -> str
     return f"{fallback_sql} as {column_name}"
 
 
+def _approval_search_clause(search: str) -> tuple[str, list[object]]:
+    pattern = f"%{search}%"
+    columns = [
+        "artifact_name",
+        "artifact_id",
+        "risk_summary",
+        "risk_headline",
+        "trigger_summary",
+        "why_now",
+        "launch_summary",
+        "launch_target",
+        "raw_command_text",
+        "fallback_cli_command",
+        "review_command",
+        "action_identity",
+        "action_envelope_json",
+        "decision_v2_json",
+        "config_path",
+    ]
+    return (
+        "(" + " or ".join(f"lower(coalesce({column}, '')) like lower(?)" for column in columns) + ")",
+        [pattern] * len(columns),
+    )
+
+
 def resolve_approval_request(
     connection: sqlite3.Connection,
     request_id: str,
@@ -531,18 +546,9 @@ def count_approval_requests(
         clauses.append("harness = ?")
         params.append(harness)
     if search is not None:
-        clauses.append(
-            "(lower(artifact_name) like lower(?)"
-            " or lower(artifact_id) like lower(?)"
-            " or lower(coalesce(risk_summary, '')) like lower(?)"
-            " or lower(coalesce(launch_target, '')) like lower(?)"
-            " or lower(coalesce(action_identity, '')) like lower(?)"
-            " or lower(coalesce(action_envelope_json, '')) like lower(?)"
-            " or lower(coalesce(decision_v2_json, '')) like lower(?)"
-            " or lower(config_path) like lower(?))"
-        )
-        pattern = f"%{search}%"
-        params.extend([pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern])
+        search_clause, search_params = _approval_search_clause(search)
+        clauses.append(search_clause)
+        params.extend(search_params)
     where_clause = f"where {' and '.join(clauses)}" if clauses else ""
     row = connection.execute(f"select count(*) as total from approval_requests {where_clause}", params).fetchone()
     return int(row["total"]) if row is not None else 0
@@ -700,18 +706,9 @@ def _approval_summary_where_clause(
         clauses.append("(last_seen_at < ? or (last_seen_at = ? and request_id < ?))")
         params.extend([marker["last_seen_at"], marker["last_seen_at"], marker["request_id"]])
     if search is not None:
-        clauses.append(
-            "(lower(artifact_name) like lower(?)"
-            " or lower(artifact_id) like lower(?)"
-            " or lower(coalesce(risk_summary, '')) like lower(?)"
-            " or lower(coalesce(launch_target, '')) like lower(?)"
-            " or lower(coalesce(action_identity, '')) like lower(?)"
-            " or lower(coalesce(action_envelope_json, '')) like lower(?)"
-            " or lower(coalesce(decision_v2_json, '')) like lower(?)"
-            " or lower(config_path) like lower(?))"
-        )
-        pattern = f"%{search}%"
-        params.extend([pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern])
+        search_clause, search_params = _approval_search_clause(search)
+        clauses.append(search_clause)
+        params.extend(search_params)
     where_clause = f"where {' and '.join(clauses)}" if clauses else ""
     return where_clause, params
 
@@ -731,6 +728,9 @@ def _row_to_approval_summary(row: sqlite3.Row) -> dict[str, object]:
         "launch_target": row["launch_target"],
         "risk_summary": row["risk_summary"],
         "risk_headline": row["risk_headline"],
+        "raw_command_text": row["raw_command_text"],
+        "fallback_cli_command": row["fallback_cli_command"],
+        "review_command": str(row["review_command"]),
         "action_identity": row["action_identity"],
         "queue_group_id": row["queue_group_id"],
         "dedupe_count": int(row["dedupe_count"] or 1),
@@ -759,7 +759,7 @@ def list_approval_request_summary_rows(
         select request_id, harness, artifact_id, artifact_name, artifact_type, policy_action,
                changed_fields_json, source_scope, config_path, workspace, launch_target,
                risk_summary, risk_headline, action_identity, queue_group_id, dedupe_count,
-               created_at, last_seen_at, status
+               raw_command_text, fallback_cli_command, review_command, created_at, last_seen_at, status
         from approval_requests
         {where_clause}
         order by last_seen_at desc, request_id desc

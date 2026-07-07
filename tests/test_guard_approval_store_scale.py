@@ -292,6 +292,49 @@ class TestSearchFilter:
         results = list_approval_requests(conn, search="specialtool")
         assert len(results) == 1
 
+    def test_search_matches_raw_command_text_in_queue_pages(self) -> None:
+        conn = _make_conn()
+        req = _make_request()
+        base = dataclasses.asdict(req)
+        mod = GuardApprovalRequest(
+            **{
+                **base,
+                "request_id": str(uuid.uuid4()),
+                "artifact_name": "Bash",
+                "artifact_id": "codex:project:bash",
+                "raw_command_text": "hol-guard approvals bulk allow once",
+            }
+        )
+        _insert(conn, req)
+        _insert(conn, mod)
+
+        page = list_pending_approval_summaries(conn, search="bulk")
+
+        assert page["total_count"] == 1
+        assert page["items"][0]["request_id"] == mod.request_id
+        assert page["items"][0]["raw_command_text"] == "hol-guard approvals bulk allow once"
+
+    def test_search_matches_fallback_cli_command(self) -> None:
+        conn = _make_conn()
+        req = _make_request()
+        base = dataclasses.asdict(req)
+        mod = GuardApprovalRequest(
+            **{
+                **base,
+                "request_id": str(uuid.uuid4()),
+                "artifact_name": "Bash",
+                "artifact_id": "codex:project:bash",
+                "fallback_cli_command": "hol-guard approvals approve --reason bulk-import",
+            }
+        )
+        _insert(conn, req)
+        _insert(conn, mod)
+
+        results = list_approval_requests(conn, search="bulk-import")
+
+        assert len(results) == 1
+        assert results[0]["request_id"] == mod.request_id
+
     def test_search_no_match_returns_empty(self) -> None:
         conn = _make_conn()
         _insert(conn, _make_request())
