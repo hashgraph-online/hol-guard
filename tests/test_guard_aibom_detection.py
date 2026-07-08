@@ -548,8 +548,7 @@ def test_workspace_artifacts_excluded_for_hermes(tmp_path: Path) -> None:
         workspace_dir=workspace,
     )
     assert hermes_artifacts == (), (
-        f"Hermes must not discover workspace artifacts, got: "
-        f"{[(a.artifact_type, a.name) for a in hermes_artifacts]}"
+        f"Hermes must not discover workspace artifacts, got: {[(a.artifact_type, a.name) for a in hermes_artifacts]}"
     )
 
     # OpenClaw natively uses .agents/skills — confirm it discovers skills.
@@ -558,9 +557,7 @@ def test_workspace_artifacts_excluded_for_hermes(tmp_path: Path) -> None:
         home_dir=tmp_path,
         workspace_dir=workspace,
     )
-    openclaw_skill_names = {
-        a.name for a in openclaw_artifacts if a.artifact_type == "skill"
-    }
+    openclaw_skill_names = {a.name for a in openclaw_artifacts if a.artifact_type == "skill"}
     assert "bare-metal-server" in openclaw_skill_names
 
     # Codex should also discover everything
@@ -582,8 +579,7 @@ def test_workspace_artifacts_excluded_for_hermes(tmp_path: Path) -> None:
         workspace_dir=workspace,
     )
     assert copilot_artifacts == (), (
-        f"Copilot must not discover workspace artifacts, got: "
-        f"{[(a.artifact_type, a.name) for a in copilot_artifacts]}"
+        f"Copilot must not discover workspace artifacts, got: {[(a.artifact_type, a.name) for a in copilot_artifacts]}"
     )
 
 

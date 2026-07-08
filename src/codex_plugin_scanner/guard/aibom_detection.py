@@ -181,6 +181,7 @@ def instruction_role_for_path(path: Path) -> InstructionRole | None:
                         return role
     return None
 
+
 def discover_shared_workspace_aibom_artifacts(
     harness: str,
     *,
