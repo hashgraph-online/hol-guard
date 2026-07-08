@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..inventory_cisco import run_cisco_inventory_scans
 from ..inventory_contract import GuardAgentInventorySnapshot, inventory_snapshot_from_detection
 from ..models import GuardArtifact, HarnessDetection
@@ -58,12 +59,17 @@ class OpenClawHarnessAdapter(HarnessAdapter):
             found_paths.append(str(path))
             artifacts.extend(config_artifacts(context, path, payload))
         artifacts.extend(skill_artifacts(context, payload, found_paths))
-        return HarnessDetection(
+        detection = HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or _command_available(self.executable),
             command_available=_command_available(self.executable),
             config_paths=tuple(found_paths),
             artifacts=tuple(artifacts),
+        )
+        return extend_detection_with_workspace_aibom(
+            detection,
+            home_dir=context.home_dir,
+            workspace_dir=context.workspace_dir,
         )
 
     def inventory_snapshot(

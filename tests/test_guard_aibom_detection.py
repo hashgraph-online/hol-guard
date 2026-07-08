@@ -218,7 +218,7 @@ def test_inventory_snapshot_includes_workspace_instructions(tmp_path: Path) -> N
     workspace = tmp_path / "repo"
     workspace.mkdir()
     (workspace / "AGENTS.md").write_text("repo policy\n", encoding="utf-8")
-    snapshot = inventory_snapshot_from_detection(
+    detection = extend_detection_with_workspace_aibom(
         HarnessDetection(
             harness="codex",
             installed=True,
@@ -226,6 +226,11 @@ def test_inventory_snapshot_includes_workspace_instructions(tmp_path: Path) -> N
             config_paths=(),
             artifacts=(),
         ),
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+    )
+    snapshot = inventory_snapshot_from_detection(
+        detection,
         generated_at="2026-06-10T00:00:00Z",
         home_dir=tmp_path,
         workspace_dir=workspace,
@@ -512,12 +517,13 @@ def test_cursor_detect_extends_workspace_aibom(tmp_path: Path) -> None:
     assert any(artifact.artifact_type == "instruction" for artifact in extended.artifacts)
 
 
-def test_workspace_artifacts_excluded_for_hermes(tmp_path: Path) -> None:
+def test_hermes_inventory_snapshot_excludes_workspace_artifacts(tmp_path: Path) -> None:
     """Hermes runs on a remote server and must not pick up local workspace files.
 
-    Hermes uses ~/.hermes/skills/, not .agents/skills/, and must not discover
-    PRODUCT.md, SECURITY.md, .cursor/rules, or marketplace plugins from the
-    local developer workspace.
+    inventory_snapshot_from_detection() must not call workspace artifact discovery.
+    Workspace artifacts are only added by extend_detection_with_workspace_aibom()
+    in the detect() method of harnesses that natively use them (Codex, Cursor,
+    OpenClaw, etc.). Hermes has its own detect() and must not inherit workspace files.
     """
     workspace = tmp_path / "repo"
     workspace.mkdir()
@@ -530,7 +536,7 @@ def test_workspace_artifacts_excluded_for_hermes(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    # Instruction files
+    # Instruction files that would have been picked up by workspace discovery
     (workspace / "PRODUCT.md").write_text("# Product\n", encoding="utf-8")
     (workspace / "SECURITY.md").write_text("# Security\n", encoding="utf-8")
     (workspace / "AGENTS.md").write_text("# Agents\n", encoding="utf-8")
@@ -541,74 +547,7 @@ def test_workspace_artifacts_excluded_for_hermes(tmp_path: Path) -> None:
     cursor_rules.mkdir(parents=True)
     (cursor_rules / "lean-ctx.mdc").write_text("# lean-ctx\n", encoding="utf-8")
 
-    # Hermes must NOT discover any workspace AIBOM artifacts
-    hermes_artifacts = discover_shared_workspace_aibom_artifacts(
-        "hermes",
-        home_dir=tmp_path,
-        workspace_dir=workspace,
-    )
-    assert hermes_artifacts == (), (
-        f"Hermes must not discover workspace artifacts, got: {[(a.artifact_type, a.name) for a in hermes_artifacts]}"
-    )
-
-    # OpenClaw natively uses .agents/skills — confirm it discovers skills.
-    openclaw_artifacts = discover_shared_workspace_aibom_artifacts(
-        "openclaw",
-        home_dir=tmp_path,
-        workspace_dir=workspace,
-    )
-    openclaw_skill_names = {a.name for a in openclaw_artifacts if a.artifact_type == "skill"}
-    assert "bare-metal-server" in openclaw_skill_names
-
-    # Codex should also discover everything
-    codex_artifacts = discover_shared_workspace_aibom_artifacts(
-        "codex",
-        home_dir=tmp_path,
-        workspace_dir=workspace,
-    )
-    codex_names = {a.name for a in codex_artifacts}
-    assert "bare-metal-server" in codex_names
-    assert "PRODUCT.md" in codex_names
-    assert "SECURITY.md" in codex_names
-    assert "AGENTS.md" in codex_names
-
-    # Copilot also doesn't use workspace AIBOM
-    copilot_artifacts = discover_shared_workspace_aibom_artifacts(
-        "copilot",
-        home_dir=tmp_path,
-        workspace_dir=workspace,
-    )
-    assert copilot_artifacts == (), (
-        f"Copilot must not discover workspace artifacts, got: {[(a.artifact_type, a.name) for a in copilot_artifacts]}"
-    )
-
-
-def test_workspace_artifacts_excluded_for_hermes_inventory_snapshot(tmp_path: Path) -> None:
-    """Full inventory snapshot for Hermes must not include any workspace artifacts.
-
-    Hermes inventory_snapshot() calls inventory_snapshot_from_detection() which
-    must not pick up PRODUCT.md, SECURITY.md, .cursor/rules, or .agents/skills.
-    """
-    workspace = tmp_path / "repo"
-    workspace.mkdir()
-
-    # Workspace skill
-    skill_dir = workspace / ".agents" / "skills" / "bare-metal-server"
-    skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(
-        "---\nname: bare-metal-server\ndescription: test\n---\nbody\n",
-        encoding="utf-8",
-    )
-
-    # Instruction files
-    (workspace / "PRODUCT.md").write_text("# Product\n", encoding="utf-8")
-    (workspace / "SECURITY.md").write_text("# Security\n", encoding="utf-8")
-
-    # Cursor rules
-    cursor_rules = workspace / ".cursor" / "rules"
-    cursor_rules.mkdir(parents=True)
-    (cursor_rules / "lean-ctx.mdc").write_text("# lean-ctx\n", encoding="utf-8")
-
+    # Hermes detect() only scans ~/.hermes/ — no workspace artifacts
     context = HarnessContext(
         home_dir=tmp_path,
         workspace_dir=workspace,
@@ -624,4 +563,13 @@ def test_workspace_artifacts_excluded_for_hermes_inventory_snapshot(tmp_path: Pa
     assert "bare-metal-server" not in item_names
     assert "PRODUCT.md" not in item_names
     assert "SECURITY.md" not in item_names
+    assert "AGENTS.md" not in item_names
     assert "lean-ctx" not in item_names
+
+    # OpenClaw SHOULD discover workspace artifacts via extend_detection_with_workspace_aibom()
+    openclaw_snapshot = OpenClawHarnessAdapter().inventory_snapshot(
+        context,
+        generated_at="2026-01-01T00:00:00Z",
+    )
+    openclaw_names = {item.display_name for item in openclaw_snapshot.items}
+    assert "AGENTS.md" in openclaw_names

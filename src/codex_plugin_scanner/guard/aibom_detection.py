@@ -51,13 +51,11 @@ _CURSOR_RULE_PATTERNS = ("*.mdc", "*.md")
 _CODEX_WORKSPACE_SKILL_ROOTS = (".agents/skills",)
 _CODEX_HOME_SKILL_ROOTS = (".codex/skills", ".agents/skills")
 
-# Harnesses that natively use shared workspace AIBOM artifacts — skills in
-# ``.agents/skills``, instruction files (CLAUDE.md, PRODUCT.md, …), cursor
-# rules, and marketplace plugins.  Hosted runtime harnesses (Hermes,
-# OpenClaw, Copilot) run on remote servers and must not pick up local
-# workspace files that belong to other harnesses on the developer's machine.
+# Harnesses that natively discover skills from the shared ``.agents/skills``
+# workspace directory.  Other harnesses (e.g. Hermes, Copilot) use their own
+# skill directories and must not pick up Codex/OpenClaw-style workspace skills.
 # Keep this set in sync with CANONICAL_HARNESS_VALUES in product_model.py.
-_WORKSPACE_AIBOM_HARNESSES = frozenset(
+_WORKSPACE_CODEX_SKILL_HARNESSES = frozenset(
     {
         "codex",
         "openclaw",
@@ -188,8 +186,6 @@ def discover_shared_workspace_aibom_artifacts(
     home_dir: Path,
     workspace_dir: Path,
 ) -> tuple[GuardArtifact, ...]:
-    if harness not in _WORKSPACE_AIBOM_HARNESSES:
-        return ()
     if not workspace_dir.is_dir():
         return ()
     try:
@@ -200,16 +196,17 @@ def discover_shared_workspace_aibom_artifacts(
     artifacts.extend(_discover_agents_md(harness, workspace_dir=workspace_dir))
     artifacts.extend(_discover_standards_context_files(harness, workspace_dir=workspace_dir))
     artifacts.extend(_discover_cursor_rules(harness, workspace_dir=workspace_dir))
-    artifacts.extend(
-        _discover_codex_skills(
-            harness,
-            workspace_dir=workspace_dir,
-            home_dir=home_dir,
-            skill_roots=_CODEX_WORKSPACE_SKILL_ROOTS,
-            source_scope="project",
-            artifact_scope="project",
+    if harness in _WORKSPACE_CODEX_SKILL_HARNESSES:
+        artifacts.extend(
+            _discover_codex_skills(
+                harness,
+                workspace_dir=workspace_dir,
+                home_dir=home_dir,
+                skill_roots=_CODEX_WORKSPACE_SKILL_ROOTS,
+                source_scope="project",
+                artifact_scope="project",
+            )
         )
-    )
     artifacts.extend(_discover_codex_marketplace_plugins(harness, workspace_dir=workspace_dir))
     return tuple(artifacts)
 

@@ -397,16 +397,6 @@ def inventory_snapshot_from_detection(
 ) -> GuardAgentInventorySnapshot:
     harness = str(getattr(detection, "harness", "unknown"))
     artifacts: list[object] = list(getattr(detection, "artifacts", ()))
-    if workspace_dir is not None:
-        existing_ids = {str(getattr(artifact, "artifact_id", "")) for artifact in artifacts}
-        for artifact in _aibom_detection_module().discover_shared_workspace_aibom_artifacts(
-            harness,
-            home_dir=home_dir,
-            workspace_dir=workspace_dir,
-        ):
-            if artifact.artifact_id not in existing_ids:
-                artifacts.append(artifact)
-                existing_ids.add(artifact.artifact_id)
     artifact_tuple = tuple(artifacts)
     items: list[GuardAgentInventoryItem] = []
     for artifact in artifact_tuple:
