@@ -238,7 +238,7 @@ def test_direct_app_server_uses_private_control_directory(
     assert pid_mode == 0o600
 
 
-def test_direct_app_server_does_not_duplicate_live_tracked_process(
+def test_direct_app_server_recovers_when_pid_marker_is_stale(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -246,13 +246,25 @@ def test_direct_app_server_does_not_duplicate_live_tracked_process(
     socket_path.parent.mkdir(parents=True)
     (socket_path.parent / "hol-guard-app-server.pid").write_text("4321", encoding="utf-8")
 
-    monkeypatch.setattr(codex_remote_control, "_wait_for_socket", lambda _path: False)
+    wait_calls = 0
+    launches = 0
+
+    def fake_wait(_path: Path) -> bool:
+        nonlocal wait_calls
+        wait_calls += 1
+        return wait_calls > 2
+
+    class FakeProcess:
+        pid = 9876
+
+    def fake_popen(*args, **kwargs):
+        nonlocal launches
+        launches += 1
+        return FakeProcess()
+
+    monkeypatch.setattr(codex_remote_control, "_wait_for_socket", fake_wait)
     monkeypatch.setattr(codex_remote_control.os, "kill", lambda _pid, _signal: None)
-
-    def fail_popen(*args, **kwargs):
-        raise AssertionError("a tracked live app-server must not be duplicated")
-
-    monkeypatch.setattr(codex_remote_control.subprocess, "Popen", fail_popen)
+    monkeypatch.setattr(codex_remote_control.subprocess, "Popen", fake_popen)
 
     started = codex_remote_control._start_direct_app_server(
         executable="codex",
@@ -260,4 +272,6 @@ def test_direct_app_server_does_not_duplicate_live_tracked_process(
         environment={},
     )
 
-    assert started is False
+    assert started is True
+    assert launches == 1
+    assert (socket_path.parent / "hol-guard-app-server.pid").read_text(encoding="utf-8") == "9876"

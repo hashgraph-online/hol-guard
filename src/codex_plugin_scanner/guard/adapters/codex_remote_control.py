@@ -151,8 +151,8 @@ def _start_direct_app_server(
         socket_path.parent.mkdir(parents=True, exist_ok=True)
         socket_path.parent.chmod(0o700)
         pid_path = socket_path.parent / "hol-guard-app-server.pid"
-        if _tracked_process_is_live(pid_path):
-            return _wait_for_socket(socket_path)
+        if _tracked_process_is_live(pid_path) and _wait_for_socket(socket_path):
+            return True
         process = subprocess.Popen(
             [executable, "app-server", "--listen", f"unix://{socket_path}"],
             stdin=subprocess.DEVNULL,
