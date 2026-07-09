@@ -106,19 +106,27 @@ class TestChunkInventoryEvents:
         assert result[1]["payload"]["snapshot"]["snapshotId"] == "hermes:snapshot:abc-chunk-2-of-3"
         assert result[2]["payload"]["snapshot"]["snapshotId"] == "hermes:snapshot:abc-chunk-3-of-3"
 
-    def test_chunked_events_preserve_non_items_fields(self):
-        """Chunked events keep findings, drift, sources, redactionReport."""
+    def test_findings_scoped_to_first_chunk(self):
+        """Findings/sources/drift appear only in the first chunk to avoid
+        duplication on the portal side. Items are accumulated, metadata is not."""
         items = [_make_item(f"item-{i}") for i in range(150)]
         event = _make_event("snap-1", items)
         event["payload"]["snapshot"]["findings"] = [{"findingId": "f1"}]
         event["payload"]["snapshot"]["sources"] = [{"sourceId": "s1"}]
         result = _chunk_inventory_events([event], max_items=100)
         assert len(result) == 2
-        for chunk in result:
-            snap = chunk["payload"]["snapshot"]
-            assert snap["findings"] == [{"findingId": "f1"}]
-            assert snap["sources"] == [{"sourceId": "s1"}]
-            assert snap["agentId"] == "hermes:local"
+        # First chunk keeps findings
+        first = result[0]["payload"]["snapshot"]
+        assert first["findings"] == [{"findingId": "f1"}]
+        assert first["sources"] == [{"sourceId": "s1"}]
+        # Second chunk has empty findings/drift/sources
+        second = result[1]["payload"]["snapshot"]
+        assert second["findings"] == []
+        assert second["drift"] == []
+        assert second["sources"] == []
+        # Both chunks keep agentId
+        assert first["agentId"] == "hermes:local"
+        assert second["agentId"] == "hermes:local"
 
     def test_mixed_events(self):
         """A mix of small and large events chunk correctly."""

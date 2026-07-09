@@ -444,11 +444,20 @@ def sync_aibom_snapshots(
     all_statuses: list[dict[str, object]] = []
     synced_at = generated_at
     batches_sent = 0
-    # Adaptive batch size: when events were chunked (items >= _AIBOM_MAX_ITEMS_PER_EVENT),
+    # Adaptive batch size: when events were chunked (items >= threshold),
     # send 1 per POST to stay within Cloudflare's 100s origin timeout.
+    def _event_item_count(e: dict[str, object]) -> int:
+        payload = e.get("payload")
+        if not isinstance(payload, dict):
+            return 0
+        snapshot = payload.get("snapshot")
+        if not isinstance(snapshot, dict):
+            return 0
+        items = snapshot.get("items")
+        return len(items) if isinstance(items, list) else 0
+
     effective_batch_size = 1 if any(
-        len(e.get("payload", {}).get("snapshot", {}).get("items", [])) >= _AIBOM_MAX_ITEMS_PER_EVENT
-        for e in events
+        _event_item_count(e) >= _AIBOM_MAX_ITEMS_PER_EVENT for e in events
     ) else _AIBOM_SYNC_BATCH_SIZE
     for batch_start in range(0, len(events), effective_batch_size):
         batch = events[batch_start : batch_start + effective_batch_size]
@@ -842,16 +851,23 @@ def _chunk_inventory_events(
 
         original_snapshot_id = str(
             event.get("idempotencyKey") or snapshot.get("snapshotId") or ""
-        )
+        ).strip() or str(uuid.uuid4())
         total_chunks = (len(items) + max_items - 1) // max_items
         for chunk_index in range(total_chunks):
             chunk_start = chunk_index * max_items
             chunk_items = items[chunk_start : chunk_start + max_items]
+            # Scope non-item fields (findings, drift, sources, etc.) to the
+            # first chunk only to avoid duplicating them across chunks on the
+            # portal side.  Items are accumulated; metadata is not.
             chunk_snapshot = {**snapshot, "items": chunk_items}
-            if original_snapshot_id:
-                chunk_snapshot["snapshotId"] = (
-                    f"{original_snapshot_id}-chunk-{chunk_index + 1}-of-{total_chunks}"
-                )
+            if chunk_index > 0:
+                chunk_snapshot["findings"] = []
+                chunk_snapshot["drift"] = []
+                chunk_snapshot["sources"] = []
+                chunk_snapshot["dockerProofs"] = []
+            chunk_snapshot["snapshotId"] = (
+                f"{original_snapshot_id}-chunk-{chunk_index + 1}-of-{total_chunks}"
+            )
             chunk_event = {
                 **event,
                 "eventId": str(uuid.uuid4()),
