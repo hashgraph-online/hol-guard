@@ -232,6 +232,82 @@ def test_workspace_package_approval_reuses_same_lockfile_across_worktrees(tmp_pa
     )
 
 
+def test_workspace_package_approval_reprompts_when_explicit_target_registry_config_changes(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    workspace_dir = tmp_path / "workspace"
+    worktree_dir = tmp_path / "workspace-worktree"
+    workspace_dir.mkdir()
+    worktree_dir.mkdir()
+    (workspace_dir / ".npmrc").write_text("registry=https://registry.npmjs.org/\n", encoding="utf-8")
+    (worktree_dir / ".npmrc").write_text("registry=https://packages.example.invalid/\n", encoding="utf-8")
+    command = ["pnpm", "add", "eslint"]
+
+    baseline_payload, baseline_rc = build_package_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=True,
+        now="2026-06-14T00:00:00Z",
+        config=None,
+        unsafe_raw_output=False,
+        timeout_seconds=30,
+    )
+    assert baseline_rc == 2
+    receipt = baseline_payload["receipt"]
+    assert isinstance(receipt, dict)
+    store.add_approval_request(
+        GuardApprovalRequest(
+            request_id="req-pnpm-target",
+            harness="guard-cli",
+            artifact_id=str(receipt["artifact_id"]),
+            artifact_name="pnpm add eslint",
+            artifact_type="package_request",
+            artifact_hash=str(receipt["artifact_hash"]),
+            policy_action="require-reapproval",
+            recommended_scope="workspace",
+            changed_fields=("package_request",),
+            source_scope="project",
+            config_path=str(workspace_dir / "hol-guard.toml"),
+            workspace=str(workspace_dir),
+            launch_target="pnpm add eslint",
+            review_command="hol-guard approvals approve req-pnpm-target",
+            approval_url="http://127.0.0.1:4455/approvals/req-pnpm-target",
+        ),
+        "2026-06-14T00:00:30Z",
+    )
+    apply_approval_resolution(
+        store=store,
+        request_id="req-pnpm-target",
+        action="allow",
+        scope="workspace",
+        workspace=str(workspace_dir),
+        reason="trusted registry",
+        now="2026-06-14T00:01:00Z",
+    )
+
+    retry_payload, retry_rc = build_package_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=worktree_dir,
+        dry_run=True,
+        now="2026-06-14T00:02:00Z",
+        config=None,
+        unsafe_raw_output=False,
+        timeout_seconds=30,
+    )
+
+    assert retry_rc == 2
+    assert retry_payload["verdict"]["action"] == "review"
+    retry_receipt = retry_payload["receipt"]
+    assert isinstance(retry_receipt, dict)
+    assert retry_receipt["artifact_hash"] != receipt["artifact_hash"]
+    evaluation = retry_payload["supply_chain_evaluation"]
+    assert isinstance(evaluation, dict)
+    assert not any(
+        isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
+        for reason in evaluation.get("reasons", [])
+    )
+
 def test_package_policy_workspace_candidates_prefer_portable_scope(tmp_path: Path) -> None:
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
