@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import signal
 import socket
 import subprocess
 import time
@@ -11,6 +12,7 @@ from pathlib import Path
 
 _REMOTE_CONTROL_START_TIMEOUT_SECONDS = 10
 _REMOTE_CONTROL_READY_TIMEOUT_SECONDS = 3.0
+_REMOTE_CONTROL_STOP_TIMEOUT_SECONDS = 1.0
 _REMOTE_INCOMPATIBLE_SUBCOMMANDS = frozenset(
     {
         "app-server",
@@ -151,8 +153,17 @@ def _start_direct_app_server(
         socket_path.parent.mkdir(parents=True, exist_ok=True)
         socket_path.parent.chmod(0o700)
         pid_path = socket_path.parent / "hol-guard-app-server.pid"
-        if _tracked_process_is_live(pid_path) and _wait_for_socket(socket_path):
-            return True
+        tracked_pid = _tracked_process_pid(pid_path)
+        if tracked_pid is not None:
+            tracked_command = _tracked_process_command(tracked_pid)
+            if tracked_command is None:
+                return False
+            listener_uri = f"unix://{socket_path}"
+            if "app-server" in tracked_command and listener_uri in tracked_command:
+                if _wait_for_socket(socket_path):
+                    return True
+                if not _stop_tracked_process(tracked_pid):
+                    return False
         process = subprocess.Popen(
             [executable, "app-server", "--listen", f"unix://{socket_path}"],
             stdin=subprocess.DEVNULL,
@@ -168,14 +179,59 @@ def _start_direct_app_server(
     return _wait_for_socket(socket_path)
 
 
-def _tracked_process_is_live(pid_path: Path) -> bool:
+def _tracked_process_pid(pid_path: Path) -> int | None:
     try:
         pid_text = pid_path.read_text(encoding="utf-8").strip()
         if not pid_text.isascii() or not pid_text.isdecimal():
-            return False
-        os.kill(int(pid_text), 0)
-    except PermissionError:
-        return True
+            return None
+        pid = int(pid_text)
     except (OSError, ValueError):
+        return None
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return pid
+    except OSError:
+        return None
+    return pid
+
+
+def _tracked_process_command(pid: int) -> str | None:
+    proc_cmdline = Path("/proc") / str(pid) / "cmdline"
+    try:
+        command = proc_cmdline.read_bytes().replace(b"\0", b"\n").decode("utf-8", errors="replace").strip()
+        if command:
+            return command
+    except OSError:
+        pass
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="],
+            capture_output=True,
+            text=True,
+            timeout=1,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    command = result.stdout.strip()
+    return command if result.returncode == 0 and command else None
+
+
+def _stop_tracked_process(pid: int) -> bool:
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return True
+    except OSError:
         return False
-    return True
+    deadline = time.monotonic() + _REMOTE_CONTROL_STOP_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        except OSError:
+            return False
+        time.sleep(0.05)
+    return False
