@@ -1,0 +1,59 @@
+name: Publish DevContainer Feature
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'devcontainer-features/**'
+  pull_request:
+    paths:
+      - 'devcontainer-features/**'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Validate feature metadata"
+        run: |
+          echo "Validating devcontainer-feature.json files..."
+          for dir in devcontainer-features/*/; do
+            if [ -f "${dir}devcontainer-feature.json" ]; then
+              echo "Checking ${dir}devcontainer-feature.json"
+              python3 -c "import json; json.load(open('${dir}devcontainer-feature.json'))" \
+                || { echo "Invalid JSON: ${dir}devcontainer-feature.json"; exit 1; }
+              echo "  OK"
+            fi
+          done
+
+      - name: "Check install scripts exist"
+        run: |
+          for dir in devcontainer-features/*/; do
+            feature_name=$(basename "$dir")
+            if [ -f "${dir}install.sh" ]; then
+              echo "  ${feature_name}: install.sh found"
+            else
+              echo "ERROR: ${dir}install.sh not found"
+              exit 1
+            fi
+          done
+
+  publish:
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Publish features to GHCR"
+        uses: devcontainers/action@v1
+        with:
+          publish-features: "true"
+          base-path-to-features: "devcontainer-features"
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
