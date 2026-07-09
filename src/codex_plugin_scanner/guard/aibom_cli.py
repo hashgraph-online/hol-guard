@@ -469,6 +469,7 @@ def sync_aibom_snapshots(
             data=body,
             extra_headers=None,
         )
+        auth_refresh_retried = False
         try:
             payload = runner._urlopen_json_with_timeout_retry(
                 request=request,
@@ -476,7 +477,24 @@ def sync_aibom_snapshots(
                 retry_timeout_seconds=120,
             )
         except urllib.error.HTTPError as error:
-            if error.code == 404:
+            if error.code == 401 and not auth_refresh_retried:
+                auth_refresh_retried = True
+                resolved_auth_context = runner._resolve_guard_sync_auth_context(
+                    store, force_refresh=True
+                )
+                request = runner._guard_sync_request(
+                    resolved_auth_context,
+                    request_url=sync_url,
+                    method="POST",
+                    data=body,
+                    extra_headers=None,
+                )
+                payload = runner._urlopen_json_with_timeout_retry(
+                    request=request,
+                    timeout_seconds=90,
+                    retry_timeout_seconds=120,
+                )
+            elif error.code == 404:
                 synced_at = generated_at
                 store.set_sync_payload(
                     _AIBOM_GUARD_EVENTS_BACKOFF_KEY,
