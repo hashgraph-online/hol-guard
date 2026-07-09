@@ -16,7 +16,7 @@
       "type": "string",
       "enum": ["none", "auto", "codex", "claude-code", "cursor", "gemini", "opencode", "pi"],
       "default": "auto",
-      "description": "Which AI harness to configure HOL Guard for during install (auto = detect)"
+      "description": "Which AI harness to configure HOL Guard for during install. Guard auto-detects installed harnesses; the selected value is informational. Use 'none' to skip init."
     },
     "strictMode": {
       "type": "boolean",

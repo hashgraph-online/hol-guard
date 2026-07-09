@@ -14,7 +14,7 @@ echo "  https://hol.org/guard"
 echo "================================================"
 
 # Ensure Python is available
-if ! command -v python3 &>/dev/null; then
+if ! command -v python3 >/dev/null 2>&1; then
     echo "ERROR: Python 3.10+ is required. Please install the Python feature first."
     echo "  Add to devcontainer.json: \"ghcr.io/devcontainers/features/python\""
     exit 1
@@ -31,11 +31,20 @@ if [ "$MAJOR" -lt 3 ] || { [ "$MAJOR" -eq 3 ] && [ "$MINOR" -lt 10 ]; }; then
     exit 1
 fi
 
+# Validate VERSION to prevent shell injection via eval/su -c.
+# Only "latest" or dotted version numbers (e.g. "2.0.1004") are allowed.
+if [ "$VERSION" != "latest" ]; then
+    if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+        echo "ERROR: Invalid version '${VERSION}'. Use 'latest' or a version like '2.0.1004'."
+        exit 1
+    fi
+fi
+
 # Determine the target non-root user (devcontainer provides these env vars)
 USERNAME="${_REMOTE_USER:-${_CONTAINER_USER:-auto}}"
 if [ "${USERNAME}" = "auto" ] || [ "${USERNAME}" = "root" ]; then
     for u in vscode node codespace; do
-        if id "$u" &>/dev/null; then
+        if id "$u" >/dev/null 2>&1; then
             USERNAME="$u"
             break
         fi
@@ -45,76 +54,95 @@ if [ "${USERNAME}" = "auto" ]; then
     USERNAME="root"
 fi
 
-USER_HOME=$(getent passwd "${USERNAME}" | cut -d: -f6 || echo "/home/${USERNAME}")
+# Resolve the user's home directory; never guess /home/root.
+if [ "${USERNAME}" = "root" ]; then
+    USER_HOME="/root"
+else
+    USER_HOME=$(getent passwd "${USERNAME}" 2>/dev/null | cut -d: -f6 || true)
+    if [ -z "$USER_HOME" ]; then
+        USER_HOME="/home/${USERNAME}"
+    fi
+fi
 echo "Installing for user: ${USERNAME} (${USER_HOME})"
 
-# Run a command as the target user
+# Run a command as the target user. Uses exec for root (no shell overhead)
+# and su for non-root. The command argument must be a pre-validated argv
+# string — never interpolate untrusted input.
 run_as_user() {
     if [ "${USERNAME}" = "root" ]; then
-        eval "$1"
+        "$@"
     else
-        su "${USERNAME}" -c "$1"
+        su "${USERNAME}" -c "$*"
     fi
 }
 
-# Install pipx if not present (handling PEP 668 externally-managed-environment)
-if ! command -v pipx &>/dev/null && ! run_as_user "command -v pipx &>/dev/null"; then
+# Check if a binary is available in the target user's PATH.
+user_has() {
+    if [ "${USERNAME}" = "root" ]; then
+        command -v "$1" >/dev/null 2>&1
+    else
+        su "${USERNAME}" -c "command -v $1" >/dev/null 2>&1
+    fi
+}
+
+# Install pipx if not present in the target user's PATH (PEP 668-safe).
+if ! user_has pipx; then
     echo "Installing pipx..."
-    if command -v apt-get &>/dev/null; then
+    if command -v apt-get >/dev/null 2>&1; then
         export DEBIAN_FRONTEND=noninteractive
         apt-get update && apt-get install -y pipx
-    elif command -v apk &>/dev/null; then
+        apt-get clean && rm -rf /var/lib/apt/lists/*
+    elif command -v apk >/dev/null 2>&1; then
         apk add pipx
-    elif command -v dnf &>/dev/null; then
+        rm -rf /var/cache/apk/*
+    elif command -v dnf >/dev/null 2>&1; then
         dnf install -y pipx
+        dnf clean all
     else
-        run_as_user "python3 -m pip install --user pipx || python3 -m pip install --user pipx --break-system-packages"
+        # Fallback: install into the user's site-packages.
+        # --break-system-packages without --user installs into the system
+        # site-packages (the correct path when PEP 668 is active).
+        run_as_user python3 -m pip install --break-system-packages pipx
     fi
 fi
 
 # Ensure pipx is in the user's PATH
-run_as_user "pipx ensurepath &>/dev/null || ${USER_HOME}/.local/bin/pipx ensurepath &>/dev/null" || true
+run_as_user pipx ensurepath >/dev/null 2>&1 || true
 
 # Determine pipx binary path
 PIPX_BIN="pipx"
-if ! run_as_user "command -v pipx &>/dev/null"; then
+if ! user_has pipx; then
     PIPX_BIN="${USER_HOME}/.local/bin/pipx"
 fi
 
 # Install hol-guard (--force for idempotent re-runs)
 if [ "$VERSION" = "latest" ]; then
     echo "Installing HOL Guard (latest)..."
-    run_as_user "${PIPX_BIN} install --force hol-guard"
+    run_as_user "${PIPX_BIN}" install --force hol-guard
 else
     echo "Installing HOL Guard v${VERSION}..."
-    run_as_user "${PIPX_BIN} install --force hol-guard==${VERSION}"
+    run_as_user "${PIPX_BIN}" install --force "hol-guard==${VERSION}"
 fi
 
 # Determine hol-guard binary path
 GUARD_BIN="hol-guard"
-if ! run_as_user "command -v hol-guard &>/dev/null"; then
+if ! user_has hol-guard; then
     GUARD_BIN="${USER_HOME}/.local/bin/hol-guard"
 fi
 
-# Initialize for harness if requested
+# Initialize for harness if requested.
+# The Guard CLI auto-detects installed harnesses via `init --yes`.
+# A specific harness name is informational only — it does not change
+# the init command, since the CLI has no --harness flag. The harness
+# will be configured automatically if it is installed in the container.
 if [ "$INIT_HARNESS" != "none" ]; then
     echo ""
-    echo "Initializing HOL Guard for harness: ${INIT_HARNESS}..."
-    # The Guard CLI auto-detects installed harnesses. --yes makes init
-    # non-interactive for devcontainer builds.
-    if [ "$INIT_HARNESS" = "auto" ]; then
-        run_as_user "${GUARD_BIN} init --yes"
-    else
-        # No --harness flag exists yet; use --yes for non-interactive auto-detect.
-        # The specified harness will be detected if installed in the container.
-        echo "Note: hol-guard init auto-detects installed harnesses."
-        echo "  Specified harness '${INIT_HARNESS}' will be configured if found."
-        run_as_user "${GUARD_BIN} init --yes"
-    fi
+    echo "Initializing HOL Guard (harness: ${INIT_HARNESS})..."
+    run_as_user "${GUARD_BIN}" init --yes
 
     if [ "$STRICT_MODE" = "true" ]; then
         echo "Enabling strict mode..."
-        run_as_user "${GUARD_BIN} settings set security-level strict"
+        run_as_user "${GUARD_BIN}" settings set security-level strict
     fi
 fi
 
