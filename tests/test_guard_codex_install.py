@@ -75,6 +75,39 @@ def test_guard_codex_hook_command_does_not_pin_custom_guard_home_in_real_global_
     assert str(stale_guard_home) not in command
 
 
+def test_guard_codex_hook_command_uses_lightweight_authenticated_daemon_bridge(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    guard_home = tmp_path / "guard-home"
+
+    command = codex_adapter._hook_command(
+        HarnessContext(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            guard_home=guard_home,
+        )
+    )
+    tokens = shlex.split(command)
+    bridge_config = json.loads(tokens[2])
+
+    assert Path(tokens[1]).name == "codex_daemon_hook_bridge.py"
+    assert bridge_config["state_path"] == str(guard_home / "daemon-state.json")
+    assert bridge_config["query"].startswith("guard-home=")
+    assert bridge_config["fallback_command"][:3] == [
+        sys.executable,
+        "-m",
+        "codex_plugin_scanner.cli",
+    ]
+    assert bridge_config["start_command"][0] == sys.executable
+    assert bridge_config["hook_timeouts"]["PreToolUse"] > bridge_config["hook_timeouts"]["UserPromptSubmit"]
+
+
+def test_guard_codex_does_not_claim_untrusted_bridge_lookalike() -> None:
+    command = "python /untrusted/codex_daemon_hook_bridge.py '{}'"
+
+    assert codex_adapter._is_managed_hook_command(command) is False
+
+
 def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
