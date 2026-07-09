@@ -443,6 +443,7 @@ def sync_aibom_snapshots(
     total_rejected = 0
     all_statuses: list[dict[str, object]] = []
     synced_at = generated_at
+    batches_sent = 0
     # Adaptive batch size: when events were chunked (items >= _AIBOM_MAX_ITEMS_PER_EVENT),
     # send 1 per POST to stay within Cloudflare's 100s origin timeout.
     effective_batch_size = 1 if any(
