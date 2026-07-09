@@ -74,6 +74,56 @@ def _hermes_home(context: HarnessContext) -> Path:
     return context.home_dir / ".hermes"
 
 
+def _hermes_host_home() -> Path | None:
+    """Resolve the host's real Hermes home when running inside a container.
+
+    Hermes agents often run inside Docker containers with a minimal sandbox
+    config (``mcp_servers: {}``) and an empty skills directory.  The host's
+    real Hermes installation — with the full config.yaml and 200+ skills — is
+    not mounted into the container.
+
+    When the operator sets ``HERMES_HOST_HOME`` (e.g. via ``-e HERMES_HOST_HOME=/home/hol/.hermes``
+    or a Guard-managed env file), ``detect()`` can fall back to scanning the
+    host's real installation even from inside the container.
+
+    Returns ``None`` when the env var is unset or the path does not exist.
+    """
+    env_host = os.environ.get("HERMES_HOST_HOME")
+    if not env_host or not env_host.strip():
+        return None
+    host_path = Path(env_host.strip())
+    if not host_path.is_dir():
+        return None
+    return host_path
+
+
+def _hermes_home_has_artifacts(hermes_home: Path) -> bool:
+    """Check whether a Hermes home directory has any discoverable artifacts.
+
+    Returns True when config.yaml exists and is non-trivial (>300 bytes),
+    or when the skills directory has at least one SKILL.md file.
+    """
+    config_path = hermes_home / "config.yaml"
+    if config_path.is_file():
+        try:
+            if config_path.stat().st_size > 300:
+                return True
+        except OSError:
+            pass
+    skills_dir = hermes_home / "skills"
+    if skills_dir.is_dir():
+        try:
+            for category_dir in skills_dir.iterdir():
+                if not category_dir.is_dir():
+                    continue
+                for skill_dir in category_dir.iterdir():
+                    if skill_dir.is_dir() and (skill_dir / "SKILL.md").is_file():
+                        return True
+        except (PermissionError, OSError):
+            pass
+    return False
+
+
 def _manifest_notes(payload: dict[str, object]) -> list[str]:
     notes = payload.get("notes")
     if not isinstance(notes, list):
@@ -106,6 +156,13 @@ class HermesHarnessAdapter(HarnessAdapter):
             pretool_path=pretool_path,
         )
         source_configs = _load_mcp_server_sources(_hermes_home(context))
+        # When running inside a container with HERMES_HOST_HOME set, also
+        # load MCP server sources from the host's real Hermes config.  This
+        # ensures the manifest captures servers the container can't see.
+        host_home = _hermes_host_home()
+        if host_home and host_home != _hermes_home(context):
+            for key, config in _load_mcp_server_sources(host_home).items():
+                source_configs.setdefault(key, config)
         overlay_servers = _overlay_servers(context=context, source_configs=source_configs)
         cloud_identity = cloud_agent_identity_hints(context, runtime=self.harness)
         overlay_path.write_text(json.dumps(overlay_servers, indent=2) + "\n", encoding="utf-8")
@@ -305,6 +362,22 @@ class HermesHarnessAdapter(HarnessAdapter):
         # Discover MCP servers from both config.yaml and mcp_servers.json.
         artifacts.extend(self._scan_mcp_servers(hermes_home, found_paths))
 
+        # Container fallback: when the container's Hermes home is a minimal
+        # sandbox (empty skills, trivial config), fall back to the host's
+        # real Hermes installation via HERMES_HOST_HOME.  This is the common
+        # case for Hermes agents running inside Docker containers where the
+        # host's ~/.hermes is not mounted.
+        host_home = _hermes_host_home()
+        if host_home and host_home != hermes_home and not _hermes_home_has_artifacts(hermes_home):
+            artifacts.extend(self._scan_host_home(host_home, found_paths))
+
+        # Manifest fallback: when no MCP servers were discovered from config
+        # files, fall back to the Guard-managed manifest.json.  This covers
+        # containers where install() ran on the host and wrote the manifest,
+        # but the container's config.yaml has no mcp_servers.
+        if not any(a.artifact_type == "mcp_server" for a in artifacts):
+            artifacts.extend(self._scan_manifest_mcp_servers(context, found_paths))
+
         return HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or _command_available(self.executable),
@@ -312,7 +385,6 @@ class HermesHarnessAdapter(HarnessAdapter):
             artifacts=tuple(artifacts),
             config_paths=tuple(found_paths),
         )
-
     def inventory_snapshot(
         self,
         context: HarnessContext,
@@ -490,6 +562,73 @@ class HermesHarnessAdapter(HarnessAdapter):
             artifacts.extend(self._mcp_artifacts(json_servers, str(json_path), source="json"))
 
         return artifacts
+
+    def _scan_host_home(
+        self,
+        host_home: Path,
+        found_paths: list[str],
+    ) -> list[GuardArtifact]:
+        """Scan the host's real Hermes home when running inside a container.
+
+        This mirrors the container-side detect() logic but targets the host's
+        installation.  Skills and MCP servers discovered here are attributed
+        to the Hermes harness — they belong to the agent even though the
+        container can't see them directly.
+        """
+        artifacts: list[GuardArtifact] = []
+
+        # Discover skills from the host's skills directory.
+        skills_dir = host_home / "skills"
+        if skills_dir.is_dir():
+            try:
+                category_dirs = sorted(skills_dir.iterdir())
+            except (PermissionError, OSError):
+                category_dirs = []
+            for category_dir in category_dirs:
+                if not category_dir.is_dir():
+                    continue
+                try:
+                    skill_dirs = sorted(category_dir.iterdir())
+                except (PermissionError, OSError):
+                    continue
+                for skill_dir in skill_dirs:
+                    if not skill_dir.is_dir():
+                        continue
+                    skill_md = skill_dir / "SKILL.md"
+                    if not skill_md.is_file():
+                        continue
+                    found_paths.append(str(skill_md))
+                    artifacts.extend(self._scan_skill(category_dir, skill_dir, skill_md))
+
+        # Discover MCP servers from the host's config files.
+        artifacts.extend(self._scan_mcp_servers(host_home, found_paths))
+
+        return artifacts
+
+    def _scan_manifest_mcp_servers(
+        self,
+        context: HarnessContext,
+        found_paths: list[str],
+    ) -> list[GuardArtifact]:
+        """Fall back to Guard-managed manifest.json for MCP server discovery.
+
+        When the container's config.yaml has no mcp_servers (common in
+        sandbox configs), the Guard-managed manifest.json written by
+        install() may contain the server definitions.  This covers the case
+        where install() ran on the host and the manifest was mounted or
+        copied into the container.
+        """
+        manifest_path = _managed_root(context) / "manifest.json"
+        if not manifest_path.is_file():
+            return []
+
+        payload = _json_payload(manifest_path)
+        servers = payload.get("servers")
+        if not isinstance(servers, dict) or not servers:
+            return []
+
+        found_paths.append(str(manifest_path))
+        return self._mcp_artifacts(servers, str(manifest_path), source="manifest")
 
     def _mcp_artifacts(
         self,
