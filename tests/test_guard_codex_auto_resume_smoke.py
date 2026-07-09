@@ -33,10 +33,10 @@ def test_codex_auto_resume_smoke_script_resumes_only_allowed_requests() -> None:
 
     assert allow_result.resume_status == "sent"
     assert allow_result.request_id
-    assert allow_result.resume_strategy == "codex-app-server-thread"
+    assert allow_result.resume_strategy == "codex-app-server-steer"
     assert allow_result.proof_created is False
     assert allow_result.assistant_message
-    assert "turn/start" in allow_result.transcript_excerpt
+    assert "turn/steer" in allow_result.transcript_excerpt
     assert block_result.resume_status == "skipped"
     assert block_result.request_id
     assert block_result.resume_strategy == "codex-app-server-thread"

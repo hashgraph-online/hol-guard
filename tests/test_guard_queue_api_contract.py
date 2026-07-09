@@ -198,20 +198,21 @@ def _start_fake_codex_app_server(socket_path: Path, received: list[dict[str, obj
                         _send_websocket_text(connection, {"id": 2, "result": {"threadId": "thread-1"}})
                     if message.get("id") == 3:
                         _send_websocket_text(connection, {"id": 3, "result": {"turnId": "turn-next"}})
-                        time.sleep(0.05)
-                        _send_websocket_text(
-                            connection,
-                            {
-                                "method": "turn/completed",
-                                "params": {
-                                    "threadId": "thread-1",
-                                    "turn": {
-                                        "id": "turn-next",
-                                        "status": "completed",
+                        if message.get("method") == "turn/start":
+                            time.sleep(0.05)
+                            _send_websocket_text(
+                                connection,
+                                {
+                                    "method": "turn/completed",
+                                    "params": {
+                                        "threadId": "thread-1",
+                                        "turn": {
+                                            "id": "turn-next",
+                                            "status": "completed",
+                                        },
                                     },
                                 },
-                            },
-                        )
+                            )
                         break
 
     thread = threading.Thread(target=server, daemon=True)
@@ -503,16 +504,17 @@ def test_codex_resolution_sends_continue_prompt_to_original_thread(tmp_path: Pat
         "initialize",
         "initialized",
         "thread/resume",
-        "turn/start",
+        "turn/steer",
     ]
-    turn_start = received_messages[-1]
+    turn_steer = received_messages[-1]
     assert payload["codex_resume"]["status"] == "sent"
     assert payload["resolution_summary"] == (
         "Decision saved. HOL Guard sent Codex a continue prompt in the original thread."
     )
-    assert turn_start["method"] == "turn/start"
-    assert turn_start["params"]["threadId"] == "thread-1"
-    assert "HOL Guard approved" in turn_start["params"]["input"][0]["text"]
+    assert turn_steer["method"] == "turn/steer"
+    assert turn_steer["params"]["threadId"] == "thread-1"
+    assert turn_steer["params"]["expectedTurnId"] == "turn-1"
+    assert "HOL Guard approved" in turn_steer["params"]["input"][0]["text"]
     assert store.list_events(event_name="codex/thread_resume")[0]["payload"]["status"] == "sent"
 
 

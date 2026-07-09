@@ -23,7 +23,6 @@ class _OperationStore(Protocol):
 
 
 _DEFAULT_PROXY_TIMEOUT_SECONDS = 5.0
-_DEFAULT_COMPLETION_TIMEOUT_SECONDS = 90.0
 _DEFAULT_SOCKET_PATH = Path.home() / ".codex" / "app-server-control" / "app-server-control.sock"
 _MAX_WEBSOCKET_HEADER_BYTES = 16_384
 _MAX_WEBSOCKET_FRAME_BYTES = 1_000_000
@@ -164,7 +163,7 @@ def resume_codex_thread_for_request(
                 "because that creates a separate background run instead of continuing the visible Codex chat."
             ),
         }
-    request_payloads = [
+    base_payloads = [
         {
             "jsonrpc": "2.0",
             "id": 1,
@@ -194,6 +193,29 @@ def resume_codex_thread_for_request(
                 "threadId": thread_id,
             },
         },
+    ]
+    turn_id = _first_string(metadata, _TURN_ID_KEYS)
+    steer_payloads = None
+    if turn_id is not None:
+        steer_payloads = [
+            *base_payloads,
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "turn/steer",
+                "params": {
+                    "threadId": thread_id,
+                    "expectedTurnId": turn_id,
+                    "input": [{"type": "text", "text": prompt}],
+                    "responsesapiClientMetadata": {
+                        "hol_guard_request_id": request_id,
+                        "hol_guard_resolution": "allow" if action == "allow" else "block",
+                    },
+                },
+            },
+        ]
+    turn_payloads = [
+        *base_payloads,
         {
             "jsonrpc": "2.0",
             "id": 3,
@@ -214,11 +236,9 @@ def resume_codex_thread_for_request(
         target=_send_codex_resume_worker,
         kwargs={
             "socket_path": socket_path,
-            "payloads": request_payloads,
-            "response_id": 3,
-            "thread_id": thread_id,
+            "steer_payloads": steer_payloads,
+            "turn_payloads": turn_payloads,
             "timeout_seconds": timeout_seconds,
-            "completion_timeout_seconds": _DEFAULT_COMPLETION_TIMEOUT_SECONDS,
             "ready": ready,
             "result": result,
         },
@@ -240,6 +260,7 @@ def resume_codex_thread_for_request(
             "thread_id": thread_id,
         }
     response = result.get("response")
+    continuation_strategy = result.get("strategy")
     if response is None:
         return {
             "status": "failed",
@@ -263,35 +284,44 @@ def resume_codex_thread_for_request(
         }
     return {
         "status": "sent",
-        "reason": "turn_start_sent",
+        "reason": "turn_steer_sent" if continuation_strategy == "codex-app-server-steer" else "turn_start_sent",
         "thread_id": thread_id,
+        "strategy": continuation_strategy or "codex-app-server-turn",
     }
 
 
 def _send_codex_resume_worker(
     *,
     socket_path: str,
-    payloads: list[dict[str, object]],
-    response_id: int,
-    thread_id: str,
+    steer_payloads: list[dict[str, object]] | None,
+    turn_payloads: list[dict[str, object]],
     timeout_seconds: float,
-    completion_timeout_seconds: float,
     ready: threading.Event,
     result: dict[str, object],
 ) -> None:
     try:
-        response, completion_status = _send_app_server_websocket_messages(
-            socket_path=socket_path,
-            payloads=payloads,
-            response_id=response_id,
-            timeout_seconds=timeout_seconds,
-            completion_thread_id=thread_id,
-            completion_timeout_seconds=completion_timeout_seconds,
-            ready=ready,
-            result=result,
-        )
+        strategy = "codex-app-server-turn"
+        response: dict[str, object] | None = None
+        completion_status = "turn_start_response"
+        if steer_payloads is not None:
+            response, completion_status = _send_app_server_websocket_messages(
+                socket_path=socket_path,
+                payloads=steer_payloads,
+                response_id=3,
+                timeout_seconds=timeout_seconds,
+            )
+            if isinstance(response, dict) and not isinstance(response.get("error"), dict):
+                strategy = "codex-app-server-steer"
+        if strategy != "codex-app-server-steer":
+            response, completion_status = _send_app_server_websocket_messages(
+                socket_path=socket_path,
+                payloads=turn_payloads,
+                response_id=3,
+                timeout_seconds=timeout_seconds,
+            )
         result["response"] = response
         result["completion_status"] = completion_status
+        result["strategy"] = strategy
     except (OSError, TimeoutError, ValueError) as error:
         result["error"] = error
     finally:
