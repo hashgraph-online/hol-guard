@@ -74,7 +74,7 @@ def _hermes_home(context: HarnessContext) -> Path:
     return context.home_dir / ".hermes"
 
 
-def _hermes_host_home() -> Path | None:
+def _hermes_host_home(context: HarnessContext) -> Path | None:
     """Resolve the host's real Hermes home when running inside a container.
 
     Hermes agents often run inside Docker containers with a minimal sandbox
@@ -82,19 +82,20 @@ def _hermes_host_home() -> Path | None:
     real Hermes installation — with the full config.yaml and 200+ skills — is
     not mounted into the container.
 
-    When the operator sets ``HERMES_HOST_HOME`` (e.g. via ``-e HERMES_HOST_HOME=/home/hol/.hermes``
-    or a Guard-managed env file), ``detect()`` can fall back to scanning the
-    host's real installation even from inside the container.
+    When the operator sets ``HERMES_HOST_HOME``, ``detect()`` can fall back to
+    scanning the mounted host installation even from inside the container.
+    A persisted ``~/hermes-host-home`` mirror is also recognized because
+    Hermes sandbox launchers may not preserve custom environment variables.
 
-    Returns ``None`` when the env var is unset or the path does not exist.
+    Returns ``None`` when neither location exists.
     """
     env_host = os.environ.get("HERMES_HOST_HOME")
-    if not env_host or not env_host.strip():
-        return None
-    host_path = Path(env_host.strip())
-    if not host_path.is_dir():
-        return None
-    return host_path
+    if env_host and env_host.strip():
+        host_path = Path(env_host.strip())
+        return host_path if host_path.is_dir() else None
+
+    fallback_path = context.home_dir / "hermes-host-home"
+    return fallback_path if fallback_path.is_dir() else None
 
 
 def _hermes_home_has_artifacts(hermes_home: Path) -> bool:
@@ -175,10 +176,8 @@ class HermesHarnessAdapter(HarnessAdapter):
             pretool_path=pretool_path,
         )
         source_configs = _load_mcp_server_sources(_hermes_home(context))
-        # When running inside a container with HERMES_HOST_HOME set, also
-        # load MCP server sources from the host's real Hermes config.  This
-        # ensures the manifest captures servers the container can't see.
-        host_home = _hermes_host_home()
+        # Also load MCP sources from an explicit or persisted host-home mirror.
+        host_home = _hermes_host_home(context)
         if host_home and host_home.resolve() != _hermes_home(context).resolve():
             for key, config in _load_mcp_server_sources(host_home).items():
                 source_configs.setdefault(key, config)
@@ -381,12 +380,9 @@ class HermesHarnessAdapter(HarnessAdapter):
         # Discover MCP servers from both config.yaml and mcp_servers.json.
         artifacts.extend(self._scan_mcp_servers(hermes_home, found_paths))
 
-        # Container fallback: when the container's Hermes home is a minimal
-        # sandbox (empty skills, trivial config), fall back to the host's
-        # real Hermes installation via HERMES_HOST_HOME.  This is the common
-        # case for Hermes agents running inside Docker containers where the
-        # host's ~/.hermes is not mounted.
-        host_home = _hermes_host_home()
+        # Container fallback: use an explicit or persisted host-home mirror
+        # when the sandbox has only empty skills and trivial config.
+        host_home = _hermes_host_home(context)
         if host_home and host_home.resolve() != hermes_home.resolve() and not _hermes_home_has_artifacts(hermes_home):
             artifacts.extend(self._scan_host_home(host_home, found_paths))
 
