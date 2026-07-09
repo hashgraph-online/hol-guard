@@ -1261,7 +1261,6 @@ class TestEdgeCases:
         detection = adapter.detect(_ctx(tmp_path))
         file_artifacts = [a for a in detection.artifacts if a.artifact_type == "skill_file"]
         assert len(file_artifacts) >= 1
-        assert len(file_artifacts) >= 1
 
 
 # ------------------------------------------------------------------
