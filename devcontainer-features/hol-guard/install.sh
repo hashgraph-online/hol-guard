@@ -100,9 +100,12 @@ if ! user_has pipx; then
         dnf clean all
     else
         # Fallback: install into the user's site-packages.
-        # --break-system-packages without --user installs into the system
-        # site-packages (the correct path when PEP 668 is active).
-        run_as_user python3 -m pip install --break-system-packages pipx
+        # --user lands in a writable directory for non-root users.
+        # --break-system-packages bypasses PEP 668 (externally-managed-environment)
+        # on distros where it applies. Both flags together are correct:
+        # --user controls the install location, --break-system-packages
+        # bypasses the externally-managed guard.
+        run_as_user python3 -m pip install --user --break-system-packages pipx
     fi
 fi
 
