@@ -1492,10 +1492,12 @@ class TestManifestFallback:
 
 
 class TestInstallHostHomeAwareness:
-    """install() loads MCP sources from HERMES_HOST_HOME when set."""
+    """install() uses host-home sources only for a minimal sandbox."""
 
-    def test_install_merges_host_home_mcp_sources(self, tmp_path: Path, monkeypatch):
-        """install() should merge MCP sources from both container and host."""
+    def test_install_skips_host_home_mcp_sources_when_container_populated(
+        self, tmp_path: Path, monkeypatch
+    ):
+        """A stale mirror must not extend a populated container config."""
         # Container config has one MCP server
         _write(
             tmp_path / ".hermes" / "config.yaml",
@@ -1516,7 +1518,22 @@ class TestInstallHostHomeAwareness:
         servers = manifest.get("servers", {})
         server_keys = set(servers.keys())
         assert "yaml:container-server" in server_keys
-        assert "yaml:host-server" in server_keys
+        assert "yaml:host-server" not in server_keys
+
+    def test_install_uses_host_home_mcp_sources_when_container_empty(
+        self, tmp_path: Path, monkeypatch
+    ):
+        _write(tmp_path / ".hermes" / "config.yaml", "mcp_servers: {}\n")
+        host_home = tmp_path / "host-hermes"
+        _write(
+            host_home / "config.yaml",
+            "mcp_servers:\n  host-server:\n    command: python\n",
+        )
+        monkeypatch.setenv("HERMES_HOST_HOME", str(host_home))
+
+        manifest = HermesHarnessAdapter().install(_ctx(tmp_path))
+
+        assert "yaml:host-server" in manifest.get("servers", {})
 
 
 class TestHostHomeFallbackEdgeCases:

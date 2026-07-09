@@ -175,10 +175,15 @@ class HermesHarnessAdapter(HarnessAdapter):
             overlay_path=overlay_path,
             pretool_path=pretool_path,
         )
-        source_configs = _load_mcp_server_sources(_hermes_home(context))
-        # Also load MCP sources from an explicit or persisted host-home mirror.
+        hermes_home = _hermes_home(context)
+        source_configs = _load_mcp_server_sources(hermes_home)
+        # Only consult the mirror for a minimal sandbox, matching detect().
         host_home = _hermes_host_home(context)
-        if host_home and host_home.resolve() != _hermes_home(context).resolve():
+        if (
+            host_home
+            and host_home.resolve() != hermes_home.resolve()
+            and not _hermes_home_has_artifacts(hermes_home)
+        ):
             for key, config in _load_mcp_server_sources(host_home).items():
                 source_configs.setdefault(key, config)
         overlay_servers = _overlay_servers(context=context, source_configs=source_configs)
