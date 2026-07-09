@@ -22,7 +22,7 @@ That's it. HOL Guard installs automatically on container build.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `version` | string | `latest` | HOL Guard version (`latest` or specific like `2.0.1004`) |
-| `initHarness` | string | `auto` | Harness to configure: `auto`, `codex`, `claude-code`, `cursor`, `gemini`, `opencode`, `pi`, or `none` |
+| `initHarness` | string | `auto` | `auto` (detect installed harnesses), `none` (skip init), or a specific name (`codex`, `claude-code`, `cursor`, `gemini`, `opencode`, `pi`) — informational only, Guard auto-detects regardless |
 | `strictMode` | boolean | `false` | Enable strict mode (blocks untrusted tool actions by default) |
 
 ## Example: Cursor + Strict Mode

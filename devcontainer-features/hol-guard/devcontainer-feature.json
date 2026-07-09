@@ -1,14 +1,14 @@
 {
   "name": "HOL Guard",
   "id": "hol-guard",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Installs HOL Guard — local-first security for AI coding agents. Intercepts tool actions before files change or networks are contacted.",
   "documentationURL": "https://hol.org/guard",
   "licenseURL": "https://github.com/hashgraph-online/hol-guard/blob/main/LICENSE",
   "options": {
     "version": {
       "type": "string",
-      "enum": ["latest", "2.0.1004"],
+      "proposals": ["latest", "2.0.1004"],
       "default": "latest",
       "description": "Select the HOL Guard version to install"
     },
@@ -16,7 +16,7 @@
       "type": "string",
       "enum": ["none", "auto", "codex", "claude-code", "cursor", "gemini", "opencode", "pi"],
       "default": "auto",
-      "description": "Which AI harness to configure HOL Guard for during install (auto = detect)"
+      "description": "Which AI harness to configure HOL Guard for during install. Guard auto-detects installed harnesses; the selected value is informational. Use 'none' to skip init."
     },
     "strictMode": {
       "type": "boolean",
