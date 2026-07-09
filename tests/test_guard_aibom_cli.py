@@ -582,6 +582,136 @@ def test_sync_aibom_snapshots_404_backoff_isolated_from_guard_events_summary(
     assert aibom_backoff.get("sync_reason") == "guard_events_endpoint_unavailable"
 
 
+def test_sync_aibom_snapshots_404_reports_only_remaining_batch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import urllib.error
+
+    from codex_plugin_scanner.guard import aibom_cli
+    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
+    from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
+    from codex_plugin_scanner.guard.runtime import runner
+
+    store = GuardStore(tmp_path / "guard")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    snapshots = tuple(
+        GuardAgentInventorySnapshot(
+            snapshot_id=f"snapshot-{index}",
+            agent_id=f"agent-{index}",
+            agent_type="codex",
+            generated_at="2026-06-10T12:00:00+00:00",
+            runtime_version="test",
+        )
+        for index in range(4)
+    )
+    monkeypatch.setattr(aibom_cli, "collect_aibom_snapshots", lambda *_args, **_kwargs: snapshots)
+    responses: list[dict[str, object] | Exception] = [
+        {
+            "accepted": 3,
+            "rejected": 0,
+            "statuses": [{"eventId": f"event-{index}", "status": "accepted"} for index in range(3)],
+            "syncedAt": "2026-06-10T12:00:01+00:00",
+        },
+        urllib.error.HTTPError(
+            url="https://hol.test/api/v1/guard/events",
+            code=404,
+            msg="Not Found",
+            hdrs=Message(),
+            fp=None,
+        ),
+    ]
+
+    def respond(*_args, **_kwargs):
+        response = responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", respond)
+    monkeypatch.setattr(runner, "_guard_events_sync_url", lambda url: url)
+    monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: object())
+
+    summary = sync_aibom_snapshots(
+        store,
+        HarnessContext(
+            home_dir=tmp_path / "home",
+            workspace_dir=tmp_path / "workspace",
+            guard_home=store.guard_home,
+        ),
+        generated_at="2026-06-10T12:00:00+00:00",
+        auth_context={
+            "sync_url": "https://hol.test/api/v1/guard/events",
+            "token": "test-token",
+        },
+    )
+
+    backoff = store.get_sync_payload("aibom_guard_events_backoff")
+    assert summary.get("synced") is False
+    assert summary.get("partial") is True
+    assert summary.get("accepted") == 3
+    assert summary.get("statuses") == [
+        {"eventId": f"event-{index}", "status": "accepted"} for index in range(3)
+    ]
+    assert isinstance(backoff, dict)
+    assert backoff.get("events") == 1
+    assert backoff.get("skipped") == 1
+    assert backoff.get("accepted") == 3
+    assert responses == []
+
+
+def test_sync_aibom_snapshots_rejects_oversized_atomic_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard import aibom_cli
+    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
+    from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
+
+    store = GuardStore(tmp_path / "guard")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    snapshot = GuardAgentInventorySnapshot(
+        snapshot_id="hermes:oversized",
+        agent_id="hermes:local",
+        agent_type="hermes",
+        generated_at="2026-06-10T12:00:00+00:00",
+        runtime_version="test",
+    )
+    monkeypatch.setattr(aibom_cli, "collect_aibom_snapshots", lambda *_args, **_kwargs: (snapshot,))
+
+    def reject_oversized_snapshot(*_args, **_kwargs):
+        raise ValueError("snapshot exceeds limit")
+
+    monkeypatch.setattr(
+        aibom_cli,
+        "_batch_inventory_events",
+        reject_oversized_snapshot,
+    )
+
+    with pytest.raises(RuntimeError, match="snapshot exceeds the request limit"):
+        sync_aibom_snapshots(
+            store,
+            HarnessContext(
+                home_dir=tmp_path / "home",
+                workspace_dir=tmp_path / "workspace",
+                guard_home=store.guard_home,
+            ),
+            generated_at="2026-06-10T12:00:00+00:00",
+            auth_context={
+                "sync_url": "https://hol.test/api/v1/guard/events",
+                "token": "test-token",
+            },
+        )
+
+    summary = store.get_sync_payload("aibom_sync_summary")
+    assert isinstance(summary, dict)
+    assert summary.get("synced") is False
+    assert summary.get("partial") is False
+    assert summary.get("reason") == "snapshot_too_large"
+
+
 def test_collect_aibom_snapshots_passes_cisco_runs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import aibom_cli
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
