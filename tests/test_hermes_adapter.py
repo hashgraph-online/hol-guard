@@ -1466,3 +1466,56 @@ class TestInstallHostHomeAwareness:
         server_keys = set(servers.keys())
         assert "yaml:container-server" in server_keys
         assert "yaml:host-server" in server_keys
+
+
+class TestHostHomeFallbackEdgeCases:
+    """Edge cases for the HERMES_HOST_HOME fallback."""
+
+    def test_small_config_with_mcp_servers_not_treated_as_empty(self, tmp_path: Path, monkeypatch):
+        """A small config.yaml with real MCP servers should NOT trigger
+        host home fallback, even if it's under 300 bytes."""
+        # Container config is small but has real MCP servers
+        _write(
+            tmp_path / ".hermes" / "config.yaml",
+            "mcp_servers:\n  local-server:\n    command: node\n",
+        )
+
+        # Host home has different servers
+        host_home = tmp_path / "host-hermes"
+        _write(
+            host_home / "config.yaml",
+            "mcp_servers:\n  host-server:\n    command: python\n",
+        )
+
+        monkeypatch.setenv("HERMES_HOST_HOME", str(host_home))
+        adapter = HermesHarnessAdapter()
+        detection = adapter.detect(_ctx(tmp_path))
+
+        # Should find the container's server, NOT the host's
+        mcp_artifacts = [a for a in detection.artifacts if a.artifact_type == "mcp_server"]
+        assert len(mcp_artifacts) == 1
+        assert mcp_artifacts[0].name == "local-server"
+
+    def test_mcp_servers_json_not_treated_as_empty(self, tmp_path: Path, monkeypatch):
+        """A container with mcp_servers.json containing servers should NOT
+        trigger host home fallback."""
+        _write(tmp_path / ".hermes" / "config.yaml", "mcp_servers: {}\n")
+        _write(
+            tmp_path / ".hermes" / "mcp_servers.json",
+            json.dumps({"json-server": {"command": "node"}}),
+        )
+
+        host_home = tmp_path / "host-hermes"
+        _write(
+            host_home / "config.yaml",
+            "mcp_servers:\n  host-server:\n    command: python\n",
+        )
+
+        monkeypatch.setenv("HERMES_HOST_HOME", str(host_home))
+        adapter = HermesHarnessAdapter()
+        detection = adapter.detect(_ctx(tmp_path))
+
+        # Should find the container's JSON server, NOT the host's
+        mcp_artifacts = [a for a in detection.artifacts if a.artifact_type == "mcp_server"]
+        assert len(mcp_artifacts) == 1
+        assert mcp_artifacts[0].name == "json-server"

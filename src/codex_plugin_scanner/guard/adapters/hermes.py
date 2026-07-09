@@ -100,15 +100,34 @@ def _hermes_host_home() -> Path | None:
 def _hermes_home_has_artifacts(hermes_home: Path) -> bool:
     """Check whether a Hermes home directory has any discoverable artifacts.
 
-    Returns True when config.yaml exists and is non-trivial (>300 bytes),
-    or when the skills directory has at least one SKILL.md file.
+    Returns True when config.yaml or config.toml exists and is non-trivial
+    (>300 bytes), when config.yaml contains mcp_servers entries, when
+    mcp_servers.json contains configured servers, or when the skills
+    directory has at least one SKILL.md file.
     """
-    config_path = hermes_home / "config.yaml"
-    if config_path.is_file():
+    for config_name in ("config.yaml", "config.toml"):
+        config_path = hermes_home / config_name
+        if config_path.is_file():
+            try:
+                if config_path.stat().st_size > 300:
+                    return True
+            except OSError:
+                pass
+    # Check if config.yaml has mcp_servers entries (even if small).
+    yaml_path = hermes_home / "config.yaml"
+    if yaml_path.is_file():
         try:
-            if config_path.stat().st_size > 300:
+            if _parse_mcp_from_yaml(yaml_path):
                 return True
-        except OSError:
+        except (ValueError, OSError):
+            pass
+    json_path = hermes_home / "mcp_servers.json"
+    if json_path.is_file():
+        try:
+            servers = _parse_mcp_from_json(json_path)
+            if servers:
+                return True
+        except (ValueError, OSError):
             pass
     skills_dir = hermes_home / "skills"
     if skills_dir.is_dir():
@@ -160,7 +179,7 @@ class HermesHarnessAdapter(HarnessAdapter):
         # load MCP server sources from the host's real Hermes config.  This
         # ensures the manifest captures servers the container can't see.
         host_home = _hermes_host_home()
-        if host_home and host_home != _hermes_home(context):
+        if host_home and host_home.resolve() != _hermes_home(context).resolve():
             for key, config in _load_mcp_server_sources(host_home).items():
                 source_configs.setdefault(key, config)
         overlay_servers = _overlay_servers(context=context, source_configs=source_configs)
@@ -368,7 +387,7 @@ class HermesHarnessAdapter(HarnessAdapter):
         # case for Hermes agents running inside Docker containers where the
         # host's ~/.hermes is not mounted.
         host_home = _hermes_host_home()
-        if host_home and host_home != hermes_home and not _hermes_home_has_artifacts(hermes_home):
+        if host_home and host_home.resolve() != hermes_home.resolve() and not _hermes_home_has_artifacts(hermes_home):
             artifacts.extend(self._scan_host_home(host_home, found_paths))
 
         # Manifest fallback: when no MCP servers were discovered from config
