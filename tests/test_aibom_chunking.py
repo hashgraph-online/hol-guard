@@ -59,9 +59,10 @@ class TestBatchInventoryEvents:
         items = [_make_item(f"item-{i}") for i in range(486)]
         event = _make_event("hermes:snapshot:test", items)
 
-        batches = _batch_inventory_events([event])
+        batches, oversized = _batch_inventory_events([event])
 
         assert batches == [[event]]
+        assert oversized == []
         snapshot = batches[0][0]["payload"]["snapshot"]
         assert snapshot["snapshotId"] == "hermes:snapshot:test"
         assert len(snapshot["items"]) == 486
@@ -69,9 +70,10 @@ class TestBatchInventoryEvents:
     def test_small_events_share_count_bounded_batch(self) -> None:
         events = [_make_event(f"snap-{index}", [_make_item(str(index))]) for index in range(4)]
 
-        batches = _batch_inventory_events(events, max_batch_size=3)
+        batches, oversized = _batch_inventory_events(events, max_batch_size=3)
 
         assert batches == [events[:3], events[3:]]
+        assert oversized == []
 
     def test_request_limit_splits_between_snapshots(self) -> None:
         first = _make_event("first", [_make_item("a")])
@@ -81,12 +83,13 @@ class TestBatchInventoryEvents:
             len(_inventory_events_request_body([second])),
         )
 
-        batches = _batch_inventory_events(
+        batches, oversized = _batch_inventory_events(
             [first, second],
             max_body_bytes=single_body_limit,
         )
 
         assert batches == [[first], [second]]
+        assert oversized == []
         assert first["idempotencyKey"] == "first"
         assert second["idempotencyKey"] == "second"
 
@@ -98,24 +101,30 @@ class TestBatchInventoryEvents:
         )
         under_limit_size = len(_inventory_events_request_body([event]))
 
-        batches = _batch_inventory_events([event])
+        batches, oversized = _batch_inventory_events([event])
 
         assert _AIBOM_MAX_REQUEST_BODY_BYTES - 100 < under_limit_size <= _AIBOM_MAX_REQUEST_BODY_BYTES
         assert all(len(_inventory_events_request_body(batch)) <= _AIBOM_MAX_REQUEST_BODY_BYTES for batch in batches)
+        assert oversized == []
 
         event["payload"]["snapshot"]["redactionReport"]["padding"] += "x" * 101
-        with pytest.raises(ValueError, match="snapshot exceeds"):
-            _batch_inventory_events([event])
+        batches, oversized = _batch_inventory_events([event])
+        assert batches == []
+        assert oversized == [event]
 
-    def test_oversized_snapshot_fails_instead_of_splitting(self) -> None:
-        event = _make_event("oversized", [_make_item("large")])
-        body_size = len(_inventory_events_request_body([event]))
+    def test_oversized_snapshot_is_quarantined_without_blocking_valid_snapshot(self) -> None:
+        valid = _make_event("valid", [_make_item("small")])
+        oversized = _make_event("oversized", [_make_item("large")])
+        body_size = len(_inventory_events_request_body([oversized]))
 
-        with pytest.raises(ValueError, match="snapshot exceeds"):
-            _batch_inventory_events([event], max_body_bytes=body_size - 1)
+        batches, oversized_events = _batch_inventory_events(
+            [valid, oversized],
+            max_body_bytes=body_size - 1,
+        )
 
-        assert event["payload"]["snapshot"]["snapshotId"] == "oversized"
-        assert len(event["payload"]["snapshot"]["items"]) == 1
+        assert batches == [[valid]]
+        assert oversized_events == [oversized]
+        assert oversized["payload"]["snapshot"]["snapshotId"] == "oversized"
 
     def test_non_item_snapshot_fields_remain_on_atomic_event(self) -> None:
         event = _make_event("snap-1", [_make_item("item-1")])
@@ -123,9 +132,10 @@ class TestBatchInventoryEvents:
         snapshot["findings"] = [{"findingId": "finding-1"}]
         snapshot["sources"] = [{"sourceId": "source-1"}]
 
-        batches = _batch_inventory_events([event])
+        batches, oversized = _batch_inventory_events([event])
 
         assert batches[0][0]["payload"]["snapshot"] == snapshot
+        assert oversized == []
 
     @pytest.mark.parametrize("max_batch_size,max_body_bytes", [(0, 100), (1, 0)])
     def test_invalid_limits_are_rejected(self, max_batch_size: int, max_body_bytes: int) -> None:
