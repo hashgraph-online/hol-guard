@@ -363,6 +363,28 @@ hol-guard start
 plugin-scanner verify .
 ```
 
+### DevContainer / Codespaces
+
+Add HOL Guard to your `devcontainer.json` for automatic protection in VS Code Codespaces and remote dev containers:
+
+```json
+{
+    "features": {
+        "ghcr.io/hashgraph-online/hol-guard/hol-guard:1": {}
+    }
+}
+```
+
+Options:
+
+| Option | Default | Description |
+| :--- | :--- | :--- |
+| `version` | `latest` | Pin to a specific release (e.g. `2.0.1004`) |
+| `initHarness` | `auto` | Configure for a specific harness: `codex`, `claude-code`, `cursor`, `gemini`, `opencode`, `pi`, or `auto` |
+| `strictMode` | `false` | Enable strict mode on install |
+
+See [`devcontainer-features/hol-guard/README.md`](devcontainer-features/hol-guard/README.md) for details.
+
 ## Ecosystem Support
 
 | Ecosystem | Detection Surfaces |
