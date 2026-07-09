@@ -443,9 +443,14 @@ def sync_aibom_snapshots(
     total_rejected = 0
     all_statuses: list[dict[str, object]] = []
     synced_at = generated_at
-    batches_sent = 0
-    for batch_start in range(0, len(events), _AIBOM_SYNC_BATCH_SIZE):
-        batch = events[batch_start : batch_start + _AIBOM_SYNC_BATCH_SIZE]
+    # Adaptive batch size: when events were chunked (items >= _AIBOM_MAX_ITEMS_PER_EVENT),
+    # send 1 per POST to stay within Cloudflare's 100s origin timeout.
+    effective_batch_size = 1 if any(
+        len(e.get("payload", {}).get("snapshot", {}).get("items", [])) >= _AIBOM_MAX_ITEMS_PER_EVENT
+        for e in events
+    ) else _AIBOM_SYNC_BATCH_SIZE
+    for batch_start in range(0, len(events), effective_batch_size):
+        batch = events[batch_start : batch_start + effective_batch_size]
         body = json.dumps({"events": batch}).encode("utf-8")
         request = runner._guard_sync_request(
             resolved_auth_context,
