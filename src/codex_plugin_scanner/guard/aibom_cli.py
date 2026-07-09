@@ -444,6 +444,7 @@ def sync_aibom_snapshots(
     all_statuses: list[dict[str, object]] = []
     synced_at = generated_at
     batches_sent = 0
+
     # Adaptive batch size: when events were chunked (items >= threshold),
     # send 1 per POST to stay within Cloudflare's 100s origin timeout.
     def _event_item_count(e: dict[str, object]) -> int:
@@ -456,9 +457,9 @@ def sync_aibom_snapshots(
         items = snapshot.get("items")
         return len(items) if isinstance(items, list) else 0
 
-    effective_batch_size = 1 if any(
-        _event_item_count(e) >= _AIBOM_MAX_ITEMS_PER_EVENT for e in events
-    ) else _AIBOM_SYNC_BATCH_SIZE
+    effective_batch_size = (
+        1 if any(_event_item_count(e) >= _AIBOM_MAX_ITEMS_PER_EVENT for e in events) else _AIBOM_SYNC_BATCH_SIZE
+    )
     for batch_start in range(0, len(events), effective_batch_size):
         batch = events[batch_start : batch_start + effective_batch_size]
         body = json.dumps({"events": batch}).encode("utf-8")
@@ -479,9 +480,7 @@ def sync_aibom_snapshots(
         except urllib.error.HTTPError as error:
             if error.code == 401 and not auth_refresh_retried:
                 auth_refresh_retried = True
-                resolved_auth_context = runner._resolve_guard_sync_auth_context(
-                    store, force_refresh=True
-                )
+                resolved_auth_context = runner._resolve_guard_sync_auth_context(store, force_refresh=True)
                 request = runner._guard_sync_request(
                     resolved_auth_context,
                     request_url=sync_url,
@@ -838,6 +837,8 @@ def _inventory_snapshot_event(
         "deviceId": device_id,
         "payload": {"snapshot": serialize_inventory_snapshot(snapshot)},
     }
+
+
 def _chunk_inventory_events(
     events: list[dict[str, object]],
     max_items: int = _AIBOM_MAX_ITEMS_PER_EVENT,
@@ -867,9 +868,9 @@ def _chunk_inventory_events(
             result.append(event)
             continue
 
-        original_snapshot_id = str(
-            event.get("idempotencyKey") or snapshot.get("snapshotId") or ""
-        ).strip() or str(uuid.uuid4())
+        original_snapshot_id = str(event.get("idempotencyKey") or snapshot.get("snapshotId") or "").strip() or str(
+            uuid.uuid4()
+        )
         total_chunks = (len(items) + max_items - 1) // max_items
         for chunk_index in range(total_chunks):
             chunk_start = chunk_index * max_items
@@ -883,9 +884,7 @@ def _chunk_inventory_events(
                 chunk_snapshot["drift"] = []
                 chunk_snapshot["sources"] = []
                 chunk_snapshot["dockerProofs"] = []
-            chunk_snapshot["snapshotId"] = (
-                f"{original_snapshot_id}-chunk-{chunk_index + 1}-of-{total_chunks}"
-            )
+            chunk_snapshot["snapshotId"] = f"{original_snapshot_id}-chunk-{chunk_index + 1}-of-{total_chunks}"
             chunk_event = {
                 **event,
                 "eventId": str(uuid.uuid4()),

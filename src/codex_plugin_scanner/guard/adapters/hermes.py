@@ -404,6 +404,7 @@ class HermesHarnessAdapter(HarnessAdapter):
             artifacts=tuple(artifacts),
             config_paths=tuple(found_paths),
         )
+
     def inventory_snapshot(
         self,
         context: HarnessContext,
