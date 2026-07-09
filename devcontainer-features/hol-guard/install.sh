@@ -31,11 +31,13 @@ if [ "$MAJOR" -lt 3 ] || { [ "$MAJOR" -eq 3 ] && [ "$MINOR" -lt 10 ]; }; then
     exit 1
 fi
 
-# Validate VERSION to prevent shell injection via eval/su -c.
-# Only "latest" or dotted version numbers (e.g. "2.0.1004") are allowed.
+# Validate VERSION to prevent shell injection via su -c.
+# Allow "latest" or PEP 440 version specifiers: digits, dots, and
+# pre/post/dev segments (e.g. 2.1, 2.0.1004, 2.0.1004.post1, 2.0.0a1,
+# 2.0.0rc1). Reject shell metacharacters, spaces, or path separators.
 if [ "$VERSION" != "latest" ]; then
-    if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-        echo "ERROR: Invalid version '${VERSION}'. Use 'latest' or a version like '2.0.1004'."
+    if ! echo "$VERSION" | grep -qE '^[0-9]+(\.[0-9]+)*((a|b|rc|c|\.post|\.dev)[0-9]*)?$'; then
+        echo "ERROR: Invalid version '${VERSION}'. Use 'latest' or a PEP 440 version like '2.0.1004'."
         exit 1
     fi
 fi
