@@ -266,6 +266,7 @@ _AIBOM_EMPTY_SYNC_RETRY_SECONDS = 2 * 60
 _AIBOM_GUARD_EVENTS_BACKOFF_KEY = "aibom_guard_events_backoff"
 _AIBOM_GUARD_EVENTS_BACKOFF_MINUTES = 5  # matches _GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_MINUTES
 _AIBOM_SYNC_BATCH_SIZE = 3  # keep each POST under Cloudflare's 100s origin timeout
+_AIBOM_MAX_ITEMS_PER_EVENT = 100  # chunk large snapshots to stay under Cloudflare timeout
 
 
 def _aware_utc_timestamp(value: str) -> datetime:
@@ -437,13 +438,29 @@ def sync_aibom_snapshots(
         )
         for snapshot in snapshots
     ]
+    events = _chunk_inventory_events(events)
     total_accepted = 0
     total_rejected = 0
     all_statuses: list[dict[str, object]] = []
     synced_at = generated_at
     batches_sent = 0
-    for batch_start in range(0, len(events), _AIBOM_SYNC_BATCH_SIZE):
-        batch = events[batch_start : batch_start + _AIBOM_SYNC_BATCH_SIZE]
+    # Adaptive batch size: when events were chunked (items >= threshold),
+    # send 1 per POST to stay within Cloudflare's 100s origin timeout.
+    def _event_item_count(e: dict[str, object]) -> int:
+        payload = e.get("payload")
+        if not isinstance(payload, dict):
+            return 0
+        snapshot = payload.get("snapshot")
+        if not isinstance(snapshot, dict):
+            return 0
+        items = snapshot.get("items")
+        return len(items) if isinstance(items, list) else 0
+
+    effective_batch_size = 1 if any(
+        _event_item_count(e) >= _AIBOM_MAX_ITEMS_PER_EVENT for e in events
+    ) else _AIBOM_SYNC_BATCH_SIZE
+    for batch_start in range(0, len(events), effective_batch_size):
+        batch = events[batch_start : batch_start + effective_batch_size]
         body = json.dumps({"events": batch}).encode("utf-8")
         request = runner._guard_sync_request(
             resolved_auth_context,
@@ -452,6 +469,7 @@ def sync_aibom_snapshots(
             data=body,
             extra_headers=None,
         )
+        auth_refresh_retried = False
         try:
             payload = runner._urlopen_json_with_timeout_retry(
                 request=request,
@@ -459,7 +477,24 @@ def sync_aibom_snapshots(
                 retry_timeout_seconds=120,
             )
         except urllib.error.HTTPError as error:
-            if error.code == 404:
+            if error.code == 401 and not auth_refresh_retried:
+                auth_refresh_retried = True
+                resolved_auth_context = runner._resolve_guard_sync_auth_context(
+                    store, force_refresh=True
+                )
+                request = runner._guard_sync_request(
+                    resolved_auth_context,
+                    request_url=sync_url,
+                    method="POST",
+                    data=body,
+                    extra_headers=None,
+                )
+                payload = runner._urlopen_json_with_timeout_retry(
+                    request=request,
+                    timeout_seconds=90,
+                    retry_timeout_seconds=120,
+                )
+            elif error.code == 404:
                 synced_at = generated_at
                 store.set_sync_payload(
                     _AIBOM_GUARD_EVENTS_BACKOFF_KEY,
@@ -803,6 +838,62 @@ def _inventory_snapshot_event(
         "deviceId": device_id,
         "payload": {"snapshot": serialize_inventory_snapshot(snapshot)},
     }
+def _chunk_inventory_events(
+    events: list[dict[str, object]],
+    max_items: int = _AIBOM_MAX_ITEMS_PER_EVENT,
+) -> list[dict[str, object]]:
+    """Split events whose snapshot has too many items into multiple events.
+
+    Large inventories (e.g. Hermes with 486 skills) produce a single event
+    whose serialized payload exceeds 2MB, causing Cloudflare 504 timeouts
+    when the portal processes it synchronously.
+
+    Each chunk becomes a separate event with a unique snapshot_id suffix
+    so the portal treats them as independent snapshots.  The portal's AIBOM
+    projection accumulates items across snapshots for the same agent_id.
+    """
+    result: list[dict[str, object]] = []
+    for event in events:
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            result.append(event)
+            continue
+        snapshot = payload.get("snapshot")
+        if not isinstance(snapshot, dict):
+            result.append(event)
+            continue
+        items = snapshot.get("items")
+        if not isinstance(items, list) or len(items) <= max_items:
+            result.append(event)
+            continue
+
+        original_snapshot_id = str(
+            event.get("idempotencyKey") or snapshot.get("snapshotId") or ""
+        ).strip() or str(uuid.uuid4())
+        total_chunks = (len(items) + max_items - 1) // max_items
+        for chunk_index in range(total_chunks):
+            chunk_start = chunk_index * max_items
+            chunk_items = items[chunk_start : chunk_start + max_items]
+            # Scope non-item fields (findings, drift, sources, etc.) to the
+            # first chunk only to avoid duplicating them across chunks on the
+            # portal side.  Items are accumulated; metadata is not.
+            chunk_snapshot = {**snapshot, "items": chunk_items}
+            if chunk_index > 0:
+                chunk_snapshot["findings"] = []
+                chunk_snapshot["drift"] = []
+                chunk_snapshot["sources"] = []
+                chunk_snapshot["dockerProofs"] = []
+            chunk_snapshot["snapshotId"] = (
+                f"{original_snapshot_id}-chunk-{chunk_index + 1}-of-{total_chunks}"
+            )
+            chunk_event = {
+                **event,
+                "eventId": str(uuid.uuid4()),
+                "idempotencyKey": chunk_snapshot["snapshotId"],
+                "payload": {"snapshot": chunk_snapshot},
+            }
+            result.append(chunk_event)
+    return result
 
 
 def _sync_timestamp_from_payload(payload: dict[str, object]) -> str | None:
