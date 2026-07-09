@@ -440,7 +440,7 @@ def sync_aibom_snapshots(
         for snapshot in snapshots
     ]
     event_batches, oversized_events = _batch_inventory_events(events)
-    oversized_statuses = [
+    oversized_statuses: list[dict[str, object]] = [
         {
             "eventId": str(event.get("eventId") or ""),
             "status": "rejected",
