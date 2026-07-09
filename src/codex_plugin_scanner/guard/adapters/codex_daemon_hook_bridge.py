@@ -20,7 +20,6 @@ _FAIL_CLOSED_REASON = "HOL Guard could not complete local Codex hook review safe
 
 class BridgeConfig(TypedDict):
     state_path: str
-    fallback_daemon_url: str
     fallback_command: tuple[str, ...]
     start_command: tuple[str, ...]
     query: str
@@ -62,14 +61,12 @@ def _state_payload(state_path: str | Path) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _daemon_url(state_path: str | Path, fallback_daemon_url: str) -> str:
+def _daemon_url(state_path: str | Path) -> str:
     payload = _state_payload(state_path)
     port = payload.get("port")
     if isinstance(port, int) and 0 < port <= 65535:
         return f"http://127.0.0.1:{port}"
-    normalized = fallback_daemon_url.rstrip("/")
-    _assert_loopback_http_url(normalized)
-    return normalized
+    raise ValueError("daemon state does not contain a valid port")
 
 
 def _daemon_auth_token(state_path: str | Path) -> str | None:
@@ -204,12 +201,11 @@ def _run_local_fallback(
 def _daemon_response(
     *,
     state_path: str | Path,
-    fallback_daemon_url: str,
     query: str,
     data: str,
     timeout_seconds: float,
 ) -> dict[str, object] | None:
-    endpoint = f"{_daemon_url(state_path, fallback_daemon_url)}/v1/hooks/codex?{query}"
+    endpoint = f"{_daemon_url(state_path)}/v1/hooks/codex?{query}"
     response = _post_to_loopback_daemon(
         endpoint,
         data,
@@ -222,7 +218,6 @@ def _daemon_response(
 def main(
     *,
     state_path: str | Path,
-    fallback_daemon_url: str,
     fallback_command: Sequence[str],
     start_command: Sequence[str],
     query: str,
@@ -237,7 +232,6 @@ def main(
     try:
         response = _daemon_response(
             state_path=state_path,
-            fallback_daemon_url=fallback_daemon_url,
             query=query,
             data=data,
             timeout_seconds=timeout_seconds,
@@ -247,7 +241,6 @@ def main(
             try:
                 response = _daemon_response(
                     state_path=state_path,
-                    fallback_daemon_url=fallback_daemon_url,
                     query=query,
                     data=data,
                     timeout_seconds=timeout_seconds,
@@ -292,17 +285,13 @@ def _bridge_config_from_argv(argv: Sequence[str]) -> BridgeConfig:
     if payload is None:
         raise SystemExit("codex_daemon_hook_bridge config must be a JSON object")
     state_path = payload.get("state_path")
-    fallback_daemon_url = payload.get("fallback_daemon_url")
     query = payload.get("query")
     if not isinstance(state_path, str):
         raise SystemExit("codex_daemon_hook_bridge config missing state_path")
-    if not isinstance(fallback_daemon_url, str):
-        raise SystemExit("codex_daemon_hook_bridge config missing fallback_daemon_url")
     if not isinstance(query, str):
         raise SystemExit("codex_daemon_hook_bridge config missing query")
     return BridgeConfig(
         state_path=state_path,
-        fallback_daemon_url=fallback_daemon_url,
         fallback_command=_string_sequence(payload.get("fallback_command"), label="fallback_command"),
         start_command=_string_sequence(payload.get("start_command"), label="start_command"),
         query=query,
@@ -315,7 +304,6 @@ if __name__ == "__main__":
     raise SystemExit(
         main(
             state_path=_config["state_path"],
-            fallback_daemon_url=_config["fallback_daemon_url"],
             fallback_command=_config["fallback_command"],
             start_command=_config["start_command"],
             query=_config["query"],

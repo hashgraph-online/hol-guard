@@ -50,7 +50,6 @@ class _ProxyHandler(BaseHTTPRequestHandler):
 def _bridge_config(guard_home: Path, port: int) -> dict[str, object]:
     return {
         "state_path": str(guard_home / "daemon-state.json"),
-        "fallback_daemon_url": f"http://127.0.0.1:{port}",
         "fallback_command": [sys.executable, "-c", "print('{}')"],
         "start_command": [sys.executable, "-c", "raise SystemExit(1)"],
         "query": f"guard-home={guard_home}",
@@ -68,6 +67,13 @@ def test_assert_loopback_http_url_rejects_remote_and_credentialed_urls() -> None
         bridge._assert_loopback_http_url("http://evil.example:5474/v1/hooks/codex")
     with pytest.raises(ValueError, match="credentials"):
         bridge._assert_loopback_http_url("http://attacker@127.0.0.1:5474/v1/hooks/codex")
+
+
+def test_daemon_url_requires_guard_owned_state(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="state"):
+        bridge._daemon_url(
+            tmp_path / "missing-daemon-state.json",
+        )
 
 
 def test_fail_closed_uses_supported_codex_deny_shapes() -> None:

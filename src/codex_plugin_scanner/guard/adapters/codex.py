@@ -20,7 +20,6 @@ from ..aibom_detection import (
 )
 from ..codex_config import dump_toml, read_toml_payload, write_toml_payload
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
-from ..daemon.manager import guard_daemon_url_for_home, load_guard_daemon_url
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
@@ -215,7 +214,6 @@ def _daemon_start_command(guard_home: Path) -> tuple[str, ...]:
 
 def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
     guard_home = _runtime_guard_home(context)
-    fallback_daemon_url = load_guard_daemon_url(guard_home) or guard_daemon_url_for_home(guard_home)
     query = {"guard-home": str(guard_home)}
     if context.home_dir.resolve() != Path.home().resolve():
         query["home"] = str(context.home_dir)
@@ -224,7 +222,6 @@ def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
     long_timeout = _post_tool_hook_timeout_seconds(context)
     config = {
         "state_path": str(guard_home / "daemon-state.json"),
-        "fallback_daemon_url": fallback_daemon_url,
         "fallback_command": list(_local_hook_command_parts(context)),
         "start_command": list(_daemon_start_command(guard_home)),
         "query": urlencode(query),
