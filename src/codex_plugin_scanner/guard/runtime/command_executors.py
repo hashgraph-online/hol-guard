@@ -20,13 +20,16 @@ from ..cli.update_commands import (
     build_guard_update_status_payload,
     run_guard_update,
 )
+from ..codex_resume import defer_request_resume_to_live_hook, retry_request_resume
 from ..config import load_guard_config
+from ..harness_resume import resume_harness_operation
 from ..local_supply_chain import (
     build_workspace_audit_payload,
     managed_install_audit_workspace_dirs,
     resolve_supply_chain_audit_workspace_dir,
     sync_supply_chain_cloud_state,
 )
+from ..memory_decision_outbox import enqueue_memory_decision_event
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, DecisionScope, GuardAction, PolicyDecision
 from ..package_shim_status import record_package_shim_audit_result
 from ..review_contracts import (
@@ -109,6 +112,7 @@ def execute_guard_command_job(
         if operation in APPROVAL_OPERATIONS:
             return _execute_approval_operation(
                 operation,
+                job=job,
                 payload=payload,
                 store=store,
                 generated_at=generated_at,
@@ -278,6 +282,7 @@ def _execute_app_update_check(generated_at: str) -> dict[str, object]:
 def _execute_approval_operation(
     operation: str,
     *,
+    job: dict[str, object],
     payload: dict[str, object],
     store: GuardStore,
     generated_at: str,
@@ -290,10 +295,13 @@ def _execute_approval_operation(
             "failureMessage": f"Unsupported approval operation: {operation}",
         }
     action = _optional_string(payload.get("action"))
-    local_request_id = _optional_string(payload.get("localRequestId")) or _optional_string(
-        payload.get("local_request_id")
+    local_request_id = _target_string(payload, "localRequestId", "local_request_id") or _target_string(
+        job,
+        "localRequestId",
+        "local_request_id",
     )
-    if action not in {"allow_once", "block", "policy_sync"}:
+    normalized_outer_action = _normalize_remote_decision_action(action)
+    if action != "policy_sync" and normalized_outer_action is None:
         raise ValueError("invalid_approval_payload")
     if action == "policy_sync":
         return _execute_policy_sync(payload, store=store, generated_at=generated_at)
@@ -306,13 +314,21 @@ def _execute_approval_operation(
     if not isinstance(request_row, dict):
         return _result(
             {
-                "action": action,
+                "action": normalized_outer_action or action,
                 "localRequestId": local_request_id,
+                "daemonAckStatus": "not_resolved",
                 "status": "not_resolved",
             },
             generated_at=generated_at,
         )
     oauth = guard_review_oauth_metadata(store)
+    _validate_approval_resolve_target(
+        job=job,
+        payload=payload,
+        oauth=oauth,
+        request_row=request_row,
+        local_request_id=local_request_id,
+    )
     envelope = validated_remote_approval_envelope(remote_approval, store=store)
     validate_remote_approval_request_binding(
         envelope=envelope,
@@ -337,11 +353,11 @@ def _execute_approval_operation(
     ):
         raise ValueError("remote_approval_replayed")
     envelope_decision = _optional_string(envelope.get("decision"))
-    if envelope_decision not in {"allow_once", "block"}:
+    resolution_action = _normalize_remote_decision_action(envelope_decision)
+    if resolution_action is None:
         store.release_remote_once_receipt(receipt_id)
         raise ValueError("invalid_remote_approval_decision")
     resolution_scope = resolution_scope or "artifact"
-    resolution_action = "block" if envelope_decision == "block" else "allow"
     try:
         result = store.resolve_request_with_signed_remote_result(
             local_request_id,
@@ -355,16 +371,254 @@ def _execute_approval_operation(
         raise
     if result.get("resolved") is not True:
         store.release_remote_once_receipt(receipt_id)
+    resolved = result.get("resolved") is True
+    if resolved:
+        enqueue_memory_decision_event(
+            store,
+            request=request_row,
+            action=resolution_action,
+            scope=resolution_scope,
+            resolved_at=generated_at,
+            source="cloud_review",
+        )
+    resume_metadata = (
+        _resume_after_remote_approval(
+            store=store,
+            request_row=request_row,
+            request_id=local_request_id,
+            action=resolution_action,
+            now=generated_at,
+        )
+        if resolved
+        else {}
+    )
+    response_data: dict[str, object] = {
+        "action": normalized_outer_action or resolution_action,
+        "daemonAckStatus": "resolved" if resolved else "not_resolved",
+        "localRequestId": local_request_id,
+        "remoteDecision": resolution_action,
+        "resolution": _remote_resolution_metadata(result),
+        "status": "completed" if resolved else "not_resolved",
+    }
+    response_data.update(resume_metadata)
     return _result(
-        {
-            "action": action,
-            "localRequestId": local_request_id,
-            "remoteApproval": envelope,
-            "resolution": result,
-            "status": "completed" if result.get("resolved") is True else "not_resolved",
-        },
+        response_data,
         generated_at=generated_at,
     )
+
+
+def _normalize_remote_decision_action(value: object) -> str | None:
+    normalized = _optional_string(value)
+    if normalized is None:
+        return None
+    folded = normalized.replace("_", "-")
+    if folded in {"allow", "allow-once"} or normalized == "allowOnce":
+        return "allow"
+    if folded in {"block", "deny", "denied", "blocked"}:
+        return "block"
+    return None
+
+
+def _target_string(mapping: dict[str, object], *keys: str) -> str | None:
+    for key in keys:
+        value = _optional_string(mapping.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _validate_approval_resolve_target(
+    *,
+    job: dict[str, object],
+    payload: dict[str, object],
+    oauth: object,
+    request_row: dict[str, object],
+    local_request_id: str,
+) -> None:
+    expected_request_id = _optional_string(request_row.get("request_id"))
+    if expected_request_id != local_request_id:
+        raise GuardReviewContractError("approval_target_request_mismatch")
+    _validate_target_field(
+        job,
+        payload,
+        keys=("targetGrantId", "target_grant_id", "grantId", "grant_id"),
+        expected=getattr(oauth, "grant_id", None),
+        failure_code="approval_target_grant_mismatch",
+        require_expected=True,
+    )
+    _validate_target_field(
+        job,
+        payload,
+        keys=("targetMachineInstallationId", "target_machine_installation_id", "machineInstallationId"),
+        expected=getattr(oauth, "installation_id", None),
+        failure_code="approval_target_machine_installation_mismatch",
+        require_expected=True,
+    )
+    _validate_target_field(
+        job,
+        payload,
+        keys=("targetRuntimeGrantId", "target_runtime_grant_id", "runtimeGrantId", "runtime_grant_id"),
+        expected=getattr(oauth, "runtime_id", None),
+        failure_code="approval_target_runtime_grant_mismatch",
+        require_expected=False,
+    )
+    _validate_target_field(
+        job,
+        payload,
+        keys=("workspaceId", "workspace_id"),
+        expected=getattr(oauth, "workspace_id", None),
+        failure_code="approval_target_workspace_mismatch",
+        require_expected=True,
+    )
+    _validate_target_field(
+        job,
+        payload,
+        keys=("localRequestId", "local_request_id"),
+        expected=local_request_id,
+        failure_code="approval_target_local_request_mismatch",
+        require_expected=True,
+    )
+
+
+def _validate_target_field(
+    job: dict[str, object],
+    payload: dict[str, object],
+    *,
+    keys: tuple[str, ...],
+    expected: object,
+    failure_code: str,
+    require_expected: bool,
+) -> None:
+    expected_value = _optional_string(expected)
+    if expected_value is None and not require_expected:
+        return
+    for source in (job, payload):
+        for key in keys:
+            value = _optional_string(source.get(key))
+            if value is not None and value != expected_value:
+                raise GuardReviewContractError(failure_code)
+
+
+def _remote_resolution_metadata(result: dict[str, object]) -> dict[str, object]:
+    resolved = result.get("resolved") is True
+    metadata: dict[str, object] = {
+        "resolved": resolved,
+        "status": "resolved" if resolved else "not_resolved",
+    }
+    error = _optional_string(result.get("error"))
+    if error is not None:
+        metadata["error"] = error
+        metadata["status"] = error
+    resolved_request = result.get("resolved_request")
+    if isinstance(resolved_request, dict):
+        request_id = _optional_string(resolved_request.get("request_id"))
+        if request_id is not None:
+            metadata["localRequestId"] = request_id
+    duplicate_ids = result.get("resolved_duplicate_ids")
+    if isinstance(duplicate_ids, list):
+        metadata["resolvedDuplicateIds"] = [
+            item for item in (_optional_string(value) for value in duplicate_ids) if item is not None
+        ]
+    return metadata
+
+
+def _resume_after_remote_approval(
+    *,
+    store: GuardStore,
+    request_row: dict[str, object],
+    request_id: str,
+    action: str,
+    now: str,
+) -> dict[str, object]:
+    harness = _optional_string(request_row.get("harness"))
+    if harness == "codex" and action in {"allow", "block"}:
+        codex_resume = _resume_codex_request(store=store, request_id=request_id, action=action, now=now)
+        if codex_resume is None:
+            return {}
+        safe = _safe_resume_metadata(codex_resume)
+        payload: dict[str, object] = {
+            "codexResume": safe,
+            "codex_resume": safe,
+            "resumeStatus": safe.get("status"),
+        }
+        completed_at = safe.get("completedAt") or safe.get("sentAt")
+        if completed_at is not None:
+            payload["resumeCompletedAt"] = completed_at
+        return payload
+    harness_resume = resume_harness_operation(store, request_id=request_id, action=action, now=now)
+    if harness_resume is None:
+        return {}
+    safe_harness_resume = _safe_resume_metadata(harness_resume)
+    payload = {
+        "harnessResume": safe_harness_resume,
+        "harness_resume": safe_harness_resume,
+        "resumeStatus": safe_harness_resume.get("status"),
+    }
+    completed_at = safe_harness_resume.get("completedAt")
+    if completed_at is not None:
+        payload["resumeCompletedAt"] = completed_at
+    return payload
+
+
+def _resume_codex_request(
+    *,
+    store: GuardStore,
+    request_id: str,
+    action: str,
+    now: str,
+) -> dict[str, object] | None:
+    try:
+        codex_resume = defer_request_resume_to_live_hook(
+            store,
+            request_id=request_id,
+            action=action,
+            now=now,
+        )
+        if codex_resume is None:
+            codex_resume = retry_request_resume(
+                store,
+                request_id=request_id,
+                now=now,
+            )
+        return codex_resume
+    except ValueError as error:
+        if str(error) == "resume_not_supported":
+            return {
+                "status": "skipped",
+                "reason": "resume_not_supported",
+                "message": "This Codex request does not expose a supported resume target.",
+            }
+        return {
+            "status": "failed",
+            "reason": str(error) or "resume_failed",
+            "message": "HOL Guard could not resume the Codex request after applying the remote decision.",
+        }
+
+
+def _safe_resume_metadata(resume: dict[str, object]) -> dict[str, object]:
+    safe: dict[str, object] = {}
+    for source_key, target_key in (
+        ("operationId", "operationId"),
+        ("harness", "harness"),
+        ("status", "status"),
+        ("action", "action"),
+        ("reason", "reason"),
+        ("message", "message"),
+        ("attempt_count", "attemptCount"),
+        ("attemptCount", "attemptCount"),
+        ("last_attempt_at", "lastAttemptAt"),
+        ("lastAttemptAt", "lastAttemptAt"),
+        ("sent_at", "sentAt"),
+        ("sentAt", "sentAt"),
+        ("completedAt", "completedAt"),
+        ("completed_at", "completedAt"),
+    ):
+        value = resume.get(source_key)
+        if isinstance(value, str) and value.strip():
+            safe[target_key] = value.strip()
+        elif isinstance(value, (int, float, bool)):
+            safe[target_key] = value
+    return safe
 
 
 def _execute_policy_sync(

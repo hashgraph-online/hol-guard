@@ -91,13 +91,26 @@ def resolve_command_display(
     review_command: str | None,
     raw_command: str | None,
     redaction_state: MemoryRedactionState,
+    action_envelope: Mapping[str, object] | None = None,
+    artifact_name: str | None = None,
+    artifact_id: str | None = None,
+    launch_target: str | None = None,
 ) -> str:
     """Return the human-facing command text honoring the redaction policy."""
-    if redaction_state == "withheld":
-        return review_command or "Command withheld"
+    if raw_command and redaction_state in {"disabled", "enabled"}:
+        return raw_command
+    envelope_display = _display_from_action_envelope(action_envelope)
+    if envelope_display is not None:
+        return envelope_display
+    for candidate in (launch_target, artifact_name, artifact_id, review_command):
+        value = _string_or_none(candidate)
+        if value is not None and not _is_approval_wrapper(value) and not _is_generic_fragment(value):
+            return value
     if redaction_state == "enabled":
-        return review_command or "Command redacted"
-    return raw_command or review_command or "Command unavailable"
+        return "Command redacted"
+    if redaction_state == "withheld":
+        return "Command withheld"
+    return "Command unavailable"
 
 
 def build_memory_decision_event(
@@ -133,6 +146,7 @@ def build_memory_decision_event(
     artifact_name = _string_or_none(request.get("artifact_name"))
     artifact_type = _string_or_none(request.get("artifact_type"))
     harness = _string_or_none(request.get("harness"))
+    action_envelope = _mapping_or_none(request.get("action_envelope_json"))
 
     redaction_state = resolve_redaction_state(
         raw_command=raw_command,
@@ -142,6 +156,10 @@ def build_memory_decision_event(
         review_command=review_command,
         raw_command=raw_command,
         redaction_state=redaction_state,
+        action_envelope=action_envelope,
+        artifact_name=artifact_name,
+        artifact_id=artifact_id,
+        launch_target=_string_or_none(request.get("launch_target")),
     )
 
     # Build the fingerprint from the real command when redaction permits it.
@@ -171,7 +189,7 @@ def build_memory_decision_event(
         machine_id=machine_id,
         machine_installation_id=machine_installation_id,
         harness_id=harness,
-        project_id=_string_or_none(request.get("project_id")),
+        project_id=_project_identity(request),
         request_id=request_id,
         queue_group_id=_string_or_none(request.get("queue_group_id")),
         action_identity=_string_or_none(request.get("action_identity")),
@@ -218,6 +236,73 @@ def _string_or_none(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
+
+
+def _mapping_or_none(value: object) -> Mapping[str, object] | None:
+    return value if isinstance(value, Mapping) else None
+
+
+def _project_identity(request: Mapping[str, object]) -> str | None:
+    for key in ("project_id", "projectId", "workspace_path", "workspacePath"):
+        value = _string_or_none(request.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _display_from_action_envelope(envelope: Mapping[str, object] | None) -> str | None:
+    if envelope is None:
+        return None
+    action_type = _string_or_none(envelope.get("action_type") or envelope.get("actionType"))
+    if action_type in {"file_read", "file_read_request", "file_write", "file_write_request"}:
+        path = _first_string_from_sequence(envelope.get("target_paths") or envelope.get("targetPaths"))
+        if path is None:
+            path = _string_or_none(envelope.get("path") or envelope.get("file_path") or envelope.get("filePath"))
+        if path is not None:
+            verb = "Read" if "read" in action_type else "Write"
+            return f"{verb} {path}"
+    if action_type == "mcp_tool":
+        server = _string_or_none(envelope.get("mcp_server") or envelope.get("mcpServer"))
+        tool = _string_or_none(envelope.get("mcp_tool") or envelope.get("mcpTool") or envelope.get("tool_name"))
+        if server and tool:
+            return f"mcp {server}.{tool}"
+        if tool and not _is_generic_fragment(tool):
+            return f"mcp {tool}"
+    package_manager = _string_or_none(envelope.get("package_manager") or envelope.get("packageManager"))
+    package_name = _string_or_none(envelope.get("package_name") or envelope.get("packageName"))
+    if package_manager and package_name:
+        return f"{package_manager} install {package_name}"
+    url = _string_or_none(
+        envelope.get("url") or envelope.get("uri") or envelope.get("endpoint") or envelope.get("host")
+    )
+    method = _string_or_none(envelope.get("method"))
+    if url and method:
+        return f"{method.upper()} {url}"
+    if url:
+        return url
+    tool_name = _string_or_none(envelope.get("tool_name") or envelope.get("toolName"))
+    if tool_name and not _is_generic_fragment(tool_name):
+        return tool_name
+    return None
+
+
+def _first_string_from_sequence(value: object) -> str | None:
+    if isinstance(value, str):
+        return _string_or_none(value)
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            candidate = _string_or_none(item)
+            if candidate is not None:
+                return candidate
+    return None
+
+
+def _is_approval_wrapper(value: str) -> bool:
+    return value.strip().startswith("hol-guard approvals approve ")
+
+
+def _is_generic_fragment(value: str) -> bool:
+    return value.strip().lower() in {"bash", "rg", "cat", "tool", "mcp", "skill"}
 
 
 def _risk_signals(request: Mapping[str, object]) -> tuple[str, ...]:

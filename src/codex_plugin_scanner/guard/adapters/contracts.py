@@ -332,7 +332,7 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
         event_surfaces=("shell", "prompt", "mcp_tool", "file_read", "tool_result"),
         native_approval=True,
         browser_fallback=True,
-        resume_support=False,
+        resume_support=True,
         known_blind_spots=(
             "Pi package install and update flows happen outside the runtime extension bridge, so Guard observes the "
             "configured package surfaces plus the prompt and tool events forwarded by the managed extension."

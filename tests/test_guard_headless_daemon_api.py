@@ -2666,8 +2666,11 @@ def test_headless_remote_once_applies_pending_request_and_records_receipt(tmp_pa
     assert payload["status"] == "completed"
     assert payload["resolved_request"]["request_id"] == "req-remote-once"
     assert payload["resolved_request"]["resolution_scope"] == "workspace"
+    assert payload["codex_resume"]["status"] == "skipped"
     events = store.list_events(limit=5, event_name="approval.remote_once_applied")
     assert events[0]["payload"]["receipt_id"] == "cloud-receipt-1"
+    resume_events = store.list_events(limit=5, event_name="codex/thread_resume")
+    assert resume_events[0]["payload"]["request_id"] == "req-remote-once"
     # Remote-once must resolve the queued request without persisting an artifact policy.
     persisted_action = store.resolve_policy(
         "codex",
@@ -2676,6 +2679,78 @@ def test_headless_remote_once_applies_pending_request_and_records_receipt(tmp_pa
         workspace=request.workspace,
     )
     assert persisted_action is None
+
+
+def test_headless_remote_once_sanitizes_codex_resume_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1", now="2026-06-13T00:00:00+00:00")
+    store.add_approval_request(_remote_once_request("req-remote-resume-safe"), "2026-05-14T11:59:00+00:00")
+
+    def fake_defer_request_resume_to_live_hook(
+        _store: GuardStore,
+        *,
+        request_id: str,
+        action: str,
+        now: str,
+    ) -> dict[str, object]:
+        return {
+            "request_id": request_id,
+            "resolution_action": action,
+            "status": "sent",
+            "reason": "app_server_sent",
+            "message": "Codex was notified.",
+            "strategy": "codex-app-server-thread",
+            "supported": True,
+            "thread_id": "thread-secret",
+            "resume_token": "resume-token-secret",
+            "attempt_count": 1,
+            "sent_at": now,
+        }
+
+    monkeypatch.setattr(daemon_server, "defer_request_resume_to_live_hook", fake_defer_request_resume_to_live_hook)
+    monkeypatch.setattr(
+        daemon_server,
+        "retry_request_resume",
+        lambda *_args, **_kwargs: pytest.fail("retry should not run when live hook returns metadata"),
+    )
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        remote_approval = _signed_remote_approval_for_request(
+            store,
+            "req-remote-resume-safe",
+            receipt_id="cloud-receipt-resume-safe",
+        )
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/requests/remote-once",
+                token=_dashboard_token_for(store),
+                payload={
+                    "harness": "codex",
+                    "operation": "remote_once",
+                    "remoteApproval": json.dumps(remote_approval),
+                },
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["codex_resume"]["status"] == "sent"
+    assert payload["codex_resume"]["strategy"] == "codex-app-server-thread"
+    assert payload["codex_resume"]["resolutionAction"] == "allow"
+    response_text = json.dumps(payload, sort_keys=True)
+    assert "thread-secret" not in response_text
+    assert "resume-token-secret" not in response_text
+    resume_events = store.list_events(limit=5, event_name="codex/thread_resume")
+    event_text = json.dumps(resume_events[0]["payload"], sort_keys=True)
+    assert "thread-secret" not in event_text
+    assert "resume-token-secret" not in event_text
 
 
 def test_headless_remote_once_rejects_stale_requests_and_replays(tmp_path: Path) -> None:

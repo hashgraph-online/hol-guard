@@ -253,6 +253,12 @@ _GENERIC_TOOL_LABELS = frozenset(
         "Grep",
         "WebFetch",
         "TodoWrite",
+        "tool",
+        "mcp",
+        "skill",
+        "bash",
+        "rg",
+        "cat",
         "mcp_tool",
         "package_request",
         "file_read_request",
@@ -1266,9 +1272,16 @@ def _item_risk_signals(item: dict[str, object], artifact) -> tuple[str, ...]:
 
 def _item_action_envelope_json(item: Mapping[str, object]) -> dict[str, object] | None:
     value = item.get("action_envelope_json")
-    if not isinstance(value, Mapping):
-        return None
-    return {str(key): item_value for key, item_value in value.items() if isinstance(key, str)}
+    if isinstance(value, str) and value.strip():
+        try:
+            import json as _json
+
+            value = _json.loads(value)
+        except (TypeError, ValueError):
+            return None
+    if isinstance(value, Mapping):
+        return {str(key): item_value for key, item_value in value.items() if isinstance(key, str)}
+    return None
 
 
 def _item_decision_v2_json(item: dict[str, object]) -> dict[str, object] | None:

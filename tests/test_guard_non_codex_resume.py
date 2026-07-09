@@ -8,6 +8,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.pi_hooks import pi_hook_response_from_guard
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.harness_resume import resume_harness_operation
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -82,8 +83,61 @@ def test_pi_approval_with_session_id_metadata_does_not_attempt_codex_resume(tmp_
 
     assert payload["resolved"] is True
     assert "codex_resume" not in payload
+    assert payload["harness_resume"]["status"] == "resumed"
+    assert payload["harnessResume"] == payload["harness_resume"]
+    assert "resume_token" not in str(payload["harness_resume"])
     assert payload["copy"]["body"] == "Return to Pi and retry"
     assert store.list_events(event_name="codex/thread_resume") == []
+    operation = store.get_guard_operation("pi-operation")
+    assert operation is not None
+    assert operation["status"] == "resumed"
+    assert store.list_events(event_name="harness/operation_resume")
+
+
+def test_pi_denial_marks_waiting_operation_blocked_without_leaking_resume_token(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    session = store.upsert_guard_session(
+        session_id="pi-session",
+        harness="pi",
+        surface="harness-adapter",
+        status="waiting_on_approval",
+        client_name="pi-hook",
+        client_title="Pi hook",
+        client_version="1.0.0",
+        workspace=str(tmp_path),
+        capabilities=["approval-resolution"],
+        now="2026-05-08T10:00:00+00:00",
+    )
+    store.upsert_guard_operation(
+        operation_id="pi-operation-block",
+        session_id=str(session["session_id"]),
+        harness="oh-my-pi",
+        operation_type="tool_call",
+        status="waiting_on_approval",
+        approval_request_ids=["req-pi-block"],
+        resume_token="resume-token-secret",
+        metadata={"session_id": "pi-session-id"},
+        now="2026-05-08T10:00:00+00:00",
+    )
+
+    result = resume_harness_operation(
+        store,
+        request_id="req-pi-block",
+        action="block",
+        now="2026-05-08T10:01:00+00:00",
+    )
+
+    assert result == {
+        "operationId": "pi-operation-block",
+        "harness": "pi",
+        "status": "blocked",
+        "action": "block",
+        "completedAt": "2026-05-08T10:01:00+00:00",
+    }
+    assert "resume-token-secret" not in str(result)
+    operation = store.get_guard_operation("pi-operation-block")
+    assert operation is not None
+    assert operation["status"] == "blocked"
 
 
 def test_pi_hook_response_includes_resume_poll_metadata_for_pending_approval() -> None:
