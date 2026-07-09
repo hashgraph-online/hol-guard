@@ -1439,6 +1439,44 @@ class TestManifestFallback:
         mcp_artifacts = [a for a in detection.artifacts if a.artifact_type == "mcp_server"]
         assert len(mcp_artifacts) == 0
 
+    def test_manifest_fallback_uses_real_server_name(self, tmp_path: Path):
+        """Manifest stores servers keyed as 'yaml:<name>' but detect()
+        should report the real server name, not the prefixed key."""
+        _write(tmp_path / ".hermes" / "config.yaml", "mcp_servers: {}\n")
+
+        # Manifest with prefixed keys (as written by install())
+        manifest_dir = tmp_path / "guard-home" / "hermes"
+        manifest_dir.mkdir(parents=True)
+        _write(
+            manifest_dir / "manifest.json",
+            json.dumps({
+                "servers": {
+                    "yaml:lean-ctx": {
+                        "name": "lean-ctx",
+                        "command": "npx",
+                        "args": ["-y", "@anthropic/lean-ctx"],
+                        "source": "yaml",
+                    },
+                    "json:playwright": {
+                        "name": "playwright",
+                        "command": "npx",
+                        "source": "json",
+                    },
+                },
+            }),
+        )
+
+        adapter = HermesHarnessAdapter()
+        detection = adapter.detect(_ctx(tmp_path))
+        mcp_artifacts = [a for a in detection.artifacts if a.artifact_type == "mcp_server"]
+        assert len(mcp_artifacts) == 2
+        names = {a.name for a in mcp_artifacts}
+        assert "lean-ctx" in names
+        assert "playwright" in names
+        # Prefixed keys should NOT appear as names
+        assert "yaml:lean-ctx" not in names
+        assert "json:playwright" not in names
+
 
 class TestInstallHostHomeAwareness:
     """install() loads MCP sources from HERMES_HOST_HOME when set."""

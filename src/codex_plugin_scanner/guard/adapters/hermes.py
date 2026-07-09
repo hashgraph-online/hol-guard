@@ -647,7 +647,18 @@ class HermesHarnessAdapter(HarnessAdapter):
             return []
 
         found_paths.append(str(manifest_path))
-        return self._mcp_artifacts(servers, str(manifest_path), source="manifest")
+        # Manifest stores servers keyed as "yaml:<name>" / "json:<name>".
+        # Re-key by the real server name so artifacts report the correct name.
+        real_servers: dict[str, dict[str, object]] = {}
+        for _key, server_config in servers.items():
+            if not isinstance(server_config, dict):
+                continue
+            real_name = server_config.get("name")
+            if isinstance(real_name, str) and real_name:
+                real_servers[real_name] = server_config
+            elif isinstance(_key, str):
+                real_servers[_key] = server_config
+        return self._mcp_artifacts(real_servers, str(manifest_path), source="manifest")
 
     def _mcp_artifacts(
         self,
