@@ -538,7 +538,7 @@ def sync_aibom_snapshots(
                 "accepted": total_accepted,
                 "rejected": total_rejected,
                 "statuses": all_statuses,
-                "partial": batches_sent > 0,
+                "partial": batches_sent > 0 or bool(oversized_events),
                 "error": "Guard Cloud AIBOM sync failed due to an HTTP error.",
             }
             store.set_sync_payload("aibom_sync_summary", failure_summary, synced_at)
@@ -551,7 +551,7 @@ def sync_aibom_snapshots(
                 "accepted": total_accepted,
                 "rejected": total_rejected,
                 "statuses": all_statuses,
-                "partial": batches_sent > 0,
+                "partial": batches_sent > 0 or bool(oversized_events),
                 "error": "Guard Cloud AIBOM sync failed due to a network error.",
             }
             store.set_sync_payload("aibom_sync_summary", failure_summary, synced_at)
