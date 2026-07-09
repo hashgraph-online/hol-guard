@@ -380,7 +380,7 @@ Options:
 | Option | Default | Description |
 | :--- | :--- | :--- |
 | `version` | `latest` | Pin to a specific release (e.g. `2.0.1004`) |
-| `initHarness` | `auto` | Configure for a specific harness: `codex`, `claude-code`, `cursor`, `gemini`, `opencode`, `pi`, or `auto` |
+| `initHarness` | `auto` | Configure for a specific harness: `codex`, `claude-code`, `cursor`, `gemini`, `opencode`, `pi`, `auto` (detect), or `none` (skip init) |
 | `strictMode` | `false` | Enable strict mode on install |
 
 See [`devcontainer-features/hol-guard/README.md`](devcontainer-features/hol-guard/README.md) for details.

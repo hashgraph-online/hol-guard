@@ -31,35 +31,90 @@ if [ "$MAJOR" -lt 3 ] || { [ "$MAJOR" -eq 3 ] && [ "$MINOR" -lt 10 ]; }; then
     exit 1
 fi
 
-# Install pipx if not present
-if ! command -v pipx &>/dev/null; then
-    echo "Installing pipx..."
-    python3 -m pip install --user pipx
-    export PATH="${PATH}:${HOME}/.local/bin"
+# Determine the target non-root user (devcontainer provides these env vars)
+USERNAME="${_REMOTE_USER:-${_CONTAINER_USER:-auto}}"
+if [ "${USERNAME}" = "auto" ] || [ "${USERNAME}" = "root" ]; then
+    for u in vscode node codespace; do
+        if id "$u" &>/dev/null; then
+            USERNAME="$u"
+            break
+        fi
+    done
+fi
+if [ "${USERNAME}" = "auto" ]; then
+    USERNAME="root"
 fi
 
-# Install hol-guard
+USER_HOME=$(getent passwd "${USERNAME}" | cut -d: -f6 || echo "/home/${USERNAME}")
+echo "Installing for user: ${USERNAME} (${USER_HOME})"
+
+# Run a command as the target user
+run_as_user() {
+    if [ "${USERNAME}" = "root" ]; then
+        eval "$1"
+    else
+        su "${USERNAME}" -c "$1"
+    fi
+}
+
+# Install pipx if not present (handling PEP 668 externally-managed-environment)
+if ! command -v pipx &>/dev/null && ! run_as_user "command -v pipx &>/dev/null"; then
+    echo "Installing pipx..."
+    if command -v apt-get &>/dev/null; then
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update && apt-get install -y pipx
+    elif command -v apk &>/dev/null; then
+        apk add pipx
+    elif command -v dnf &>/dev/null; then
+        dnf install -y pipx
+    else
+        run_as_user "python3 -m pip install --user pipx || python3 -m pip install --user pipx --break-system-packages"
+    fi
+fi
+
+# Ensure pipx is in the user's PATH
+run_as_user "pipx ensurepath &>/dev/null || ${USER_HOME}/.local/bin/pipx ensurepath &>/dev/null" || true
+
+# Determine pipx binary path
+PIPX_BIN="pipx"
+if ! run_as_user "command -v pipx &>/dev/null"; then
+    PIPX_BIN="${USER_HOME}/.local/bin/pipx"
+fi
+
+# Install hol-guard (--force for idempotent re-runs)
 if [ "$VERSION" = "latest" ]; then
     echo "Installing HOL Guard (latest)..."
-    pipx install hol-guard
+    run_as_user "${PIPX_BIN} install --force hol-guard"
 else
     echo "Installing HOL Guard v${VERSION}..."
-    pipx install "hol-guard==${VERSION}"
+    run_as_user "${PIPX_BIN} install --force hol-guard==${VERSION}"
+fi
+
+# Determine hol-guard binary path
+GUARD_BIN="hol-guard"
+if ! run_as_user "command -v hol-guard &>/dev/null"; then
+    GUARD_BIN="${USER_HOME}/.local/bin/hol-guard"
 fi
 
 # Initialize for harness if requested
 if [ "$INIT_HARNESS" != "none" ]; then
     echo ""
     echo "Initializing HOL Guard for harness: ${INIT_HARNESS}..."
+    # The Guard CLI auto-detects installed harnesses. --yes makes init
+    # non-interactive for devcontainer builds.
     if [ "$INIT_HARNESS" = "auto" ]; then
-        hol-guard init
+        run_as_user "${GUARD_BIN} init --yes"
     else
-        hol-guard init --harness "$INIT_HARNESS"
+        # No --harness flag exists yet; use --yes for non-interactive auto-detect.
+        # The specified harness will be detected if installed in the container.
+        echo "Note: hol-guard init auto-detects installed harnesses."
+        echo "  Specified harness '${INIT_HARNESS}' will be configured if found."
+        run_as_user "${GUARD_BIN} init --yes"
     fi
 
     if [ "$STRICT_MODE" = "true" ]; then
         echo "Enabling strict mode..."
-        hol-guard config set strict true
+        run_as_user "${GUARD_BIN} settings set security-level strict"
     fi
 fi
 
