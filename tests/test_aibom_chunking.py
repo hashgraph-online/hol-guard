@@ -1,13 +1,14 @@
-"""Tests for AIBOM inventory event chunking.
-
-Large snapshots (e.g. Hermes with 486 items) exceed Cloudflare's 100s
-origin timeout when sent as a single event.  _chunk_inventory_events
-splits them into multiple smaller events.
-"""
+"""Tests for atomic AIBOM inventory request batching."""
 
 from __future__ import annotations
 
-from codex_plugin_scanner.guard.aibom_cli import _chunk_inventory_events
+import pytest
+
+from codex_plugin_scanner.guard.aibom_cli import (
+    _AIBOM_MAX_REQUEST_BODY_BYTES,
+    _batch_inventory_events,
+    _inventory_events_request_body,
+)
 
 
 def _make_event(snapshot_id: str, items: list[dict]) -> dict:
@@ -53,104 +54,94 @@ def _make_item(item_id: str) -> dict:
     }
 
 
-class TestChunkInventoryEvents:
-    """_chunk_inventory_events splits large events into item-level chunks."""
-
-    def test_small_event_not_chunked(self):
-        """An event with fewer items than the threshold stays as one event."""
-        items = [_make_item(f"item-{i}") for i in range(10)]
-        event = _make_event("snap-1", items)
-        result = _chunk_inventory_events([event], max_items=100)
-        assert len(result) == 1
-        assert result[0]["idempotencyKey"] == "snap-1"
-
-    def test_exact_threshold_not_chunked(self):
-        """An event with exactly max_items items is not chunked."""
-        items = [_make_item(f"item-{i}") for i in range(100)]
-        event = _make_event("snap-1", items)
-        result = _chunk_inventory_events([event], max_items=100)
-        assert len(result) == 1
-
-    def test_large_event_chunked(self):
-        """An event with 486 items and max_items=100 produces 5 chunks."""
+class TestBatchInventoryEvents:
+    def test_486_item_snapshot_remains_atomic(self) -> None:
         items = [_make_item(f"item-{i}") for i in range(486)]
         event = _make_event("hermes:snapshot:test", items)
-        result = _chunk_inventory_events([event], max_items=100)
-        assert len(result) == 5  # ceil(486/100) = 5
-        # Each chunk has at most 100 items
-        for chunk in result:
-            chunk_items = chunk["payload"]["snapshot"]["items"]
-            assert len(chunk_items) <= 100
-        # Last chunk has the remainder
-        last_items = result[-1]["payload"]["snapshot"]["items"]
-        assert len(last_items) == 86  # 486 - 400
 
-    def test_chunked_events_have_unique_ids(self):
-        """Each chunk gets a unique event_id and snapshot_id."""
-        items = [_make_item(f"item-{i}") for i in range(250)]
-        event = _make_event("snap-1", items)
-        result = _chunk_inventory_events([event], max_items=100)
-        assert len(result) == 3
-        event_ids = {c["eventId"] for c in result}
-        snapshot_ids = {c["idempotencyKey"] for c in result}
-        assert len(event_ids) == 3
-        assert len(snapshot_ids) == 3
+        batches, oversized = _batch_inventory_events([event])
 
-    def test_chunked_snapshot_ids_have_suffix(self):
-        """Chunked snapshot IDs include a -chunk-N-of-M suffix."""
-        items = [_make_item(f"item-{i}") for i in range(250)]
-        event = _make_event("hermes:snapshot:abc", items)
-        result = _chunk_inventory_events([event], max_items=100)
-        assert len(result) == 3
-        assert result[0]["payload"]["snapshot"]["snapshotId"] == "hermes:snapshot:abc-chunk-1-of-3"
-        assert result[1]["payload"]["snapshot"]["snapshotId"] == "hermes:snapshot:abc-chunk-2-of-3"
-        assert result[2]["payload"]["snapshot"]["snapshotId"] == "hermes:snapshot:abc-chunk-3-of-3"
+        assert batches == [[event]]
+        assert oversized == []
+        snapshot = batches[0][0]["payload"]["snapshot"]
+        assert snapshot["snapshotId"] == "hermes:snapshot:test"
+        assert len(snapshot["items"]) == 486
 
-    def test_findings_scoped_to_first_chunk(self):
-        """Findings/sources/drift appear only in the first chunk to avoid
-        duplication on the portal side. Items are accumulated, metadata is not."""
-        items = [_make_item(f"item-{i}") for i in range(150)]
-        event = _make_event("snap-1", items)
-        event["payload"]["snapshot"]["findings"] = [{"findingId": "f1"}]
-        event["payload"]["snapshot"]["sources"] = [{"sourceId": "s1"}]
-        result = _chunk_inventory_events([event], max_items=100)
-        assert len(result) == 2
-        # First chunk keeps findings
-        first = result[0]["payload"]["snapshot"]
-        assert first["findings"] == [{"findingId": "f1"}]
-        assert first["sources"] == [{"sourceId": "s1"}]
-        # Second chunk has empty findings/drift/sources
-        second = result[1]["payload"]["snapshot"]
-        assert second["findings"] == []
-        assert second["drift"] == []
-        assert second["sources"] == []
-        # Both chunks keep agentId
-        assert first["agentId"] == "hermes:local"
-        assert second["agentId"] == "hermes:local"
+    def test_small_events_share_count_bounded_batch(self) -> None:
+        events = [_make_event(f"snap-{index}", [_make_item(str(index))]) for index in range(4)]
 
-    def test_mixed_events(self):
-        """A mix of small and large events chunk correctly."""
-        small = _make_event("small", [_make_item("a")])
-        large = _make_event("large", [_make_item(f"i-{i}") for i in range(200)])
-        result = _chunk_inventory_events([small, large], max_items=100)
-        assert len(result) == 3  # 1 small + 2 large chunks
+        batches, oversized = _batch_inventory_events(events, max_batch_size=3)
 
-    def test_no_items_passes_through(self):
-        """An event with empty items list passes through unchanged."""
-        event = _make_event("empty", [])
-        result = _chunk_inventory_events([event], max_items=100)
-        assert len(result) == 1
-        assert result[0]["payload"]["snapshot"]["items"] == []
+        assert batches == [events[:3], events[3:]]
+        assert oversized == []
 
-    def test_all_items_preserved_across_chunks(self):
-        """No items are lost during chunking."""
-        original_items = [_make_item(f"item-{i}") for i in range(486)]
-        event = _make_event("snap-1", original_items)
-        result = _chunk_inventory_events([event], max_items=100)
-        chunked_items = []
-        for chunk in result:
-            chunked_items.extend(chunk["payload"]["snapshot"]["items"])
-        assert len(chunked_items) == 486
-        original_ids = {item["itemId"] for item in original_items}
-        chunked_ids = {item["itemId"] for item in chunked_items}
-        assert original_ids == chunked_ids
+    def test_request_limit_splits_between_snapshots(self) -> None:
+        first = _make_event("first", [_make_item("a")])
+        second = _make_event("second", [_make_item("b")])
+        single_body_limit = max(
+            len(_inventory_events_request_body([first])),
+            len(_inventory_events_request_body([second])),
+        )
+
+        batches, oversized = _batch_inventory_events(
+            [first, second],
+            max_body_bytes=single_body_limit,
+        )
+
+        assert batches == [[first], [second]]
+        assert oversized == []
+        assert first["idempotencyKey"] == "first"
+        assert second["idempotencyKey"] == "second"
+
+    def test_default_request_limit_accepts_just_under_and_rejects_over(self) -> None:
+        event = _make_event("boundary", [_make_item("boundary")])
+        base_size = len(_inventory_events_request_body([event]))
+        event["payload"]["snapshot"]["redactionReport"]["padding"] = "x" * (
+            _AIBOM_MAX_REQUEST_BODY_BYTES - base_size - 64
+        )
+        under_limit_size = len(_inventory_events_request_body([event]))
+
+        batches, oversized = _batch_inventory_events([event])
+
+        assert _AIBOM_MAX_REQUEST_BODY_BYTES - 100 < under_limit_size <= _AIBOM_MAX_REQUEST_BODY_BYTES
+        assert all(len(_inventory_events_request_body(batch)) <= _AIBOM_MAX_REQUEST_BODY_BYTES for batch in batches)
+        assert oversized == []
+
+        event["payload"]["snapshot"]["redactionReport"]["padding"] += "x" * 101
+        batches, oversized = _batch_inventory_events([event])
+        assert batches == []
+        assert oversized == [event]
+
+    def test_oversized_snapshot_is_quarantined_without_blocking_valid_snapshot(self) -> None:
+        valid = _make_event("valid", [_make_item("small")])
+        oversized = _make_event("oversized", [_make_item("large")])
+        body_size = len(_inventory_events_request_body([oversized]))
+
+        batches, oversized_events = _batch_inventory_events(
+            [valid, oversized],
+            max_body_bytes=body_size - 1,
+        )
+
+        assert batches == [[valid]]
+        assert oversized_events == [oversized]
+        assert oversized["payload"]["snapshot"]["snapshotId"] == "oversized"
+
+    def test_non_item_snapshot_fields_remain_on_atomic_event(self) -> None:
+        event = _make_event("snap-1", [_make_item("item-1")])
+        snapshot = event["payload"]["snapshot"]
+        snapshot["findings"] = [{"findingId": "finding-1"}]
+        snapshot["sources"] = [{"sourceId": "source-1"}]
+
+        batches, oversized = _batch_inventory_events([event])
+
+        assert batches[0][0]["payload"]["snapshot"] == snapshot
+        assert oversized == []
+
+    @pytest.mark.parametrize("max_batch_size,max_body_bytes", [(0, 100), (1, 0)])
+    def test_invalid_limits_are_rejected(self, max_batch_size: int, max_body_bytes: int) -> None:
+        with pytest.raises(ValueError, match="limits must be positive"):
+            _batch_inventory_events(
+                [],
+                max_batch_size=max_batch_size,
+                max_body_bytes=max_body_bytes,
+            )
