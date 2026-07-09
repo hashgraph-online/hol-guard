@@ -1261,3 +1261,298 @@ class TestEdgeCases:
         detection = adapter.detect(_ctx(tmp_path))
         file_artifacts = [a for a in detection.artifacts if a.artifact_type == "skill_file"]
         assert len(file_artifacts) >= 1
+
+
+# ------------------------------------------------------------------
+# Container fallback: HERMES_HOST_HOME + manifest.json
+# ------------------------------------------------------------------
+
+
+class TestContainerHostHomeFallback:
+    """detect() falls back to HERMES_HOST_HOME when the container's
+    Hermes home is a minimal sandbox with no artifacts."""
+
+    def test_detect_uses_host_home_when_container_is_empty(self, tmp_path: Path, monkeypatch):
+        """Container has empty skills + trivial config; host has real skills."""
+        # Container's minimal sandbox config
+        _write(tmp_path / ".hermes" / "config.yaml", "mcp_servers: {}\n")
+
+        # Host's real Hermes home with skills
+        host_home = tmp_path / "host-hermes"
+        _write(
+            host_home / "skills" / "creative" / "story-writer" / "SKILL.md",
+            "---\nname: story-writer\n---\n# Story Writer\n",
+        )
+        _write(
+            host_home / "config.yaml",
+            "mcp_servers:\n  lean-ctx:\n    command: npx\n    args: ['lean-ctx']\n",
+        )
+
+        monkeypatch.setenv("HERMES_HOST_HOME", str(host_home))
+        adapter = HermesHarnessAdapter()
+        detection = adapter.detect(_ctx(tmp_path))
+
+        # Should find the skill from the host home
+        skill_artifacts = [a for a in detection.artifacts if a.artifact_type == "skill"]
+        assert len(skill_artifacts) == 1
+        assert skill_artifacts[0].name == "story-writer"
+
+        # Should find the MCP server from the host config
+        mcp_artifacts = [a for a in detection.artifacts if a.artifact_type == "mcp_server"]
+        assert len(mcp_artifacts) == 1
+        assert mcp_artifacts[0].name == "lean-ctx"
+
+    def test_detect_skips_host_home_when_container_has_artifacts(self, tmp_path: Path, monkeypatch):
+        """When the container already has artifacts, don't scan host home."""
+        # Container has real skills
+        _write(
+            tmp_path / ".hermes" / "skills" / "local" / "my-skill" / "SKILL.md",
+            "---\nname: my-skill\n---\n# My Skill\n",
+        )
+        _write(tmp_path / ".hermes" / "config.yaml", "mcp_servers: {}\n")
+
+        # Host home also has skills
+        host_home = tmp_path / "host-hermes"
+        _write(
+            host_home / "skills" / "host" / "host-skill" / "SKILL.md",
+            "---\nname: host-skill\n---\n# Host Skill\n",
+        )
+
+        monkeypatch.setenv("HERMES_HOST_HOME", str(host_home))
+        adapter = HermesHarnessAdapter()
+        detection = adapter.detect(_ctx(tmp_path))
+
+        # Should only find the container's skill, not the host's
+        skill_artifacts = [a for a in detection.artifacts if a.artifact_type == "skill"]
+        assert len(skill_artifacts) == 1
+        assert skill_artifacts[0].name == "my-skill"
+
+    def test_detect_skips_host_home_when_env_unset(self, tmp_path: Path, monkeypatch):
+        """Without HERMES_HOST_HOME, no fallback occurs."""
+        monkeypatch.delenv("HERMES_HOST_HOME", raising=False)
+        _write(tmp_path / ".hermes" / "config.yaml", "mcp_servers: {}\n")
+
+        adapter = HermesHarnessAdapter()
+        detection = adapter.detect(_ctx(tmp_path))
+        assert len(detection.artifacts) == 0
+
+    def test_detect_skips_host_home_when_path_missing(self, tmp_path: Path, monkeypatch):
+        """HERMES_HOST_HOME pointing to a nonexistent dir is ignored."""
+        _write(tmp_path / ".hermes" / "config.yaml", "mcp_servers: {}\n")
+        monkeypatch.setenv("HERMES_HOST_HOME", str(tmp_path / "nonexistent"))
+
+        adapter = HermesHarnessAdapter()
+        detection = adapter.detect(_ctx(tmp_path))
+        assert len(detection.artifacts) == 0
+
+    def test_detect_skips_host_home_when_same_as_container(self, tmp_path: Path, monkeypatch):
+        """HERMES_HOST_HOME equal to the container's home is a no-op."""
+        _write(tmp_path / ".hermes" / "config.yaml", "mcp_servers: {}\n")
+        monkeypatch.setenv("HERMES_HOST_HOME", str(tmp_path / ".hermes"))
+
+        adapter = HermesHarnessAdapter()
+        detection = adapter.detect(_ctx(tmp_path))
+        assert len(detection.artifacts) == 0
+
+
+class TestManifestFallback:
+    """detect() falls back to Guard-managed manifest.json when no MCP
+    servers are found in config files."""
+
+    def test_detect_uses_manifest_when_no_mcp_in_config(self, tmp_path: Path):
+        """Container config has no mcp_servers; manifest has servers."""
+        _write(tmp_path / ".hermes" / "config.yaml", "mcp_servers: {}\n")
+
+        # Guard-managed manifest with servers
+        managed_root = tmp_path / "guard-home" / "hermes"
+        _write(
+            managed_root / "manifest.json",
+            json.dumps({
+                "servers": {
+                    "lean-ctx": {
+                        "command": "npx",
+                        "args": ["lean-ctx"],
+                    },
+                    "web-search": {
+                        "command": "npx",
+                        "args": ["web-search"],
+                    },
+                },
+            }),
+        )
+
+        adapter = HermesHarnessAdapter()
+        detection = adapter.detect(_ctx(tmp_path))
+
+        mcp_artifacts = [a for a in detection.artifacts if a.artifact_type == "mcp_server"]
+        assert len(mcp_artifacts) == 2
+        names = {a.name for a in mcp_artifacts}
+        assert names == {"lean-ctx", "web-search"}
+
+    def test_detect_skips_manifest_when_config_has_mcp(self, tmp_path: Path):
+        """When config.yaml already has MCP servers, manifest is not used."""
+        _write(
+            tmp_path / ".hermes" / "config.yaml",
+            "mcp_servers:\n  config-server:\n    command: node\n",
+        )
+
+        # Manifest with different servers
+        managed_root = tmp_path / "guard-home" / "hermes"
+        _write(
+            managed_root / "manifest.json",
+            json.dumps({
+                "servers": {
+                    "manifest-server": {
+                        "command": "python",
+                        "args": ["-m", "server"],
+                    },
+                },
+            }),
+        )
+
+        adapter = HermesHarnessAdapter()
+        detection = adapter.detect(_ctx(tmp_path))
+
+        mcp_artifacts = [a for a in detection.artifacts if a.artifact_type == "mcp_server"]
+        assert len(mcp_artifacts) == 1
+        assert mcp_artifacts[0].name == "config-server"
+
+    def test_detect_skips_manifest_when_empty(self, tmp_path: Path):
+        """Empty manifest servers dict is ignored."""
+        _write(tmp_path / ".hermes" / "config.yaml", "mcp_servers: {}\n")
+
+        managed_root = tmp_path / "guard-home" / "hermes"
+        _write(managed_root / "manifest.json", json.dumps({"servers": {}}))
+
+        adapter = HermesHarnessAdapter()
+        detection = adapter.detect(_ctx(tmp_path))
+        mcp_artifacts = [a for a in detection.artifacts if a.artifact_type == "mcp_server"]
+        assert len(mcp_artifacts) == 0
+
+    def test_detect_skips_manifest_when_missing(self, tmp_path: Path):
+        """No manifest.json file means no fallback."""
+        _write(tmp_path / ".hermes" / "config.yaml", "mcp_servers: {}\n")
+
+        adapter = HermesHarnessAdapter()
+        detection = adapter.detect(_ctx(tmp_path))
+        mcp_artifacts = [a for a in detection.artifacts if a.artifact_type == "mcp_server"]
+        assert len(mcp_artifacts) == 0
+
+    def test_manifest_fallback_uses_real_server_name(self, tmp_path: Path):
+        """Manifest stores servers keyed as 'yaml:<name>' but detect()
+        should report the real server name, not the prefixed key."""
+        _write(tmp_path / ".hermes" / "config.yaml", "mcp_servers: {}\n")
+
+        # Manifest with prefixed keys (as written by install())
+        manifest_dir = tmp_path / "guard-home" / "hermes"
+        manifest_dir.mkdir(parents=True)
+        _write(
+            manifest_dir / "manifest.json",
+            json.dumps({
+                "servers": {
+                    "yaml:lean-ctx": {
+                        "name": "lean-ctx",
+                        "command": "npx",
+                        "args": ["-y", "@anthropic/lean-ctx"],
+                        "source": "yaml",
+                    },
+                    "json:playwright": {
+                        "name": "playwright",
+                        "command": "npx",
+                        "source": "json",
+                    },
+                },
+            }),
+        )
+
+        adapter = HermesHarnessAdapter()
+        detection = adapter.detect(_ctx(tmp_path))
+        mcp_artifacts = [a for a in detection.artifacts if a.artifact_type == "mcp_server"]
+        assert len(mcp_artifacts) == 2
+        names = {a.name for a in mcp_artifacts}
+        assert "lean-ctx" in names
+        assert "playwright" in names
+        # Prefixed keys should NOT appear as names
+        assert "yaml:lean-ctx" not in names
+        assert "json:playwright" not in names
+
+
+class TestInstallHostHomeAwareness:
+    """install() loads MCP sources from HERMES_HOST_HOME when set."""
+
+    def test_install_merges_host_home_mcp_sources(self, tmp_path: Path, monkeypatch):
+        """install() should merge MCP sources from both container and host."""
+        # Container config has one MCP server
+        _write(
+            tmp_path / ".hermes" / "config.yaml",
+            "mcp_servers:\n  container-server:\n    command: node\n",
+        )
+
+        # Host config has a different MCP server
+        host_home = tmp_path / "host-hermes"
+        _write(
+            host_home / "config.yaml",
+            "mcp_servers:\n  host-server:\n    command: python\n",
+        )
+
+        monkeypatch.setenv("HERMES_HOST_HOME", str(host_home))
+        adapter = HermesHarnessAdapter()
+        manifest = adapter.install(_ctx(tmp_path))
+
+        servers = manifest.get("servers", {})
+        server_keys = set(servers.keys())
+        assert "yaml:container-server" in server_keys
+        assert "yaml:host-server" in server_keys
+
+
+class TestHostHomeFallbackEdgeCases:
+    """Edge cases for the HERMES_HOST_HOME fallback."""
+
+    def test_small_config_with_mcp_servers_not_treated_as_empty(self, tmp_path: Path, monkeypatch):
+        """A small config.yaml with real MCP servers should NOT trigger
+        host home fallback, even if it's under 300 bytes."""
+        # Container config is small but has real MCP servers
+        _write(
+            tmp_path / ".hermes" / "config.yaml",
+            "mcp_servers:\n  local-server:\n    command: node\n",
+        )
+
+        # Host home has different servers
+        host_home = tmp_path / "host-hermes"
+        _write(
+            host_home / "config.yaml",
+            "mcp_servers:\n  host-server:\n    command: python\n",
+        )
+
+        monkeypatch.setenv("HERMES_HOST_HOME", str(host_home))
+        adapter = HermesHarnessAdapter()
+        detection = adapter.detect(_ctx(tmp_path))
+
+        # Should find the container's server, NOT the host's
+        mcp_artifacts = [a for a in detection.artifacts if a.artifact_type == "mcp_server"]
+        assert len(mcp_artifacts) == 1
+        assert mcp_artifacts[0].name == "local-server"
+
+    def test_mcp_servers_json_not_treated_as_empty(self, tmp_path: Path, monkeypatch):
+        """A container with mcp_servers.json containing servers should NOT
+        trigger host home fallback."""
+        _write(tmp_path / ".hermes" / "config.yaml", "mcp_servers: {}\n")
+        _write(
+            tmp_path / ".hermes" / "mcp_servers.json",
+            json.dumps({"json-server": {"command": "node"}}),
+        )
+
+        host_home = tmp_path / "host-hermes"
+        _write(
+            host_home / "config.yaml",
+            "mcp_servers:\n  host-server:\n    command: python\n",
+        )
+
+        monkeypatch.setenv("HERMES_HOST_HOME", str(host_home))
+        adapter = HermesHarnessAdapter()
+        detection = adapter.detect(_ctx(tmp_path))
+
+        # Should find the container's JSON server, NOT the host's
+        mcp_artifacts = [a for a in detection.artifacts if a.artifact_type == "mcp_server"]
+        assert len(mcp_artifacts) == 1
+        assert mcp_artifacts[0].name == "json-server"
