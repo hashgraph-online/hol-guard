@@ -11,6 +11,7 @@ import sys
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from ..aibom_detection import (
     enrich_mcp_server_metadata,
@@ -18,7 +19,8 @@ from ..aibom_detection import (
     extend_detection_with_workspace_aibom,
 )
 from ..codex_config import dump_toml, read_toml_payload, write_toml_payload
-from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config
+from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
+from ..daemon.manager import guard_daemon_url_for_home, load_guard_daemon_url
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
@@ -175,7 +177,7 @@ def _strict_json_object(path: Path, *, label: str) -> dict[str, object]:
     return payload
 
 
-def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
+def _local_hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
     resolved_home = context.home_dir.resolve()
     resolved_user_home = Path.home().resolve()
     guard_args = [
@@ -191,6 +193,50 @@ def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
     if context.workspace_dir is not None:
         guard_args.extend(["--workspace", str(context.workspace_dir)])
     return (sys.executable, "-m", "codex_plugin_scanner.cli", *guard_args)
+
+
+def _runtime_guard_home(context: HarnessContext) -> Path:
+    if context.home_dir.resolve() == Path.home().resolve():
+        return resolve_guard_home()
+    return context.guard_home
+
+
+def _daemon_start_command(guard_home: Path) -> tuple[str, ...]:
+    package_root = Path(__file__).resolve().parents[3]
+    code = (
+        "import sys;"
+        f"sys.path.insert(0, {str(package_root)!r});"
+        "from pathlib import Path;"
+        "from codex_plugin_scanner.guard.daemon import ensure_guard_daemon;"
+        f"ensure_guard_daemon(Path({str(guard_home)!r}))"
+    )
+    return (sys.executable, "-c", code)
+
+
+def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
+    guard_home = _runtime_guard_home(context)
+    fallback_daemon_url = load_guard_daemon_url(guard_home) or guard_daemon_url_for_home(guard_home)
+    query = {"guard-home": str(guard_home)}
+    if context.home_dir.resolve() != Path.home().resolve():
+        query["home"] = str(context.home_dir)
+    if context.workspace_dir is not None:
+        query["workspace"] = str(context.workspace_dir)
+    long_timeout = _post_tool_hook_timeout_seconds(context)
+    config = {
+        "state_path": str(guard_home / "daemon-state.json"),
+        "fallback_daemon_url": fallback_daemon_url,
+        "fallback_command": list(_local_hook_command_parts(context)),
+        "start_command": list(_daemon_start_command(guard_home)),
+        "query": urlencode(query),
+        "hook_timeouts": {
+            "PreToolUse": long_timeout,
+            "PermissionRequest": _MANAGED_HOOK_TIMEOUT_SECONDS,
+            "UserPromptSubmit": _MANAGED_HOOK_TIMEOUT_SECONDS,
+            "PostToolUse": long_timeout,
+        },
+    }
+    bridge_path = Path(__file__).with_name("codex_daemon_hook_bridge.py")
+    return (sys.executable, str(bridge_path), json.dumps(config, separators=(",", ":")))
 
 
 def _hook_command(context: HarnessContext) -> str:
@@ -283,10 +329,15 @@ def _is_managed_hook_command(command: object) -> bool:
         return False
     if tokens and Path(tokens[0]).name == "hol-guard-codex-hook.sh":
         return True
-    if len(tokens) < 3:
+    if len(tokens) < 2:
         return False
     executable = Path(tokens[0]).name.lower()
     if not executable.startswith("python"):
+        return False
+    managed_bridge_path = Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()
+    if Path(tokens[1]).resolve() == managed_bridge_path:
+        return True
+    if len(tokens) < 3:
         return False
     if tokens[1] == "-m":
         if len(tokens) < 5:
