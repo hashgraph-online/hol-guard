@@ -102,6 +102,35 @@ def test_guard_codex_hook_command_uses_lightweight_authenticated_daemon_bridge(t
     assert bridge_config["hook_timeouts"]["PreToolUse"] > bridge_config["hook_timeouts"]["UserPromptSubmit"]
 
 
+def test_guard_codex_launch_uses_remote_control_for_dashboard_continuation(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    context = HarnessContext(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        guard_home=tmp_path / "guard-home",
+    )
+    captured: dict[str, object] = {}
+
+    def fake_remote_launch(**kwargs):
+        captured.update(kwargs)
+        return ["/usr/bin/codex", "--remote", "unix:///guarded.sock", "Fix it."]
+
+    monkeypatch.setattr(codex_adapter, "guarded_codex_launch_command", fake_remote_launch)
+    monkeypatch.setattr(CodexHarnessAdapter, "resolved_executable", lambda self, ctx: "/usr/bin/codex")
+
+    command = CodexHarnessAdapter().launch_command(context, ["Fix it."])
+    environment = CodexHarnessAdapter().launch_environment(context)
+
+    assert command == ["/usr/bin/codex", "--remote", "unix:///guarded.sock", "Fix it."]
+    assert captured == {
+        "executable": "/usr/bin/codex",
+        "home_dir": home_dir,
+        "passthrough_args": ["Fix it."],
+    }
+    assert environment["CODEX_HOME"] == str(home_dir / ".codex")
+
+
 def test_guard_codex_does_not_claim_untrusted_bridge_lookalike() -> None:
     command = "python /untrusted/codex_daemon_hook_bridge.py '{}'"
 

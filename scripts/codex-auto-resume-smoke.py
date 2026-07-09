@@ -287,20 +287,21 @@ def _start_fake_codex_app_server(
                         _send_websocket_text(connection, {"id": 2, "result": {"threadId": thread_id}})
                     if message.get("id") == 3:
                         _send_websocket_text(connection, {"id": 3, "result": {"turnId": "turn-smoke"}})
-                        time.sleep(0.05)
-                        _send_websocket_text(
-                            connection,
-                            {
-                                "method": "turn/completed",
-                                "params": {
-                                    "threadId": thread_id,
-                                    "turn": {
-                                        "id": "turn-smoke",
-                                        "status": "completed",
+                        if message.get("method") == "turn/start":
+                            time.sleep(0.05)
+                            _send_websocket_text(
+                                connection,
+                                {
+                                    "method": "turn/completed",
+                                    "params": {
+                                        "threadId": thread_id,
+                                        "turn": {
+                                            "id": "turn-smoke",
+                                            "status": "completed",
+                                        },
                                     },
                                 },
-                            },
-                        )
+                            )
                         break
 
     thread = threading.Thread(target=server, name="codex-app-server-smoke", daemon=True)
@@ -535,6 +536,7 @@ def _queue_pending_request(
         resume_token=f"resume-{request_id}",
         metadata={
             "codex_thread_id": thread_id,
+            "codex_turn_id": "turn-smoke",
             "session_id": thread_id,
             "codex_home": codex_home,
             "codex_app_server_socket": str(socket_path),

@@ -24,6 +24,7 @@ from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available, _warnings_include_setup_failure
+from .codex_remote_control import codex_remote_launch_environment, guarded_codex_launch_command
 from .mcp_servers import (
     ManagedMcpServer,
     is_guard_proxy_command,
@@ -246,12 +247,14 @@ def _managed_hook_entry(
     *,
     timeout_seconds: int = _MANAGED_HOOK_TIMEOUT_SECONDS,
 ) -> dict[str, object]:
+    environment = merge_guard_launcher_env(pin_package=True)
+    environment.update(codex_remote_launch_environment(context.home_dir))
     return {
         "type": "command",
         "command": _hook_command(context),
         "timeout": timeout_seconds,
         "statusMessage": status_message,
-        "env": merge_guard_launcher_env(pin_package=True),
+        "env": environment,
     }
 
 
@@ -628,6 +631,16 @@ class CodexHarnessAdapter(HarnessAdapter):
     )
     approval_prompt_channel = "native"
     approval_auto_open_browser = False
+
+    def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
+        return guarded_codex_launch_command(
+            executable=self.resolved_executable(context) or self.executable,
+            home_dir=context.home_dir,
+            passthrough_args=passthrough_args,
+        )
+
+    def launch_environment(self, context: HarnessContext) -> dict[str, str]:
+        return codex_remote_launch_environment(context.home_dir)
 
     @staticmethod
     def _scope_for(context: HarnessContext, path: Path) -> str:
