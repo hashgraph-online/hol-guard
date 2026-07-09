@@ -304,14 +304,17 @@ def _send_codex_resume_worker(
         response: dict[str, object] | None = None
         completion_status = "turn_start_response"
         if steer_payloads is not None:
-            response, completion_status = _send_app_server_websocket_messages(
-                socket_path=socket_path,
-                payloads=steer_payloads,
-                response_id=3,
-                timeout_seconds=timeout_seconds,
-            )
-            if isinstance(response, dict) and not isinstance(response.get("error"), dict):
-                strategy = "codex-app-server-steer"
+            try:
+                response, completion_status = _send_app_server_websocket_messages(
+                    socket_path=socket_path,
+                    payloads=steer_payloads,
+                    response_id=3,
+                    timeout_seconds=timeout_seconds,
+                )
+                if isinstance(response, dict) and not isinstance(response.get("error"), dict):
+                    strategy = "codex-app-server-steer"
+            except (OSError, TimeoutError, ValueError):
+                response = None
         if strategy != "codex-app-server-steer":
             response, completion_status = _send_app_server_websocket_messages(
                 socket_path=socket_path,

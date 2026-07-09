@@ -638,6 +638,44 @@ def test_codex_approval_starts_next_turn_when_original_turn_is_idle(
     assert [payloads[-1]["method"] for payloads in captured_payloads] == ["turn/steer", "turn/start"]
 
 
+def test_codex_approval_starts_next_turn_when_steer_connection_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_methods: list[str] = []
+
+    def _fake_send(**kwargs):
+        method = kwargs["payloads"][-1]["method"]
+        captured_methods.append(method)
+        if method == "turn/steer":
+            raise OSError("transient connection failure")
+        return {"id": 3, "result": {"turn": {"id": "turn-2"}}}, "turn_start_response"
+
+    monkeypatch.setattr(codex_app_server_module, "_send_app_server_websocket_messages", _fake_send)
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-steer-connection"), "2026-05-19T10:00:00+00:00")
+    socket_path = tmp_path / "codex-steer-connection.sock"
+    socket_path.write_text("", encoding="utf-8")
+    _seed_codex_operation(
+        store,
+        request_id="req-steer-connection",
+        socket_path=socket_path,
+        command_text="python -m pytest",
+        status="approval_wait_timeout",
+    )
+
+    result = codex_app_server_module.resume_codex_thread_for_request(
+        store=store,
+        request_id="req-steer-connection",
+        action="allow",
+    )
+
+    assert result is not None
+    assert result["status"] == "sent"
+    assert result["strategy"] == "codex-app-server-turn"
+    assert captured_methods == ["turn/steer", "turn/start"]
+
+
 def test_request_resume_retry_endpoint_keeps_same_thread_failure_after_socket_missing(
     tmp_path: Path,
 ) -> None:
