@@ -32,11 +32,12 @@ if [ "$MAJOR" -lt 3 ] || { [ "$MAJOR" -eq 3 ] && [ "$MINOR" -lt 10 ]; }; then
 fi
 
 # Validate VERSION to prevent shell injection via su -c.
-# Allow "latest" or PEP 440 version specifiers: digits, dots, and
-# pre/post/dev segments (e.g. 2.1, 2.0.1004, 2.0.1004.post1, 2.0.0a1,
-# 2.0.0rc1). Reject shell metacharacters, spaces, or path separators.
+# Allow "latest" or PEP 440 version specifiers: release segment (N.N*)
+# followed by any combination of pre/post/dev segments (e.g. 2.1,
+# 2.0.1004, 2.0.1004.post1, 2.0.0a1, 2.0.0rc1, 2.0.0a1.post2).
+# Reject shell metacharacters, spaces, or path separators.
 if [ "$VERSION" != "latest" ]; then
-    if ! echo "$VERSION" | grep -qE '^[0-9]+(\.[0-9]+)*((a|b|rc|c|\.post|\.dev)[0-9]*)?$'; then
+    if ! echo "$VERSION" | grep -qE '^[0-9]+(\.[0-9]+)*((a|b|rc|c|\.post|\.dev)[0-9]*)*$'; then
         echo "ERROR: Invalid version '${VERSION}'. Use 'latest' or a PEP 440 version like '2.0.1004'."
         exit 1
     fi
