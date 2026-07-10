@@ -98,9 +98,9 @@ class GuardMCPServer:
         annotations = _create_annotations()
         return [
             types.Tool(
-                name=td["name"],
-                description=td["description"],
-                inputSchema=td["inputSchema"],
+                name=str(td["name"]),
+                description=str(td["description"]),
+                inputSchema=dict(td["inputSchema"]),  # type: ignore[arg-type]
                 annotations=annotations,
             )
             for td in _TOOL_DEFINITIONS
@@ -129,9 +129,13 @@ class GuardMCPServer:
         mcp = FastMCP("hol-guard")
         annotations = _create_annotations()
 
+        search_desc = _TOOL_DEFINITIONS[0]["description"]
+        fetch_desc = _TOOL_DEFINITIONS[1]["description"]
+        status_desc = _TOOL_DEFINITIONS[2]["description"]
+
         @mcp.tool(
             name="search",
-            description=_TOOL_DEFINITIONS[0]["description"],
+            description=str(search_desc),
             annotations=annotations,
         )
         def search(query: str) -> str:
@@ -139,7 +143,7 @@ class GuardMCPServer:
 
         @mcp.tool(
             name="fetch",
-            description=_TOOL_DEFINITIONS[1]["description"],
+            description=str(fetch_desc),
             annotations=annotations,
         )
         def fetch(id: str) -> str:  # noqa: A002
@@ -147,7 +151,7 @@ class GuardMCPServer:
 
         @mcp.tool(
             name="get_guard_status",
-            description=_TOOL_DEFINITIONS[2]["description"],
+            description=str(status_desc),
             annotations=annotations,
         )
         def get_guard_status() -> str:
