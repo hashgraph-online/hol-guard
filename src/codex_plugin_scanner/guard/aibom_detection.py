@@ -506,7 +506,8 @@ def _instruction_artifact(
     artifact_name: str | None = None,
     artifact_id: str | None = None,
 ) -> GuardArtifact:
-    content_hash = file_content_hash(path) or fingerprint_text(path.name)
+    content_digest = file_content_hash(path) or fingerprint_text(path.name)
+    content_hash = f"sha256:{content_digest}"
     name = display_name or path.name
     artifact_suffix = artifact_name or name
     resolved_artifact_id = artifact_id or f"{harness}:{scope}:instruction:{role}:{artifact_suffix}"
