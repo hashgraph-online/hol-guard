@@ -432,3 +432,67 @@ def test_prepare_guard_cloud_connect_authorization_persists_refreshed_cloud_user
     assert profile["email"] == "user@hol.org"
     assert profile["display_name"] == "Test User"
     assert profile["avatar_url"] == "https://hol.org/avatar.png"
+
+
+def test_prepare_guard_cloud_connect_authorization_clears_stale_cloud_user_profile(tmp_path, monkeypatch) -> None:
+    """When refresh response has guard_local_entitlement but no user_profile, clear stale profile."""
+    store = _store_with_oauth_credentials(tmp_path)
+    # Seed existing cloud_user_profile in credentials
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        now=datetime.now(timezone.utc).isoformat(),
+        cloud_user_profile={
+            "email": "old@hol.org",
+            "display_name": "Old User",
+            "avatar_url": "https://hol.org/old.png",
+        },
+    )
+
+    access_token = ".".join(
+        (
+            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
+            guard_runner_module._encode_jwt_segment({"exp": 9999999999}),
+            "signature",
+        )
+    )
+
+    class _Response:
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "access_token": access_token,
+                    "refresh_token": "refresh-token-2",
+                    "token_type": "Bearer",
+                    "guard_local_entitlement": {
+                        "plan_id": "team",
+                        "supply_chain_firewall": True,
+                    },
+                }
+            ).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    monkeypatch.setattr(
+        guard_runner_module.urllib.request,
+        "urlopen",
+        lambda request, timeout: _Response(),
+    )
+
+    guard_runner_module.prepare_guard_cloud_connect_authorization(store)
+
+    credentials = store.get_oauth_local_credentials(allow_primary=True)
+    assert credentials is not None
+    # Profile should be cleared (not preserved) because entitlement was present but lacked user_profile
+    profile = credentials.get("cloud_user_profile")
+    assert profile is None

@@ -3026,6 +3026,7 @@ def _refresh_guard_oauth_access_token(
                 now=datetime.now(timezone.utc),
             ),
             "cloud_user_profile": extract_cloud_user_profile(payload),
+            "had_guard_local_entitlement": isinstance(payload.get("guard_local_entitlement"), dict),
             "refresh_token": _optional_string(payload.get("refresh_token")) or refresh_token,
         }
 
@@ -3162,7 +3163,7 @@ def _persist_rotated_oauth_refresh_token(
             else _optional_string(credentials.get("supply_chain_plan_id"))
         ),
         workspace_id=_optional_string(credentials.get("workspace_id")),
-        cloud_user_profile=cloud_user_profile or _extract_dict_field(credentials, "cloud_user_profile"),
+        cloud_user_profile=cloud_user_profile,
         runtime_id=_optional_string(credentials.get("runtime_id")),
         runtime_label=_optional_string(credentials.get("runtime_label")),
         access_token=access_token,
@@ -3216,18 +3217,30 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
     refreshed_cloud_user_profile = refreshed.get("cloud_user_profile")
     if not isinstance(refreshed_cloud_user_profile, dict):
         refreshed_cloud_user_profile = None
+    had_entitlement = bool(refreshed.get("had_guard_local_entitlement"))
+    # When the refresh response includes a guard_local_entitlement but no
+    # user_profile, clear the stale profile rather than preserving it.
+    # When there's no guard_local_entitlement at all (old server), keep existing.
+    effective_cloud_user_profile: dict[str, str] | None
+    if had_entitlement:
+        effective_cloud_user_profile = refreshed_cloud_user_profile
+    else:
+        effective_cloud_user_profile = refreshed_cloud_user_profile or _extract_dict_field(
+            oauth_credentials, "cloud_user_profile"
+        )
     if (
         force_refresh
         or rotated_refresh_token != refresh_token
         or package_firewall_entitlement is not None
-        or refreshed_cloud_user_profile is not None
+        or effective_cloud_user_profile is not None
+        or (had_entitlement and refreshed_cloud_user_profile is None)
         or persist_recovered_secret
     ):
         _persist_rotated_oauth_refresh_token(
             store=store,
             credentials=oauth_credentials,
             package_firewall_entitlement=package_firewall_entitlement,
-            cloud_user_profile=refreshed_cloud_user_profile,
+            cloud_user_profile=effective_cloud_user_profile,
             refresh_token=rotated_refresh_token,
             access_token=_optional_string(refreshed.get("access_token")),
             access_token_expires_at=_optional_string(refreshed.get("access_token_expires_at")),
