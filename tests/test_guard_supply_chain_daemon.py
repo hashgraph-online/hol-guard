@@ -282,10 +282,21 @@ def test_daemon_aibom_refresh_resolves_managed_workspace_context(
 
     monkeypatch.setattr(guard_daemon_module, "sync_aibom_snapshots_if_due", _fake_sync)
     resolved_workspace = tmp_path / "managed-workspace"
+    resolver_calls: list[dict[str, object]] = []
+
+    def _resolve_workspace(**kwargs: object) -> Path:
+        resolver_calls.append(kwargs)
+        return resolved_workspace
+
+    monkeypatch.setattr(
+        guard_daemon_module,
+        "managed_install_audit_workspace_dirs",
+        lambda _store: (str(resolved_workspace),),
+    )
     monkeypatch.setattr(
         guard_daemon_module,
         "resolve_supply_chain_audit_workspace_dir",
-        lambda **_kwargs: resolved_workspace,
+        _resolve_workspace,
     )
     daemon = guard_daemon_module.GuardDaemonServer(
         store,
@@ -303,6 +314,7 @@ def test_daemon_aibom_refresh_resolves_managed_workspace_context(
 
     assert calls[0]["home_dir"] is None
     assert calls[0]["workspace_dir"] == resolved_workspace
+    assert resolver_calls[0]["allowed_roots"] == (resolved_workspace.resolve(),)
     assert summary["synced"] is True
 
 
@@ -357,6 +369,42 @@ def test_daemon_aibom_refresh_retries_returned_error_on_backoff(
         calls += 1
         if calls == 1:
             return {"synced": False, "error": "temporary upload failure"}
+        return {"synced": True, "snapshots": 2, "accepted": 2}
+
+    monkeypatch.setattr(guard_daemon_module, "sync_aibom_snapshots_if_due", _fake_sync)
+    daemon = guard_daemon_module.GuardDaemonServer(
+        store,
+        host="127.0.0.1",
+        port=0,
+        idle_timeout_seconds=60,
+        aibom_refresh_interval_seconds=60,
+        aibom_refresh_backoff_seconds=0.05,
+        workspace_dir=tmp_path / "workspace",
+    )
+    daemon.start()
+    try:
+        summary = _wait_for_aibom_status(store, expected="synced")
+    finally:
+        daemon.stop()
+
+    assert calls == 2
+    assert summary["synced"] is True
+
+
+def test_daemon_aibom_refresh_retries_not_configured_on_backoff(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A newly configured daemon does not wait for the normal inventory interval."""
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
+    calls = 0
+
+    def _fake_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {"synced": False, "reason": "not_configured", "skipped": True}
         return {"synced": True, "snapshots": 2, "accepted": 2}
 
     monkeypatch.setattr(guard_daemon_module, "sync_aibom_snapshots_if_due", _fake_sync)

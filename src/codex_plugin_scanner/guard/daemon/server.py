@@ -5489,8 +5489,10 @@ class GuardDaemonServer:
         self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
 
     def _begin_service(self) -> None:
-        if self._aibom_refresh_thread is not None and self._aibom_refresh_thread.is_alive():
-            raise RuntimeError("AIBOM inventory refresh is still stopping")
+        if self._aibom_refresh_thread is not None:
+            if self._aibom_refresh_thread.is_alive():
+                raise RuntimeError("AIBOM inventory refresh is still stopping")
+            self._aibom_refresh_thread = None
         self._shutdown_started.clear()
         self._server.last_activity_monotonic = time.monotonic()
         write_guard_daemon_state(self._server.store.guard_home, self.port, self._server.auth_token)
@@ -5668,15 +5670,18 @@ class GuardDaemonServer:
             else self._aibom_workspace_dir
         )
         if workspace_dir is None:
+            managed_workspace_dirs = managed_install_audit_workspace_dirs(self._server.store)
+            allowed_roots: list[Path] = []
+            for managed_workspace in managed_workspace_dirs:
+                try:
+                    allowed_roots.append(Path(managed_workspace).expanduser().resolve())
+                except OSError:
+                    continue
             workspace_dir = resolve_supply_chain_audit_workspace_dir(
                 workspace_dir_value=None,
                 workspace_value=None,
-                allowed_roots=(
-                    Path.home().resolve(),
-                    Path.cwd().resolve(),
-                    Path(tempfile.gettempdir()).resolve(),
-                ),
-                managed_workspace_dirs=managed_install_audit_workspace_dirs(self._server.store),
+                allowed_roots=tuple(allowed_roots),
+                managed_workspace_dirs=managed_workspace_dirs,
             )
         return home_dir, workspace_dir
 
@@ -5727,7 +5732,9 @@ class GuardDaemonServer:
                     {**summary, "status": status, "refreshed_at": refreshed_at},
                     refreshed_at,
                 )
-                wait_seconds = backoff_seconds if has_error else interval_seconds
+                wait_seconds = (
+                    backoff_seconds if has_error or status == "not_configured" else interval_seconds
+                )
             except GuardSyncAuthorizationExpiredError as error:
                 self._server.store.set_sync_payload(
                     "aibom_inventory_daemon",
