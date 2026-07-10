@@ -449,14 +449,6 @@ def _validate_approval_resolve_target(
     _validate_target_field(
         job,
         payload,
-        keys=("targetMachineInstallationId", "target_machine_installation_id", "machineInstallationId"),
-        expected=getattr(oauth, "installation_id", None),
-        failure_code="approval_target_machine_installation_mismatch",
-        require_expected=True,
-    )
-    _validate_target_field(
-        job,
-        payload,
         keys=("targetRuntimeGrantId", "target_runtime_grant_id", "runtimeGrantId", "runtime_grant_id"),
         expected=getattr(oauth, "runtime_id", None),
         failure_code="approval_target_runtime_grant_mismatch",

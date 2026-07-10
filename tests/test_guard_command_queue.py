@@ -2118,7 +2118,7 @@ def test_executor_returns_waiting_local_confirm_for_app_remove_without_surface(
     }
 
 
-def test_executor_resolves_local_approval_request(tmp_path: Path) -> None:
+def test_executor_resolves_local_approval_with_distinct_portal_routing_installation(tmp_path: Path) -> None:
     class ApprovalStore(FakeStore):
         def __init__(self, guard_home: Path) -> None:
             super().__init__(guard_home)
@@ -2174,9 +2174,11 @@ def test_executor_resolves_local_approval_request(tmp_path: Path) -> None:
     result = command_executors.execute_guard_command_job(
         {
             "operation": "guard.approval.resolve",
+            "targetMachineInstallationId": "portal-installation-routing-id",
             "payload": {
                 "localRequestId": "request-1",
                 "action": "allow_once",
+                "targetMachineInstallationId": "portal-installation-routing-id",
                 "remoteApproval": remote_approval,
                 "scope": "artifact",
             },
@@ -2335,11 +2337,6 @@ def test_executor_ignores_stale_remote_approval_request_id(tmp_path: Path) -> No
     ("job_extra", "payload_extra", "failure_code"),
     [
         ({}, {"targetGrantId": "grant-other"}, "approval_target_grant_mismatch"),
-        (
-            {},
-            {"targetMachineInstallationId": "33333333-3333-4333-8333-333333333333"},
-            "approval_target_machine_installation_mismatch",
-        ),
         ({}, {"targetRuntimeGrantId": "runtime-other"}, "approval_target_runtime_grant_mismatch"),
         ({}, {"workspaceId": "workspace-other"}, "approval_target_workspace_mismatch"),
         ({"localRequestId": "request-other"}, {}, "approval_target_local_request_mismatch"),
