@@ -466,18 +466,3 @@ class StoreApprovalsMixin:
             purge_request_resumes(connection, request_ids)
             cursor = connection.execute(query, tuple(params))
             return int(cursor.rowcount if cursor.rowcount is not None else 0)
-
-    def expire_pending_approval_requests(self, *, older_than: str, now: str) -> int:
-        with self._connect() as connection:
-            cursor = connection.execute(
-                """
-                update approval_requests
-                set status = 'expired',
-                    reason = 'Expired after waiting for review.',
-                    resolved_at = ?
-                where status = 'pending'
-                  and created_at < ?
-                """,
-                (now, older_than),
-            )
-            return int(cursor.rowcount if cursor.rowcount is not None else 0)
