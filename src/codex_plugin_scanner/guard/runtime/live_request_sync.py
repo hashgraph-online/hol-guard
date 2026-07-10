@@ -34,6 +34,7 @@ import random
 import threading
 import time
 import urllib.error
+import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -105,8 +106,11 @@ def _resolve_sync_url(auth_context: dict[str, object], path: str) -> str:
     sync_url = str(auth_context.get("sync_url") or "")
     if not sync_url:
         raise RuntimeError("Guard sync URL is not configured.")
-    base = sync_url.rstrip("/")
-    return f"{base}{path}"
+    parsed = urllib.parse.urlsplit(sync_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise RuntimeError("Guard sync URL must be an absolute HTTP(S) URL.")
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, normalized_path, "", ""))
 
 
 def _load_sync_cursor(store: GuardStore) -> str | None:
