@@ -1581,6 +1581,11 @@ def _bind_skill_document_evidence(
     ):
         return metadata
 
+    if isinstance(evidence, dict) and "contentHash" not in evidence:
+        bound = dict(metadata)
+        bound.pop("documentedCapabilities", None)
+        return bound
+
     bound = dict(metadata)
     bound.pop("contentEvidence", None)
     bound.pop("documentedCapabilities", None)

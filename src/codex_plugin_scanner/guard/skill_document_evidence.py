@@ -230,7 +230,12 @@ def _documented_network_capability(lines: list[str]) -> dict[str, str] | None:
             context = f"{section_heading} {context}"
         if _is_negative_context(context):
             continue
-        if _HTTP_CLIENT_RE.search(behavior_line) and any(_is_remote_url(url) for url in _URL_RE.findall(behavior_line)):
+        client_match = _HTTP_CLIENT_RE.search(line)
+        if (
+            client_match
+            and not _is_inside_prose_quote(line, client_match.start())
+            and any(_is_remote_url(url) for url in _URL_RE.findall(line))
+        ):
             return _network_capability("explicit_http_client")
         if _ACTIVE_REMOTE_BEHAVIOR_RE.search(behavior_line):
             return _network_capability("explicit_remote_api_statement")
@@ -239,6 +244,11 @@ def _documented_network_capability(lines: list[str]) -> dict[str, str] | None:
 
 def _is_negative_context(value: str) -> bool:
     return bool(_NEGATION_RE.search(value) or _COUNTEREXAMPLE_RE.search(value))
+
+
+def _is_inside_prose_quote(value: str, offset: int) -> bool:
+    prefix = value[:offset]
+    return prefix.count('"') % 2 == 1 or prefix.count("'") % 2 == 1
 
 
 def _is_remote_url(value: str) -> bool:

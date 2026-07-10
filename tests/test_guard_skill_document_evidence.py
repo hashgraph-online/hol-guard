@@ -37,6 +37,9 @@ def _metadata_for(path: Path, home: Path) -> dict[str, object]:
         ("Run `curl -X POST https://api.example.test/v1/upload` to publish results.\n", "explicit_http_client"),
         ("This skill uploads scan results to the remote API.\n", "explicit_remote_api_statement"),
         ("The workflow calls the external service endpoint.\n", "explicit_remote_api_statement"),
+        ('fetch("https://api.example.test/v1/data")\n', "explicit_http_client"),
+        ("axios.get('https://api.example.test/v1/data')\n", "explicit_http_client"),
+        ('requests.get("https://api.example.test/v1/data")\n', "explicit_http_client"),
     ),
 )
 def test_explicit_remote_behavior_adds_documented_capability(
@@ -74,6 +77,7 @@ def test_explicit_remote_behavior_adds_documented_capability(
         "## Counterexample\n```js\nfetch('https://api.example.test/v1/data')\n```\n",
         'Example: "This skill calls the remote API."\n',
         'The phrase "This skill calls the remote API" is a sample, not a capability.\n',
+        "The sample says \"fetch('https://api.example.test/v1/data')\".\n",
         "Example: curl https://api.example.test/v1/data\n",
     ),
 )
@@ -284,6 +288,23 @@ def test_documented_behavior_serializes_separately_from_observed_capabilities(tm
 def test_skill_types_do_not_claim_observed_file_reading() -> None:
     assert _capabilities_for_artifact("skill", {}) == ("unknown",)
     assert _capabilities_for_artifact("skill_file", {}) == ("unknown",)
+
+
+@pytest.mark.parametrize(
+    "readability_status",
+    ("symlink_rejected", "too_large", "invalid_utf8", "outside_safe_roots"),
+)
+def test_rejected_document_evidence_is_preserved_without_capabilities(
+    readability_status: str,
+) -> None:
+    metadata = {
+        "contentEvidence": {"readabilityStatus": readability_status},
+        "documentedCapabilities": [{"capability": "network_egress"}],
+    }
+
+    assert _bind_skill_document_evidence(metadata, primary_content_hash=None) == {
+        "contentEvidence": {"readabilityStatus": readability_status},
+    }
 
 
 def test_unbound_document_evidence_is_removed_before_inventory_serialization() -> None:
