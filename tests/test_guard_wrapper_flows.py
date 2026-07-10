@@ -11,6 +11,7 @@ Covers:
 from __future__ import annotations
 
 import argparse
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -92,6 +93,37 @@ class TestWaitForApprovalRequests:
         )
         assert result["resolved"] is True
         assert result["pending_request_ids"] == []
+
+    def test_observes_remote_resolution_within_200ms(self, tmp_path: Path) -> None:
+        store = GuardStore(tmp_path / "guard")
+        request_id = self._add_request(store, "req-fast-remote", status="pending")
+        resolved_at = [0.0]
+
+        def resolve_remotely() -> None:
+            time.sleep(0.02)
+            resolved_at[0] = time.monotonic()
+            store.resolve_approval_request(
+                request_id,
+                resolution_action="allow",
+                resolution_scope="artifact",
+                reason=None,
+                resolved_at="2026-01-01T00:00:01+00:00",
+            )
+
+        resolver = threading.Thread(target=resolve_remotely)
+        resolver.start()
+        try:
+            result = wait_for_approval_requests(
+                store=store,
+                request_ids=[request_id],
+                timeout_seconds=1,
+            )
+            observed_at = time.monotonic()
+        finally:
+            resolver.join(timeout=1)
+
+        assert result["resolved"] is True
+        assert observed_at - resolved_at[0] < 0.2
 
     def test_returns_pending_after_timeout_when_not_resolved(self, tmp_path: Path) -> None:
         store = GuardStore(tmp_path / "guard")

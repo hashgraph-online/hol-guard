@@ -1180,7 +1180,7 @@ def wait_for_approval_requests(
     store: GuardStore,
     request_ids: list[str],
     timeout_seconds: int,
-    poll_interval: float = 0.25,
+    poll_interval: float = 0.01,
 ) -> dict[str, object]:
     deadline = time.monotonic() + max(timeout_seconds, 0)
     while True:

@@ -14,6 +14,7 @@ codex_plugin_scanner.guard.runtime.live_request_sync:
 from __future__ import annotations
 
 import random
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -58,6 +59,7 @@ from codex_plugin_scanner.guard.runtime.live_request_sync import (
 from codex_plugin_scanner.guard.runtime.runner import (
     GuardSyncAuthorizationExpiredError,
 )
+from codex_plugin_scanner.guard.store import GuardStore
 
 # ---------------------------------------------------------------------------
 # Test helpers
@@ -263,6 +265,19 @@ class TestMonotonicSequence:
     def test_current_returns_zero_when_no_state(self, tmp_path: Path) -> None:
         store = Store(tmp_path)
         assert _get_current_cloud_sync_sequence(store) == 0
+
+    def test_concurrent_store_reservations_are_unique(self, tmp_path: Path) -> None:
+        store = GuardStore(tmp_path / "guard")
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            sequences = list(
+                executor.map(
+                    lambda _: _get_next_cloud_sync_sequence(store),
+                    range(40),
+                )
+            )
+
+        assert sorted(sequences) == list(range(1, 41))
+        assert _get_current_cloud_sync_sequence(store) == 40
 
 
 # ---------------------------------------------------------------------------
