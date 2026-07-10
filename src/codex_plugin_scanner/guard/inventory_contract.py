@@ -1368,7 +1368,11 @@ def _primary_artifact_content_hash(
         allowed_roots = (workspace_dir,)
     else:
         return None
-    if not any(root is not None and resolves_within_root(root, path, require_exists=True) for root in allowed_roots):
+    allowed_root = next(
+        (root for root in allowed_roots if root is not None and resolves_within_root(root, path, require_exists=True)),
+        None,
+    )
+    if allowed_root is None or _path_has_symlink_component(path, allowed_root=allowed_root):
         return None
     try:
         digest = hashlib.sha256()
@@ -1378,6 +1382,21 @@ def _primary_artifact_content_hash(
     except OSError:
         return None
     return f"sha256:{digest.hexdigest()}"
+
+
+def _path_has_symlink_component(path: Path, *, allowed_root: Path) -> bool:
+    try:
+        relative = path.relative_to(allowed_root)
+    except ValueError:
+        return True
+    current = allowed_root
+    if current.is_symlink():
+        return True
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            return True
+    return False
 
 
 def _canonical_inventory_content_hash(value: str) -> str:
