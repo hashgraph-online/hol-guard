@@ -267,7 +267,7 @@ _AIBOM_GUARD_EVENTS_BACKOFF_KEY = "aibom_guard_events_backoff"
 _AIBOM_GUARD_EVENTS_BACKOFF_MINUTES = 5  # matches _GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_MINUTES
 _AIBOM_SYNC_BATCH_SIZE = 3  # keep each POST under Cloudflare's 100s origin timeout
 # Guard Cloud queues large projection work; preserve snapshot replacement semantics in transit.
-_AIBOM_MAX_REQUEST_BODY_BYTES = 3_900_000  # stay below the portal's 4 MB request limit
+_AIBOM_MAX_REQUEST_BODY_BYTES = 7_500_000  # stay below the portal's 8 MB request limit
 
 
 def _aware_utc_timestamp(value: str) -> datetime:
