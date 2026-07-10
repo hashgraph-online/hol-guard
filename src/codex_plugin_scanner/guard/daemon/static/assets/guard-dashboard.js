@@ -494,7 +494,7 @@ function requireReact_production() {
   react_production.useTransition = function() {
     return ReactSharedInternals.H.useTransition();
   };
-  react_production.version = "19.2.5";
+  react_production.version = "19.2.7";
   return react_production;
 }
 var hasRequiredReact;
@@ -516,7 +516,7 @@ var hasRequiredScheduler_production;
 function requireScheduler_production() {
   if (hasRequiredScheduler_production) return scheduler_production;
   hasRequiredScheduler_production = 1;
-  (function(exports$1) {
+  (function(exports) {
     function push(heap, node) {
       var index = heap.length;
       heap.push(node);
@@ -550,15 +550,15 @@ function requireScheduler_production() {
       var diff = a.sortIndex - b.sortIndex;
       return 0 !== diff ? diff : a.id - b.id;
     }
-    exports$1.unstable_now = void 0;
+    exports.unstable_now = void 0;
     if ("object" === typeof performance && "function" === typeof performance.now) {
       var localPerformance = performance;
-      exports$1.unstable_now = function() {
+      exports.unstable_now = function() {
         return localPerformance.now();
       };
     } else {
       var localDate = Date, initialTime = localDate.now();
-      exports$1.unstable_now = function() {
+      exports.unstable_now = function() {
         return localDate.now() - initialTime;
       };
     }
@@ -585,12 +585,12 @@ function requireScheduler_production() {
     }
     var isMessageLoopRunning = false, taskTimeoutID = -1, frameInterval = 5, startTime = -1;
     function shouldYieldToHost() {
-      return needsPaint ? true : exports$1.unstable_now() - startTime < frameInterval ? false : true;
+      return needsPaint ? true : exports.unstable_now() - startTime < frameInterval ? false : true;
     }
     function performWorkUntilDeadline() {
       needsPaint = false;
       if (isMessageLoopRunning) {
-        var currentTime = exports$1.unstable_now();
+        var currentTime = exports.unstable_now();
         startTime = currentTime;
         var hasMoreWork = true;
         try {
@@ -610,7 +610,7 @@ function requireScheduler_production() {
                     var continuationCallback = callback(
                       currentTask.expirationTime <= currentTime
                     );
-                    currentTime = exports$1.unstable_now();
+                    currentTime = exports.unstable_now();
                     if ("function" === typeof continuationCallback) {
                       currentTask.callback = continuationCallback;
                       advanceTimers(currentTime);
@@ -660,27 +660,27 @@ function requireScheduler_production() {
       };
     function requestHostTimeout(callback, ms) {
       taskTimeoutID = localSetTimeout(function() {
-        callback(exports$1.unstable_now());
+        callback(exports.unstable_now());
       }, ms);
     }
-    exports$1.unstable_IdlePriority = 5;
-    exports$1.unstable_ImmediatePriority = 1;
-    exports$1.unstable_LowPriority = 4;
-    exports$1.unstable_NormalPriority = 3;
-    exports$1.unstable_Profiling = null;
-    exports$1.unstable_UserBlockingPriority = 2;
-    exports$1.unstable_cancelCallback = function(task) {
+    exports.unstable_IdlePriority = 5;
+    exports.unstable_ImmediatePriority = 1;
+    exports.unstable_LowPriority = 4;
+    exports.unstable_NormalPriority = 3;
+    exports.unstable_Profiling = null;
+    exports.unstable_UserBlockingPriority = 2;
+    exports.unstable_cancelCallback = function(task) {
       task.callback = null;
     };
-    exports$1.unstable_forceFrameRate = function(fps) {
+    exports.unstable_forceFrameRate = function(fps) {
       0 > fps || 125 < fps ? console.error(
         "forceFrameRate takes a positive int between 0 and 125, forcing frame rates higher than 125 fps is not supported"
       ) : frameInterval = 0 < fps ? Math.floor(1e3 / fps) : 5;
     };
-    exports$1.unstable_getCurrentPriorityLevel = function() {
+    exports.unstable_getCurrentPriorityLevel = function() {
       return currentPriorityLevel;
     };
-    exports$1.unstable_next = function(eventHandler) {
+    exports.unstable_next = function(eventHandler) {
       switch (currentPriorityLevel) {
         case 1:
         case 2:
@@ -698,10 +698,10 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports$1.unstable_requestPaint = function() {
+    exports.unstable_requestPaint = function() {
       needsPaint = true;
     };
-    exports$1.unstable_runWithPriority = function(priorityLevel, eventHandler) {
+    exports.unstable_runWithPriority = function(priorityLevel, eventHandler) {
       switch (priorityLevel) {
         case 1:
         case 2:
@@ -720,8 +720,8 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports$1.unstable_scheduleCallback = function(priorityLevel, callback, options) {
-      var currentTime = exports$1.unstable_now();
+    exports.unstable_scheduleCallback = function(priorityLevel, callback, options) {
+      var currentTime = exports.unstable_now();
       "object" === typeof options && null !== options ? (options = options.delay, options = "number" === typeof options && 0 < options ? currentTime + options : currentTime) : options = currentTime;
       switch (priorityLevel) {
         case 1:
@@ -751,8 +751,8 @@ function requireScheduler_production() {
       options > currentTime ? (priorityLevel.sortIndex = options, push(timerQueue, priorityLevel), null === peek(taskQueue) && priorityLevel === peek(timerQueue) && (isHostTimeoutScheduled ? (localClearTimeout(taskTimeoutID), taskTimeoutID = -1) : isHostTimeoutScheduled = true, requestHostTimeout(handleTimeout, options - currentTime))) : (priorityLevel.sortIndex = timeout, push(taskQueue, priorityLevel), isHostCallbackScheduled || isPerformingWork || (isHostCallbackScheduled = true, isMessageLoopRunning || (isMessageLoopRunning = true, schedulePerformWorkUntilDeadline())));
       return priorityLevel;
     };
-    exports$1.unstable_shouldYield = shouldYieldToHost;
-    exports$1.unstable_wrapCallback = function(callback) {
+    exports.unstable_shouldYield = shouldYieldToHost;
+    exports.unstable_wrapCallback = function(callback) {
       var parentPriorityLevel = currentPriorityLevel;
       return function() {
         var previousPriorityLevel = currentPriorityLevel;
@@ -922,7 +922,7 @@ function requireReactDom_production() {
   reactDom_production.useFormStatus = function() {
     return ReactSharedInternals.H.useHostTransitionStatus();
   };
-  reactDom_production.version = "19.2.5";
+  reactDom_production.version = "19.2.7";
   return reactDom_production;
 }
 var hasRequiredReactDom;
@@ -12366,12 +12366,12 @@ function requireReactDomClient_production() {
     }
   };
   var isomorphicReactPackageVersion$jscomp$inline_1840 = React2.version;
-  if ("19.2.5" !== isomorphicReactPackageVersion$jscomp$inline_1840)
+  if ("19.2.7" !== isomorphicReactPackageVersion$jscomp$inline_1840)
     throw Error(
       formatProdErrorMessage(
         527,
         isomorphicReactPackageVersion$jscomp$inline_1840,
-        "19.2.5"
+        "19.2.7"
       )
     );
   ReactDOMSharedInternals.findDOMNode = function(componentOrElement) {
@@ -12389,10 +12389,10 @@ function requireReactDomClient_production() {
   };
   var internals$jscomp$inline_2347 = {
     bundleType: 0,
-    version: "19.2.5",
+    version: "19.2.7",
     rendererPackageName: "react-dom",
     currentDispatcherRef: ReactSharedInternals,
-    reconcilerVersion: "19.2.5"
+    reconcilerVersion: "19.2.7"
   };
   if ("undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__) {
     var hook$jscomp$inline_2348 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
@@ -12459,7 +12459,7 @@ function requireReactDomClient_production() {
     listenToAllSupportedEvents(container2);
     return new ReactDOMHydrationRoot(initialChildren);
   };
-  reactDomClient_production.version = "19.2.5";
+  reactDomClient_production.version = "19.2.7";
   return reactDomClient_production;
 }
 var hasRequiredClient;
@@ -15009,11 +15009,9 @@ const demoDiff = {
   recorded_at: now
 };
 function isGuardDemoMode() {
-  const meta = import.meta;
-  if (meta.env?.DEV !== true) {
+  {
     return false;
   }
-  return new URLSearchParams(window.location.search).get("demo") === "1";
 }
 function getDemoRequests() {
   return demoRequests;
@@ -15931,6 +15929,12 @@ function buildDemoRuntimeSnapshot() {
     headline_label: demoRequests2.length > 0 ? "Blocked" : "Connected",
     headline_detail: demoRequests2.length > 0 ? "A blocked action is waiting for review." : "This machine is connected to Guard Cloud and waiting for the first protected session to appear.",
     sync_configured: true,
+    cloud_user_profile: {
+      email: "demo@hol.org",
+      display_name: "Demo User",
+      avatar_url: ""
+    },
+    cloud_workspace_id: "demo-workspace-282f6ff2",
     cloud_state: cloudState,
     cloud_state_label: cloudLabel,
     cloud_state_detail: cloudDetail,
@@ -15939,6 +15943,12 @@ function buildDemoRuntimeSnapshot() {
       label: cloudLabel,
       detail: cloudDetail,
       sync_configured: true,
+      cloud_user_profile: {
+        email: "demo@hol.org",
+        display_name: "Demo User",
+        avatar_url: ""
+      },
+      workspace_id: "demo-workspace-282f6ff2",
       dashboard_url: dashboardUrl,
       inbox_url: inboxUrl,
       fleet_url: fleetUrl,
@@ -17510,6 +17520,172 @@ function useGuardUpdate(options) {
     refreshUpdateStatus
   };
 }
+function formatEmailDisplay(email) {
+  const trimmed = email.trim();
+  if (trimmed.length <= 24) return trimmed;
+  const atIndex = trimmed.indexOf("@");
+  if (atIndex > 0 && atIndex < trimmed.length - 1) {
+    const localPart = trimmed.slice(0, atIndex);
+    const domain = trimmed.slice(atIndex);
+    if (localPart.length > 10) {
+      return `${localPart.slice(0, 8)}…${domain}`;
+    }
+  }
+  return `${trimmed.slice(0, 12)}…`;
+}
+function resolveInitials(name, email) {
+  const trimmed = name.trim();
+  if (trimmed) {
+    const parts = trimmed.split(/\s+/);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    }
+    return trimmed.slice(0, 2).toUpperCase();
+  }
+  return email.trim().slice(0, 2).toUpperCase();
+}
+function resolveDisplayName(profile) {
+  const name = profile.display_name?.trim();
+  if (name) return name;
+  return profile.email.split("@")[0];
+}
+function CloudUserMenu(props) {
+  const [open, setOpen] = reactExports.useState(false);
+  const [copied, setCopied] = reactExports.useState(false);
+  const containerRef = reactExports.useRef(null);
+  const copyTimeoutRef = reactExports.useRef(null);
+  const handleClickOutside = reactExports.useCallback((event) => {
+    if (containerRef.current && !containerRef.current.contains(event.target)) {
+      setOpen(false);
+      setCopied(false);
+    }
+  }, []);
+  reactExports.useEffect(() => {
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open, handleClickOutside]);
+  reactExports.useEffect(() => {
+    return () => clearTimeout(copyTimeoutRef.current);
+  }, []);
+  const handleCopyWorkspaceId = reactExports.useCallback(async () => {
+    if (!props.workspaceId) return;
+    try {
+      await navigator.clipboard.writeText(props.workspaceId);
+      setCopied(true);
+      clearTimeout(copyTimeoutRef.current);
+      copyTimeoutRef.current = setTimeout(() => setCopied(false), 2e3);
+    } catch {
+    }
+  }, [props.workspaceId]);
+  if (!props.userProfile) {
+    if (props.collapsed) {
+      return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-center pb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex h-8 w-8 items-center justify-center rounded-full bg-slate-200", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "h-4 w-4 text-slate-400" }) }) });
+    }
+    return null;
+  }
+  const displayName = resolveDisplayName(props.userProfile);
+  const initials = resolveInitials(props.userProfile.display_name || "", props.userProfile.email);
+  if (props.collapsed) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: containerRef, className: "relative flex justify-center pb-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: () => setOpen((prev) => !prev),
+          className: "relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full ring-2 ring-brand-blue/30 transition hover:ring-brand-blue/60",
+          title: `${displayName} (${props.userProfile.email})`,
+          "aria-label": `Cloud user: ${displayName}`,
+          children: props.userProfile.avatar_url ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "img",
+            {
+              src: props.userProfile.avatar_url,
+              alt: "",
+              className: "h-full w-full object-cover"
+            }
+          ) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-bold text-brand-blue", children: initials })
+        }
+      ),
+      open && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "div",
+        {
+          className: "absolute bottom-16 left-16 z-50 w-56 rounded-xl border border-slate-200 bg-white p-3 shadow-lg",
+          children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1 text-center", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold text-brand-dark", children: displayName }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] text-slate-500", children: formatEmailDisplay(props.userProfile.email) }),
+            props.workspaceId ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                type: "button",
+                onClick: handleCopyWorkspaceId,
+                className: "mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1.5 text-[10px] font-mono text-slate-600 transition hover:bg-slate-100",
+                children: [
+                  copied ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { className: "h-3 w-3 text-green-600" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocument, { className: "h-3 w-3" }),
+                  props.workspaceId.slice(0, 8),
+                  "…"
+                ]
+              }
+            ) : null
+          ] })
+        }
+      )
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: containerRef, className: "relative", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        onClick: () => setOpen((prev) => !prev),
+        className: "flex w-full items-center gap-2 rounded-xl px-2 py-1.5 transition hover:bg-slate-100",
+        "aria-expanded": open,
+        "aria-label": `Cloud user: ${displayName}`,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-brand-blue/20", children: props.userProfile.avatar_url ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "img",
+            {
+              src: props.userProfile.avatar_url,
+              alt: "",
+              className: "h-full w-full object-cover"
+            }
+          ) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-bold text-brand-blue", children: initials }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 flex-1 flex-col", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate text-xs font-semibold text-brand-dark", children: displayName }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate text-[10px] text-slate-500", children: formatEmailDisplay(props.userProfile.email) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            HiMiniChevronDown,
+            {
+              className: `h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`
+            }
+          )
+        ]
+      }
+    ),
+    open && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute bottom-full left-0 right-0 mb-1 rounded-xl border border-slate-200 bg-white p-3 shadow-lg", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "h-3 w-3 text-brand-blue" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[9px] font-semibold uppercase tracking-widest text-brand-blue", children: "HOL Guard Cloud" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 pt-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-medium uppercase tracking-wider text-slate-400", children: "Workspace ID" }),
+        props.workspaceId ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: handleCopyWorkspaceId,
+            className: "mt-1 flex w-full items-center justify-between gap-2 rounded-lg bg-slate-50 px-2 py-1.5 font-mono text-[10px] text-slate-600 transition hover:bg-slate-100",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate", children: props.workspaceId }),
+              copied ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { className: "h-3 w-3 shrink-0 text-green-600" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocument, { className: "h-3 w-3 shrink-0 text-slate-400" })
+            ]
+          }
+        ) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-[10px] text-slate-400", children: "Not available" })
+      ] })
+    ] }) })
+  ] });
+}
 function ShellHeader(props) {
   function handleMobileNavigationChange(event) {
     props.onNavigate(event.target.value);
@@ -17669,40 +17845,50 @@ function ShellSidebar(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx(SidebarAction, { href: "https://hol.org/guard", external: true, icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "h-4 w-4", "aria-hidden": "true" }), children: "Open Guard Cloud" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(SidebarAction, { href: GITHUB_ISSUE_LINK, external: true, icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "h-4 w-4", "aria-hidden": "true" }), children: GITHUB_ISSUE_BUTTON_LABEL })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-auto border-t border-slate-200 pt-4", children: !collapsed ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-2 overflow-hidden rounded-xl border border-brand-blue/25 bg-gradient-to-br from-brand-blue/[0.05] to-brand-dark/[0.03]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 px-3 pb-2.5 pt-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-3.5 w-3.5 text-brand-blue" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[10px] font-semibold uppercase tracking-widest text-brand-blue", children: "Local Guard" })
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-auto border-t border-slate-200 pt-4", children: [
+        props.cloudUserProfile ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `mb-3 ${collapsed ? "px-1" : "px-2"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          CloudUserMenu,
+          {
+            userProfile: props.cloudUserProfile,
+            workspaceId: props.workspaceId,
+            collapsed
+          }
+        ) }) : null,
+        !collapsed ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-2 overflow-hidden rounded-xl border border-brand-blue/25 bg-gradient-to-br from-brand-blue/[0.05] to-brand-dark/[0.03]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 px-3 pb-2.5 pt-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-3.5 w-3.5 text-brand-blue" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[10px] font-semibold uppercase tracking-widest text-brand-blue", children: "Local Guard" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-brand-blue/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand-blue", children: props.queuedCount > 0 ? "Review" : "Clear" })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-brand-blue/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand-blue", children: props.queuedCount > 0 ? "Review" : "Clear" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: props.queuedCount > 0 ? `${props.queuedCount} local ${props.queuedCount === 1 ? "action needs" : "actions need"} a Guard decision.` : "No local approvals are waiting." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          GuardUpdatePanel,
-          {
-            guardVersion: props.guardVersion,
-            updateStatus: props.updateStatus,
-            updatePhase: props.updatePhase,
-            onUpdateGuard: props.onUpdateGuard,
-            onReinstallGuard: props.onReinstallGuard
-          }
-        )
-      ] }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-5 min-w-5 items-center justify-center rounded-full text-[10px] font-bold ${props.queuedCount > 0 ? "bg-brand-blue/15 text-brand-blue" : "bg-slate-200 text-slate-400"}`, children: props.queuedCount > 0 ? props.queuedCount > 99 ? "99+" : props.queuedCount : "0" }),
-        props.guardVersion ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "span",
-          {
-            className: "font-mono text-[9px] text-brand-dark/50",
-            "aria-label": `Guard version ${props.guardVersion}`,
-            title: `Guard version ${props.guardVersion}`,
-            children: [
-              "v",
-              props.guardVersion
-            ]
-          }
-        ) : null
-      ] }) })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: props.queuedCount > 0 ? `${props.queuedCount} local ${props.queuedCount === 1 ? "action needs" : "actions need"} a Guard decision.` : "No local approvals are waiting." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            GuardUpdatePanel,
+            {
+              guardVersion: props.guardVersion,
+              updateStatus: props.updateStatus,
+              updatePhase: props.updatePhase,
+              onUpdateGuard: props.onUpdateGuard,
+              onReinstallGuard: props.onReinstallGuard
+            }
+          )
+        ] }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-5 min-w-5 items-center justify-center rounded-full text-[10px] font-bold ${props.queuedCount > 0 ? "bg-brand-blue/15 text-brand-blue" : "bg-slate-200 text-slate-400"}`, children: props.queuedCount > 0 ? props.queuedCount > 99 ? "99+" : props.queuedCount : "0" }),
+          props.guardVersion ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "span",
+            {
+              className: "font-mono text-[9px] text-brand-dark/50",
+              "aria-label": `Guard version ${props.guardVersion}`,
+              title: `Guard version ${props.guardVersion}`,
+              children: [
+                "v",
+                props.guardVersion
+              ]
+            }
+          ) : null
+        ] })
+      ] })
     ] })
   ] });
 }
@@ -25639,7 +25825,9 @@ function ApprovalCenterLayout(props) {
         updateStatus,
         updatePhase,
         onUpdateGuard,
-        onReinstallGuard
+        onReinstallGuard,
+        cloudUserProfile: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_user_profile : null,
+        workspaceId: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_pairing_state.workspace_id ?? null : null
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -26535,11 +26723,11 @@ export {
   HiMiniExclamationCircle as K,
   HiMiniClipboardDocumentCheck as L,
   HiMiniClipboard as M,
-  requireReact as N,
-  getDefaultExportFromCjs as O,
+  getDefaultExportFromCjs as N,
+  HiMiniKey as O,
   ProofStrip as P,
-  HiMiniKey as Q,
-  HiMiniLockClosed as R,
+  HiMiniLockClosed as Q,
+  React as R,
   SectionLabel as S,
   HiMiniBellAlert as T,
   HiMiniAdjustmentsHorizontal as U,
