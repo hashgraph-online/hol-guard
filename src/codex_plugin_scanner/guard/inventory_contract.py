@@ -1344,7 +1344,7 @@ def _resolve_item_content_hash(metadata: dict[str, object], semantic_text: str) 
         version_hash = version_info.get("contentHash")
         if isinstance(version_hash, str) and version_hash:
             return _canonical_inventory_content_hash(version_hash)
-    return _canonical_inventory_content_hash(semantic_text)
+    return semantic_text
 
 
 def _primary_artifact_content_hash(
@@ -1361,7 +1361,26 @@ def _primary_artifact_content_hash(
     if artifact_type == "skill":
         if path.name != "SKILL.md":
             return None
-        allowed_roots = (home_dir, workspace_dir)
+        skills_root = next((parent for parent in path.parents if parent.name.lower() == "skills"), None)
+        if skills_root is None:
+            return None
+        try:
+            relative = path.relative_to(skills_root)
+        except ValueError:
+            return None
+        if len(relative.parts) < 2:
+            return None
+        outer_root = next(
+            (
+                root
+                for root in (home_dir, workspace_dir)
+                if root is not None and resolves_within_root(root, skills_root, require_exists=True)
+            ),
+            None,
+        )
+        if outer_root is None or _path_has_symlink_component(skills_root, allowed_root=outer_root):
+            return None
+        allowed_roots = (skills_root,)
     elif artifact_type == "instruction":
         if workspace_dir is None or path.suffix.lower() not in {".md", ".mdc"}:
             return None

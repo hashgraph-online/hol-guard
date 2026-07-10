@@ -321,6 +321,43 @@ def test_symlinked_primary_skill_does_not_advertise_uploadable_body_hash(tmp_pat
     body_hash = f"sha256:{hashlib.sha256(real_skill_path.read_bytes()).hexdigest()}"
 
     assert snapshot.items[0].content_hash != body_hash
+    assert not snapshot.items[0].content_hash.startswith("sha256:")
+    assert sources == ()
+
+
+def test_skill_outside_skills_root_does_not_advertise_uploadable_body_hash(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    skill_path = home_dir / ".codex" / "review" / "SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text("# Review\n", encoding="utf-8")
+    artifact = GuardArtifact(
+        artifact_id="codex:skill:review",
+        name="review",
+        harness="codex",
+        artifact_type="skill",
+        source_scope="global",
+        config_path=str(skill_path),
+    )
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=False,
+        config_paths=(str(skill_path),),
+        artifacts=(artifact,),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-07-10T00:00:00Z",
+        home_dir=home_dir,
+    )
+    sources = primary_content_sources_from_artifacts(
+        detection.artifacts,
+        snapshot,
+        workspace_dir=None,
+    )
+
+    assert not snapshot.items[0].content_hash.startswith("sha256:")
     assert sources == ()
 
 
