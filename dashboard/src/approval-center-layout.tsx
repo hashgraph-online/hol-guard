@@ -240,6 +240,16 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         updatePhase={updatePhase}
         onUpdateGuard={onUpdateGuard}
         onReinstallGuard={onReinstallGuard}
+        cloudUserProfile={
+          props.runtime.kind === "ready"
+            ? props.runtime.snapshot.cloud_user_profile
+            : null
+        }
+        workspaceId={
+          props.runtime.kind === "ready"
+            ? props.runtime.snapshot.cloud_pairing_state.workspace_id ?? null
+            : null
+        }
       />
       <div
         className={`flex flex-col transition-all duration-200 lg:min-h-screen ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`}

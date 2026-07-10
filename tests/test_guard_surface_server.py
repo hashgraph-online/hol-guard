@@ -1069,6 +1069,8 @@ class TestGuardSurfaceServer:
             "label": "Connected",
             "detail": payload["cloud_state_detail"],
             "sync_configured": True,
+            "cloud_user_profile": None,
+            "workspace_id": None,
             "dashboard_url": "https://hol.org/guard",
             "inbox_url": "https://hol.org/guard/inbox",
             "fleet_url": "https://hol.org/guard/protect",
