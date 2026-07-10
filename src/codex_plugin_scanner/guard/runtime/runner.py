@@ -1599,6 +1599,9 @@ def sync_receipts(
         aibom_context["home_dir"] = str(home_dir)
     if workspace_dir is not None:
         aibom_context["workspace_dir"] = str(workspace_dir)
+        workspace_id = store.get_cloud_workspace_id()
+        if workspace_id is not None:
+            aibom_context["workspace_id"] = workspace_id
     if aibom_context:
         store.set_sync_payload("aibom_inventory_context", aibom_context, now)
     if persisted_command_detail_backfill_marker is not None:

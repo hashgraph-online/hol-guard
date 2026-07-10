@@ -335,6 +335,7 @@ def test_sync_receipts_runs_aibom_when_deep_sync_is_requested(tmp_path, monkeypa
             store,
             sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
             token="token-1",
+            workspace_id="workspace-alpha",
         )
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -351,6 +352,11 @@ def test_sync_receipts_runs_aibom_when_deep_sync_is_requested(tmp_path, monkeypa
 
     assert calls == [(home_dir, workspace_dir)]
     assert result["aibom_inventory"] == {"synced": True, "accepted": 1}
+    assert store.get_sync_payload("aibom_inventory_context") == {
+        "home_dir": str(home_dir),
+        "workspace_dir": str(workspace_dir),
+        "workspace_id": "workspace-alpha",
+    }
 
 
 def test_sync_receipts_keeps_receipt_success_when_v1_events_endpoint_is_missing(tmp_path) -> None:

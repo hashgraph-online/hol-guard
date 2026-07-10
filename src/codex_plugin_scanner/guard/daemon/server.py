@@ -5494,6 +5494,7 @@ class GuardDaemonServer:
                 raise RuntimeError("AIBOM inventory refresh is still stopping")
             self._aibom_refresh_thread = None
         self._shutdown_started.clear()
+        self._persist_aibom_inventory_context()
         self._server.last_activity_monotonic = time.monotonic()
         write_guard_daemon_state(self._server.store.guard_home, self.port, self._server.auth_token)
         self._server.store.upsert_runtime_state(
@@ -5512,6 +5513,19 @@ class GuardDaemonServer:
             self._server.store,
             self._live_request_sync_worker,
         )
+
+    def _persist_aibom_inventory_context(self) -> None:
+        workspace_id = self._server.store.get_cloud_workspace_id()
+        if workspace_id is None or self._aibom_workspace_dir is None:
+            return
+        payload: dict[str, object] = {
+            "workspace_dir": str(self._aibom_workspace_dir),
+            "workspace_id": workspace_id,
+        }
+        if self._aibom_home_dir is not None:
+            payload["home_dir"] = str(self._aibom_home_dir)
+        now = _now()
+        self._server.store.set_sync_payload("aibom_inventory_context", payload, now)
 
     def _serve_forever(self) -> None:
         try:
@@ -5653,36 +5667,24 @@ class GuardDaemonServer:
 
     def _aibom_inventory_context_dirs(self) -> tuple[Path | None, Path | None]:
         payload = self._server.store.get_sync_payload("aibom_inventory_context")
-        if isinstance(payload, dict):
+        current_workspace_id = self._server.store.get_cloud_workspace_id()
+        payload_is_bound = (
+            isinstance(payload, dict)
+            and isinstance(payload.get("workspace_id"), str)
+            and payload.get("workspace_id") == current_workspace_id
+        )
+        if payload_is_bound:
             home_value = payload.get("home_dir")
             workspace_value = payload.get("workspace_dir")
         else:
             home_value = None
             workspace_value = None
-        home_dir = (
-            Path(home_value).expanduser()
-            if isinstance(home_value, str) and home_value.strip()
-            else self._aibom_home_dir
-        )
-        workspace_dir = (
-            Path(workspace_value).expanduser()
-            if isinstance(workspace_value, str) and workspace_value.strip()
-            else self._aibom_workspace_dir
-        )
-        if workspace_dir is None:
-            managed_workspace_dirs = managed_install_audit_workspace_dirs(self._server.store)
-            allowed_roots: list[Path] = []
-            for managed_workspace in managed_workspace_dirs:
-                try:
-                    allowed_roots.append(Path(managed_workspace).expanduser().resolve())
-                except OSError:
-                    continue
-            workspace_dir = resolve_supply_chain_audit_workspace_dir(
-                workspace_dir_value=None,
-                workspace_value=None,
-                allowed_roots=tuple(allowed_roots),
-                managed_workspace_dirs=managed_workspace_dirs,
-            )
+        home_dir = self._aibom_home_dir
+        if home_dir is None and isinstance(home_value, str) and home_value.strip():
+            home_dir = Path(home_value).expanduser()
+        workspace_dir = self._aibom_workspace_dir
+        if workspace_dir is None and isinstance(workspace_value, str) and workspace_value.strip():
+            workspace_dir = Path(workspace_value).expanduser()
         return home_dir, workspace_dir
 
     def _refresh_aibom_inventory_loop(self) -> None:

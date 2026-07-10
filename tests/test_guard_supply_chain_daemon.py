@@ -231,6 +231,11 @@ def test_daemon_aibom_refresh_records_synced_on_success(
     assert summary["status"] == "synced"
     assert summary["synced"] is True
     assert summary["snapshots"] == 2
+    assert store.get_sync_payload("aibom_inventory_context") == {
+        "home_dir": str(home_dir),
+        "workspace_dir": str(workspace_dir),
+        "workspace_id": "workspace-alpha",
+    }
 
 
 def test_daemon_aibom_refresh_records_skipped_when_not_due(
@@ -267,11 +272,11 @@ def test_daemon_aibom_refresh_records_skipped_when_not_due(
     assert summary["skipped"] is True
 
 
-def test_daemon_aibom_refresh_resolves_managed_workspace_context(
+def test_daemon_aibom_refresh_uses_workspace_bound_persisted_context(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """AIBOM daemon resolves an audited workspace before publishing inventory."""
+    """AIBOM daemon reuses context only when it matches the paired cloud workspace."""
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
     calls: list[dict[str, object]] = []
@@ -280,24 +285,13 @@ def test_daemon_aibom_refresh_resolves_managed_workspace_context(
         calls.append(kwargs)
         return {"synced": True, "synced_at": "2026-06-29T00:00:00Z", "snapshots": 1, "accepted": 1}
 
+    workspace_dir = tmp_path / "workspace"
+    store.set_sync_payload(
+        "aibom_inventory_context",
+        {"workspace_dir": str(workspace_dir), "workspace_id": "workspace-alpha"},
+        "2026-06-29T00:00:00Z",
+    )
     monkeypatch.setattr(guard_daemon_module, "sync_aibom_snapshots_if_due", _fake_sync)
-    resolved_workspace = tmp_path / "managed-workspace"
-    resolver_calls: list[dict[str, object]] = []
-
-    def _resolve_workspace(**kwargs: object) -> Path:
-        resolver_calls.append(kwargs)
-        return resolved_workspace
-
-    monkeypatch.setattr(
-        guard_daemon_module,
-        "managed_install_audit_workspace_dirs",
-        lambda _store: (str(resolved_workspace),),
-    )
-    monkeypatch.setattr(
-        guard_daemon_module,
-        "resolve_supply_chain_audit_workspace_dir",
-        _resolve_workspace,
-    )
     daemon = guard_daemon_module.GuardDaemonServer(
         store,
         host="127.0.0.1",
@@ -313,9 +307,47 @@ def test_daemon_aibom_refresh_resolves_managed_workspace_context(
         daemon.stop()
 
     assert calls[0]["home_dir"] is None
-    assert calls[0]["workspace_dir"] == resolved_workspace
-    assert resolver_calls[0]["allowed_roots"] == (resolved_workspace.resolve(),)
+    assert calls[0]["workspace_dir"] == workspace_dir
     assert summary["synced"] is True
+
+
+def test_daemon_aibom_refresh_rejects_mismatched_persisted_context(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Persisted paths from another cloud workspace cannot drive inventory uploads."""
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
+    store.set_sync_payload(
+        "aibom_inventory_context",
+        {
+            "workspace_dir": str(tmp_path / "wrong-workspace"),
+            "workspace_id": "workspace-beta",
+        },
+        "2026-06-29T00:00:00Z",
+    )
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        guard_daemon_module,
+        "sync_aibom_snapshots_if_due",
+        lambda _store, **kwargs: calls.append(kwargs) or {"synced": True},
+    )
+    daemon = guard_daemon_module.GuardDaemonServer(
+        store,
+        host="127.0.0.1",
+        port=0,
+        idle_timeout_seconds=60,
+        aibom_refresh_interval_seconds=60,
+        aibom_refresh_backoff_seconds=0.05,
+    )
+    daemon.start()
+    try:
+        summary = _wait_for_aibom_status(store, expected="missing_workspace_context")
+    finally:
+        daemon.stop()
+
+    assert calls == []
+    assert summary["reason"] == "missing_workspace_context"
 
 
 def test_daemon_aibom_refresh_skips_without_workspace_context(
@@ -331,11 +363,6 @@ def test_daemon_aibom_refresh_skips_without_workspace_context(
         guard_daemon_module,
         "sync_aibom_snapshots_if_due",
         lambda _store, **kwargs: calls.append(kwargs) or {"synced": True},
-    )
-    monkeypatch.setattr(
-        guard_daemon_module,
-        "resolve_supply_chain_audit_workspace_dir",
-        lambda **_kwargs: None,
     )
     daemon = guard_daemon_module.GuardDaemonServer(
         store,
