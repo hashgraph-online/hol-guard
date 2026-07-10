@@ -15,6 +15,8 @@ from types import SimpleNamespace
 from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from ..path_support import resolves_within_root
+
 InventoryItemKind = Literal[
     "agent",
     "daemon_plugin",
@@ -391,7 +393,7 @@ def cloud_inventory_artifacts_from_detection(
 ) -> tuple[object, ...]:
     """Return artifacts eligible for the cloud inventory contract.
 
-    Hermes supplementary skill files remain part of local detection and policy
+    Supplementary skill files remain part of local detection and policy
     evaluation, but the cloud inventory represents the primary SKILL.md once.
     """
     harness = str(getattr(detection, "harness", "unknown"))
@@ -406,8 +408,7 @@ def cloud_inventory_artifacts_from_detection(
             if artifact.artifact_id not in existing_ids:
                 artifacts.append(artifact)
                 existing_ids.add(artifact.artifact_id)
-    if harness == "hermes":
-        artifacts = [artifact for artifact in artifacts if str(getattr(artifact, "artifact_type", "")) != "skill_file"]
+    artifacts = [artifact for artifact in artifacts if str(getattr(artifact, "artifact_type", "")) != "skill_file"]
     return tuple(artifacts)
 
 
@@ -726,7 +727,12 @@ def _item_from_artifact(
             "metadata": _stable_snapshot_value(safe_metadata),
         }
     )
-    content_hash = _resolve_item_content_hash(safe_metadata, semantic_text)
+    content_hash = _primary_artifact_content_hash(
+        artifact,
+        artifact_type=artifact_type,
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+    ) or _resolve_item_content_hash(safe_metadata, semantic_text)
     from .runtime.trust_attestation import (
         GuardTrustAttestationSigningConfig,
         apply_trust_attestation_metadata,
@@ -1332,13 +1338,53 @@ def _resolve_item_content_hash(metadata: dict[str, object], semantic_text: str) 
     for key in ("content_hash", "directory_hash"):
         candidate = metadata.get(key)
         if isinstance(candidate, str) and candidate:
-            return candidate
+            return _canonical_inventory_content_hash(candidate)
     version_info = metadata.get("versionInfo")
     if isinstance(version_info, dict):
         version_hash = version_info.get("contentHash")
         if isinstance(version_hash, str) and version_hash:
-            return version_hash
-    return semantic_text
+            return _canonical_inventory_content_hash(version_hash)
+    return _canonical_inventory_content_hash(semantic_text)
+
+
+def _primary_artifact_content_hash(
+    artifact: object,
+    *,
+    artifact_type: str,
+    home_dir: Path,
+    workspace_dir: Path | None,
+) -> str | None:
+    path_value = getattr(artifact, "config_path", None)
+    if not isinstance(path_value, str) or not path_value.strip():
+        return None
+    path = Path(path_value).expanduser()
+    if artifact_type == "skill":
+        if path.name != "SKILL.md":
+            return None
+        allowed_roots = (home_dir, workspace_dir)
+    elif artifact_type == "instruction":
+        if workspace_dir is None or path.suffix.lower() not in {".md", ".mdc"}:
+            return None
+        allowed_roots = (workspace_dir,)
+    else:
+        return None
+    if not any(root is not None and resolves_within_root(root, path, require_exists=True) for root in allowed_roots):
+        return None
+    try:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(64 * 1024), b""):
+                digest.update(chunk)
+    except OSError:
+        return None
+    return f"sha256:{digest.hexdigest()}"
+
+
+def _canonical_inventory_content_hash(value: str) -> str:
+    normalized = value.lower()
+    if re.fullmatch(r"[0-9a-f]{64}", normalized):
+        return f"sha256:{normalized}"
+    return value
 
 
 def _safe_roots_for_inspection(
