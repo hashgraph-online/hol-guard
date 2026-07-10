@@ -123,17 +123,22 @@ def test_sync_uploads_exact_primary_hermes_content_after_legacy_ack(
         auth_context={"sync_url": "https://hol.test/api/v1/guard/events"},
     )
 
-    assert summary["synced"] is True
+    assert summary["synced"] is (content_status == "accepted")
     upload_summary = summary["content_upload"]
     assert isinstance(upload_summary, dict)
     assert upload_summary["eligible"] == 2
     content_requests = [request for request in requests if request.full_url.endswith("/content-upload")]
     assert len(content_requests) == 1
     if content_status == "missing_endpoint":
+        assert summary["synced"] is False
+        assert summary["partial"] is True
+        assert summary["reason"] == "content_upload_incomplete"
+        assert summary["content_upload_complete"] is False
         assert upload_summary["failed"] == 2
         assert upload_summary["reason"] == "endpoint_unavailable"
         return
 
+    assert summary["content_upload_complete"] is True
     assert upload_summary["uploaded"] == 2
     assert upload_summary["stored"] == 2
     assert upload_summary["hash_only"] == 0

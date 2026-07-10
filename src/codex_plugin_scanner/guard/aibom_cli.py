@@ -618,18 +618,25 @@ def sync_aibom_snapshots(
             )
             merge_content_upload_summary(content_upload_summary, upload_summary)
             content_uploaded_snapshot_ids.add(snapshot_id)
+    content_eligible = int(content_upload_summary.get("eligible", 0))
+    content_stored = int(content_upload_summary.get("stored", 0))
+    content_upload_complete = content_stored == content_eligible
     summary: dict[str, object] = {
-        "synced": True,
+        "synced": content_upload_complete,
         "synced_at": synced_at,
         "snapshots": len(snapshots),
         "accepted": total_accepted,
         "rejected": total_rejected,
         "statuses": all_statuses,
         "content_upload": content_upload_summary,
+        "content_upload_complete": content_upload_complete,
     }
     if oversized_events:
         summary["partial"] = True
         summary["reason"] = "snapshot_too_large"
+    if not content_upload_complete:
+        summary["partial"] = True
+        summary["reason"] = "content_upload_incomplete"
     store.set_sync_payload("aibom_sync_summary", summary, synced_at)
     return summary
 
