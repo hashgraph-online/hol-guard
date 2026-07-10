@@ -299,6 +299,7 @@ def test_symlinked_primary_skill_does_not_advertise_uploadable_body_hash(tmp_pat
         artifact_type="skill",
         source_scope="global",
         config_path=str(linked_skill_path),
+        metadata={"content_hash": hashlib.sha256(real_skill_path.read_bytes()).hexdigest()},
     )
     detection = HarnessDetection(
         harness="codex",
@@ -337,6 +338,7 @@ def test_skill_outside_skills_root_does_not_advertise_uploadable_body_hash(tmp_p
         artifact_type="skill",
         source_scope="global",
         config_path=str(skill_path),
+        metadata={"content_hash": hashlib.sha256(skill_path.read_bytes()).hexdigest()},
     )
     detection = HarnessDetection(
         harness="codex",

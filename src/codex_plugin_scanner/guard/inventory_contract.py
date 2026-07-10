@@ -727,12 +727,17 @@ def _item_from_artifact(
             "metadata": _stable_snapshot_value(safe_metadata),
         }
     )
-    content_hash = _primary_artifact_content_hash(
+    primary_content_hash = _primary_artifact_content_hash(
         artifact,
         artifact_type=artifact_type,
         home_dir=home_dir,
         workspace_dir=workspace_dir,
-    ) or _resolve_item_content_hash(safe_metadata, semantic_text)
+    )
+    content_hash = (
+        primary_content_hash or semantic_text
+        if artifact_type in {"skill", "instruction"}
+        else _resolve_item_content_hash(safe_metadata, semantic_text)
+    )
     from .runtime.trust_attestation import (
         GuardTrustAttestationSigningConfig,
         apply_trust_attestation_metadata,
