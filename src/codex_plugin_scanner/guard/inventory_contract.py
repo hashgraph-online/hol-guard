@@ -733,11 +733,10 @@ def _item_from_artifact(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
     )
-    content_hash = (
-        primary_content_hash or semantic_text
-        if artifact_type in {"skill", "instruction"}
-        else _resolve_item_content_hash(safe_metadata, semantic_text)
-    )
+    if artifact_type in {"skill", "instruction"}:
+        content_hash = primary_content_hash or semantic_text
+    else:
+        content_hash = _resolve_item_content_hash(safe_metadata, semantic_text)
     from .runtime.trust_attestation import (
         GuardTrustAttestationSigningConfig,
         apply_trust_attestation_metadata,
