@@ -137,6 +137,65 @@ def test_guard_codex_does_not_claim_untrusted_bridge_lookalike() -> None:
     assert codex_adapter._is_managed_hook_command(command) is False
 
 
+def test_guard_codex_preserves_user_owned_direct_hook_without_status_message() -> None:
+    command = shlex.join(
+        [
+            sys.executable,
+            "-m",
+            "codex_plugin_scanner.cli",
+            "guard",
+            "hook",
+            "--harness",
+            "codex",
+        ]
+    )
+    entry = {"type": "command", "command": command}
+
+    assert codex_adapter._is_managed_hook_command(command) is True
+    assert codex_adapter._is_unambiguously_managed_hook_command(command) is False
+    assert codex_adapter._is_managed_hook_entry(entry) is False
+
+
+def test_guard_codex_claims_stale_pipx_direct_hook_without_status_message() -> None:
+    command = shlex.join(
+        [
+            "/home/user/.local/pipx/venvs/hol-guard/bin/python",
+            "-m",
+            "codex_plugin_scanner.cli",
+            "guard",
+            "hook",
+            "--harness",
+            "codex",
+        ]
+    )
+    entry = {"type": "command", "command": command}
+
+    assert codex_adapter._is_managed_hook_entry(entry) is True
+
+
+def test_guard_codex_detects_direct_hook_with_python_runtime_flags() -> None:
+    command_tokens = [
+        "python3",
+        "-P",
+        "-m",
+        "codex_plugin_scanner.cli",
+        "guard",
+        "hook",
+        "--harness",
+        "codex",
+    ]
+    command = shlex.join(command_tokens)
+    entry = {
+        "type": "command",
+        "command": command,
+        "statusMessage": "HOL Guard checking tool result",
+    }
+
+    assert codex_adapter._argv_is_direct_codex_hook(command_tokens) is True
+    assert codex_adapter._is_managed_hook_command(command) is True
+    assert codex_adapter._is_managed_hook_entry(entry) is True
+
+
 def test_guard_install_and_repair_codex_reconcile_legacy_post_tool_hooks(
     tmp_path,
     capsys,
