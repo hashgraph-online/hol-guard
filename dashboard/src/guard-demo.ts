@@ -113,7 +113,8 @@ const demoDiff: GuardArtifactDiff = {
 };
 
 export function isGuardDemoMode(): boolean {
-  if (import.meta.env.DEV !== true) {
+  const meta = import.meta as ImportMeta & { env?: { DEV?: boolean } };
+  if (meta.env?.DEV !== true) {
     return false;
   }
   return new URLSearchParams(window.location.search).get("demo") === "1";
