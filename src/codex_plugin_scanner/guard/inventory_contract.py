@@ -1382,7 +1382,7 @@ def _primary_artifact_content_hash(
             ),
             None,
         )
-        if outer_root is None or _path_has_symlink_component(skills_root, allowed_root=outer_root):
+        if outer_root is None:
             return None
         allowed_roots = (skills_root,)
     elif artifact_type == "instruction":

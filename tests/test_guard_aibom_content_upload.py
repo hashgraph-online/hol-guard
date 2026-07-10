@@ -155,6 +155,39 @@ def test_gemini_adapter_skill_without_metadata_hash_has_uploadable_primary_conte
     assert summary["failed"] == 0
 
 
+def test_gemini_skill_through_symlinked_workspace_has_uploadable_primary_content(tmp_path: Path) -> None:
+    real_workspace = tmp_path / "workspace-real"
+    workspace_dir = tmp_path / "workspace-link"
+    skill_path = workspace_dir / ".gemini" / "skills" / "review" / "SKILL.md"
+    real_skill_path = real_workspace / ".gemini" / "skills" / "review" / "SKILL.md"
+    real_skill_path.parent.mkdir(parents=True)
+    real_skill_path.write_text("# Symlinked workspace review\n", encoding="utf-8")
+    workspace_dir.symlink_to(real_workspace, target_is_directory=True)
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=workspace_dir,
+        guard_home=tmp_path / "guard-home",
+    )
+
+    detection = GeminiHarnessAdapter().detect(context)
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-07-10T00:00:00Z",
+        home_dir=context.home_dir,
+        workspace_dir=workspace_dir,
+    )
+    sources = primary_content_sources_from_artifacts(
+        detection.artifacts,
+        snapshot,
+        workspace_dir=workspace_dir,
+    )
+    expected_hash = f"sha256:{hashlib.sha256(real_skill_path.read_bytes()).hexdigest()}"
+
+    assert len(sources) == 1
+    assert sources[0].path == skill_path
+    assert sources[0].content_hash == expected_hash
+
+
 def test_workspace_instruction_without_metadata_hash_has_uploadable_primary_content(tmp_path: Path) -> None:
     workspace_dir = tmp_path / "workspace"
     instruction_path = workspace_dir / "AGENTS.md"
