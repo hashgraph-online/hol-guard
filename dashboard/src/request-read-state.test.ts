@@ -47,6 +47,11 @@ assert(
 );
 
 assert(
+  JSON.stringify(addReadIds(["a", "b"], ["c", "c", "c"])) === JSON.stringify(["c", "a", "b"]),
+  "T-RRS-03b: addReadIds deduplicates repeated input ids"
+);
+
+assert(
   addReadIds(new Array(500).fill(0).map((_, i) => `id-${i}`), ["new"]).length === 500,
   "T-RRS-04: addReadIds respects the limit"
 );

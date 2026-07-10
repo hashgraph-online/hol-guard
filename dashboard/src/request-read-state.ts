@@ -37,9 +37,10 @@ function safeWriteStorage(storage: Storage | null | undefined, ids: string[]): v
 }
 
 export function addReadIds(current: string[], requestIds: string[], limit = REQUEST_READ_STATE_LIMIT): string[] {
-  const toAdd = new Set(requestIds);
+  const uniqueNew = Array.from(new Set(requestIds));
+  const toAdd = new Set(uniqueNew);
   const next = current.filter((id) => !toAdd.has(id));
-  next.unshift(...requestIds);
+  next.unshift(...uniqueNew);
   if (next.length > limit) {
     next.length = limit;
   }
@@ -77,15 +78,19 @@ export function createRequestReadState(
   };
 }
 
+function getStorage(): Storage | null {
+  return typeof window !== "undefined" ? window.localStorage : null;
+}
+
 export function useRequestReadState(): RequestReadState {
-  const [readIds, setReadIds] = useState<string[]>(() => safeReadStorage(window?.localStorage));
+  const [readIds, setReadIds] = useState<string[]>(() => safeReadStorage(getStorage()));
 
   useEffect(() => {
-    setReadIds(safeReadStorage(window?.localStorage));
+    setReadIds(safeReadStorage(getStorage()));
   }, []);
 
   useEffect(() => {
-    safeWriteStorage(window?.localStorage, readIds);
+    safeWriteStorage(getStorage(), readIds);
   }, [readIds]);
 
   const isRead = useCallback((requestId: string) => readIds.includes(requestId), [readIds]);

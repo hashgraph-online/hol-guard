@@ -15130,9 +15130,9 @@ function guardParams() {
 function guardParam(name) {
   return guardParams().get(name);
 }
-function readBrowserStorage(getStorage, name) {
+function readBrowserStorage(getStorage2, name) {
   try {
-    return getStorage().getItem(name);
+    return getStorage2().getItem(name);
   } catch {
     return null;
   }
@@ -15140,9 +15140,9 @@ function readBrowserStorage(getStorage, name) {
 function readGuardStorage(name) {
   return readBrowserStorage(() => window.sessionStorage, name) ?? readBrowserStorage(() => window.localStorage, name);
 }
-function saveBrowserStorage(getStorage, name, value) {
+function saveBrowserStorage(getStorage2, name, value) {
   try {
-    getStorage().setItem(name, value);
+    getStorage2().setItem(name, value);
   } catch {
   }
 }
@@ -23272,9 +23272,10 @@ function safeWriteStorage(storage, ids) {
   }
 }
 function addReadIds(current, requestIds, limit = REQUEST_READ_STATE_LIMIT) {
-  const toAdd = new Set(requestIds);
+  const uniqueNew = Array.from(new Set(requestIds));
+  const toAdd = new Set(uniqueNew);
   const next = current.filter((id) => !toAdd.has(id));
-  next.unshift(...requestIds);
+  next.unshift(...uniqueNew);
   if (next.length > limit) {
     next.length = limit;
   }
@@ -23283,13 +23284,16 @@ function addReadIds(current, requestIds, limit = REQUEST_READ_STATE_LIMIT) {
 function removeReadId(current, requestId) {
   return current.filter((id) => id !== requestId);
 }
+function getStorage() {
+  return typeof window !== "undefined" ? window.localStorage : null;
+}
 function useRequestReadState() {
-  const [readIds, setReadIds] = reactExports.useState(() => safeReadStorage(window?.localStorage));
+  const [readIds, setReadIds] = reactExports.useState(() => safeReadStorage(getStorage()));
   reactExports.useEffect(() => {
-    setReadIds(safeReadStorage(window?.localStorage));
+    setReadIds(safeReadStorage(getStorage()));
   }, []);
   reactExports.useEffect(() => {
-    safeWriteStorage(window?.localStorage, readIds);
+    safeWriteStorage(getStorage(), readIds);
   }, [readIds]);
   const isRead = reactExports.useCallback((requestId) => readIds.includes(requestId), [readIds]);
   const markRead = reactExports.useCallback((requestId) => {
@@ -24481,17 +24485,17 @@ function ReviewWorkspace(props) {
       if (event.key === "ArrowDown") {
         event.preventDefault();
         const nextIdx = Math.min(activeIdx + 1, pagedRequests.length - 1);
-        if (nextIdx !== activeIdx) props.onOpenRequest(pagedRequests[nextIdx].request_id);
+        if (nextIdx !== activeIdx) handleOpenRequest(pagedRequests[nextIdx].request_id);
       }
       if (event.key === "ArrowUp") {
         event.preventDefault();
         const prevIdx = Math.max(activeIdx - 1, 0);
-        if (prevIdx !== activeIdx) props.onOpenRequest(pagedRequests[prevIdx].request_id);
+        if (prevIdx !== activeIdx) handleOpenRequest(pagedRequests[prevIdx].request_id);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [pagedRequests, activeRequestId, props.onOpenRequest]);
+  }, [pagedRequests, activeRequestId, handleOpenRequest]);
   reactExports.useEffect(() => {
     if (filteredRequests.length === 0) {
       return;
@@ -24500,15 +24504,15 @@ function ReviewWorkspace(props) {
     if (activeRequestId !== null && activeInRequests) {
       return;
     }
-    props.onOpenRequest(filteredRequests[0].request_id);
-  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, props.onOpenRequest]);
+    handleOpenRequest(filteredRequests[0].request_id);
+  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, handleOpenRequest]);
   reactExports.useEffect(() => {
     if (pagedRequests.length === 0) return;
     const activeOnPage = pagedRequests.some((item) => item.request_id === activeRequestId) || detail?.item.request_id === activeRequestId;
     if (!activeOnPage) {
-      props.onOpenRequest(pagedRequests[0].request_id);
+      handleOpenRequest(pagedRequests[0].request_id);
     }
-  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, props.onOpenRequest]);
+  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, handleOpenRequest]);
   const bulkApprove = useQueueBulkApprove({
     items: filteredRequests,
     approvalGate: props.approvalGate ?? null,
@@ -24786,7 +24790,7 @@ const ReviewQueueList = reactExports.forwardRef(({
           "button",
           {
             type: "button",
-            onClick: () => readState.markAllRead(requests.map((item) => item.request_id)),
+            onClick: () => readState.markAllRead(allFilteredRequests.map((item) => item.request_id)),
             className: "text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
             children: "Mark all read"
           }
@@ -25028,7 +25032,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
     "div",
     {
       role: "none",
-      className: `w-full rounded-lg py-2.5 px-2 transition-all ${selected ? "border border-brand-blue/60 bg-brand-blue/[0.08] ring-1 ring-brand-blue/20" : active ? "border border-brand-blue bg-brand-blue/[0.06]" : "border border-transparent bg-white hover:bg-slate-50"}`,
+      className: `group w-full rounded-lg py-2.5 px-2 transition-all ${selected ? "border border-brand-blue/60 bg-brand-blue/[0.08] ring-1 ring-brand-blue/20" : active ? "border border-brand-blue bg-brand-blue/[0.06]" : "border border-transparent bg-white hover:bg-slate-50"}`,
       children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
         showCheckbox ? /* @__PURE__ */ jsxRuntimeExports.jsx(
           "label",
