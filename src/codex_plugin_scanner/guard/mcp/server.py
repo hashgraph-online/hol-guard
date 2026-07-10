@@ -93,6 +93,8 @@ class GuardMCPServer:
         return self._store
 
     def list_tools(self) -> list[Any]:
+        from typing import cast
+
         from mcp import types
 
         annotations = _create_annotations()
@@ -100,7 +102,7 @@ class GuardMCPServer:
             types.Tool(
                 name=str(td["name"]),
                 description=str(td["description"]),
-                inputSchema=dict(td["inputSchema"]),  # type: ignore[arg-type]
+                inputSchema=cast(dict[str, Any], td["inputSchema"]),
                 annotations=annotations,
             )
             for td in _TOOL_DEFINITIONS
