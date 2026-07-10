@@ -41,6 +41,7 @@ def _metadata_for(path: Path, home: Path) -> dict[str, object]:
         ("axios.get('https://api.example.test/v1/data')\n", "explicit_http_client"),
         ('requests.get("https://api.example.test/v1/data")\n', "explicit_http_client"),
         ('The skill\'s requests.get("https://api.example.test/v1/data")\n', "explicit_http_client"),
+        ('The skills\' requests.get("https://api.example.test/v1/data")\n', "explicit_http_client"),
     ),
 )
 def test_explicit_remote_behavior_adds_documented_capability(

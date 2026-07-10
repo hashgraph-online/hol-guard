@@ -259,9 +259,12 @@ def _is_inside_prose_quote(value: str, offset: int) -> bool:
             continue
         previous = value[index - 1] if index > 0 else ""
         following = value[index + 1] if index + 1 < len(value) else ""
-        if previous.isalnum() and following.isalnum():
+        if previous.isalnum():
+            if single_open:
+                single_open = False
             continue
-        single_open = not single_open
+        if following.isalnum():
+            single_open = True
     return double_open or single_open
 
 
