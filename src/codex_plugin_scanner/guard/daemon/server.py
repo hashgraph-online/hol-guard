@@ -99,6 +99,7 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
+from ..harness_resume import resume_harness_operation
 from ..insights_share import publish_insights_share
 from ..local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE, build_local_dashboard_session_token
 from ..local_supply_chain import (
@@ -1994,6 +1995,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 title = self._optional_string(updated_copy.get("title")) or copy["title"]
                 body = self._optional_string(updated_copy.get("body")) or copy["body"]
                 copy = {"title": title, "body": body}
+        elif action in {"allow", "block"}:
+            harness_resume = resume_harness_operation(
+                self.server.store,  # type: ignore[attr-defined]
+                request_id=request_id,
+                action=action,
+                now=_now(),
+            )
+            if harness_resume is not None:
+                updated = self._apply_harness_resume_result(
+                    updated=updated,
+                    harness_resume=harness_resume,
+                )
         updated["copy"] = copy
         updated["retry_hint"] = copy["body"]
         self._write_json(updated)
@@ -2493,16 +2506,37 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "request_id": request_id,
             },
         )
-        self._write_json(
-            {
-                "harness": adapter.harness,
-                "operation": "remote_once",
-                "receipt": receipt,
-                "request_id": request_id,
-                "resolved_request": resolved_request,
-                "status": "completed",
-            }
-        )
+        response_payload: dict[str, object] = {
+            "harness": adapter.harness,
+            "operation": "remote_once",
+            "receipt": receipt,
+            "request_id": request_id,
+            "resolved_request": resolved_request,
+            "status": "completed",
+        }
+        if adapter.harness == "codex":
+            codex_resume = self._codex_resume_after_remote_once(
+                request_id=request_id,
+                action=resolution_action,
+            )
+            if codex_resume is not None:
+                response_payload["codex_resume"] = codex_resume
+                self.server.store.add_event(  # type: ignore[attr-defined]
+                    "codex/thread_resume",
+                    {"request_id": request_id, "action": resolution_action, **codex_resume},
+                    _now(),
+                )
+        else:
+            harness_resume = resume_harness_operation(
+                self.server.store,  # type: ignore[attr-defined]
+                request_id=request_id,
+                action=resolution_action,
+                now=_now(),
+            )
+            if harness_resume is not None:
+                response_payload["harness_resume"] = harness_resume
+                response_payload["harnessResume"] = harness_resume
+        self._write_json(response_payload)
 
     def _handle_audit_remediation(self, action: str, payload: dict[str, object]) -> None:
         if action != "package_shim_path":
@@ -4089,6 +4123,77 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         updated["copy"] = copy
         updated["retry_hint"] = copy["body"]
         return updated
+
+    def _apply_harness_resume_result(
+        self,
+        *,
+        updated: dict[str, object],
+        harness_resume: dict[str, object],
+    ) -> dict[str, object]:
+        updated["harness_resume"] = harness_resume
+        updated["harnessResume"] = harness_resume
+        return updated
+
+    def _safe_resume_metadata(self, resume: dict[str, object]) -> dict[str, object]:
+        safe: dict[str, object] = {}
+        for source_key, target_key in (
+            ("operationId", "operationId"),
+            ("harness", "harness"),
+            ("status", "status"),
+            ("action", "action"),
+            ("resolution_action", "resolutionAction"),
+            ("reason", "reason"),
+            ("message", "message"),
+            ("strategy", "strategy"),
+            ("supported", "supported"),
+            ("attempt_count", "attemptCount"),
+            ("attemptCount", "attemptCount"),
+            ("last_attempt_at", "lastAttemptAt"),
+            ("lastAttemptAt", "lastAttemptAt"),
+            ("sent_at", "sentAt"),
+            ("sentAt", "sentAt"),
+            ("completedAt", "completedAt"),
+            ("completed_at", "completedAt"),
+        ):
+            value = resume.get(source_key)
+            if isinstance(value, str) and value.strip():
+                safe[target_key] = value.strip()
+            elif isinstance(value, (int, float, bool)):
+                safe[target_key] = value
+        return safe
+
+    def _codex_resume_after_remote_once(
+        self,
+        *,
+        request_id: str,
+        action: str,
+    ) -> dict[str, object] | None:
+        try:
+            codex_resume = defer_request_resume_to_live_hook(
+                self.server.store,  # type: ignore[attr-defined]
+                request_id=request_id,
+                action=action,
+                now=_now(),
+            )
+            if codex_resume is None:
+                codex_resume = retry_request_resume(
+                    self.server.store,  # type: ignore[attr-defined]
+                    request_id=request_id,
+                    now=_now(),
+                )
+            return self._safe_resume_metadata(codex_resume)
+        except ValueError as error:
+            if str(error) == "resume_not_supported":
+                return {
+                    "status": "skipped",
+                    "reason": "resume_not_supported",
+                    "message": "This Codex request does not expose a supported resume target.",
+                }
+            return {
+                "status": "failed",
+                "reason": str(error) or "resume_failed",
+                "message": "HOL Guard could not resume the Codex request after applying the remote decision.",
+            }
 
     def _write_legacy_pairing_disabled(self) -> None:
         self._write_json(

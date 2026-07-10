@@ -116,6 +116,12 @@ class TestContractFor:
     def test_unknown_returns_none(self) -> None:
         assert contract_for("unknown-harness-xyz") is None
 
+    def test_oh_my_pi_alias_is_resume_capable_pi_contract(self) -> None:
+        c = contract_for("oh-my-pi")
+        assert c is not None
+        assert c.harness == "pi"
+        assert c.resume_support is True
+
 
 class TestInstallAliases:
     def test_install_codex(self) -> None:

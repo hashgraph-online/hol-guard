@@ -1138,14 +1138,69 @@ def _policy_bundle_rule_matches_local_scope(
     if isinstance(devices, list) and devices and device_id not in devices and device_name not in devices:
         return False
     environments = scope.get("environments")
-    if (
-        isinstance(environments, list)
-        and environments
-        and not any(isinstance(item, str) and item in POLICY_BUNDLE_DEFAULT_ENVIRONMENTS for item in environments)
-    ):
-        return False
+    if not isinstance(environments, list) or not environments:
+        return True
+    return any(isinstance(item, str) and item in POLICY_BUNDLE_DEFAULT_ENVIRONMENTS for item in environments)
+
+
+def _policy_bundle_rule_locations(rule: dict[str, object]) -> list[str]:
+    scope = rule.get("scope")
+    if not isinstance(scope, dict):
+        return []
     locations = scope.get("locations")
-    return not (isinstance(locations, list) and locations)
+    if not isinstance(locations, list):
+        return []
+    return [item.strip() for item in locations if isinstance(item, str) and item.strip()]
+
+
+def _policy_bundle_rule_exact_artifact_ids(rule: dict[str, object]) -> list[str]:
+    artifact_ids: list[str] = []
+    matcher = rule.get("matcher")
+    if isinstance(matcher, dict):
+        for key in ("artifactId", "artifact_id"):
+            value = non_empty_string(matcher.get(key))
+            if value is not None:
+                artifact_ids.append(value)
+    for key in ("artifactId", "artifact_id"):
+        value = non_empty_string(rule.get(key))
+        if value is not None:
+            artifact_ids.append(value)
+    return list(dict.fromkeys(artifact_ids))
+
+
+def _policy_bundle_rule_expires_at(
+    rule: dict[str, object],
+    policy_bundle: dict[str, object],
+) -> str | None:
+    return non_empty_string(rule.get("expiresAt")) or non_empty_string(policy_bundle.get("expiresAt"))
+
+
+def _policy_bundle_rule_source_metadata(rule: dict[str, object]) -> dict[str, object]:
+    metadata: dict[str, object] = {}
+    for key in ("sourceDecisionId", "sourceSuggestionId", "ruleId"):
+        value = non_empty_string(rule.get(key))
+        if value is not None:
+            metadata[key] = value
+    for key in ("sourceReceiptIds", "auditEventIds"):
+        value = rule.get(key)
+        if isinstance(value, list):
+            items = [item for item in (non_empty_string(entry) for entry in value) if item is not None]
+            if items:
+                metadata[key] = items
+    return metadata
+
+
+def _policy_bundle_rule_reason(rule: dict[str, object], rule_id: str) -> str:
+    reason = non_empty_string(rule.get("reason")) or f"Matched Guard Cloud rule {rule_id}."
+    source_metadata = _policy_bundle_rule_source_metadata(rule)
+    diagnostic_ids = [
+        f"{key}={value}"
+        for key, value in source_metadata.items()
+        if isinstance(value, str) and key != "ruleId"
+    ]
+    if diagnostic_ids:
+        return f"{reason} ({'; '.join(diagnostic_ids)})"
+    return reason
 
 
 def _policy_bundle_rule_harnesses(rule: dict[str, object]) -> list[str]:
@@ -1207,25 +1262,73 @@ def _build_policy_bundle_decisions(
             continue
         if _policy_bundle_rule_has_browser_scope(item):
             continue
+        rule_id = non_empty_string(item.get("ruleId")) or "bundle-rule"
+        reason = _policy_bundle_rule_reason(item, rule_id)
+        locations = _policy_bundle_rule_locations(item)
+        expires_at = _policy_bundle_rule_expires_at(item, policy_bundle)
+        for harness in _policy_bundle_rule_harnesses(item):
+            for artifact_id in _policy_bundle_rule_exact_artifact_ids(item):
+                if locations:
+                    for location in locations:
+                        decisions.append(
+                            PolicyDecision(
+                                harness=harness,
+                                scope="workspace",
+                                action=action,
+                                artifact_id=artifact_id,
+                                workspace=location,
+                                reason=reason,
+                                owner=rule_id,
+                                source="policy-bundle",
+                                expires_at=expires_at,
+                            )
+                        )
+                else:
+                    decisions.append(
+                        PolicyDecision(
+                            harness=harness,
+                            scope="artifact",
+                            action=action,
+                            artifact_id=artifact_id,
+                            reason=reason,
+                            owner=rule_id,
+                            source="policy-bundle",
+                            expires_at=expires_at,
+                        )
+                    )
         matcher_families = _policy_bundle_rule_saved_decision_families(item)
         if not matcher_families:
             continue
-        rule_id = non_empty_string(item.get("ruleId")) or "bundle-rule"
-        reason = non_empty_string(item.get("reason")) or f"Matched Guard Cloud rule {rule_id}."
         for harness in _policy_bundle_rule_harnesses(item):
             for family in matcher_families:
-                decisions.append(
-                    PolicyDecision(
-                        harness=harness,
-                        scope="harness",
-                        action=action,
-                        artifact_id=f"family:{family}",
-                        reason=reason,
-                        owner=rule_id,
-                        source="policy-bundle",
-                        expires_at=non_empty_string(policy_bundle.get("expiresAt")),
+                if locations:
+                    for location in locations:
+                        decisions.append(
+                            PolicyDecision(
+                                harness=harness,
+                                scope="workspace",
+                                action=action,
+                                artifact_id=f"family:{family}",
+                                workspace=location,
+                                reason=reason,
+                                owner=rule_id,
+                                source="policy-bundle",
+                                expires_at=expires_at,
+                            )
+                        )
+                else:
+                    decisions.append(
+                        PolicyDecision(
+                            harness=harness,
+                            scope="harness",
+                            action=action,
+                            artifact_id=f"family:{family}",
+                            reason=reason,
+                            owner=rule_id,
+                            source="policy-bundle",
+                            expires_at=expires_at,
+                        )
                     )
-                )
     return decisions
 
 

@@ -101,12 +101,19 @@ class TestMemoryPatternFingerprint:
         assert git_push.components["target"] == "origin"
 
     def test_bare_generic_labels_rejected(self) -> None:
-        for raw in ("read", "write", "bash", "grep", "job", "pi:project:read"):
+        for raw in ("read", "write", "bash", "grep", "job", "tool", "mcp", "skill", "rg", "cat", "pi:project:read"):
             assert build_memory_pattern_fingerprint(command=raw) is None, raw
 
     def test_bare_command_verbs_without_target_rejected(self) -> None:
         assert build_memory_pattern_fingerprint(command="read") is None
         assert build_memory_pattern_fingerprint(command="bash") is None
+
+    def test_concrete_rg_and_cat_commands_remain_eligible(self) -> None:
+        rg_pattern = build_memory_pattern_fingerprint(command="rg TODO src/lib/file.ts")
+        cat_pattern = build_memory_pattern_fingerprint(command="cat package.json")
+
+        assert rg_pattern is not None
+        assert cat_pattern is not None
 
     def test_generic_artifact_fallback_uses_artifact_id(self) -> None:
         candidate = build_memory_pattern_fingerprint(
@@ -210,6 +217,31 @@ class TestMemoryDecisionEventBuilder:
         assert event.redaction_state == "withheld"
         assert event.command_raw is None
 
+    def test_withheld_display_uses_guarded_action_not_approval_wrapper(self) -> None:
+        request = _approval_request(
+            review_command="hol-guard approvals approve req-1",
+            raw_command=None,
+            artifact_id="file:src/lib/file.ts",
+            artifact_name="Read source file",
+            artifact_type="file_read_request",
+        )
+        request["action_envelope_json"] = {
+            "action_type": "file_read",
+            "target_paths": ["src/lib/file.ts"],
+        }
+
+        event = build_memory_decision_event(
+            request=request,
+            action="allow",
+            scope="artifact",
+            resolved_at="2026-07-07T00:00:00Z",
+        )
+
+        assert event is not None
+        assert event.redaction_state == "withheld"
+        assert event.command_display == "Read src/lib/file.ts"
+        assert event.command_display != "hol-guard approvals approve req-1"
+
     def test_returns_none_without_request_id(self) -> None:
         request = _approval_request()
         request["request_id"] = ""
@@ -290,6 +322,47 @@ class TestMemoryDecisionOutboxEnqueue:
         assert payload["eventType"] == "approval.memory_decision"
         assert payload["payload"]["decision_action"] == "approved"
         assert payload["payload"]["contractVersion"] == MEMORY_DECISION_EVENT_CONTRACT_VERSION
+
+    def test_enqueue_includes_project_identity_from_guard_operation(self, tmp_path: Path) -> None:
+        store = _store(tmp_path)
+        _seed_workspace(store)
+        store.upsert_guard_session(
+            session_id="session-1",
+            harness="codex",
+            surface="cli",
+            status="active",
+            client_name="codex",
+            client_title=None,
+            client_version=None,
+            workspace=str(tmp_path),
+            capabilities=[],
+            now="2026-07-07T00:00:00Z",
+        )
+        store.upsert_guard_operation(
+            operation_id="operation-1",
+            session_id="session-1",
+            harness="codex",
+            operation_type="tool_call",
+            status="waiting",
+            approval_request_ids=["req-1"],
+            resume_token=None,
+            metadata={"project_id": "project-1", "workspace_path": str(tmp_path)},
+            now="2026-07-07T00:00:00Z",
+        )
+
+        enqueued = enqueue_memory_decision_event(
+            store,
+            request=_approval_request(request_id="req-1"),
+            action="allow",
+            scope="harness",
+            resolved_at="2026-07-07T00:00:00Z",
+        )
+
+        assert enqueued is True
+        events = store.list_guard_events_v1(uploaded=False, limit=10)
+        payload = events[0]["payload"]
+        assert isinstance(payload, dict)
+        assert payload["payload"]["project_id"] == "project-1"
 
     def test_enqueue_is_idempotent_by_request_action_time(self, tmp_path: Path) -> None:
         store = _store(tmp_path)

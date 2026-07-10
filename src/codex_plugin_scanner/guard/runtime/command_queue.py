@@ -97,6 +97,22 @@ def _env_int(name: str, default: int) -> int:
     return parsed if parsed >= 0 else default
 
 
+def _command_queue_lease_wait_ms(environ: dict[str, str] | None = None) -> int:
+    source = os.environ if environ is None else environ
+    value = source.get(COMMAND_QUEUE_LEASE_WAIT_MS_ENV, "").strip()
+    if not value:
+        return _DEFAULT_LEASE_WAIT_MS
+    try:
+        parsed = int(value)
+    except ValueError:
+        return _DEFAULT_LEASE_WAIT_MS
+    return parsed if parsed >= 0 else _DEFAULT_LEASE_WAIT_MS
+
+
+def _command_queue_long_poll_enabled(environ: dict[str, str] | None = None) -> bool:
+    return _command_queue_lease_wait_ms(environ) > 0
+
+
 def _command_api_url(sync_url: object, path: str) -> str:
     parsed = urlparse(str(sync_url))
     base_path = "/api/guard/commands"
@@ -251,7 +267,7 @@ def _lease_payload(store: GuardStore) -> dict[str, object]:
         },
         "localRequestsSnapshot": _local_requests_snapshot(store),
         "maxJobs": 1,
-        "waitMs": _env_int(COMMAND_QUEUE_LEASE_WAIT_MS_ENV, _DEFAULT_LEASE_WAIT_MS),
+        "waitMs": _command_queue_lease_wait_ms(),
     }
 
 
@@ -583,8 +599,12 @@ def command_queue_loop(
             status = poll_command_queue_once(store, context)
             error_streak = 0
             if status.get("last_poll_was_empty") is True:
-                empty_streak += 1
-                wait_seconds = _retry_wait_seconds(poll_interval, error_backoff, empty_streak)
+                if _command_queue_long_poll_enabled():
+                    empty_streak = 0
+                    wait_seconds = 0
+                else:
+                    empty_streak += 1
+                    wait_seconds = _retry_wait_seconds(poll_interval, error_backoff, empty_streak)
             else:
                 empty_streak = 0
         except GuardSyncAuthorizationExpiredError as error:

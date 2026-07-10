@@ -50,8 +50,9 @@ def enqueue_memory_decision_event(
         machine_id = _resolve_oauth_machine_id(store) or machine_installation_id
         redaction_enabled = _resolve_redaction_enabled(store)
 
+        enriched_request = _request_with_project_identity(store, request)
         event = build_memory_decision_event(
-            request=request,
+            request=enriched_request,
             action=action,
             scope=scope,
             resolved_at=resolved_at,
@@ -153,6 +154,35 @@ def _resolve_redaction_enabled(store: Any) -> bool:
         if isinstance(value, bool):
             return value
     return False
+
+
+def _request_with_project_identity(
+    store: Any,
+    request: Mapping[str, object],
+) -> Mapping[str, object]:
+    request_id = request.get("request_id")
+    if not isinstance(request_id, str) or not request_id.strip():
+        return request
+    getter = getattr(store, "get_guard_operation_for_approval_request", None)
+    if not callable(getter):
+        return request
+    try:
+        operation = getter(request_id.strip())
+    except Exception:
+        return request
+    if not isinstance(operation, Mapping):
+        return request
+    metadata = operation.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return request
+    additions: dict[str, object] = {}
+    for key in ("project_id", "projectId", "workspace_path", "workspacePath"):
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip() and key not in request:
+            additions[key] = value.strip()
+    if not additions:
+        return request
+    return {**dict(request), **additions}
 
 
 def _oauth_credentials(store: Any) -> Mapping[str, object] | None:
