@@ -56,7 +56,7 @@ import {
   standardScopeChoicesForRequest,
 } from "./approval-scopes";
 import { ConsolidatedEvidenceAlert, type EvidenceItem } from "./consolidated-evidence-alert";
-import { useRequestReadState, type RequestReadState } from "./request-read-state";
+import { useRequestReadState, type RequestReadState, REQUEST_READ_STATE_LIMIT } from "./request-read-state";
 import {
   deriveDataFlowEvidence,
   deriveSkillRiskSignals,
@@ -222,7 +222,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
     function handleKeyDown(event: KeyboardEvent) {
       if (pagedRequests.length === 0) return;
       const activeIdx = pagedRequests.findIndex((r) => r.request_id === activeRequestId);
-        if (event.key === "ArrowDown") {
+      if (event.key === "ArrowDown") {
         event.preventDefault();
         const nextIdx = Math.min(activeIdx + 1, pagedRequests.length - 1);
         if (nextIdx !== activeIdx) handleOpenRequest(pagedRequests[nextIdx].request_id);
@@ -597,6 +597,7 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
         <div className="flex items-center gap-3">
           <button
             type="button"
+            title={`Marks every visible filtered request as read (remembering the most recent ${REQUEST_READ_STATE_LIMIT}).`}
             onClick={() => readState.markAllRead(allFilteredRequests.map((item) => item.request_id))}
             className="text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
           >

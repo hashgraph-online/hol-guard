@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 export const REQUEST_READ_STATE_KEY = "hol-guard:read-request-ids";
-export const REQUEST_READ_STATE_LIMIT = 500;
+export const REQUEST_READ_STATE_LIMIT = 2000;
 
 export type RequestReadState = {
   isRead: (requestId: string) => boolean;

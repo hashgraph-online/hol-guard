@@ -1,4 +1,4 @@
-import { addReadIds, removeReadId, createRequestReadState, REQUEST_READ_STATE_KEY } from "./request-read-state";
+import { addReadIds, removeReadId, createRequestReadState, REQUEST_READ_STATE_KEY, REQUEST_READ_STATE_LIMIT } from "./request-read-state";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -52,12 +52,12 @@ assert(
 );
 
 assert(
-  addReadIds(new Array(500).fill(0).map((_, i) => `id-${i}`), ["new"]).length === 500,
+  addReadIds(new Array(REQUEST_READ_STATE_LIMIT).fill(0).map((_, i) => `id-${i}`), ["new"]).length === REQUEST_READ_STATE_LIMIT,
   "T-RRS-04: addReadIds respects the limit"
 );
 
 assert(
-  !addReadIds(new Array(500).fill(0).map((_, i) => `id-${i}`), ["new"]).includes("id-499"),
+  !addReadIds(new Array(REQUEST_READ_STATE_LIMIT).fill(0).map((_, i) => `id-${i}`), ["new"]).includes(`id-${REQUEST_READ_STATE_LIMIT - 1}`),
   "T-RRS-05: addReadIds evicts the oldest id at the limit"
 );
 

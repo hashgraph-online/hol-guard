@@ -23251,7 +23251,7 @@ function ConsolidatedEvidenceAlert({ items }) {
   ] });
 }
 const REQUEST_READ_STATE_KEY = "hol-guard:read-request-ids";
-const REQUEST_READ_STATE_LIMIT = 500;
+const REQUEST_READ_STATE_LIMIT = 2e3;
 function safeReadStorage(storage) {
   if (!storage) return [];
   try {
@@ -24790,6 +24790,7 @@ const ReviewQueueList = reactExports.forwardRef(({
           "button",
           {
             type: "button",
+            title: `Marks every visible filtered request as read (remembering the most recent ${REQUEST_READ_STATE_LIMIT}).`,
             onClick: () => readState.markAllRead(allFilteredRequests.map((item) => item.request_id)),
             className: "text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
             children: "Mark all read"
