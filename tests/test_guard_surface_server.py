@@ -141,7 +141,7 @@ class TestGuardSurfaceServer:
                 assert "text/html" in response.headers.get("Content-Type", "")
                 assert response.headers.get("Content-Security-Policy") == (
                     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-                    "img-src 'self' data:; font-src 'self' data:; connect-src 'self'; "
+                    "img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; "
                     "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
                 )
                 assert response.headers.get("Referrer-Policy") == "no-referrer"
