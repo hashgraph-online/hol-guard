@@ -137,6 +137,203 @@ def test_guard_codex_does_not_claim_untrusted_bridge_lookalike() -> None:
     assert codex_adapter._is_managed_hook_command(command) is False
 
 
+def test_guard_install_and_repair_codex_reconcile_legacy_post_tool_hooks(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    guard_home = home_dir / ".hol-guard"
+    codex_home = home_dir / ".codex"
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_support_interaction._open_guard_cloud_app",
+        lambda **_kwargs: {"status": "test"},
+    )
+    stale_bridge_path = (
+        home_dir
+        / ".local"
+        / "share"
+        / "uv"
+        / "tools"
+        / "hol-guard"
+        / "lib"
+        / "python3.12"
+        / "site-packages"
+        / "codex_plugin_scanner"
+        / "guard"
+        / "adapters"
+        / "codex_daemon_hook_bridge.py"
+    )
+    stale_bridge_command = shlex.join(
+        [
+            str(home_dir / ".local" / "share" / "uv" / "tools" / "hol-guard" / "bin" / "python"),
+            str(stale_bridge_path),
+            json.dumps(
+                {
+                    "state_path": str(guard_home / "daemon-state.json"),
+                    "fallback_command": [
+                        str(home_dir / ".local" / "bin" / "python"),
+                        "-m",
+                        "codex_plugin_scanner.cli",
+                        "guard",
+                        "hook",
+                        "--harness",
+                        "codex",
+                    ],
+                    "start_command": [str(home_dir / ".local" / "bin" / "python"), "-c", "pass"],
+                    "query": "guard-home=stale",
+                    "hook_timeouts": {"PostToolUse": 30},
+                },
+                separators=(",", ":"),
+            ),
+        ]
+    )
+    stale_direct_command = shlex.join(
+        [
+            str(home_dir / ".local" / "pipx" / "venvs" / "hol-guard" / "bin" / "python"),
+            "-m",
+            "codex_plugin_scanner.cli",
+            "guard",
+            "hook",
+            "--harness",
+            "codex",
+            "--workspace",
+            str(workspace_dir),
+        ]
+    )
+    lean_command = "lean-ctx hook observe"
+    _write_text(
+        codex_home / "config.toml",
+        dump_toml(
+            {
+                "features": {"hooks": True},
+                "hooks": {
+                    "PostToolUse": [
+                        {
+                            "matcher": ".*",
+                            "hooks": [{"type": "command", "command": lean_command}],
+                        },
+                        {
+                            "matcher": "Bash",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": stale_bridge_command,
+                                    "statusMessage": "HOL Guard checking tool result",
+                                }
+                            ],
+                        },
+                        {
+                            "matcher": "Bash",
+                            "hooks": [{"type": "command", "command": stale_direct_command}],
+                        },
+                    ]
+                },
+            }
+        ),
+    )
+
+    install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--guard-home",
+            str(guard_home),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    installed_payload = tomllib.loads((codex_home / "config.toml").read_text(encoding="utf-8"))
+    installed_payload["hooks"]["PostToolUse"].append(
+        {
+            "matcher": "Bash",
+            "hooks": [{"type": "command", "command": stale_direct_command}],
+        }
+    )
+    _write_text(codex_home / "config.toml", dump_toml(installed_payload))
+    connect_rc = main(
+        [
+            "guard",
+            "apps",
+            "connect",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--guard-home",
+            str(guard_home),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    connected_payload = tomllib.loads((codex_home / "config.toml").read_text(encoding="utf-8"))
+    connected_commands = [
+        hook["command"]
+        for group in connected_payload["hooks"]["PostToolUse"]
+        for hook in group["hooks"]
+        if hook["type"] == "command"
+    ]
+    assert stale_direct_command not in connected_commands
+    connected_payload["hooks"]["PostToolUse"].append(
+        {
+            "matcher": "Bash",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": stale_bridge_command,
+                    "statusMessage": "HOL Guard checking tool result",
+                }
+            ],
+        }
+    )
+    _write_text(codex_home / "config.toml", dump_toml(connected_payload))
+    repair_rc = main(
+        [
+            "guard",
+            "apps",
+            "repair",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--guard-home",
+            str(guard_home),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    config_payload = tomllib.loads((codex_home / "config.toml").read_text(encoding="utf-8"))
+    commands = [
+        hook["command"]
+        for group in config_payload["hooks"]["PostToolUse"]
+        for hook in group["hooks"]
+        if hook["type"] == "command"
+    ]
+    command_tokens = [shlex.split(command) for command in commands]
+    bridge_commands = [tokens for tokens in command_tokens if Path(tokens[1]).name == "codex_daemon_hook_bridge.py"]
+
+    assert install_rc == 0
+    assert connect_rc == 0
+    assert repair_rc == 0
+    assert lean_command in commands
+    assert stale_bridge_command not in commands
+    assert all(tokens[1:3] != ["-m", "codex_plugin_scanner.cli"] for tokens in command_tokens)
+    assert len(bridge_commands) == 1
+    assert Path(bridge_commands[0][1]).resolve() == Path(codex_adapter.__file__).with_name(
+        "codex_daemon_hook_bridge.py"
+    ).resolve()
+
+
 def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

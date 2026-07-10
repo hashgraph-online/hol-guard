@@ -142,15 +142,14 @@ _MANAGED_HOOK_TIMEOUT_SECONDS = 30
 _MANAGED_HOOK_TIMEOUT_GRACE_SECONDS = 5
 _CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 _CODEX_GUARD_PERMISSION_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
-_LEGACY_MANAGED_HOOK_STATUS_MESSAGES = {
-    "HOL Guard checking Bash command",
-    _MANAGED_HOOK_STATUS_MESSAGE,
-    _MANAGED_PROMPT_HOOK_STATUS_MESSAGE,
-    _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE,
-    _MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE,
-}
 _SHELL_GUARD_BEGIN = "# >>> HOL Guard Codex shell guard >>>"
 _SHELL_GUARD_END = "# <<< HOL Guard Codex shell guard <<<"
+_DAEMON_BRIDGE_PATH_SUFFIX = (
+    "codex_plugin_scanner",
+    "guard",
+    "adapters",
+    "codex_daemon_hook_bridge.py",
+)
 
 
 def _json_object(path: Path) -> dict[str, object]:
@@ -337,17 +336,17 @@ def _is_managed_hook_command(command: object) -> bool:
     managed_bridge_path = Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()
     if Path(tokens[1]).resolve() == managed_bridge_path:
         return True
+    bridge_path = Path(tokens[1])
+    if (
+        len(tokens) >= 3
+        and bridge_path.parts[-len(_DAEMON_BRIDGE_PATH_SUFFIX) :] == _DAEMON_BRIDGE_PATH_SUFFIX
+        and _bridge_config_targets_codex(tokens[2])
+    ):
+        return True
     if len(tokens) < 3:
         return False
-    if tokens[1] == "-m":
-        if len(tokens) < 5:
-            return False
-        return (
-            tokens[2] == "codex_plugin_scanner.cli"
-            and tokens[3] == "guard"
-            and tokens[4] == "hook"
-            and _argv_targets_codex(tokens[5:])
-        )
+    if _argv_is_direct_codex_hook(tokens):
+        return True
     if tokens[1] != "-c":
         return False
     code = tokens[2]
@@ -358,6 +357,30 @@ def _is_managed_hook_command(command: object) -> bool:
         and re.search(r"['\"]codex['\"]", code) is not None
     )
     return "codex_plugin_scanner.cli" in code and "main([" in code and has_guard_call
+
+
+def _bridge_config_targets_codex(config_text: str) -> bool:
+    try:
+        config_value: object = json.loads(config_text)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(config_value, dict):
+        return False
+    config = {key: value for key, value in config_value.items() if isinstance(key, str)}
+    fallback_value = config.get("fallback_command")
+    if not isinstance(fallback_value, list) or not all(isinstance(token, str) for token in fallback_value):
+        return False
+    fallback_command = [token for token in fallback_value if isinstance(token, str)]
+    return _argv_is_direct_codex_hook(fallback_command)
+
+
+def _argv_is_direct_codex_hook(tokens: list[str]) -> bool:
+    return (
+        len(tokens) >= 5
+        and Path(tokens[0]).name.lower().startswith("python")
+        and tokens[1:5] == ["-m", "codex_plugin_scanner.cli", "guard", "hook"]
+        and _argv_targets_codex(tokens[5:])
+    )
 
 
 def _argv_targets_codex(argv: list[str]) -> bool:
@@ -381,9 +404,7 @@ def _is_managed_hook_group(group: object) -> bool:
 def _is_managed_hook_entry(entry: object) -> bool:
     if not isinstance(entry, dict):
         return False
-    status_message = entry.get("statusMessage")
-    has_managed_status = isinstance(status_message, str) and status_message in _LEGACY_MANAGED_HOOK_STATUS_MESSAGES
-    return entry.get("type") == "command" and has_managed_status and _is_managed_hook_command(entry.get("command"))
+    return entry.get("type") == "command" and _is_managed_hook_command(entry.get("command"))
 
 
 def _remove_managed_hook_entries(group: object) -> object | None:
