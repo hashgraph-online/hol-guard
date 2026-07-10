@@ -1477,3 +1477,17 @@ class TestResolveSyncUrl:
         }
         result = _resolve_sync_url(auth_context, "/api/guard/live-requests/sync")
         assert result == "https://hol.org:8443/api/guard/live-requests/sync"
+
+    def test_query_string_preserved_when_path_replaced(self) -> None:
+        """Replacing the sync URL path must preserve scheme, netloc, and query.
+
+        The auth sync URL carries a `route` query parameter that downstream
+        components depend on.  Only the path segment is replaced; the query
+        string and fragment (which is not part of the HTTP request target)
+        must survive intact.
+        """
+        auth_context: dict[str, object] = {
+            "sync_url": "https://hol.org/api/guard/receipts/sync?route=tenant-a",
+        }
+        result = _resolve_sync_url(auth_context, "/api/guard/live-requests/sync")
+        assert result == "https://hol.org/api/guard/live-requests/sync?route=tenant-a"

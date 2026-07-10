@@ -110,7 +110,7 @@ def _resolve_sync_url(auth_context: dict[str, object], path: str) -> str:
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise RuntimeError("Guard sync URL must be an absolute HTTP(S) URL.")
     normalized_path = path if path.startswith("/") else f"/{path}"
-    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, normalized_path, "", ""))
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, normalized_path, parsed.query, ""))
 
 
 def _load_sync_cursor(store: GuardStore) -> str | None:
