@@ -1351,18 +1351,28 @@ def test_gr123_request_resolution_requires_local_auth_token(tmp_path: Path) -> N
     )
 
 
-def test_gr121_stale_pending_requests_can_be_marked_expired_safely(tmp_path: Path) -> None:
+def test_gr121_legacy_expired_requests_reopen_as_pending(tmp_path: Path) -> None:
     store = _store(tmp_path)
     old = _request("req-old")
     fresh = _request("req-fresh", artifact_id="codex:project:fresh", command="cat ~/.ssh/config")
     store.add_approval_request(old, "2026-05-01T00:00:00+00:00")
     store.add_approval_request(fresh, "2026-05-13T00:00:00+00:00")
 
-    expired = store.expire_pending_approval_requests(
-        older_than="2026-05-10T00:00:00+00:00",
-        now="2026-05-13T00:01:00+00:00",
-    )
+    with store._connect() as connection:
+        connection.execute(
+            """
+            update approval_requests
+            set status = 'expired', reason = 'Expired after waiting for review.', resolved_at = ?
+            where request_id = ?
+            """,
+            ("2026-05-13T00:01:00+00:00", "req-old"),
+        )
 
-    assert expired == 1
-    assert store.get_approval_request("req-old")["status"] == "expired"
-    assert store.get_approval_request("req-fresh")["status"] == "pending"
+    restored = _store(tmp_path)
+    restored_old = restored.get_approval_request("req-old")
+    assert restored_old is not None
+    assert restored_old["status"] == "pending"
+    assert restored_old["reason"] is None
+    assert restored_old["resolved_at"] is None
+    assert restored.get_approval_request("req-fresh")["status"] == "pending"
+    assert not hasattr(restored, "expire_pending_approval_requests")

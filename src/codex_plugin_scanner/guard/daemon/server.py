@@ -2417,7 +2417,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         request_row = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
         if not isinstance(request_row, dict) or request_row.get("status") != "pending":
-            self._write_json({"error": "remote_once_request_expired"}, status=409)
+            self._write_json({"error": "remote_once_request_not_pending"}, status=409)
             return
         request_policy_action = self._optional_string(request_row.get("policy_action"))
         request_recommended_scope = self._optional_string(request_row.get("recommended_scope"))
