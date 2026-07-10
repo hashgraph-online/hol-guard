@@ -54,7 +54,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
             "test-eval,"
             "receipts,inventory,abom,aibom,approvals,explain,allow,deny,policies,trust,exceptions,advisories,events,doctor,connect,"
             "remote-pair,disconnect,"
-            "login,sync,device,commands,bridge}"
+            "login,sync,device,commands,bridge,mcp}"
         ),
     )
     _configure_guard_local_parsers(guard_subparsers)
