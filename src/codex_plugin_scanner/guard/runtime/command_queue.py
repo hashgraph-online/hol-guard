@@ -44,7 +44,6 @@ _DEFAULT_POLL_INTERVAL_SECONDS = 2.0
 _DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
 _MIN_RETRY_WAIT_SECONDS = 0.1
 _LONG_POLL_EMPTY_MIN_WAIT_SECONDS = 0.05
-_LONG_POLL_EMPTY_MAX_WAIT_SECONDS = 1.0
 _REQUEST_TIMEOUT_SECONDS = 35
 _RETRY_TIMEOUT_SECONDS = 60
 _LOGGER = logging.getLogger(__name__)
@@ -604,8 +603,8 @@ def command_queue_loop(
                 empty_streak += 1
                 if _command_queue_long_poll_enabled():
                     wait_seconds = min(
-                        _LONG_POLL_EMPTY_MAX_WAIT_SECONDS,
-                        _LONG_POLL_EMPTY_MIN_WAIT_SECONDS * (2 ** min(empty_streak - 1, 5)),
+                        poll_interval,
+                        _LONG_POLL_EMPTY_MIN_WAIT_SECONDS * (2 ** min(empty_streak - 1, 8)),
                     )
                 else:
                     wait_seconds = _retry_wait_seconds(poll_interval, error_backoff, empty_streak)
