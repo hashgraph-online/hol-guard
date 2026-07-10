@@ -1390,8 +1390,17 @@ def _build_runtime_cloud_context(
         connect_retry_required=connect_retry_required,
         connect_retry_refresh_race=connect_retry_refresh_race,
     )
+    oauth_credentials = store.get_oauth_local_credentials()
+    cloud_user_profile = (
+        oauth_credentials.get("cloud_user_profile")
+        if isinstance(oauth_credentials, dict) and isinstance(oauth_credentials.get("cloud_user_profile"), dict)
+        else None
+    )
+    cloud_workspace_id = store.get_cloud_workspace_id()
     return {
         "sync_configured": cloud_profile is not None,
+        "cloud_user_profile": cloud_user_profile,
+        "cloud_workspace_id": cloud_workspace_id,
         "cloud_state": cloud_state,
         "cloud_state_label": _runtime_cloud_state_label(cloud_state),
         "cloud_state_detail": _runtime_cloud_state_detail(
@@ -1413,6 +1422,8 @@ def _build_runtime_cloud_context(
                 shared_proof_recorded=bool(sync_summary) or remote_payload_active,
             ),
             "sync_configured": cloud_profile is not None,
+            "cloud_user_profile": cloud_user_profile,
+            "workspace_id": cloud_workspace_id,
             "dashboard_url": dashboard_url,
             "inbox_url": inbox_url,
             "fleet_url": fleet_url,
