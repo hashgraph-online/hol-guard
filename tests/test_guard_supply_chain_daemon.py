@@ -226,6 +226,7 @@ def test_daemon_aibom_refresh_records_synced_on_success(
     assert calls
     assert calls[0]["home_dir"] == home_dir
     assert calls[0]["workspace_dir"] == workspace_dir
+    assert calls[0]["expected_workspace_id"] == "workspace-alpha"
     summary = store.get_sync_payload("aibom_inventory_daemon")
     assert isinstance(summary, dict)
     assert summary["status"] == "synced"
@@ -348,6 +349,41 @@ def test_daemon_aibom_refresh_rejects_mismatched_persisted_context(
 
     assert calls == []
     assert summary["reason"] == "missing_workspace_context"
+
+
+def test_daemon_aibom_refresh_rejects_explicit_context_after_repair(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A daemon cannot reuse constructor context after pairing changes workspaces."""
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        guard_daemon_module,
+        "sync_aibom_snapshots_if_due",
+        lambda _store, **kwargs: calls.append(kwargs) or {"synced": True},
+    )
+    daemon = guard_daemon_module.GuardDaemonServer(
+        store,
+        host="127.0.0.1",
+        port=0,
+        idle_timeout_seconds=60,
+        aibom_refresh_interval_seconds=60,
+        aibom_refresh_backoff_seconds=0.05,
+        workspace_dir=tmp_path / "workspace-alpha",
+    )
+    _seed_guard_cloud(store, workspace_id="workspace-beta")
+
+    daemon.start()
+    try:
+        summary = _wait_for_aibom_status(store, expected="missing_workspace_context")
+    finally:
+        daemon.stop()
+
+    assert calls == []
+    assert summary["reason"] == "missing_workspace_context"
+    assert store.get_sync_payload("aibom_inventory_context") is None
 
 
 def test_daemon_aibom_refresh_skips_without_workspace_context(

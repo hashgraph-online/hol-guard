@@ -123,6 +123,7 @@ def _resolve_trust_attestation_context(
     *,
     generated_at: str,
     include_upload_session_bindings: bool = False,
+    workspace_id: str | None = None,
 ) -> dict[str, object]:
     from .runtime.trust_attestation import (
         resolve_guard_oauth_trust_attestation_signing_config,
@@ -137,6 +138,7 @@ def _resolve_trust_attestation_context(
         guard_home = store.guard_home if include_upload_session_bindings else None
         signing_config = resolve_trust_attestation_signing_config(guard_home=guard_home)
     enable_v2 = trust_attestation_v2_enabled()
+    resolved_workspace_id = workspace_id or store.get_cloud_workspace_id()
     installation_id = store.get_or_create_installation_id() if enable_v2 else None
     context: dict[str, object] = {
         "analyzerId": "hol-guard" if enable_v2 else None,
@@ -151,7 +153,7 @@ def _resolve_trust_attestation_context(
         "sequence": None,
         "signingConfig": signing_config,
         "uploadId": None,
-        "workspaceId": store.get_cloud_workspace_id() if enable_v2 else None,
+        "workspaceId": resolved_workspace_id if enable_v2 else None,
     }
     if not enable_v2 or not include_upload_session_bindings:
         return context
@@ -360,14 +362,23 @@ def sync_aibom_snapshots_if_due(
     force: bool = False,
     options: AibomCliOptions | None = None,
     auth_context: dict[str, object] | None = None,
+    expected_workspace_id: str | None = None,
     home_dir: Path | None = None,
     workspace_dir: Path | None = None,
 ) -> dict[str, object]:
     runner = _runner_module()
     guard_sync_not_configured_error = runner.GuardSyncNotConfiguredError
 
-    if store.get_cloud_workspace_id() is None:
+    current_workspace_id = store.get_cloud_workspace_id()
+    if current_workspace_id is None:
         return {"synced": False, "skipped": True, "reason": "not_configured"}
+    if expected_workspace_id is not None and current_workspace_id != expected_workspace_id:
+        return {
+            "synced": False,
+            "reason": "workspace_changed",
+            "error": "Guard Cloud workspace changed before AIBOM inventory sync.",
+        }
+    bound_workspace_id = expected_workspace_id or current_workspace_id
     if _aibom_guard_events_endpoint_unavailable_recently(store):
         return {
             "synced": False,
@@ -398,6 +409,7 @@ def sync_aibom_snapshots_if_due(
             generated_at=generated_at,
             options=options,
             auth_context=auth_context,
+            expected_workspace_id=bound_workspace_id,
         )
     except guard_sync_not_configured_error:
         return {"synced": False, "skipped": True, "reason": "not_configured"}
@@ -414,20 +426,28 @@ def sync_aibom_snapshots(
     generated_at: str,
     options: AibomCliOptions | None = None,
     auth_context: dict[str, object] | None = None,
+    expected_workspace_id: str | None = None,
 ) -> dict[str, object]:
     runner = _runner_module()
     guard_sync_not_configured_error = runner.GuardSyncNotConfiguredError
 
-    workspace_id = store.get_cloud_workspace_id()
-    if workspace_id is None:
-        raise guard_sync_not_configured_error("Guard Cloud workspace is not configured. Run `hol-guard connect` first.")
+    with store.hold_oauth_credential_lock():
+        current_workspace_id = store.get_cloud_workspace_id()
+        if current_workspace_id is None:
+            raise guard_sync_not_configured_error(
+                "Guard Cloud workspace is not configured. Run `hol-guard connect` first."
+            )
+        if expected_workspace_id is not None and current_workspace_id != expected_workspace_id:
+            raise ValueError("Guard Cloud workspace changed before AIBOM inventory sync.")
+        workspace_id = expected_workspace_id or current_workspace_id
+        trust_attestation_context = _resolve_trust_attestation_context(
+            store,
+            generated_at=generated_at,
+            include_upload_session_bindings=True,
+            workspace_id=workspace_id,
+        )
 
     resolved_options = options or _AIBOM_CLOUD_SYNC_OPTIONS
-    trust_attestation_context = _resolve_trust_attestation_context(
-        store,
-        generated_at=generated_at,
-        include_upload_session_bindings=True,
-    )
     primary_content_sources: list[GuardAibomPrimaryContentSource] = []
     snapshots = collect_aibom_snapshots(
         context,

@@ -340,6 +340,48 @@ def test_sync_aibom_snapshots_if_due_skips_recent_sync(tmp_path: Path, monkeypat
     assert summary.get("reason") == "recently_synced"
 
 
+def test_sync_aibom_snapshots_if_due_rejects_changed_workspace(tmp_path: Path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots_if_due
+
+    store = GuardStore(tmp_path / "guard")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-beta")
+
+    summary = sync_aibom_snapshots_if_due(
+        store,
+        generated_at="2026-06-10T13:00:00+00:00",
+        expected_workspace_id="workspace-alpha",
+    )
+
+    assert summary == {
+        "synced": False,
+        "reason": "workspace_changed",
+        "error": "Guard Cloud workspace changed before AIBOM inventory sync.",
+    }
+
+
+def test_sync_aibom_snapshots_if_due_binds_current_workspace(tmp_path: Path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard import aibom_cli
+
+    store = GuardStore(tmp_path / "guard")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-alpha")
+    calls: list[dict[str, object]] = []
+
+    def _fake_sync(*_args: object, **kwargs: object) -> dict[str, object]:
+        calls.append(kwargs)
+        return {"synced": True}
+
+    monkeypatch.setattr(aibom_cli, "sync_aibom_snapshots", _fake_sync)
+
+    summary = aibom_cli.sync_aibom_snapshots_if_due(
+        store,
+        generated_at="2026-06-10T13:00:00+00:00",
+        force=True,
+    )
+
+    assert summary == {"synced": True}
+    assert calls[0]["expected_workspace_id"] == "workspace-alpha"
+
+
 def test_sync_aibom_snapshots_if_due_skips_recent_empty_sync(tmp_path: Path, monkeypatch) -> None:
     from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots_if_due
 
@@ -489,6 +531,24 @@ def test_resolve_trust_attestation_context_includes_workspace_device_for_v2(
     assert context["installationId"] == "device-1"
     assert context["policyVersion"] == "guard-aibom-trust-policy.v1"
     assert context["uploadId"] is None
+
+
+def test_resolve_trust_attestation_context_uses_workspace_override(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-beta")
+    monkeypatch.setattr(store, "get_or_create_installation_id", lambda: "device-1")
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", "1")
+
+    context = aibom_cli._resolve_trust_attestation_context(
+        store,
+        generated_at="2026-06-10T12:00:00+00:00",
+        workspace_id="workspace-alpha",
+    )
+
+    assert context["workspaceId"] == "workspace-alpha"
     assert context["challengeId"] is None
     assert context["nonce"] is None
     assert context["sequence"] is None
