@@ -30,6 +30,8 @@ import {
 import { guardAwareHref } from "./guard-api";
 import { EMPTY_QUEUE_TITLE } from "./approval-center-utils";
 import { GuardUpdatePanel } from "./guard-update-panel";
+import { CloudUserMenu } from "./cloud-user-menu";
+import type { GuardCloudUserProfile } from "./guard-types";
 import { GITHUB_ISSUE_BUTTON_LABEL, GITHUB_ISSUE_LINK } from "./github-issue-link";
 import type { GuardUpdatePhase, GuardUpdateStatus } from "./guard-types";
 
@@ -175,6 +177,8 @@ export function ShellSidebar(props: {
   onUpdateGuard?: () => void;
   onReinstallGuard?: () => void;
   updatePhase?: GuardUpdatePhase;
+  cloudUserProfile?: GuardCloudUserProfile | null;
+  workspaceId?: string | null;
 }) {
   const collapsed = props.collapsed ?? false;
   return (
@@ -247,6 +251,15 @@ export function ShellSidebar(props: {
         )}
 
         <div className="mt-auto border-t border-slate-200 pt-4">
+          {props.cloudUserProfile ? (
+            <div className={`mb-3 ${collapsed ? "px-1" : "px-2"}`}>
+              <CloudUserMenu
+                userProfile={props.cloudUserProfile}
+                workspaceId={props.workspaceId}
+                collapsed={collapsed}
+              />
+            </div>
+          ) : null}
           {!collapsed ? (
             <div className="mx-2 overflow-hidden rounded-xl border border-brand-blue/25 bg-gradient-to-br from-brand-blue/[0.05] to-brand-dark/[0.03]">
               <div className="space-y-2 px-3 pb-2.5 pt-3">

@@ -3156,6 +3156,9 @@ def _persist_rotated_oauth_refresh_token(
             else _optional_string(credentials.get("supply_chain_plan_id"))
         ),
         workspace_id=_optional_string(credentials.get("workspace_id")),
+        cloud_user_profile=(
+            credentials.get("cloud_user_profile") if isinstance(credentials.get("cloud_user_profile"), dict) else None
+        ),
         runtime_id=_optional_string(credentials.get("runtime_id")),
         runtime_label=_optional_string(credentials.get("runtime_label")),
         access_token=access_token,
