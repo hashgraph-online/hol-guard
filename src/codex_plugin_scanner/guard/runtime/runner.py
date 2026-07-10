@@ -3228,12 +3228,13 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
         effective_cloud_user_profile = refreshed_cloud_user_profile or _extract_dict_field(
             oauth_credentials, "cloud_user_profile"
         )
+    stored_cloud_user_profile = _extract_dict_field(oauth_credentials, "cloud_user_profile")
+    profile_changed = effective_cloud_user_profile != stored_cloud_user_profile
     if (
         force_refresh
         or rotated_refresh_token != refresh_token
         or package_firewall_entitlement is not None
-        or effective_cloud_user_profile is not None
-        or (had_entitlement and refreshed_cloud_user_profile is None)
+        or profile_changed
         or persist_recovered_secret
     ):
         _persist_rotated_oauth_refresh_token(
