@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -666,7 +667,7 @@ class TestSkillDiscovery:
         h1 = next(a for a in d1.artifacts if a.artifact_type == "skill").metadata["content_hash"]
         h2 = next(a for a in d2.artifacts if a.artifact_type == "skill").metadata["content_hash"]
         assert h1 == h2
-        assert len(h1) == 16
+        assert h1 == f"sha256:{hashlib.sha256(content.encode('utf-8')).hexdigest()}"
 
     def test_related_skills_in_metadata(self, tmp_path: Path):
         _write(
@@ -700,6 +701,33 @@ class TestSkillSubdirectoryScanning:
         assert len(file_artifacts) == 1
         assert "references" in file_artifacts[0].artifact_id
         assert "deploy/references/api-setup.md" in file_artifacts[0].name
+
+    def test_cloud_snapshot_keeps_primary_skill_and_instruction_only(self, tmp_path: Path):
+        skill_body = "---\nname: deploy\n---\n# Deploy\n"
+        instruction_body = "# Workspace instructions\nUse focused tests.\n"
+        skill_dir = tmp_path / ".hermes" / "skills" / "dev" / "deploy"
+        workspace = tmp_path / "workspace"
+        _write(skill_dir / "SKILL.md", skill_body)
+        _write(skill_dir / "references" / "agent_install_commands.md", "Install helper notes.\n")
+        _write(workspace / "AGENTS.md", instruction_body)
+        context = HarnessContext(
+            home_dir=tmp_path,
+            workspace_dir=workspace,
+            guard_home=tmp_path / "guard-home",
+        )
+        adapter = HermesHarnessAdapter()
+
+        detection = adapter.detect(context)
+        assert any(artifact.artifact_type == "skill_file" for artifact in detection.artifacts)
+
+        snapshot = adapter.inventory_snapshot(context, generated_at="2026-07-10T00:00:00Z")
+        artifact_types = {item.metadata.get("artifactType") for item in snapshot.items}
+        primary_skill = next(item for item in snapshot.items if item.metadata.get("artifactType") == "skill")
+        instruction = next(item for item in snapshot.items if item.metadata.get("artifactType") == "instruction")
+
+        assert "skill_file" not in artifact_types
+        assert primary_skill.content_hash == f"sha256:{hashlib.sha256(skill_body.encode()).hexdigest()}"
+        assert instruction.content_hash == f"sha256:{hashlib.sha256(instruction_body.encode()).hexdigest()}"
 
     def test_discovers_script_files(self, tmp_path: Path):
         skill_dir = tmp_path / ".hermes" / "skills" / "dev" / "deploy"
@@ -1381,18 +1409,20 @@ class TestManifestFallback:
         managed_root = tmp_path / "guard-home" / "hermes"
         _write(
             managed_root / "manifest.json",
-            json.dumps({
-                "servers": {
-                    "lean-ctx": {
-                        "command": "npx",
-                        "args": ["lean-ctx"],
+            json.dumps(
+                {
+                    "servers": {
+                        "lean-ctx": {
+                            "command": "npx",
+                            "args": ["lean-ctx"],
+                        },
+                        "web-search": {
+                            "command": "npx",
+                            "args": ["web-search"],
+                        },
                     },
-                    "web-search": {
-                        "command": "npx",
-                        "args": ["web-search"],
-                    },
-                },
-            }),
+                }
+            ),
         )
 
         adapter = HermesHarnessAdapter()
@@ -1414,14 +1444,16 @@ class TestManifestFallback:
         managed_root = tmp_path / "guard-home" / "hermes"
         _write(
             managed_root / "manifest.json",
-            json.dumps({
-                "servers": {
-                    "manifest-server": {
-                        "command": "python",
-                        "args": ["-m", "server"],
+            json.dumps(
+                {
+                    "servers": {
+                        "manifest-server": {
+                            "command": "python",
+                            "args": ["-m", "server"],
+                        },
                     },
-                },
-            }),
+                }
+            ),
         )
 
         adapter = HermesHarnessAdapter()
@@ -1462,21 +1494,23 @@ class TestManifestFallback:
         manifest_dir.mkdir(parents=True)
         _write(
             manifest_dir / "manifest.json",
-            json.dumps({
-                "servers": {
-                    "yaml:lean-ctx": {
-                        "name": "lean-ctx",
-                        "command": "npx",
-                        "args": ["-y", "@anthropic/lean-ctx"],
-                        "source": "yaml",
+            json.dumps(
+                {
+                    "servers": {
+                        "yaml:lean-ctx": {
+                            "name": "lean-ctx",
+                            "command": "npx",
+                            "args": ["-y", "@anthropic/lean-ctx"],
+                            "source": "yaml",
+                        },
+                        "json:playwright": {
+                            "name": "playwright",
+                            "command": "npx",
+                            "source": "json",
+                        },
                     },
-                    "json:playwright": {
-                        "name": "playwright",
-                        "command": "npx",
-                        "source": "json",
-                    },
-                },
-            }),
+                }
+            ),
         )
 
         adapter = HermesHarnessAdapter()
@@ -1494,9 +1528,7 @@ class TestManifestFallback:
 class TestInstallHostHomeAwareness:
     """install() uses host-home sources only for a minimal sandbox."""
 
-    def test_install_skips_host_home_mcp_sources_when_container_populated(
-        self, tmp_path: Path, monkeypatch
-    ):
+    def test_install_skips_host_home_mcp_sources_when_container_populated(self, tmp_path: Path, monkeypatch):
         """A stale mirror must not extend a populated container config."""
         # Container config has one MCP server
         _write(
@@ -1520,9 +1552,7 @@ class TestInstallHostHomeAwareness:
         assert "yaml:container-server" in server_keys
         assert "yaml:host-server" not in server_keys
 
-    def test_install_uses_host_home_mcp_sources_when_container_empty(
-        self, tmp_path: Path, monkeypatch
-    ):
+    def test_install_uses_host_home_mcp_sources_when_container_empty(self, tmp_path: Path, monkeypatch):
         _write(tmp_path / ".hermes" / "config.yaml", "mcp_servers: {}\n")
         host_home = tmp_path / "host-hermes"
         _write(

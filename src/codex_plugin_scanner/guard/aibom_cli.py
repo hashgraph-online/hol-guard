@@ -16,10 +16,18 @@ from typing import Any, Literal
 
 from ..version import __version__
 from .adapters.base import HarnessContext
+from .aibom_content_upload import (
+    GuardAibomPrimaryContentSource,
+    empty_content_upload_summary,
+    merge_content_upload_summary,
+    primary_content_sources_from_artifacts,
+    upload_primary_content_sources,
+)
 from .aibom_trust_metadata import apply_local_trust_metadata
 from .inventory_cisco import run_cisco_inventory_scans
 from .inventory_contract import (
     GuardAgentInventorySnapshot,
+    cloud_inventory_artifacts_from_detection,
     extract_aibom_metadata_extensions,
     inventory_snapshot_from_detection,
     redact_local_path,
@@ -60,6 +68,7 @@ def collect_aibom_snapshots(
     generated_at: str,
     options: AibomCliOptions | None = None,
     trust_attestation_context: dict[str, object] | None = None,
+    primary_content_sources: list[GuardAibomPrimaryContentSource] | None = None,
 ) -> tuple[GuardAgentInventorySnapshot, ...]:
     resolved = options or AibomCliOptions()
     snapshots: list[GuardAgentInventorySnapshot] = []
@@ -81,18 +90,31 @@ def collect_aibom_snapshots(
                 remaining_cisco_timeout_seconds - max(time.monotonic() - cisco_started, 0.0),
                 0.0,
             )
-        snapshots.append(
-            inventory_snapshot_from_detection(
-                detection,
-                generated_at=generated_at,
-                home_dir=context.home_dir,
-                workspace_dir=context.workspace_dir,
-                cisco_runs=cisco_runs,
-                include_symlinks=resolved.include_symlinks,
-                follow_unsafe_symlinks=resolved.follow_unsafe_symlinks,
-                trust_attestation_context=trust_attestation_context,
-            )
+        artifacts = cloud_inventory_artifacts_from_detection(
+            detection,
+            home_dir=context.home_dir,
+            workspace_dir=context.workspace_dir,
         )
+        snapshot = inventory_snapshot_from_detection(
+            detection,
+            generated_at=generated_at,
+            home_dir=context.home_dir,
+            workspace_dir=context.workspace_dir,
+            cisco_runs=cisco_runs,
+            include_symlinks=resolved.include_symlinks,
+            follow_unsafe_symlinks=resolved.follow_unsafe_symlinks,
+            trust_attestation_context=trust_attestation_context,
+            artifacts=artifacts,
+        )
+        snapshots.append(snapshot)
+        if primary_content_sources is not None:
+            primary_content_sources.extend(
+                primary_content_sources_from_artifacts(
+                    artifacts,
+                    snapshot,
+                    workspace_dir=context.workspace_dir,
+                )
+            )
     return tuple(snapshots)
 
 
@@ -406,11 +428,13 @@ def sync_aibom_snapshots(
         generated_at=generated_at,
         include_upload_session_bindings=True,
     )
+    primary_content_sources: list[GuardAibomPrimaryContentSource] = []
     snapshots = collect_aibom_snapshots(
         context,
         generated_at=generated_at,
         options=resolved_options,
         trust_attestation_context=trust_attestation_context,
+        primary_content_sources=primary_content_sources,
     )
     if not snapshots:
         synced_at = generated_at
@@ -440,6 +464,13 @@ def sync_aibom_snapshots(
         for snapshot in snapshots
     ]
     event_batches, oversized_events = _batch_inventory_events(events)
+    content_sources_by_snapshot: dict[str, tuple[GuardAibomPrimaryContentSource, ...]] = {}
+    for snapshot in snapshots:
+        content_sources_by_snapshot[snapshot.snapshot_id] = tuple(
+            source for source in primary_content_sources if source.snapshot_id == snapshot.snapshot_id
+        )
+    content_upload_summary = empty_content_upload_summary()
+    content_uploaded_snapshot_ids: set[str] = set()
     oversized_statuses: list[dict[str, object]] = [
         {
             "eventId": str(event.get("eventId") or ""),
@@ -459,6 +490,7 @@ def sync_aibom_snapshots(
             "partial": False,
             "reason": "snapshot_too_large",
             "error": "Guard Cloud AIBOM sync failed because an inventory snapshot exceeds the request limit.",
+            "content_upload": content_upload_summary,
         }
         store.set_sync_payload("aibom_sync_summary", failure_summary, generated_at)
         return failure_summary
@@ -526,6 +558,7 @@ def sync_aibom_snapshots(
                     "statuses": all_statuses,
                     "partial": batches_sent > 0 or bool(oversized_events),
                     "reason": "guard_events_endpoint_unavailable",
+                    "content_upload": content_upload_summary,
                 }
                 if batches_sent == 0:
                     summary["skipped"] = True
@@ -540,6 +573,7 @@ def sync_aibom_snapshots(
                 "statuses": all_statuses,
                 "partial": batches_sent > 0 or bool(oversized_events),
                 "error": "Guard Cloud AIBOM sync failed due to an HTTP error.",
+                "content_upload": content_upload_summary,
             }
             store.set_sync_payload("aibom_sync_summary", failure_summary, synced_at)
             raise RuntimeError("Guard Cloud AIBOM sync failed due to an HTTP error.") from error
@@ -553,10 +587,11 @@ def sync_aibom_snapshots(
                 "statuses": all_statuses,
                 "partial": batches_sent > 0 or bool(oversized_events),
                 "error": "Guard Cloud AIBOM sync failed due to a network error.",
+                "content_upload": content_upload_summary,
             }
             store.set_sync_payload("aibom_sync_summary", failure_summary, synced_at)
             raise RuntimeError("Guard Cloud AIBOM sync failed due to a network error.") from error
-        batches_sent += 1  # noqa: SIM113
+        batches_sent += 1
         events_sent += len(batch)
         batch_accepted = payload.get("accepted")
         if isinstance(batch_accepted, int):
@@ -570,6 +605,19 @@ def sync_aibom_snapshots(
         batch_synced_at = _sync_timestamp_from_payload(payload)
         if isinstance(batch_synced_at, str):
             synced_at = batch_synced_at
+        for snapshot_id in _accepted_snapshot_ids(batch, payload):
+            if snapshot_id in content_uploaded_snapshot_ids:
+                continue
+            sources = content_sources_by_snapshot.get(snapshot_id, ())
+            upload_summary, resolved_auth_context = upload_primary_content_sources(
+                store,
+                runner,
+                resolved_auth_context,
+                sources=sources,
+                workspace_id=workspace_id,
+            )
+            merge_content_upload_summary(content_upload_summary, upload_summary)
+            content_uploaded_snapshot_ids.add(snapshot_id)
     summary: dict[str, object] = {
         "synced": True,
         "synced_at": synced_at,
@@ -577,6 +625,7 @@ def sync_aibom_snapshots(
         "accepted": total_accepted,
         "rejected": total_rejected,
         "statuses": all_statuses,
+        "content_upload": content_upload_summary,
     }
     if oversized_events:
         summary["partial"] = True
@@ -889,6 +938,32 @@ def _sync_timestamp_from_payload(payload: dict[str, object]) -> str | None:
         if isinstance(value, str) and value:
             return value
     return None
+
+
+def _accepted_snapshot_ids(
+    batch: list[dict[str, object]],
+    payload: dict[str, object],
+) -> set[str]:
+    snapshot_by_event_id: dict[str, str] = {}
+    for event in batch:
+        event_id = event.get("eventId")
+        event_payload = event.get("payload")
+        snapshot_payload = event_payload.get("snapshot") if isinstance(event_payload, dict) else None
+        snapshot_id = snapshot_payload.get("snapshotId") if isinstance(snapshot_payload, dict) else None
+        if isinstance(event_id, str) and isinstance(snapshot_id, str):
+            snapshot_by_event_id[event_id] = snapshot_id
+    accepted_event_ids = (
+        {
+            str(status.get("eventId"))
+            for status in payload.get("statuses", [])
+            if isinstance(status, dict) and status.get("status") == "accepted"
+        }
+        if isinstance(payload.get("statuses"), list)
+        else set()
+    )
+    if not accepted_event_ids and payload.get("accepted") == len(batch):
+        accepted_event_ids = set(snapshot_by_event_id)
+    return {snapshot_by_event_id[event_id] for event_id in accepted_event_ids if event_id in snapshot_by_event_id}
 
 
 def _render_aibom_markdown(payload: dict[str, object]) -> str:

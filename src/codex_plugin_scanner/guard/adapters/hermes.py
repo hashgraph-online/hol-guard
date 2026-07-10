@@ -463,7 +463,7 @@ class HermesHarnessAdapter(HarnessAdapter):
                     if isinstance(hermes_related, str):
                         related = hermes_related
 
-        content_hash = _content_hash(content)
+        content_hash = _primary_content_hash(skill_md, fallback_content=content)
         env_mentions = _extract_env_mentions(content)
 
         metadata: dict[str, object] = {
@@ -866,6 +866,18 @@ def _extract_env_mentions(content: str) -> list[str]:
 def _content_hash(content: str) -> str:
     """Deterministic hash for change detection (truncated SHA-256)."""
     return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+
+
+def _primary_content_hash(path: Path, *, fallback_content: str) -> str:
+    """Hash the exact primary artifact body using the cloud content format."""
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            while chunk := handle.read(64 * 1024):
+                digest.update(chunk)
+    except OSError:
+        digest = hashlib.sha256(fallback_content.encode("utf-8"))
+    return f"sha256:{digest.hexdigest()}"
 
 
 def _safe_read(path: Path) -> str:

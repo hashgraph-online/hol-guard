@@ -383,18 +383,17 @@ def extract_aibom_metadata_extensions(metadata: dict[str, object]) -> dict[str, 
     return extensions
 
 
-def inventory_snapshot_from_detection(
+def cloud_inventory_artifacts_from_detection(
     detection: object,
     *,
-    generated_at: str,
     home_dir: Path,
     workspace_dir: Path | None = None,
-    runtime_version: str | None = None,
-    cisco_runs: tuple[object, ...] = (),
-    include_symlinks: bool = True,
-    follow_unsafe_symlinks: bool = False,
-    trust_attestation_context: Mapping[str, object] | None = None,
-) -> GuardAgentInventorySnapshot:
+) -> tuple[object, ...]:
+    """Return artifacts eligible for the cloud inventory contract.
+
+    Hermes supplementary skill files remain part of local detection and policy
+    evaluation, but the cloud inventory represents the primary SKILL.md once.
+    """
     harness = str(getattr(detection, "harness", "unknown"))
     artifacts: list[object] = list(getattr(detection, "artifacts", ()))
     if workspace_dir is not None:
@@ -407,7 +406,34 @@ def inventory_snapshot_from_detection(
             if artifact.artifact_id not in existing_ids:
                 artifacts.append(artifact)
                 existing_ids.add(artifact.artifact_id)
-    artifact_tuple = tuple(artifacts)
+    if harness == "hermes":
+        artifacts = [artifact for artifact in artifacts if str(getattr(artifact, "artifact_type", "")) != "skill_file"]
+    return tuple(artifacts)
+
+
+def inventory_snapshot_from_detection(
+    detection: object,
+    *,
+    generated_at: str,
+    home_dir: Path,
+    workspace_dir: Path | None = None,
+    runtime_version: str | None = None,
+    cisco_runs: tuple[object, ...] = (),
+    include_symlinks: bool = True,
+    follow_unsafe_symlinks: bool = False,
+    trust_attestation_context: Mapping[str, object] | None = None,
+    artifacts: tuple[object, ...] | None = None,
+) -> GuardAgentInventorySnapshot:
+    harness = str(getattr(detection, "harness", "unknown"))
+    artifact_tuple = (
+        artifacts
+        if artifacts is not None
+        else cloud_inventory_artifacts_from_detection(
+            detection,
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+        )
+    )
     items: list[GuardAgentInventoryItem] = []
     for artifact in artifact_tuple:
         item = _item_from_artifact(
