@@ -26,6 +26,7 @@ coverage/
 # Tooling
 .ruff_cache/
 dashboard/node_modules/
+dashboard/node_modules
 dashboard/.vite/
 dashboard/dist/
 output/playwright/
