@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from .adapters import fetch_inventory, fetch_receipt, get_status, search_inventory, search_receipts
 from .sanitizers import sanitize_fetch_result, sanitize_search_result, sanitize_status_result
-from .schemas import CONTRACT_VERSION, DEFAULT_SEARCH_LIMIT, MAX_FETCH_TEXT_BYTES, SOURCE_LOCAL
+from .schemas import CONTRACT_VERSION, MAX_FETCH_TEXT_BYTES, MAX_SEARCH_LIMIT, SOURCE_LOCAL
 
 if TYPE_CHECKING:
     from codex_plugin_scanner.guard.store import GuardStore
@@ -34,10 +34,10 @@ def _envelope(extra: dict[str, object]) -> str:
 
 
 def execute_search(store: GuardStore, query: str) -> str:
-    receipt_results = search_receipts(store, query)
-    inventory_results = search_inventory(store, query)
-    all_results = receipt_results + inventory_results
-    sanitized = [sanitize_search_result(r) for r in all_results[:DEFAULT_SEARCH_LIMIT]]
+    receipt_results = search_receipts(store, query, limit=MAX_SEARCH_LIMIT)
+    inventory_results = search_inventory(store, query, limit=MAX_SEARCH_LIMIT)
+    all_results = (receipt_results + inventory_results)[:MAX_SEARCH_LIMIT]
+    sanitized = [sanitize_search_result(r) for r in all_results]
     return _envelope(
         {
             "results": sanitized,
@@ -50,19 +50,20 @@ def execute_fetch(store: GuardStore, item_id: str) -> str:
     result: dict[str, object] | None = None
     if item_id.startswith("receipt:"):
         result = fetch_receipt(store, item_id)
-    elif item_id.startswith("inventory:") or item_id.startswith(("artifact:", "device:")):
+    elif item_id.startswith(("inventory:", "artifact:", "device:")):
         result = fetch_inventory(store, item_id)
     if result is None:
         return _envelope(
             {
                 "found": False,
-                "id": item_id,
+                "id": _sanitize_id_echo(item_id),
                 "text": None,
             }
         )
     sanitized = sanitize_fetch_result(result)
-    if len(str(sanitized.get("text", ""))) > MAX_FETCH_TEXT_BYTES:
-        sanitized["text"] = str(sanitized["text"])[:MAX_FETCH_TEXT_BYTES]
+    text_bytes = str(sanitized.get("text", "")).encode("utf-8")
+    if len(text_bytes) > MAX_FETCH_TEXT_BYTES:
+        sanitized["text"] = text_bytes[:MAX_FETCH_TEXT_BYTES].decode("utf-8", errors="ignore")
         sanitized["truncated"] = True
     return _envelope(
         {
@@ -80,3 +81,10 @@ def execute_get_guard_status(store: GuardStore) -> str:
             **sanitized,
         }
     )
+
+
+def _sanitize_id_echo(raw_id: str) -> str:
+    """Sanitize a caller-supplied ID for safe echo in not-found responses."""
+    import re
+
+    return re.sub(r"[^a-zA-Z0-9:_-]", "", raw_id)[:256]

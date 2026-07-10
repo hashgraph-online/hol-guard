@@ -6,7 +6,6 @@ The stdio entry point keeps stdout protocol-only; diagnostics go to stderr.
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -121,7 +120,9 @@ class GuardMCPServer:
         elif name == "get_guard_status":
             text = execute_get_guard_status(store)
         else:
-            text = json.dumps({"error": f"Unknown tool: {name}"})
+            from .tools import _envelope
+
+            text = _envelope({"error": f"Unknown tool: {name}"})
         return types.TextContent(type="text", text=text)
 
     def run_stdio(self) -> int:

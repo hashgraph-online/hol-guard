@@ -17,6 +17,8 @@ from .schemas import (
 if TYPE_CHECKING:
     from codex_plugin_scanner.guard.store import GuardStore
 
+_FETCH_SCAN_LIMIT = 200
+
 
 def search_receipts(store: GuardStore, query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> list[dict[str, object]]:
     bounded_limit = min(max(limit, 1), MAX_SEARCH_LIMIT)
@@ -35,9 +37,7 @@ def search_receipts(store: GuardStore, query: str, limit: int = DEFAULT_SEARCH_L
 
 def fetch_receipt(store: GuardStore, opaque_id: str) -> dict[str, object] | None:
     """Resolve a hash-based opaque ID back to a receipt."""
-    from .schemas import make_opaque_id
-
-    receipts = store.list_receipts(limit=MAX_SEARCH_LIMIT)
+    receipts = store.list_receipts(limit=_FETCH_SCAN_LIMIT)
     for r in receipts:
         rid = str(r.get("receipt_id") or "")
         if make_opaque_id("receipt", rid) == opaque_id:
@@ -60,19 +60,27 @@ def search_inventory(store: GuardStore, query: str, limit: int = DEFAULT_SEARCH_
 
 
 def fetch_inventory(store: GuardStore, opaque_id: str) -> dict[str, object] | None:
-    """Resolve a hash-based opaque ID back to an inventory item."""
-    from .schemas import make_opaque_id
+    """Resolve a hash-based opaque ID back to an inventory item.
 
+    Accepts inventory:, artifact:, and device: prefixed IDs.
+    """
     items = store.list_inventory()
     for item in items:
         aid = str(item.get("artifact_id") or "")
         if make_opaque_id("inventory", aid) == opaque_id:
             return _inventory_to_fetch_result(item)
+        if make_opaque_id("artifact", aid) == opaque_id:
+            return _inventory_to_fetch_result(item)
+        if make_opaque_id("device", aid) == opaque_id:
+            return _inventory_to_fetch_result(item)
     return None
 
 
 def get_status(store: GuardStore) -> dict[str, object]:
-    receipt_count = store.count_receipts()
+    try:
+        receipt_count = store.count_receipts()
+    except Exception:
+        receipt_count = 0
     try:
         inventory = store.list_inventory()
         inventory_count = len(inventory)
