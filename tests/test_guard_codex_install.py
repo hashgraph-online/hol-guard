@@ -173,6 +173,25 @@ def test_guard_codex_claims_stale_pipx_direct_hook_without_status_message() -> N
     assert codex_adapter._is_managed_hook_entry(entry) is True
 
 
+def test_guard_codex_does_not_claim_guard_install_path_lookalike() -> None:
+    lookalike_python = "/home/user/.local/uv/tools/hol-guard-extra/bin/python"
+    command = shlex.join(
+        [
+            lookalike_python,
+            "-m",
+            "codex_plugin_scanner.cli",
+            "guard",
+            "hook",
+            "--harness",
+            "codex",
+        ]
+    )
+    entry = {"type": "command", "command": command}
+
+    assert codex_adapter._python_executable_is_guard_install(lookalike_python) is False
+    assert codex_adapter._is_managed_hook_entry(entry) is False
+
+
 def test_guard_codex_detects_direct_hook_with_python_runtime_flags() -> None:
     command_tokens = [
         "python3",

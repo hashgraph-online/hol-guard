@@ -157,9 +157,9 @@ _DAEMON_BRIDGE_PATH_SUFFIX = (
     "adapters",
     "codex_daemon_hook_bridge.py",
 )
-_GUARD_INSTALL_PATH_MARKERS = (
-    "/uv/tools/hol-guard/",
-    "/pipx/venvs/hol-guard/",
+_GUARD_INSTALL_PATH_SEGMENTS = (
+    ("uv", "tools", "hol-guard"),
+    ("pipx", "venvs", "hol-guard"),
 )
 
 
@@ -330,13 +330,17 @@ def _managed_hook_groups(context: HarnessContext) -> dict[str, dict[str, object]
     }
 
 
-def _is_managed_hook_command(command: object) -> bool:
+def _split_hook_command(command: object) -> list[str] | None:
     if not isinstance(command, str):
-        return False
+        return None
     try:
         tokens = shlex.split(command)
     except ValueError:
-        return False
+        return None
+    return tokens
+
+
+def _tokens_are_managed_hook_command(tokens: list[str]) -> bool:
     if tokens and Path(tokens[0]).name == "hol-guard-codex-hook.sh":
         return True
     if len(tokens) < 2:
@@ -351,6 +355,13 @@ def _is_managed_hook_command(command: object) -> bool:
     if _argv_is_direct_codex_hook(tokens):
         return True
     return bool(_argv_is_inline_codex_hook(tokens))
+
+
+def _is_managed_hook_command(command: object) -> bool:
+    tokens = _split_hook_command(command)
+    if tokens is None:
+        return False
+    return _tokens_are_managed_hook_command(tokens)
 
 
 def _python_script_and_args(tokens: list[str]) -> tuple[str, list[str]] | None:
@@ -392,19 +403,13 @@ def _is_daemon_bridge_hook_command(tokens: list[str]) -> bool:
     )
 
 
-def _is_unambiguously_managed_hook_command(command: object) -> bool:
+def _tokens_are_unambiguously_managed_hook_command(tokens: list[str]) -> bool:
     """Return True for hook commands that only Guard installs.
 
     Direct ``python -m codex_plugin_scanner.cli guard hook`` entries are ambiguous:
     a user can hand-author the same command. Bridge paths and the shell wrapper are
     unique to Guard installs and can be reclaimed without a statusMessage marker.
     """
-    if not isinstance(command, str):
-        return False
-    try:
-        tokens = shlex.split(command)
-    except ValueError:
-        return False
     if tokens and Path(tokens[0]).name == "hol-guard-codex-hook.sh":
         return True
     if len(tokens) < 2:
@@ -413,6 +418,13 @@ def _is_unambiguously_managed_hook_command(command: object) -> bool:
     if not executable.startswith("python"):
         return False
     return _is_daemon_bridge_hook_command(tokens)
+
+
+def _is_unambiguously_managed_hook_command(command: object) -> bool:
+    tokens = _split_hook_command(command)
+    if tokens is None:
+        return False
+    return _tokens_are_unambiguously_managed_hook_command(tokens)
 
 
 def _bridge_config_targets_codex(config_text: str) -> bool:
@@ -471,8 +483,12 @@ def _argv_is_inline_codex_hook(tokens: list[str]) -> bool:
 
 
 def _python_executable_is_guard_install(executable: str) -> bool:
-    normalized = executable.replace("\\", "/").lower()
-    return any(marker in normalized for marker in _GUARD_INSTALL_PATH_MARKERS)
+    """True when the interpreter path is a Guard pipx/uv install, not a substring lookalike."""
+    parts = tuple(part.lower() for part in Path(executable).parts)
+    return any(
+        any(parts[index : index + len(segment)] == segment for index in range(len(parts) - len(segment) + 1))
+        for segment in _GUARD_INSTALL_PATH_SEGMENTS
+    )
 
 
 def _argv_targets_codex(argv: list[str]) -> bool:
@@ -498,24 +514,16 @@ def _is_managed_hook_entry(entry: object) -> bool:
         return False
     if entry.get("type") != "command":
         return False
-    command = entry.get("command")
-    if not _is_managed_hook_command(command):
+    tokens = _split_hook_command(entry.get("command"))
+    if tokens is None or not _tokens_are_managed_hook_command(tokens):
         return False
     # Bridge/wrapper commands are uniquely Guard-owned.
-    if _is_unambiguously_managed_hook_command(command):
+    if _tokens_are_unambiguously_managed_hook_command(tokens):
         return True
     status_message = entry.get("statusMessage")
     if isinstance(status_message, str) and status_message in _LEGACY_MANAGED_HOOK_STATUS_MESSAGES:
         return True
     # Stale pipx/uv direct hooks may lose statusMessage but still live under Guard install paths.
-    if not isinstance(command, str):
-        return False
-    try:
-        tokens = shlex.split(command)
-    except ValueError:
-        return False
-    if not tokens:
-        return False
     return _python_executable_is_guard_install(tokens[0])
 
 
