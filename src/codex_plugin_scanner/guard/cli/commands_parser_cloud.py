@@ -375,6 +375,22 @@ def _configure_guard_cloud_parsers(
     _add_guard_common_args(hermes_mcp_proxy_parser)
     hermes_mcp_proxy_parser.add_argument("--server", required=True)
     hermes_mcp_proxy_parser.add_argument("--stdio", action="store_true")
+
+    mcp_parser = guard_subparsers.add_parser(
+        "mcp",
+        help="Serve the local Guard MCP server (guard-mcp.v1)",
+    )
+    mcp_subparsers = mcp_parser.add_subparsers(
+        dest="mcp_command",
+        required=True,
+        parser_class=FriendlyArgumentParser,
+    )
+    mcp_serve_parser = mcp_subparsers.add_parser(
+        "serve",
+        help="Start the MCP server over stdio transport",
+    )
+    _add_guard_common_args(mcp_serve_parser)
+    mcp_serve_parser.add_argument("--stdio", action="store_true", default=True)
     hidden_commands = {
         "admin",
         "hook",
