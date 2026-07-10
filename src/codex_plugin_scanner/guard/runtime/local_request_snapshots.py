@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from datetime import datetime, timezone
@@ -446,8 +447,18 @@ def _local_request_snapshot_routing_metadata(
     return metadata
 
 
+_CLOUD_SPACED_SECRET_ARGUMENT_RE = re.compile(
+    r'(?P<prefix>(?:^|\s)--?(?:[\w-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[\w-]*)\s+)(?:"[^"]*"|\'[^\']*\'|\S+)',
+    re.IGNORECASE,
+)
+
+
 def _cloud_scrub_text(value: str) -> str:
-    return redact_sensitive_text(redact_text(value).text)
+    without_spaced_secret_arguments = _CLOUD_SPACED_SECRET_ARGUMENT_RE.sub(
+        lambda match: f"{match.group('prefix')}[redacted]",
+        value,
+    )
+    return redact_sensitive_text(redact_text(without_spaced_secret_arguments).text)
 
 
 _SENSITIVE_CLOUD_FIELD_MARKERS = (
@@ -467,6 +478,11 @@ def _is_sensitive_cloud_field(field_name: str | None) -> bool:
         return False
     normalized = field_name.strip().lower().replace("-", "_")
     return any(marker in normalized for marker in _SENSITIVE_CLOUD_FIELD_MARKERS)
+
+
+def _is_sensitive_cli_flag(value: str) -> bool:
+    flag = value.strip().split("=", maxsplit=1)[0]
+    return flag.startswith("-") and _is_sensitive_cloud_field(flag.lstrip("-"))
 
 
 def _cloud_safe_local_request_payload(
@@ -677,10 +693,17 @@ def _bounded_cloud_value(value: object, *, field_name: str | None = None) -> obj
             if isinstance(key, str)
         }
     if isinstance(value, Sequence) and not isinstance(value, str):
-        return [
-            _bounded_cloud_value(item, field_name=field_name)
-            for item in list(value)[:LOCAL_REQUEST_SNAPSHOT_MAX_LIST_ITEMS]
-        ]
+        scrubbed_items: list[object] = []
+        redact_next_item = False
+        for item in list(value)[:LOCAL_REQUEST_SNAPSHOT_MAX_LIST_ITEMS]:
+            if redact_next_item:
+                scrubbed_items.append("[redacted]")
+                redact_next_item = False
+                continue
+            scrubbed_items.append(_bounded_cloud_value(item, field_name=field_name))
+            if isinstance(item, str) and _is_sensitive_cli_flag(item):
+                redact_next_item = True
+        return scrubbed_items
     if isinstance(value, (int, float, bool)) or value is None:
         return value
     return _bounded_text(_cloud_scrub_text(str(value)))

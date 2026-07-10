@@ -1183,11 +1183,11 @@ class TestRedactionLevelNone:
             "action_identity": "deploy",
             "trigger_summary": "Deploy service",
             "harness": "guard-review",
-            "raw_command_text": f"deploy --token={secret}",
+            "raw_command_text": f"deploy --api-key {secret}",
             "action_envelope_json": {
                 "action_type": "shell_command",
-                "command": f"deploy --token={secret}",
-                "args": [f"--token={secret}"],
+                "command": f"deploy --api-key {secret}",
+                "args": ["--api-key", secret],
                 "parameters": {"accessToken": secret, "region": "us-east-1"},
             },
             "created_at": "2026-07-10T00:00:00+00:00",
@@ -1208,7 +1208,7 @@ class TestRedactionLevelNone:
         assert isinstance(request_payload, dict)
         action_envelope = request_payload["actionEnvelope"]
         assert isinstance(action_envelope, dict)
-        assert action_envelope["args"] == ["--[redacted]"]
+        assert action_envelope["args"] == ["--api-key", "[redacted]"]
         assert action_envelope["parameters"] == {
             "accessToken": "[redacted]",
             "region": "us-east-1",
