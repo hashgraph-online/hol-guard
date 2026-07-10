@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from datetime import datetime, timezone
 
 from ..config import VALID_RECEIPT_REDACTION_LEVELS, load_guard_config
-from ..redaction import redact_text
+from ..redaction import redact_sensitive_text, redact_text
 from ..review_contracts import (
     GuardReviewContractError,
     build_local_review_request_claim,
@@ -446,6 +447,44 @@ def _local_request_snapshot_routing_metadata(
     return metadata
 
 
+_CLOUD_SPACED_SECRET_ARGUMENT_RE = re.compile(
+    r'(?P<prefix>(?:^|\s)--?(?:[\w-]*(?:api[-_]?key|token|secret|password|credential|authorization|cookie)[\w-]*)\s+)(?:"[^"]*"|\'[^\']*\'|\S+)',
+    re.IGNORECASE,
+)
+
+
+def _cloud_scrub_text(value: str) -> str:
+    without_spaced_secret_arguments = _CLOUD_SPACED_SECRET_ARGUMENT_RE.sub(
+        lambda match: f"{match.group('prefix')}[redacted]",
+        value,
+    )
+    return redact_sensitive_text(redact_text(without_spaced_secret_arguments).text)
+
+
+_SENSITIVE_CLOUD_FIELD_MARKERS = (
+    "api_key",
+    "apikey",
+    "authorization",
+    "cookie",
+    "credential",
+    "password",
+    "secret",
+    "token",
+)
+
+
+def _is_sensitive_cloud_field(field_name: str | None) -> bool:
+    if field_name is None:
+        return False
+    normalized = field_name.strip().lower().replace("-", "_")
+    return any(marker in normalized for marker in _SENSITIVE_CLOUD_FIELD_MARKERS)
+
+
+def _is_sensitive_cli_flag(value: str) -> bool:
+    flag = value.strip().split("=", maxsplit=1)[0]
+    return flag.startswith("-") and _is_sensitive_cloud_field(flag.lstrip("-"))
+
+
 def _cloud_safe_local_request_payload(
     item: dict[str, object],
     *,
@@ -483,9 +522,12 @@ def _cloud_safe_local_request_payload(
     ):
         value = item.get(key)
         if isinstance(value, str):
-            payload[key] = _bounded_text(value)
+            payload[key] = _bounded_text(_cloud_scrub_text(value))
         elif isinstance(value, (int, float, bool)) or value is None:
             payload[key] = value
+
+    if payload.get("status") == "expired":
+        payload["status"] = "pending"
 
     if routing_metadata is not None:
         payload.update(routing_metadata)
@@ -520,7 +562,7 @@ def _cloud_safe_local_request_payload(
         return payload
 
     if command_text:
-        scrubbed = _bounded_command(redact_text(command_text).text)
+        scrubbed = _bounded_command(_cloud_scrub_text(command_text))
         payload["raw_command_text"] = scrubbed
         payload["rawCommandText"] = scrubbed
         payload["command_text"] = scrubbed
@@ -607,7 +649,7 @@ def _cloud_safe_action_envelope(
     if redaction_level == "none":
         command = envelope.get("command")
         if isinstance(command, str) and command.strip():
-            safe["command"] = _bounded_command(redact_text(command).text)
+            safe["command"] = _bounded_command(_cloud_scrub_text(command))
         for key in ("target_paths", "network_hosts", "package_name", "package_targets"):
             value = envelope.get(key)
             if isinstance(value, list):
@@ -639,20 +681,32 @@ def _set_dual_key(
     payload[camel_key] = normalized
 
 
-def _bounded_cloud_value(value: object) -> object:
+def _bounded_cloud_value(value: object, *, field_name: str | None = None) -> object:
+    if _is_sensitive_cloud_field(field_name):
+        return "[redacted]"
     if isinstance(value, str):
-        return _bounded_text(value)
+        return _bounded_text(_cloud_scrub_text(value))
     if isinstance(value, Mapping):
         return {
-            str(key): _bounded_cloud_value(item)
+            str(key): _bounded_cloud_value(item, field_name=str(key))
             for key, item in list(value.items())[:LOCAL_REQUEST_SNAPSHOT_MAX_LIST_ITEMS]
             if isinstance(key, str)
         }
     if isinstance(value, Sequence) and not isinstance(value, str):
-        return [_bounded_cloud_value(item) for item in list(value)[:LOCAL_REQUEST_SNAPSHOT_MAX_LIST_ITEMS]]
+        scrubbed_items: list[object] = []
+        redact_next_item = False
+        for item in list(value)[:LOCAL_REQUEST_SNAPSHOT_MAX_LIST_ITEMS]:
+            if redact_next_item:
+                scrubbed_items.append("[redacted]")
+                redact_next_item = False
+                continue
+            scrubbed_items.append(_bounded_cloud_value(item, field_name=field_name))
+            if isinstance(item, str) and _is_sensitive_cli_flag(item):
+                redact_next_item = True
+        return scrubbed_items
     if isinstance(value, (int, float, bool)) or value is None:
         return value
-    return _bounded_text(str(value))
+    return _bounded_text(_cloud_scrub_text(str(value)))
 
 
 def _add_action_envelope_aliases(safe: dict[str, object]) -> None:

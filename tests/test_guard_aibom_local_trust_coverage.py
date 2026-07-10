@@ -77,7 +77,7 @@ def test_inventory_snapshot_adds_local_trust_to_hooks(tmp_path: Path) -> None:
     assert hook_trust["trustComponents"]
 
 
-def test_inventory_snapshot_adds_parent_skill_trust_to_skill_files(tmp_path: Path) -> None:
+def test_inventory_snapshot_keeps_parent_skill_trust_without_supplementary_skill_files(tmp_path: Path) -> None:
     workspace = tmp_path / "repo"
     workspace.mkdir()
     skill_dir = workspace / "skills" / "compress"
@@ -97,6 +97,15 @@ def test_inventory_snapshot_adds_parent_skill_trust_to_skill_files(tmp_path: Pat
             config_paths=(str(skill_dir / "SKILL.md"),),
             artifacts=(
                 GuardArtifact(
+                    artifact_id="openclaw:skill:local:compress",
+                    name="compress",
+                    harness="openclaw",
+                    artifact_type="skill",
+                    source_scope="workspace",
+                    config_path=str(skill_dir / "SKILL.md"),
+                    metadata={"skill_dir": str(skill_dir)},
+                ),
+                GuardArtifact(
                     artifact_id="openclaw:skill:local:compress:scripts/cli.py",
                     name="compress/scripts/cli.py",
                     harness="openclaw",
@@ -113,11 +122,12 @@ def test_inventory_snapshot_adds_parent_skill_trust_to_skill_files(tmp_path: Pat
         workspace_dir=workspace,
     )
 
-    skill_file_item = next(item for item in snapshot.items if item.metadata.get("artifactType") == "skill_file")
-    skill_file_trust = skill_file_item.metadata.get("trustResolution")
-    assert isinstance(skill_file_trust, dict)
-    assert isinstance(skill_file_item.metadata.get("trustLayers"), list)
-    assert skill_file_trust["trustComponents"]
+    skill_item = next(item for item in snapshot.items if item.metadata.get("artifactType") == "skill")
+    skill_trust = skill_item.metadata.get("trustResolution")
+    assert isinstance(skill_trust, dict)
+    assert isinstance(skill_item.metadata.get("trustLayers"), list)
+    assert skill_trust["trustComponents"]
+    assert all(item.metadata.get("artifactType") != "skill_file" for item in snapshot.items)
 
 
 def test_aibom_export_adds_parent_skill_trust_to_store_only_skill_files(tmp_path: Path) -> None:

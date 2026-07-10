@@ -1180,6 +1180,12 @@ export function buildDemoRuntimeSnapshot(): GuardRuntimeSnapshot {
         ? "A blocked action is waiting for review."
         : "This machine is connected to Guard Cloud and waiting for the first protected session to appear.",
     sync_configured: true,
+    cloud_user_profile: {
+      email: "demo@hol.org",
+      display_name: "Demo User",
+      avatar_url: "",
+    },
+    cloud_workspace_id: "demo-workspace-282f6ff2",
     cloud_state: cloudState,
     cloud_state_label: cloudLabel,
     cloud_state_detail: cloudDetail,
@@ -1188,6 +1194,12 @@ export function buildDemoRuntimeSnapshot(): GuardRuntimeSnapshot {
       label: cloudLabel,
       detail: cloudDetail,
       sync_configured: true,
+      cloud_user_profile: {
+        email: "demo@hol.org",
+        display_name: "Demo User",
+        avatar_url: "",
+      },
+      workspace_id: "demo-workspace-282f6ff2",
       dashboard_url: dashboardUrl,
       inbox_url: inboxUrl,
       fleet_url: fleetUrl,

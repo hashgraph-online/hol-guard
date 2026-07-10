@@ -233,11 +233,19 @@ export type GuardRuntimeState = {
   approval_center_url: string;
 };
 
+export type GuardCloudUserProfile = {
+  email: string;
+  display_name: string;
+  avatar_url: string;
+};
+
 export type GuardCloudPairingState = {
   state: "local_only" | "paired_waiting" | "paired_active";
   label: string;
   detail: string;
   sync_configured: boolean;
+  cloud_user_profile?: GuardCloudUserProfile | null;
+  workspace_id?: string | null;
   dashboard_url: string;
   inbox_url: string;
   fleet_url: string;
@@ -374,6 +382,8 @@ export type GuardRuntimeSnapshot = {
   headline_label: string;
   headline_detail: string;
   thread_count?: number;
+  cloud_user_profile?: GuardCloudUserProfile | null;
+  cloud_workspace_id?: string | null;
   sync_configured: boolean;
   cloud_state: "local_only" | "paired_waiting" | "paired_active";
   cloud_state_label: string;

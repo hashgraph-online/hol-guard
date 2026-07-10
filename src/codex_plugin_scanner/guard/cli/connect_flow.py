@@ -21,6 +21,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 from ...version import __version__
+from ..package_firewall_defaults import extract_cloud_user_profile as _extract_cloud_user_profile
 from ..package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
     reconcile_connect_state_with_oauth_entitlement,
@@ -101,6 +102,7 @@ class GuardOAuthTokenExchangeResult:
     machine_id: str | None
     supply_chain_entitlement: dict[str, object] | None
     workspace_id: str | None
+    cloud_user_profile: dict[str, str] | None = None
     access_token_expires_at: str | None = None
 
     def __post_init__(self) -> None:
@@ -538,6 +540,7 @@ def _parse_guard_token_exchange_payload(payload: dict[str, object]) -> GuardOAut
             now=now,
         ),
         workspace_id=_read_nested_string(claims, "workspace", "workspaceId"),
+        cloud_user_profile=_extract_cloud_user_profile(payload),
     )
 
 
@@ -939,6 +942,7 @@ def _persist_oauth_local_credentials(
     machine_id: str | None = None,
     supply_chain_entitlement: dict[str, object] | None = None,
     workspace_id: str | None = None,
+    cloud_user_profile: dict[str, str] | None = None,
     runtime_id: str | None = None,
     runtime_label: str | None = None,
     access_token: str | None = None,
@@ -972,6 +976,7 @@ def _persist_oauth_local_credentials(
             else None
         ),
         workspace_id=workspace_id,
+        cloud_user_profile=cloud_user_profile,
         runtime_id=runtime_id,
         runtime_label=runtime_label,
         access_token=access_token,
@@ -1037,6 +1042,7 @@ def run_guard_disconnect_command(
             machine_id=_read_nested_string(credentials, "machine_id"),
             supply_chain_entitlement=token_result.supply_chain_entitlement,
             workspace_id=workspace_id,
+            cloud_user_profile=token_result.cloud_user_profile,
             runtime_id=_read_nested_string(credentials, "runtime_id"),
             runtime_label=_read_nested_string(credentials, "runtime_label"),
             access_token=token_result.access_token,
@@ -1158,6 +1164,7 @@ def run_guard_device_connect_command(
         machine_id=token_result.machine_id,
         supply_chain_entitlement=token_result.supply_chain_entitlement,
         workspace_id=token_result.workspace_id,
+        cloud_user_profile=token_result.cloud_user_profile,
         runtime_id=HEADLESS_RUNTIME_ID,
         runtime_label=HEADLESS_RUNTIME_LABEL,
         access_token=token_result.access_token,
@@ -1244,6 +1251,7 @@ def run_guard_browser_connect_command(
             machine_id=token_result.machine_id,
             supply_chain_entitlement=token_result.supply_chain_entitlement,
             workspace_id=token_result.workspace_id,
+            cloud_user_profile=token_result.cloud_user_profile,
             runtime_id=HEADLESS_RUNTIME_ID,
             runtime_label=HEADLESS_RUNTIME_LABEL,
             access_token=token_result.access_token,

@@ -535,6 +535,13 @@ class StoreConnectionSchemaMixin:
             if not self._schema_version_applied(connection, version=2):
                 self._record_schema_version(connection, version=2)
             self._enable_wal_mode(connection)
+            connection.execute(
+                """
+                update approval_requests
+                set status = 'pending', reason = null, resolved_at = null
+                where status = 'expired'
+                """
+            )
             self._repair_store_permissions()
         if getattr(self, "_prime_policy_integrity_on_initialize", True):
             # Prime policy-integrity secrets outside the SQLite transaction. Some

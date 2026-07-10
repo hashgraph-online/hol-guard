@@ -15,6 +15,8 @@ from types import SimpleNamespace
 from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from ..path_support import resolves_within_root
+
 InventoryItemKind = Literal[
     "agent",
     "daemon_plugin",
@@ -391,7 +393,7 @@ def cloud_inventory_artifacts_from_detection(
 ) -> tuple[object, ...]:
     """Return artifacts eligible for the cloud inventory contract.
 
-    Hermes supplementary skill files remain part of local detection and policy
+    Supplementary skill files remain part of local detection and policy
     evaluation, but the cloud inventory represents the primary SKILL.md once.
     """
     harness = str(getattr(detection, "harness", "unknown"))
@@ -406,8 +408,7 @@ def cloud_inventory_artifacts_from_detection(
             if artifact.artifact_id not in existing_ids:
                 artifacts.append(artifact)
                 existing_ids.add(artifact.artifact_id)
-    if harness == "hermes":
-        artifacts = [artifact for artifact in artifacts if str(getattr(artifact, "artifact_type", "")) != "skill_file"]
+    artifacts = [artifact for artifact in artifacts if str(getattr(artifact, "artifact_type", "")) != "skill_file"]
     return tuple(artifacts)
 
 
@@ -726,7 +727,16 @@ def _item_from_artifact(
             "metadata": _stable_snapshot_value(safe_metadata),
         }
     )
-    content_hash = _resolve_item_content_hash(safe_metadata, semantic_text)
+    primary_content_hash = _primary_artifact_content_hash(
+        artifact,
+        artifact_type=artifact_type,
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+    )
+    if artifact_type in {"skill", "instruction"}:
+        content_hash = primary_content_hash or semantic_text
+    else:
+        content_hash = _resolve_item_content_hash(safe_metadata, semantic_text)
     from .runtime.trust_attestation import (
         GuardTrustAttestationSigningConfig,
         apply_trust_attestation_metadata,
@@ -1332,13 +1342,91 @@ def _resolve_item_content_hash(metadata: dict[str, object], semantic_text: str) 
     for key in ("content_hash", "directory_hash"):
         candidate = metadata.get(key)
         if isinstance(candidate, str) and candidate:
-            return candidate
+            return _canonical_inventory_content_hash(candidate)
     version_info = metadata.get("versionInfo")
     if isinstance(version_info, dict):
         version_hash = version_info.get("contentHash")
         if isinstance(version_hash, str) and version_hash:
-            return version_hash
+            return _canonical_inventory_content_hash(version_hash)
     return semantic_text
+
+
+def _primary_artifact_content_hash(
+    artifact: object,
+    *,
+    artifact_type: str,
+    home_dir: Path,
+    workspace_dir: Path | None,
+) -> str | None:
+    path_value = getattr(artifact, "config_path", None)
+    if not isinstance(path_value, str) or not path_value.strip():
+        return None
+    path = Path(path_value).expanduser()
+    if artifact_type == "skill":
+        if path.name != "SKILL.md":
+            return None
+        skills_root = next((parent for parent in path.parents if parent.name.lower() == "skills"), None)
+        if skills_root is None:
+            return None
+        try:
+            relative = path.relative_to(skills_root)
+        except ValueError:
+            return None
+        if len(relative.parts) < 2:
+            return None
+        outer_root = next(
+            (
+                root
+                for root in (home_dir, workspace_dir)
+                if root is not None and resolves_within_root(root, skills_root, require_exists=True)
+            ),
+            None,
+        )
+        if outer_root is None:
+            return None
+        allowed_roots = (skills_root,)
+    elif artifact_type == "instruction":
+        if workspace_dir is None or path.suffix.lower() not in {".md", ".mdc"}:
+            return None
+        allowed_roots = (workspace_dir,)
+    else:
+        return None
+    allowed_root = next(
+        (root for root in allowed_roots if root is not None and resolves_within_root(root, path, require_exists=True)),
+        None,
+    )
+    if allowed_root is None or _path_has_symlink_component(path, allowed_root=allowed_root):
+        return None
+    try:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(64 * 1024), b""):
+                digest.update(chunk)
+    except OSError:
+        return None
+    return f"sha256:{digest.hexdigest()}"
+
+
+def _path_has_symlink_component(path: Path, *, allowed_root: Path) -> bool:
+    try:
+        relative = path.relative_to(allowed_root)
+    except ValueError:
+        return True
+    current = allowed_root
+    if current.is_symlink():
+        return True
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            return True
+    return False
+
+
+def _canonical_inventory_content_hash(value: str) -> str:
+    normalized = value.lower()
+    if re.fullmatch(r"[0-9a-f]{64}", normalized):
+        return f"sha256:{normalized}"
+    return value
 
 
 def _safe_roots_for_inspection(
