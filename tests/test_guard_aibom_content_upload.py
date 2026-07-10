@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import urllib.error
+from dataclasses import replace
 from email.message import Message
 from pathlib import Path
 from types import SimpleNamespace
@@ -160,3 +161,32 @@ def test_primary_content_upload_skips_changed_body(tmp_path: Path) -> None:
     assert summary["eligible"] == 1
     assert summary["attempted"] == 0
     assert summary["skipped"] == 1
+
+
+def test_primary_content_upload_accepts_an_empty_primary_file(tmp_path: Path) -> None:
+    source = _source(tmp_path / "skills", 1)
+    source.path.write_bytes(b"")
+    source = replace(
+        source,
+        content_hash=f"sha256:{hashlib.sha256(b'').hexdigest()}",
+    )
+    runner = SimpleNamespace(
+        _guard_sync_request=lambda *_args, **kwargs: SimpleNamespace(data=kwargs["data"]),
+        _urlopen_json_with_timeout_retry=lambda **_kwargs: {
+            "storedCount": 1,
+            "hashOnlyCount": 0,
+            "failedCount": 0,
+        },
+    )
+
+    summary, _auth_context = upload_primary_content_sources(
+        object(),
+        runner,
+        {"sync_url": "https://hol.test/api/v1/guard/events"},
+        sources=(source,),
+        workspace_id="workspace-1",
+    )
+
+    assert summary["attempted"] == 1
+    assert summary["stored"] == 1
+    assert summary["failed"] == 0

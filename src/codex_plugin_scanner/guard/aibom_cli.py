@@ -618,8 +618,10 @@ def sync_aibom_snapshots(
             )
             merge_content_upload_summary(content_upload_summary, upload_summary)
             content_uploaded_snapshot_ids.add(snapshot_id)
-    content_eligible = int(content_upload_summary.get("eligible", 0))
-    content_stored = int(content_upload_summary.get("stored", 0))
+    content_eligible_value = content_upload_summary.get("eligible")
+    content_stored_value = content_upload_summary.get("stored")
+    content_eligible = content_eligible_value if isinstance(content_eligible_value, int) else 0
+    content_stored = content_stored_value if isinstance(content_stored_value, int) else 0
     content_upload_complete = content_stored == content_eligible
     summary: dict[str, object] = {
         "synced": content_upload_complete,
@@ -959,15 +961,15 @@ def _accepted_snapshot_ids(
         snapshot_id = snapshot_payload.get("snapshotId") if isinstance(snapshot_payload, dict) else None
         if isinstance(event_id, str) and isinstance(snapshot_id, str):
             snapshot_by_event_id[event_id] = snapshot_id
-    accepted_event_ids = (
-        {
-            str(status.get("eventId"))
-            for status in payload.get("statuses", [])
-            if isinstance(status, dict) and status.get("status") == "accepted"
-        }
-        if isinstance(payload.get("statuses"), list)
-        else set()
-    )
+    accepted_event_ids: set[str] = set()
+    statuses = payload.get("statuses")
+    if isinstance(statuses, list):
+        for status in statuses:
+            if not isinstance(status, dict) or status.get("status") != "accepted":
+                continue
+            event_id = status.get("eventId")
+            if isinstance(event_id, str):
+                accepted_event_ids.add(event_id)
     if not accepted_event_ids and payload.get("accepted") == len(batch):
         accepted_event_ids = set(snapshot_by_event_id)
     return {snapshot_by_event_id[event_id] for event_id in accepted_event_ids if event_id in snapshot_by_event_id}

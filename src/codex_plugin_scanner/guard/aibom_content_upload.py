@@ -10,7 +10,7 @@ import urllib.error
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from ..path_support import resolves_within_root
 from .inventory_contract import GuardAgentInventorySnapshot
@@ -36,7 +36,22 @@ class GuardAibomPrimaryContentSource:
     version_id: str
 
 
-def empty_content_upload_summary() -> dict[str, object]:
+class _GuardAibomContentUploadCounts(TypedDict):
+    eligible: int
+    attempted: int
+    stored: int
+    hash_only: int
+    uploaded: int
+    failed: int
+    skipped: int
+    batches: int
+
+
+class GuardAibomContentUploadSummary(_GuardAibomContentUploadCounts, total=False):
+    reason: str
+
+
+def empty_content_upload_summary() -> GuardAibomContentUploadSummary:
     return {
         "eligible": 0,
         "attempted": 0,
@@ -49,18 +64,18 @@ def empty_content_upload_summary() -> dict[str, object]:
     }
 
 
-def merge_content_upload_summary(target: dict[str, object], source: dict[str, object]) -> None:
-    for key in (
-        "eligible",
-        "attempted",
-        "stored",
-        "hash_only",
-        "uploaded",
-        "failed",
-        "skipped",
-        "batches",
-    ):
-        target[key] = int(target.get(key, 0)) + int(source.get(key, 0))
+def merge_content_upload_summary(
+    target: GuardAibomContentUploadSummary,
+    source: GuardAibomContentUploadSummary,
+) -> None:
+    target["eligible"] += source["eligible"]
+    target["attempted"] += source["attempted"]
+    target["stored"] += source["stored"]
+    target["hash_only"] += source["hash_only"]
+    target["uploaded"] += source["uploaded"]
+    target["failed"] += source["failed"]
+    target["skipped"] += source["skipped"]
+    target["batches"] += source["batches"]
     reason = source.get("reason")
     if isinstance(reason, str) and reason:
         target["reason"] = reason
@@ -166,7 +181,7 @@ def _prepared_upload_item(source: GuardAibomPrimaryContentSource) -> tuple[dict[
             body = handle.read(_MAX_CONTENT_ITEM_BYTES + 1)
     except OSError:
         return None
-    if not body or len(body) > _MAX_CONTENT_ITEM_BYTES:
+    if len(body) > _MAX_CONTENT_ITEM_BYTES:
         return None
     content_hash = f"sha256:{hashlib.sha256(body).hexdigest()}"
     if content_hash != source.content_hash:
@@ -223,7 +238,7 @@ def upload_primary_content_sources(
     *,
     sources: tuple[GuardAibomPrimaryContentSource, ...],
     workspace_id: str,
-) -> tuple[dict[str, object], dict[str, object]]:
+) -> tuple[GuardAibomContentUploadSummary, dict[str, object]]:
     summary = empty_content_upload_summary()
     summary["eligible"] = len(sources)
     if not sources:
@@ -246,8 +261,8 @@ def upload_primary_content_sources(
             data=body,
             extra_headers=None,
         )
-        summary["attempted"] = int(summary["attempted"]) + len(batch_items)
-        summary["batches"] = int(summary["batches"]) + 1
+        summary["attempted"] += len(batch_items)
+        summary["batches"] += 1
         try:
             payload = runner._urlopen_json_with_timeout_retry(
                 request=request,
@@ -272,15 +287,15 @@ def upload_primary_content_sources(
                         retry_timeout_seconds=90,
                     )
                 except (OSError, RuntimeError, urllib.error.HTTPError):
-                    summary["failed"] = int(summary["failed"]) + len(batch_items)
+                    summary["failed"] += len(batch_items)
                     summary["reason"] = "authorization_failed"
                     return False
             else:
-                summary["failed"] = int(summary["failed"]) + len(batch_items)
+                summary["failed"] += len(batch_items)
                 summary["reason"] = "endpoint_unavailable" if error.code == 404 else "http_error"
                 return False
         except (OSError, RuntimeError):
-            summary["failed"] = int(summary["failed"]) + len(batch_items)
+            summary["failed"] += len(batch_items)
             summary["reason"] = "network_error"
             return False
 
@@ -289,18 +304,18 @@ def upload_primary_content_sources(
         hash_only = _bounded_response_count(payload, "hashOnlyCount", upper_bound=batch_size)
         server_failed = _bounded_response_count(payload, "failedCount", upper_bound=batch_size)
         if stored is None or hash_only is None or server_failed is None:
-            summary["failed"] = int(summary["failed"]) + batch_size
+            summary["failed"] += batch_size
             summary["reason"] = "invalid_response"
             return False
         accounted = stored + hash_only + server_failed
         if accounted > batch_size:
-            summary["failed"] = int(summary["failed"]) + batch_size
+            summary["failed"] += batch_size
             summary["reason"] = "invalid_response"
             return False
-        summary["stored"] = int(summary["stored"]) + stored
-        summary["hash_only"] = int(summary["hash_only"]) + hash_only
-        summary["uploaded"] = int(summary["uploaded"]) + stored + hash_only
-        summary["failed"] = int(summary["failed"]) + server_failed + batch_size - accounted
+        summary["stored"] += stored
+        summary["hash_only"] += hash_only
+        summary["uploaded"] += stored + hash_only
+        summary["failed"] += server_failed + batch_size - accounted
         if accounted < batch_size:
             summary["reason"] = "incomplete_response"
             return False
@@ -311,7 +326,7 @@ def upload_primary_content_sources(
     for index, source in enumerate(sources):
         prepared = _prepared_upload_item(source)
         if prepared is None:
-            summary["skipped"] = int(summary["skipped"]) + 1
+            summary["skipped"] += 1
             continue
         item, raw_bytes = prepared
         candidate_items = [*batch_items, item]
@@ -322,12 +337,12 @@ def upload_primary_content_sources(
             or len(candidate_body) > _MAX_CONTENT_REQUEST_BYTES
         ):
             if not send_batch():
-                summary["failed"] = int(summary["failed"]) + len(sources) - index
+                summary["failed"] += len(sources) - index
                 return summary, resolved_auth_context
             candidate_items = [item]
             candidate_body = _encoded_batch(items=candidate_items)
         if raw_bytes > _MAX_CONTENT_RAW_BYTES_PER_BATCH or len(candidate_body) > _MAX_CONTENT_REQUEST_BYTES:
-            summary["skipped"] = int(summary["skipped"]) + 1
+            summary["skipped"] += 1
             continue
         batch_items = candidate_items
         batch_raw_bytes += raw_bytes
