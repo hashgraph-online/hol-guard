@@ -38,7 +38,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from ..redaction import redact_text
 from ..review_contracts import (
     GuardReviewContractError,
     GuardReviewOAuthMetadata,
@@ -48,6 +47,8 @@ from ..review_contracts import (
 from ..store import GuardStore
 from .local_request_snapshots import (
     _cloud_safe_local_request_payload,
+    _cloud_scrub_text,
+    _local_request_command_text,
     _resolve_cloud_receipt_redaction_level,
 )
 
@@ -84,7 +85,6 @@ SYNC_HEALTH_STATES = frozenset({"healthy", "stale", "auth_failed", "retrying", "
 _EVENT_TYPE_MAP = {
     "pending": "request_created",
     "resolved": "request_resolved",
-    "expired": "request_expired",
     "superseded": "request_superseded",
 }
 
@@ -164,20 +164,20 @@ def _build_display_command(item: dict[str, object], redaction_level: str) -> tup
     risk_headline = str(item.get("risk_headline") or item.get("risk_summary") or "")
     harness = str(item.get("harness") or "guard-review")
 
-    display_command = f"{harness}: {action_identity}"
+    fallback_display = f"{_cloud_scrub_text(harness)}: {_cloud_scrub_text(action_identity)}"
+    envelope_value = item.get("action_envelope_json")
+    envelope = envelope_value if isinstance(envelope_value, dict) else None
+    command_text = _local_request_command_text(item, envelope)
+    safe_command = _cloud_scrub_text(command_text) if command_text else None
+    display_command = safe_command if safe_command and redaction_level != "full" else fallback_display
     display_summary = f"{trigger_summary}"
     if risk_headline:
         display_summary = f"{risk_headline} — {trigger_summary}"
 
-    raw_command: str | None = None
-    redacted_command: str | None = None
-    if redaction_level == "none":
-        raw_command = display_command
-    elif redaction_level == "partial":
-        raw_command = display_command
-        redacted_command = redact_text(display_command).text
-    else:
-        redacted_command = redact_text(display_command).text
+    raw_command = display_command if redaction_level == "none" and safe_command else None
+    redacted_command = (
+        display_command if redaction_level == "full" or (redaction_level == "partial" and safe_command) else None
+    )
     return display_command, display_summary, raw_command, redacted_command
 
 
@@ -193,7 +193,8 @@ def _build_live_request_event(
     if not isinstance(request_id, str) or not request_id:
         return None
 
-    status = str(item.get("status") or "pending")
+    stored_status = str(item.get("status") or "pending")
+    status = "pending" if stored_status == "expired" else stored_status
     event_type = _EVENT_TYPE_MAP.get(status, "request_created")
 
     claim: dict[str, object] | None = None
@@ -212,7 +213,6 @@ def _build_live_request_event(
 
     created_at = str(item.get("created_at") or _now())
     last_seen_at = str(item.get("last_seen_at") or created_at)
-    expires_at = item.get("expires_at")
 
     request_payload = _cloud_safe_local_request_payload(item, redaction_level=redaction_level)
 
@@ -235,7 +235,6 @@ def _build_live_request_event(
         "localCreatedAt": created_at,
         "localUpdatedAt": str(item.get("updated_at") or last_seen_at),
         "localLastSeenAt": last_seen_at,
-        "localExpiresAt": str(expires_at) if isinstance(expires_at, str) and expires_at else None,
         "localEmittedAt": _now(),
         "sentAt": _now(),
     }
@@ -818,21 +817,6 @@ def emit_request_refreshed(
         display_command=display_command,
         display_summary=display_summary,
         last_seen_at=last_seen_at or _now(),
-    )
-
-
-def emit_request_expired(
-    store: GuardStore,
-    local_request_id: str,
-    *,
-    resolved_at: str | None = None,
-) -> int:
-    """Local TTL expiry, status expired."""
-    return emit_cloud_sync_event(
-        store,
-        "request_expired",
-        local_request_id,
-        resolved_at=resolved_at or _now(),
     )
 
 

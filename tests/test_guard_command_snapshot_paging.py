@@ -112,7 +112,7 @@ def test_local_request_snapshot_payload_stays_under_cloud_byte_budget(tmp_path: 
     assert isinstance(first_request, dict)
     request_payload = first_request["requestPayload"]
     assert isinstance(request_payload, dict)
-    assert "truncated" in str(request_payload["risk_summary"])
+    assert request_payload["risk_summary"] == "SECRET_[redacted]"
     assert "truncated" in str(request_payload["command_text"])
 
 
@@ -218,7 +218,5 @@ def test_local_request_snapshot_includes_newest_pending_after_truncation(tmp_pat
     assert "req-pending-fresh" in third_ids
     # The persisted snapshot cursor key must NOT contain a pending cursor,
     # otherwise the next call could skip fresh rows.
-    stored_cursor = store.get_sync_payload(
-        "guard_command_local_request_snapshot_cursor"
-    )
+    stored_cursor = store.get_sync_payload("guard_command_local_request_snapshot_cursor")
     assert stored_cursor is None or "pending" not in stored_cursor
