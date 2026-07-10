@@ -1391,11 +1391,11 @@ def _build_runtime_cloud_context(
         connect_retry_refresh_race=connect_retry_refresh_race,
     )
     oauth_credentials = store.get_oauth_local_credentials()
-    cloud_user_profile = (
-        oauth_credentials.get("cloud_user_profile")
-        if isinstance(oauth_credentials, dict) and isinstance(oauth_credentials.get("cloud_user_profile"), dict)
-        else None
-    )
+    cloud_user_profile: dict[str, str] | None = None
+    if isinstance(oauth_credentials, dict):
+        raw_profile = oauth_credentials.get("cloud_user_profile")
+        if isinstance(raw_profile, dict):
+            cloud_user_profile = {str(k): str(v) for k, v in raw_profile.items()}
     cloud_workspace_id = store.get_cloud_workspace_id()
     return {
         "sync_configured": cloud_profile is not None,
