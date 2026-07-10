@@ -87,8 +87,6 @@ def primary_content_sources_from_artifacts(
     *,
     workspace_dir: Path | None,
 ) -> tuple[GuardAibomPrimaryContentSource, ...]:
-    if snapshot.agent_type != "hermes":
-        return ()
     items_by_id = {item.item_id: item for item in snapshot.items}
     sources: list[GuardAibomPrimaryContentSource] = []
     for artifact in artifacts:
