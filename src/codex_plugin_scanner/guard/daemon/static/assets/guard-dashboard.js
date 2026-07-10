@@ -23250,6 +23250,63 @@ function ConsolidatedEvidenceAlert({ items }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-brand-dark", children: current.content })
   ] });
 }
+const REQUEST_READ_STATE_KEY = "hol-guard:read-request-ids";
+const REQUEST_READ_STATE_LIMIT = 500;
+function safeReadStorage(storage) {
+  if (!storage) return [];
+  try {
+    const raw = storage.getItem(REQUEST_READ_STATE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.ids)) return [];
+    return parsed.ids.filter((id) => typeof id === "string");
+  } catch {
+    return [];
+  }
+}
+function safeWriteStorage(storage, ids) {
+  if (!storage) return;
+  try {
+    storage.setItem(REQUEST_READ_STATE_KEY, JSON.stringify({ ids }));
+  } catch {
+  }
+}
+function addReadIds(current, requestIds, limit = REQUEST_READ_STATE_LIMIT) {
+  const toAdd = new Set(requestIds);
+  const next = current.filter((id) => !toAdd.has(id));
+  next.unshift(...requestIds);
+  if (next.length > limit) {
+    next.length = limit;
+  }
+  return next;
+}
+function removeReadId(current, requestId) {
+  return current.filter((id) => id !== requestId);
+}
+function useRequestReadState() {
+  const [readIds, setReadIds] = reactExports.useState(() => safeReadStorage(window?.localStorage));
+  reactExports.useEffect(() => {
+    setReadIds(safeReadStorage(window?.localStorage));
+  }, []);
+  reactExports.useEffect(() => {
+    safeWriteStorage(window?.localStorage, readIds);
+  }, [readIds]);
+  const isRead = reactExports.useCallback((requestId) => readIds.includes(requestId), [readIds]);
+  const markRead = reactExports.useCallback((requestId) => {
+    setReadIds((current) => addReadIds(current, [requestId]));
+  }, []);
+  const markUnread = reactExports.useCallback((requestId) => {
+    setReadIds((current) => removeReadId(current, requestId));
+  }, []);
+  const markAllRead = reactExports.useCallback((requestIds) => {
+    if (requestIds.length === 0) return;
+    setReadIds((current) => addReadIds(current, requestIds));
+  }, []);
+  return reactExports.useMemo(
+    () => ({ isRead, markRead, markUnread, markAllRead }),
+    [isRead, markRead, markUnread, markAllRead]
+  );
+}
 function approvalGateCooldownLabel(seconds) {
   if (seconds === 0) return "Every approval";
   if (seconds === 900) return "15 minutes";
@@ -24376,6 +24433,7 @@ const QUEUE_PAGE_SIZE = 10;
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact"]);
 function ReviewWorkspace(props) {
   const { requests, activeRequestId, detail } = props;
+  const readState = useRequestReadState();
   const queueRef = reactExports.useRef(null);
   const [searchTerm, setSearchTerm] = reactExports.useState("");
   const [categoryFilter, setCategoryFilter] = reactExports.useState("all");
@@ -24387,8 +24445,9 @@ function ReviewWorkspace(props) {
   const [page, setPage] = reactExports.useState(1);
   const handleOpenRequest = reactExports.useCallback((id) => {
     props.onOpenRequest(id);
+    readState.markRead(id);
     setMobileQueueOpen(false);
-  }, [props.onOpenRequest]);
+  }, [props.onOpenRequest, readState]);
   const handleToggleMobileQueue = reactExports.useCallback(() => {
     setMobileQueueOpen((v) => !v);
   }, []);
@@ -24550,6 +24609,7 @@ function ReviewWorkspace(props) {
           totalCount: requests.length,
           filteredCount: filteredRequests.length,
           activeRequestId: activeItem.request_id,
+          readState,
           categoryOptions,
           categoryFilter,
           searchTerm,
@@ -24620,6 +24680,7 @@ const ReviewQueueList = reactExports.forwardRef(({
   totalCount,
   filteredCount,
   activeRequestId,
+  readState,
   categoryOptions,
   categoryFilter,
   searchTerm,
@@ -24720,10 +24781,21 @@ const ReviewQueueList = reactExports.forwardRef(({
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "space-y-3", ref, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Queue" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-[11px] font-semibold text-muted-foreground", children: [
-        filteredCount,
-        "/",
-        totalCount
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => readState.markAllRead(requests.map((item) => item.request_id)),
+            className: "text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
+            children: "Mark all read"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-[11px] font-semibold text-muted-foreground", children: [
+          filteredCount,
+          "/",
+          totalCount
+        ] })
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 rounded-xl border border-slate-100 bg-white p-3", children: [
@@ -24847,6 +24919,7 @@ const ReviewQueueList = reactExports.forwardRef(({
             {
               item,
               active: item.request_id === activeRequestId,
+              readState,
               index,
               onOpenRequest,
               selectionMode,
@@ -24913,16 +24986,24 @@ function SemanticFilterButton(props) {
     }
   );
 }
-function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = false, selectable = false, selected = false, onToggleSelect }) {
+function QueueItemRow({ item, active, readState, index, onOpenRequest, selectionMode = false, selectable = false, selected = false, onToggleSelect }) {
   const isBlocked = item.policy_action === "block";
   const category = resolveQueueCategory(item);
   const CategoryIcon = iconForQueueCategory(category.id);
   const preview = queueItemPreview(item);
+  const isRead = readState.isRead(item.request_id);
   const showCheckbox = selectionMode;
   const canSelect = selectionMode && selectable;
   const handleClick = reactExports.useCallback(() => {
     onOpenRequest(item.request_id);
   }, [item.request_id, onOpenRequest]);
+  const handleMarkUnread = reactExports.useCallback(
+    (event) => {
+      event.stopPropagation();
+      readState.markUnread(item.request_id);
+    },
+    [item.request_id, readState]
+  );
   const handleCheckboxChange = reactExports.useCallback(
     (event) => {
       event.stopPropagation();
@@ -24979,7 +25060,7 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
             "aria-posinset": index + 1,
             "aria-setsize": void 0,
             tabIndex: active ? 0 : -1,
-            className: "flex min-w-0 flex-1 items-center justify-between gap-2 text-left",
+            className: "group flex min-w-0 flex-1 items-center justify-between gap-2 text-left",
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -24990,7 +25071,10 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
                   }
                 ),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-medium text-brand-dark", children: preview }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: `truncate text-sm ${isRead ? "font-medium text-brand-dark" : "font-bold text-brand-dark"}`, children: [
+                    !isRead && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Unread request:" }),
+                    preview
+                  ] }),
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "truncate text-[11px] text-muted-foreground", children: [
                     harnessDisplayName(item.harness),
                     " · ",
@@ -25008,6 +25092,17 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
                 }
               )
             ]
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: handleMarkUnread,
+            "aria-label": `Mark request ${preview} unread`,
+            title: "Mark unread",
+            className: "opacity-0 group-hover:opacity-100 focus:opacity-100 shrink-0 rounded-md p-1 text-[11px] font-medium text-slate-500 hover:bg-slate-100 hover:text-brand-dark transition-opacity",
+            children: "Mark unread"
           }
         )
       ] })
