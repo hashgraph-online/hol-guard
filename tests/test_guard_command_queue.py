@@ -123,21 +123,16 @@ class FakeStore:
         return []
 
 
-def test_command_queue_auth_context_includes_live_sync_identity(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_live_sync_identity_context_includes_local_identity(tmp_path: Path) -> None:
     store = FakeStore(tmp_path / "guard-home")
-    monkeypatch.setattr(
-        command_queue,
-        "_resolve_guard_sync_auth_context",
-        lambda _store, *, force_refresh=False: {
+
+    auth_context = command_queue._with_live_sync_identity(
+        store,
+        {
             "access_token": "token-1",
             "sync_url": "https://hol.test/api/guard/receipts/sync",
         },
     )
-
-    auth_context = command_queue._resolve_command_queue_auth_context(store)
 
     assert auth_context == {
         "access_token": "token-1",
@@ -146,6 +141,29 @@ def test_command_queue_auth_context_includes_live_sync_identity(
         "sync_url": "https://hol.test/api/guard/receipts/sync",
         "workspace_id": "workspace-1",
     }
+
+
+def test_live_sync_identity_failure_remains_best_effort(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+
+    def fail_identity(
+        _store: FakeStore,
+        _auth_context: dict[str, object],
+    ) -> dict[str, object]:
+        raise RuntimeError("identity unavailable")
+
+    monkeypatch.setattr(command_queue, "_with_live_sync_identity", fail_identity)
+
+    command_queue._sync_live_requests_best_effort(
+        store,
+        {
+            "access_token": "token-1",
+            "sync_url": "https://hol.test/api/guard/receipts/sync",
+        },
+    )
 
 
 def _approval_request_row(
