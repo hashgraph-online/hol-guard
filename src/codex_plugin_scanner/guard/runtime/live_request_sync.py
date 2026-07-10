@@ -1125,13 +1125,9 @@ def _cloud_sync_retry_request(
 
     for attempt in range(max_retries + 1):
         try:
-            # Reuse _command_api_url logic from command_queue
-            from urllib.parse import urlparse, urlunparse
-
-            parsed = urlparse(str(auth_context.get("sync_url", "")))
             normalized_path = path if path.startswith("/") else f"/{path}"
             request_path = normalized_path if normalized_path.startswith("/api/") else f"/api/guard{normalized_path}"
-            request_url = urlunparse((parsed.scheme, parsed.netloc, request_path, "", "", ""))
+            request_url = _resolve_sync_url(auth_context, request_path)
             request = _guard_sync_request(
                 auth_context,
                 request_url=request_url,

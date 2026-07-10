@@ -38,6 +38,7 @@ from codex_plugin_scanner.guard.runtime.live_request_sync import (
     SyncHealthSnapshot,
     _build_live_request_event,
     _cloud_sync_handle_401_refresh,
+    _cloud_sync_retry_request,
     _cloud_sync_retry_wait_seconds,
     _get_cloud_sync_sync_state,
     _get_current_cloud_sync_sequence,
@@ -1479,15 +1480,47 @@ class TestResolveSyncUrl:
         assert result == "https://hol.org:8443/api/guard/live-requests/sync"
 
     def test_query_string_preserved_when_path_replaced(self) -> None:
-        """Replacing the sync URL path must preserve scheme, netloc, and query.
-
-        The auth sync URL carries a `route` query parameter that downstream
-        components depend on.  Only the path segment is replaced; the query
-        string and fragment (which is not part of the HTTP request target)
-        must survive intact.
-        """
+        """Replacing the sync URL path preserves query-bound routing."""
         auth_context: dict[str, object] = {
             "sync_url": "https://hol.org/api/guard/receipts/sync?route=tenant-a",
         }
         result = _resolve_sync_url(auth_context, "/api/guard/live-requests/sync")
         assert result == "https://hol.org/api/guard/live-requests/sync?route=tenant-a"
+
+    def test_batch_request_preserves_query_bound_routing(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Batch requests use the shared endpoint derivation contract."""
+        from codex_plugin_scanner.guard.runtime import runner
+
+        captured_urls: list[str] = []
+
+        def capture_request(
+            _auth_context: dict[str, object],
+            *,
+            request_url: str,
+            **_kwargs: object,
+        ) -> object:
+            captured_urls.append(request_url)
+            return object()
+
+        monkeypatch.setattr(runner, "_guard_sync_request", capture_request)
+        monkeypatch.setattr(
+            runner,
+            "_urlopen_json_with_timeout_retry",
+            lambda **_kwargs: {},
+        )
+
+        result = _cloud_sync_retry_request(
+            {
+                "sync_url": ("https://hol.org/api/guard/receipts/sync?route=tenant-a"),
+            },
+            method="POST",
+            path="live-requests/batch",
+            payload={},
+            max_retries=0,
+        )
+
+        assert result == {}
+        assert captured_urls == ["https://hol.org/api/guard/live-requests/batch?route=tenant-a"]
