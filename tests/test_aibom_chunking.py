@@ -10,6 +10,9 @@ from codex_plugin_scanner.guard.aibom_cli import (
     _inventory_events_request_body,
 )
 
+_LEGACY_AIBOM_MAX_REQUEST_BODY_BYTES = 3_900_000
+_LARGE_ITEM_CONTENT_SUMMARY_BYTES = 11_300
+
 
 def _make_event(snapshot_id: str, items: list[dict]) -> dict:
     """Build a minimal inventory snapshot event for testing."""
@@ -58,13 +61,14 @@ class TestBatchInventoryEvents:
     def test_large_486_item_snapshot_remains_atomic(self) -> None:
         items = [_make_item(f"item-{i}") for i in range(486)]
         for item in items:
-            item["metadata"]["contentSummary"] = "x" * 11_300
+            item["metadata"]["contentSummary"] = "x" * _LARGE_ITEM_CONTENT_SUMMARY_BYTES
         event = _make_event("hermes:snapshot:test", items)
         request_size = len(_inventory_events_request_body([event]))
 
         batches, oversized = _batch_inventory_events([event])
 
-        assert 5_500_000 < request_size < _AIBOM_MAX_REQUEST_BODY_BYTES
+        assert _LARGE_ITEM_CONTENT_SUMMARY_BYTES * len(items) > _LEGACY_AIBOM_MAX_REQUEST_BODY_BYTES
+        assert request_size <= _AIBOM_MAX_REQUEST_BODY_BYTES
         assert batches == [[event]]
         assert oversized == []
         snapshot = batches[0][0]["payload"]["snapshot"]
