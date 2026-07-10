@@ -92,7 +92,7 @@ export function CloudUserMenu(props: {
 
   if (props.collapsed) {
     return (
-      <div ref={containerRef} className="flex justify-center pb-2">
+      <div ref={containerRef} className="relative flex justify-center pb-2">
         <button
           type="button"
           onClick={() => setOpen((prev) => !prev)}
