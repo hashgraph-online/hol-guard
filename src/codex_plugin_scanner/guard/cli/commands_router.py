@@ -18,6 +18,7 @@ from .commands_parser_helpers import *
 _EARLY_HANDLERS = {
     "scan": "_run_guard_scan_command",
     "preflight": "_run_guard_preflight_command",
+    "mcp": "_run_guard_mcp_command",
 }
 
 _PRESTORE_HANDLERS = {

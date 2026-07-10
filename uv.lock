@@ -1165,9 +1165,10 @@ name = "hol-guard"
 version = "2.0.1014"
 source = { editable = "." }
 dependencies = [
-    { name = "cisco-ai-skill-scanner", marker = "python_full_version < '3.14'" },
+    { name = "cisco-ai-skill-scanner" },
     { name = "cryptography" },
     { name = "keyring" },
+    { name = "mcp" },
     { name = "packaging" },
     { name = "requests" },
     { name = "rich" },
@@ -1176,7 +1177,7 @@ dependencies = [
 
 [package.optional-dependencies]
 cisco = [
-    { name = "litellm", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
+    { name = "litellm" },
 ]
 dev = [
     { name = "basedpyright" },
@@ -1205,6 +1206,7 @@ requires-dist = [
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.26.0" },
     { name = "keyring", specifier = ">=25.0" },
     { name = "litellm", marker = "python_full_version >= '3.11' and python_full_version < '3.14' and extra == 'cisco'", specifier = "==1.89.1" },
+    { name = "mcp", marker = "python_full_version >= '3.10'", specifier = ">=1.27.0,<2" },
     { name = "packaging", specifier = ">=24.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.3" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },
@@ -1746,20 +1748,20 @@ name = "mcp"
 version = "1.27.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "anyio", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
-    { name = "httpx", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
-    { name = "httpx-sse", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
-    { name = "jsonschema", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
-    { name = "pydantic", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
-    { name = "pydantic-settings", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
-    { name = "pyjwt", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
-    { name = "python-multipart", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
-    { name = "pywin32", marker = "python_full_version >= '3.11' and python_full_version < '3.14' and sys_platform == 'win32'" },
-    { name = "sse-starlette", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
-    { name = "starlette", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
-    { name = "typing-extensions", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
-    { name = "typing-inspection", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
-    { name = "uvicorn", marker = "python_full_version >= '3.11' and python_full_version < '3.14' and sys_platform != 'emscripten'" },
+    { name = "anyio" },
+    { name = "httpx" },
+    { name = "httpx-sse" },
+    { name = "jsonschema" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "pyjwt" },
+    { name = "python-multipart" },
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
+    { name = "sse-starlette" },
+    { name = "starlette" },
+    { name = "typing-extensions" },
+    { name = "typing-inspection" },
+    { name = "uvicorn", marker = "sys_platform != 'emscripten'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/38/83/d1efe7c2980d8a3afa476f4e3d42d53dd54c0ab94c27bee5d755b45c8b73/mcp-1.27.1.tar.gz", hash = "sha256:0f47e1820f8f8f941466b39749eb1d1839a04caddca2bc60e9d46e8a99914924", size = 608458, upload-time = "2026-05-08T16:50:12.601Z" }
 wheels = [
@@ -2751,9 +2753,9 @@ name = "pydantic-settings"
 version = "2.14.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pydantic", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
-    { name = "python-dotenv", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
-    { name = "typing-inspection", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+    { name = "typing-inspection" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/07/60/1d1e59c9c90d54591469ada7d268251f71c24bdb765f1a8a832cee8c6653/pydantic_settings-2.14.1.tar.gz", hash = "sha256:e874d3bec7e787b0c9958277956ed9b4dd5de6a80e162188fdaff7c5e26fd5fa", size = 235551, upload-time = "2026-05-08T13:40:06.542Z" }
 wheels = [
@@ -2773,6 +2775,9 @@ wheels = [
 name = "pyjwt"
 version = "2.13.0"
 source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+]
 sdist = { url = "https://files.pythonhosted.org/packages/3b/81/58d0ac84e1ef3a3843791d6954d94c0b33d526c75eeb1efbce9d0a4c4077/pyjwt-2.13.0.tar.gz", hash = "sha256:41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423", size = 107515, upload-time = "2026-05-21T19:54:36.618Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a3/5e/ecf12fdb62546d64385c158514e9b2b671f7832108ef2ecd2020ce0af2d1/pyjwt-2.13.0-py3-none-any.whl", hash = "sha256:66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728", size = 31274, upload-time = "2026-05-21T19:54:35.362Z" },
@@ -3352,8 +3357,8 @@ name = "sse-starlette"
 version = "3.4.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "anyio", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
-    { name = "starlette", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
+    { name = "anyio" },
+    { name = "starlette" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f7/2b/58abc2d1fd397e7dde08e947e05c884d8ef2f78d5e2588c17a12d42d6994/sse_starlette-3.4.4.tar.gz", hash = "sha256:07e0fa0460138baf25cdd5fb28683472c3995dc1642225191b3832d62526bcb0", size = 31819, upload-time = "2026-05-12T17:37:17.019Z" }
 wheels = [
