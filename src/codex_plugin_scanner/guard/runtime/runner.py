@@ -3156,6 +3156,7 @@ def _persist_rotated_oauth_refresh_token(
             else _optional_string(credentials.get("supply_chain_plan_id"))
         ),
         workspace_id=_optional_string(credentials.get("workspace_id")),
+        cloud_user_profile=_extract_dict_field(credentials, "cloud_user_profile"),
         runtime_id=_optional_string(credentials.get("runtime_id")),
         runtime_label=_optional_string(credentials.get("runtime_label")),
         access_token=access_token,
@@ -3676,6 +3677,13 @@ def _optional_string(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value
     return None
+
+
+def _extract_dict_field(credentials: dict[str, object], key: str) -> dict[str, str] | None:
+    value = credentials.get(key)
+    if not isinstance(value, dict):
+        return None
+    return {str(k): str(v) for k, v in value.items()}
 
 
 def _int_value(value: object) -> int | None:

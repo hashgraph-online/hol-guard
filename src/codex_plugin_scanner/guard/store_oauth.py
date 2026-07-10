@@ -88,6 +88,7 @@ class StoreOAuthConnectMixin:
         supply_chain_firewall: bool | None = None,
         supply_chain_plan_id: str | None = None,
         workspace_id: str | None = None,
+        cloud_user_profile: dict[str, str] | None = None,
         runtime_id: str | None = None,
         runtime_label: str | None = None,
         access_token: str | None = None,
@@ -109,6 +110,7 @@ class StoreOAuthConnectMixin:
                 supply_chain_firewall=supply_chain_firewall,
                 supply_chain_plan_id=supply_chain_plan_id,
                 workspace_id=workspace_id,
+                cloud_user_profile=cloud_user_profile,
                 runtime_id=runtime_id,
                 runtime_label=runtime_label,
                 access_token=access_token,
@@ -132,6 +134,7 @@ class StoreOAuthConnectMixin:
         supply_chain_firewall: bool | None = None,
         supply_chain_plan_id: str | None = None,
         workspace_id: str | None = None,
+        cloud_user_profile: dict[str, str] | None = None,
         runtime_id: str | None = None,
         runtime_label: str | None = None,
         access_token: str | None = None,
@@ -169,6 +172,8 @@ class StoreOAuthConnectMixin:
             payload["supply_chain_plan_id"] = supply_chain_plan_id
         if workspace_id:
             payload["workspace_id"] = workspace_id
+        if cloud_user_profile:
+            payload["cloud_user_profile"] = cloud_user_profile
         if runtime_id:
             payload["runtime_id"] = runtime_id
         if runtime_label:
