@@ -36,3 +36,28 @@ def build_guard_local_entitlement_defaults(
         "supply_chain_firewall": allowed,
         "supply_chain_plan_id": normalized_tier,
     }
+
+
+def extract_cloud_user_profile(payload: dict[str, object]) -> dict[str, str] | None:
+    """Extract user profile (email, display_name, avatar_url) from guard_local_entitlement.
+
+    Works on both the full token-exchange payload and the raw guard_local_entitlement dict.
+    """
+    entitlement = payload.get("guard_local_entitlement")
+    if not isinstance(entitlement, dict):
+        # If payload IS the entitlement dict, use it directly
+        if "user_profile" in payload:
+            entitlement = payload
+        else:
+            return None
+    profile = entitlement.get("user_profile")
+    if not isinstance(profile, dict):
+        return None
+    email = profile.get("email")
+    if not isinstance(email, str) or not email:
+        return None
+    return {
+        "email": email,
+        "display_name": str(profile.get("display_name") or ""),
+        "avatar_url": str(profile.get("avatar_url") or ""),
+    }

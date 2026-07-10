@@ -21,6 +21,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 from ...version import __version__
+from ..package_firewall_defaults import extract_cloud_user_profile as _extract_cloud_user_profile
 from ..package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
     reconcile_connect_state_with_oauth_entitlement,
@@ -176,24 +177,6 @@ def _read_nested_string(payload: dict[str, object], *path: str) -> str | None:
             return None
         current = current.get(segment)
     return current if isinstance(current, str) and current else None
-
-
-def _extract_cloud_user_profile(payload: dict[str, object]) -> dict[str, str] | None:
-    """Extract user profile (email, display_name, avatar_url) from guard_local_entitlement."""
-    entitlement = payload.get("guard_local_entitlement")
-    if not isinstance(entitlement, dict):
-        return None
-    profile = entitlement.get("user_profile")
-    if not isinstance(profile, dict):
-        return None
-    email = profile.get("email")
-    if not isinstance(email, str) or not email:
-        return None
-    return {
-        "email": email,
-        "display_name": str(profile.get("display_name") or ""),
-        "avatar_url": str(profile.get("avatar_url") or ""),
-    }
 
 
 def _guard_access_token_expires_at(
