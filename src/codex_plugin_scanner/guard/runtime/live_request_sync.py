@@ -584,22 +584,32 @@ def _set_cloud_sync_sync_state(store: GuardStore, state: dict[str, Any]) -> None
     store.set_sync_payload(_LIVE_REQUEST_EVENT_SEQUENCE_KEY, state, _now())
 
 
+def _sync_sequence_value(payload: object, key: str) -> int:
+    if not isinstance(payload, dict):
+        return 0
+    value = payload.get(key)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return 0
+    return value
+
+
 def _get_next_cloud_sync_sequence(store: GuardStore) -> int:
     legacy_state = store.get_sync_payload(_LOCAL_EVENT_SEQUENCE_KEY)
-    legacy_sequence = int(legacy_state.get("sequence", 0)) if isinstance(legacy_state, dict) else 0
+    legacy_sequence = _sync_sequence_value(legacy_state, "sequence")
     reserve_sequence = getattr(store, "reserve_sync_sequence", None)
     if callable(reserve_sequence):
-        return int(
-            reserve_sequence(
-                _LIVE_REQUEST_EVENT_SEQUENCE_KEY,
-                "cloud_sync_sequence",
-                _now(),
-                floor=legacy_sequence,
-            )
+        reserved = reserve_sequence(
+            _LIVE_REQUEST_EVENT_SEQUENCE_KEY,
+            "cloud_sync_sequence",
+            _now(),
+            floor=legacy_sequence,
         )
+        if isinstance(reserved, bool) or not isinstance(reserved, int):
+            raise TypeError("Guard sync sequence reservation returned a non-integer value")
+        return reserved
     with _LIVE_REQUEST_SEQUENCE_LOCK:
         state = _get_cloud_sync_sync_state(store)
-        seq = max(int(state.get("cloud_sync_sequence", 0)), legacy_sequence) + 1
+        seq = max(_sync_sequence_value(state, "cloud_sync_sequence"), legacy_sequence) + 1
         state["cloud_sync_sequence"] = seq
         _set_cloud_sync_sync_state(store, state)
         return seq
@@ -608,8 +618,8 @@ def _get_next_cloud_sync_sequence(store: GuardStore) -> int:
 def _get_current_cloud_sync_sequence(store: GuardStore) -> int:
     state = _get_cloud_sync_sync_state(store)
     legacy_state = store.get_sync_payload(_LOCAL_EVENT_SEQUENCE_KEY)
-    legacy_sequence = int(legacy_state.get("sequence", 0)) if isinstance(legacy_state, dict) else 0
-    return max(int(state.get("cloud_sync_sequence", 0)), legacy_sequence)
+    legacy_sequence = _sync_sequence_value(legacy_state, "sequence")
+    return max(_sync_sequence_value(state, "cloud_sync_sequence"), legacy_sequence)
 
 
 def _cloud_sync_device_id(store: GuardStore) -> str:

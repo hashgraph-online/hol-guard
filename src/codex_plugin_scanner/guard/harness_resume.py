@@ -49,7 +49,7 @@ def resume_harness_operation(
         metadata=safe_metadata,
         now=now,
     )
-    payload = {
+    payload: dict[str, object] = {
         "operationId": str(updated["operation_id"]),
         "harness": canonical_harness,
         "status": status,
