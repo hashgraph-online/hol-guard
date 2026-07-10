@@ -5668,14 +5668,16 @@ class GuardDaemonServer:
     def _aibom_inventory_context_dirs(self) -> tuple[Path | None, Path | None]:
         payload = self._server.store.get_sync_payload("aibom_inventory_context")
         current_workspace_id = self._server.store.get_cloud_workspace_id()
-        payload_is_bound = (
-            isinstance(payload, dict)
-            and isinstance(payload.get("workspace_id"), str)
+        bound_payload: dict[str, object] | None = None
+        if (
+            current_workspace_id is not None
+            and isinstance(payload, dict)
             and payload.get("workspace_id") == current_workspace_id
-        )
-        if payload_is_bound:
-            home_value = payload.get("home_dir")
-            workspace_value = payload.get("workspace_dir")
+        ):
+            bound_payload = payload
+        if bound_payload is not None:
+            home_value = bound_payload.get("home_dir")
+            workspace_value = bound_payload.get("workspace_dir")
         else:
             home_value = None
             workspace_value = None
