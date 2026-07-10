@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from pathlib import Path
+
+import pytest
 
 from codex_plugin_scanner.guard.daemon import server as guard_daemon_module
 from codex_plugin_scanner.guard.runtime.runner import GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError
@@ -209,7 +212,7 @@ def test_daemon_aibom_refresh_records_synced_on_success(
         host="127.0.0.1",
         port=0,
         idle_timeout_seconds=60,
-        aibom_refresh_interval_seconds=0.05,
+        aibom_refresh_interval_seconds=60,
         aibom_refresh_backoff_seconds=0.05,
         home_dir=home_dir,
         workspace_dir=workspace_dir,
@@ -264,24 +267,70 @@ def test_daemon_aibom_refresh_records_skipped_when_not_due(
     assert summary["skipped"] is True
 
 
-def test_daemon_aibom_refresh_waits_for_workspace_context(
+def test_daemon_aibom_refresh_resolves_managed_workspace_context(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """AIBOM daemon records a skipped status instead of syncing without a workspace."""
+    """AIBOM daemon resolves an audited workspace before publishing inventory."""
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
+    calls: list[dict[str, object]] = []
 
-    def _unexpected_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
-        raise AssertionError("AIBOM sync should wait for a real workspace context")
+    def _fake_sync(_store: GuardStore, **kwargs: object) -> dict[str, object]:
+        calls.append(kwargs)
+        return {"synced": True, "synced_at": "2026-06-29T00:00:00Z", "snapshots": 1, "accepted": 1}
 
-    monkeypatch.setattr(guard_daemon_module, "sync_aibom_snapshots_if_due", _unexpected_sync)
+    monkeypatch.setattr(guard_daemon_module, "sync_aibom_snapshots_if_due", _fake_sync)
+    resolved_workspace = tmp_path / "managed-workspace"
+    monkeypatch.setattr(
+        guard_daemon_module,
+        "resolve_supply_chain_audit_workspace_dir",
+        lambda **_kwargs: resolved_workspace,
+    )
     daemon = guard_daemon_module.GuardDaemonServer(
         store,
         host="127.0.0.1",
         port=0,
         idle_timeout_seconds=60,
-        aibom_refresh_interval_seconds=0.05,
+        aibom_refresh_interval_seconds=60,
+        aibom_refresh_backoff_seconds=0.05,
+    )
+    daemon.start()
+    try:
+        summary = _wait_for_aibom_status(store, expected="synced")
+    finally:
+        daemon.stop()
+
+    assert calls[0]["home_dir"] is None
+    assert calls[0]["workspace_dir"] == resolved_workspace
+    assert summary["synced"] is True
+
+
+def test_daemon_aibom_refresh_skips_without_workspace_context(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """AIBOM daemon does not replace a full snapshot with a home-only scan."""
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
+    calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        guard_daemon_module,
+        "sync_aibom_snapshots_if_due",
+        lambda _store, **kwargs: calls.append(kwargs) or {"synced": True},
+    )
+    monkeypatch.setattr(
+        guard_daemon_module,
+        "resolve_supply_chain_audit_workspace_dir",
+        lambda **_kwargs: None,
+    )
+    daemon = guard_daemon_module.GuardDaemonServer(
+        store,
+        host="127.0.0.1",
+        port=0,
+        idle_timeout_seconds=60,
+        aibom_refresh_interval_seconds=60,
         aibom_refresh_backoff_seconds=0.05,
     )
     daemon.start()
@@ -290,8 +339,44 @@ def test_daemon_aibom_refresh_waits_for_workspace_context(
     finally:
         daemon.stop()
 
-    assert summary["skipped"] is True
+    assert calls == []
     assert summary["reason"] == "missing_workspace_context"
+
+
+def test_daemon_aibom_refresh_retries_returned_error_on_backoff(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Returned sync errors retry on backoff instead of waiting for the normal interval."""
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
+    calls = 0
+
+    def _fake_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {"synced": False, "error": "temporary upload failure"}
+        return {"synced": True, "snapshots": 2, "accepted": 2}
+
+    monkeypatch.setattr(guard_daemon_module, "sync_aibom_snapshots_if_due", _fake_sync)
+    daemon = guard_daemon_module.GuardDaemonServer(
+        store,
+        host="127.0.0.1",
+        port=0,
+        idle_timeout_seconds=60,
+        aibom_refresh_interval_seconds=60,
+        aibom_refresh_backoff_seconds=0.05,
+        workspace_dir=tmp_path / "workspace",
+    )
+    daemon.start()
+    try:
+        summary = _wait_for_aibom_status(store, expected="synced")
+    finally:
+        daemon.stop()
+
+    assert calls == 2
+    assert summary["synced"] is True
 
 
 def test_daemon_aibom_refresh_records_error_on_exception(
@@ -357,3 +442,43 @@ def test_daemon_aibom_refresh_stops_cleanly(
 
     # Thread reference is cleared and no longer alive after stop
     assert daemon._aibom_refresh_thread is None
+
+
+def test_daemon_retains_blocked_aibom_refresh_thread_during_shutdown(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A blocked refresh remains tracked and prevents a concurrent daemon restart."""
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-alpha")
+    entered = threading.Event()
+    release = threading.Event()
+
+    def _blocked_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
+        entered.set()
+        release.wait(timeout=5)
+        return {"synced": True}
+
+    monkeypatch.setattr(guard_daemon_module, "sync_aibom_snapshots_if_due", _blocked_sync)
+    monkeypatch.setattr(guard_daemon_module, "_AIBOM_REFRESH_STOP_JOIN_TIMEOUT_SECONDS", 0.01)
+    daemon = guard_daemon_module.GuardDaemonServer(
+        store,
+        host="127.0.0.1",
+        port=0,
+        idle_timeout_seconds=60,
+        aibom_refresh_interval_seconds=60,
+        workspace_dir=tmp_path / "workspace",
+    )
+    daemon.start()
+    assert entered.wait(timeout=1)
+
+    daemon.stop()
+    refresh_thread = daemon._aibom_refresh_thread
+    assert refresh_thread is not None
+    assert refresh_thread.is_alive()
+    with pytest.raises(RuntimeError, match="still stopping"):
+        daemon.start()
+
+    release.set()
+    refresh_thread.join(timeout=1)
+    assert not refresh_thread.is_alive()

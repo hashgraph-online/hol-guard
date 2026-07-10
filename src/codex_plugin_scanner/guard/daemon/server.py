@@ -197,6 +197,7 @@ _SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS = 180
 _LOCAL_DASHBOARD_SESSION_REFRESH_GRACE_SECONDS = 7 * 24 * 60 * 60
 _DEFAULT_HEADLESS_CLOUD_SYNC_INTERVAL_SECONDS = 30.0
 _DEFAULT_HEADLESS_CLOUD_SYNC_BACKOFF_SECONDS = 10.0
+_AIBOM_REFRESH_STOP_JOIN_TIMEOUT_SECONDS = 5.0
 
 
 class _HookPathValidationError(ValueError):
@@ -5478,8 +5479,9 @@ class GuardDaemonServer:
             self._bundle_refresh_thread.join(timeout=5)
             self._bundle_refresh_thread = None
         if self._aibom_refresh_thread is not None:
-            self._aibom_refresh_thread.join(timeout=5)
-            self._aibom_refresh_thread = None
+            self._aibom_refresh_thread.join(timeout=_AIBOM_REFRESH_STOP_JOIN_TIMEOUT_SECONDS)
+            if not self._aibom_refresh_thread.is_alive():
+                self._aibom_refresh_thread = None
         if self._headless_cloud_sync_thread is not None:
             self._headless_cloud_sync_thread.join(timeout=5)
             self._headless_cloud_sync_thread = None
@@ -5487,6 +5489,8 @@ class GuardDaemonServer:
         self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
 
     def _begin_service(self) -> None:
+        if self._aibom_refresh_thread is not None and self._aibom_refresh_thread.is_alive():
+            raise RuntimeError("AIBOM inventory refresh is still stopping")
         self._shutdown_started.clear()
         self._server.last_activity_monotonic = time.monotonic()
         write_guard_daemon_state(self._server.store.guard_home, self.port, self._server.auth_token)
@@ -5663,6 +5667,17 @@ class GuardDaemonServer:
             if isinstance(workspace_value, str) and workspace_value.strip()
             else self._aibom_workspace_dir
         )
+        if workspace_dir is None:
+            workspace_dir = resolve_supply_chain_audit_workspace_dir(
+                workspace_dir_value=None,
+                workspace_value=None,
+                allowed_roots=(
+                    Path.home().resolve(),
+                    Path.cwd().resolve(),
+                    Path(tempfile.gettempdir()).resolve(),
+                ),
+                managed_workspace_dirs=managed_install_audit_workspace_dirs(self._server.store),
+            )
         return home_dir, workspace_dir
 
     def _refresh_aibom_inventory_loop(self) -> None:
@@ -5672,8 +5687,6 @@ class GuardDaemonServer:
         backoff_seconds = (
             self._aibom_refresh_backoff_seconds if self._aibom_refresh_backoff_seconds > 0 else interval_seconds
         )
-        if self._shutdown_started.wait(interval_seconds):
-            return
         while not self._shutdown_started.is_set():
             refreshed_at = _now()
             try:
@@ -5702,13 +5715,19 @@ class GuardDaemonServer:
                         home_dir=home_dir,
                         workspace_dir=workspace_dir,
                     )
-                status = "synced" if summary.get("synced") is True else str(summary.get("reason") or "skipped")
+                has_error = bool(summary.get("error"))
+                if has_error:
+                    status = "error"
+                elif summary.get("synced") is True:
+                    status = "synced"
+                else:
+                    status = str(summary.get("reason") or "skipped")
                 self._server.store.set_sync_payload(
                     "aibom_inventory_daemon",
                     {**summary, "status": status, "refreshed_at": refreshed_at},
                     refreshed_at,
                 )
-                wait_seconds = interval_seconds
+                wait_seconds = backoff_seconds if has_error else interval_seconds
             except GuardSyncAuthorizationExpiredError as error:
                 self._server.store.set_sync_payload(
                     "aibom_inventory_daemon",
