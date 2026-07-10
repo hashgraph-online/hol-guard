@@ -1194,9 +1194,7 @@ def _policy_bundle_rule_reason(rule: dict[str, object], rule_id: str) -> str:
     reason = non_empty_string(rule.get("reason")) or f"Matched Guard Cloud rule {rule_id}."
     source_metadata = _policy_bundle_rule_source_metadata(rule)
     diagnostic_ids = [
-        f"{key}={value}"
-        for key, value in source_metadata.items()
-        if isinstance(value, str) and key != "ruleId"
+        f"{key}={value}" for key, value in source_metadata.items() if isinstance(value, str) and key != "ruleId"
     ]
     if diagnostic_ids:
         return f"{reason} ({'; '.join(diagnostic_ids)})"

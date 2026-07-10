@@ -271,9 +271,7 @@ def _local_request_snapshot_items_for_status(
             "resolvedAt": str(resolved_at) if isinstance(resolved_at, str) and resolved_at else None,
         }
         snapshot_item.update(routing)
-        items.append(
-            snapshot_item
-        )
+        items.append(snapshot_item)
     if cursor_supported and use_cursor:
         if len(rows) > limit:
             cursor_state[status] = _local_request_snapshot_next_cursor(rows, limit)
