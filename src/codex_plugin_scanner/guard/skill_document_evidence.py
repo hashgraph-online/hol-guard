@@ -247,8 +247,22 @@ def _is_negative_context(value: str) -> bool:
 
 
 def _is_inside_prose_quote(value: str, offset: int) -> bool:
-    prefix = value[:offset]
-    return prefix.count('"') % 2 == 1 or prefix.count("'") % 2 == 1
+    double_open = False
+    single_open = False
+    for index, character in enumerate(value[:offset]):
+        if index > 0 and value[index - 1] == "\\":
+            continue
+        if character == '"' and not single_open:
+            double_open = not double_open
+            continue
+        if character != "'" or double_open:
+            continue
+        previous = value[index - 1] if index > 0 else ""
+        following = value[index + 1] if index + 1 < len(value) else ""
+        if previous.isalnum() and following.isalnum():
+            continue
+        single_open = not single_open
+    return double_open or single_open
 
 
 def _is_remote_url(value: str) -> bool:
