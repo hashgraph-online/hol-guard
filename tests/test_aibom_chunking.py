@@ -45,9 +45,9 @@ def _make_item(item_id: str) -> dict:
         "displayName": item_id,
         "contentHash": f"hash-{item_id}",
         "sourceFingerprint": f"fp-{item_id}",
-        "riskLevel": "unknown",
+        "riskLevel": "info",
         "securityScore": 100,
-        "driftState": "current",
+        "driftState": "unchanged",
         "metadata": {},
         "capabilityCategories": [],
         "scannerSources": [],
@@ -55,12 +55,16 @@ def _make_item(item_id: str) -> dict:
 
 
 class TestBatchInventoryEvents:
-    def test_486_item_snapshot_remains_atomic(self) -> None:
+    def test_large_486_item_snapshot_remains_atomic(self) -> None:
         items = [_make_item(f"item-{i}") for i in range(486)]
+        for item in items:
+            item["metadata"]["contentSummary"] = "x" * 11_300
         event = _make_event("hermes:snapshot:test", items)
+        request_size = len(_inventory_events_request_body([event]))
 
         batches, oversized = _batch_inventory_events([event])
 
+        assert 5_500_000 < request_size < _AIBOM_MAX_REQUEST_BODY_BYTES
         assert batches == [[event]]
         assert oversized == []
         snapshot = batches[0][0]["payload"]["snapshot"]
