@@ -424,22 +424,48 @@ def _maybe_auto_update(store: GuardStore, context: HarnessContext) -> None:
     maybe_auto_update(store, context)
 
 
+def _with_live_sync_identity(
+    store: GuardStore,
+    auth_context: dict[str, object],
+) -> dict[str, object]:
+    machine_id, workspace_id = _oauth_metadata(store)
+    return {
+        **auth_context,
+        "machine_id": machine_id,
+        "workspace_id": workspace_id,
+        "machine_installation_id": store.get_or_create_installation_id(),
+    }
+
+
+def _resolve_guard_sync_auth_for_commands(
+    store: GuardStore,
+    *,
+    force_refresh: bool,
+) -> dict[str, object]:
+    if force_refresh:
+        return _resolve_guard_sync_auth_context(store, force_refresh=True)
+    return _resolve_guard_sync_auth_context(store)
+
+
 def _resolve_command_queue_auth_context(
     store: GuardStore,
     *,
     force_refresh: bool = False,
 ) -> dict[str, object]:
     try:
-        if force_refresh:
-            return _resolve_guard_sync_auth_context(store, force_refresh=True)
-        return _resolve_guard_sync_auth_context(store)
+        auth_context = _resolve_guard_sync_auth_for_commands(
+            store,
+            force_refresh=force_refresh,
+        )
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError):
         repair = _repair_guard_cloud_authorization(store)
-        if repair["existing_sign_in_valid"] or repair["repaired_storage"]:
-            if force_refresh:
-                return _resolve_guard_sync_auth_context(store, force_refresh=True)
-            return _resolve_guard_sync_auth_context(store)
-        raise
+        if not repair["existing_sign_in_valid"] and not repair["repaired_storage"]:
+            raise
+        auth_context = _resolve_guard_sync_auth_for_commands(
+            store,
+            force_refresh=force_refresh,
+        )
+    return _with_live_sync_identity(store, auth_context)
 
 
 def _sync_live_requests_best_effort(store: GuardStore, auth_context: dict[str, object]) -> None:

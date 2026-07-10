@@ -123,6 +123,31 @@ class FakeStore:
         return []
 
 
+def test_command_queue_auth_context_includes_live_sync_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    monkeypatch.setattr(
+        command_queue,
+        "_resolve_guard_sync_auth_context",
+        lambda _store, *, force_refresh=False: {
+            "access_token": "token-1",
+            "sync_url": "https://hol.test/api/guard/receipts/sync",
+        },
+    )
+
+    auth_context = command_queue._resolve_command_queue_auth_context(store)
+
+    assert auth_context == {
+        "access_token": "token-1",
+        "machine_id": "machine-1",
+        "machine_installation_id": "22222222-2222-4222-8222-222222222222",
+        "sync_url": "https://hol.test/api/guard/receipts/sync",
+        "workspace_id": "workspace-1",
+    }
+
+
 def _approval_request_row(
     request_id: str,
     *,
