@@ -13,6 +13,7 @@ event transport — no new outbox table or auth path.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from typing import Literal
@@ -189,7 +190,7 @@ def build_memory_decision_event(
         machine_id=machine_id,
         machine_installation_id=machine_installation_id,
         harness_id=harness,
-        project_id=_project_identity(request),
+        project_id=_request_project_identity(request),
         request_id=request_id,
         queue_group_id=_string_or_none(request.get("queue_group_id")),
         action_identity=_string_or_none(request.get("action_identity")),
@@ -239,10 +240,18 @@ def _string_or_none(value: object) -> str | None:
 
 
 def _mapping_or_none(value: object) -> Mapping[str, object] | None:
-    return value if isinstance(value, Mapping) else None
+    if isinstance(value, Mapping):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, Mapping) else None
 
 
-def _project_identity(request: Mapping[str, object]) -> str | None:
+def _request_project_identity(request: Mapping[str, object]) -> str | None:
     for key in ("project_id", "projectId", "workspace_path", "workspacePath"):
         value = _string_or_none(request.get(key))
         if value is not None:

@@ -83,6 +83,7 @@ from ..cloud_exception_requests import (
     submit_cloud_exception_request,
 )
 from ..codex_resume import (
+    ResumeNotSupportedError,
     defer_request_resume_to_live_hook,
     get_request_resume_status,
     retry_request_resume,
@@ -99,7 +100,7 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
-from ..harness_resume import resume_harness_operation
+from ..harness_resume import resume_harness_operation, safe_resume_metadata
 from ..insights_share import publish_insights_share
 from ..local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE, build_local_dashboard_session_token
 from ..local_supply_chain import (
@@ -4134,34 +4135,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         updated["harnessResume"] = harness_resume
         return updated
 
-    def _safe_resume_metadata(self, resume: dict[str, object]) -> dict[str, object]:
-        safe: dict[str, object] = {}
-        for source_key, target_key in (
-            ("operationId", "operationId"),
-            ("harness", "harness"),
-            ("status", "status"),
-            ("action", "action"),
-            ("resolution_action", "resolutionAction"),
-            ("reason", "reason"),
-            ("message", "message"),
-            ("strategy", "strategy"),
-            ("supported", "supported"),
-            ("attempt_count", "attemptCount"),
-            ("attemptCount", "attemptCount"),
-            ("last_attempt_at", "lastAttemptAt"),
-            ("lastAttemptAt", "lastAttemptAt"),
-            ("sent_at", "sentAt"),
-            ("sentAt", "sentAt"),
-            ("completedAt", "completedAt"),
-            ("completed_at", "completedAt"),
-        ):
-            value = resume.get(source_key)
-            if isinstance(value, str) and value.strip():
-                safe[target_key] = value.strip()
-            elif isinstance(value, (int, float, bool)):
-                safe[target_key] = value
-        return safe
-
     def _codex_resume_after_remote_once(
         self,
         *,
@@ -4181,14 +4154,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     request_id=request_id,
                     now=_now(),
                 )
-            return self._safe_resume_metadata(codex_resume)
+            return safe_resume_metadata(codex_resume)
+        except ResumeNotSupportedError:
+            return {
+                "status": "skipped",
+                "reason": "resume_not_supported",
+                "message": "This Codex request does not expose a supported resume target.",
+            }
         except ValueError as error:
-            if str(error) == "resume_not_supported":
-                return {
-                    "status": "skipped",
-                    "reason": "resume_not_supported",
-                    "message": "This Codex request does not expose a supported resume target.",
-                }
             return {
                 "status": "failed",
                 "reason": str(error) or "resume_failed",

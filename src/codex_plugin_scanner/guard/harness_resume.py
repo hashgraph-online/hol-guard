@@ -9,6 +9,40 @@ from .adapters.contracts import contract_for
 from .store import GuardStore
 
 
+def safe_resume_metadata(resume: Mapping[str, object]) -> dict[str, object]:
+    """Return the public, normalized subset of harness resume metadata."""
+
+    safe: dict[str, object] = {}
+    for source_key, target_key in (
+        ("operationId", "operationId"),
+        ("operation_id", "operationId"),
+        ("harness", "harness"),
+        ("requestId", "requestId"),
+        ("request_id", "requestId"),
+        ("status", "status"),
+        ("reason", "reason"),
+        ("message", "message"),
+        ("attempt_count", "attemptCount"),
+        ("attemptCount", "attemptCount"),
+        ("last_attempt_at", "lastAttemptAt"),
+        ("lastAttemptAt", "lastAttemptAt"),
+        ("sent_at", "sentAt"),
+        ("sentAt", "sentAt"),
+        ("completedAt", "completedAt"),
+        ("completed_at", "completedAt"),
+        ("resolution_action", "resolutionAction"),
+        ("resolutionAction", "resolutionAction"),
+        ("strategy", "strategy"),
+        ("supported", "supported"),
+    ):
+        value = resume.get(source_key)
+        if isinstance(value, str) and value.strip():
+            safe[target_key] = value.strip()
+        elif isinstance(value, (int, float, bool)):
+            safe[target_key] = value
+    return safe
+
+
 def resume_harness_operation(
     store: GuardStore,
     *,

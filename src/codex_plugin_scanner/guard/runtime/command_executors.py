@@ -20,9 +20,9 @@ from ..cli.update_commands import (
     build_guard_update_status_payload,
     run_guard_update,
 )
-from ..codex_resume import defer_request_resume_to_live_hook, retry_request_resume
+from ..codex_resume import ResumeNotSupportedError, defer_request_resume_to_live_hook, retry_request_resume
 from ..config import load_guard_config
-from ..harness_resume import resume_harness_operation
+from ..harness_resume import resume_harness_operation, safe_resume_metadata
 from ..local_supply_chain import (
     build_workspace_audit_payload,
     managed_install_audit_workspace_dirs,
@@ -535,7 +535,7 @@ def _resume_after_remote_approval(
         codex_resume = _resume_codex_request(store=store, request_id=request_id, action=action, now=now)
         if codex_resume is None:
             return {}
-        safe = _safe_resume_metadata(codex_resume)
+        safe = safe_resume_metadata(codex_resume)
         payload: dict[str, object] = {
             "codexResume": safe,
             "codex_resume": safe,
@@ -548,7 +548,7 @@ def _resume_after_remote_approval(
     harness_resume = resume_harness_operation(store, request_id=request_id, action=action, now=now)
     if harness_resume is None:
         return {}
-    safe_harness_resume = _safe_resume_metadata(harness_resume)
+    safe_harness_resume = safe_resume_metadata(harness_resume)
     payload = {
         "harnessResume": safe_harness_resume,
         "harness_resume": safe_harness_resume,
@@ -581,44 +581,18 @@ def _resume_codex_request(
                 now=now,
             )
         return codex_resume
+    except ResumeNotSupportedError:
+        return {
+            "status": "skipped",
+            "reason": "resume_not_supported",
+            "message": "This Codex request does not expose a supported resume target.",
+        }
     except ValueError as error:
-        if str(error) == "resume_not_supported":
-            return {
-                "status": "skipped",
-                "reason": "resume_not_supported",
-                "message": "This Codex request does not expose a supported resume target.",
-            }
         return {
             "status": "failed",
             "reason": str(error) or "resume_failed",
             "message": "HOL Guard could not resume the Codex request after applying the remote decision.",
         }
-
-
-def _safe_resume_metadata(resume: dict[str, object]) -> dict[str, object]:
-    safe: dict[str, object] = {}
-    for source_key, target_key in (
-        ("operationId", "operationId"),
-        ("harness", "harness"),
-        ("status", "status"),
-        ("action", "action"),
-        ("reason", "reason"),
-        ("message", "message"),
-        ("attempt_count", "attemptCount"),
-        ("attemptCount", "attemptCount"),
-        ("last_attempt_at", "lastAttemptAt"),
-        ("lastAttemptAt", "lastAttemptAt"),
-        ("sent_at", "sentAt"),
-        ("sentAt", "sentAt"),
-        ("completedAt", "completedAt"),
-        ("completed_at", "completedAt"),
-    ):
-        value = resume.get(source_key)
-        if isinstance(value, str) and value.strip():
-            safe[target_key] = value.strip()
-        elif isinstance(value, (int, float, bool)):
-            safe[target_key] = value
-    return safe
 
 
 def _execute_policy_sync(

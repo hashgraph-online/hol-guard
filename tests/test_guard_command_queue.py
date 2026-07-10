@@ -1628,7 +1628,16 @@ def test_poll_once_clears_active_job_for_malformed_pending_result(tmp_path: Path
     assert calls == ["/lease"]
 
 
-def test_command_queue_loop_immediately_renews_after_empty_long_poll(tmp_path: Path, monkeypatch) -> None:
+def test_command_queue_loop_empty_long_poll_returns_positive_bounded_backoff(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Long-poll empty responses must use bounded positive backoff, not zero-delay.
+
+    Verifies the fix for the immediate-empty long-poll spin bug: when long-poll
+    is enabled and every poll returns empty, the loop must wait with a positive
+    backoff that is non-decreasing (bounded exponential growth), not spin at 0s.
+    """
     store = FakeStore(tmp_path / "guard-home")
     waits: list[float] = []
 
@@ -1656,7 +1665,10 @@ def test_command_queue_loop_immediately_renews_after_empty_long_poll(tmp_path: P
         stop_event=StopAfterThreeWaits(),
     )
 
-    assert waits == [0, 0, 0]
+    # Each wait must be strictly positive (no zero-delay spin).
+    assert all(w > 0 for w in waits), f"Long-poll empty responses caused zero-delay spin: {waits}"
+    # Backoff must be non-decreasing (bounded exponential growth).
+    assert waits == sorted(waits), f"Backoff must not decrease: {waits}"
 
 
 def test_command_queue_loop_backs_off_after_empty_short_poll_when_wait_disabled(

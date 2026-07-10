@@ -159,3 +159,93 @@ def test_pi_hook_response_includes_resume_poll_metadata_for_pending_approval() -
         "approval_url": "http://127.0.0.1:5474/requests/req-pi",
         "approval_center_url": "http://127.0.0.1:5474",
     }
+
+
+class TestSafeResumeMetadata:
+    """3 tests: union normalization, unsafe/blank dropping, merge precedence."""
+
+    @staticmethod
+    def _run(resume: dict[str, object]) -> dict[str, object]:
+        from codex_plugin_scanner.guard.harness_resume import safe_resume_metadata
+
+        return safe_resume_metadata(resume)
+
+    def test_normalization_union_all_safe_fields(self) -> None:
+        """All safe fields map to targets; resolutionAction/strategy/supported included."""
+        data = {
+            "operation_id": "op-1",
+            "harness": "pi",
+            "request_id": "req-1",
+            "status": "done",
+            "resolution_action": "approve",
+            "reason": "safe",
+            "message": "ok",
+            "attempt_count": 3,
+            "last_attempt_at": "2026-01-01T00:00:00Z",
+            "sent_at": "2026-01-02T00:00:00Z",
+            "completed_at": "2026-01-03T00:00:00Z",
+            "strategy": "manual",
+            "supported": True,
+        }
+        result = self._run(data)
+        assert result == {
+            "operationId": "op-1",
+            "harness": "pi",
+            "requestId": "req-1",
+            "status": "done",
+            "resolutionAction": "approve",
+            "reason": "safe",
+            "message": "ok",
+            "attemptCount": 3,
+            "lastAttemptAt": "2026-01-01T00:00:00Z",
+            "sentAt": "2026-01-02T00:00:00Z",
+            "completedAt": "2026-01-03T00:00:00Z",
+            "strategy": "manual",
+            "supported": True,
+        }
+
+    def test_unknown_and_blank_are_dropped(self) -> None:
+        """Arbitrary unsafe keys dropped; blank strings excluded."""
+        result = self._run(
+            {
+                "status": "done",
+                "resolutionAction": "approve",
+                "internal_token": "secret",
+                "debug_stacktrace": "Traceback …",
+                "confidence_score": 0.99,
+                "message": "",
+                "reason": "  ",
+            }
+        )
+        assert result == {"status": "done", "resolutionAction": "approve"}
+
+    def test_merge_precedence_is_last_in_tuple_wins(self) -> None:
+        """Each snake/camel pair: later entry in the mapping tuple overwrites."""
+        result = self._run(
+            {
+                "operation_id": "s",
+                "operationId": "c",
+                "request_id": "s",
+                "requestId": "c",
+                "attempt_count": "s",
+                "attemptCount": "c",
+                "last_attempt_at": "s",
+                "lastAttemptAt": "c",
+                "sent_at": "s",
+                "sentAt": "c",
+                "completed_at": "s",
+                "completedAt": "c",
+                "resolution_action": "s",
+                "resolutionAction": "c",
+            }
+        )
+        for key, expected in {
+            "operationId": "s",
+            "requestId": "s",
+            "completedAt": "s",  # snake last in tuple
+            "attemptCount": "c",
+            "lastAttemptAt": "c",
+            "sentAt": "c",
+            "resolutionAction": "c",  # camel last
+        }.items():
+            assert result[key] == expected, f"{key} expected {expected!r}, got {result[key]!r}"
