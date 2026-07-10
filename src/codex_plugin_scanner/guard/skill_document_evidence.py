@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import os
 import re
 import stat
@@ -259,6 +260,8 @@ def _is_inside_prose_quote(value: str, offset: int) -> bool:
             continue
         previous = value[index - 1] if index > 0 else ""
         following = value[index + 1] if index + 1 < len(value) else ""
+        if previous.isalnum() and following.isalnum():
+            continue
         if previous.isalnum():
             if single_open:
                 single_open = False
@@ -275,8 +278,14 @@ def _is_remote_url(value: str) -> bool:
         return False
     if not host:
         return False
-    normalized = host.casefold().rstrip(".")
-    return normalized not in {"localhost", "127.0.0.1", "0.0.0.0", "::1"} and not normalized.endswith(".localhost")
+    normalized = host.casefold().strip("[]").rstrip(".")
+    if normalized == "localhost" or normalized.endswith(".localhost"):
+        return False
+    try:
+        address = ipaddress.ip_address(normalized)
+    except ValueError:
+        return True
+    return not address.is_loopback and not address.is_unspecified
 
 
 def _network_capability(evidence_code: str) -> dict[str, str]:

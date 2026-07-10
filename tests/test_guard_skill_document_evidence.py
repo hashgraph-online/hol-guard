@@ -73,6 +73,7 @@ def test_explicit_remote_behavior_adds_documented_capability(
         "Counterexample: fetch('https://api.example.test/v1/data')\n",
         "fetch('http://localhost:8000/test')\n",
         "Use a connection-aware layout and test browser network throttling.\n",
+        'fetch("' + "https" + "://[" + chr(58) * 2 + '1]:8080/endpoint")\n',
         "Queries supported by the API are listed below.\n",
         "## Do not make network requests\n```sh\ncurl https://api.example.test/v1/data\n```\n",
         "> curl https://api.example.test/v1/reference\n",
@@ -80,6 +81,7 @@ def test_explicit_remote_behavior_adds_documented_capability(
         'Example: "This skill calls the remote API."\n',
         'The phrase "This skill calls the remote API" is a sample, not a capability.\n',
         "The sample says \"fetch('https://api.example.test/v1/data')\".\n",
+        "'The client won't call requests.get(\"https://api.example.test/v1/data\")'\n",
         "Example: curl https://api.example.test/v1/data\n",
     ),
 )
