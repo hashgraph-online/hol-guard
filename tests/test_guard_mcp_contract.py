@@ -60,8 +60,16 @@ class TestMCPServerInitialization:
         """Only read-only tools are registered."""
         tools = server.list_tools()
         forbidden = {
-            "approve", "deny", "sync", "upload", "delete", "revoke",
-            "checkout", "admin", "shell", "exec",
+            "approve",
+            "deny",
+            "sync",
+            "upload",
+            "delete",
+            "revoke",
+            "checkout",
+            "admin",
+            "shell",
+            "exec",
         }
         names = {t.name for t in tools}
         assert not (names & forbidden), f"Forbidden tools found: {names & forbidden}"

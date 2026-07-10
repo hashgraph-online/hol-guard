@@ -53,10 +53,7 @@ _TOOL_DEFINITIONS = [
     },
     {
         "name": "get_guard_status",
-        "description": (
-            "Report whether local Guard data is available and how fresh "
-            "it is. Takes no input."
-        ),
+        "description": ("Report whether local Guard data is available and how fresh it is. Takes no input."),
         "inputSchema": {
             "type": "object",
             "properties": {},
@@ -128,6 +125,7 @@ class GuardMCPServer:
     def run_stdio(self) -> int:
         """Run the MCP server over stdio transport."""
         from mcp.server.fastmcp import FastMCP
+
         mcp = FastMCP("hol-guard")
         annotations = _create_annotations()
 

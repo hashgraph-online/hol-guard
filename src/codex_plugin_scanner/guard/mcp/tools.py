@@ -38,10 +38,12 @@ def execute_search(store: GuardStore, query: str) -> str:
     inventory_results = search_inventory(store, query)
     all_results = receipt_results + inventory_results
     sanitized = [sanitize_search_result(r) for r in all_results[:DEFAULT_SEARCH_LIMIT]]
-    return _envelope({
-        "results": sanitized,
-        "count": len(sanitized),
-    })
+    return _envelope(
+        {
+            "results": sanitized,
+            "count": len(sanitized),
+        }
+    )
 
 
 def execute_fetch(store: GuardStore, item_id: str) -> str:
@@ -51,24 +53,30 @@ def execute_fetch(store: GuardStore, item_id: str) -> str:
     elif item_id.startswith("inventory:") or item_id.startswith(("artifact:", "device:")):
         result = fetch_inventory(store, item_id)
     if result is None:
-        return _envelope({
-            "found": False,
-            "id": item_id,
-            "text": None,
-        })
+        return _envelope(
+            {
+                "found": False,
+                "id": item_id,
+                "text": None,
+            }
+        )
     sanitized = sanitize_fetch_result(result)
     if len(str(sanitized.get("text", ""))) > MAX_FETCH_TEXT_BYTES:
         sanitized["text"] = str(sanitized["text"])[:MAX_FETCH_TEXT_BYTES]
         sanitized["truncated"] = True
-    return _envelope({
-        "found": True,
-        **sanitized,
-    })
+    return _envelope(
+        {
+            "found": True,
+            **sanitized,
+        }
+    )
 
 
 def execute_get_guard_status(store: GuardStore) -> str:
     raw = get_status(store)
     sanitized = sanitize_status_result(raw)
-    return _envelope({
-        **sanitized,
-    })
+    return _envelope(
+        {
+            **sanitized,
+        }
+    )

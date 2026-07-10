@@ -81,14 +81,10 @@ def sanitize_status_result(raw: dict[str, object]) -> dict[str, object]:
 
     allowed["cliAvailable"] = bool(raw.get("cliAvailable", True))
     allowed["receiptCount"] = (
-        int(raw.get("receiptCount", 0))
-        if isinstance(raw.get("receiptCount"), (int, float))
-        else 0
+        int(raw.get("receiptCount", 0)) if isinstance(raw.get("receiptCount"), (int, float)) else 0
     )
     allowed["inventoryCount"] = (
-        int(raw.get("inventoryCount", 0))
-        if isinstance(raw.get("inventoryCount"), (int, float))
-        else 0
+        int(raw.get("inventoryCount", 0)) if isinstance(raw.get("inventoryCount"), (int, float)) else 0
     )
 
     version = _normalize_text(raw.get("cliVersion"), _MAX_FIELD_LENGTH)

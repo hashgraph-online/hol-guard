@@ -177,7 +177,11 @@ class TestOutputAllowlist:
         data = json.loads(text)
 
         allowed_result_fields = {
-            "id", "title", "kind", "harness", "decision",
+            "id",
+            "title",
+            "kind",
+            "harness",
+            "decision",
             "changedSinceLastApproval",
         }
 
@@ -350,9 +354,23 @@ class TestNoWriteTools:
         tools = server.list_tools()
         names = {t.name for t in tools}
         forbidden = {
-            "approve", "deny", "sync", "upload", "delete", "revoke",
-            "checkout", "admin", "shell", "exec", "write", "put",
-            "post", "patch", "remove", "destroy", "grant",
+            "approve",
+            "deny",
+            "sync",
+            "upload",
+            "delete",
+            "revoke",
+            "checkout",
+            "admin",
+            "shell",
+            "exec",
+            "write",
+            "put",
+            "post",
+            "patch",
+            "remove",
+            "destroy",
+            "grant",
         }
         assert not (names & forbidden), f"Forbidden tools found: {names & forbidden}"
 
