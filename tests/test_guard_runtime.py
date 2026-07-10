@@ -18216,6 +18216,73 @@ def test_policy_bundle_decisions_map_to_runtime_families(tmp_path):
     assert store.resolve_policy("codex", "codex:project:tool-action:abc", "hash") == "block"
 
 
+def test_policy_bundle_exact_artifact_rules_apply_with_workspace_scope(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    workspace_a = str(tmp_path / "workspace-a")
+    workspace_b = str(tmp_path / "workspace-b")
+    allow_artifact = "codex:project:tool-action:deploy-prod"
+    block_artifact = "codex:project:file-read:secret-env"
+    bundle = {
+        "bundleVersion": "policy-2026-06-05.9",
+        "expiresAt": "2026-12-01T00:00:00+00:00",
+        "rules": [
+            {
+                "ruleId": "memory-allow-deploy",
+                "action": "allow",
+                "reason": "Approved Suggested Memory for this deploy command.",
+                "matcher": {"artifactId": allow_artifact},
+                "scope": {
+                    "agents": [],
+                    "devices": [],
+                    "environments": ["development"],
+                    "harnesses": ["codex"],
+                    "locations": [workspace_a],
+                },
+                "sourceDecisionId": "decision-allow",
+                "sourceSuggestionId": "suggestion-allow",
+            },
+            {
+                "ruleId": "memory-block-secret",
+                "action": "block",
+                "reason": "Blocked Suggested Memory for secret reads.",
+                "matcher": {"artifact_id": block_artifact},
+                "scope": {
+                    "agents": [],
+                    "devices": [],
+                    "environments": ["development"],
+                    "harnesses": ["codex"],
+                    "locations": [workspace_a],
+                },
+                "expiresAt": "2026-10-01T00:00:00+00:00",
+                "sourceDecisionId": "decision-block",
+                "sourceSuggestionId": "suggestion-block",
+            },
+        ],
+    }
+
+    decisions = guard_runner_module._build_policy_bundle_decisions(
+        bundle,
+        device_id=guard_runner_module._guard_device_metadata(store)[0],
+        device_name="MacBook Pro",
+    )
+    store.replace_remote_policies(decisions, "2026-06-05T13:31:00+00:00", remote_write_authorized=True)
+
+    assert store.resolve_policy("codex", allow_artifact, "hash", workspace=workspace_a) == "allow"
+    assert store.resolve_policy("codex", block_artifact, "hash", workspace=workspace_a) == "block"
+    assert store.resolve_policy("codex", "codex:project:tool-action:other", "hash", workspace=workspace_a) is None
+    assert store.resolve_policy("codex", allow_artifact, "hash", workspace=workspace_b) is None
+    exact_decisions = [item for item in store.list_policy_decisions() if item["source"] == "policy-bundle"]
+    assert {item["scope"] for item in exact_decisions} == {"workspace"}
+    stored_workspaces = {item["workspace"] for item in exact_decisions}
+    assert len(stored_workspaces) == 1
+    assert next(iter(stored_workspaces)).startswith("workspace:")
+    assert {item["artifact_id"] for item in exact_decisions} == {allow_artifact, block_artifact}
+    assert {item["expires_at"] for item in exact_decisions} == {
+        "2026-12-01T00:00:00+00:00",
+        "2026-10-01T00:00:00+00:00",
+    }
+
+
 def test_simulate_policy_bundle_receipts_replays_recent_receipts_without_enforcing(tmp_path):
     store = GuardStore(tmp_path / "guard-home")
     store.add_receipt(

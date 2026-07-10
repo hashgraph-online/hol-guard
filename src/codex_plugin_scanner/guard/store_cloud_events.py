@@ -183,6 +183,41 @@ class StoreCloudEventsMixin:
                 bundle_version=bundle_version,
             )
 
+    def reserve_sync_sequence(
+        self,
+        state_key: str,
+        field: str,
+        now: str,
+        *,
+        floor: int = 0,
+    ) -> int:
+        with self._connect() as connection:
+            connection.execute("begin immediate")
+            row = connection.execute(
+                "select payload_json from sync_state where state_key = ?",
+                (state_key,),
+            ).fetchone()
+            payload: dict[str, object] = {}
+            if row is not None:
+                decoded = json.loads(str(row["payload_json"]))
+                if isinstance(decoded, dict):
+                    payload = decoded
+            current = payload.get(field, 0)
+            current_sequence = current if isinstance(current, int) and not isinstance(current, bool) else 0
+            sequence = max(current_sequence, floor) + 1
+            payload[field] = sequence
+            connection.execute(
+                """
+                insert into sync_state (state_key, payload_json, updated_at)
+                values (?, ?, ?)
+                on conflict(state_key) do update set
+                  payload_json = excluded.payload_json,
+                  updated_at = excluded.updated_at
+                """,
+                (state_key, json.dumps(payload), now),
+            )
+            return sequence
+
     def set_sync_payload(self, state_key: str, payload: Mapping[str, object] | Sequence[object], now: str) -> None:
         if state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY or state_key.startswith(
             _OAUTH_LOCAL_CREDENTIALS_STATE_KEY + ":"

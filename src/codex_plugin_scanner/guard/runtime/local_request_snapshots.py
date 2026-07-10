@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import base64
 import json
+from collections.abc import Mapping, Sequence
+from contextlib import suppress
 from datetime import datetime, timezone
 
 from ..config import VALID_RECEIPT_REDACTION_LEVELS, load_guard_config
@@ -51,10 +53,15 @@ def local_request_snapshot_payload(store: GuardStore) -> dict[str, object]:
         status="resolved",
         limit=LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT,
     )
+    request_max_bytes = _local_request_snapshot_request_max_bytes(
+        pending_count=len(pending_items),
+        resolved_count=len(resolved_items),
+        max_bytes=LOCAL_REQUEST_SNAPSHOT_MAX_BYTES,
+    )
     requests, pending_byte_complete, resolved_byte_complete = _local_request_snapshot_byte_capped_statuses(
         pending_items,
         resolved_items,
-        max_bytes=LOCAL_REQUEST_SNAPSHOT_MAX_BYTES,
+        max_bytes=request_max_bytes,
     )
     return {
         "requests": requests,
@@ -66,6 +73,29 @@ def local_request_snapshot_payload(store: GuardStore) -> dict[str, object]:
         "resolvedCount": len(resolved_items),
         "maxBytes": LOCAL_REQUEST_SNAPSHOT_MAX_BYTES,
     }
+
+
+def _local_request_snapshot_request_max_bytes(
+    *,
+    pending_count: int,
+    resolved_count: int,
+    max_bytes: int,
+) -> int:
+    """Return the request-list budget after exact payload metadata overhead."""
+    envelope = {
+        "requests": [],
+        "pendingComplete": False,
+        "resolvedComplete": False,
+        "pendingLimit": LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT,
+        "resolvedLimit": LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT,
+        "pendingCount": pending_count,
+        "resolvedCount": resolved_count,
+        "maxBytes": max_bytes,
+    }
+    envelope_bytes = len(json.dumps(envelope, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+    empty_requests_bytes = len(json.dumps({"requests": []}, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+    metadata_bytes = max(0, envelope_bytes - empty_requests_bytes)
+    return max(1, max_bytes - metadata_bytes)
 
 
 def _local_request_snapshot_byte_capped_statuses(
@@ -137,9 +167,18 @@ def _compact_local_request_snapshot_item(item: dict[str, object]) -> dict[str, o
         "artifactType",
         "policyAction",
         "recommendedScope",
+        "local_request_id",
         "rawCommandText",
+        "raw_command_text",
+        "commandText",
+        "command_text",
         "reviewCommand",
         "actionEnvelope",
+        "action_envelope_json",
+        "envelopeRedacted",
+        "envelope_redacted",
+        "redactionEnabled",
+        "redaction_enabled",
     )
     reduced = {key: compact[key] for key in safe_keys if key in compact}
     if reduced:
@@ -171,6 +210,7 @@ def _local_request_snapshot_items_for_status(
         oauth = guard_review_oauth_metadata(store)
     except GuardReviewContractError:
         oauth = None
+    routing_base = _local_request_snapshot_routing_base(store, oauth)
     cursor_state = _local_request_snapshot_cursor_state(store)
     use_cursor = status != "pending"
     cursor = cursor_state.get(status) if use_cursor else None
@@ -200,6 +240,12 @@ def _local_request_snapshot_items_for_status(
         created_at = str(item.get("created_at") or _now())
         last_seen_at = str(item.get("last_seen_at") or created_at)
         resolved_at = item.get("resolved_at")
+        routing = _local_request_snapshot_routing_metadata(
+            item,
+            routing_base=routing_base,
+            request_id=request_id,
+            last_seen_at=last_seen_at,
+        )
         claim = None
         if oauth is not None:
             try:
@@ -210,21 +256,22 @@ def _local_request_snapshot_items_for_status(
                 )
             except GuardReviewContractError:
                 claim = None
-        items.append(
-            {
-                "claim": claim,
-                "localRequestId": request_id,
-                "requestKind": str(item.get("harness") or "guard-review"),
-                "requestPayload": _cloud_safe_local_request_payload(
-                    item,
-                    redaction_level=redaction_level,
-                ),
-                "localStatus": str(item.get("status") or status),
-                "firstSeenAt": created_at,
-                "lastSeenAt": last_seen_at,
-                "resolvedAt": str(resolved_at) if isinstance(resolved_at, str) and resolved_at else None,
-            }
-        )
+        snapshot_item: dict[str, object] = {
+            "claim": claim,
+            "localRequestId": request_id,
+            "requestKind": str(item.get("harness") or "guard-review"),
+            "requestPayload": _cloud_safe_local_request_payload(
+                item,
+                redaction_level=redaction_level,
+                routing_metadata=routing,
+            ),
+            "localStatus": str(item.get("status") or status),
+            "firstSeenAt": created_at,
+            "lastSeenAt": last_seen_at,
+            "resolvedAt": str(resolved_at) if isinstance(resolved_at, str) and resolved_at else None,
+        }
+        snapshot_item.update(routing)
+        items.append(snapshot_item)
     if cursor_supported and use_cursor:
         if len(rows) > limit:
             cursor_state[status] = _local_request_snapshot_next_cursor(rows, limit)
@@ -308,14 +355,102 @@ def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
     return "full"
 
 
+def _optional_string(value: object) -> str | None:
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _first_optional_string(mapping: Mapping[str, object], keys: Sequence[str]) -> str | None:
+    for key in keys:
+        value = _optional_string(mapping.get(key))
+        if value is not None:
+            return value
+    return None
+
+
 def _optional_payload_mapping(value: object) -> dict[str, object] | None:
-    return dict(value) if isinstance(value, dict) else None
+    if isinstance(value, Mapping):
+        return {str(key): item for key, item in value.items() if isinstance(key, str)}
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except (TypeError, ValueError):
+            return {
+                "action_type": "unknown",
+                "operation": "parse_action_envelope",
+                "malformed": True,
+                "reason": "invalid_action_envelope",
+            }
+        if isinstance(parsed, Mapping):
+            return {str(key): item for key, item in parsed.items() if isinstance(key, str)}
+        return {
+            "action_type": "unknown",
+            "operation": "parse_action_envelope",
+            "malformed": True,
+            "reason": "non_object_action_envelope",
+        }
+    return None
+
+
+def _local_request_snapshot_routing_base(
+    store: GuardStore,
+    oauth: object | None,
+) -> dict[str, object]:
+    metadata: dict[str, object] = {}
+    if oauth is not None:
+        for snake_key, camel_key, value in (
+            ("workspace_id", "workspaceId", getattr(oauth, "workspace_id", None)),
+            ("machine_installation_id", "machineInstallationId", getattr(oauth, "installation_id", None)),
+            ("grant_id", "grantId", getattr(oauth, "grant_id", None)),
+            ("runtime_grant_id", "runtimeGrantId", getattr(oauth, "runtime_id", None)),
+        ):
+            _set_dual_key(metadata, snake_key, camel_key, value)
+        return metadata
+
+    credentials = None
+    try:
+        credentials = store.get_oauth_local_credentials(allow_primary=False)
+    except Exception:
+        credentials = None
+    if isinstance(credentials, Mapping):
+        _set_dual_key(metadata, "workspace_id", "workspaceId", credentials.get("workspace_id"))
+        _set_dual_key(metadata, "grant_id", "grantId", credentials.get("grant_id"))
+        _set_dual_key(metadata, "runtime_grant_id", "runtimeGrantId", credentials.get("runtime_id"))
+        _set_dual_key(
+            metadata,
+            "machine_installation_id",
+            "machineInstallationId",
+            credentials.get("machine_installation_id") or credentials.get("installation_id"),
+        )
+    if "machine_installation_id" not in metadata:
+        with suppress(Exception):
+            _set_dual_key(
+                metadata,
+                "machine_installation_id",
+                "machineInstallationId",
+                store.get_or_create_installation_id(),
+            )
+    return metadata
+
+
+def _local_request_snapshot_routing_metadata(
+    item: Mapping[str, object],
+    *,
+    routing_base: Mapping[str, object],
+    request_id: str,
+    last_seen_at: str,
+) -> dict[str, object]:
+    metadata = dict(routing_base)
+    _set_dual_key(metadata, "local_request_id", "localRequestId", request_id)
+    _set_dual_key(metadata, "harness_id", "harnessId", item.get("harness") or "guard-review")
+    _set_dual_key(metadata, "request_last_seen_at", "requestLastSeenAt", last_seen_at)
+    return metadata
 
 
 def _cloud_safe_local_request_payload(
     item: dict[str, object],
     *,
     redaction_level: str,
+    routing_metadata: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     payload: dict[str, object] = {}
     for key in (
@@ -352,24 +487,55 @@ def _cloud_safe_local_request_payload(
         elif isinstance(value, (int, float, bool)) or value is None:
             payload[key] = value
 
+    if routing_metadata is not None:
+        payload.update(routing_metadata)
+
+    redaction_enabled = redaction_level != "none"
+    payload["redaction_enabled"] = redaction_enabled
+    payload["redactionEnabled"] = redaction_enabled
+
     envelope = _optional_payload_mapping(item.get("action_envelope_json"))
-    safe_envelope = _cloud_safe_action_envelope(envelope, redaction_level=redaction_level)
+    envelope_reason = _first_optional_string(
+        item,
+        ("risk_summary", "why_now", "trigger_summary", "risk_headline", "policy_action"),
+    )
+    safe_envelope = _cloud_safe_action_envelope(
+        envelope,
+        redaction_level=redaction_level,
+        reason=envelope_reason,
+    )
     if safe_envelope is not None:
         payload["action_envelope_json"] = safe_envelope
-
-    if redaction_level == "full":
-        payload["raw_command_text"] = None
-        payload["command_text"] = None
-        return payload
+        payload["actionEnvelope"] = safe_envelope
+        if redaction_enabled:
+            payload["envelope_redacted"] = safe_envelope
+            payload["envelopeRedacted"] = safe_envelope
 
     command_text = _local_request_command_text(item, envelope)
+    if redaction_enabled:
+        payload["raw_command_text"] = None
+        payload["command_text"] = None
+        payload["rawCommandText"] = None
+        payload["commandText"] = None
+        return payload
+
     if command_text:
         scrubbed = _bounded_command(redact_text(command_text).text)
         payload["raw_command_text"] = scrubbed
+        payload["rawCommandText"] = scrubbed
         payload["command_text"] = scrubbed
+        payload["commandText"] = scrubbed
         payload_envelope = payload.get("action_envelope_json")
         if isinstance(payload_envelope, dict):
             payload_envelope["command"] = scrubbed
+            action_envelope = payload.get("actionEnvelope")
+            if isinstance(action_envelope, dict):
+                action_envelope["command"] = scrubbed
+    else:
+        payload["raw_command_text"] = None
+        payload["rawCommandText"] = None
+        payload["command_text"] = None
+        payload["commandText"] = None
     return payload
 
 
@@ -391,6 +557,7 @@ def _cloud_safe_action_envelope(
     envelope: dict[str, object] | None,
     *,
     redaction_level: str,
+    reason: str | None = None,
 ) -> dict[str, object] | None:
     if envelope is None:
         return None
@@ -408,24 +575,262 @@ def _cloud_safe_action_envelope(
         "target_path_count",
         "network_host_count",
         "package_manager",
+        "malformed",
+        "reason",
     ):
         value = envelope.get(key)
         if isinstance(value, str):
             safe[key] = _bounded_text(value)
         elif isinstance(value, (int, float, bool)) or value is None:
             safe[key] = value
-    if redaction_level != "full":
+
+    action_type = _first_optional_string(envelope, ("action_type", "actionType"))
+    operation = _first_optional_string(envelope, ("operation",))
+    if action_type is not None:
+        _set_dual_key(safe, "action_type", "actionType", action_type)
+    resolved_operation = operation or _operation_for_action_type(action_type)
+    if resolved_operation is not None:
+        safe["operation"] = _bounded_text(resolved_operation)
+    _add_action_envelope_aliases(safe)
+
+    redaction_enabled = redaction_level != "none"
+    if redaction_enabled:
+        target_class = _target_class_for_action_type(action_type, envelope)
+        target_count = _target_count_for_envelope(envelope)
+        _set_dual_key(safe, "target_class", "targetClass", target_class)
+        _set_dual_key(safe, "target_count", "targetCount", target_count)
+        redacted_reason = reason or _first_optional_string(envelope, ("reason", "pre_execution_result"))
+        if redacted_reason is not None:
+            safe["reason"] = _bounded_text(redacted_reason)
+        return safe or None
+
+    if redaction_level == "none":
         command = envelope.get("command")
         if isinstance(command, str) and command.strip():
             safe["command"] = _bounded_command(redact_text(command).text)
-    if redaction_level == "none":
         for key in ("target_paths", "network_hosts", "package_name", "package_targets"):
             value = envelope.get(key)
             if isinstance(value, list):
                 safe[key] = [_bounded_text(item) for item in value if isinstance(item, str)]
             elif isinstance(value, str):
                 safe[key] = _bounded_text(value)
+        _preserve_portal_action_contract_fields(safe, envelope)
+        _add_action_envelope_aliases(safe)
     return safe or None
+
+
+def _set_dual_key(
+    payload: dict[str, object],
+    snake_key: str,
+    camel_key: str,
+    value: object,
+) -> None:
+    if isinstance(value, str):
+        if not value.strip():
+            return
+        normalized: object = _bounded_text(value.strip())
+    elif isinstance(value, (int, float, bool)):
+        normalized = value
+    elif value is None:
+        return
+    else:
+        normalized = _bounded_cloud_value(value)
+    payload[snake_key] = normalized
+    payload[camel_key] = normalized
+
+
+def _bounded_cloud_value(value: object) -> object:
+    if isinstance(value, str):
+        return _bounded_text(value)
+    if isinstance(value, Mapping):
+        return {
+            str(key): _bounded_cloud_value(item)
+            for key, item in list(value.items())[:LOCAL_REQUEST_SNAPSHOT_MAX_LIST_ITEMS]
+            if isinstance(key, str)
+        }
+    if isinstance(value, Sequence) and not isinstance(value, str):
+        return [_bounded_cloud_value(item) for item in list(value)[:LOCAL_REQUEST_SNAPSHOT_MAX_LIST_ITEMS]]
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    return _bounded_text(str(value))
+
+
+def _add_action_envelope_aliases(safe: dict[str, object]) -> None:
+    for snake_key, camel_key in (
+        ("schema_version", "schemaVersion"),
+        ("action_id", "actionId"),
+        ("action_type", "actionType"),
+        ("workspace_hash", "workspaceHash"),
+        ("tool_name", "toolName"),
+        ("mcp_server", "mcpServer"),
+        ("mcp_tool", "mcpTool"),
+        ("package_manager", "packageManager"),
+        ("package_name", "packageName"),
+        ("package_targets", "packageTargets"),
+        ("target_paths", "targetPaths"),
+        ("network_hosts", "networkHosts"),
+        ("target_resource", "targetResource"),
+        ("source_path", "sourcePath"),
+        ("skill_name", "skillName"),
+        ("requested_permission", "requestedPermission"),
+        ("access_mode", "accessMode"),
+        ("content_state", "contentState"),
+    ):
+        if snake_key in safe and camel_key not in safe:
+            safe[camel_key] = safe[snake_key]
+
+
+def _operation_for_action_type(action_type: str | None) -> str | None:
+    return {
+        "shell_command": "run",
+        "file_read": "read",
+        "file_read_request": "read",
+        "file_write": "write",
+        "file_write_request": "write",
+        "mcp_tool": "call",
+        "package_script": "install",
+        "network_request": "request",
+        "browser_action": "browse",
+        "config_change": "update",
+        "harness_start": "start",
+        "prompt": "submit",
+        "skill": "use",
+        "skill_request": "use",
+    }.get(action_type or "")
+
+
+def _target_class_for_action_type(action_type: str | None, envelope: Mapping[str, object]) -> str:
+    if action_type in {"file_read", "file_write", "file_read_request", "file_write_request"}:
+        return "file"
+    if action_type == "mcp_tool":
+        return "mcp_tool"
+    if action_type == "package_script" or _first_optional_string(envelope, ("package_name", "packageName")):
+        return "package"
+    if action_type == "network_request":
+        return "network"
+    if action_type == "browser_action":
+        return "browser"
+    if action_type in {"skill", "skill_request"}:
+        return "skill"
+    if action_type == "shell_command":
+        return "shell_command"
+    return "action"
+
+
+def _target_count_for_envelope(envelope: Mapping[str, object]) -> int:
+    count = 0
+    for key in ("target_paths", "targetPaths", "network_hosts", "networkHosts", "package_targets", "packageTargets"):
+        value = envelope.get(key)
+        if isinstance(value, Sequence) and not isinstance(value, str):
+            count += len([item for item in value if isinstance(item, str) and item.strip()])
+        elif isinstance(value, str) and value.strip():
+            count += 1
+    if count:
+        return count
+    for key in (
+        "path",
+        "file_path",
+        "filePath",
+        "url",
+        "uri",
+        "endpoint",
+        "origin",
+        "host",
+        "selector",
+        "package_name",
+        "packageName",
+        "target_resource",
+        "targetResource",
+        "resource",
+    ):
+        if _optional_string(envelope.get(key)) is not None:
+            return 1
+    return 0
+
+
+def _preserve_portal_action_contract_fields(
+    safe: dict[str, object],
+    envelope: Mapping[str, object],
+) -> None:
+    for key in (
+        "operation",
+        "resource",
+        "resource_uri",
+        "target",
+        "target_resource",
+        "skill_name",
+        "source_path",
+        "permission",
+        "requested_permission",
+        "path",
+        "access_mode",
+        "content_state",
+        "url",
+        "uri",
+        "endpoint",
+        "origin",
+        "host",
+        "selector",
+        "method",
+        "args",
+        "arguments",
+        "input",
+        "parameters",
+    ):
+        if key in envelope and key not in safe:
+            safe[key] = _bounded_cloud_value(envelope[key])
+
+    action_type = _first_optional_string(envelope, ("action_type", "actionType"))
+    target_paths = _string_list_from_envelope(envelope, ("target_paths", "targetPaths"))
+    if action_type in {"file_read", "file_write", "file_read_request", "file_write_request"} and target_paths:
+        safe.setdefault("path", target_paths[0])
+        safe.setdefault("access_mode", "read" if "read" in action_type else "write")
+        safe.setdefault("content_state", "metadata_only")
+
+    network_hosts = _string_list_from_envelope(envelope, ("network_hosts", "networkHosts"))
+    if action_type == "network_request" and network_hosts:
+        safe.setdefault("host", network_hosts[0])
+
+    package_name = _first_optional_string(envelope, ("package_name", "packageName"))
+    if package_name is not None:
+        safe.setdefault("package_name", _bounded_text(package_name))
+    package_manager = _first_optional_string(envelope, ("package_manager", "packageManager"))
+    if package_manager is not None:
+        safe.setdefault("package_manager", _bounded_text(package_manager))
+
+    mcp_tool = _first_optional_string(envelope, ("mcp_tool", "mcpTool"))
+    if action_type == "mcp_tool" and mcp_tool is not None:
+        safe.setdefault("tool_name", _bounded_text(mcp_tool))
+    if action_type == "mcp_tool" and target_paths:
+        safe.setdefault("target_resource", target_paths[0])
+
+    if not any(key in safe for key in ("args", "arguments", "input", "parameters")):
+        arguments = _action_arguments_from_raw_payload(envelope)
+        if arguments is not None:
+            safe["arguments"] = arguments
+            safe["args"] = arguments
+
+
+def _string_list_from_envelope(envelope: Mapping[str, object], keys: Sequence[str]) -> list[str]:
+    for key in keys:
+        value = envelope.get(key)
+        if isinstance(value, str) and value.strip():
+            return [_bounded_text(value.strip())]
+        if isinstance(value, Sequence) and not isinstance(value, str):
+            items = [_bounded_text(item.strip()) for item in value if isinstance(item, str) and item.strip()]
+            if items:
+                return items
+    return []
+
+
+def _action_arguments_from_raw_payload(envelope: Mapping[str, object]) -> object | None:
+    raw_payload = envelope.get("raw_payload_redacted")
+    if not isinstance(raw_payload, Mapping):
+        return None
+    for key in ("tool_input", "toolInput", "args", "arguments", "input", "parameters"):
+        if key in raw_payload:
+            return _bounded_cloud_value(raw_payload[key])
+    return None
 
 
 def _bounded_text(value: str, *, max_chars: int = LOCAL_REQUEST_TEXT_FIELD_MAX_CHARS) -> str:

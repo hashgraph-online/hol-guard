@@ -49,6 +49,11 @@ _GENERIC_FINGERPRINT_LABELS: frozenset[str] = frozenset(
         "irc",
         "github",
         "glob",
+        "tool",
+        "mcp",
+        "skill",
+        "rg",
+        "cat",
         "pi:project:read",
         "pi:project:write",
         "pi:project",
@@ -59,7 +64,7 @@ _GENERIC_FINGERPRINT_LABELS: frozenset[str] = frozenset(
 
 # Commands whose only value is a single generic verb (no concrete target).
 _BARE_COMMAND_VERBS: frozenset[str] = frozenset(
-    {"read", "write", "bash", "grep", "shell", "edit", "eval", "ls", "cat", "echo"}
+    {"read", "write", "bash", "grep", "shell", "edit", "eval", "ls", "echo"}
 )
 
 _PACKAGE_MANAGERS: frozenset[str] = frozenset(

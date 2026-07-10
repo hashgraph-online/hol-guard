@@ -8,6 +8,14 @@ from datetime import datetime, timezone
 from .codex_app_server import default_codex_app_server_socket_available, resume_codex_thread_for_request
 from .store import GuardStore
 
+
+class ResumeNotSupportedError(ValueError):
+    """Raised when an approval request cannot be resumed automatically."""
+
+    def __init__(self) -> None:
+        super().__init__("resume_not_supported")
+
+
 _THREAD_ID_KEYS = (
     "codex_thread_id",
     "thread_id",
@@ -72,13 +80,13 @@ def retry_request_resume(
     if request is None:
         raise ValueError("not_found")
     if str(request.get("harness")) != "codex":
-        raise ValueError("resume_not_supported")
+        raise ResumeNotSupportedError()
     action = request.get("resolution_action")
     if not isinstance(action, str) or not action:
         raise ValueError("not_resolved")
     resume = get_request_resume_status(store, request_id=request_id, now=now)
     if resume is None:
-        raise ValueError("resume_not_supported")
+        raise ResumeNotSupportedError()
     if action == "block":
         attempt_count = _int_value(resume.get("attempt_count")) + 1
         return _skip_blocked_resume(
@@ -113,7 +121,7 @@ def retry_request_resume(
     )
     refreshed = store.get_request_resume(request_id)
     if refreshed is None:
-        raise ValueError("resume_not_supported")
+        raise ResumeNotSupportedError()
     final = _finalize_resume_attempt(
         store=store,
         request_id=request_id,
@@ -247,7 +255,7 @@ def _finalize_resume_attempt(
         )
         result = store.get_request_resume(request_id)
         if result is None:
-            raise ValueError("resume_not_supported")
+            raise ResumeNotSupportedError()
         return result
 
     raw_result = _dispatch_resume_attempt(
@@ -280,7 +288,7 @@ def _finalize_resume_attempt(
     )
     result = store.get_request_resume(request_id)
     if result is None:
-        raise ValueError("resume_not_supported")
+        raise ResumeNotSupportedError()
     return result
 
 
@@ -308,7 +316,7 @@ def _skip_blocked_resume(
     )
     result = store.get_request_resume(request_id)
     if result is None:
-        raise ValueError("resume_not_supported")
+        raise ResumeNotSupportedError()
     return result
 
 
