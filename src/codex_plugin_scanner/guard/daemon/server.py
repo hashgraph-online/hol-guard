@@ -5732,9 +5732,7 @@ class GuardDaemonServer:
                     {**summary, "status": status, "refreshed_at": refreshed_at},
                     refreshed_at,
                 )
-                wait_seconds = (
-                    backoff_seconds if has_error or status == "not_configured" else interval_seconds
-                )
+                wait_seconds = backoff_seconds if has_error or status == "not_configured" else interval_seconds
             except GuardSyncAuthorizationExpiredError as error:
                 self._server.store.set_sync_payload(
                     "aibom_inventory_daemon",
