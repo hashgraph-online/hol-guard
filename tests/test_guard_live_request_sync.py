@@ -23,8 +23,9 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime.live_request_sync import (
     _DEFAULT_401_REFRESH_RETRY_MAX,
-    _LIVE_REQUEST_EVENT_SEQUENCE_KEY,
     _REFRESH_THROTTLE_SECONDS,
+    _resolve_sync_url,
+    _LIVE_REQUEST_EVENT_SEQUENCE_KEY,
     LIVE_REQUEST_EVENT_TYPES,
     LIVE_REQUEST_SYNC_PROTOCOL_VERSION,
     OUTBOX_BATCH_COUNT,
@@ -37,6 +38,7 @@ from codex_plugin_scanner.guard.runtime.live_request_sync import (
     SyncHealthSnapshot,
     _build_live_request_event,
     _cloud_sync_handle_401_refresh,
+    _cloud_sync_retry_request,
     _cloud_sync_retry_wait_seconds,
     _get_cloud_sync_sync_state,
     _get_current_cloud_sync_sequence,
@@ -1448,3 +1450,77 @@ class TestPendingRequestAgeConnectivity:
         assert event is not None
         assert event["eventType"] == "request_created"
         assert event["requestPayload"]["status"] == "pending"
+
+
+# ---------------------------------------------------------------------------
+# Contract: _resolve_sync_url derives live-request endpoint from receipt sync URL
+# ---------------------------------------------------------------------------
+
+
+class TestResolveSyncUrl:
+    """_resolve_sync_url replaces the entire path, preserving scheme and host."""
+
+    def test_full_receipt_path_replaced_not_appended(self) -> None:
+        """A receipt-sync URL must derive /api/guard/live-requests/sync, not
+        append to the existing receipt path.  This is the contract that caused
+        the production 404 — the old code appended instead of replacing."""
+        auth_context: dict[str, object] = {
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        }
+        result = _resolve_sync_url(auth_context, "/api/guard/live-requests/sync")
+        assert result == "https://hol.org/api/guard/live-requests/sync"
+
+    def test_https_origin_with_explicit_port_preserved(self) -> None:
+        """An HTTPS origin carrying an explicit port keeps that port when the
+        path is replaced."""
+        auth_context: dict[str, object] = {
+            "sync_url": "https://hol.org:8443/api/guard/receipts/sync",
+        }
+        result = _resolve_sync_url(auth_context, "/api/guard/live-requests/sync")
+        assert result == "https://hol.org:8443/api/guard/live-requests/sync"
+
+    def test_query_string_preserved_when_path_replaced(self) -> None:
+        """Replacing the sync URL path preserves query-bound routing."""
+        auth_context: dict[str, object] = {
+            "sync_url": "https://hol.org/api/guard/receipts/sync?route=tenant-a",
+        }
+        result = _resolve_sync_url(auth_context, "/api/guard/live-requests/sync")
+        assert result == "https://hol.org/api/guard/live-requests/sync?route=tenant-a"
+
+    def test_batch_request_preserves_query_bound_routing(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Batch requests use the shared endpoint derivation contract."""
+        from codex_plugin_scanner.guard.runtime import runner
+
+        captured_urls: list[str] = []
+
+        def capture_request(
+            _auth_context: dict[str, object],
+            *,
+            request_url: str,
+            **_kwargs: object,
+        ) -> object:
+            captured_urls.append(request_url)
+            return object()
+
+        monkeypatch.setattr(runner, "_guard_sync_request", capture_request)
+        monkeypatch.setattr(
+            runner,
+            "_urlopen_json_with_timeout_retry",
+            lambda **_kwargs: {},
+        )
+
+        result = _cloud_sync_retry_request(
+            {
+                "sync_url": ("https://hol.org/api/guard/receipts/sync?route=tenant-a"),
+            },
+            method="POST",
+            path="live-requests/batch",
+            payload={},
+            max_retries=0,
+        )
+
+        assert result == {}
+        assert captured_urls == ["https://hol.org/api/guard/live-requests/batch?route=tenant-a"]

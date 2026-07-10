@@ -34,6 +34,7 @@ import random
 import threading
 import time
 import urllib.error
+import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -105,8 +106,11 @@ def _resolve_sync_url(auth_context: dict[str, object], path: str) -> str:
     sync_url = str(auth_context.get("sync_url") or "")
     if not sync_url:
         raise RuntimeError("Guard sync URL is not configured.")
-    base = sync_url.rstrip("/")
-    return f"{base}{path}"
+    parsed = urllib.parse.urlsplit(sync_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise RuntimeError("Guard sync URL must be an absolute HTTP(S) URL.")
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, normalized_path, parsed.query, ""))
 
 
 def _load_sync_cursor(store: GuardStore) -> str | None:
@@ -1121,13 +1125,9 @@ def _cloud_sync_retry_request(
 
     for attempt in range(max_retries + 1):
         try:
-            # Reuse _command_api_url logic from command_queue
-            from urllib.parse import urlparse, urlunparse
-
-            parsed = urlparse(str(auth_context.get("sync_url", "")))
             normalized_path = path if path.startswith("/") else f"/{path}"
             request_path = normalized_path if normalized_path.startswith("/api/") else f"/api/guard{normalized_path}"
-            request_url = urlunparse((parsed.scheme, parsed.netloc, request_path, "", "", ""))
+            request_url = _resolve_sync_url(auth_context, request_path)
             request = _guard_sync_request(
                 auth_context,
                 request_url=request_url,
