@@ -523,7 +523,11 @@ def _is_managed_hook_entry(entry: object) -> bool:
     status_message = entry.get("statusMessage")
     if isinstance(status_message, str) and status_message in _LEGACY_MANAGED_HOOK_STATUS_MESSAGES:
         return True
-    # Stale pipx/uv direct hooks may lose statusMessage but still live under Guard install paths.
+    # Intentional: direct Guard CLI hooks under pipx/uv hol-guard installs are reclaimed even
+    # without statusMessage. Stale PostToolUse installs often drop the marker while keeping the
+    # same python -m codex_plugin_scanner.cli path; leaving them breaks Codex JSON parsing.
+    # Hand-authored hooks that intentionally use that same Guard interpreter are treated as
+    # managed so repair can replace them with the daemon bridge.
     return _python_executable_is_guard_install(tokens[0])
 
 
