@@ -196,6 +196,41 @@ def test_guard_codex_detects_direct_hook_with_python_runtime_flags() -> None:
     assert codex_adapter._is_managed_hook_entry(entry) is True
 
 
+def test_guard_codex_detects_bridge_hook_with_python_runtime_flags(tmp_path: Path) -> None:
+    bridge_path = (
+        tmp_path
+        / "site-packages"
+        / "codex_plugin_scanner"
+        / "guard"
+        / "adapters"
+        / "codex_daemon_hook_bridge.py"
+    )
+    bridge_path.parent.mkdir(parents=True, exist_ok=True)
+    bridge_path.write_text("# bridge\n", encoding="utf-8")
+    config = json.dumps(
+        {
+            "fallback_command": [
+                sys.executable,
+                "-m",
+                "codex_plugin_scanner.cli",
+                "guard",
+                "hook",
+                "--harness",
+                "codex",
+            ]
+        },
+        separators=(",", ":"),
+    )
+    command_tokens = ["python3", "-I", str(bridge_path), config]
+    command = shlex.join(command_tokens)
+    entry = {"type": "command", "command": command}
+
+    assert codex_adapter._is_daemon_bridge_hook_command(command_tokens) is True
+    assert codex_adapter._is_managed_hook_command(command) is True
+    assert codex_adapter._is_unambiguously_managed_hook_command(command) is True
+    assert codex_adapter._is_managed_hook_entry(entry) is True
+
+
 def test_guard_install_and_repair_codex_reconcile_legacy_post_tool_hooks(
     tmp_path,
     capsys,

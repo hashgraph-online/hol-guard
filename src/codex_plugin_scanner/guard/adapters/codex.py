@@ -350,25 +350,45 @@ def _is_managed_hook_command(command: object) -> bool:
         return False
     if _argv_is_direct_codex_hook(tokens):
         return True
-    if _argv_is_inline_codex_hook(tokens):
-        return True
-    return False
+    return bool(_argv_is_inline_codex_hook(tokens))
+
+
+def _python_script_and_args(tokens: list[str]) -> tuple[str, list[str]] | None:
+    """Return (script_path, remaining_args) after a python executable and its flags."""
+    if not tokens or not Path(tokens[0]).name.lower().startswith("python"):
+        return None
+    index = 1
+    while index < len(tokens):
+        token = tokens[index]
+        if token in {"-c", "-m"}:
+            return None
+        if token.startswith("-"):
+            # Flags that consume a following argument (e.g. -W error, -X faulthandler).
+            if token in {"-W", "-X", "-Q"} and index + 1 < len(tokens):
+                index += 2
+                continue
+            index += 1
+            continue
+        return token, tokens[index + 1 :]
+    return None
 
 
 def _is_daemon_bridge_hook_command(tokens: list[str]) -> bool:
-    if len(tokens) < 2:
+    script_and_args = _python_script_and_args(tokens)
+    if script_and_args is None:
         return False
+    script_path, remaining = script_and_args
     managed_bridge_path = Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()
     try:
-        if Path(tokens[1]).resolve() == managed_bridge_path:
+        if Path(script_path).resolve() == managed_bridge_path:
             return True
     except OSError:
         pass
-    bridge_path = Path(tokens[1])
+    bridge_path = Path(script_path)
     return (
-        len(tokens) >= 3
+        len(remaining) >= 1
         and bridge_path.parts[-len(_DAEMON_BRIDGE_PATH_SUFFIX) :] == _DAEMON_BRIDGE_PATH_SUFFIX
-        and _bridge_config_targets_codex(tokens[2])
+        and _bridge_config_targets_codex(remaining[0])
     )
 
 
