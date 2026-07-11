@@ -54,7 +54,7 @@ jobs:
           VERSION="$BASE_VERSION"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
-          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
+          elif [[ ("$GITHUB_EVENT_NAME" == "push" || "$GITHUB_EVENT_NAME" == "workflow_dispatch") && "$GITHUB_REF" == "refs/heads/main" ]]; then
             # Check git tags first
             LAST_TAG=$(git tag --list 'v*' --sort=-version:refname 2>/dev/null | head -n1)
             LAST_TAG_VERSION="${LAST_TAG#v}"
