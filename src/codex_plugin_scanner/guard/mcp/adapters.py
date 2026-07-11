@@ -6,7 +6,7 @@ that the sanitizers will clean before returning to the MCP client.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from .schemas import (
     DEFAULT_SEARCH_LIMIT,
@@ -46,7 +46,7 @@ def search_receipts(store: GuardStore, query: str, limit: int = DEFAULT_SEARCH_L
             if q and q not in f"{artifact_name} {harness} {decision}".lower():
                 continue
             results.append(_receipt_to_search_result(r))
-        after_rowid = int(page[-1].get("receipt_rowid") or 0) or None
+        after_rowid = cast(int | None, page[-1].get("receipt_rowid"))
         if after_rowid is None:
             break
     return results[:bounded_limit]
@@ -71,7 +71,7 @@ def fetch_receipt(store: GuardStore, opaque_id: str) -> dict[str, object] | None
             rid = str(r.get("receipt_id") or "")
             if make_opaque_id("receipt", rid) == opaque_id:
                 return _receipt_to_fetch_result(r)
-        after_rowid = int(page[-1].get("receipt_rowid") or 0) or None
+        after_rowid = cast(int | None, page[-1].get("receipt_rowid"))
         if after_rowid is None:
             break
     return None
