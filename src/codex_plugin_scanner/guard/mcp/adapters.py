@@ -17,31 +17,63 @@ from .schemas import (
 if TYPE_CHECKING:
     from codex_plugin_scanner.guard.store import GuardStore
 
-_FETCH_SCAN_LIMIT = 200
+_SEARCH_PAGE_SIZE = 200
+_FETCH_PAGE_SIZE = 200
 
 
 def search_receipts(store: GuardStore, query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> list[dict[str, object]]:
+    """Search all receipts by paging through the store with rowid cursor.
+
+    Previously this read only the newest ``limit`` rows, which meant older
+    matching receipts were unreachable. Now we page through the entire store
+    and collect matches until we have enough results or exhaust all rows.
+    """
     bounded_limit = min(max(limit, 1), MAX_SEARCH_LIMIT)
-    receipts = store.list_receipts(limit=bounded_limit)
     results: list[dict[str, object]] = []
     q = query.lower().strip() if query else ""
-    for r in receipts:
-        artifact_name = str(r.get("artifact_name") or "")
-        harness = str(r.get("harness") or "")
-        decision = str(r.get("policy_decision") or "")
-        if q and q not in f"{artifact_name} {harness} {decision}".lower():
-            continue
-        results.append(_receipt_to_search_result(r))
+    after_rowid: int | None = None
+    while len(results) < bounded_limit:
+        page = store.list_receipts_since_rowid(
+            after_rowid=after_rowid,
+            limit=_SEARCH_PAGE_SIZE,
+        )
+        if not page:
+            break
+        for r in page:
+            artifact_name = str(r.get("artifact_name") or "")
+            harness = str(r.get("harness") or "")
+            decision = str(r.get("policy_decision") or "")
+            if q and q not in f"{artifact_name} {harness} {decision}".lower():
+                continue
+            results.append(_receipt_to_search_result(r))
+        after_rowid = page[-1].get("receipt_rowid")
+        if after_rowid is None:
+            break
     return results[:bounded_limit]
 
 
 def fetch_receipt(store: GuardStore, opaque_id: str) -> dict[str, object] | None:
-    """Resolve a hash-based opaque ID back to a receipt."""
-    receipts = store.list_receipts(limit=_FETCH_SCAN_LIMIT)
-    for r in receipts:
-        rid = str(r.get("receipt_id") or "")
-        if make_opaque_id("receipt", rid) == opaque_id:
-            return _receipt_to_fetch_result(r)
+    """Resolve a hash-based opaque ID back to a receipt.
+
+    Previously this scanned only the newest 200 rows, so valid receipts
+    older than that cutoff returned ``found: false``. Now we page through
+    the entire store until the receipt is found or all rows are exhausted.
+    """
+    after_rowid: int | None = None
+    while True:
+        page = store.list_receipts_since_rowid(
+            after_rowid=after_rowid,
+            limit=_FETCH_PAGE_SIZE,
+        )
+        if not page:
+            break
+        for r in page:
+            rid = str(r.get("receipt_id") or "")
+            if make_opaque_id("receipt", rid) == opaque_id:
+                return _receipt_to_fetch_result(r)
+        after_rowid = page[-1].get("receipt_rowid")
+        if after_rowid is None:
+            break
     return None
 
 
