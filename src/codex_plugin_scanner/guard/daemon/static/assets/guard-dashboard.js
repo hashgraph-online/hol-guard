@@ -25152,32 +25152,28 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
             ] })
           }
         ),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
           "div",
           {
             className: "relative inline-flex shrink-0 cursor-pointer items-center justify-center",
             onClick: handleClick,
-            "aria-hidden": "true",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "span",
-                {
-                  className: `inline-flex h-7 w-7 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
-                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" })
-                }
-              ),
-              isRead && /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "button",
-                {
-                  type: "button",
-                  onClick: handleMarkUnread,
-                  "aria-label": `Mark request ${preview} unread`,
-                  title: "Mark unread",
-                  className: "absolute inset-0 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50/95 text-slate-500 pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus:pointer-events-auto focus:opacity-100 hover:bg-slate-200 hover:text-brand-dark transition-opacity",
-                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEnvelopeOpen, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
-                }
-              )
-            ]
+            children: isRead ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: handleMarkUnread,
+                "aria-label": `Mark request ${preview} unread`,
+                title: "Mark unread",
+                className: `inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200 hover:text-brand-dark transition-colors ${active ? "bg-brand-blue/10" : "bg-slate-50"}`,
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEnvelopeOpen, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+              }
+            ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "span",
+              {
+                className: `inline-flex h-7 w-7 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" })
+              }
+            )
           }
         )
       ] })
