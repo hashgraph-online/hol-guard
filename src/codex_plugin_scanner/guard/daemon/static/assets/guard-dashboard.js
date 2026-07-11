@@ -24482,8 +24482,15 @@ function ReviewWorkspace(props) {
   const categoryOptions = reactExports.useMemo(() => queueCategoriesForItems(requests), [requests]);
   const activeRequest = activeRequestId !== null ? requests.find((r) => r.request_id === activeRequestId) ?? (detail?.item.request_id === activeRequestId ? detail.item : null) : null;
   reactExports.useEffect(() => {
+    function isTypingTarget(target) {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName.toLowerCase();
+      const role = target.getAttribute("role")?.toLowerCase();
+      return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable || role === "textbox" || role === "combobox" || role === "listbox" || role === "radiogroup" || role === "slider";
+    }
     function handleKeyDown(event) {
       if (pagedRequests.length === 0) return;
+      if (isTypingTarget(event.target)) return;
       const activeIdx = pagedRequests.findIndex((r) => r.request_id === activeRequestId);
       if (event.key === "ArrowDown") {
         event.preventDefault();
