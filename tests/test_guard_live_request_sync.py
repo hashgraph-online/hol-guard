@@ -211,11 +211,14 @@ class TestIndependentWorker:
         store = Store(tmp_path)
 
         class FakeThread:
+            def __init__(self, *_args: object, **_kwargs: object) -> None:
+                self.started = False
+
             def is_alive(self) -> bool:
                 return False
 
             def start(self) -> None:
-                pass
+                self.started = True
 
         class FakeEvent:
             def is_set(self) -> bool:
@@ -223,6 +226,7 @@ class TestIndependentWorker:
 
         existing = type("Worker", (), {"thread": FakeThread(), "stop_event": FakeEvent()})()
         monkeypatch.delenv("GUARD_LIVE_REQUEST_POLL_INTERVAL", raising=False)
+        monkeypatch.setattr(live_request_sync_module.threading, "Thread", FakeThread)
 
         new_worker = start_cloud_sync_sync_worker(store, existing=existing)  # type: ignore[arg-type]
         assert new_worker is not existing
