@@ -20,13 +20,12 @@ from json import dumps as json_dumps
 from pathlib import Path
 
 import pytest
-from codex_plugin_scanner.guard.runtime import live_request_sync as live_request_sync_module
 
+from codex_plugin_scanner.guard.runtime import live_request_sync as live_request_sync_module
 from codex_plugin_scanner.guard.runtime.live_request_sync import (
     _DEFAULT_401_REFRESH_RETRY_MAX,
-    _REFRESH_THROTTLE_SECONDS,
-    _resolve_sync_url,
     _LIVE_REQUEST_EVENT_SEQUENCE_KEY,
+    _REFRESH_THROTTLE_SECONDS,
     LIVE_REQUEST_EVENT_TYPES,
     LIVE_REQUEST_SYNC_CURSOR_KEY,
     LIVE_REQUEST_SYNC_FINGERPRINTS_KEY,
@@ -46,6 +45,7 @@ from codex_plugin_scanner.guard.runtime.live_request_sync import (
     _get_cloud_sync_sync_state,
     _get_current_cloud_sync_sequence,
     _get_next_cloud_sync_sequence,
+    _resolve_sync_url,
     atomic_write_sync,
     cloud_sync_live_request_diagnostics,
     cloud_sync_sync_live_requests_once,
@@ -61,8 +61,8 @@ from codex_plugin_scanner.guard.runtime.live_request_sync import (
     process_cloud_sync_ack_response,
     set_sync_health,
     start_cloud_sync_sync_worker,
-    sync_live_requests_once,
     stop_cloud_sync_sync_worker,
+    sync_live_requests_once,
 )
 from codex_plugin_scanner.guard.runtime.runner import (
     GuardSyncAuthorizationExpiredError,

@@ -46,8 +46,8 @@ from ..review_contracts import (
     build_local_review_request_claim,
     guard_review_oauth_metadata,
 )
-from ..store_approvals import _encode_page_cursor
 from ..store import GuardStore
+from ..store_approvals import _encode_page_cursor
 from .local_request_snapshots import (
     _cloud_safe_local_request_payload,
     _cloud_scrub_text,
