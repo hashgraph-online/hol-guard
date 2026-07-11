@@ -540,12 +540,12 @@ def start_cloud_sync_sync_worker(
 def stop_cloud_sync_sync_worker(
     worker: LiveRequestSyncWorker | None,
 ) -> LiveRequestSyncWorker | None:
-    """Stop a live-request sync worker gracefully."""
+    """Signal a live-request sync worker and wait briefly for shutdown."""
     if worker is None:
         return None
     worker.stop_event.set()
-    worker.thread.join()
-    return None
+    worker.thread.join(timeout=1.0)
+    return worker if worker.thread.is_alive() else None
 
 
 def _with_live_request_sync_identity(

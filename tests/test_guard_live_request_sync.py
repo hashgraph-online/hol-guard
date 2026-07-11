@@ -177,7 +177,7 @@ class TestIndependentWorker:
         new_worker = stop_cloud_sync_sync_worker(worker)
         assert new_worker is None  # dead worker returns None
         assert created_event.is_set() is True
-        assert created_thread.join_timeout is None
+        assert created_thread.join_timeout == 1.0
 
     def test_start_worker_skips_alive_existing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         store = Store(tmp_path)
