@@ -19,7 +19,6 @@ import {
   HiMiniCube,
   HiMiniDocumentMagnifyingGlass,
   HiMiniDocumentPlus,
-  HiMiniEnvelopeOpen,
   HiMiniGlobeAlt,
   HiMiniKey,
   HiMiniPencilSquare,
@@ -870,14 +869,6 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
     onOpenRequest(item.request_id);
   }, [item.request_id, onOpenRequest]);
 
-  const handleMarkUnread = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
-      event.stopPropagation();
-      readState.markUnread(item.request_id);
-    },
-    [item.request_id, readState],
-  );
-
   const handleCheckboxChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       event.stopPropagation();
@@ -944,50 +935,41 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
           tabIndex={active ? 0 : -1}
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
-          <div className="flex min-w-0 items-center gap-2">
-            <span
-              className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
-                isBlocked ? "bg-brand-attention" : "bg-emerald-400"
-              }`}
-              aria-hidden="true"
-            />
-            <div className="min-w-0">
-              <p className={`truncate text-sm ${isRead ? "font-medium text-brand-dark" : "font-bold text-brand-dark"}`}>
-                {!isRead && <span className="sr-only">Unread request:</span>}
-                {preview}
-              </p>
-              <p className="truncate text-[11px] text-muted-foreground">
-                {harnessDisplayName(item.harness)} · {category.shortLabel} · {formatQueueRequestDate(item)}
-              </p>
-            </div>
+          <span
+            className={`h-2 w-2 shrink-0 rounded-full transition-colors ${
+              isRead
+                ? "bg-transparent"
+                : "bg-brand-blue"
+            }`}
+            title={isRead ? "Read" : "Unread"}
+            aria-label={isRead ? "Read" : "Unread"}
+          />
+          <div className="min-w-0 flex-1">
+            <p className={`truncate text-sm ${isRead ? "font-medium text-slate-600" : "font-bold text-brand-dark"}`}>
+              {!isRead && <span className="sr-only">Unread request:</span>}
+              {preview}
+            </p>
+            <p className="truncate text-[11px] text-muted-foreground">
+              {harnessDisplayName(item.harness)} · {category.shortLabel} · {formatQueueRequestDate(item)}
+            </p>
           </div>
+          <span
+            className={`inline-flex h-2 w-2 shrink-0 rounded-full ${
+              isBlocked ? "bg-brand-attention" : "bg-emerald-400"
+            }`}
+            title={isBlocked ? "Blocked by policy" : "Allowed by policy"}
+            aria-label={isBlocked ? "Blocked by policy" : "Allowed by policy"}
+          />
+          <span
+            className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+              active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"
+            }`}
+            title={category.label}
+            aria-label={category.label}
+          >
+            <CategoryIcon className="h-4 w-4" aria-hidden="true" />
+          </span>
         </button>
-        <div
-          className="relative inline-flex shrink-0 cursor-pointer items-center justify-center"
-          onClick={handleClick}
-        >
-          {isRead ? (
-            <button
-              type="button"
-              onClick={handleMarkUnread}
-              aria-label={`Mark request ${preview} unread`}
-              title="Mark unread"
-              className={`inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200 hover:text-brand-dark transition-colors ${
-                active ? "bg-brand-blue/10" : "bg-slate-50"
-              }`}
-            >
-              <HiMiniEnvelopeOpen className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-          ) : (
-            <span
-              className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${
-                active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"
-              }`}
-            >
-              <CategoryIcon className="h-4 w-4" aria-hidden="true" />
-            </span>
-          )}
-        </div>
       </div>
     </div>
   );

@@ -4969,10 +4969,6 @@
       }
     }
 
-    .hover\:bg-slate-200:hover {
-      background-color: var(--color-slate-200);
-    }
-
     .hover\:bg-slate-200\/50:hover {
       background-color: #e2e8f080;
     }
