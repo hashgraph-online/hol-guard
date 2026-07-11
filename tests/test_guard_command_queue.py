@@ -26,7 +26,11 @@ from codex_plugin_scanner.guard.review_contracts import (
     validate_remote_approval_request_binding,
     validated_remote_approval_envelope,
 )
-from codex_plugin_scanner.guard.runtime import command_executors, command_queue, local_request_snapshots
+from codex_plugin_scanner.guard.runtime import (
+    command_executors,
+    command_queue,
+    local_request_snapshots,
+)
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.schemas.guard_event_v1 import GuardEventV1
 from codex_plugin_scanner.guard.store import GuardStore
@@ -121,49 +125,6 @@ class FakeStore:
     ) -> list[dict[str, object]]:
         del status, harness, limit, cursor, search
         return []
-
-
-def test_live_sync_identity_context_includes_local_identity(tmp_path: Path) -> None:
-    store = FakeStore(tmp_path / "guard-home")
-
-    auth_context = command_queue._with_live_sync_identity(
-        store,
-        {
-            "access_token": "token-1",
-            "sync_url": "https://hol.test/api/guard/receipts/sync",
-        },
-    )
-
-    assert auth_context == {
-        "access_token": "token-1",
-        "machine_id": "machine-1",
-        "machine_installation_id": "22222222-2222-4222-8222-222222222222",
-        "sync_url": "https://hol.test/api/guard/receipts/sync",
-        "workspace_id": "workspace-1",
-    }
-
-
-def test_live_sync_identity_failure_remains_best_effort(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = FakeStore(tmp_path / "guard-home")
-
-    def fail_identity(
-        _store: FakeStore,
-        _auth_context: dict[str, object],
-    ) -> dict[str, object]:
-        raise RuntimeError("identity unavailable")
-
-    monkeypatch.setattr(command_queue, "_with_live_sync_identity", fail_identity)
-
-    command_queue._sync_live_requests_best_effort(
-        store,
-        {
-            "access_token": "token-1",
-            "sync_url": "https://hol.test/api/guard/receipts/sync",
-        },
-    )
 
 
 def _approval_request_row(

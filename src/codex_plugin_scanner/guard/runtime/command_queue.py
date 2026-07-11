@@ -424,19 +424,6 @@ def _maybe_auto_update(store: GuardStore, context: HarnessContext) -> None:
     maybe_auto_update(store, context)
 
 
-def _with_live_sync_identity(
-    store: GuardStore,
-    auth_context: dict[str, object],
-) -> dict[str, object]:
-    machine_id, workspace_id = _oauth_metadata(store)
-    return {
-        **auth_context,
-        "machine_id": machine_id,
-        "workspace_id": workspace_id,
-        "machine_installation_id": store.get_or_create_installation_id(),
-    }
-
-
 def _resolve_command_queue_auth_context(
     store: GuardStore,
     *,
@@ -455,22 +442,6 @@ def _resolve_command_queue_auth_context(
         return _resolve_guard_sync_auth_context(store)
 
 
-def _sync_live_requests_best_effort(store: GuardStore, auth_context: dict[str, object]) -> None:
-    """Sync local approval requests to Cloud live request table.
-
-    Best-effort: failures are logged but do not block the command queue lease.
-    The dedicated endpoint uses cursor-based pagination to ensure all requests
-    are synced regardless of backlog size, eliminating the stale-row
-    accumulation bug caused by the capped snapshot approach.
-    """
-    try:
-        from .live_request_sync import sync_live_requests_once
-
-        sync_live_requests_once(store, _with_live_sync_identity(store, auth_context))
-    except Exception as exc:
-        _LOGGER.debug("Guard live request sync skipped: %s", _redacted_error(exc))
-
-
 def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[str, object]:
     auth_context = _resolve_command_queue_auth_context(store)
     state = _load_state(store)
@@ -483,7 +454,6 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
         }
     )
     _save_state(store, state)
-    _sync_live_requests_best_effort(store, auth_context)
     if _retry_pending_result(store, auth_context, state):
         return command_queue_status(store)
     lease_response = _json_request(
