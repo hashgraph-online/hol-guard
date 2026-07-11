@@ -24447,11 +24447,14 @@ function ReviewWorkspace(props) {
   const [dateTo, setDateTo] = reactExports.useState("");
   const [mobileQueueOpen, setMobileQueueOpen] = reactExports.useState(false);
   const [page, setPage] = reactExports.useState(1);
-  const handleOpenRequest = reactExports.useCallback((id) => {
+  const selectRequest = reactExports.useCallback((id) => {
     props.onOpenRequest(id);
-    readState.markRead(id);
     setMobileQueueOpen(false);
-  }, [props.onOpenRequest, readState]);
+  }, [props.onOpenRequest]);
+  const handleOpenRequest = reactExports.useCallback((id) => {
+    selectRequest(id);
+    readState.markRead(id);
+  }, [selectRequest, readState]);
   const handleToggleMobileQueue = reactExports.useCallback(() => {
     setMobileQueueOpen((v) => !v);
   }, []);
@@ -24504,15 +24507,15 @@ function ReviewWorkspace(props) {
     if (activeRequestId !== null && activeInRequests) {
       return;
     }
-    handleOpenRequest(filteredRequests[0].request_id);
-  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, handleOpenRequest]);
+    selectRequest(filteredRequests[0].request_id);
+  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, selectRequest]);
   reactExports.useEffect(() => {
     if (pagedRequests.length === 0) return;
     const activeOnPage = pagedRequests.some((item) => item.request_id === activeRequestId) || detail?.item.request_id === activeRequestId;
     if (!activeOnPage) {
-      handleOpenRequest(pagedRequests[0].request_id);
+      selectRequest(pagedRequests[0].request_id);
     }
-  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, handleOpenRequest]);
+  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, selectRequest]);
   const bulkApprove = useQueueBulkApprove({
     items: filteredRequests,
     approvalGate: props.approvalGate ?? null,
