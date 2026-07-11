@@ -329,7 +329,11 @@ def _execute_approval_operation(
         request_row=request_row,
         local_request_id=local_request_id,
     )
-    envelope = validated_remote_approval_envelope(remote_approval, store=store)
+    envelope = validated_remote_approval_envelope(
+        remote_approval,
+        store=store,
+        admitted_at=job.get("createdAt"),
+    )
     validate_remote_approval_request_binding(
         envelope=envelope,
         request_row=request_row,
