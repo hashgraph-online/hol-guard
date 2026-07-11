@@ -1200,6 +1200,7 @@ export function buildDemoRuntimeSnapshot(): GuardRuntimeSnapshot {
         avatar_url: "",
       },
       workspace_id: "demo-workspace-282f6ff2",
+      plan_id: "team",
       dashboard_url: dashboardUrl,
       inbox_url: inboxUrl,
       fleet_url: fleetUrl,
