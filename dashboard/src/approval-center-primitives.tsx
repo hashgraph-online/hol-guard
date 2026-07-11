@@ -179,6 +179,7 @@ export function ShellSidebar(props: {
   updatePhase?: GuardUpdatePhase;
   cloudUserProfile?: GuardCloudUserProfile | null;
   workspaceId?: string | null;
+  planId?: string | null;
 }) {
   const collapsed = props.collapsed ?? false;
   return (
@@ -256,6 +257,7 @@ export function ShellSidebar(props: {
               <CloudUserMenu
                 userProfile={props.cloudUserProfile}
                 workspaceId={props.workspaceId}
+                planId={props.planId}
                 collapsed={collapsed}
               />
             </div>

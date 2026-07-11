@@ -1071,6 +1071,7 @@ class TestGuardSurfaceServer:
             "sync_configured": True,
             "cloud_user_profile": None,
             "workspace_id": None,
+            "plan_id": None,
             "dashboard_url": "https://hol.org/guard",
             "inbox_url": "https://hol.org/guard/inbox",
             "fleet_url": "https://hol.org/guard/protect",
@@ -1180,6 +1181,42 @@ class TestGuardSurfaceServer:
         assert payload["connect_url"] == "https://hol.org/guard/connect"
         assert payload["cloud_pairing_state"]["state"] == "paired_waiting"
         assert payload["cloud_pairing_state"]["sync_configured"] is True
+
+    def test_guard_daemon_runtime_snapshot_extracts_plan_id_from_oauth_credentials(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        store.set_oauth_local_credentials(
+            issuer="https://hol.org",
+            client_id="guard-local-daemon",
+            refresh_token="test-token-not-real",
+            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_public_jwk={
+                "kty": "EC",
+                "crv": "P-256",
+                "x": "x-value",
+                "y": "y-value",
+                "alg": "ES256",
+                "use": "sig",
+            },
+            dpop_public_jwk_thumbprint="thumbprint-123",
+            grant_id="grant-123",
+            machine_id="machine-123",
+            workspace_id="workspace-123",
+            supply_chain_plan_id="team",
+            now="2026-06-04T18:30:00+00:00",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(
+                _guard_get_request(daemon.port, "/v1/runtime", daemon._server.auth_token),
+                timeout=5,
+            ) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert payload["cloud_pairing_state"]["plan_id"] == "team"
 
     def test_guard_daemon_runtime_snapshot_mirrors_oauth_repair_detail_in_pairing_state(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
