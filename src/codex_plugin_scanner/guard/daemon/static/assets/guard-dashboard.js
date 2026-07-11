@@ -24489,12 +24489,12 @@ function ReviewWorkspace(props) {
   const categoryOptions = reactExports.useMemo(() => queueCategoriesForItems(requests), [requests]);
   const activeRequest = activeRequestId !== null ? requests.find((r) => r.request_id === activeRequestId) ?? (detail?.item.request_id === activeRequestId ? detail.item : null) : null;
   reactExports.useEffect(() => {
-    function isNestedQueueButton(target) {
-      return target instanceof HTMLElement && target.tagName.toLowerCase() === "button";
+    function isNestedQueueActionButton(target) {
+      return target instanceof HTMLElement && target.tagName.toLowerCase() === "button" && target.getAttribute("role") !== "option";
     }
     function handleKeyDown(event) {
       if (pagedRequests.length === 0) return;
-      if (!(event.target instanceof HTMLElement) || !event.target.closest('[role="listbox"]') || isNestedQueueButton(event.target))
+      if (!(event.target instanceof HTMLElement) || !event.target.closest('[role="listbox"]') || isNestedQueueActionButton(event.target))
         return;
       const activeIdx = pagedRequests.findIndex((r) => r.request_id === activeRequestId);
       if (event.key === "ArrowDown") {

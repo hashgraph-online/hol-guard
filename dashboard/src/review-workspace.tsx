@@ -223,8 +223,12 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
       : null;
 
   useEffect(() => {
-    function isNestedQueueButton(target: EventTarget | null): boolean {
-      return target instanceof HTMLElement && target.tagName.toLowerCase() === "button";
+    function isNestedQueueActionButton(target: EventTarget | null): boolean {
+      return (
+        target instanceof HTMLElement &&
+        target.tagName.toLowerCase() === "button" &&
+        target.getAttribute("role") !== "option"
+      );
     }
 
     function handleKeyDown(event: KeyboardEvent) {
@@ -234,7 +238,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
       if (
         !(event.target instanceof HTMLElement) ||
         !event.target.closest('[role="listbox"]') ||
-        isNestedQueueButton(event.target)
+        isNestedQueueActionButton(event.target)
       )
         return;
       const activeIdx = pagedRequests.findIndex((r) => r.request_id === activeRequestId);
