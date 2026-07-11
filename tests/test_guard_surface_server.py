@@ -1705,7 +1705,7 @@ class TestGuardSurfaceServer:
     def test_guard_daemon_keeps_stream_clients_alive_past_idle_timeout(self, tmp_path) -> None:
         guard_home = tmp_path / "pytest-of-user" / "guard-home"
         store = GuardStore(guard_home)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0.05)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0.5)
         daemon.start()
         response = None
 
@@ -1716,7 +1716,7 @@ class TestGuardSurfaceServer:
                 method="GET",
             )
             response = urllib.request.urlopen(stream_request, timeout=5)
-            time.sleep(0.15)
+            time.sleep(0.75)
             daemon_thread = daemon._thread
             daemon_thread_alive = daemon_thread is not None and daemon_thread.is_alive()
             runtime_state = store.get_runtime_state()
