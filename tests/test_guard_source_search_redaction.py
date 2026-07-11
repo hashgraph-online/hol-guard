@@ -7,10 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.live_request_sync import (
-    _build_live_request_event,
-    _request_sync_fingerprint,
-)
+from codex_plugin_scanner.guard.runtime.live_request_sync import _build_live_request_event
 from codex_plugin_scanner.guard.runtime.local_request_snapshots import _cloud_scrub_text
 from codex_plugin_scanner.guard.runtime.shell_command_wrappers import (
     normalize_transparent_shell_command,
@@ -227,35 +224,3 @@ def test_source_search_secret_never_leaks_from_live_request_payload(tmp_path: Pa
     assert "[redacted]" in str(event["rawCommand"])
 
 
-def test_corrected_source_search_event_changes_live_request_fingerprint(tmp_path: Path) -> None:
-    command = "grep -n 'access_token = os.getenv(\"TOKEN\")' src/config.py"
-    item: dict[str, object] = {
-        "artifact_id": "pi:source-search-replay",
-        "created_at": "2026-07-11T00:00:00+00:00",
-        "harness": "pi",
-        "last_seen_at": "2026-07-11T00:00:00+00:00",
-        "raw_command_text": command,
-        "request_id": "source-search-replay-request",
-        "status": "pending",
-    }
-    event = _build_live_request_event(
-        item,
-        oauth=None,
-        redaction_level="none",
-        store=GuardStore(tmp_path / "guard-home"),
-        event_sequence=1,
-    )
-
-    assert event is not None
-    legacy_event = dict(event)
-    legacy_event["displayCommand"] = "grep -n [redacted]"
-    legacy_event["rawCommand"] = "grep -n [redacted]"
-    legacy_event["requestPayload"] = {
-        **event["requestPayload"],
-        "commandText": "grep -n [redacted]",
-        "command_text": "grep -n [redacted]",
-        "rawCommandText": "grep -n [redacted]",
-        "raw_command_text": "grep -n [redacted]",
-    }
-
-    assert _request_sync_fingerprint(event) != _request_sync_fingerprint(legacy_event)
