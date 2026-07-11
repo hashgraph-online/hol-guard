@@ -361,14 +361,19 @@ def payload_hash_for_remote_approval_envelope(envelope: dict[str, object]) -> st
     return _sha256_hex(_canonical_signed_payload(envelope))
 
 
-def validated_remote_approval_envelope(envelope: dict[str, object], *, store) -> dict[str, object]:
+def validated_remote_approval_envelope(
+    envelope: dict[str, object],
+    *,
+    store,
+    allow_expired: bool = False,
+) -> dict[str, object]:
     if envelope.get("contractVersion") != _REMOTE_APPROVAL_CONTRACT_VERSION:
         raise GuardReviewContractError("unsupported_remote_approval_contract")
     if envelope.get("scope") not in _REMOTE_APPROVAL_ALLOWED_SCOPES:
         raise GuardReviewContractError("invalid_remote_approval_scope")
     issued_at = _parse_iso_timestamp(envelope.get("issuedAt"), field_name="issued_at")
     expires_at = _parse_iso_timestamp(envelope.get("expiresAt"), field_name="expires_at")
-    if expires_at <= issued_at or expires_at <= _now():
+    if expires_at <= issued_at or (expires_at <= _now() and not allow_expired):
         raise GuardReviewContractError("remote_approval_expired")
     payload_hash = _non_empty_string(envelope.get("payloadHash"))
     if payload_hash is None or payload_hash != payload_hash_for_remote_approval_envelope(envelope):

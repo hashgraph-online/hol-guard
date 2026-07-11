@@ -161,6 +161,7 @@ def _signed_remote_approval(
     *,
     decision: str = "allow_once",
     receipt_id: str = "cloud-receipt-1",
+    issued_at: datetime | None = None,
     scope: str | None = None,
 ) -> dict[str, object]:
     oauth = guard_review_oauth_metadata(store)
@@ -169,7 +170,7 @@ def _signed_remote_approval(
         oauth=oauth,
         store=store,
     )
-    issued_at = datetime.now(timezone.utc).replace(microsecond=0)
+    issued_at = issued_at or datetime.now(timezone.utc).replace(microsecond=0)
     expires_at = issued_at + timedelta(minutes=5)
     envelope = {
         "actionEnvelopeHash": claim["actionEnvelopeHash"],
@@ -2122,7 +2123,7 @@ def test_executor_returns_waiting_local_confirm_for_app_remove_without_surface(
     }
 
 
-def test_executor_resolves_local_approval_with_distinct_portal_routing_installation(tmp_path: Path) -> None:
+def test_executor_resolves_expired_queued_remote_approval(tmp_path: Path) -> None:
     class ApprovalStore(FakeStore):
         def __init__(self, guard_home: Path) -> None:
             super().__init__(guard_home)
@@ -2174,7 +2175,11 @@ def test_executor_resolves_local_approval_with_distinct_portal_routing_installat
             self.guard_events.append(event)
 
     store = ApprovalStore(tmp_path / "guard-home")
-    remote_approval = _signed_remote_approval(store, store.request_row)
+    remote_approval = _signed_remote_approval(
+        store,
+        store.request_row,
+        issued_at=datetime(2026, 6, 12, tzinfo=timezone.utc),
+    )
     result = command_executors.execute_guard_command_job(
         {
             "operation": "guard.approval.resolve",
