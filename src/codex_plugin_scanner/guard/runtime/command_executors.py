@@ -332,7 +332,7 @@ def _execute_approval_operation(
     envelope = validated_remote_approval_envelope(
         remote_approval,
         store=store,
-        allow_expired=True,
+        admitted_at=job.get("createdAt"),
     )
     validate_remote_approval_request_binding(
         envelope=envelope,

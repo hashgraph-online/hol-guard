@@ -300,6 +300,23 @@ def _oauth_store(tmp_path: Path) -> GuardStore:
     return store
 
 
+def test_remote_approval_rejects_queue_admission_after_expiry(tmp_path: Path) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    request_row = _approval_request_row("request-expired")
+    envelope = _signed_remote_approval(
+        store,
+        request_row,
+        issued_at=datetime(2026, 6, 12, tzinfo=timezone.utc),
+    )
+
+    with pytest.raises(GuardReviewContractError, match="remote_approval_expired"):
+        validated_remote_approval_envelope(
+            envelope,
+            store=store,
+            admitted_at="2026-06-12T00:06:00+00:00",
+        )
+
+
 def test_guard_review_oauth_metadata_prefers_explicit_device_id(tmp_path: Path) -> None:
     class DeviceStore(FakeStore):
         def get_oauth_local_credentials(self, *, allow_primary: bool = False) -> dict[str, object]:
@@ -2182,6 +2199,7 @@ def test_executor_resolves_expired_queued_remote_approval(tmp_path: Path) -> Non
     )
     result = command_executors.execute_guard_command_job(
         {
+            "createdAt": "2026-06-12T00:02:00+00:00",
             "operation": "guard.approval.resolve",
             "targetMachineInstallationId": "portal-installation-routing-id",
             "payload": {
