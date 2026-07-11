@@ -603,8 +603,18 @@ def _cloud_sync_sync_loop(
                 }
             )
             _save_sync_state(store, state)
-        except Exception:
+        except Exception as error:
             error_streak += 1
+            _LOGGER.exception("Unexpected error in live-request sync loop")
+            state = _load_sync_state(store)
+            state.update(
+                {
+                    "state": "error",
+                    "last_error": _redacted_error(error),
+                    "last_error_at": _now(),
+                }
+            )
+            _save_sync_state(store, state)
 
         wait = min(error_backoff, poll_interval * (2 ** min(error_streak, 10))) if error_streak else poll_interval
         if stop_event.wait(wait):

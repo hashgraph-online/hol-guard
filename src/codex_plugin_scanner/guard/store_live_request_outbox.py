@@ -216,7 +216,7 @@ class StoreLiveRequestOutboxMixin:
                 select count(*) as depth,
                        min(changed_at) as oldest_changed_at,
                        max(attempt_count) as max_attempt_count,
-                       max(last_error) filter (where last_error is not null) as last_error
+                       max(last_error) as last_error
                 from guard_live_request_outbox
                 """
             ).fetchone()
