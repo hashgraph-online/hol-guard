@@ -1832,6 +1832,11 @@
     border-width: 0;
   }
 
+  .border-2 {
+    border-style: var(--tw-border-style);
+    border-width: 2px;
+  }
+
   .border-t {
     border-top-style: var(--tw-border-style);
     border-top-width: 1px;
@@ -4967,10 +4972,6 @@
       .hover\:bg-slate-100\/60:hover {
         background-color: color-mix(in oklab, var(--color-slate-100) 60%, transparent);
       }
-    }
-
-    .hover\:bg-slate-200:hover {
-      background-color: var(--color-slate-200);
     }
 
     .hover\:bg-slate-200\/50:hover {

@@ -12802,9 +12802,6 @@ function HiMiniExclamationTriangle(props) {
 function HiMiniExclamationCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
-function HiMiniEnvelopeOpen(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2.106 6.447A2 2 0 0 0 1 8.237V16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.236a2 2 0 0 0-1.106-1.789l-7-3.5a2 2 0 0 0-1.788 0l-7 3.5Zm1.48 4.007a.75.75 0 0 0-.671 1.342l5.855 2.928a2.75 2.75 0 0 0 2.46 0l5.852-2.927a.75.75 0 1 0-.67-1.341l-5.853 2.926a1.25 1.25 0 0 1-1.118 0l-5.856-2.928Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
 function HiMiniDocumentText(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -25064,13 +25061,6 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
   const handleClick = reactExports.useCallback(() => {
     onOpenRequest(item.request_id);
   }, [item.request_id, onOpenRequest]);
-  const handleMarkUnread = reactExports.useCallback(
-    (event) => {
-      event.stopPropagation();
-      readState.markUnread(item.request_id);
-    },
-    [item.request_id, readState]
-  );
   const handleCheckboxChange = reactExports.useCallback(
     (event) => {
       event.stopPropagation();
@@ -25117,7 +25107,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
             )
           }
         ) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
           {
             type: "button",
@@ -25128,16 +25118,18 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
             "aria-setsize": void 0,
             tabIndex: active ? 0 : -1,
             className: "flex min-w-0 flex-1 items-center gap-2 text-left",
-            children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2", children: [
+            children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 "span",
                 {
-                  className: `mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${isBlocked ? "bg-brand-attention" : "bg-emerald-400"}`,
-                  "aria-hidden": "true"
+                  role: "img",
+                  className: `h-2 w-2 shrink-0 rounded-full border-2 transition-colors ${isRead ? "border-slate-300 bg-transparent" : "border-transparent bg-brand-blue"}`,
+                  title: isRead ? "Read" : "Unread",
+                  "aria-label": isRead ? "Read" : "Unread"
                 }
               ),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: `truncate text-sm ${isRead ? "font-medium text-brand-dark" : "font-bold text-brand-dark"}`, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: `truncate text-sm ${isRead ? "font-medium text-slate-600" : "font-bold text-brand-dark"}`, children: [
                   !isRead && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Unread request:" }),
                   preview
                 ] }),
@@ -25148,32 +25140,27 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                   " · ",
                   formatQueueRequestDate(item)
                 ] })
-              ] })
-            ] })
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "div",
-          {
-            className: "relative inline-flex shrink-0 cursor-pointer items-center justify-center",
-            onClick: handleClick,
-            children: isRead ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "button",
-              {
-                type: "button",
-                onClick: handleMarkUnread,
-                "aria-label": `Mark request ${preview} unread`,
-                title: "Mark unread",
-                className: `inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200 hover:text-brand-dark transition-colors ${active ? "bg-brand-blue/10" : "bg-slate-50"}`,
-                children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEnvelopeOpen, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
-              }
-            ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "span",
-              {
-                className: `inline-flex h-7 w-7 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
-                children: /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" })
-              }
-            )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "span",
+                {
+                  role: "img",
+                  className: `inline-flex h-2 w-2 shrink-0 rounded-full ${isBlocked ? "bg-brand-attention" : "bg-emerald-400"}`,
+                  title: isBlocked ? "Blocked by policy" : "Allowed by policy",
+                  "aria-label": isBlocked ? "Blocked by policy" : "Allowed by policy"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "span",
+                {
+                  role: "img",
+                  className: `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
+                  title: category.label,
+                  "aria-label": category.label,
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" })
+                }
+              )
+            ]
           }
         )
       ] })
