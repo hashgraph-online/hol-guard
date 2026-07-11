@@ -5,8 +5,10 @@ from __future__ import annotations
 import base64
 import json
 import re
+import shlex
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from ..config import VALID_RECEIPT_REDACTION_LEVELS, load_guard_config
@@ -452,13 +454,657 @@ _CLOUD_SPACED_SECRET_ARGUMENT_RE = re.compile(
     re.IGNORECASE,
 )
 
+_SOURCE_SEARCH_COMMANDS = frozenset({"grep", "egrep", "fgrep", "rg"})
+_SOURCE_SEARCH_OPTION_FLAGS_WITH_VALUES = frozenset(
+    {
+        "-A",
+        "-B",
+        "-C",
+        "-f",
+        "-g",
+        "-m",
+        "-t",
+        "--after-context",
+        "--before-context",
+        "--color",
+        "--context",
+        "--exclude",
+        "--exclude-dir",
+        "--file",
+        "--glob",
+        "--iglob",
+        "--include",
+        "--max-count",
+        "--type",
+        "--type-add",
+        "--type-not",
+    }
+)
+_SOURCE_SEARCH_PATTERN_FLAGS = frozenset({"-e", "--regexp"})
+_SOURCE_SEARCH_SECRET_ASSIGNMENT_RE = re.compile(
+    r"""(?ix)
+    (?P<prefix>
+        [\"']?
+        (?:
+            access[_-]?token
+            |refresh[_-]?token
+            |authorization[_-]?code
+            |user[_-]?code
+            |dpop[_-]?private[_-]?key(?:[_-]?(?:pem|ref))?
+            |api[_-]?key
+            |token
+            |secret
+            |password
+            |credential
+        )
+        [\"']?
+        \s*[:=]\s*
+    )
+    (?P<value>
+        \"(?:\\.|[^\"])*\"
+        |'(?:\\.|[^'])*'
+        |[^\s,;)}\]]+
+    )
+    """
+)
+_SOURCE_SEARCH_CODE_VALUE_RE = re.compile(
+    r"""(?ix)
+    ^(?:
+        \$\{?[A-Za-z_][A-Za-z0-9_]*\}?
+        |(?:os\.(?:getenv|environ)|process\.env|getenv|env(?:iron)?\[|config(?:uration)?(?:\.|\[)|settings(?:\.|\[)|secrets?(?:\.|\[)|credentials?(?:\.|\[))
+        |[A-Za-z_][A-Za-z0-9_.]*\([^\n]*\)
+        |(?:none|null|undefined|true|false|value|variable|placeholder)
+    )$
+    """
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _ShellToken:
+    value: str
+    start: int
+    end: int
+    is_control: bool = False
+
 
 def _cloud_scrub_text(value: str) -> str:
+    protected_value, replacements = _protect_source_search_patterns(value)
     without_spaced_secret_arguments = _CLOUD_SPACED_SECRET_ARGUMENT_RE.sub(
         lambda match: f"{match.group('prefix')}[redacted]",
-        value,
+        protected_value,
     )
-    return redact_sensitive_text(redact_text(without_spaced_secret_arguments).text)
+    scrubbed = redact_sensitive_text(redact_text(without_spaced_secret_arguments).text)
+    for placeholder, replacement in replacements.items():
+        scrubbed = scrubbed.replace(placeholder, replacement)
+    return scrubbed
+
+
+def _protect_source_search_patterns(value: str) -> tuple[str, dict[str, str]]:
+    spans = _source_search_pattern_spans(value)
+    if not spans:
+        return value, {}
+
+    parts: list[str] = []
+    replacements: dict[str, str] = {}
+    cursor = 0
+    for index, (start, end) in enumerate(spans):
+        if start < cursor:
+            continue
+        raw_token = value[start:end]
+        safe_token = _safe_source_search_pattern_token(raw_token)
+        placeholder = _source_search_placeholder(index, value)
+        parts.append(value[cursor:start])
+        parts.append(placeholder)
+        replacements[placeholder] = safe_token
+        cursor = end
+    parts.append(value[cursor:])
+    return "".join(parts), replacements
+
+
+def _source_search_placeholder(index: int, value: str) -> str:
+    nonce = 0
+    while True:
+        placeholder = f"__HOL_GUARD_SOURCE_SEARCH_PATTERN_{index}_{nonce}__"
+        if placeholder not in value:
+            return placeholder
+        nonce += 1
+
+
+def _safe_source_search_pattern_token(raw_token: str) -> str:
+    try:
+        parsed = shlex.split(raw_token, posix=True, comments=False)
+    except ValueError:
+        return raw_token
+    if len(parsed) != 1:
+        return raw_token
+
+    original = parsed[0]
+    safe = (
+        _cloud_scrub_text(original)
+        if _source_search_pattern_spans(original)
+        else _scrub_source_search_pattern(original)
+    )
+    return raw_token if safe == original else shlex.quote(safe)
+
+
+def _scrub_source_search_pattern(value: str) -> str:
+    known_secret_safe = redact_text(value).text
+
+    def redact_assignment(match: re.Match[str]) -> str:
+        candidate = match.group("value")
+        if _is_source_search_code_value(candidate):
+            return match.group(0)
+        return f"{match.group('prefix')}[redacted]"
+
+    return _SOURCE_SEARCH_SECRET_ASSIGNMENT_RE.sub(redact_assignment, known_secret_safe)
+
+
+def _is_source_search_code_value(value: str) -> bool:
+    candidate = value.strip()
+    if len(candidate) >= 2 and candidate[0] == candidate[-1] and candidate[0] in {"'", '"'}:
+        candidate = candidate[1:-1].strip()
+    lower_candidate = candidate.lower()
+    if lower_candidate.startswith(
+        (
+            "os.getenv(",
+            "os.environ",
+            "process.env",
+            "getenv(",
+            "env[",
+            "environment[",
+            "config.",
+            "config[",
+            "configuration.",
+            "configuration[",
+            "settings.",
+            "settings[",
+            "secret.",
+            "secret[",
+            "secrets.",
+            "secrets[",
+            "credential.",
+            "credential[",
+            "credentials.",
+            "credentials[",
+        )
+    ):
+        return True
+    return bool(_SOURCE_SEARCH_CODE_VALUE_RE.fullmatch(candidate))
+
+
+def _source_search_pattern_spans(value: str) -> list[tuple[int, int]]:
+    tokens = _shell_tokens(value)
+    if tokens is None:
+        return []
+
+    spans: list[tuple[int, int]] = []
+    segment_start = 0
+    for index, token in enumerate((*tokens, _ShellToken(";", len(value), len(value), is_control=True))):
+        if not token.is_control:
+            continue
+        spans.extend(_source_search_pattern_spans_for_segment(tokens, segment_start, index))
+        segment_start = index + 1
+    return spans
+
+
+def _source_search_pattern_spans_for_segment(
+    tokens: Sequence[_ShellToken],
+    start: int,
+    end: int,
+) -> list[tuple[int, int]]:
+    split_string_spans = [
+        (tokens[index].start, tokens[index].end)
+        for index in _source_search_split_string_token_indexes(tokens, start, end)
+    ]
+    command_index = _source_search_command_index(tokens, start, end)
+    if command_index >= end:
+        return split_string_spans
+
+    command_name = _command_basename(tokens[command_index].value)
+    argument_index = command_index + 1
+    if command_name == "git":
+        argument_index = _git_grep_argument_index(tokens, argument_index, end)
+        if argument_index >= end:
+            return split_string_spans
+    elif command_name not in _SOURCE_SEARCH_COMMANDS:
+        return split_string_spans
+
+    return split_string_spans + [
+        (tokens[index].start, tokens[index].end)
+        for index in _source_search_pattern_token_indexes(tokens, argument_index, end)
+    ]
+
+
+def _source_search_split_string_token_indexes(
+    tokens: Sequence[_ShellToken],
+    start: int,
+    end: int,
+) -> list[int]:
+    index = start
+    while index < end:
+        while index < end and _is_shell_environment_assignment(tokens[index].value):
+            index += 1
+        if index >= end:
+            return []
+        command_name = _command_basename(tokens[index].value)
+        wrapper_index = _skip_transparent_source_search_wrapper(
+            command_name,
+            tokens,
+            index + 1,
+            end,
+        )
+        if wrapper_index is not None:
+            index = wrapper_index
+            continue
+        if command_name != "env":
+            return []
+        return _env_split_string_token_indexes(tokens, index + 1, end)
+    return []
+
+
+def _env_split_string_token_indexes(
+    tokens: Sequence[_ShellToken],
+    start: int,
+    end: int,
+) -> list[int]:
+    split_string_indexes: list[int] = []
+    value_options = frozenset({"-C", "-S", "-u", "--chdir", "--split-string", "--unset"})
+    index = start
+    while index < end:
+        value = tokens[index].value
+        if value == "--":
+            return split_string_indexes
+        clustered_split_string = _env_clustered_split_string_payload(value)
+        if clustered_split_string is not None:
+            if not clustered_split_string and index + 1 < end and _source_search_pattern_spans(tokens[index + 1].value):
+                split_string_indexes.append(index + 1)
+            index += 2 if not clustered_split_string else 1
+            continue
+        if value in value_options:
+            if (
+                value in {"-S", "--split-string"}
+                and index + 1 < end
+                and _source_search_pattern_spans(tokens[index + 1].value)
+            ):
+                split_string_indexes.append(index + 1)
+            index += 2
+            continue
+        if value.startswith("--split-string="):
+            split_string = value.removeprefix("--split-string=")
+            if _source_search_pattern_spans(split_string):
+                split_string_indexes.append(index)
+            index += 1
+            continue
+        if value.startswith(("--chdir=", "--unset=")):
+            index += 1
+            continue
+        if value.startswith("-") or _is_shell_environment_assignment(value):
+            index += 1
+            continue
+        return split_string_indexes
+    return split_string_indexes
+
+
+def _env_clustered_split_string_payload(value: str) -> str | None:
+    if not value.startswith("-") or value.startswith("--") or len(value) <= 2:
+        return None
+    split_index = value.find("S", 1)
+    return None if split_index == -1 else value[split_index + 1 :]
+
+
+def _source_search_command_index(
+    tokens: Sequence[_ShellToken],
+    start: int,
+    end: int,
+) -> int:
+    index = start
+    while index < end:
+        while index < end and _is_shell_environment_assignment(tokens[index].value):
+            index += 1
+        if index >= end:
+            return index
+        command_name = _command_basename(tokens[index].value)
+        wrapper_index = _skip_transparent_source_search_wrapper(
+            command_name,
+            tokens,
+            index + 1,
+            end,
+        )
+        if wrapper_index is not None:
+            index = wrapper_index
+            continue
+        if command_name == "env":
+            index = _skip_env_prefix_options(tokens, index + 1, end)
+            continue
+        return index
+    return index
+
+
+def _skip_command_prefix_options(
+    tokens: Sequence[_ShellToken],
+    start: int,
+    end: int,
+) -> int:
+    index = start
+    while index < end:
+        value = tokens[index].value
+        if value == "--":
+            return index + 1
+        if not value.startswith("-"):
+            return index
+        index += 1
+    return index
+
+
+def _skip_transparent_source_search_wrapper(
+    command_name: str,
+    tokens: Sequence[_ShellToken],
+    start: int,
+    end: int,
+) -> int | None:
+    if command_name in {"command", "nohup"}:
+        return _skip_command_prefix_options(tokens, start, end)
+    if command_name == "nice":
+        return _skip_nice_prefix_options(tokens, start, end)
+    if command_name == "stdbuf":
+        return _skip_stdbuf_prefix_options(tokens, start, end)
+    if command_name == "sudo":
+        return _skip_sudo_prefix_options(tokens, start, end)
+    if command_name == "time":
+        return _skip_time_prefix_options(tokens, start, end)
+    return None
+
+
+def _skip_nice_prefix_options(
+    tokens: Sequence[_ShellToken],
+    start: int,
+    end: int,
+) -> int:
+    value_options = frozenset({"-n", "--adjustment"})
+    index = start
+    while index < end:
+        value = tokens[index].value
+        if value == "--":
+            return index + 1
+        clustered_split_string = _env_clustered_split_string_payload(value)
+        if clustered_split_string is not None:
+            index += 2 if not clustered_split_string else 1
+            continue
+        if value in value_options:
+            index += 2
+            continue
+        if value.startswith("--adjustment=") or (value.startswith("-n") and value != "-n"):
+            index += 1
+            continue
+        if value.startswith("-"):
+            index += 1
+            continue
+        return index
+    return index
+
+
+def _skip_stdbuf_prefix_options(
+    tokens: Sequence[_ShellToken],
+    start: int,
+    end: int,
+) -> int:
+    value_options = frozenset({"-e", "-i", "-o", "--error", "--input", "--output"})
+    index = start
+    while index < end:
+        value = tokens[index].value
+        if value == "--":
+            return index + 1
+        if value in value_options:
+            index += 2
+            continue
+        if value.startswith(("--error=", "--input=", "--output=")):
+            index += 1
+            continue
+        if len(value) > 2 and value[:2] in {"-e", "-i", "-o"}:
+            index += 1
+            continue
+        if value.startswith("-"):
+            index += 1
+            continue
+        return index
+    return index
+
+
+def _skip_time_prefix_options(
+    tokens: Sequence[_ShellToken],
+    start: int,
+    end: int,
+) -> int:
+    value_options = frozenset({"-f", "-o", "--format", "--output"})
+    index = start
+    while index < end:
+        value = tokens[index].value
+        if value == "--":
+            return index + 1
+        if value in value_options:
+            index += 2
+            continue
+        if value.startswith(("--format=", "--output=")):
+            index += 1
+            continue
+        if len(value) > 2 and value[:2] in {"-f", "-o"}:
+            index += 1
+            continue
+        if value.startswith("-"):
+            index += 1
+            continue
+        return index
+    return index
+
+
+def _skip_env_prefix_options(
+    tokens: Sequence[_ShellToken],
+    start: int,
+    end: int,
+) -> int:
+    value_options = frozenset({"-C", "-S", "-u", "--chdir", "--split-string", "--unset"})
+    index = start
+    while index < end:
+        value = tokens[index].value
+        if value == "--":
+            return index + 1
+        if value in value_options:
+            index += 2
+            continue
+        if value.startswith(("--chdir=", "--split-string=", "--unset=")):
+            index += 1
+            continue
+        if value.startswith("-") or _is_shell_environment_assignment(value):
+            index += 1
+            continue
+        return index
+    return index
+
+
+def _skip_sudo_prefix_options(
+    tokens: Sequence[_ShellToken],
+    start: int,
+    end: int,
+) -> int:
+    value_options = frozenset(
+        {
+            "-C",
+            "-D",
+            "-g",
+            "-p",
+            "-r",
+            "-t",
+            "-u",
+            "--chdir",
+            "--close-from",
+            "--group",
+            "--host",
+            "--other-user",
+            "--preserve-env",
+            "--prompt",
+            "--role",
+            "--type",
+            "--user",
+        }
+    )
+    index = start
+    while index < end:
+        value = tokens[index].value
+        if value == "--":
+            return index + 1
+        if value in value_options:
+            index += 2
+            continue
+        if value.startswith(
+            (
+                "--chdir=",
+                "--close-from=",
+                "--group=",
+                "--host=",
+                "--other-user=",
+                "--preserve-env=",
+                "--prompt=",
+                "--role=",
+                "--type=",
+                "--user=",
+            )
+        ):
+            index += 1
+            continue
+        if value.startswith("-"):
+            index += 1
+            continue
+        return index
+    return index
+
+
+def _git_grep_argument_index(
+    tokens: Sequence[_ShellToken],
+    start: int,
+    end: int,
+) -> int:
+    value_options = frozenset(
+        {"-C", "-c", "--attr-source", "--config-env", "--exec-path", "--git-dir", "--namespace", "--work-tree"}
+    )
+    index = start
+    while index < end:
+        value = tokens[index].value
+        if value == "grep":
+            return index + 1
+        if value == "--":
+            return end
+        if value in value_options:
+            index += 2
+            continue
+        if value.startswith(
+            ("--attr-source=", "--config-env=", "--exec-path=", "--git-dir=", "--namespace=", "--work-tree=")
+        ):
+            index += 1
+            continue
+        if value.startswith("-"):
+            index += 1
+            continue
+        return end
+    return end
+
+
+def _source_search_pattern_token_indexes(
+    tokens: Sequence[_ShellToken],
+    start: int,
+    end: int,
+) -> list[int]:
+    pattern_indexes: list[int] = []
+    options_enabled = True
+    index = start
+    while index < end:
+        value = tokens[index].value
+        if options_enabled and value == "--":
+            options_enabled = False
+            index += 1
+            continue
+        if options_enabled and value in _SOURCE_SEARCH_PATTERN_FLAGS:
+            if index + 1 >= end:
+                return []
+            pattern_indexes.append(index + 1)
+            index += 2
+            continue
+        if options_enabled and _is_attached_source_search_pattern_option(value):
+            pattern_indexes.append(index)
+            index += 1
+            continue
+        if options_enabled and value in _SOURCE_SEARCH_OPTION_FLAGS_WITH_VALUES:
+            if index + 1 >= end:
+                return []
+            index += 2
+            continue
+        if options_enabled and value.startswith("-"):
+            index += 1
+            continue
+        if not pattern_indexes:
+            pattern_indexes.append(index)
+        return pattern_indexes
+    return pattern_indexes
+
+
+def _is_attached_source_search_pattern_option(value: str) -> bool:
+    return value.startswith("--regexp=") or (value.startswith("-e") and len(value) > 2)
+
+
+def _shell_tokens(value: str) -> list[_ShellToken] | None:
+    tokens: list[_ShellToken] = []
+    index = 0
+    while index < len(value):
+        while index < len(value) and value[index].isspace():
+            index += 1
+        if index >= len(value):
+            break
+        start = index
+        character = value[index]
+        if character in "|;&<>":
+            index += 2 if index + 1 < len(value) and value[index : index + 2] in {"&&", "||", ">>", "<<"} else 1
+            tokens.append(_ShellToken(value[start:index], start, index, is_control=True))
+            continue
+
+        quote: str | None = None
+        while index < len(value):
+            character = value[index]
+            if quote is not None:
+                if quote == '"' and character == "\\":
+                    index += 2
+                    continue
+                if character == quote:
+                    quote = None
+                index += 1
+                continue
+            if character in {"'", '"'}:
+                quote = character
+                index += 1
+                continue
+            if character == "\\":
+                index += 2
+                continue
+            if character.isspace() or character in "|;&<>":
+                break
+            index += 1
+        if quote is not None:
+            return None
+        raw_token = value[start:index]
+        try:
+            parsed = shlex.split(raw_token, posix=True, comments=False)
+        except ValueError:
+            return None
+        if len(parsed) != 1:
+            return None
+        tokens.append(_ShellToken(parsed[0], start, index))
+    return tokens
+
+
+def _is_shell_environment_assignment(value: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", value))
+
+
+def _command_basename(value: str) -> str:
+    return value.rsplit("/", maxsplit=1)[-1]
 
 
 _SENSITIVE_CLOUD_FIELD_MARKERS = (
