@@ -2219,7 +2219,7 @@ def test_executor_resolves_expired_queued_remote_approval(tmp_path: Path) -> Non
     assert result["generatedAt"] == "2026-06-13T00:00:00+00:00"
     data = result["data"]
     assert data["status"] == "completed"
-    assert data["daemonAckStatus"] == "resolved_unconfirmed"
+    assert data["daemonAckStatus"] == "resolved"
     assert data["remoteDecision"] == "allow"
     assert data["resolution"]["status"] == "resolved"
     assert "remoteApproval" not in data
@@ -2300,7 +2300,7 @@ def test_executor_blocks_local_approval_request(tmp_path: Path) -> None:
 
     data = result["data"]
     assert data["status"] == "completed"
-    assert data["daemonAckStatus"] == "resolved_unconfirmed"
+    assert data["daemonAckStatus"] == "resolved"
     assert data["remoteDecision"] == "block"
     assert data["resolution"]["status"] == "resolved"
     assert "remoteApproval" not in data
