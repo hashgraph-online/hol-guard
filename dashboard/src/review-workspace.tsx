@@ -942,7 +942,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
           aria-posinset={index + 1}
           aria-setsize={undefined}
           tabIndex={active ? 0 : -1}
-          className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
           <div className="flex min-w-0 items-center gap-2">
             <span
@@ -961,27 +961,31 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
               </p>
             </div>
           </div>
-          <div className="relative shrink-0">
-            <span
-              className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${
-                active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"
-              }`}
-            >
-              <CategoryIcon className="h-4 w-4" aria-hidden="true" />
-            </span>
-            {isRead && (
-              <button
-                type="button"
-                onClick={handleMarkUnread}
-                aria-label={`Mark request ${preview} unread`}
-                title="Mark unread"
-                className="absolute inset-0 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50/95 text-slate-500 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-slate-200 hover:text-brand-dark transition-opacity"
-              >
-                <HiMiniEnvelopeOpen className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-            )}
-          </div>
         </button>
+        <div
+          className="relative inline-flex shrink-0 cursor-pointer items-center justify-center"
+          onClick={handleClick}
+          aria-hidden="true"
+        >
+          <span
+            className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${
+              active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"
+            }`}
+          >
+            <CategoryIcon className="h-4 w-4" aria-hidden="true" />
+          </span>
+          {isRead && (
+            <button
+              type="button"
+              onClick={handleMarkUnread}
+              aria-label={`Mark request ${preview} unread`}
+              title="Mark unread"
+              className="absolute inset-0 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50/95 text-slate-500 pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus:pointer-events-auto focus:opacity-100 hover:bg-slate-200 hover:text-brand-dark transition-opacity"
+            >
+              <HiMiniEnvelopeOpen className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -4699,6 +4699,10 @@
   }
 
   @media (hover: hover) {
+    .group-hover\:pointer-events-auto:is(:where(.group):hover *) {
+      pointer-events: auto;
+    }
+
     .group-hover\:bg-\[color-mix\(in_srgb\,var\(--brand-blue\)_85\%\,var\(--brand-dark\)\)\]:is(:where(.group):hover *) {
       background-color: var(--brand-blue);
     }
@@ -5148,6 +5152,10 @@
         --tw-ring-color: color-mix(in oklab, var(--brand-blue) 60%, transparent);
       }
     }
+  }
+
+  .focus\:pointer-events-auto:focus {
+    pointer-events: auto;
   }
 
   .focus\:not-sr-only:focus {

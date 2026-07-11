@@ -25117,7 +25117,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
             )
           }
         ) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
             type: "button",
@@ -25127,50 +25127,56 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
             "aria-posinset": index + 1,
             "aria-setsize": void 0,
             tabIndex: active ? 0 : -1,
-            className: "flex min-w-0 flex-1 items-center justify-between gap-2 text-left",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "span",
-                  {
-                    className: `mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${isBlocked ? "bg-brand-attention" : "bg-emerald-400"}`,
-                    "aria-hidden": "true"
-                  }
-                ),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: `truncate text-sm ${isRead ? "font-medium text-brand-dark" : "font-bold text-brand-dark"}`, children: [
-                    !isRead && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Unread request:" }),
-                    preview
-                  ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "truncate text-[11px] text-muted-foreground", children: [
-                    harnessDisplayName(item.harness),
-                    " · ",
-                    category.shortLabel,
-                    " · ",
-                    formatQueueRequestDate(item)
-                  ] })
+            className: "flex min-w-0 flex-1 items-center gap-2 text-left",
+            children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "span",
+                {
+                  className: `mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${isBlocked ? "bg-brand-attention" : "bg-emerald-400"}`,
+                  "aria-hidden": "true"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: `truncate text-sm ${isRead ? "font-medium text-brand-dark" : "font-bold text-brand-dark"}`, children: [
+                  !isRead && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Unread request:" }),
+                  preview
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "truncate text-[11px] text-muted-foreground", children: [
+                  harnessDisplayName(item.harness),
+                  " · ",
+                  category.shortLabel,
+                  " · ",
+                  formatQueueRequestDate(item)
                 ] })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative shrink-0", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "span",
-                  {
-                    className: `inline-flex h-7 w-7 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
-                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" })
-                  }
-                ),
-                isRead && /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "button",
-                  {
-                    type: "button",
-                    onClick: handleMarkUnread,
-                    "aria-label": `Mark request ${preview} unread`,
-                    title: "Mark unread",
-                    className: "absolute inset-0 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50/95 text-slate-500 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-slate-200 hover:text-brand-dark transition-opacity",
-                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEnvelopeOpen, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
-                  }
-                )
               ] })
+            ] })
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: "relative inline-flex shrink-0 cursor-pointer items-center justify-center",
+            onClick: handleClick,
+            "aria-hidden": "true",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "span",
+                {
+                  className: `inline-flex h-7 w-7 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" })
+                }
+              ),
+              isRead && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  onClick: handleMarkUnread,
+                  "aria-label": `Mark request ${preview} unread`,
+                  title: "Mark unread",
+                  className: "absolute inset-0 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50/95 text-slate-500 pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus:pointer-events-auto focus:opacity-100 hover:bg-slate-200 hover:text-brand-dark transition-opacity",
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEnvelopeOpen, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+                }
+              )
             ]
           }
         )
