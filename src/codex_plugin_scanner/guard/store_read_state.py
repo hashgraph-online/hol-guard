@@ -22,9 +22,11 @@ class StoreReadStateMixin:
                     "on conflict(request_id) do update set read_at = excluded.read_at",
                     (rid, now),
                 )
-            connection.execute("delete from guard_request_read_state where request_id not in "
-                               "(select request_id from guard_request_read_state order by read_at desc limit ?)",
-                               (self.READ_STATE_LIMIT,))
+            connection.execute(
+                "delete from guard_request_read_state where request_id not in "
+                "(select request_id from guard_request_read_state order by read_at desc limit ?)",
+                (self.READ_STATE_LIMIT,),
+            )
 
     def mark_request_unread(self, request_id: str) -> None:
         with self._connect() as connection:
