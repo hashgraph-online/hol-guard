@@ -223,10 +223,20 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
       : null;
 
   useEffect(() => {
+    function isNestedQueueButton(target: EventTarget | null): boolean {
+      return target instanceof HTMLElement && target.tagName.toLowerCase() === "button";
+    }
+
     function handleKeyDown(event: KeyboardEvent) {
       if (pagedRequests.length === 0) return;
-      // Only fire queue navigation when focus is inside the review queue listbox.
-      if (!(event.target instanceof HTMLElement) || !event.target.closest('[role="listbox"]')) return;
+      // Only fire queue navigation when focus is inside the review queue listbox
+      // and not on a nested action button such as "Mark unread".
+      if (
+        !(event.target instanceof HTMLElement) ||
+        !event.target.closest('[role="listbox"]') ||
+        isNestedQueueButton(event.target)
+      )
+        return;
       const activeIdx = pagedRequests.findIndex((r) => r.request_id === activeRequestId);
       if (event.key === "ArrowDown") {
         event.preventDefault();
