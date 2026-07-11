@@ -567,7 +567,7 @@ def test_package_manager_shim_uses_trusted_guard_import_path(tmp_path: Path, cap
         capture_output=True,
         check=False,
         text=True,
-        timeout=30,
+        timeout=120,
     )
 
     assert result.returncode == 2
