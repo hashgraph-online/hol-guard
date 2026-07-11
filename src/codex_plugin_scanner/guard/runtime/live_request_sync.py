@@ -160,9 +160,7 @@ def _save_sync_fingerprints(
 
 def _request_sync_fingerprint(event: dict[str, object]) -> str:
     fields = {
-        key: value
-        for key, value in event.items()
-        if key not in {"localEventSequence", "localEmittedAt", "sentAt"}
+        key: value for key, value in event.items() if key not in {"localEventSequence", "localEmittedAt", "sentAt"}
     }
     serialized = json.dumps(
         fields,
