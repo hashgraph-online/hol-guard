@@ -167,9 +167,11 @@ def _verify_signed_payload(
         verifier = payload.get("verifier")
         if isinstance(verifier, dict):
             key_id = _non_empty_string(verifier.get("keyId"))
+    advertised_keys = _verification_keys_from_payload(payload.get("verificationKeys"))
+    if key_id is None and len(advertised_keys) == 1:
+        key_id = advertised_keys[0].key_id
     if key_id is None:
         raise GuardReviewContractError("missing_signing_key_id")
-    advertised_keys = _verification_keys_from_payload(payload.get("verificationKeys"))
     signing_key = _resolve_anchored_signing_key(
         advertised_keys=advertised_keys,
         anchored_keys=_anchored_review_verification_keys(store),
@@ -382,7 +384,7 @@ def validated_remote_approval_envelope(
             admitted_at,
             field_name="queue_admitted_at",
         )
-        if queue_admitted_at < issued_at or queue_admitted_at > expires_at:
+        if queue_admitted_at > expires_at:
             raise GuardReviewContractError("remote_approval_expired")
     payload_hash = _non_empty_string(envelope.get("payloadHash"))
     if payload_hash is None or payload_hash != payload_hash_for_remote_approval_envelope(envelope):
