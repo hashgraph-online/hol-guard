@@ -162,6 +162,7 @@ def _signed_remote_approval(
     decision: str = "allow_once",
     receipt_id: str = "cloud-receipt-1",
     issued_at: datetime | None = None,
+    include_key_id: bool = True,
     scope: str | None = None,
 ) -> dict[str, object]:
     oauth = guard_review_oauth_metadata(store)
@@ -189,7 +190,6 @@ def _signed_remote_approval(
         "nonce": f"{claim['nonce']}:{receipt_id}",
         "policyVersion": claim["policyVersion"],
         "projectIdentity": claim["projectIdentity"],
-        "keyId": REVIEW_SIGNING_KEY_ID,
         "receiptId": receipt_id,
         "reviewerRole": "workspace-owner",
         "reviewerUserId": "user-1",
@@ -202,6 +202,8 @@ def _signed_remote_approval(
         "verificationKeys": review_verification_keys(),
         "signatureAlgorithm": "rsa-pss-sha256",
     }
+    if include_key_id:
+        envelope["keyId"] = REVIEW_SIGNING_KEY_ID
     envelope["payloadHash"] = payload_hash_for_remote_approval_envelope(envelope)
     envelope["signature"] = sign_review_payload(envelope)
     return envelope
@@ -2195,6 +2197,7 @@ def test_executor_resolves_expired_approval_from_preexisting_queue(tmp_path: Pat
     remote_approval = _signed_remote_approval(
         store,
         store.request_row,
+        include_key_id=False,
         issued_at=datetime(2026, 6, 12, tzinfo=timezone.utc),
     )
     result = command_executors.execute_guard_command_job(
