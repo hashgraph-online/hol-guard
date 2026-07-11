@@ -25122,7 +25122,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 "span",
                 {
-                  className: `h-2 w-2 shrink-0 rounded-full transition-colors ${isRead ? "bg-transparent" : "bg-brand-blue"}`,
+                  className: `h-2 w-2 shrink-0 rounded-full border-2 transition-colors ${isRead ? "border-slate-300 bg-transparent" : "border-transparent bg-brand-blue"}`,
                   title: isRead ? "Read" : "Unread",
                   "aria-label": isRead ? "Read" : "Unread"
                 }
