@@ -508,6 +508,9 @@ def start_cloud_sync_sync_worker(
         "off",
     }:
         return None
+    profile = store.get_cloud_sync_profile()
+    if not isinstance(profile, dict) or not profile.get("workspace_id") or not profile.get("sync_url"):
+        return None
     stop_event = threading.Event()
     poll_interval = poll_interval or float(
         os.environ.get(
