@@ -12802,6 +12802,9 @@ function HiMiniExclamationTriangle(props) {
 function HiMiniExclamationCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniEnvelopeOpen(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2.106 6.447A2 2 0 0 0 1 8.237V16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.236a2 2 0 0 0-1.106-1.789l-7-3.5a2 2 0 0 0-1.788 0l-7 3.5Zm1.48 4.007a.75.75 0 0 0-.671 1.342l5.855 2.928a2.75 2.75 0 0 0 2.46 0l5.852-2.927a.75.75 0 1 0-.67-1.341l-5.853 2.926a1.25 1.25 0 0 1-1.118 0l-5.856-2.928Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniDocumentText(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -24662,7 +24665,7 @@ function ReviewWorkspace(props) {
         ]
       }
     ) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)] items-start", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 md:grid-cols-[320px_minmax(0,1fr)] lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)] items-start", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `${mobileQueueOpen ? "block" : "hidden"} md:block`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         ReviewQueueList,
         {
@@ -24873,7 +24876,7 @@ const ReviewQueueList = reactExports.forwardRef(({
             type: "search",
             value: searchTerm,
             onChange: handleSearchChange,
-            placeholder: "Search command, category, host...",
+            placeholder: "Search queue...",
             className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           }
         )
@@ -25124,7 +25127,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
             "aria-posinset": index + 1,
             "aria-setsize": void 0,
             tabIndex: active ? 0 : -1,
-            className: "group flex min-w-0 flex-1 items-center justify-between gap-2 text-left",
+            className: "flex min-w-0 flex-1 items-center justify-between gap-2 text-left",
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -25148,25 +25151,27 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                   ] })
                 ] })
               ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "span",
-                {
-                  className: `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
-                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" })
-                }
-              )
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative shrink-0", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "span",
+                  {
+                    className: `inline-flex h-7 w-7 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" })
+                  }
+                ),
+                isRead && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    onClick: handleMarkUnread,
+                    "aria-label": `Mark request ${preview} unread`,
+                    title: "Mark unread",
+                    className: "absolute inset-0 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50/95 text-slate-500 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-slate-200 hover:text-brand-dark transition-opacity",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEnvelopeOpen, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+                  }
+                )
+              ] })
             ]
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            onClick: handleMarkUnread,
-            "aria-label": `Mark request ${preview} unread`,
-            title: "Mark unread",
-            className: "opacity-0 group-hover:opacity-100 focus:opacity-100 shrink-0 rounded-md p-1 text-[11px] font-medium text-slate-500 hover:bg-slate-100 hover:text-brand-dark transition-opacity",
-            children: "Mark unread"
           }
         )
       ] })
