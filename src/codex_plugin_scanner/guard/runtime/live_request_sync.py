@@ -158,28 +158,11 @@ def _save_sync_fingerprints(
     )
 
 
-def _request_sync_fingerprint(item: dict[str, object]) -> str:
+def _request_sync_fingerprint(event: dict[str, object]) -> str:
     fields = {
-        key: item.get(key)
-        for key in (
-            "action_envelope_json",
-            "action_identity",
-            "changed_fields_json",
-            "created_at",
-            "decision",
-            "decision_expires_at",
-            "decision_scope",
-            "fallback_cli_command",
-            "last_seen_at",
-            "raw_command_text",
-            "request_id",
-            "review_claim_json",
-            "review_command",
-            "risk_headline",
-            "risk_summary",
-            "status",
-            "trigger_summary",
-        )
+        key: value
+        for key, value in event.items()
+        if key not in {"localEventSequence", "localEmittedAt", "sentAt"}
     }
     serialized = json.dumps(
         fields,
@@ -412,9 +395,6 @@ def _build_changed_sync_events(
             request_id_value = item.get("request_id")
             if not isinstance(request_id_value, str) or not request_id_value:
                 continue
-            fingerprint = _request_sync_fingerprint(item)
-            if fingerprints.get(request_id_value) == fingerprint:
-                continue
             sequence = _next_local_event_sequence(store)
             event = _build_live_request_event(
                 item,
@@ -424,6 +404,9 @@ def _build_changed_sync_events(
                 event_sequence=sequence,
             )
             if event is None:
+                continue
+            fingerprint = _request_sync_fingerprint(event)
+            if fingerprints.get(request_id_value) == fingerprint:
                 continue
             events.append(event)
             pending_fingerprints[request_id_value] = fingerprint

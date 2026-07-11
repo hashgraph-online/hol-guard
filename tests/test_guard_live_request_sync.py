@@ -1638,7 +1638,7 @@ class TestStateAwareLiveRequestSync:
         rejected = sync_live_requests_once(store, auth_context)
         accepted = sync_live_requests_once(store, auth_context)
         unchanged = sync_live_requests_once(store, auth_context)
-        store.rows[0]["last_seen_at"] = "2026-07-10T00:00:01+00:00"
+        store.rows[0]["risk_category"] = "critical"
         changed = sync_live_requests_once(store, auth_context)
 
         assert rejected["synced"] == 0
@@ -1695,9 +1695,18 @@ class TestStateAwareLiveRequestSync:
             "LIVE_REQUEST_SYNC_BATCH_SIZE",
             2,
         )
-        fingerprints = {
-            str(item["request_id"]): live_request_sync_module._request_sync_fingerprint(item) for item in rows[:2]
-        }
+        fingerprints: dict[str, str] = {}
+        redaction_level = live_request_sync_module._resolve_cloud_receipt_redaction_level(store)
+        for sequence, item in enumerate(rows[:2], start=1):
+            event = live_request_sync_module._build_live_request_event(
+                item,
+                oauth=None,
+                redaction_level=redaction_level,
+                store=store,
+                event_sequence=sequence,
+            )
+            assert event is not None
+            fingerprints[str(item["request_id"])] = live_request_sync_module._request_sync_fingerprint(event)
 
         events, pending, next_cursor = live_request_sync_module._build_changed_sync_events(
             store,
