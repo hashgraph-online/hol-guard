@@ -2140,7 +2140,7 @@ def test_executor_returns_waiting_local_confirm_for_app_remove_without_surface(
     }
 
 
-def test_executor_resolves_expired_queued_remote_approval(tmp_path: Path) -> None:
+def test_executor_resolves_expired_approval_from_preexisting_queue(tmp_path: Path) -> None:
     class ApprovalStore(FakeStore):
         def __init__(self, guard_home: Path) -> None:
             super().__init__(guard_home)
@@ -2199,7 +2199,7 @@ def test_executor_resolves_expired_queued_remote_approval(tmp_path: Path) -> Non
     )
     result = command_executors.execute_guard_command_job(
         {
-            "createdAt": "2026-06-12T00:02:00+00:00",
+            "createdAt": "2026-06-11T00:02:00+00:00",
             "operation": "guard.approval.resolve",
             "targetMachineInstallationId": "portal-installation-routing-id",
             "payload": {
