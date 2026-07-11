@@ -252,20 +252,23 @@ def test_rejected_batch_remains_durable_and_is_backed_off(tmp_path, monkeypatch)
 
 def test_partial_acknowledgement_retries_only_rejected_event(tmp_path, monkeypatch) -> None:
     store = GuardStore(tmp_path / "guard")
-    store.add_approval_request(_request("request-accepted"), _NOW)
+    store.add_approval_request(_request("request-accepted"), "2026-07-11T18:00:00+00:00")
     store.add_approval_request(_request("request-rejected"), _NOW)
-    monkeypatch.setattr(
-        live_request_sync,
-        "_post_sync_events",
-        lambda *_args, **_kwargs: {
+    monkeypatch.setattr(live_request_sync, "LIVE_REQUEST_SYNC_BATCH_SIZE", 2)
+
+    def post_events(*_args, **kwargs):
+        return {
             "accepted": 1,
             "rejected": 1,
             "perEventResults": [
-                {"index": 0, "accepted": True},
-                {"index": 1, "accepted": False},
+                {
+                    "index": index,
+                    "accepted": event["localRequestId"] == "request-accepted",
+                }
+                for index, event in enumerate(kwargs["events"])
             ],
-        },
-    )
+        }
+    monkeypatch.setattr(live_request_sync, "_post_sync_events", post_events)
 
     result = live_request_sync.sync_live_requests_once(store, _AUTH)
 
@@ -276,5 +279,122 @@ def test_partial_acknowledgement_retries_only_rejected_event(tmp_path, monkeypat
     assert rows[0]["attempt_count"] == 1
 
 
+def test_stale_rejection_is_acknowledged_while_transient_rejection_retries(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard")
+    store.add_approval_request(_request("request-stale"), _NOW)
+    monkeypatch.setattr(live_request_sync, "LIVE_REQUEST_SYNC_BATCH_SIZE", 2)
+    store.add_approval_request(_request("request-transient"), "2026-07-11T18:00:00+00:00")
+    monkeypatch.setattr(
+        live_request_sync,
+        "_post_sync_events",
+        lambda *_args, **_kwargs: {
+            "accepted": 0,
+            "rejected": 2,
+            "perEventResults": [
+                {"index": 0, "accepted": False, "error": "temporary failure"},
+                {
+                    "index": 1,
+                    "accepted": False,
+                    "error": "stale_sequence",
+                },
+            ],
+        },
+    )
+
+    live_request_sync.sync_live_requests_once(store, _AUTH)
+
+    rows = store.list_ready_live_request_outbox(
+        now="9999-12-31T23:59:59+00:00",
+        limit=10,
+    )
+    assert [row["local_request_id"] for row in rows] == ["request-transient"]
+    assert rows[0]["attempt_count"] == 1
+
+
+def test_newest_outbox_event_preempts_historical_backlog(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard")
+    store.add_approval_request(_request("historical"), _NOW)
+    store.add_approval_request(_request("new"), "2026-07-11T18:00:00+00:00")
+
+    rows = store.list_ready_live_request_outbox(
+        now="9999-12-31T23:59:59+00:00",
+        limit=1,
+        newest_first=True,
+    )
+
+    assert [row["local_request_id"] for row in rows] == ["new"]
+
+
+def test_sync_reserves_every_tenth_slot_for_oldest_ready_event(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard")
+    for index in range(11):
+        store.add_approval_request(
+            _request(f"request-{index:02d}"),
+            f"2026-07-11T12:{index:02d}:00+00:00",
+        )
+    sent: list[str] = []
+
+    def post_events(*_args, **kwargs):
+        sent.append(kwargs["events"][0]["localRequestId"])
+        return {
+            "accepted": 1,
+            "rejected": 0,
+            "perEventResults": [{"index": 0, "accepted": True}],
+        }
+
+    monkeypatch.setattr(live_request_sync, "LIVE_REQUEST_SYNC_MAX_BATCHES", 10)
+    monkeypatch.setattr(live_request_sync, "_post_sync_events", post_events)
+
+    live_request_sync.sync_live_requests_once(store, _AUTH)
+
+    assert sent[:9] == [f"request-{index:02d}" for index in range(10, 1, -1)]
+    assert sent[9] == "request-00"
+
+
+def test_transient_newest_failures_do_not_reset_oldest_fairness_slot(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard")
+    for index in range(11):
+        store.add_approval_request(
+            _request(f"request-{index:02d}"),
+            f"2026-07-11T12:{index:02d}:00+00:00",
+        )
+
+    def post_events(*_args, **kwargs):
+        request_id = kwargs["events"][0]["localRequestId"]
+        accepted = request_id == "request-00"
+        return {
+            "accepted": int(accepted),
+            "rejected": int(not accepted),
+            "perEventResults": [
+                {
+                    "index": 0,
+                    "accepted": accepted,
+                    "error": None if accepted else "temporary_failure",
+                },
+            ],
+        }
+
+    monkeypatch.setattr(live_request_sync, "LIVE_REQUEST_SYNC_MAX_BATCHES", 10)
+    monkeypatch.setattr(live_request_sync, "_post_sync_events", post_events)
+
+    live_request_sync.sync_live_requests_once(store, _AUTH)
+
+    rows = store.list_ready_live_request_outbox(
+        now="9999-12-31T23:59:59+00:00",
+        limit=20,
+    )
+    assert "request-00" not in {row["local_request_id"] for row in rows}
+
+
 def test_worker_safety_interval_is_subsecond() -> None:
     assert live_request_sync.DEFAULT_POLL_INTERVAL_SECONDS <= 0.1
+    assert live_request_sync.LIVE_REQUEST_SYNC_BATCH_SIZE == 1
