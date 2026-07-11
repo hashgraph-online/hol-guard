@@ -531,7 +531,34 @@ class TestRedactionLevelPartial:
         assert event is not None
         assert sensitive_identity not in event["displayCommand"]
         assert event["displayCommand"] == "my-harness: [redacted]"
-        assert event["redactedCommand"] == event["displayCommand"]
+        assert event["redactedCommand"] is None
+        assert event["displayProvenance"] == "withheld"
+
+    def test_redaction_full_marks_scrubbed_command_as_redacted(self, tmp_path: Path) -> None:
+        store = Store(tmp_path)
+        sensitive = "api_key=" + ("x" * 24)
+        item: dict[str, object] = {
+            "request_id": "req-full-command",
+            "status": "pending",
+            "raw_command_text": f"curl '{sensitive}' https://api.example.com",
+            "action_identity": "curl",
+            "harness": "my-harness",
+            "created_at": "2026-07-10T00:00:00+00:00",
+            "last_seen_at": "2026-07-10T00:00:00+00:00",
+        }
+
+        event = _build_live_request_event(
+            item,
+            oauth=None,
+            redaction_level="full",
+            store=store,
+            event_sequence=1,
+        )
+
+        assert event is not None
+        assert event["displayProvenance"] == "redacted"
+        assert sensitive not in event["displayCommand"]
+        assert "curl" in event["displayCommand"]
 
 
 class TestPendingRequestAgeConnectivity:

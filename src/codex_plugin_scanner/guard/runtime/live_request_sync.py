@@ -80,12 +80,13 @@ def _save_sync_state(store: GuardStore, state: dict[str, object]) -> None:
 
 
 def _resolve_display_provenance(
-    item: dict[str, object],
+    *,
+    has_command_details: bool,
     redaction_level: str,
 ) -> str:
     if redaction_level == "none":
         return _DISPLAY_PROVENANCE_RAW
-    if redaction_level == "full":
+    if redaction_level == "full" and not has_command_details:
         return _DISPLAY_PROVENANCE_WITHHELD
     return _DISPLAY_PROVENANCE_REDACTED
 
@@ -133,7 +134,7 @@ def _build_display_command(item: dict[str, object], redaction_level: str) -> tup
     envelope = envelope_value if isinstance(envelope_value, dict) else None
     command_text = _local_request_command_text(item, envelope)
     safe_command = _cloud_scrub_text(command_text) if command_text else None
-    display_command = safe_command if safe_command and redaction_level != "full" else fallback_display
+    display_command = safe_command or fallback_display
     display_command = _truncate_utf16(
         display_command,
         _LIVE_REQUEST_COMMAND_MAX_UTF16_UNITS,
@@ -147,9 +148,7 @@ def _build_display_command(item: dict[str, object], redaction_level: str) -> tup
     )
 
     raw_command = display_command if redaction_level == "none" and safe_command else None
-    redacted_command = (
-        display_command if redaction_level == "full" or (redaction_level == "partial" and safe_command) else None
-    )
+    redacted_command = display_command if redaction_level != "none" and safe_command else None
     return display_command, display_summary, raw_command, redacted_command
 
 
@@ -181,12 +180,13 @@ def _build_live_request_event(
             claim = None
 
     display_command, display_summary, raw_command, redacted_command = _build_display_command(item, redaction_level)
-    display_provenance = _resolve_display_provenance(item, redaction_level)
-
+    request_payload = _cloud_safe_local_request_payload(item, redaction_level=redaction_level)
+    display_provenance = _resolve_display_provenance(
+        has_command_details=bool(request_payload.get("command_text")),
+        redaction_level=redaction_level,
+    )
     created_at = str(item.get("created_at") or _now())
     last_seen_at = str(item.get("last_seen_at") or created_at)
-
-    request_payload = _cloud_safe_local_request_payload(item, redaction_level=redaction_level)
 
     return {
         "localRequestId": request_id,
