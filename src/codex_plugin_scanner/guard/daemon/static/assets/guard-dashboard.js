@@ -25050,8 +25050,20 @@ function SemanticFilterButton(props) {
     }
   );
 }
+const RISK_DOT_COLOR = {
+  high: "bg-red-400",
+  medium: "bg-amber-400",
+  low: "bg-emerald-400"
+};
+function riskLevelFromScore(score) {
+  if (score <= 2) return "high";
+  if (score <= 4) return "medium";
+  return "low";
+}
 function QueueItemRow({ item, active, readState, index, onOpenRequest, selectionMode = false, selectable = false, selected = false, onToggleSelect }) {
-  const isBlocked = item.policy_action === "block";
+  const risk = riskScore(item);
+  const riskLevel = riskLevelFromScore(risk);
+  const riskDotColor = RISK_DOT_COLOR[riskLevel];
   const category = resolveQueueCategory(item);
   const CategoryIcon = iconForQueueCategory(category.id);
   const preview = queueItemPreview(item);
@@ -25142,16 +25154,16 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                 "span",
                 {
                   role: "img",
-                  "aria-label": isBlocked ? "Blocked by policy" : "Allowed by policy",
+                  "aria-label": `Risk: ${riskLevel}`,
                   className: "group/icon relative flex h-2 w-2 shrink-0 items-center justify-center",
                   children: [
                     /* @__PURE__ */ jsxRuntimeExports.jsx(
                       "span",
                       {
-                        className: `h-2 w-2 rounded-full ${isBlocked ? "bg-brand-attention" : "bg-emerald-400"}`
+                        className: `h-2 w-2 rounded-full ${riskDotColor}`
                       }
                     ),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100", children: isBlocked ? "Blocked by policy" : "Allowed by policy" })
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100", children: `Risk: ${riskLevel}` })
                   ]
                 }
               ),
