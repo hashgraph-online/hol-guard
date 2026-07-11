@@ -1627,6 +1627,7 @@ def sync_receipts(
         store.set_sync_payload("policy", policy_payload, now)
     else:
         store.set_sync_payload("policy", {}, now)
+    validated_policy_bundle: dict[str, object] | None = None
     if policy_bundle_payload is not None:
         validated_policy_bundle, policy_bundle_rejection_reason, trusted_policy_bundle_keys = (
             validate_synced_policy_bundle(
@@ -1668,16 +1669,6 @@ def sync_receipts(
                 policy_bundle_keyring_payload(
                     trusted_policy_bundle_keys,
                     workspace_id=store.get_cloud_workspace_id(),
-                ),
-                now,
-            )
-            store.set_sync_payload(
-                "policy_bundle_ack",
-                _policy_bundle_acknowledgement_payload(
-                    device_id=device_id,
-                    device_name=device_name,
-                    policy_bundle=validated_policy_bundle,
-                    synced_at=now,
                 ),
                 now,
             )
@@ -1759,6 +1750,17 @@ def sync_receipts(
     remote_policy_sync_blocked = False
     try:
         store.replace_remote_policies(list(remote_decisions), now, remote_write_authorized=True)
+        if validated_policy_bundle is not None:
+            store.set_sync_payload(
+                "policy_bundle_ack",
+                _policy_bundle_acknowledgement_payload(
+                    device_id=device_id,
+                    device_name=device_name,
+                    policy_bundle=validated_policy_bundle,
+                    synced_at=now,
+                ),
+                now,
+            )
     except ApprovalGateError as error:
         remote_policies_stored = 0
         remote_policy_sync_blocked = True

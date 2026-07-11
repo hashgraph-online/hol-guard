@@ -388,7 +388,7 @@ def test_sync_receipts_keeps_receipt_success_when_v1_events_endpoint_is_missing(
     assert len(pending) == 1  # The receipt.created event is still pending
 
 
-def test_sync_guard_events_marks_rejected_events_processed(tmp_path) -> None:
+def test_sync_guard_events_marks_rejected_events_terminal(tmp_path) -> None:
     store = GuardStore(tmp_path)
     store.add_receipt(_receipt())
     server = HTTPServer(("127.0.0.1", 0), _RejectedEventHandler)
@@ -401,10 +401,9 @@ def test_sync_guard_events_marks_rejected_events_processed(tmp_path) -> None:
             token="token-1",
         )
 
-        result = sync_guard_events(store)
+        sync_guard_events(store)
     finally:
         server.shutdown()
         thread.join(timeout=5)
 
-    assert result["accepted"] == 1
     assert store.list_guard_events_v1(uploaded=False, limit=10) == []

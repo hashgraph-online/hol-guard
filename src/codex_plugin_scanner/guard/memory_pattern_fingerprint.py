@@ -71,6 +71,7 @@ _PACKAGE_MANAGERS: frozenset[str] = frozenset(
     {"npm", "pnpm", "yarn", "bun", "pip", "pip3", "uv", "poetry", "cargo", "go", "gem", "brew"}
 )
 _PACKAGE_INSTALL_SUBCOMMANDS: frozenset[str] = frozenset({"install", "i", "add", "ci", "in", "up", "upgrade"})
+_TOOL_ACTION_ARTIFACT_TYPES: frozenset[str] = frozenset({"tool_action_request", "tool_output"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,16 +101,25 @@ def build_memory_pattern_fingerprint(
     """Build the most specific fingerprint available for a decision.
 
     Returns ``None`` when the available signal is too generic to anchor memory.
-    Preference order: package install > MCP tool > file read > shell command >
-    generic artifact. Each path applies guardrails against bare labels.
+    Tool action/output rows use their concrete artifact identity rather than
+    reinterpreting display text as a shell or package-manager command.
     """
-    candidate = (
-        _try_package_install(command, harness)
-        or _try_mcp_tool(command, harness, artifact_id)
-        or _try_file_read(command, harness, artifact_type)
-        or _try_shell_command(command, harness)
-        or _try_generic_artifact(artifact_id, artifact_name, artifact_type, harness)
-    )
+    normalized_artifact_type = _normalize_token(artifact_type)
+    if normalized_artifact_type in _TOOL_ACTION_ARTIFACT_TYPES:
+        candidate = _try_generic_artifact(
+            artifact_id,
+            artifact_name,
+            artifact_type,
+            harness,
+        )
+    else:
+        candidate = (
+            _try_package_install(command, harness)
+            or _try_mcp_tool(command, harness, artifact_id)
+            or _try_file_read(command, harness, artifact_type)
+            or _try_shell_command(command, harness)
+            or _try_generic_artifact(artifact_id, artifact_name, artifact_type, harness)
+        )
     if candidate is None:
         return None
     if _is_generic_label(candidate.fingerprint):

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.memory_decision_event import (
     MEMORY_DECISION_EVENT_CONTRACT_VERSION,
     build_memory_decision_event,
@@ -15,7 +17,6 @@ from codex_plugin_scanner.guard.memory_decision_outbox import (
 from codex_plugin_scanner.guard.memory_pattern_fingerprint import (
     build_memory_pattern_fingerprint,
 )
-import pytest
 from codex_plugin_scanner.guard.store import GuardStore
 
 # ── Pattern fingerprint ──────────────────────────────────────────────────────
@@ -75,6 +76,19 @@ class TestMemoryPatternFingerprint:
         assert candidate.kind == "mcp_tool_pattern"
         assert candidate.components["server"] == "lean_ctx"
         assert candidate.components["tool"] == "ctx_search"
+
+    def test_tool_action_display_text_is_not_reclassified_as_a_command(self) -> None:
+        candidate = build_memory_pattern_fingerprint(
+            command="npm install lodash",
+            artifact_type="tool_action_request",
+            artifact_id="codex_tool:project:search",
+            artifact_name="Search files",
+            harness="codex",
+        )
+
+        assert candidate is not None
+        assert candidate.kind == "generic_artifact_pattern"
+        assert candidate.components["artifact"] == "codex_tool:project:search"
 
     def test_file_read_recognizes_file_read_artifact_type(self) -> None:
         candidate = build_memory_pattern_fingerprint(

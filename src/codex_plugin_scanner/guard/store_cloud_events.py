@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 # ruff: noqa: F403,F405
 from .store_base import *
 
@@ -303,39 +305,50 @@ class StoreCloudEventsMixin:
         if existing is None:
             pending_count = self._count_guard_events_v1_in_connection(connection, uploaded=False)
             if pending_count >= self._guard_event_queue_limit:
-                drop_count = pending_count - self._guard_event_queue_limit + 1
-                cursor = connection.execute(
+                capacity_row = connection.execute(
+                    "select payload_json from sync_state where state_key = ?",
+                    ("guard_event_queue_capacity",),
+                ).fetchone()
+                capacity_payload: dict[str, object] = {}
+                if capacity_row is not None:
+                    try:
+                        parsed_capacity_payload = json.loads(capacity_row["payload_json"])
+                    except (json.JSONDecodeError, TypeError, ValueError):
+                        parsed_capacity_payload = {}
+                    if isinstance(parsed_capacity_payload, dict):
+                        capacity_payload = parsed_capacity_payload
+                rejected_count_value = capacity_payload.get("rejectedCount", 0)
+                rejected_count = (
+                    rejected_count_value
+                    if isinstance(rejected_count_value, int) and not isinstance(rejected_count_value, bool)
+                    else 0
+                ) + 1
+                connection.execute(
                     """
-                    delete from guard_cloud_events
-                    where event_id in (
-                        select event_id
-                        from guard_cloud_events
-                        where uploaded_at is null
-                        order by occurred_at asc, event_id asc
-                        limit ?
-                    )
+                    insert into sync_state (state_key, payload_json, updated_at)
+                    values (?, ?, ?)
+                    on conflict(state_key) do update set
+                      payload_json = excluded.payload_json,
+                      updated_at = excluded.updated_at
                     """,
-                    (drop_count,),
-                )
-                dropped_count = int(cursor.rowcount) if cursor.rowcount is not None and cursor.rowcount > 0 else 0
-                if dropped_count > 0:
-                    connection.execute(
-                        """
-                        insert into guard_events (event_name, payload_json, occurred_at)
-                        values (?, ?, ?)
-                        """,
-                        (
-                            "cloud_event_queue_overflow",
-                            json.dumps(
-                                {
-                                    "dropped_count": dropped_count,
-                                    "queue_limit": self._guard_event_queue_limit,
-                                    "incoming_event_type": event.event_type,
-                                }
-                            ),
-                            _now(),
+                    (
+                        "guard_event_queue_capacity",
+                        json.dumps(
+                            {
+                                "exhausted": True,
+                                "firstRejectedAt": capacity_payload.get("firstRejectedAt", event.occurred_at),
+                                "lastRejectedAt": event.occurred_at,
+                                "limit": self._guard_event_queue_limit,
+                                "pendingCount": pending_count,
+                                "rejectedCount": rejected_count,
+                                "rejectedEventType": event.event_type,
+                            },
+                            sort_keys=True,
                         ),
-                    )
+                        datetime.now(timezone.utc).isoformat(),
+                    ),
+                )
+                return
         connection.execute(
             """
             insert or ignore into guard_cloud_events (
@@ -407,6 +420,41 @@ class StoreCloudEventsMixin:
                 f"update guard_cloud_events set uploaded_at = ? where event_id in ({placeholders})",
                 (uploaded_at, *clean_ids),
             )
+            pending_count = self._count_guard_events_v1_in_connection(
+                connection,
+                uploaded=False,
+            )
+            if pending_count < self._guard_event_queue_limit:
+                capacity_row = connection.execute(
+                    "select payload_json from sync_state where state_key = ?",
+                    ("guard_event_queue_capacity",),
+                ).fetchone()
+                if capacity_row is not None:
+                    try:
+                        capacity_payload = json.loads(capacity_row["payload_json"])
+                    except (json.JSONDecodeError, TypeError, ValueError):
+                        capacity_payload = {}
+                    if not isinstance(capacity_payload, dict):
+                        capacity_payload = {}
+                    capacity_payload.update(
+                        {
+                            "exhausted": False,
+                            "pendingCount": pending_count,
+                            "recoveredAt": uploaded_at,
+                        }
+                    )
+                    connection.execute(
+                        """
+                        update sync_state
+                        set payload_json = ?, updated_at = ?
+                        where state_key = ?
+                        """,
+                        (
+                            json.dumps(capacity_payload, sort_keys=True),
+                            uploaded_at,
+                            "guard_event_queue_capacity",
+                        ),
+                    )
             return int(cursor.rowcount)
 
     def add_event(self, event_name: str, payload: dict[str, object], now: str) -> None:

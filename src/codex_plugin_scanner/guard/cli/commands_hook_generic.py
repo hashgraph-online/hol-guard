@@ -85,6 +85,15 @@ def _run_hook_generic_payload(
         artifact_id,
         str(payload_map.get("artifact_hash")) if isinstance(payload_map.get("artifact_hash"), str) else None,
         str(runtime_workspace) if runtime_workspace else None,
+        memory_command=_coalesce_string(
+            payload_map.get("command"),
+            payload_map.get("tool_name"),
+        ),
+        memory_artifact_type=_coalesce_string(
+            payload_map.get("artifact_type"),
+            payload_map.get("tool_type"),
+        ),
+        memory_artifact_name=artifact_name,
     )
     incoming_policy_action = _optional_string(payload_map.get("policy_action"))
     policy_action = _coalesce_string(

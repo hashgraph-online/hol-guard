@@ -114,13 +114,16 @@ def _evaluate_runtime_artifact_hook(
         )
         return 0
     runtime_exact_match_context = _runtime_artifact_exact_match_context(runtime_artifact)
-    policy_lookup = store.resolve_policy_decision_lookup(
+    policy_lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
         policy_harness,
         artifact_id,
         artifact_hash=runtime_artifact_hash,
         workspace=str(runtime_workspace) if runtime_workspace else None,
         publisher=runtime_artifact.publisher,
         runtime_exact_match_context=runtime_exact_match_context,
+        memory_command=runtime_artifact.command,
+        memory_artifact_type=runtime_artifact.artifact_type,
+        memory_artifact_name=runtime_artifact.name,
     )
     stored_policy_action = _runtime_stored_policy_action(
         store=store,

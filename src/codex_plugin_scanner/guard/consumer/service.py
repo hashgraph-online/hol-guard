@@ -480,6 +480,9 @@ def evaluate_detection(
             str(diff["current_hash"]),
             workspace,
             artifact.publisher,
+            memory_command=artifact.command,
+            memory_artifact_type=artifact.artifact_type,
+            memory_artifact_name=artifact.name,
         )
         if configured_action is None:
             configured_action = config.resolve_action_override(

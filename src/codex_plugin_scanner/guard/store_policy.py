@@ -6,6 +6,7 @@ from __future__ import annotations
 
 # ruff: noqa: F403,F405
 from .approval_scope_support import package_request_portable_workspace_scope
+from .memory_pattern_fingerprint import build_memory_pattern_fingerprint
 from .store_base import *
 
 
@@ -168,17 +169,76 @@ class StorePolicyMixin:
         workspace: str | None = None,
         publisher: str | None = None,
         now: str | None = None,
+        *,
+        memory_command: str | None = None,
+        memory_artifact_type: str | None = None,
+        memory_artifact_name: str | None = None,
     ) -> str | None:
-        lookup = self.resolve_policy_decision_lookup(
+        lookup = self.resolve_policy_decision_lookup_with_memory_pattern(
             harness,
             artifact_id,
             artifact_hash=artifact_hash,
             workspace=workspace,
             publisher=publisher,
             now=now,
+            memory_command=memory_command,
+            memory_artifact_type=memory_artifact_type,
+            memory_artifact_name=memory_artifact_name,
         )
         decision = lookup["decision"]
         return str(decision["action"]) if decision is not None else None
+
+    def resolve_policy_decision_lookup_with_memory_pattern(
+        self,
+        harness: str,
+        artifact_id: str | None,
+        artifact_hash: str | None = None,
+        workspace: str | None = None,
+        publisher: str | None = None,
+        now: str | None = None,
+        runtime_exact_match_context: str | None = None,
+        *,
+        memory_command: str | None = None,
+        memory_artifact_type: str | None = None,
+        memory_artifact_name: str | None = None,
+    ) -> PolicyDecisionLookupResult:
+        direct_lookup = self.resolve_policy_decision_lookup(
+            harness,
+            artifact_id,
+            artifact_hash=artifact_hash,
+            workspace=workspace,
+            publisher=publisher,
+            now=now,
+            runtime_exact_match_context=runtime_exact_match_context,
+        )
+        if direct_lookup["decision"] is not None or direct_lookup.get("ignored_local_integrity") is not None:
+            return direct_lookup
+        memory_pattern = build_memory_pattern_fingerprint(
+            command=memory_command,
+            artifact_type=memory_artifact_type,
+            artifact_id=artifact_id,
+            artifact_name=memory_artifact_name,
+            harness=harness,
+        )
+        if memory_pattern is None:
+            return direct_lookup
+        memory_artifact_id = f"memory:{harness}:{memory_pattern.kind}:{memory_pattern.fingerprint}"
+        if memory_artifact_id == artifact_id:
+            return direct_lookup
+        memory_lookup = self.resolve_policy_decision_lookup(
+            harness,
+            memory_artifact_id,
+            artifact_hash=artifact_hash,
+            workspace=workspace,
+            publisher=publisher,
+            now=now,
+            runtime_exact_match_context=runtime_exact_match_context,
+        )
+        return (
+            memory_lookup
+            if (memory_lookup["decision"] is not None or memory_lookup.get("ignored_local_integrity") is not None)
+            else direct_lookup
+        )
 
     def resolve_policy_decision_lookup(
         self,
