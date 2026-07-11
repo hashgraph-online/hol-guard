@@ -120,6 +120,20 @@ def test_outbox_ownership_is_not_reassigned_after_workspace_switch(tmp_path) -> 
         )
         == 1
     )
+    assert (
+        store.live_request_outbox_status(
+            now=_NOW,
+            workspace_id="workspace-a",
+        )["depth"]
+        == 1
+    )
+    assert (
+        store.live_request_outbox_status(
+            now=_NOW,
+            workspace_id="workspace-b",
+        )["depth"]
+        == 0
+    )
 
 
 def test_newer_mutation_preserves_retry_backoff(tmp_path) -> None:

@@ -263,17 +263,25 @@ class StoreLiveRequestOutboxMixin:
                 updated += int(cursor.rowcount if cursor.rowcount is not None else 0)
             return updated
 
-    def live_request_outbox_status(self, *, now: str) -> dict[str, object]:
+    def live_request_outbox_status(
+        self,
+        *,
+        now: str,
+        workspace_id: str | None = None,
+    ) -> dict[str, object]:
+        query = """
+            select count(*) as depth,
+                   min(changed_at) as oldest_changed_at,
+                   max(attempt_count) as max_attempt_count,
+                   max(last_error) as last_error
+            from guard_live_request_outbox
+        """
+        parameters: list[object] = []
+        if workspace_id is not None:
+            query += " where workspace_id = ?"
+            parameters.append(workspace_id)
         with self._connect() as connection:
-            row = connection.execute(
-                """
-                select count(*) as depth,
-                       min(changed_at) as oldest_changed_at,
-                       max(attempt_count) as max_attempt_count,
-                       max(last_error) as last_error
-                from guard_live_request_outbox
-                """
-            ).fetchone()
+            row = connection.execute(query, parameters).fetchone()
         return {
             "depth": int(row["depth"] if row is not None else 0),
             "oldest_changed_at": row["oldest_changed_at"] if row is not None else None,

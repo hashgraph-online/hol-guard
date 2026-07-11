@@ -5653,12 +5653,17 @@ class GuardDaemonServer:
                 status="pending",
                 limit=1,
             )
-            outbox_status = self._server.store.live_request_outbox_status(now=_now())
+            cloud_profile = self._server.store.get_cloud_sync_profile()
+            workspace_id = cloud_profile.get("workspace_id") if isinstance(cloud_profile, dict) else None
+            outbox_status = self._server.store.live_request_outbox_status(
+                now=_now(),
+                workspace_id=workspace_id,
+            )
             outbox_depth = outbox_status["depth"]
             if (
                 active_stream_clients > 0
                 or pending_live_requests
-                or (isinstance(outbox_depth, int) and outbox_depth > 0)
+                or (workspace_id is not None and isinstance(outbox_depth, int) and outbox_depth > 0)
             ):
                 time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)
                 continue

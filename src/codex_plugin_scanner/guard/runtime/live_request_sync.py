@@ -389,7 +389,10 @@ def sync_live_requests_once(
             store.acknowledge_live_request_outbox(sequences)
 
         completed_at = _now()
-        outbox_status = store.live_request_outbox_status(now=completed_at)
+        outbox_status = store.live_request_outbox_status(
+            now=completed_at,
+            workspace_id=workspace_id,
+        )
         state.update(
             {
                 "state": "idle",
@@ -451,7 +454,12 @@ def sync_live_requests_once(
 def live_request_sync_status(store: GuardStore) -> dict[str, object]:
     """Return live request outbox and delivery health."""
     state = _load_sync_state(store)
-    outbox = store.live_request_outbox_status(now=_now())
+    profile = store.get_cloud_sync_profile()
+    workspace_id = profile.get("workspace_id") if isinstance(profile, dict) else None
+    outbox = store.live_request_outbox_status(
+        now=_now(),
+        workspace_id=workspace_id,
+    )
     return {
         "state": state.get("state") or "not_configured",
         "last_sync_at": state.get("last_sync_at"),
