@@ -1134,7 +1134,7 @@ class TestRedactionLevelNone:
             "trigger_summary": "😀" * 400,
             "risk_headline": "😀" * 400,
             "harness": "guard-review",
-            "raw_command_text": "😀" * 2_000,
+            "raw_command_text": ("😀" * 40_000) + " --dangerous-suffix",
             "created_at": "2026-07-10T00:00:00+00:00",
             "last_seen_at": "2026-07-10T00:00:00+00:00",
         }
@@ -1151,7 +1151,9 @@ class TestRedactionLevelNone:
         display_summary = event["displaySummary"]
         assert isinstance(raw_command, str)
         assert isinstance(display_summary, str)
-        assert len(raw_command.encode("utf-16-le")) // 2 <= 2_048
+        assert len(raw_command.encode("utf-16-le")) // 2 <= 65_536
+        assert " … [truncated] … " in raw_command
+        assert raw_command.endswith(" --dangerous-suffix")
         assert len(display_summary.encode("utf-16-le")) // 2 <= 512
 
     def test_redaction_none_hides_bearer_prefix(self, tmp_path: Path) -> None:
