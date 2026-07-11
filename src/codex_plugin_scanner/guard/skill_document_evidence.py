@@ -72,6 +72,8 @@ def _analyze_skill_document(
     evidence: dict[str, object] = {
         "analysisVersion": _ANALYSIS_VERSION,
         "readabilityStatus": "unavailable",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
     }
     if not isinstance(config_path, str) or not config_path:
         return evidence, []

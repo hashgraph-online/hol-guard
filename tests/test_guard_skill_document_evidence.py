@@ -115,6 +115,8 @@ def test_adapter_metadata_cannot_claim_documented_capabilities(tmp_path: Path) -
     assert "skillDocumentEvidence" not in metadata
     assert metadata["contentEvidence"] == {
         "analysisVersion": "1",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
         "readabilityStatus": "readable",
         "byteLength": 26,
         "contentHash": f"sha256:{expected_hash}",
@@ -135,6 +137,8 @@ def test_skill_document_evidence_contains_counts_but_no_content(tmp_path: Path) 
 
     assert metadata["contentEvidence"] == {
         "analysisVersion": "1",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
         "readabilityStatus": "readable",
         "byteLength": len(content.encode("utf-8")),
         "contentHash": f"sha256:{hashlib.sha256(content.encode('utf-8')).hexdigest()}",
@@ -173,6 +177,8 @@ def test_symlinked_skill_document_is_not_read(tmp_path: Path) -> None:
 
     assert metadata["contentEvidence"] == {
         "analysisVersion": "1",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
         "readabilityStatus": "symlink_rejected",
     }
     assert "documentedCapabilities" not in metadata
@@ -194,6 +200,8 @@ def test_symlinked_skill_directory_is_not_read(tmp_path: Path) -> None:
 
     assert metadata["contentEvidence"] == {
         "analysisVersion": "1",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
         "readabilityStatus": "symlink_rejected",
     }
     assert "documentedCapabilities" not in metadata
@@ -209,6 +217,8 @@ def test_skill_document_outside_skills_root_is_not_read(tmp_path: Path) -> None:
 
     assert metadata["contentEvidence"] == {
         "analysisVersion": "1",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
         "readabilityStatus": "not_primary_skill_document",
     }
     assert "documentedCapabilities" not in metadata
@@ -222,6 +232,8 @@ def test_skill_document_outside_safe_roots_is_not_read(tmp_path: Path) -> None:
 
     assert metadata["contentEvidence"] == {
         "analysisVersion": "1",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
         "readabilityStatus": "outside_safe_roots",
     }
     assert "documentedCapabilities" not in metadata
@@ -235,6 +247,8 @@ def test_oversized_skill_document_is_not_read(tmp_path: Path) -> None:
 
     assert metadata["contentEvidence"] == {
         "analysisVersion": "1",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
         "readabilityStatus": "too_large",
         "byteLength": MAX_SKILL_DOCUMENT_BYTES + 1,
     }

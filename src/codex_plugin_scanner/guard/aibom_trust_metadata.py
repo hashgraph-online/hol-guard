@@ -74,6 +74,8 @@ def trust_resolution_from_domain(
         "trustDomain": domain.domain,
         "attestationStatus": "unsigned",
         "evidenceSchemaVersion": "guard-aibom-local-baseline-evidence.v1",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
         "evidence": _local_baseline_evidence_payload(
             domain,
             captured_at=normalized_captured_at,
@@ -94,6 +96,8 @@ def trust_resolution_from_domain(
     return {
         "resolutionSource": "local",
         "status": "local",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
         "trustScore": round(domain.score),
         "trustComponents": trust_components,
         "capturedAt": normalized_captured_at,
@@ -620,6 +624,8 @@ def _trust_layer_from_domain(
         "layerId": "local_baseline",
         "layerType": "local_baseline",
         "status": "local",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
         "trustScore": round(domain.score),
         "trustComponents": trust_components,
         "capturedAt": normalized_captured_at,
@@ -631,6 +637,8 @@ def _trust_layer_from_domain(
             "specVersion": domain.spec_version,
             "trustDomain": domain.domain,
             "attestationStatus": "unsigned",
+            "evidenceAuthority": "device_claim",
+            "affectsV4Score": False,
             "evidenceSchemaVersion": "guard-aibom-local-baseline-evidence.v1",
             "evidence": evidence,
             "evidenceHash": _trust_evidence_hash(
@@ -880,6 +888,8 @@ def _cisco_trust_layer(
             if value is not None:
                 safe_metadata[key] = value
     safe_metadata["attestationStatus"] = "unsigned"
+    safe_metadata["evidenceAuthority"] = "device_claim"
+    safe_metadata["affectsV4Score"] = False
     safe_metadata["evidenceSchemaVersion"] = "guard-aibom-cisco-scanner-evidence.v1"
     evidence_payload = _cisco_evidence_payload(
         layer_id=layer_id,
@@ -898,6 +908,8 @@ def _cisco_trust_layer(
         "layerId": layer_id,
         "layerType": layer_id,
         "status": status,
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
         "trustScore": trust_score,
         "trustComponents": trust_components,
         "capturedAt": _normalize_inventory_datetime(captured_at),
