@@ -1672,8 +1672,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/read-state":
             body = self._read_delete_body()
-            if body and isinstance(body.get("request_id"), str):
-                store.mark_request_unread(body["request_id"])
+            request_id = body.get("request_id") if body else None
+            if isinstance(request_id, str):
+                store.mark_request_unread(request_id)
             elif body and body.get("clear_all"):
                 store.clear_read_state()
             self._write_json({"ok": True})
