@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 import urllib.error
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -26,7 +28,12 @@ from codex_plugin_scanner.guard.review_contracts import (
     validate_remote_approval_request_binding,
     validated_remote_approval_envelope,
 )
-from codex_plugin_scanner.guard.runtime import command_executors, command_queue, local_request_snapshots
+from codex_plugin_scanner.guard.runtime import (
+    command_executors,
+    command_queue,
+    live_request_sync,
+    local_request_snapshots,
+)
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.schemas.guard_event_v1 import GuardEventV1
 from codex_plugin_scanner.guard.store import GuardStore
@@ -164,6 +171,42 @@ def test_live_sync_identity_failure_remains_best_effort(
             "sync_url": "https://hol.test/api/guard/receipts/sync",
         },
     )
+    assert command_queue._LIVE_REQUEST_SYNC_LOCK.acquire(timeout=1)
+    command_queue._LIVE_REQUEST_SYNC_LOCK.release()
+
+
+def test_live_request_sync_does_not_block_command_delivery(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    started = threading.Event()
+    release = threading.Event()
+    calls = 0
+
+    def slow_sync(
+        _store: FakeStore,
+        _auth_context: dict[str, object],
+    ) -> None:
+        nonlocal calls
+        calls += 1
+        started.set()
+        assert release.wait(timeout=2)
+
+    monkeypatch.setattr(command_queue, "_with_live_sync_identity", lambda _store, auth: auth)
+    monkeypatch.setattr(live_request_sync, "sync_live_requests_once", slow_sync)
+
+    sync_started_at = time.monotonic()
+    command_queue._sync_live_requests_best_effort(store, {"access_token": "token-1"})
+    command_queue._sync_live_requests_best_effort(store, {"access_token": "token-1"})
+    elapsed_seconds = time.monotonic() - sync_started_at
+
+    assert started.wait(timeout=1)
+    assert elapsed_seconds < 0.2
+    assert calls == 1
+    release.set()
+    assert command_queue._LIVE_REQUEST_SYNC_LOCK.acquire(timeout=1)
+    command_queue._LIVE_REQUEST_SYNC_LOCK.release()
 
 
 def _approval_request_row(

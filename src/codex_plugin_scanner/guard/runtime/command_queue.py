@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,6 +48,7 @@ _LONG_POLL_EMPTY_MIN_WAIT_SECONDS = 0.05
 _REQUEST_TIMEOUT_SECONDS = 35
 _RETRY_TIMEOUT_SECONDS = 60
 _LOGGER = logging.getLogger(__name__)
+_LIVE_REQUEST_SYNC_LOCK = threading.Lock()
 _LEASE_LOCAL_REQUEST_SNAPSHOT_KEYS = (
     "requests",
     "pendingComplete",
@@ -455,21 +457,34 @@ def _resolve_command_queue_auth_context(
         return _resolve_guard_sync_auth_context(store)
 
 
-def _sync_live_requests_best_effort(store: GuardStore, auth_context: dict[str, object]) -> None:
-    """Sync local approval requests to Cloud live request table.
-
-    Best-effort: failures are logged but do not block the command queue lease.
-    The dedicated endpoint uses cursor-based pagination to ensure all requests
-    are synced regardless of backlog size, eliminating the stale-row
-    accumulation bug caused by the capped snapshot approach.
-    """
+def _run_live_request_sync(
+    store: GuardStore,
+    auth_context: dict[str, object],
+) -> None:
     try:
         from .live_request_sync import sync_live_requests_once
 
         sync_live_requests_once(store, _with_live_sync_identity(store, auth_context))
     except Exception as exc:
         _LOGGER.debug("Guard live request sync skipped: %s", _redacted_error(exc))
+    finally:
+        _LIVE_REQUEST_SYNC_LOCK.release()
 
+
+def _sync_live_requests_best_effort(store: GuardStore, auth_context: dict[str, object]) -> None:
+    """Start one best-effort Cloud live-request sync without delaying command delivery."""
+    if not _LIVE_REQUEST_SYNC_LOCK.acquire(blocking=False):
+        return
+    try:
+        threading.Thread(
+            target=_run_live_request_sync,
+            args=(store, auth_context),
+            daemon=True,
+            name="hol-guard-live-request-sync",
+        ).start()
+    except Exception as exc:
+        _LIVE_REQUEST_SYNC_LOCK.release()
+        _LOGGER.debug("Guard live request sync could not start: %s", _redacted_error(exc))
 
 def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[str, object]:
     auth_context = _resolve_command_queue_auth_context(store)
