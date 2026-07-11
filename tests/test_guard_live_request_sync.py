@@ -21,12 +21,14 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime import live_request_sync as live_request_sync_module
 from codex_plugin_scanner.guard.runtime.live_request_sync import (
     _DEFAULT_401_REFRESH_RETRY_MAX,
-    _REFRESH_THROTTLE_SECONDS,
-    _resolve_sync_url,
     _LIVE_REQUEST_EVENT_SEQUENCE_KEY,
+    _REFRESH_THROTTLE_SECONDS,
     LIVE_REQUEST_EVENT_TYPES,
+    LIVE_REQUEST_SYNC_CURSOR_KEY,
+    LIVE_REQUEST_SYNC_FINGERPRINTS_KEY,
     LIVE_REQUEST_SYNC_PROTOCOL_VERSION,
     OUTBOX_BATCH_COUNT,
     OUTBOX_MAX_QUEUE_EVENTS,
@@ -43,6 +45,7 @@ from codex_plugin_scanner.guard.runtime.live_request_sync import (
     _get_cloud_sync_sync_state,
     _get_current_cloud_sync_sequence,
     _get_next_cloud_sync_sequence,
+    _resolve_sync_url,
     atomic_write_sync,
     cloud_sync_live_request_diagnostics,
     cloud_sync_sync_live_requests_once,
@@ -59,6 +62,7 @@ from codex_plugin_scanner.guard.runtime.live_request_sync import (
     set_sync_health,
     start_cloud_sync_sync_worker,
     stop_cloud_sync_sync_worker,
+    sync_live_requests_once,
 )
 from codex_plugin_scanner.guard.runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -1558,3 +1562,161 @@ class TestResolveSyncUrl:
 
         assert result == {}
         assert captured_urls == ["https://hol.org/api/guard/live-requests/batch?route=tenant-a"]
+
+
+class TestStateAwareLiveRequestSync:
+    def test_ignores_cloud_cursor_and_only_resends_changed_requests(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class QueueStore(Store):
+            def __init__(self, guard_home: Path) -> None:
+                super().__init__(guard_home)
+                self.rows: list[dict[str, object]] = [
+                    {
+                        "request_id": "request-1",
+                        "status": "pending",
+                        "action_identity": "test-action",
+                        "trigger_summary": "Review test action",
+                        "harness": "guard-review",
+                        "created_at": "2026-07-10T00:00:00+00:00",
+                        "last_seen_at": "2026-07-10T00:00:00+00:00",
+                    }
+                ]
+
+            def list_approval_requests(
+                self,
+                *,
+                status: str | None = "pending",
+                harness: str | None = None,
+                limit: int | None = 50,
+                cursor: str | None = None,
+                search: str | None = None,
+            ) -> list[dict[str, object]]:
+                del status, harness, cursor, search
+                return self.rows if limit is None else self.rows[:limit]
+
+        store = QueueStore(tmp_path)
+        store.set_sync_payload(
+            LIVE_REQUEST_SYNC_CURSOR_KEY,
+            {"inbound_cursor": "cloud-cursor-that-is-not-a-local-page-cursor"},
+            "2026-07-10T00:00:00+00:00",
+        )
+        posted_batches: list[list[dict[str, object]]] = []
+
+        def post_sync_events(
+            _auth_context: dict[str, object],
+            **kwargs: object,
+        ) -> dict[str, object]:
+            events = kwargs["events"]
+            assert isinstance(events, list)
+            posted_batches.append(events)
+            if len(posted_batches) == 1:
+                return {
+                    "accepted": 0,
+                    "rejected": len(events),
+                    "cursor": "cloud-cursor-that-is-not-a-local-page-cursor",
+                }
+            return {
+                "accepted": len(events),
+                "rejected": 0,
+                "cursor": "cloud-cursor-that-is-not-a-local-page-cursor",
+            }
+
+        monkeypatch.setattr(
+            live_request_sync_module,
+            "_post_sync_events",
+            post_sync_events,
+        )
+        auth_context = {
+            "machine_id": "machine-1",
+            "workspace_id": "workspace-1",
+            "machine_installation_id": "22222222-2222-4222-8222-222222222222",
+        }
+
+        rejected = sync_live_requests_once(store, auth_context)
+        accepted = sync_live_requests_once(store, auth_context)
+        unchanged = sync_live_requests_once(store, auth_context)
+        store.rows[0]["risk_category"] = "critical"
+        changed = sync_live_requests_once(store, auth_context)
+
+        assert rejected["synced"] == 0
+        assert rejected["rejected"] == 1
+        assert accepted["synced"] == 1
+        assert accepted["cursor"] is None
+        assert unchanged["synced"] == 0
+        assert changed["synced"] == 1
+        assert len(posted_batches) == 3
+        assert store.get_sync_payload(LIVE_REQUEST_SYNC_CURSOR_KEY) == {}
+        fingerprints = store.get_sync_payload(LIVE_REQUEST_SYNC_FINGERPRINTS_KEY)
+        assert isinstance(fingerprints, dict)
+        assert set(fingerprints) == {"request-1"}
+
+    def test_scan_reaches_changed_requests_beyond_the_first_page(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        rows = [
+            {
+                "request_id": f"request-{index}",
+                "status": "pending",
+                "action_identity": f"test-action-{index}",
+                "trigger_summary": f"Review test action {index}",
+                "harness": "guard-review",
+                "created_at": f"2026-07-10T00:00:0{index}+00:00",
+                "last_seen_at": f"2026-07-10T00:00:0{index}+00:00",
+            }
+            for index in range(5)
+        ]
+
+        class PagedQueueStore(Store):
+            def list_approval_requests(
+                self,
+                *,
+                status: str | None = "pending",
+                harness: str | None = None,
+                limit: int | None = 50,
+                cursor: str | None = None,
+                search: str | None = None,
+            ) -> list[dict[str, object]]:
+                del status, harness, limit, search
+                return rows[:3] if cursor is None else rows[2:5]
+
+        store = PagedQueueStore(tmp_path)
+        monkeypatch.setattr(
+            live_request_sync_module,
+            "LIVE_REQUEST_SYNC_SCAN_PAGE_SIZE",
+            2,
+        )
+        monkeypatch.setattr(
+            live_request_sync_module,
+            "LIVE_REQUEST_SYNC_BATCH_SIZE",
+            2,
+        )
+        fingerprints: dict[str, str] = {}
+        redaction_level = live_request_sync_module._resolve_cloud_receipt_redaction_level(store)
+        for sequence, item in enumerate(rows[:2], start=1):
+            event = live_request_sync_module._build_live_request_event(
+                item,
+                oauth=None,
+                redaction_level=redaction_level,
+                store=store,
+                event_sequence=sequence,
+            )
+            assert event is not None
+            fingerprints[str(item["request_id"])] = live_request_sync_module._request_sync_fingerprint(event)
+
+        events, pending, next_cursor = live_request_sync_module._build_changed_sync_events(
+            store,
+            fingerprints,
+            cursor=None,
+        )
+
+        assert [event["localRequestId"] for event in events] == [
+            "request-2",
+            "request-3",
+        ]
+        assert set(pending) == {"request-2", "request-3"}
+        assert isinstance(next_cursor, str)
