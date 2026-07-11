@@ -254,6 +254,7 @@ def test_partial_acknowledgement_retries_only_rejected_event(tmp_path, monkeypat
     store = GuardStore(tmp_path / "guard")
     store.add_approval_request(_request("request-accepted"), "2026-07-11T18:00:00+00:00")
     store.add_approval_request(_request("request-rejected"), _NOW)
+    monkeypatch.setattr(live_request_sync, "LIVE_REQUEST_SYNC_BATCH_SIZE", 2)
 
     def post_events(*_args, **kwargs):
         return {
@@ -284,6 +285,7 @@ def test_stale_rejection_is_acknowledged_while_transient_rejection_retries(
 ) -> None:
     store = GuardStore(tmp_path / "guard")
     store.add_approval_request(_request("request-stale"), _NOW)
+    monkeypatch.setattr(live_request_sync, "LIVE_REQUEST_SYNC_BATCH_SIZE", 2)
     store.add_approval_request(_request("request-transient"), "2026-07-11T18:00:00+00:00")
     monkeypatch.setattr(
         live_request_sync,
@@ -327,4 +329,4 @@ def test_newest_outbox_event_preempts_historical_backlog(tmp_path) -> None:
 
 def test_worker_safety_interval_is_subsecond() -> None:
     assert live_request_sync.DEFAULT_POLL_INTERVAL_SECONDS <= 0.1
-    assert live_request_sync.LIVE_REQUEST_SYNC_BATCH_SIZE <= 25
+    assert live_request_sync.LIVE_REQUEST_SYNC_BATCH_SIZE == 1
