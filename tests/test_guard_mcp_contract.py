@@ -338,3 +338,38 @@ def _seed_receipt(
         raw_command_text="npx test-package --flag",
     )
     store.add_receipt(receipt)
+
+
+class TestReceiptPagination:
+    """Verify search and fetch find receipts beyond the first page.
+
+    Regression tests for Greptile P1 findings on PR #1404.
+    """
+
+    @pytest.fixture()
+    def server(self, tmp_path: Path):
+        from codex_plugin_scanner.guard.mcp.server import GuardMCPServer
+        return GuardMCPServer(guard_home=tmp_path)
+
+    def test_search_finds_older_receipt_beyond_page(self, server, tmp_path: Path):
+        for i in range(250):
+            _seed_receipt(tmp_path, server, artifact_name=f"noise-{i:04d}")
+        _seed_receipt(tmp_path, server, artifact_name="unique-target")
+        result = server.call_tool("search", {"query": "unique-target"})
+        text = result.text if hasattr(result, "text") else str(result)
+        data = json.loads(text)
+        assert data["count"] >= 1
+        assert any("unique-target" in r.get("title", "") for r in data["results"])
+
+    def test_fetch_finds_older_receipt_beyond_scan_limit(self, server, tmp_path: Path):
+        from codex_plugin_scanner.guard.mcp.schemas import make_opaque_id
+        oldest_receipt_id = "rcpt-oldest-target-001"
+        _seed_receipt(tmp_path, server, artifact_name="oldest-target")
+        for i in range(250):
+            _seed_receipt(tmp_path, server, artifact_name=f"newer-{i:04d}")
+        opaque_id = make_opaque_id("receipt", oldest_receipt_id)
+        result = server.call_tool("fetch", {"id": opaque_id})
+        text = result.text if hasattr(result, "text") else str(result)
+        data = json.loads(text)
+        assert data["found"] is True
+        assert "oldest-target" in data.get("title", "")
