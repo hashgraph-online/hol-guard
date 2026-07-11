@@ -626,7 +626,7 @@ def test_local_request_snapshot_items_continues_when_request_claim_is_invalid(tm
     assert snapshot[0]["claim"] is None
 
 
-def test_local_request_snapshot_strips_command_when_redaction_is_full(tmp_path: Path) -> None:
+def test_local_request_snapshot_preserves_scrubbed_command_when_redaction_is_full(tmp_path: Path) -> None:
     class RequestStore(FakeStore):
         def list_approval_requests(
             self,
@@ -660,15 +660,17 @@ def test_local_request_snapshot_strips_command_when_redaction_is_full(tmp_path: 
     assert payload["redaction_enabled"] is True
     assert payload["redactionEnabled"] is True
     assert payload["raw_command_text"] is None
-    assert payload["command_text"] is None
+    assert isinstance(payload["command_text"], str)
+    assert payload["command_text"]
     assert payload["rawCommandText"] is None
-    assert payload["commandText"] is None
+    assert payload["commandText"] == payload["command_text"]
     assert payload["actionEnvelope"] == envelope
     assert payload["envelope_redacted"] == envelope
     assert payload["envelopeRedacted"] == envelope
     assert "raw_target_paths" not in payload
     assert "request_payload_json" not in payload
-    assert "command" not in envelope
+    assert isinstance(envelope["command"], str)
+    assert envelope["command"]
     assert envelope["operation"] == "run"
     assert envelope["target_class"] == "shell_command"
     assert envelope["targetClass"] == "shell_command"
@@ -676,7 +678,7 @@ def test_local_request_snapshot_strips_command_when_redaction_is_full(tmp_path: 
     assert envelope["targetCount"] == 0
 
 
-def test_local_request_snapshot_withholds_command_when_redaction_is_partial(tmp_path: Path) -> None:
+def test_local_request_snapshot_preserves_scrubbed_command_when_redaction_is_partial(tmp_path: Path) -> None:
     class RequestStore(FakeStore):
         def list_approval_requests(
             self,
@@ -712,10 +714,11 @@ def test_local_request_snapshot_withholds_command_when_redaction_is_partial(tmp_
     assert payload["redaction_enabled"] is True
     assert payload["redactionEnabled"] is True
     assert payload["raw_command_text"] is None
-    assert payload["command_text"] is None
+    assert isinstance(payload["command_text"], str)
+    assert "sk-test-token" not in payload["command_text"]
     assert payload["rawCommandText"] is None
-    assert payload["commandText"] is None
-    assert "command" not in envelope
+    assert payload["commandText"] == payload["command_text"]
+    assert envelope["command"] == "cat PRIVATE_KEY_FILE"
     assert "target_paths" not in envelope
     assert envelope["operation"] == "run"
     assert envelope["target_class"] == "shell_command"

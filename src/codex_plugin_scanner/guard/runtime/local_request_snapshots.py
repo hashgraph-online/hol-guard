@@ -1202,9 +1202,10 @@ def _cloud_safe_local_request_payload(
     command_text = _local_request_command_text(item, envelope)
     if redaction_enabled:
         payload["raw_command_text"] = None
-        payload["command_text"] = None
         payload["rawCommandText"] = None
-        payload["commandText"] = None
+        scrubbed = _bounded_command(_cloud_scrub_text(command_text)) if command_text else None
+        payload["command_text"] = scrubbed
+        payload["commandText"] = scrubbed
         return payload
 
     if command_text:
@@ -1283,6 +1284,9 @@ def _cloud_safe_action_envelope(
 
     redaction_enabled = redaction_level != "none"
     if redaction_enabled:
+        command = envelope.get("command")
+        if isinstance(command, str) and command.strip():
+            safe["command"] = _bounded_command(_cloud_scrub_text(command))
         target_class = _target_class_for_action_type(action_type, envelope)
         target_count = _target_count_for_envelope(envelope)
         _set_dual_key(safe, "target_class", "targetClass", target_class)
