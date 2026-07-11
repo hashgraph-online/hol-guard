@@ -245,6 +245,11 @@ def _post_sync_events(
     )
 
 
+def _is_terminally_superseded_result(item: dict[str, object]) -> bool:
+    error = item.get("error")
+    return isinstance(error, str) and error.startswith("stale event sequence ")
+
+
 def sync_live_requests_once(
     store: GuardStore,
     auth_context: dict[str, object],
@@ -349,8 +354,8 @@ def sync_live_requests_once(
                 all_errors.extend(str(error) for error in errors[:5])
             per_event_results = response.get("perEventResults")
             if isinstance(per_event_results, list) and len(per_event_results) == len(events):
-                accepted_sequences: list[int] = []
-                rejected_sequences: list[int] = []
+                acknowledged_sequences: list[int] = []
+                retry_sequences: list[int] = []
                 valid_results = True
                 for index, item in enumerate(per_event_results):
                     if (
@@ -360,15 +365,21 @@ def sync_live_requests_once(
                     ):
                         valid_results = False
                         break
-                    target = accepted_sequences if item["accepted"] else rejected_sequences
-                    target.append(sequences[index])
-                if valid_results and len(accepted_sequences) == accepted and len(rejected_sequences) == rejected:
-                    store.acknowledge_live_request_outbox(accepted_sequences)
-                    if rejected_sequences:
-                        message = f"{rejected} live request events were rejected."
+                    if item["accepted"] or _is_terminally_superseded_result(item):
+                        acknowledged_sequences.append(sequences[index])
+                    else:
+                        retry_sequences.append(sequences[index])
+                if (
+                    valid_results
+                    and sum(bool(item["accepted"]) for item in per_event_results) == accepted
+                    and len(per_event_results) - accepted == rejected
+                ):
+                    store.acknowledge_live_request_outbox(acknowledged_sequences)
+                    if retry_sequences:
+                        message = f"{len(retry_sequences)} live request events require retry."
                         all_errors.append(message)
                         store.retry_live_request_outbox(
-                            rejected_sequences,
+                            retry_sequences,
                             now=_now(),
                             error=message,
                         )

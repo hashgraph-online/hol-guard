@@ -187,7 +187,7 @@ class StoreLiveRequestOutboxMixin:
         if workspace_id is not None:
             query += " and workspace_id = ?"
             parameters.append(workspace_id)
-        query += " order by sequence limit ?"
+        query += " order by changed_at desc, sequence desc limit ?"
         parameters.append(max(1, int(limit)))
         with self._connect() as connection:
             rows = connection.execute(query, parameters).fetchall()

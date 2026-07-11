@@ -252,20 +252,22 @@ def test_rejected_batch_remains_durable_and_is_backed_off(tmp_path, monkeypatch)
 
 def test_partial_acknowledgement_retries_only_rejected_event(tmp_path, monkeypatch) -> None:
     store = GuardStore(tmp_path / "guard")
-    store.add_approval_request(_request("request-accepted"), _NOW)
+    store.add_approval_request(_request("request-accepted"), "2026-07-11T18:00:00+00:00")
     store.add_approval_request(_request("request-rejected"), _NOW)
-    monkeypatch.setattr(
-        live_request_sync,
-        "_post_sync_events",
-        lambda *_args, **_kwargs: {
+
+    def post_events(*_args, **kwargs):
+        return {
             "accepted": 1,
             "rejected": 1,
             "perEventResults": [
-                {"index": 0, "accepted": True},
-                {"index": 1, "accepted": False},
+                {
+                    "index": index,
+                    "accepted": event["localRequestId"] == "request-accepted",
+                }
+                for index, event in enumerate(kwargs["events"])
             ],
-        },
-    )
+        }
+    monkeypatch.setattr(live_request_sync, "_post_sync_events", post_events)
 
     result = live_request_sync.sync_live_requests_once(store, _AUTH)
 
@@ -274,6 +276,53 @@ def test_partial_acknowledgement_retries_only_rejected_event(tmp_path, monkeypat
     rows = store.list_ready_live_request_outbox(now="9999-12-31T23:59:59+00:00", limit=10)
     assert [row["local_request_id"] for row in rows] == ["request-rejected"]
     assert rows[0]["attempt_count"] == 1
+
+
+def test_stale_rejection_is_acknowledged_while_transient_rejection_retries(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard")
+    store.add_approval_request(_request("request-stale"), _NOW)
+    store.add_approval_request(_request("request-transient"), "2026-07-11T18:00:00+00:00")
+    monkeypatch.setattr(
+        live_request_sync,
+        "_post_sync_events",
+        lambda *_args, **_kwargs: {
+            "accepted": 0,
+            "rejected": 2,
+            "perEventResults": [
+                {"index": 0, "accepted": False, "error": "temporary failure"},
+                {
+                    "index": 1,
+                    "accepted": False,
+                    "error": "stale event sequence for request-stale (seq 1 < existing 2)",
+                },
+            ],
+        },
+    )
+
+    live_request_sync.sync_live_requests_once(store, _AUTH)
+
+    rows = store.list_ready_live_request_outbox(
+        now="9999-12-31T23:59:59+00:00",
+        limit=10,
+    )
+    assert [row["local_request_id"] for row in rows] == ["request-transient"]
+    assert rows[0]["attempt_count"] == 1
+
+
+def test_newest_outbox_event_preempts_historical_backlog(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard")
+    store.add_approval_request(_request("historical"), _NOW)
+    store.add_approval_request(_request("new"), "2026-07-11T18:00:00+00:00")
+
+    rows = store.list_ready_live_request_outbox(
+        now="9999-12-31T23:59:59+00:00",
+        limit=1,
+    )
+
+    assert [row["local_request_id"] for row in rows] == ["new"]
 
 
 def test_worker_safety_interval_is_subsecond() -> None:
