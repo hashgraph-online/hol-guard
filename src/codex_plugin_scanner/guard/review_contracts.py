@@ -382,7 +382,7 @@ def validated_remote_approval_envelope(
             admitted_at,
             field_name="queue_admitted_at",
         )
-        if queue_admitted_at < issued_at or queue_admitted_at > expires_at:
+        if queue_admitted_at > expires_at:
             raise GuardReviewContractError("remote_approval_expired")
     payload_hash = _non_empty_string(envelope.get("payloadHash"))
     if payload_hash is None or payload_hash != payload_hash_for_remote_approval_envelope(envelope):
