@@ -72,6 +72,8 @@ def _analyze_skill_document(
     evidence: dict[str, object] = {
         "analysisVersion": _ANALYSIS_VERSION,
         "readabilityStatus": "unavailable",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
     }
     if not isinstance(config_path, str) or not config_path:
         return evidence, []
@@ -151,8 +153,6 @@ def _analyze_skill_document(
         {
             "readabilityStatus": "readable",
             "schemaVersion": "guard.skill.content-evidence.v1",
-            "evidenceAuthority": "device_claim",
-            "affectsV4Score": False,
             "contentHash": f"sha256:{hashlib.sha256(content).hexdigest()}",
             "lineCount": len(lines),
             "headingCount": sum(bool(_HEADING_RE.match(line)) for line in lines),

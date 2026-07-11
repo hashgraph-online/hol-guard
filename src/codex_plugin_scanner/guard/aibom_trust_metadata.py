@@ -884,6 +884,8 @@ def _cisco_trust_layer(
             if value is not None:
                 safe_metadata[key] = value
     safe_metadata["attestationStatus"] = "unsigned"
+    safe_metadata["evidenceAuthority"] = "device_claim"
+    safe_metadata["affectsV4Score"] = False
     safe_metadata["evidenceSchemaVersion"] = "guard-aibom-cisco-scanner-evidence.v1"
     evidence_payload = _cisco_evidence_payload(
         layer_id=layer_id,
@@ -902,6 +904,8 @@ def _cisco_trust_layer(
         "layerId": layer_id,
         "layerType": layer_id,
         "status": status,
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
         "trustScore": trust_score,
         "trustComponents": trust_components,
         "capturedAt": _normalize_inventory_datetime(captured_at),

@@ -193,6 +193,7 @@ def _prepared_upload_item(source: GuardAibomPrimaryContentSource) -> tuple[dict[
             "versionId": source.version_id,
             "mimeType": source.mime_type,
             "evidenceAuthority": "device_claim",
+            "affectsV4Score": False,
             "bundleCompletenessState": "device_declared",
         },
         len(body),
