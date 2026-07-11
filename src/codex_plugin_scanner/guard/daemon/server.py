@@ -1635,6 +1635,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return
             self._write_json(diff)
             return
+        if parsed.path == "/v1/read-state":
+            self._write_json({"ids": store.get_read_state()})
+            return
         if parsed.path in _ROOT_STATIC_FILES:
             self._write_static_asset(parsed.path.removeprefix("/"))
             return
@@ -1666,6 +1669,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             with store._connect() as conn:
                 deleted = clear_evidence(conn)
             self._write_json({"deleted": deleted})
+            return
+        if parsed.path == "/v1/read-state":
+            body = self._read_delete_body()
+            if body and isinstance(body.get("request_id"), str):
+                store.mark_request_unread(body["request_id"])
+            elif body and body.get("clear_all"):
+                store.clear_read_state()
+            self._write_json({"ok": True})
             return
         self._write_json({"error": "not_found"}, status=404)
 
@@ -1773,6 +1784,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/requests/remote-once":
             self._handle_headless_remote_once(payload)
+            return
+        if parsed.path == "/v1/read-state":
+            self._handle_read_state_update(payload)
             return
         if parsed.path == "/v1/settings":
             self._handle_settings_update(payload)
@@ -3682,6 +3696,46 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         self._write_json(result)
 
+    def _handle_read_state_update(self, payload: dict[str, object]) -> None:
+        store = self.server.store  # type: ignore[attr-defined]
+        action = str(payload.get("action") or "mark_read")
+        if action == "mark_all_read":
+            request_ids = payload.get("request_ids")
+            if not isinstance(request_ids, list):
+                self._write_json({"error": "invalid_request_ids"}, status=400)
+                return
+            store.mark_requests_read([str(rid) for rid in request_ids if isinstance(rid, str)])
+            self._write_json({"ok": True, "ids": store.get_read_state()})
+            return
+        if action == "mark_unread":
+            request_id = payload.get("request_id")
+            if not isinstance(request_id, str):
+                self._write_json({"error": "invalid_request_id"}, status=400)
+                return
+            store.mark_request_unread(request_id)
+            self._write_json({"ok": True, "ids": store.get_read_state()})
+            return
+        request_id = payload.get("request_id")
+        if isinstance(request_id, str):
+            store.mark_requests_read([request_id])
+            self._write_json({"ok": True, "ids": store.get_read_state()})
+            return
+        self._write_json({"error": "invalid_action"}, status=400)
+
+    def _read_delete_body(self) -> dict[str, object] | None:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            return None
+        if length <= 0 or length > self._MAX_BODY_BYTES:
+            return None
+        raw = self.rfile.read(length)
+        try:
+            parsed = json.loads(raw.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return None
+        return parsed if isinstance(parsed, dict) else None
+
     def _handle_settings_update(self, payload: dict[str, object]) -> None:
         settings = payload.get("settings")
         if not isinstance(settings, dict):
@@ -4585,6 +4639,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/requests/remote-once",
             "/v1/settings/import",
             "/v1/settings/reset",
+            "/v1/read-state",
             "/v1/policy/clear",
             "/v1/approval-gate/cooldown/revoke",
             "/v1/approval-gate/totp/enroll",
@@ -4868,6 +4923,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/settings/export",
             "/v1/settings/import",
             "/v1/settings/reset",
+            "/v1/read-state",
             "/v1/update",
             "/v1/update/status",
         }:

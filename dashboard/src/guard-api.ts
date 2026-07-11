@@ -1113,6 +1113,48 @@ export async function fetchQueueSummary(input: { activeRequestId?: string } = {}
   return normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count);
 }
 
+export type GuardReadStatePayload = { ids: string[] };
+
+export async function fetchReadState(): Promise<GuardReadStatePayload> {
+  if (isGuardDemoMode()) {
+    return { ids: [] };
+  }
+  return readJson<GuardReadStatePayload>("/v1/read-state");
+}
+
+export async function postReadStateMarkRead(requestId: string): Promise<GuardReadStatePayload> {
+  if (isGuardDemoMode()) {
+    return { ids: [] };
+  }
+  return readJson<GuardReadStatePayload>("/v1/read-state", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
+    body: JSON.stringify({ action: "mark_read", request_id: requestId }),
+  });
+}
+
+export async function postReadStateMarkUnread(requestId: string): Promise<GuardReadStatePayload> {
+  if (isGuardDemoMode()) {
+    return { ids: [] };
+  }
+  return readJson<GuardReadStatePayload>("/v1/read-state", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
+    body: JSON.stringify({ action: "mark_unread", request_id: requestId }),
+  });
+}
+
+export async function postReadStateMarkAllRead(requestIds: string[]): Promise<GuardReadStatePayload> {
+  if (isGuardDemoMode()) {
+    return { ids: [] };
+  }
+  return readJson<GuardReadStatePayload>("/v1/read-state", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
+    body: JSON.stringify({ action: "mark_all_read", request_ids: requestIds }),
+  });
+}
+
 export function buildDemoRuntimeSnapshot(): GuardRuntimeSnapshot {
   const demoRequests = getDemoRequests();
   const demoReceipts = getDemoReceipts();

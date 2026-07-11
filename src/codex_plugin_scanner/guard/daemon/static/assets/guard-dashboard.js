@@ -15130,9 +15130,9 @@ function guardParams() {
 function guardParam(name) {
   return guardParams().get(name);
 }
-function readBrowserStorage(getStorage2, name) {
+function readBrowserStorage(getStorage, name) {
   try {
-    return getStorage2().getItem(name);
+    return getStorage().getItem(name);
   } catch {
     return null;
   }
@@ -15140,9 +15140,9 @@ function readBrowserStorage(getStorage2, name) {
 function readGuardStorage(name) {
   return readBrowserStorage(() => window.sessionStorage, name) ?? readBrowserStorage(() => window.localStorage, name);
 }
-function saveBrowserStorage(getStorage2, name, value) {
+function saveBrowserStorage(getStorage, name, value) {
   try {
-    getStorage2().setItem(name, value);
+    getStorage().setItem(name, value);
   } catch {
   }
 }
@@ -15865,6 +15865,42 @@ async function fetchRuntimeSnapshot(input = {}) {
   const path = query.length > 0 ? `/v1/runtime?${query}` : "/v1/runtime";
   const snapshot = await readJson(path);
   return normalizeRuntimeSnapshot(snapshot);
+}
+async function fetchReadState() {
+  if (isGuardDemoMode()) {
+    return { ids: [] };
+  }
+  return readJson("/v1/read-state");
+}
+async function postReadStateMarkRead(requestId) {
+  if (isGuardDemoMode()) {
+    return { ids: [] };
+  }
+  return readJson("/v1/read-state", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
+    body: JSON.stringify({ action: "mark_read", request_id: requestId })
+  });
+}
+async function postReadStateMarkUnread(requestId) {
+  if (isGuardDemoMode()) {
+    return { ids: [] };
+  }
+  return readJson("/v1/read-state", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
+    body: JSON.stringify({ action: "mark_unread", request_id: requestId })
+  });
+}
+async function postReadStateMarkAllRead(requestIds) {
+  if (isGuardDemoMode()) {
+    return { ids: [] };
+  }
+  return readJson("/v1/read-state", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
+    body: JSON.stringify({ action: "mark_all_read", request_ids: requestIds })
+  });
 }
 function buildDemoRuntimeSnapshot() {
   const demoRequests2 = getDemoRequests();
@@ -23257,67 +23293,74 @@ function ConsolidatedEvidenceAlert({ items }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-brand-dark", children: current.content })
   ] });
 }
-const REQUEST_READ_STATE_KEY = "hol-guard:read-request-ids";
-const REQUEST_READ_STATE_LIMIT = 2e3;
-function safeReadStorage(storage) {
-  if (!storage) return [];
-  try {
-    const raw = storage.getItem(REQUEST_READ_STATE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!parsed || !Array.isArray(parsed.ids)) return [];
-    return parsed.ids.filter((id) => typeof id === "string");
-  } catch {
-    return [];
-  }
-}
-function safeWriteStorage(storage, ids) {
-  if (!storage) return;
-  try {
-    storage.setItem(REQUEST_READ_STATE_KEY, JSON.stringify({ ids }));
-  } catch {
-  }
-}
-function addReadIds(current, requestIds, limit = REQUEST_READ_STATE_LIMIT) {
-  const uniqueNew = Array.from(new Set(requestIds));
-  const toAdd = new Set(uniqueNew);
-  const next = current.filter((id) => !toAdd.has(id));
-  next.unshift(...uniqueNew);
-  if (next.length > limit) {
-    next.length = limit;
-  }
-  return next;
-}
-function removeReadId(current, requestId) {
-  return current.filter((id) => id !== requestId);
-}
-function getStorage() {
-  return typeof window !== "undefined" ? window.localStorage : null;
-}
+const FETCH_DEBOUNCE_MS = 2e3;
 function useRequestReadState() {
-  const [readIds, setReadIds] = reactExports.useState(() => safeReadStorage(getStorage()));
-  reactExports.useEffect(() => {
-    setReadIds(safeReadStorage(getStorage()));
+  const [readIds, setReadIds] = reactExports.useState(() => /* @__PURE__ */ new Set());
+  const [lastFetch, setLastFetch] = reactExports.useState(0);
+  const refresh = reactExports.useCallback(async () => {
+    try {
+      const response = await fetchReadState();
+      if (response?.ids) {
+        setReadIds(new Set(response.ids));
+      }
+    } catch {
+    }
+    setLastFetch(Date.now());
   }, []);
   reactExports.useEffect(() => {
-    safeWriteStorage(getStorage(), readIds);
-  }, [readIds]);
-  const isRead = reactExports.useCallback((requestId) => readIds.includes(requestId), [readIds]);
-  const markRead = reactExports.useCallback((requestId) => {
-    setReadIds((current) => addReadIds(current, [requestId]));
-  }, []);
-  const markUnread = reactExports.useCallback((requestId) => {
-    setReadIds((current) => removeReadId(current, requestId));
-  }, []);
-  const markAllRead = reactExports.useCallback((requestIds) => {
-    if (requestIds.length === 0) return;
-    setReadIds((current) => addReadIds(current, requestIds));
-  }, []);
+    if (Date.now() - lastFetch > FETCH_DEBOUNCE_MS) {
+      void refresh();
+    }
+  }, [lastFetch, refresh]);
+  const isRead = reactExports.useCallback(
+    (requestId) => readIds.has(requestId),
+    [readIds]
+  );
+  const markRead = reactExports.useCallback(
+    (requestId) => {
+      setReadIds((prev) => {
+        if (prev.has(requestId)) return prev;
+        const next = new Set(prev);
+        next.add(requestId);
+        return next;
+      });
+      void postReadStateMarkRead(requestId).catch(() => {
+      });
+    },
+    []
+  );
+  const markUnread = reactExports.useCallback(
+    (requestId) => {
+      setReadIds((prev) => {
+        if (!prev.has(requestId)) return prev;
+        const next = new Set(prev);
+        next.delete(requestId);
+        return next;
+      });
+      void postReadStateMarkUnread(requestId).catch(() => {
+      });
+    },
+    []
+  );
+  const markAllRead = reactExports.useCallback(
+    (requestIds) => {
+      if (requestIds.length === 0) return;
+      setReadIds((prev) => {
+        const next = new Set(prev);
+        for (const id of requestIds) next.add(id);
+        return next;
+      });
+      void postReadStateMarkAllRead(requestIds).catch(() => {
+      });
+    },
+    []
+  );
   return reactExports.useMemo(
-    () => ({ isRead, markRead, markUnread, markAllRead, readCount: readIds.length }),
-    [isRead, markRead, markUnread, markAllRead, readIds.length]
+    () => ({ isRead, markRead, markUnread, markAllRead, readCount: readIds.size }),
+    [isRead, markRead, markUnread, markAllRead, readIds.size]
   );
 }
+const REQUEST_READ_STATE_LIMIT = 5e4;
 function approvalGateCooldownLabel(seconds) {
   if (seconds === 0) return "Every approval";
   if (seconds === 900) return "15 minutes";

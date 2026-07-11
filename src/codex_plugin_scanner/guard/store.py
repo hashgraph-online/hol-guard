@@ -19,6 +19,7 @@ from .store_inventory import StoreInventoryMixin
 from .store_oauth import StoreOAuthConnectMixin
 from .store_policy import StorePolicyMixin
 from .store_policy_integrity_runtime import StorePolicyIntegrityAdminMixin
+from .store_read_state import StoreReadStateMixin
 from .store_receipts import StoreReceiptsRuntimeMixin
 from .store_secret_policy_integrity import (
     StoreSecretPolicyIntegrityMixin,
@@ -32,14 +33,15 @@ class GuardStore(
     StoreConnectionSchemaMixin,
     StoreInventoryMixin,
     StorePolicyMixin,
-    StoreReceiptsRuntimeMixin,
-    StoreApprovalsMixin,
     StorePolicyIntegrityAdminMixin,
     StoreCloudEventsMixin,
+    StoreReceiptsRuntimeMixin,
+    StoreApprovalsMixin,
     StoreEventReceiptsMixin,
     StoreOAuthConnectMixin,
     StoreSessionsMixin,
     StoreEvidenceMixin,
+    StoreReadStateMixin,
 ):
     """Local SQLite store for Guard state."""
 
