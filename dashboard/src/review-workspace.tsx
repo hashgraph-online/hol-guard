@@ -947,7 +947,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                   : "border-transparent bg-brand-blue"
               }`}
             />
-            <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus:opacity-100">
+            <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
               {isRead ? "Read" : "Unread"}
             </span>
           </span>
@@ -970,7 +970,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                 isBlocked ? "bg-brand-attention" : "bg-emerald-400"
               }`}
             />
-            <span className="pointer-events-none absolute right-0 top-full z-50 mt-1 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus:opacity-100">
+            <span className="pointer-events-none absolute right-0 top-full z-40 mt-1 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
               {isBlocked ? "Blocked by policy" : "Allowed by policy"}
             </span>
           </span>
@@ -982,7 +982,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
             }`}
           >
             <CategoryIcon className="h-4 w-4" aria-hidden="true" />
-            <span className="pointer-events-none absolute right-0 top-full z-50 mt-1 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus:opacity-100">
+            <span className="pointer-events-none absolute right-0 top-full z-30 mt-5 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
               {category.label}
             </span>
           </span>

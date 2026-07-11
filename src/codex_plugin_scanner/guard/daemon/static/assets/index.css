@@ -4721,10 +4721,6 @@
     }
   }
 
-  .group-focus\:opacity-100:is(:where(.group):focus *) {
-    opacity: 1;
-  }
-
   .placeholder\:text-slate-400::placeholder {
     color: var(--color-slate-400);
   }
