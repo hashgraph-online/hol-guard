@@ -563,7 +563,6 @@ def _with_live_request_sync_identity(
 
 def _resolve_live_request_sync_auth_context(store: GuardStore) -> dict[str, Any]:
     """Resolve cloud sync auth context and repair paired storage when possible."""
-    from .command_queue import _with_live_sync_identity
     from .runner import (
         GuardSyncAuthorizationExpiredError,
         GuardSyncNotConfiguredError,
@@ -572,11 +571,11 @@ def _resolve_live_request_sync_auth_context(store: GuardStore) -> dict[str, Any]
     )
 
     try:
-        return _with_live_sync_identity(store, _resolve_guard_sync_auth_context(store))
+        return _with_live_request_sync_identity(store, _resolve_guard_sync_auth_context(store))
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError):
         repair = repair_guard_cloud_connect_storage(store)
         if repair["existing_sign_in_valid"] or repair["repaired_storage"]:
-            return _with_live_sync_identity(store, _resolve_guard_sync_auth_context(store))
+            return _with_live_request_sync_identity(store, _resolve_guard_sync_auth_context(store))
         raise
 
 

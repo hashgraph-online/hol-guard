@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime import live_request_sync as live_request_sync_module
 from codex_plugin_scanner.guard.runtime.live_request_sync import (
     LIVE_REQUEST_SYNC_PROTOCOL_VERSION,
     _build_live_request_event,
@@ -72,22 +73,12 @@ class TestIndependentWorker:
         monkeypatch.setattr(
             live_request_sync_module,
             "_resolve_live_request_sync_auth_context",
-            lambda _store: {"access_token": "token-1"},
-        )
-        monkeypatch.setattr(
-            live_request_sync_module,
-            "_with_live_request_sync_identity",
-            lambda _store, auth: {**auth, "workspace_id": "workspace-1"},
+            lambda _store: {"access_token": "token-1", "workspace_id": "workspace-1"},
         )
         monkeypatch.setattr(
             live_request_sync_module,
             "sync_live_requests_once",
             lambda _store, auth: calls.append(("live", auth)) or {"synced": 0},
-        )
-        monkeypatch.setattr(
-            live_request_sync_module,
-            "cloud_sync_sync_live_requests_once",
-            lambda _store, auth: calls.append(("outbox", auth)) or {"synced": 0},
         )
 
         live_request_sync_module._cloud_sync_sync_loop(
@@ -99,7 +90,6 @@ class TestIndependentWorker:
 
         assert calls == [
             ("live", {"access_token": "token-1", "workspace_id": "workspace-1"}),
-            ("outbox", {"access_token": "token-1"}),
         ]
 
     def test_start_worker_creates_thread(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
