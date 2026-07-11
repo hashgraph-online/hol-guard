@@ -24489,16 +24489,9 @@ function ReviewWorkspace(props) {
   const categoryOptions = reactExports.useMemo(() => queueCategoriesForItems(requests), [requests]);
   const activeRequest = activeRequestId !== null ? requests.find((r) => r.request_id === activeRequestId) ?? (detail?.item.request_id === activeRequestId ? detail.item : null) : null;
   reactExports.useEffect(() => {
-    function isNonQueueControlTarget(target) {
-      if (!(target instanceof HTMLElement)) return true;
-      if (target.closest('[role="listbox"]')) return false;
-      const tag = target.tagName.toLowerCase();
-      const role = target.getAttribute("role")?.toLowerCase();
-      return tag === "input" || tag === "textarea" || tag === "select" || tag === "button" || target.isContentEditable || role === "textbox" || role === "combobox" || role === "button" || role === "menu" || role === "menuitem" || role === "menuitemcheckbox" || role === "menuitemradio" || role === "radiogroup" || role === "slider";
-    }
     function handleKeyDown(event) {
       if (pagedRequests.length === 0) return;
-      if (isNonQueueControlTarget(event.target)) return;
+      if (!(event.target instanceof HTMLElement) || !event.target.closest('[role="listbox"]')) return;
       const activeIdx = pagedRequests.findIndex((r) => r.request_id === activeRequestId);
       if (event.key === "ArrowDown") {
         event.preventDefault();

@@ -223,34 +223,10 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
       : null;
 
   useEffect(() => {
-    function isNonQueueControlTarget(target: EventTarget | null): boolean {
-      if (!(target instanceof HTMLElement)) return true;
-      // Only fire queue navigation when focus is inside the review queue listbox.
-      if (target.closest('[role="listbox"]')) return false;
-      // Also ignore interactive filter controls outside the listbox.
-      const tag = target.tagName.toLowerCase();
-      const role = target.getAttribute("role")?.toLowerCase();
-      return (
-        tag === "input" ||
-        tag === "textarea" ||
-        tag === "select" ||
-        tag === "button" ||
-        target.isContentEditable ||
-        role === "textbox" ||
-        role === "combobox" ||
-        role === "button" ||
-        role === "menu" ||
-        role === "menuitem" ||
-        role === "menuitemcheckbox" ||
-        role === "menuitemradio" ||
-        role === "radiogroup" ||
-        role === "slider"
-      );
-    }
-
     function handleKeyDown(event: KeyboardEvent) {
       if (pagedRequests.length === 0) return;
-      if (isNonQueueControlTarget(event.target)) return;
+      // Only fire queue navigation when focus is inside the review queue listbox.
+      if (!(event.target instanceof HTMLElement) || !event.target.closest('[role="listbox"]')) return;
       const activeIdx = pagedRequests.findIndex((r) => r.request_id === activeRequestId);
       if (event.key === "ArrowDown") {
         event.preventDefault();
