@@ -896,16 +896,17 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
     ? `Select ${preview} for bulk approval`
     : `Not eligible for bulk approval: ${category.shortLabel.toLowerCase()}`;
 
+  const rowClassName = (() => {
+    if (selected) return "border border-brand-blue/60 bg-brand-blue/[0.08] ring-1 ring-brand-blue/20";
+    if (active) return "border border-brand-blue bg-brand-blue/[0.06]";
+    if (isRead) return "border border-transparent bg-white hover:bg-slate-50";
+    return "border border-transparent bg-slate-50 hover:bg-slate-100";
+  })();
+
   return (
     <div
       role="none"
-      className={`group w-full rounded-lg py-2.5 px-2 transition-all ${
-        selected
-          ? "border border-brand-blue/60 bg-brand-blue/[0.08] ring-1 ring-brand-blue/20"
-          : active
-            ? "border border-brand-blue bg-brand-blue/[0.06]"
-            : "border border-transparent bg-white hover:bg-slate-50"
-      }`}
+      className={`group w-full rounded-lg py-2.5 px-2 transition-all ${rowClassName}`}
     >
       <div className="flex items-center justify-between gap-2">
         {showCheckbox ? (
@@ -933,26 +934,10 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
           aria-posinset={index + 1}
           aria-setsize={undefined}
           tabIndex={active ? 0 : -1}
-          className="group flex min-w-0 flex-1 items-center gap-2 text-left"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
-          <span
-            role="img"
-            aria-label={isRead ? "Read" : "Unread"}
-            className="relative flex h-2 w-2 shrink-0 items-center justify-center"
-          >
-            <span
-              className={`h-2 w-2 rounded-full border-2 transition-colors ${
-                isRead
-                  ? "border-slate-300 bg-transparent"
-                  : "border-transparent bg-brand-blue"
-              }`}
-            />
-            <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
-              {isRead ? "Read" : "Unread"}
-            </span>
-          </span>
           <div className="min-w-0 flex-1">
-            <p className={`truncate text-sm ${isRead ? "font-medium text-slate-600" : "font-bold text-brand-dark"}`}>
+            <p className={`truncate text-sm ${isRead ? "font-medium text-slate-500" : "font-bold text-brand-dark"}`}>
               {!isRead && <span className="sr-only">Unread request:</span>}
               {preview}
             </p>
@@ -963,26 +948,26 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
           <span
             role="img"
             aria-label={isBlocked ? "Blocked by policy" : "Allowed by policy"}
-            className="relative flex h-2 w-2 shrink-0 items-center justify-center"
+            className="group/icon relative flex h-2 w-2 shrink-0 items-center justify-center"
           >
             <span
               className={`h-2 w-2 rounded-full ${
                 isBlocked ? "bg-brand-attention" : "bg-emerald-400"
               }`}
             />
-            <span className="pointer-events-none absolute right-0 top-full z-40 mt-1 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+            <span className="pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100">
               {isBlocked ? "Blocked by policy" : "Allowed by policy"}
             </span>
           </span>
           <span
             role="img"
             aria-label={category.label}
-            className={`relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+            className={`group/icon relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
               active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"
             }`}
           >
             <CategoryIcon className="h-4 w-4" aria-hidden="true" />
-            <span className="pointer-events-none absolute right-0 top-full z-30 mt-5 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+            <span className="pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100">
               {category.label}
             </span>
           </span>

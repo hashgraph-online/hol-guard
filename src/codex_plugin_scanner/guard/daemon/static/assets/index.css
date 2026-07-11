@@ -616,10 +616,6 @@
     left: calc(var(--spacing) * .5);
   }
 
-  .left-1\/2 {
-    left: 50%;
-  }
-
   .left-2\.5 {
     left: calc(var(--spacing) * 2.5);
   }
@@ -1838,11 +1834,6 @@
   .border-0 {
     border-style: var(--tw-border-style);
     border-width: 0;
-  }
-
-  .border-2 {
-    border-style: var(--tw-border-style);
-    border-width: 2px;
   }
 
   .border-t {
@@ -3155,10 +3146,6 @@
     .bg-slate-300\/80 {
       background-color: color-mix(in oklab, var(--color-slate-300) 80%, transparent);
     }
-  }
-
-  .bg-slate-900 {
-    background-color: var(--color-slate-900);
   }
 
   .bg-slate-900\/45 {
@@ -4716,7 +4703,7 @@
       }
     }
 
-    .group-hover\:opacity-100:is(:where(.group):hover *) {
+    .group-hover\/icon\:opacity-100:is(:where(.group\/icon):hover *) {
       opacity: 1;
     }
   }
