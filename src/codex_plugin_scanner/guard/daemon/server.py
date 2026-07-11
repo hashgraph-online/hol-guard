@@ -5654,7 +5654,12 @@ class GuardDaemonServer:
                 limit=1,
             )
             outbox_status = self._server.store.live_request_outbox_status(now=_now())
-            if active_stream_clients > 0 or pending_live_requests or int(outbox_status["depth"]) > 0:
+            outbox_depth = outbox_status["depth"]
+            if (
+                active_stream_clients > 0
+                or pending_live_requests
+                or (isinstance(outbox_depth, int) and outbox_depth > 0)
+            ):
                 time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)
                 continue
             if time.monotonic() - self._server.last_activity_monotonic >= idle_timeout_seconds:

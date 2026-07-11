@@ -290,7 +290,10 @@ def sync_live_requests_once(
             except GuardReviewContractError:
                 oauth = None
             for outbox_row in outbox_rows:
-                sequence = int(outbox_row["sequence"])
+                sequence_value = outbox_row["sequence"]
+                if not isinstance(sequence_value, int):
+                    raise RuntimeError("Live-request outbox sequence is invalid.")
+                sequence = sequence_value
                 request_id = str(outbox_row["local_request_id"])
                 request = store.get_approval_request(request_id)
                 if request is None:
@@ -399,12 +402,15 @@ def sync_live_requests_once(
         )
         _save_sync_state(store, state)
 
+        outbox_depth = outbox_status["depth"]
+        if not isinstance(outbox_depth, int):
+            raise RuntimeError("Live-request outbox depth is invalid.")
         _LOGGER.info(
             "Guard live request sync complete: accepted=%d rejected=%d batches=%d outbox_depth=%d",
             total_accepted,
             total_rejected,
             batches,
-            int(outbox_status["depth"]),
+            outbox_depth,
         )
         return {
             "synced": total_accepted,
@@ -582,7 +588,8 @@ def _cloud_sync_sync_loop(
         try:
             auth_context = _resolve_live_request_sync_auth_context(store)
             result = sync_live_requests_once(store, auth_context)
-            if result.get("synced", 0) > 0:
+            synced = result.get("synced", 0)
+            if isinstance(synced, int) and synced > 0:
                 error_streak = 0
                 continue
         except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
