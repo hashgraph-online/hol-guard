@@ -624,6 +624,8 @@ def _trust_layer_from_domain(
         "layerId": "local_baseline",
         "layerType": "local_baseline",
         "status": "local",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
         "trustScore": round(domain.score),
         "trustComponents": trust_components,
         "capturedAt": normalized_captured_at,
@@ -635,6 +637,8 @@ def _trust_layer_from_domain(
             "specVersion": domain.spec_version,
             "trustDomain": domain.domain,
             "attestationStatus": "unsigned",
+            "evidenceAuthority": "device_claim",
+            "affectsV4Score": False,
             "evidenceSchemaVersion": "guard-aibom-local-baseline-evidence.v1",
             "evidence": evidence,
             "evidenceHash": _trust_evidence_hash(
