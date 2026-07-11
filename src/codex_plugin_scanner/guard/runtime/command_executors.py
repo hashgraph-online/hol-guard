@@ -398,7 +398,13 @@ def _execute_approval_operation(
     )
     response_data: dict[str, object] = {
         "action": normalized_outer_action or resolution_action,
-        "daemonAckStatus": "resolved" if resolved else "not_resolved",
+        "daemonAckStatus": (
+            "resolved"
+            if resolved and _remote_resume_confirmed(resume_metadata, resolution_action)
+            else "resolved_unconfirmed"
+            if resolved
+            else "not_resolved"
+        ),
         "localRequestId": local_request_id,
         "remoteDecision": resolution_action,
         "resolution": _remote_resolution_metadata(result),
@@ -409,6 +415,16 @@ def _execute_approval_operation(
         response_data,
         generated_at=generated_at,
     )
+
+
+def _remote_resume_confirmed(resume_metadata: dict[str, object], action: str) -> bool:
+    status = _optional_string(resume_metadata.get("resumeStatus"))
+    if status in {"already_sent", "blocked", "not_applicable", "resumed", "sent"}:
+        return True
+    if action != "block" or status != "skipped":
+        return False
+    detail = resume_metadata.get("codexResume") or resume_metadata.get("harnessResume")
+    return isinstance(detail, dict) and detail.get("reason") == "blocked_not_resumed"
 
 
 def _normalize_remote_decision_action(value: object) -> str | None:
@@ -527,6 +543,15 @@ def _resume_after_remote_approval(
     now: str,
 ) -> dict[str, object]:
     harness = _optional_string(request_row.get("harness"))
+    if harness not in {"codex", "pi"}:
+        return {
+            "resumeStatus": "not_applicable",
+            "harnessResume": {
+                "harness": harness or "unknown",
+                "status": "not_applicable",
+                "reason": "harness_has_no_resumable_operation",
+            },
+        }
     if harness == "codex" and action in {"allow", "block"}:
         codex_resume = _resume_codex_request(store=store, request_id=request_id, action=action, now=now)
         if codex_resume is None:

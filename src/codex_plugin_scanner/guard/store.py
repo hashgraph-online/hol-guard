@@ -16,6 +16,7 @@ from .store_connection_schema import StoreConnectionSchemaMixin
 from .store_event_receipts import StoreEventReceiptsMixin
 from .store_evidence_facade import StoreEvidenceMixin
 from .store_inventory import StoreInventoryMixin
+from .store_live_request_outbox import StoreLiveRequestOutboxMixin
 from .store_oauth import StoreOAuthConnectMixin
 from .store_policy import StorePolicyMixin
 from .store_policy_integrity_runtime import StorePolicyIntegrityAdminMixin
@@ -37,6 +38,7 @@ class GuardStore(
     StoreCloudEventsMixin,
     StoreReceiptsRuntimeMixin,
     StoreApprovalsMixin,
+    StoreLiveRequestOutboxMixin,
     StoreEventReceiptsMixin,
     StoreOAuthConnectMixin,
     StoreSessionsMixin,

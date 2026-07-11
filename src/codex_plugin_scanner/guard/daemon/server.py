@@ -5514,8 +5514,9 @@ class GuardDaemonServer:
         self._shutdown_started = threading.Event()
 
     def start(self) -> None:
-        if self._thread is not None:
+        if self._thread is not None and self._thread.is_alive():
             return
+        self._thread = None
         self._begin_service()
         self._thread = threading.Thread(target=self._serve_forever, daemon=True)
         self._thread.start()
@@ -5599,11 +5600,9 @@ class GuardDaemonServer:
             self._finish_service()
 
     def _finish_service(self) -> None:
-        if self._shutdown_started.is_set():
-            clear_guard_daemon_state_if_current(self._server.store.guard_home, pid=os.getpid(), port=self.port)
-            self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
-            return
         self._shutdown_started.set()
+        self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
+        self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
         clear_guard_daemon_state_if_current(self._server.store.guard_home, pid=os.getpid(), port=self.port)
         self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
 
@@ -5649,7 +5648,22 @@ class GuardDaemonServer:
         while not self._shutdown_started.is_set():
             with self._server.active_stream_clients_lock:
                 active_stream_clients = self._server.active_stream_clients
-            if active_stream_clients > 0:
+            pending_live_requests = self._server.store.list_approval_requests(
+                status="pending",
+                limit=1,
+            )
+            cloud_profile = self._server.store.get_cloud_sync_profile()
+            workspace_id = cloud_profile.get("workspace_id") if isinstance(cloud_profile, dict) else None
+            outbox_status = self._server.store.live_request_outbox_status(
+                now=_now(),
+                workspace_id=workspace_id,
+            )
+            outbox_depth = outbox_status["depth"]
+            if (
+                active_stream_clients > 0
+                or pending_live_requests
+                or (workspace_id is not None and isinstance(outbox_depth, int) and outbox_depth > 0)
+            ):
                 time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)
                 continue
             if time.monotonic() - self._server.last_activity_monotonic >= idle_timeout_seconds:
