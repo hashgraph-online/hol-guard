@@ -844,6 +844,19 @@ function SemanticFilterButton(props: {
   );
 }
 
+type RiskLevel = "high" | "medium" | "low";
+
+const RISK_DOT_COLOR: Record<RiskLevel, string> = {
+  high: "bg-red-400",
+  medium: "bg-amber-400",
+  low: "bg-emerald-400",
+};
+
+function riskLevelFromScore(score: number): RiskLevel {
+  if (score <= 2) return "high";
+  if (score <= 4) return "medium";
+  return "low";
+}
 function QueueItemRow({ item, active, readState, index, onOpenRequest, selectionMode = false, selectable = false, selected = false, onToggleSelect }: {
   item: GuardApprovalRequest;
   active: boolean;
@@ -856,7 +869,8 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
   onToggleSelect?: (item: GuardApprovalRequest) => void;
 }) {
   const risk = riskScore(item);
-  const riskLevel = risk <= 2 ? "high" : risk <= 4 ? "medium" : "low";
+  const riskLevel = riskLevelFromScore(risk);
+  const riskDotColor = RISK_DOT_COLOR[riskLevel];
   const category = resolveQueueCategory(item);
   const CategoryIcon = iconForQueueCategory(category.id);
   const preview = queueItemPreview(item);
@@ -953,11 +967,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
             className="group/icon relative flex h-2 w-2 shrink-0 items-center justify-center"
           >
             <span
-              className={`h-2 w-2 rounded-full ${
-                riskLevel === "high" ? "bg-red-400"
-                : riskLevel === "medium" ? "bg-amber-400"
-                : "bg-emerald-400"
-              }`}
+              className={`h-2 w-2 rounded-full ${riskDotColor}`}
             />
             <span className="pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100">
               {`Risk: ${riskLevel}`}
