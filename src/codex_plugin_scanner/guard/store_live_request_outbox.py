@@ -31,7 +31,6 @@ def live_request_outbox_schema_statements() -> tuple[str, ...]:
         create index if not exists idx_guard_live_request_outbox_newest_ready
         on guard_live_request_outbox (
           workspace_id,
-          next_attempt_at,
           changed_at desc,
           sequence desc
         )
@@ -188,6 +187,7 @@ class StoreLiveRequestOutboxMixin:
         workspace_id: str | None = None,
         newest_first: bool = False,
     ) -> list[dict[str, object]]:
+        """List ready events in explicit newest-first or fairness order."""
         query = """
             select sequence, local_request_id, changed_at, attempt_count
             from guard_live_request_outbox
@@ -197,8 +197,10 @@ class StoreLiveRequestOutboxMixin:
         if workspace_id is not None:
             query += " and workspace_id = ?"
             parameters.append(workspace_id)
-        order = "changed_at desc, sequence desc" if newest_first else "sequence"
-        query += f" order by {order} limit ?"
+        if newest_first:
+            query += " order by changed_at desc, sequence desc limit ?"
+        else:
+            query += " order by sequence asc limit ?"
         parameters.append(max(1, int(limit)))
         with self._connect() as connection:
             rows = connection.execute(query, parameters).fetchall()

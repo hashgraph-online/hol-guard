@@ -298,7 +298,8 @@ def test_stale_rejection_is_acknowledged_while_transient_rejection_retries(
                 {
                     "index": 1,
                     "accepted": False,
-                    "error": "stale event sequence for request-stale (seq 1 < existing 2)",
+                    "code": "stale_sequence",
+                    "error": "Cloud already has a newer projection.",
                 },
             ],
         },
