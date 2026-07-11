@@ -486,6 +486,7 @@ def _sync_live_requests_best_effort(store: GuardStore, auth_context: dict[str, o
         _LIVE_REQUEST_SYNC_LOCK.release()
         _LOGGER.debug("Guard live request sync could not start: %s", _redacted_error(exc))
 
+
 def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[str, object]:
     auth_context = _resolve_command_queue_auth_context(store)
     state = _load_state(store)
