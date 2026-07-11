@@ -1122,6 +1122,40 @@ class TestRedactionLevelNone:
         # redacted_command must be None for 'none' level
         assert event["redactedCommand"] is None
 
+    def test_redaction_none_enforces_portal_utf16_field_limits(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        store = Store(tmp_path)
+        item: dict[str, object] = {
+            "request_id": "req-bounded-1",
+            "status": "pending",
+            "action_identity": "test-action",
+            "trigger_summary": "😀" * 400,
+            "risk_headline": "😀" * 400,
+            "harness": "guard-review",
+            "raw_command_text": ("😀" * 40_000) + " --dangerous-suffix",
+            "created_at": "2026-07-10T00:00:00+00:00",
+            "last_seen_at": "2026-07-10T00:00:00+00:00",
+        }
+        event = _build_live_request_event(
+            item,
+            oauth=None,
+            redaction_level="none",
+            store=store,
+            event_sequence=1,
+        )
+
+        assert event is not None
+        raw_command = event["rawCommand"]
+        display_summary = event["displaySummary"]
+        assert isinstance(raw_command, str)
+        assert isinstance(display_summary, str)
+        assert len(raw_command.encode("utf-16-le")) // 2 <= 65_536
+        assert " … [truncated] … " in raw_command
+        assert raw_command.endswith(" --dangerous-suffix")
+        assert len(display_summary.encode("utf-16-le")) // 2 <= 512
+
     def test_redaction_none_hides_bearer_prefix(self, tmp_path: Path) -> None:
         """Bearer token is scrubbed to 'Bearer *****' — prefix retained."""
         store = Store(tmp_path)

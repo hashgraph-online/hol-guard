@@ -61,6 +61,8 @@ _LOGGER = logging.getLogger(__name__)
 LIVE_REQUEST_SYNC_BATCH_SIZE = 200
 LIVE_REQUEST_SYNC_MAX_BATCHES = 25
 LIVE_REQUEST_SYNC_PROTOCOL_VERSION = "1"
+_LIVE_REQUEST_COMMAND_MAX_UTF16_UNITS = 65_536
+_LIVE_REQUEST_SUMMARY_MAX_UTF16_UNITS = 512
 _LIVE_REQUEST_SEQUENCE_LOCK = threading.Lock()
 LIVE_REQUEST_SYNC_CURSOR_KEY = "guard_live_request_sync_cursor"
 LIVE_REQUEST_SYNC_STATE_KEY = "guard_live_request_sync_state"
@@ -162,6 +164,38 @@ def _resolve_display_provenance(
     return _DISPLAY_PROVENANCE_REDACTED
 
 
+def _utf16_units(value: str) -> int:
+    return sum(2 if ord(character) > 0xFFFF else 1 for character in value)
+
+
+def _take_utf16_prefix(value: str, max_units: int) -> str:
+    units = 0
+    for index, character in enumerate(value):
+        units += 2 if ord(character) > 0xFFFF else 1
+        if units > max_units:
+            return value[:index]
+    return value
+
+
+def _take_utf16_suffix(value: str, max_units: int) -> str:
+    units = 0
+    for index in range(len(value) - 1, -1, -1):
+        units += 2 if ord(value[index]) > 0xFFFF else 1
+        if units > max_units:
+            return value[index + 1 :]
+    return value
+
+
+def _truncate_utf16(value: str, max_units: int) -> str:
+    if _utf16_units(value) <= max_units:
+        return value
+    marker = " … [truncated] … "
+    available_units = max_units - _utf16_units(marker)
+    prefix_units = available_units * 3 // 4
+    suffix_units = available_units - prefix_units
+    return _take_utf16_prefix(value, prefix_units) + marker + _take_utf16_suffix(value, suffix_units)
+
+
 def _build_display_command(item: dict[str, object], redaction_level: str) -> tuple[str, str, str | None, str | None]:
     action_identity = str(item.get("action_identity") or item.get("artifact_id") or "unknown")
     trigger_summary = str(item.get("trigger_summary") or item.get("why_now") or "Guard approval request")
@@ -174,9 +208,17 @@ def _build_display_command(item: dict[str, object], redaction_level: str) -> tup
     command_text = _local_request_command_text(item, envelope)
     safe_command = _cloud_scrub_text(command_text) if command_text else None
     display_command = safe_command if safe_command and redaction_level != "full" else fallback_display
+    display_command = _truncate_utf16(
+        display_command,
+        _LIVE_REQUEST_COMMAND_MAX_UTF16_UNITS,
+    )
     display_summary = f"{trigger_summary}"
     if risk_headline:
         display_summary = f"{risk_headline} — {trigger_summary}"
+    display_summary = _truncate_utf16(
+        display_summary,
+        _LIVE_REQUEST_SUMMARY_MAX_UTF16_UNITS,
+    )
 
     raw_command = display_command if redaction_level == "none" and safe_command else None
     redacted_command = (
