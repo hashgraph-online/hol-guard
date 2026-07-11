@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import sqlite3
+from contextlib import AbstractContextManager
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 
 class StoreReadStateMixin:
     """SQLite-backed read-state for approval requests viewed by the user."""
 
     READ_STATE_LIMIT = 50000
+
+    if TYPE_CHECKING:
+
+        def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
 
     def mark_requests_read(self, request_ids: list[str]) -> None:
         if not request_ids:
