@@ -552,6 +552,10 @@
     top: calc(var(--spacing) * 6);
   }
 
+  .top-full {
+    top: 100%;
+  }
+
   .-right-3 {
     right: calc(var(--spacing) * -3);
   }
@@ -610,6 +614,10 @@
 
   .left-0\.5 {
     left: calc(var(--spacing) * .5);
+  }
+
+  .left-1\/2 {
+    left: 50%;
   }
 
   .left-2\.5 {
@@ -3149,6 +3157,10 @@
     }
   }
 
+  .bg-slate-900 {
+    background-color: var(--color-slate-900);
+  }
+
   .bg-slate-900\/45 {
     background-color: #0f172b73;
   }
@@ -4702,6 +4714,10 @@
       .group-hover\:bg-\[color-mix\(in_srgb\,var\(--brand-blue\)_85\%\,var\(--brand-dark\)\)\]:is(:where(.group):hover *) {
         background-color: color-mix(in srgb,var(--brand-blue) 85%,var(--brand-dark));
       }
+    }
+
+    .group-hover\/tt\:opacity-100:is(:where(.group\/tt):hover *) {
+      opacity: 1;
     }
   }
 
