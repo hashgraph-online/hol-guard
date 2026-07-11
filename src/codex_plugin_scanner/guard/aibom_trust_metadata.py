@@ -74,6 +74,8 @@ def trust_resolution_from_domain(
         "trustDomain": domain.domain,
         "attestationStatus": "unsigned",
         "evidenceSchemaVersion": "guard-aibom-local-baseline-evidence.v1",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
         "evidence": _local_baseline_evidence_payload(
             domain,
             captured_at=normalized_captured_at,
@@ -94,6 +96,8 @@ def trust_resolution_from_domain(
     return {
         "resolutionSource": "local",
         "status": "local",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
         "trustScore": round(domain.score),
         "trustComponents": trust_components,
         "capturedAt": normalized_captured_at,

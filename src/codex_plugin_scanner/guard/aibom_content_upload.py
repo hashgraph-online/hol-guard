@@ -192,6 +192,8 @@ def _prepared_upload_item(source: GuardAibomPrimaryContentSource) -> tuple[dict[
             "itemId": source.item_id,
             "versionId": source.version_id,
             "mimeType": source.mime_type,
+            "evidenceAuthority": "device_claim",
+            "bundleCompletenessState": "device_declared",
         },
         len(body),
     )
