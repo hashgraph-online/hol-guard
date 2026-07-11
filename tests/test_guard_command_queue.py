@@ -127,6 +127,7 @@ class FakeStore:
         return []
 
 
+
 def _approval_request_row(
     request_id: str,
     *,
@@ -2218,7 +2219,7 @@ def test_executor_resolves_expired_queued_remote_approval(tmp_path: Path) -> Non
     assert result["generatedAt"] == "2026-06-13T00:00:00+00:00"
     data = result["data"]
     assert data["status"] == "completed"
-    assert data["daemonAckStatus"] == "resolved"
+    assert data["daemonAckStatus"] == "resolved_unconfirmed"
     assert data["remoteDecision"] == "allow"
     assert data["resolution"]["status"] == "resolved"
     assert "remoteApproval" not in data
@@ -2299,7 +2300,7 @@ def test_executor_blocks_local_approval_request(tmp_path: Path) -> None:
 
     data = result["data"]
     assert data["status"] == "completed"
-    assert data["daemonAckStatus"] == "resolved"
+    assert data["daemonAckStatus"] == "resolved_unconfirmed"
     assert data["remoteDecision"] == "block"
     assert data["resolution"]["status"] == "resolved"
     assert "remoteApproval" not in data
@@ -3243,6 +3244,7 @@ def test_executor_attaches_codex_resume_live_hook_metadata(
     assert data["codexResume"]["status"] == "pending"
     assert data["codex_resume"] == data["codexResume"]
     assert data["resumeStatus"] == "pending"
+    assert data["daemonAckStatus"] == "resolved_unconfirmed"
     assert "thread-secret" not in str(data)
 
 
@@ -3311,6 +3313,7 @@ def test_executor_attaches_codex_resume_retry_fallback(
     data = result["data"]
     assert data["codexResume"]["status"] == "sent"
     assert data["resumeStatus"] == "sent"
+    assert data["daemonAckStatus"] == "resolved"
     assert data["resumeCompletedAt"] == "2026-06-13T00:00:00+00:00"
     assert "thread-secret" not in str(data)
 
@@ -3388,6 +3391,7 @@ def test_executor_attaches_pi_harness_resume_without_token(tmp_path: Path) -> No
     assert data["harnessResume"]["status"] == "resumed"
     assert data["harness_resume"] == data["harnessResume"]
     assert data["resumeStatus"] == "resumed"
+    assert data["daemonAckStatus"] == "resolved"
     assert "codexResume" not in data
     assert "resume-token-secret" not in str(data)
     assert store.operation["status"] == "resumed"
