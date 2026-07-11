@@ -873,6 +873,54 @@ class TestDiagnostics:
 class TestIndependentWorker:
     """start_cloud_sync_sync_worker creates a thread; stop_cloud_sync_sync_worker signals it."""
 
+    def test_worker_owns_live_review_sync(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        store = Store(tmp_path)
+        calls: list[tuple[str, dict[str, object]]] = []
+
+        class StopAfterOneIteration:
+            def is_set(self) -> bool:
+                return False
+
+            def wait(self, _timeout: float) -> bool:
+                return True
+
+        monkeypatch.setattr(
+            live_request_sync_module,
+            "_resolve_live_request_sync_auth_context",
+            lambda _store: {"access_token": "token-1"},
+        )
+        monkeypatch.setattr(
+            live_request_sync_module,
+            "_with_live_request_sync_identity",
+            lambda _store, auth: {**auth, "workspace_id": "workspace-1"},
+        )
+        monkeypatch.setattr(
+            live_request_sync_module,
+            "sync_live_requests_once",
+            lambda _store, auth: calls.append(("live", auth)) or {"synced": 0},
+        )
+        monkeypatch.setattr(
+            live_request_sync_module,
+            "cloud_sync_sync_live_requests_once",
+            lambda _store, auth: calls.append(("outbox", auth)) or {"synced": 0},
+        )
+
+        live_request_sync_module._cloud_sync_sync_loop(
+            store,
+            StopAfterOneIteration(),
+            poll_interval=1,
+            error_backoff=1,
+        )
+
+        assert calls == [
+            ("live", {"access_token": "token-1", "workspace_id": "workspace-1"}),
+            ("outbox", {"access_token": "token-1"}),
+        ]
+
     def test_start_worker_creates_thread(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         store = Store(tmp_path)
 

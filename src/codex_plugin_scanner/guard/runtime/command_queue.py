@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import threading
 import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
@@ -48,7 +47,6 @@ _LONG_POLL_EMPTY_MIN_WAIT_SECONDS = 0.05
 _REQUEST_TIMEOUT_SECONDS = 35
 _RETRY_TIMEOUT_SECONDS = 60
 _LOGGER = logging.getLogger(__name__)
-_LIVE_REQUEST_SYNC_LOCK = threading.Lock()
 _LEASE_LOCAL_REQUEST_SNAPSHOT_KEYS = (
     "requests",
     "pendingComplete",
@@ -426,19 +424,6 @@ def _maybe_auto_update(store: GuardStore, context: HarnessContext) -> None:
     maybe_auto_update(store, context)
 
 
-def _with_live_sync_identity(
-    store: GuardStore,
-    auth_context: dict[str, object],
-) -> dict[str, object]:
-    machine_id, workspace_id = _oauth_metadata(store)
-    return {
-        **auth_context,
-        "machine_id": machine_id,
-        "workspace_id": workspace_id,
-        "machine_installation_id": store.get_or_create_installation_id(),
-    }
-
-
 def _resolve_command_queue_auth_context(
     store: GuardStore,
     *,
@@ -457,36 +442,6 @@ def _resolve_command_queue_auth_context(
         return _resolve_guard_sync_auth_context(store)
 
 
-def _run_live_request_sync(
-    store: GuardStore,
-    auth_context: dict[str, object],
-) -> None:
-    try:
-        from .live_request_sync import sync_live_requests_once
-
-        sync_live_requests_once(store, _with_live_sync_identity(store, auth_context))
-    except Exception as exc:
-        _LOGGER.debug("Guard live request sync skipped: %s", _redacted_error(exc))
-    finally:
-        _LIVE_REQUEST_SYNC_LOCK.release()
-
-
-def _sync_live_requests_best_effort(store: GuardStore, auth_context: dict[str, object]) -> None:
-    """Start one best-effort Cloud live-request sync without delaying command delivery."""
-    if not _LIVE_REQUEST_SYNC_LOCK.acquire(blocking=False):
-        return
-    try:
-        threading.Thread(
-            target=_run_live_request_sync,
-            args=(store, auth_context),
-            daemon=True,
-            name="hol-guard-live-request-sync",
-        ).start()
-    except Exception as exc:
-        _LIVE_REQUEST_SYNC_LOCK.release()
-        _LOGGER.debug("Guard live request sync could not start: %s", _redacted_error(exc))
-
-
 def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[str, object]:
     auth_context = _resolve_command_queue_auth_context(store)
     state = _load_state(store)
@@ -499,7 +454,6 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
         }
     )
     _save_state(store, state)
-    _sync_live_requests_best_effort(store, auth_context)
     if _retry_pending_result(store, auth_context, state):
         return command_queue_status(store)
     lease_response = _json_request(

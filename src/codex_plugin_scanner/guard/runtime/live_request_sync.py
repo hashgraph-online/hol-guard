@@ -1741,6 +1741,19 @@ def stop_cloud_sync_sync_worker(
     return worker if worker.thread.is_alive() else None
 
 
+def _with_live_request_sync_identity(
+    store: GuardStore,
+    auth_context: dict[str, object],
+) -> dict[str, object]:
+    oauth = guard_review_oauth_metadata(store)
+    return {
+        **auth_context,
+        "machine_id": oauth.machine_id,
+        "workspace_id": oauth.workspace_id,
+        "machine_installation_id": oauth.installation_id,
+    }
+
+
 def _resolve_live_request_sync_auth_context(store: GuardStore) -> dict[str, Any]:
     """Resolve cloud sync auth context and repair paired storage when possible."""
     from .runner import (
@@ -1776,8 +1789,12 @@ def _cloud_sync_sync_loop(
     while not stop_event.is_set():
         try:
             auth_context = _resolve_live_request_sync_auth_context(store)
-            result = cloud_sync_sync_live_requests_once(store, auth_context)
-            if result.get("synced", 0) > 0:
+            live_result = sync_live_requests_once(
+                store,
+                _with_live_request_sync_identity(store, auth_context),
+            )
+            outbox_result = cloud_sync_sync_live_requests_once(store, auth_context)
+            if live_result.get("synced", 0) > 0 or outbox_result.get("synced", 0) > 0:
                 error_streak = 0
                 continue
         except GuardSyncAuthorizationExpiredError as exc:
