@@ -389,7 +389,6 @@ def sync_live_requests_once(
                             now=_now(),
                             error=message,
                         )
-                        continue
                     continue
 
             accounted = accepted + rejected
