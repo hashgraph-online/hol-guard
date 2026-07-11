@@ -56,6 +56,7 @@ import {
   standardScopeChoicesForRequest,
 } from "./approval-scopes";
 import { ConsolidatedEvidenceAlert, type EvidenceItem } from "./consolidated-evidence-alert";
+import { useRequestReadState, type RequestReadState, REQUEST_READ_STATE_LIMIT } from "./request-read-state";
 import {
   deriveDataFlowEvidence,
   deriveSkillRiskSignals,
@@ -164,6 +165,7 @@ const commonScopeValues = new Set<DecisionScope>(["artifact"]);
 
 export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const { requests, activeRequestId, detail } = props;
+  const readState = useRequestReadState();
   const queueRef = useRef<HTMLDivElement>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<QueueCategoryId | "all">("all");
@@ -174,10 +176,15 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
   const [page, setPage] = useState(1);
 
-  const handleOpenRequest = useCallback((id: string) => {
+  const selectRequest = useCallback((id: string) => {
     props.onOpenRequest(id);
     setMobileQueueOpen(false);
   }, [props.onOpenRequest]);
+
+  const handleOpenRequest = useCallback((id: string) => {
+    selectRequest(id);
+    readState.markRead(id);
+  }, [selectRequest, readState]);
 
   const handleToggleMobileQueue = useCallback(() => {
     setMobileQueueOpen((v) => !v);
@@ -216,23 +223,39 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
       : null;
 
   useEffect(() => {
+    function isNestedQueueActionButton(target: EventTarget | null): boolean {
+      return (
+        target instanceof HTMLElement &&
+        target.tagName.toLowerCase() === "button" &&
+        target.getAttribute("role") !== "option"
+      );
+    }
+
     function handleKeyDown(event: KeyboardEvent) {
       if (pagedRequests.length === 0) return;
+      // Only fire queue navigation when focus is inside the review queue listbox
+      // and not on a nested action button such as "Mark unread".
+      if (
+        !(event.target instanceof HTMLElement) ||
+        !event.target.closest('[role="listbox"]') ||
+        isNestedQueueActionButton(event.target)
+      )
+        return;
       const activeIdx = pagedRequests.findIndex((r) => r.request_id === activeRequestId);
       if (event.key === "ArrowDown") {
         event.preventDefault();
         const nextIdx = Math.min(activeIdx + 1, pagedRequests.length - 1);
-        if (nextIdx !== activeIdx) props.onOpenRequest(pagedRequests[nextIdx].request_id);
+        if (nextIdx !== activeIdx) handleOpenRequest(pagedRequests[nextIdx].request_id);
       }
       if (event.key === "ArrowUp") {
         event.preventDefault();
         const prevIdx = Math.max(activeIdx - 1, 0);
-        if (prevIdx !== activeIdx) props.onOpenRequest(pagedRequests[prevIdx].request_id);
+        if (prevIdx !== activeIdx) handleOpenRequest(pagedRequests[prevIdx].request_id);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [pagedRequests, activeRequestId, props.onOpenRequest]);
+  }, [pagedRequests, activeRequestId, handleOpenRequest]);
 
   useEffect(() => {
     if (filteredRequests.length === 0) {
@@ -244,8 +267,8 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
     if (activeRequestId !== null && activeInRequests) {
       return;
     }
-    props.onOpenRequest(filteredRequests[0].request_id);
-  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, props.onOpenRequest]);
+    selectRequest(filteredRequests[0].request_id);
+  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, selectRequest]);
 
   useEffect(() => {
     if (pagedRequests.length === 0) return;
@@ -253,9 +276,9 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
       pagedRequests.some((item) => item.request_id === activeRequestId) ||
       detail?.item.request_id === activeRequestId;
     if (!activeOnPage) {
-      props.onOpenRequest(pagedRequests[0].request_id);
+      selectRequest(pagedRequests[0].request_id);
     }
-  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, props.onOpenRequest]);
+  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, selectRequest]);
 
   const bulkApprove = useQueueBulkApprove({
     items: filteredRequests,
@@ -362,6 +385,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
             totalCount={requests.length}
             filteredCount={filteredRequests.length}
             activeRequestId={activeItem.request_id}
+            readState={readState}
             categoryOptions={categoryOptions}
             categoryFilter={categoryFilter}
             searchTerm={searchTerm}
@@ -439,6 +463,7 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   totalCount: number;
   filteredCount: number;
   activeRequestId: string | null;
+  readState: RequestReadState;
   categoryOptions: QueueCategory[];
   categoryFilter: QueueCategoryId | "all";
   searchTerm: string;
@@ -468,6 +493,7 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   totalCount,
   filteredCount,
   activeRequestId,
+  readState,
   categoryOptions,
   categoryFilter,
   searchTerm,
@@ -588,9 +614,40 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
     <aside className="space-y-3" ref={ref}>
       <div className="flex items-center justify-between gap-3">
         <SectionLabel>Queue</SectionLabel>
-        <span className="font-mono text-[11px] font-semibold text-muted-foreground">
-          {filteredCount}/{totalCount}
-        </span>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            disabled={
+              allFilteredRequests.length > 0 &&
+              allFilteredRequests.length +
+                readState.readCount -
+                allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length >
+                REQUEST_READ_STATE_LIMIT
+            }
+            title={
+              allFilteredRequests.length +
+                readState.readCount -
+                allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length >
+                REQUEST_READ_STATE_LIMIT
+                ? `Cannot mark all read: doing so would exceed the read-state storage cap (${REQUEST_READ_STATE_LIMIT.toLocaleString()}). Reduce filters to shrink the visible queue, or mark requests read one by one.`
+                : `Marks every visible filtered request as read (remembering up to ${REQUEST_READ_STATE_LIMIT.toLocaleString()}).`
+            }
+            onClick={() => readState.markAllRead(allFilteredRequests.map((item) => item.request_id))}
+            className={`text-xs font-medium transition-colors ${
+              allFilteredRequests.length +
+                readState.readCount -
+                allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length >
+                REQUEST_READ_STATE_LIMIT
+                ? "text-slate-400 cursor-not-allowed"
+                : "text-brand-blue hover:text-brand-dark"
+            }`}
+          >
+            Mark all read
+          </button>
+          <span className="font-mono text-[11px] font-semibold text-muted-foreground">
+            {filteredCount}/{totalCount}
+          </span>
+        </div>
       </div>
       <div className="space-y-2 rounded-xl border border-slate-100 bg-white p-3">
         <label className="block">
@@ -713,6 +770,7 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
               key={item.request_id}
               item={item}
               active={item.request_id === activeRequestId}
+              readState={readState}
               index={index}
               onOpenRequest={onOpenRequest}
               selectionMode={selectionMode}
@@ -785,9 +843,10 @@ function SemanticFilterButton(props: {
   );
 }
 
-function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = false, selectable = false, selected = false, onToggleSelect }: {
+function QueueItemRow({ item, active, readState, index, onOpenRequest, selectionMode = false, selectable = false, selected = false, onToggleSelect }: {
   item: GuardApprovalRequest;
   active: boolean;
+  readState: RequestReadState;
   index: number;
   onOpenRequest: (requestId: string) => void;
   selectionMode?: boolean;
@@ -799,6 +858,7 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
   const category = resolveQueueCategory(item);
   const CategoryIcon = iconForQueueCategory(category.id);
   const preview = queueItemPreview(item);
+  const isRead = readState.isRead(item.request_id);
   // Checkboxes render whenever bulk selection is active so the affordance is
   // always discoverable. Non-eligible rows show a disabled checkbox with a
   // tooltip instead of silently hiding the control.
@@ -808,6 +868,14 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
   const handleClick = useCallback(() => {
     onOpenRequest(item.request_id);
   }, [item.request_id, onOpenRequest]);
+
+  const handleMarkUnread = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      readState.markUnread(item.request_id);
+    },
+    [item.request_id, readState],
+  );
 
   const handleCheckboxChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
@@ -839,7 +907,7 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
   return (
     <div
       role="none"
-      className={`w-full rounded-lg py-2.5 px-2 transition-all ${
+      className={`group w-full rounded-lg py-2.5 px-2 transition-all ${
         selected
           ? "border border-brand-blue/60 bg-brand-blue/[0.08] ring-1 ring-brand-blue/20"
           : active
@@ -873,7 +941,7 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
           aria-posinset={index + 1}
           aria-setsize={undefined}
           tabIndex={active ? 0 : -1}
-          className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+          className="group flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
         >
           <div className="flex min-w-0 items-center gap-2">
             <span
@@ -883,7 +951,10 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
               aria-hidden="true"
             />
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-brand-dark">{preview}</p>
+              <p className={`truncate text-sm ${isRead ? "font-medium text-brand-dark" : "font-bold text-brand-dark"}`}>
+                {!isRead && <span className="sr-only">Unread request:</span>}
+                {preview}
+              </p>
               <p className="truncate text-[11px] text-muted-foreground">
                 {harnessDisplayName(item.harness)} · {category.shortLabel} · {formatQueueRequestDate(item)}
               </p>
@@ -896,6 +967,15 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
           >
             <CategoryIcon className="h-4 w-4" aria-hidden="true" />
           </span>
+        </button>
+        <button
+          type="button"
+          onClick={handleMarkUnread}
+          aria-label={`Mark request ${preview} unread`}
+          title="Mark unread"
+          className="opacity-0 group-hover:opacity-100 focus:opacity-100 shrink-0 rounded-md p-1 text-[11px] font-medium text-slate-500 hover:bg-slate-100 hover:text-brand-dark transition-opacity"
+        >
+          Mark unread
         </button>
       </div>
     </div>

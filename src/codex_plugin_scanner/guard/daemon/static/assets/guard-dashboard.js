@@ -15130,9 +15130,9 @@ function guardParams() {
 function guardParam(name) {
   return guardParams().get(name);
 }
-function readBrowserStorage(getStorage, name) {
+function readBrowserStorage(getStorage2, name) {
   try {
-    return getStorage().getItem(name);
+    return getStorage2().getItem(name);
   } catch {
     return null;
   }
@@ -15140,9 +15140,9 @@ function readBrowserStorage(getStorage, name) {
 function readGuardStorage(name) {
   return readBrowserStorage(() => window.sessionStorage, name) ?? readBrowserStorage(() => window.localStorage, name);
 }
-function saveBrowserStorage(getStorage, name, value) {
+function saveBrowserStorage(getStorage2, name, value) {
   try {
-    getStorage().setItem(name, value);
+    getStorage2().setItem(name, value);
   } catch {
   }
 }
@@ -23257,6 +23257,67 @@ function ConsolidatedEvidenceAlert({ items }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-brand-dark", children: current.content })
   ] });
 }
+const REQUEST_READ_STATE_KEY = "hol-guard:read-request-ids";
+const REQUEST_READ_STATE_LIMIT = 2e3;
+function safeReadStorage(storage) {
+  if (!storage) return [];
+  try {
+    const raw = storage.getItem(REQUEST_READ_STATE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.ids)) return [];
+    return parsed.ids.filter((id) => typeof id === "string");
+  } catch {
+    return [];
+  }
+}
+function safeWriteStorage(storage, ids) {
+  if (!storage) return;
+  try {
+    storage.setItem(REQUEST_READ_STATE_KEY, JSON.stringify({ ids }));
+  } catch {
+  }
+}
+function addReadIds(current, requestIds, limit = REQUEST_READ_STATE_LIMIT) {
+  const uniqueNew = Array.from(new Set(requestIds));
+  const toAdd = new Set(uniqueNew);
+  const next = current.filter((id) => !toAdd.has(id));
+  next.unshift(...uniqueNew);
+  if (next.length > limit) {
+    next.length = limit;
+  }
+  return next;
+}
+function removeReadId(current, requestId) {
+  return current.filter((id) => id !== requestId);
+}
+function getStorage() {
+  return typeof window !== "undefined" ? window.localStorage : null;
+}
+function useRequestReadState() {
+  const [readIds, setReadIds] = reactExports.useState(() => safeReadStorage(getStorage()));
+  reactExports.useEffect(() => {
+    setReadIds(safeReadStorage(getStorage()));
+  }, []);
+  reactExports.useEffect(() => {
+    safeWriteStorage(getStorage(), readIds);
+  }, [readIds]);
+  const isRead = reactExports.useCallback((requestId) => readIds.includes(requestId), [readIds]);
+  const markRead = reactExports.useCallback((requestId) => {
+    setReadIds((current) => addReadIds(current, [requestId]));
+  }, []);
+  const markUnread = reactExports.useCallback((requestId) => {
+    setReadIds((current) => removeReadId(current, requestId));
+  }, []);
+  const markAllRead = reactExports.useCallback((requestIds) => {
+    if (requestIds.length === 0) return;
+    setReadIds((current) => addReadIds(current, requestIds));
+  }, []);
+  return reactExports.useMemo(
+    () => ({ isRead, markRead, markUnread, markAllRead, readCount: readIds.length }),
+    [isRead, markRead, markUnread, markAllRead, readIds.length]
+  );
+}
 function approvalGateCooldownLabel(seconds) {
   if (seconds === 0) return "Every approval";
   if (seconds === 900) return "15 minutes";
@@ -24383,6 +24444,7 @@ const QUEUE_PAGE_SIZE = 10;
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact"]);
 function ReviewWorkspace(props) {
   const { requests, activeRequestId, detail } = props;
+  const readState = useRequestReadState();
   const queueRef = reactExports.useRef(null);
   const [searchTerm, setSearchTerm] = reactExports.useState("");
   const [categoryFilter, setCategoryFilter] = reactExports.useState("all");
@@ -24392,10 +24454,14 @@ function ReviewWorkspace(props) {
   const [dateTo, setDateTo] = reactExports.useState("");
   const [mobileQueueOpen, setMobileQueueOpen] = reactExports.useState(false);
   const [page, setPage] = reactExports.useState(1);
-  const handleOpenRequest = reactExports.useCallback((id) => {
+  const selectRequest = reactExports.useCallback((id) => {
     props.onOpenRequest(id);
     setMobileQueueOpen(false);
   }, [props.onOpenRequest]);
+  const handleOpenRequest = reactExports.useCallback((id) => {
+    selectRequest(id);
+    readState.markRead(id);
+  }, [selectRequest, readState]);
   const handleToggleMobileQueue = reactExports.useCallback(() => {
     setMobileQueueOpen((v) => !v);
   }, []);
@@ -24423,23 +24489,28 @@ function ReviewWorkspace(props) {
   const categoryOptions = reactExports.useMemo(() => queueCategoriesForItems(requests), [requests]);
   const activeRequest = activeRequestId !== null ? requests.find((r) => r.request_id === activeRequestId) ?? (detail?.item.request_id === activeRequestId ? detail.item : null) : null;
   reactExports.useEffect(() => {
+    function isNestedQueueActionButton(target) {
+      return target instanceof HTMLElement && target.tagName.toLowerCase() === "button" && target.getAttribute("role") !== "option";
+    }
     function handleKeyDown(event) {
       if (pagedRequests.length === 0) return;
+      if (!(event.target instanceof HTMLElement) || !event.target.closest('[role="listbox"]') || isNestedQueueActionButton(event.target))
+        return;
       const activeIdx = pagedRequests.findIndex((r) => r.request_id === activeRequestId);
       if (event.key === "ArrowDown") {
         event.preventDefault();
         const nextIdx = Math.min(activeIdx + 1, pagedRequests.length - 1);
-        if (nextIdx !== activeIdx) props.onOpenRequest(pagedRequests[nextIdx].request_id);
+        if (nextIdx !== activeIdx) handleOpenRequest(pagedRequests[nextIdx].request_id);
       }
       if (event.key === "ArrowUp") {
         event.preventDefault();
         const prevIdx = Math.max(activeIdx - 1, 0);
-        if (prevIdx !== activeIdx) props.onOpenRequest(pagedRequests[prevIdx].request_id);
+        if (prevIdx !== activeIdx) handleOpenRequest(pagedRequests[prevIdx].request_id);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [pagedRequests, activeRequestId, props.onOpenRequest]);
+  }, [pagedRequests, activeRequestId, handleOpenRequest]);
   reactExports.useEffect(() => {
     if (filteredRequests.length === 0) {
       return;
@@ -24448,15 +24519,15 @@ function ReviewWorkspace(props) {
     if (activeRequestId !== null && activeInRequests) {
       return;
     }
-    props.onOpenRequest(filteredRequests[0].request_id);
-  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, props.onOpenRequest]);
+    selectRequest(filteredRequests[0].request_id);
+  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, selectRequest]);
   reactExports.useEffect(() => {
     if (pagedRequests.length === 0) return;
     const activeOnPage = pagedRequests.some((item) => item.request_id === activeRequestId) || detail?.item.request_id === activeRequestId;
     if (!activeOnPage) {
-      props.onOpenRequest(pagedRequests[0].request_id);
+      selectRequest(pagedRequests[0].request_id);
     }
-  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, props.onOpenRequest]);
+  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, selectRequest]);
   const bulkApprove = useQueueBulkApprove({
     items: filteredRequests,
     approvalGate: props.approvalGate ?? null,
@@ -24557,6 +24628,7 @@ function ReviewWorkspace(props) {
           totalCount: requests.length,
           filteredCount: filteredRequests.length,
           activeRequestId: activeItem.request_id,
+          readState,
           categoryOptions,
           categoryFilter,
           searchTerm,
@@ -24627,6 +24699,7 @@ const ReviewQueueList = reactExports.forwardRef(({
   totalCount,
   filteredCount,
   activeRequestId,
+  readState,
   categoryOptions,
   categoryFilter,
   searchTerm,
@@ -24727,10 +24800,23 @@ const ReviewQueueList = reactExports.forwardRef(({
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "space-y-3", ref, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Queue" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-[11px] font-semibold text-muted-foreground", children: [
-        filteredCount,
-        "/",
-        totalCount
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            disabled: allFilteredRequests.length > 0 && allFilteredRequests.length + readState.readCount - allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length > REQUEST_READ_STATE_LIMIT,
+            title: allFilteredRequests.length + readState.readCount - allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length > REQUEST_READ_STATE_LIMIT ? `Cannot mark all read: doing so would exceed the read-state storage cap (${REQUEST_READ_STATE_LIMIT.toLocaleString()}). Reduce filters to shrink the visible queue, or mark requests read one by one.` : `Marks every visible filtered request as read (remembering up to ${REQUEST_READ_STATE_LIMIT.toLocaleString()}).`,
+            onClick: () => readState.markAllRead(allFilteredRequests.map((item) => item.request_id)),
+            className: `text-xs font-medium transition-colors ${allFilteredRequests.length + readState.readCount - allFilteredRequests.filter((item) => readState.isRead(item.request_id)).length > REQUEST_READ_STATE_LIMIT ? "text-slate-400 cursor-not-allowed" : "text-brand-blue hover:text-brand-dark"}`,
+            children: "Mark all read"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-[11px] font-semibold text-muted-foreground", children: [
+          filteredCount,
+          "/",
+          totalCount
+        ] })
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 rounded-xl border border-slate-100 bg-white p-3", children: [
@@ -24854,6 +24940,7 @@ const ReviewQueueList = reactExports.forwardRef(({
             {
               item,
               active: item.request_id === activeRequestId,
+              readState,
               index,
               onOpenRequest,
               selectionMode,
@@ -24920,16 +25007,24 @@ function SemanticFilterButton(props) {
     }
   );
 }
-function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = false, selectable = false, selected = false, onToggleSelect }) {
+function QueueItemRow({ item, active, readState, index, onOpenRequest, selectionMode = false, selectable = false, selected = false, onToggleSelect }) {
   const isBlocked = item.policy_action === "block";
   const category = resolveQueueCategory(item);
   const CategoryIcon = iconForQueueCategory(category.id);
   const preview = queueItemPreview(item);
+  const isRead = readState.isRead(item.request_id);
   const showCheckbox = selectionMode;
   const canSelect = selectionMode && selectable;
   const handleClick = reactExports.useCallback(() => {
     onOpenRequest(item.request_id);
   }, [item.request_id, onOpenRequest]);
+  const handleMarkUnread = reactExports.useCallback(
+    (event) => {
+      event.stopPropagation();
+      readState.markUnread(item.request_id);
+    },
+    [item.request_id, readState]
+  );
   const handleCheckboxChange = reactExports.useCallback(
     (event) => {
       event.stopPropagation();
@@ -24954,7 +25049,7 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
     "div",
     {
       role: "none",
-      className: `w-full rounded-lg py-2.5 px-2 transition-all ${selected ? "border border-brand-blue/60 bg-brand-blue/[0.08] ring-1 ring-brand-blue/20" : active ? "border border-brand-blue bg-brand-blue/[0.06]" : "border border-transparent bg-white hover:bg-slate-50"}`,
+      className: `group w-full rounded-lg py-2.5 px-2 transition-all ${selected ? "border border-brand-blue/60 bg-brand-blue/[0.08] ring-1 ring-brand-blue/20" : active ? "border border-brand-blue bg-brand-blue/[0.06]" : "border border-transparent bg-white hover:bg-slate-50"}`,
       children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
         showCheckbox ? /* @__PURE__ */ jsxRuntimeExports.jsx(
           "label",
@@ -24986,7 +25081,7 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
             "aria-posinset": index + 1,
             "aria-setsize": void 0,
             tabIndex: active ? 0 : -1,
-            className: "flex min-w-0 flex-1 items-center justify-between gap-2 text-left",
+            className: "group flex min-w-0 flex-1 items-center justify-between gap-2 text-left",
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -24997,7 +25092,10 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
                   }
                 ),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-medium text-brand-dark", children: preview }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: `truncate text-sm ${isRead ? "font-medium text-brand-dark" : "font-bold text-brand-dark"}`, children: [
+                    !isRead && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Unread request:" }),
+                    preview
+                  ] }),
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "truncate text-[11px] text-muted-foreground", children: [
                     harnessDisplayName(item.harness),
                     " · ",
@@ -25015,6 +25113,17 @@ function QueueItemRow({ item, active, index, onOpenRequest, selectionMode = fals
                 }
               )
             ]
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: handleMarkUnread,
+            "aria-label": `Mark request ${preview} unread`,
+            title: "Mark unread",
+            className: "opacity-0 group-hover:opacity-100 focus:opacity-100 shrink-0 rounded-md p-1 text-[11px] font-medium text-slate-500 hover:bg-slate-100 hover:text-brand-dark transition-opacity",
+            children: "Mark unread"
           }
         )
       ] })

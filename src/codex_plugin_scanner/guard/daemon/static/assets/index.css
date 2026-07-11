@@ -4698,6 +4698,10 @@
         background-color: color-mix(in srgb,var(--brand-blue) 85%,var(--brand-dark));
       }
     }
+
+    .group-hover\:opacity-100:is(:where(.group):hover *) {
+      opacity: 1;
+    }
   }
 
   .placeholder\:text-slate-400::placeholder {
@@ -5191,6 +5195,10 @@
 
   .focus\:text-white:focus {
     color: var(--color-white);
+  }
+
+  .focus\:opacity-100:focus {
+    opacity: 1;
   }
 
   .focus\:ring-1:focus {
