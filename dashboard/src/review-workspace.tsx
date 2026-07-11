@@ -619,9 +619,18 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            title={`Marks every visible filtered request as read (remembering the most recent ${REQUEST_READ_STATE_LIMIT}).`}
+            disabled={allFilteredRequests.length > REQUEST_READ_STATE_LIMIT}
+            title={
+              allFilteredRequests.length > REQUEST_READ_STATE_LIMIT
+                ? `Cannot mark all read: filtered queue (${allFilteredRequests.length.toLocaleString()}) exceeds the storage cap (${REQUEST_READ_STATE_LIMIT.toLocaleString()}). Use filters to reduce the list, or mark requests read one by one.`
+                : `Marks every visible filtered request as read (remembering up to ${REQUEST_READ_STATE_LIMIT.toLocaleString()}).`
+            }
             onClick={() => readState.markAllRead(allFilteredRequests.map((item) => item.request_id))}
-            className="text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
+            className={`text-xs font-medium transition-colors ${
+              allFilteredRequests.length > REQUEST_READ_STATE_LIMIT
+                ? "text-slate-400 cursor-not-allowed"
+                : "text-brand-blue hover:text-brand-dark"
+            }`}
           >
             Mark all read
           </button>
