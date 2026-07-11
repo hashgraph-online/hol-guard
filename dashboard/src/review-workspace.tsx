@@ -936,6 +936,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
           <span
+            role="img"
             className={`h-2 w-2 shrink-0 rounded-full border-2 transition-colors ${
               isRead
                 ? "border-slate-300 bg-transparent"
@@ -954,6 +955,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
             </p>
           </div>
           <span
+            role="img"
             className={`inline-flex h-2 w-2 shrink-0 rounded-full ${
               isBlocked ? "bg-brand-attention" : "bg-emerald-400"
             }`}
@@ -961,6 +963,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
             aria-label={isBlocked ? "Blocked by policy" : "Allowed by policy"}
           />
           <span
+            role="img"
             className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
               active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"
             }`}

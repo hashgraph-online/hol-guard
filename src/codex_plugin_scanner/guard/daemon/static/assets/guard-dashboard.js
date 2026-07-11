@@ -25122,6 +25122,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 "span",
                 {
+                  role: "img",
                   className: `h-2 w-2 shrink-0 rounded-full border-2 transition-colors ${isRead ? "border-slate-300 bg-transparent" : "border-transparent bg-brand-blue"}`,
                   title: isRead ? "Read" : "Unread",
                   "aria-label": isRead ? "Read" : "Unread"
@@ -25143,6 +25144,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 "span",
                 {
+                  role: "img",
                   className: `inline-flex h-2 w-2 shrink-0 rounded-full ${isBlocked ? "bg-brand-attention" : "bg-emerald-400"}`,
                   title: isBlocked ? "Blocked by policy" : "Allowed by policy",
                   "aria-label": isBlocked ? "Blocked by policy" : "Allowed by policy"
@@ -25151,6 +25153,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 "span",
                 {
+                  role: "img",
                   className: `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
                   title: category.label,
                   "aria-label": category.label,
