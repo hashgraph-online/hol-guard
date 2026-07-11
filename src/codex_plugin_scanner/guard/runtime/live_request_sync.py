@@ -1794,7 +1794,11 @@ def _cloud_sync_sync_loop(
                 _with_live_request_sync_identity(store, auth_context),
             )
             outbox_result = cloud_sync_sync_live_requests_once(store, auth_context)
-            if live_result.get("synced", 0) > 0 or outbox_result.get("synced", 0) > 0:
+            live_synced = live_result.get("synced")
+            outbox_synced = outbox_result.get("synced")
+            if (isinstance(live_synced, int) and live_synced > 0) or (
+                isinstance(outbox_synced, int) and outbox_synced > 0
+            ):
                 error_streak = 0
                 continue
         except GuardSyncAuthorizationExpiredError as exc:
