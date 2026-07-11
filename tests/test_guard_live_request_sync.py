@@ -952,6 +952,7 @@ class TestIndependentWorker:
             def __init__(self) -> None:
                 self.started = False
                 self.joined = False
+                self.join_timeout: float | None = -1
 
             def is_alive(self) -> bool:
                 return not self.joined
@@ -960,6 +961,7 @@ class TestIndependentWorker:
                 self.started = True
 
             def join(self, timeout: float | None = None) -> None:
+                self.join_timeout = timeout
                 self.joined = True
 
         class FakeEvent:
@@ -994,6 +996,7 @@ class TestIndependentWorker:
         new_worker = stop_cloud_sync_sync_worker(worker)
         assert new_worker is None  # dead worker returns None
         assert created_event.is_set() is True
+        assert created_thread.join_timeout is None
 
     def test_start_worker_skips_alive_existing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         store = Store(tmp_path)

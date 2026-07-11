@@ -1737,8 +1737,8 @@ def stop_cloud_sync_sync_worker(
     if worker is None:
         return None
     worker.stop_event.set()
-    worker.thread.join(timeout=30.0)
-    return worker if worker.thread.is_alive() else None
+    worker.thread.join()
+    return None
 
 
 def _with_live_request_sync_identity(
