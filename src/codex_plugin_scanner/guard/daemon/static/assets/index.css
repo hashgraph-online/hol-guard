@@ -4705,6 +4705,10 @@
     --tw-ring-inset: inset;
   }
 
+  .group-focus-within\/tt\:opacity-100:is(:where(.group\/tt):focus-within *) {
+    opacity: 1;
+  }
+
   @media (hover: hover) {
     .group-hover\:bg-\[color-mix\(in_srgb\,var\(--brand-blue\)_85\%\,var\(--brand-dark\)\)\]:is(:where(.group):hover *) {
       background-color: var(--brand-blue);
