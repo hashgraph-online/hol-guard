@@ -20,6 +20,7 @@ from json import dumps as json_dumps
 from pathlib import Path
 
 import pytest
+from codex_plugin_scanner.guard.runtime import live_request_sync as live_request_sync_module
 
 from codex_plugin_scanner.guard.runtime.live_request_sync import (
     _DEFAULT_401_REFRESH_RETRY_MAX,
@@ -27,6 +28,8 @@ from codex_plugin_scanner.guard.runtime.live_request_sync import (
     _resolve_sync_url,
     _LIVE_REQUEST_EVENT_SEQUENCE_KEY,
     LIVE_REQUEST_EVENT_TYPES,
+    LIVE_REQUEST_SYNC_CURSOR_KEY,
+    LIVE_REQUEST_SYNC_FINGERPRINTS_KEY,
     LIVE_REQUEST_SYNC_PROTOCOL_VERSION,
     OUTBOX_BATCH_COUNT,
     OUTBOX_MAX_QUEUE_EVENTS,
@@ -58,6 +61,7 @@ from codex_plugin_scanner.guard.runtime.live_request_sync import (
     process_cloud_sync_ack_response,
     set_sync_health,
     start_cloud_sync_sync_worker,
+    sync_live_requests_once,
     stop_cloud_sync_sync_worker,
 )
 from codex_plugin_scanner.guard.runtime.runner import (
@@ -1558,3 +1562,84 @@ class TestResolveSyncUrl:
 
         assert result == {}
         assert captured_urls == ["https://hol.org/api/guard/live-requests/batch?route=tenant-a"]
+
+
+class TestStateAwareLiveRequestSync:
+    def test_ignores_cloud_cursor_and_only_resends_changed_requests(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class QueueStore(Store):
+            def __init__(self, guard_home: Path) -> None:
+                super().__init__(guard_home)
+                self.rows: list[dict[str, object]] = [
+                    {
+                        "request_id": "request-1",
+                        "status": "pending",
+                        "action_identity": "test-action",
+                        "trigger_summary": "Review test action",
+                        "harness": "guard-review",
+                        "created_at": "2026-07-10T00:00:00+00:00",
+                        "last_seen_at": "2026-07-10T00:00:00+00:00",
+                    }
+                ]
+
+            def list_approval_requests(
+                self,
+                *,
+                status: str | None = "pending",
+                harness: str | None = None,
+                limit: int | None = 50,
+                cursor: str | None = None,
+                search: str | None = None,
+            ) -> list[dict[str, object]]:
+                del status, harness, cursor, search
+                return self.rows if limit is None else self.rows[:limit]
+
+        store = QueueStore(tmp_path)
+        store.set_sync_payload(
+            LIVE_REQUEST_SYNC_CURSOR_KEY,
+            {"inbound_cursor": "cloud-cursor-that-is-not-a-local-page-cursor"},
+            "2026-07-10T00:00:00+00:00",
+        )
+        posted_batches: list[list[dict[str, object]]] = []
+
+        def post_sync_events(
+            _auth_context: dict[str, object],
+            **kwargs: object,
+        ) -> dict[str, object]:
+            events = kwargs["events"]
+            assert isinstance(events, list)
+            posted_batches.append(events)
+            return {
+                "accepted": len(events),
+                "rejected": 0,
+                "cursor": "cloud-cursor-that-is-not-a-local-page-cursor",
+            }
+
+        monkeypatch.setattr(
+            live_request_sync_module,
+            "_post_sync_events",
+            post_sync_events,
+        )
+        auth_context = {
+            "machine_id": "machine-1",
+            "workspace_id": "workspace-1",
+            "machine_installation_id": "22222222-2222-4222-8222-222222222222",
+        }
+
+        first = sync_live_requests_once(store, auth_context)
+        second = sync_live_requests_once(store, auth_context)
+        store.rows[0]["last_seen_at"] = "2026-07-10T00:00:01+00:00"
+        third = sync_live_requests_once(store, auth_context)
+
+        assert first["synced"] == 1
+        assert first["cursor"] is None
+        assert second["synced"] == 0
+        assert third["synced"] == 1
+        assert len(posted_batches) == 2
+        assert store.get_sync_payload(LIVE_REQUEST_SYNC_CURSOR_KEY) == {}
+        fingerprints = store.get_sync_payload(LIVE_REQUEST_SYNC_FINGERPRINTS_KEY)
+        assert isinstance(fingerprints, dict)
+        assert set(fingerprints) == {"request-1"}
