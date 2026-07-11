@@ -176,11 +176,15 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
   const [page, setPage] = useState(1);
 
-  const handleOpenRequest = useCallback((id: string) => {
+  const selectRequest = useCallback((id: string) => {
     props.onOpenRequest(id);
-    readState.markRead(id);
     setMobileQueueOpen(false);
-  }, [props.onOpenRequest, readState]);
+  }, [props.onOpenRequest]);
+
+  const handleOpenRequest = useCallback((id: string) => {
+    selectRequest(id);
+    readState.markRead(id);
+  }, [selectRequest, readState]);
 
   const handleToggleMobileQueue = useCallback(() => {
     setMobileQueueOpen((v) => !v);
@@ -247,8 +251,8 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
     if (activeRequestId !== null && activeInRequests) {
       return;
     }
-    handleOpenRequest(filteredRequests[0].request_id);
-  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, handleOpenRequest]);
+    selectRequest(filteredRequests[0].request_id);
+  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, selectRequest]);
 
   useEffect(() => {
     if (pagedRequests.length === 0) return;
@@ -256,9 +260,9 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
       pagedRequests.some((item) => item.request_id === activeRequestId) ||
       detail?.item.request_id === activeRequestId;
     if (!activeOnPage) {
-      handleOpenRequest(pagedRequests[0].request_id);
+      selectRequest(pagedRequests[0].request_id);
     }
-  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, handleOpenRequest]);
+  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, selectRequest]);
 
   const bulkApprove = useQueueBulkApprove({
     items: filteredRequests,
