@@ -8,6 +8,7 @@ export type RequestReadState = {
   markRead: (requestId: string) => void;
   markUnread: (requestId: string) => void;
   markAllRead: (requestIds: string[]) => void;
+  readCount: number;
 };
 
 export type ReadStateShape = {
@@ -75,6 +76,9 @@ export function createRequestReadState(
       ids = addReadIds(ids, requestIds);
       persist();
     },
+    get readCount(): number {
+      return ids.length;
+    },
   };
 }
 
@@ -109,7 +113,7 @@ export function useRequestReadState(): RequestReadState {
   }, []);
 
   return useMemo(
-    () => ({ isRead, markRead, markUnread, markAllRead }),
-    [isRead, markRead, markUnread, markAllRead]
+    () => ({ isRead, markRead, markUnread, markAllRead, readCount: readIds.length }),
+    [isRead, markRead, markUnread, markAllRead, readIds.length]
   );
 }

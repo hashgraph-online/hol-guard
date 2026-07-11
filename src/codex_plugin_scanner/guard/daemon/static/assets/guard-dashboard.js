@@ -23314,8 +23314,8 @@ function useRequestReadState() {
     setReadIds((current) => addReadIds(current, requestIds));
   }, []);
   return reactExports.useMemo(
-    () => ({ isRead, markRead, markUnread, markAllRead }),
-    [isRead, markRead, markUnread, markAllRead]
+    () => ({ isRead, markRead, markUnread, markAllRead, readCount: readIds.length }),
+    [isRead, markRead, markUnread, markAllRead, readIds.length]
   );
 }
 function approvalGateCooldownLabel(seconds) {
@@ -24489,15 +24489,16 @@ function ReviewWorkspace(props) {
   const categoryOptions = reactExports.useMemo(() => queueCategoriesForItems(requests), [requests]);
   const activeRequest = activeRequestId !== null ? requests.find((r) => r.request_id === activeRequestId) ?? (detail?.item.request_id === activeRequestId ? detail.item : null) : null;
   reactExports.useEffect(() => {
-    function isTypingTarget(target) {
-      if (!(target instanceof HTMLElement)) return false;
+    function isNonQueueControlTarget(target) {
+      if (!(target instanceof HTMLElement)) return true;
+      if (target.closest('[role="listbox"]')) return false;
       const tag = target.tagName.toLowerCase();
       const role = target.getAttribute("role")?.toLowerCase();
-      return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable || role === "textbox" || role === "combobox" || role === "listbox" || role === "radiogroup" || role === "slider";
+      return tag === "input" || tag === "textarea" || tag === "select" || tag === "button" || target.isContentEditable || role === "textbox" || role === "combobox" || role === "button" || role === "menu" || role === "menuitem" || role === "menuitemcheckbox" || role === "menuitemradio" || role === "radiogroup" || role === "slider";
     }
     function handleKeyDown(event) {
       if (pagedRequests.length === 0) return;
-      if (isTypingTarget(event.target)) return;
+      if (isNonQueueControlTarget(event.target)) return;
       const activeIdx = pagedRequests.findIndex((r) => r.request_id === activeRequestId);
       if (event.key === "ArrowDown") {
         event.preventDefault();
@@ -24807,10 +24808,10 @@ const ReviewQueueList = reactExports.forwardRef(({
           "button",
           {
             type: "button",
-            disabled: allFilteredRequests.length > REQUEST_READ_STATE_LIMIT,
-            title: allFilteredRequests.length > REQUEST_READ_STATE_LIMIT ? `Cannot mark all read: filtered queue (${allFilteredRequests.length.toLocaleString()}) exceeds the storage cap (${REQUEST_READ_STATE_LIMIT.toLocaleString()}). Use filters to reduce the list, or mark requests read one by one.` : `Marks every visible filtered request as read (remembering up to ${REQUEST_READ_STATE_LIMIT.toLocaleString()}).`,
+            disabled: allFilteredRequests.length > 0 && allFilteredRequests.length + readState.readCount > REQUEST_READ_STATE_LIMIT,
+            title: allFilteredRequests.length + readState.readCount > REQUEST_READ_STATE_LIMIT ? `Cannot mark all read: doing so would exceed the read-state storage cap (${REQUEST_READ_STATE_LIMIT.toLocaleString()}). Reduce filters to shrink the visible queue, or mark requests read one by one.` : `Marks every visible filtered request as read (remembering up to ${REQUEST_READ_STATE_LIMIT.toLocaleString()}).`,
             onClick: () => readState.markAllRead(allFilteredRequests.map((item) => item.request_id)),
-            className: `text-xs font-medium transition-colors ${allFilteredRequests.length > REQUEST_READ_STATE_LIMIT ? "text-slate-400 cursor-not-allowed" : "text-brand-blue hover:text-brand-dark"}`,
+            className: `text-xs font-medium transition-colors ${allFilteredRequests.length + readState.readCount > REQUEST_READ_STATE_LIMIT ? "text-slate-400 cursor-not-allowed" : "text-brand-blue hover:text-brand-dark"}`,
             children: "Mark all read"
           }
         ),
