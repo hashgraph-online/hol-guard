@@ -446,6 +446,12 @@ class StoreConnectionSchemaMixin:
               primary key (surface, open_key)
             )
             """,
+            """
+            create table if not exists guard_request_read_state (
+              request_id text primary key,
+              read_at text not null
+            )
+            """,
             resume_schema_statement(),
             connect_state_schema_statement(),
             connect_request_schema_statement(),

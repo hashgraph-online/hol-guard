@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-export const REQUEST_READ_STATE_KEY = "hol-guard:read-request-ids";
-export const REQUEST_READ_STATE_LIMIT = 2000;
+import {
+  fetchReadState,
+  postReadStateMarkAllRead,
+  postReadStateMarkRead,
+  postReadStateMarkUnread,
+} from './guard-api';
 
 export type RequestReadState = {
   isRead: (requestId: string) => boolean;
@@ -11,109 +15,78 @@ export type RequestReadState = {
   readCount: number;
 };
 
-export type ReadStateShape = {
-  ids: string[];
-};
-
-function safeReadStorage(storage: Storage | null | undefined): string[] {
-  if (!storage) return [];
-  try {
-    const raw = storage.getItem(REQUEST_READ_STATE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as ReadStateShape;
-    if (!parsed || !Array.isArray(parsed.ids)) return [];
-    return parsed.ids.filter((id): id is string => typeof id === "string");
-  } catch {
-    return [];
-  }
-}
-
-function safeWriteStorage(storage: Storage | null | undefined, ids: string[]): void {
-  if (!storage) return;
-  try {
-    storage.setItem(REQUEST_READ_STATE_KEY, JSON.stringify({ ids }));
-  } catch {
-    // Ignore quota or disabled-storage errors.
-  }
-}
-
-export function addReadIds(current: string[], requestIds: string[], limit = REQUEST_READ_STATE_LIMIT): string[] {
-  const uniqueNew = Array.from(new Set(requestIds));
-  const toAdd = new Set(uniqueNew);
-  const next = current.filter((id) => !toAdd.has(id));
-  next.unshift(...uniqueNew);
-  if (next.length > limit) {
-    next.length = limit;
-  }
-  return next;
-}
-
-export function removeReadId(current: string[], requestId: string): string[] {
-  return current.filter((id) => id !== requestId);
-}
-
-export function createRequestReadState(
-  storage: Storage | null | undefined = typeof window !== "undefined" ? window.localStorage : null
-): RequestReadState {
-  let ids = safeReadStorage(storage);
-
-  const persist = (): void => {
-    safeWriteStorage(storage, ids);
-  };
-
-  return {
-    isRead: (requestId: string) => ids.includes(requestId),
-    markRead: (requestId: string) => {
-      ids = addReadIds(ids, [requestId]);
-      persist();
-    },
-    markUnread: (requestId: string) => {
-      ids = removeReadId(ids, requestId);
-      persist();
-    },
-    markAllRead: (requestIds: string[]) => {
-      if (requestIds.length === 0) return;
-      ids = addReadIds(ids, requestIds);
-      persist();
-    },
-    get readCount(): number {
-      return ids.length;
-    },
-  };
-}
-
-function getStorage(): Storage | null {
-  return typeof window !== "undefined" ? window.localStorage : null;
-}
+const FETCH_DEBOUNCE_MS = 2_000;
 
 export function useRequestReadState(): RequestReadState {
-  const [readIds, setReadIds] = useState<string[]>(() => safeReadStorage(getStorage()));
+  const [readIds, setReadIds] = useState<Set<string>>(() => new Set());
+  const [lastFetch, setLastFetch] = useState<number>(0);
 
-  useEffect(() => {
-    setReadIds(safeReadStorage(getStorage()));
+  const refresh = useCallback(async () => {
+    try {
+      const response = await fetchReadState();
+      if (response?.ids) {
+        setReadIds(new Set(response.ids));
+      }
+    } catch {
+      // Daemon may be unreachable during SSR or initial mount; stale state is acceptable.
+    }
+    setLastFetch(Date.now());
   }, []);
 
   useEffect(() => {
-    safeWriteStorage(getStorage(), readIds);
-  }, [readIds]);
+    if (Date.now() - lastFetch > FETCH_DEBOUNCE_MS) {
+      void refresh();
+    }
+  }, [lastFetch, refresh]);
 
-  const isRead = useCallback((requestId: string) => readIds.includes(requestId), [readIds]);
+  const isRead = useCallback(
+    (requestId: string) => readIds.has(requestId),
+    [readIds],
+  );
 
-  const markRead = useCallback((requestId: string) => {
-    setReadIds((current) => addReadIds(current, [requestId]));
-  }, []);
+  const markRead = useCallback(
+    (requestId: string) => {
+      setReadIds((prev) => {
+        if (prev.has(requestId)) return prev;
+        const next = new Set(prev);
+        next.add(requestId);
+        return next;
+      });
+      void postReadStateMarkRead(requestId).catch(() => {});
+    },
+    [],
+  );
 
-  const markUnread = useCallback((requestId: string) => {
-    setReadIds((current) => removeReadId(current, requestId));
-  }, []);
+  const markUnread = useCallback(
+    (requestId: string) => {
+      setReadIds((prev) => {
+        if (!prev.has(requestId)) return prev;
+        const next = new Set(prev);
+        next.delete(requestId);
+        return next;
+      });
+      void postReadStateMarkUnread(requestId).catch(() => {});
+    },
+    [],
+  );
 
-  const markAllRead = useCallback((requestIds: string[]) => {
-    if (requestIds.length === 0) return;
-    setReadIds((current) => addReadIds(current, requestIds));
-  }, []);
+  const markAllRead = useCallback(
+    (requestIds: string[]) => {
+      if (requestIds.length === 0) return;
+      setReadIds((prev) => {
+        const next = new Set(prev);
+        for (const id of requestIds) next.add(id);
+        return next;
+      });
+      void postReadStateMarkAllRead(requestIds).catch(() => {});
+    },
+    [],
+  );
 
   return useMemo(
-    () => ({ isRead, markRead, markUnread, markAllRead, readCount: readIds.length }),
-    [isRead, markRead, markUnread, markAllRead, readIds.length]
+    () => ({ isRead, markRead, markUnread, markAllRead, readCount: readIds.size }),
+    [isRead, markRead, markUnread, markAllRead, readIds.size],
   );
 }
+
+export const REQUEST_READ_STATE_LIMIT = 50000;
