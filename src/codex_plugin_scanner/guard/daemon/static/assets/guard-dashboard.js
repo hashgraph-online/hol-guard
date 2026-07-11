@@ -25081,11 +25081,17 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
     [item, onToggleSelect, canSelect]
   );
   const checkboxLabel = canSelect ? `Select ${preview} for bulk approval` : `Not eligible for bulk approval: ${category.shortLabel.toLowerCase()}`;
+  const rowClassName = (() => {
+    if (selected) return "border border-brand-blue/60 bg-brand-blue/[0.08] ring-1 ring-brand-blue/20";
+    if (active) return "border border-brand-blue bg-brand-blue/[0.06]";
+    if (isRead) return "border border-transparent bg-white hover:bg-slate-50";
+    return "border border-transparent bg-slate-50 hover:bg-slate-100";
+  })();
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "div",
     {
       role: "none",
-      className: `group w-full rounded-lg py-2.5 px-2 transition-all ${selected ? "border border-brand-blue/60 bg-brand-blue/[0.08] ring-1 ring-brand-blue/20" : active ? "border border-brand-blue bg-brand-blue/[0.06]" : isRead ? "border border-transparent bg-white hover:bg-slate-50" : "border border-transparent bg-slate-50 hover:bg-slate-100"}`,
+      className: `group w-full rounded-lg py-2.5 px-2 transition-all ${rowClassName}`,
       children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
         showCheckbox ? /* @__PURE__ */ jsxRuntimeExports.jsx(
           "label",
