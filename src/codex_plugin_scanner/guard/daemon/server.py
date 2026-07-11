@@ -5514,8 +5514,9 @@ class GuardDaemonServer:
         self._shutdown_started = threading.Event()
 
     def start(self) -> None:
-        if self._thread is not None:
+        if self._thread is not None and self._thread.is_alive():
             return
+        self._thread = None
         self._begin_service()
         self._thread = threading.Thread(target=self._serve_forever, daemon=True)
         self._thread.start()
@@ -5604,8 +5605,6 @@ class GuardDaemonServer:
         self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
         clear_guard_daemon_state_if_current(self._server.store.guard_home, pid=os.getpid(), port=self.port)
         self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
-        if self._thread is threading.current_thread():
-            self._thread = None
 
     def _start_watchdog(self) -> None:
         if self._watchdog_thread is not None and self._watchdog_thread.is_alive():

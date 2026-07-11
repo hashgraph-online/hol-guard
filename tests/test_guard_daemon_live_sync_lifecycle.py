@@ -51,5 +51,5 @@ def test_finish_service_stops_cloud_workers_and_allows_restart(monkeypatch, tmp_
         ("command", command_worker),
         ("live-request", live_request_worker),
     ]
-    assert service._thread is None
+    assert service._thread is threading.current_thread()
     assert service._shutdown_started.is_set()

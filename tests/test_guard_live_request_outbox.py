@@ -158,34 +158,16 @@ def test_newer_mutation_preserves_retry_backoff(tmp_path) -> None:
     assert retried[0]["attempt_count"] == 1
 
 
-def test_retention_cannot_delete_request_before_outbox_ack(tmp_path) -> None:
+def test_explicit_request_deletion_is_not_blocked_by_pending_outbox(tmp_path) -> None:
     store = GuardStore(tmp_path / "guard")
     store.add_approval_request(_request("request-1"), _NOW)
-    store.resolve_approval_request(
-        "request-1",
-        resolution_action="approve",
-        resolution_scope="artifact",
-        reason="approved",
-        resolved_at="2026-07-11T12:00:00.100000+00:00",
-    )
 
     with store._connect() as connection:
         connection.execute(
             "delete from approval_requests where request_id = ?",
             ("request-1",),
         )
-    assert store.get_approval_request("request-1") is not None
 
-    queued = store.list_ready_live_request_outbox(
-        now="2026-07-11T12:00:01+00:00",
-        limit=1,
-    )
-    store.acknowledge_live_request_outbox([int(queued[0]["sequence"])])
-    with store._connect() as connection:
-        connection.execute(
-            "delete from approval_requests where request_id = ?",
-            ("request-1",),
-        )
     assert store.get_approval_request("request-1") is None
 
 

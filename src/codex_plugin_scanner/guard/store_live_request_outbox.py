@@ -99,18 +99,7 @@ def live_request_outbox_schema_statements() -> tuple[str, ...]:
             and sequence <> last_insert_rowid();
         end
         """,
-        """
-        create trigger if not exists guard_live_request_outbox_before_delete
-        before delete on approval_requests
-        when exists (
-          select 1
-          from guard_live_request_outbox
-          where local_request_id = old.request_id
-        )
-        begin
-          select raise(ignore);
-        end
-        """,
+        "drop trigger if exists guard_live_request_outbox_before_delete",
     )
 
 

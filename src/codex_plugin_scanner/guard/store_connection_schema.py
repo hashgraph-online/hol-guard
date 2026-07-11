@@ -472,8 +472,6 @@ class StoreConnectionSchemaMixin:
         with self._connect() as connection:
             for statement in statements:
                 connection.execute(statement)
-            ensure_live_request_outbox_schema(connection)
-            seed_live_request_outbox(connection, datetime.now(timezone.utc).isoformat())
             ensure_evidence_schema(connection)
             if not self._schema_version_applied(connection, version=4):
                 self._record_schema_version(connection, version=4)
@@ -530,6 +528,8 @@ class StoreConnectionSchemaMixin:
                 self._record_schema_version(connection, version=3)
             for idx_stmt in approval_index_statements():
                 connection.execute(idx_stmt)
+            ensure_live_request_outbox_schema(connection)
+            seed_live_request_outbox(connection, datetime.now(timezone.utc).isoformat())
             for idx_stmt in receipt_index_statements():
                 connection.execute(idx_stmt)
             for statement in receipt_rollup_schema_statements():
