@@ -25117,14 +25117,14 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
             "aria-posinset": index + 1,
             "aria-setsize": void 0,
             tabIndex: active ? 0 : -1,
-            className: "flex min-w-0 flex-1 items-center gap-2 text-left",
+            className: "group flex min-w-0 flex-1 items-center gap-2 text-left",
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs(
                 "span",
                 {
                   role: "img",
                   "aria-label": isRead ? "Read" : "Unread",
-                  className: "group/tt relative flex h-2 w-2 shrink-0 items-center justify-center",
+                  className: "relative flex h-2 w-2 shrink-0 items-center justify-center",
                   children: [
                     /* @__PURE__ */ jsxRuntimeExports.jsx(
                       "span",
@@ -25132,7 +25132,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                         className: `h-2 w-2 rounded-full border-2 transition-colors ${isRead ? "border-slate-300 bg-transparent" : "border-transparent bg-brand-blue"}`
                       }
                     ),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100", children: isRead ? "Read" : "Unread" })
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus:opacity-100", children: isRead ? "Read" : "Unread" })
                   ]
                 }
               ),
@@ -25154,7 +25154,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                 {
                   role: "img",
                   "aria-label": isBlocked ? "Blocked by policy" : "Allowed by policy",
-                  className: "group/tt relative flex h-2 w-2 shrink-0 items-center justify-center",
+                  className: "relative flex h-2 w-2 shrink-0 items-center justify-center",
                   children: [
                     /* @__PURE__ */ jsxRuntimeExports.jsx(
                       "span",
@@ -25162,7 +25162,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                         className: `h-2 w-2 rounded-full ${isBlocked ? "bg-brand-attention" : "bg-emerald-400"}`
                       }
                     ),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute right-0 top-full z-50 mt-1 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100", children: isBlocked ? "Blocked by policy" : "Allowed by policy" })
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute right-0 top-full z-50 mt-1 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus:opacity-100", children: isBlocked ? "Blocked by policy" : "Allowed by policy" })
                   ]
                 }
               ),
@@ -25171,10 +25171,10 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                 {
                   role: "img",
                   "aria-label": category.label,
-                  className: `group/tt relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
+                  className: `relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
                   children: [
                     /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute right-0 top-full z-50 mt-1 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100", children: category.label })
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute right-0 top-full z-50 mt-1 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus:opacity-100", children: category.label })
                   ]
                 }
               )

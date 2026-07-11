@@ -933,12 +933,12 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
           aria-posinset={index + 1}
           aria-setsize={undefined}
           tabIndex={active ? 0 : -1}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          className="group flex min-w-0 flex-1 items-center gap-2 text-left"
         >
           <span
             role="img"
             aria-label={isRead ? "Read" : "Unread"}
-            className="group/tt relative flex h-2 w-2 shrink-0 items-center justify-center"
+            className="relative flex h-2 w-2 shrink-0 items-center justify-center"
           >
             <span
               className={`h-2 w-2 rounded-full border-2 transition-colors ${
@@ -947,7 +947,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                   : "border-transparent bg-brand-blue"
               }`}
             />
-            <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100">
+            <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus:opacity-100">
               {isRead ? "Read" : "Unread"}
             </span>
           </span>
@@ -963,26 +963,26 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
           <span
             role="img"
             aria-label={isBlocked ? "Blocked by policy" : "Allowed by policy"}
-            className="group/tt relative flex h-2 w-2 shrink-0 items-center justify-center"
+            className="relative flex h-2 w-2 shrink-0 items-center justify-center"
           >
             <span
               className={`h-2 w-2 rounded-full ${
                 isBlocked ? "bg-brand-attention" : "bg-emerald-400"
               }`}
             />
-            <span className="pointer-events-none absolute right-0 top-full z-50 mt-1 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100">
+            <span className="pointer-events-none absolute right-0 top-full z-50 mt-1 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus:opacity-100">
               {isBlocked ? "Blocked by policy" : "Allowed by policy"}
             </span>
           </span>
           <span
             role="img"
             aria-label={category.label}
-            className={`group/tt relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+            className={`relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
               active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"
             }`}
           >
             <CategoryIcon className="h-4 w-4" aria-hidden="true" />
-            <span className="pointer-events-none absolute right-0 top-full z-50 mt-1 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100">
+            <span className="pointer-events-none absolute right-0 top-full z-50 mt-1 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus:opacity-100">
               {category.label}
             </span>
           </span>
