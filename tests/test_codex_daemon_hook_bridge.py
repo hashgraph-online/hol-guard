@@ -155,6 +155,31 @@ def test_malformed_daemon_and_fallback_outputs_fail_closed(
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+def test_post_tool_use_stdout_is_exactly_one_json_object_with_noisy_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    config = _bridge_config(guard_home, 1)
+    config["fallback_command"] = [
+        sys.executable,
+        "-c",
+        "print('Guard integrity warning'); print('{\"continue\": true}')",
+    ]
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PostToolUse"})))
+
+    exit_code = bridge.main(**config)
+
+    captured = capsys.readouterr()
+    output = json.loads(captured.out)
+    assert exit_code == 0
+    assert output["continue"] is False
+    assert captured.out == json.dumps(output, separators=(",", ":"))
+    assert captured.err == ""
+
+
 def test_unavailable_daemon_preserves_local_fallback_denial(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

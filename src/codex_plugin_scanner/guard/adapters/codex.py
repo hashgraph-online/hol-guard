@@ -138,10 +138,6 @@ _MANAGED_HOOK_STATUS_MESSAGE = "HOL Guard checking tool action"
 _MANAGED_PROMPT_HOOK_STATUS_MESSAGE = "HOL Guard checking prompt"
 _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE = "HOL Guard checking Codex approval request"
 _MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE = "HOL Guard checking tool result"
-_MANAGED_HOOK_TIMEOUT_SECONDS = 30
-_MANAGED_HOOK_TIMEOUT_GRACE_SECONDS = 5
-_CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
-_CODEX_GUARD_PERMISSION_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 _LEGACY_MANAGED_HOOK_STATUS_MESSAGES = {
     "HOL Guard checking Bash command",
     _MANAGED_HOOK_STATUS_MESSAGE,
@@ -149,8 +145,22 @@ _LEGACY_MANAGED_HOOK_STATUS_MESSAGES = {
     _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE,
     _MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE,
 }
+_MANAGED_HOOK_TIMEOUT_SECONDS = 30
+_MANAGED_HOOK_TIMEOUT_GRACE_SECONDS = 5
+_CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
+_CODEX_GUARD_PERMISSION_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 _SHELL_GUARD_BEGIN = "# >>> HOL Guard Codex shell guard >>>"
 _SHELL_GUARD_END = "# <<< HOL Guard Codex shell guard <<<"
+_DAEMON_BRIDGE_PATH_SUFFIX = (
+    "codex_plugin_scanner",
+    "guard",
+    "adapters",
+    "codex_daemon_hook_bridge.py",
+)
+_GUARD_INSTALL_PATH_SEGMENTS = (
+    ("uv", "tools", "hol-guard"),
+    ("pipx", "venvs", "hol-guard"),
+)
 
 
 def _json_object(path: Path) -> dict[str, object]:
@@ -320,13 +330,17 @@ def _managed_hook_groups(context: HarnessContext) -> dict[str, dict[str, object]
     }
 
 
-def _is_managed_hook_command(command: object) -> bool:
+def _split_hook_command(command: object) -> list[str] | None:
     if not isinstance(command, str):
-        return False
+        return None
     try:
         tokens = shlex.split(command)
     except ValueError:
-        return False
+        return None
+    return tokens
+
+
+def _tokens_are_managed_hook_command(tokens: list[str]) -> bool:
     if tokens and Path(tokens[0]).name == "hol-guard-codex-hook.sh":
         return True
     if len(tokens) < 2:
@@ -334,30 +348,147 @@ def _is_managed_hook_command(command: object) -> bool:
     executable = Path(tokens[0]).name.lower()
     if not executable.startswith("python"):
         return False
-    managed_bridge_path = Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()
-    if Path(tokens[1]).resolve() == managed_bridge_path:
+    if _is_daemon_bridge_hook_command(tokens):
         return True
     if len(tokens) < 3:
         return False
-    if tokens[1] == "-m":
-        if len(tokens) < 5:
+    if _argv_is_direct_codex_hook(tokens):
+        return True
+    return bool(_argv_is_inline_codex_hook(tokens))
+
+
+def _is_managed_hook_command(command: object) -> bool:
+    tokens = _split_hook_command(command)
+    if tokens is None:
+        return False
+    return _tokens_are_managed_hook_command(tokens)
+
+
+def _python_script_and_args(tokens: list[str]) -> tuple[str, list[str]] | None:
+    """Return (script_path, remaining_args) after a python executable and its flags."""
+    if not tokens or not Path(tokens[0]).name.lower().startswith("python"):
+        return None
+    index = 1
+    while index < len(tokens):
+        token = tokens[index]
+        if token in {"-c", "-m"}:
+            return None
+        if token.startswith("-"):
+            # Flags that consume a following argument (e.g. -W error, -X faulthandler).
+            if token in {"-W", "-X", "-Q"} and index + 1 < len(tokens):
+                index += 2
+                continue
+            index += 1
+            continue
+        return token, tokens[index + 1 :]
+    return None
+
+
+def _is_daemon_bridge_hook_command(tokens: list[str]) -> bool:
+    script_and_args = _python_script_and_args(tokens)
+    if script_and_args is None:
+        return False
+    script_path, remaining = script_and_args
+    managed_bridge_path = Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()
+    try:
+        if Path(script_path).resolve() == managed_bridge_path:
+            return True
+    except OSError:
+        pass
+    bridge_path = Path(script_path)
+    return (
+        len(remaining) >= 1
+        and bridge_path.parts[-len(_DAEMON_BRIDGE_PATH_SUFFIX) :] == _DAEMON_BRIDGE_PATH_SUFFIX
+        and _bridge_config_targets_codex(remaining[0])
+    )
+
+
+def _tokens_are_unambiguously_managed_hook_command(tokens: list[str]) -> bool:
+    """Return True for hook commands that only Guard installs.
+
+    Direct ``python -m codex_plugin_scanner.cli guard hook`` entries are ambiguous:
+    a user can hand-author the same command. Bridge paths and the shell wrapper are
+    unique to Guard installs and can be reclaimed without a statusMessage marker.
+    """
+    if tokens and Path(tokens[0]).name == "hol-guard-codex-hook.sh":
+        return True
+    if len(tokens) < 2:
+        return False
+    executable = Path(tokens[0]).name.lower()
+    if not executable.startswith("python"):
+        return False
+    return _is_daemon_bridge_hook_command(tokens)
+
+
+def _is_unambiguously_managed_hook_command(command: object) -> bool:
+    tokens = _split_hook_command(command)
+    if tokens is None:
+        return False
+    return _tokens_are_unambiguously_managed_hook_command(tokens)
+
+
+def _bridge_config_targets_codex(config_text: str) -> bool:
+    try:
+        config_value: object = json.loads(config_text)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(config_value, dict):
+        return False
+    config = {key: value for key, value in config_value.items() if isinstance(key, str)}
+    fallback_value = config.get("fallback_command")
+    if not isinstance(fallback_value, list) or not all(isinstance(token, str) for token in fallback_value):
+        return False
+    fallback_command = [token for token in fallback_value if isinstance(token, str)]
+    return _argv_is_direct_codex_hook(fallback_command)
+
+
+def _argv_is_direct_codex_hook(tokens: list[str]) -> bool:
+    if not tokens or not Path(tokens[0]).name.lower().startswith("python"):
+        return False
+    for index, token in enumerate(tokens[1:], start=1):
+        if token == "-c":
+            return False
+        if token != "-m":
+            continue
+        if index + 3 >= len(tokens):
             return False
         return (
-            tokens[2] == "codex_plugin_scanner.cli"
-            and tokens[3] == "guard"
-            and tokens[4] == "hook"
-            and _argv_targets_codex(tokens[5:])
+            tokens[index + 1] == "codex_plugin_scanner.cli"
+            and tokens[index + 2] == "guard"
+            and tokens[index + 3] == "hook"
+            and _argv_targets_codex(tokens[index + 4 :])
         )
-    if tokens[1] != "-c":
+    return False
+
+
+def _argv_is_inline_codex_hook(tokens: list[str]) -> bool:
+    if not tokens or not Path(tokens[0]).name.lower().startswith("python"):
         return False
-    code = tokens[2]
-    has_guard_call = (
-        re.search(r"['\"]guard['\"]", code) is not None
-        and re.search(r"['\"]hook['\"]", code) is not None
-        and re.search(r"['\"]--harness['\"]", code) is not None
-        and re.search(r"['\"]codex['\"]", code) is not None
+    for index, token in enumerate(tokens[1:], start=1):
+        if token == "-m":
+            return False
+        if token != "-c":
+            continue
+        if index + 1 >= len(tokens):
+            return False
+        code = tokens[index + 1]
+        has_guard_call = (
+            re.search(r"['\"]guard['\"]", code) is not None
+            and re.search(r"['\"]hook['\"]", code) is not None
+            and re.search(r"['\"]--harness['\"]", code) is not None
+            and re.search(r"['\"]codex['\"]", code) is not None
+        )
+        return "codex_plugin_scanner.cli" in code and "main([" in code and has_guard_call
+    return False
+
+
+def _python_executable_is_guard_install(executable: str) -> bool:
+    """True when the interpreter path is a Guard pipx/uv install, not a substring lookalike."""
+    parts = tuple(part.lower() for part in Path(executable).parts)
+    return any(
+        any(parts[index : index + len(segment)] == segment for index in range(len(parts) - len(segment) + 1))
+        for segment in _GUARD_INSTALL_PATH_SEGMENTS
     )
-    return "codex_plugin_scanner.cli" in code and "main([" in code and has_guard_call
 
 
 def _argv_targets_codex(argv: list[str]) -> bool:
@@ -381,9 +512,23 @@ def _is_managed_hook_group(group: object) -> bool:
 def _is_managed_hook_entry(entry: object) -> bool:
     if not isinstance(entry, dict):
         return False
+    if entry.get("type") != "command":
+        return False
+    tokens = _split_hook_command(entry.get("command"))
+    if tokens is None or not _tokens_are_managed_hook_command(tokens):
+        return False
+    # Bridge/wrapper commands are uniquely Guard-owned.
+    if _tokens_are_unambiguously_managed_hook_command(tokens):
+        return True
     status_message = entry.get("statusMessage")
-    has_managed_status = isinstance(status_message, str) and status_message in _LEGACY_MANAGED_HOOK_STATUS_MESSAGES
-    return entry.get("type") == "command" and has_managed_status and _is_managed_hook_command(entry.get("command"))
+    if isinstance(status_message, str) and status_message in _LEGACY_MANAGED_HOOK_STATUS_MESSAGES:
+        return True
+    # Intentional: direct Guard CLI hooks under pipx/uv hol-guard installs are reclaimed even
+    # without statusMessage. Stale PostToolUse installs often drop the marker while keeping the
+    # same python -m codex_plugin_scanner.cli path; leaving them breaks Codex JSON parsing.
+    # Hand-authored hooks that intentionally use that same Guard interpreter are treated as
+    # managed so repair can replace them with the daemon bridge.
+    return _python_executable_is_guard_install(tokens[0])
 
 
 def _remove_managed_hook_entries(group: object) -> object | None:
