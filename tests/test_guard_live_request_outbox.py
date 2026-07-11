@@ -327,3 +327,4 @@ def test_newest_outbox_event_preempts_historical_backlog(tmp_path) -> None:
 
 def test_worker_safety_interval_is_subsecond() -> None:
     assert live_request_sync.DEFAULT_POLL_INTERVAL_SECONDS <= 0.1
+    assert live_request_sync.LIVE_REQUEST_SYNC_BATCH_SIZE <= 25
