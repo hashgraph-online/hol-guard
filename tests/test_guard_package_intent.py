@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.runtime.package_intent import (
+    extract_package_intent_request,
     parse_manifest_dependency_changes,
     parse_package_intent,
 )
@@ -119,6 +123,133 @@ def test_parse_package_intent_detects_package_command_after_control_operator() -
         assert intent.targets[0].package_name == package_name
 
     assert parse_package_intent("echo safe && grep foo src/file.ts") is None
+
+
+def test_parse_package_intent_skips_verified_local_test_runner_execution(tmp_path: Path) -> None:
+    _write_text(tmp_path / "package.json", '{"name":"demo","devDependencies":{"vitest":"^4.1.8"}}\n')
+    _write_text(tmp_path / "bun.lock", '"vitest": "4.1.8"\n')
+    runner = tmp_path / "node_modules" / ".bin" / "vitest"
+    _write_text(runner, "#!/bin/sh\n")
+    runner.chmod(0o755)
+
+    assert parse_package_intent("bunx vitest run tests/example.test.ts", workspace=tmp_path) is None
+    assert parse_package_intent("npx --no-install vitest --run tests/example.test.ts", workspace=tmp_path) is None
+    assert parse_package_intent("bunx vitest --help", workspace=tmp_path) is None
+    assert (
+        extract_package_intent_request(
+            "Bash",
+            {"command": "bunx vitest run tests/example.test.ts"},
+            action_envelope_command="bunx vitest run tests/example.test.ts",
+            workspace=tmp_path,
+        )
+        is None
+    )
+
+
+def test_parse_package_intent_keeps_unverified_or_remote_test_runner_execution_guarded(tmp_path: Path) -> None:
+    _write_text(tmp_path / "package.json", '{"name":"demo","devDependencies":{"vitest":"^4.1.8"}}\n')
+    _write_text(tmp_path / "bun.lock", '"vitest": "4.1.8"\n')
+    runner = tmp_path / "node_modules" / ".bin" / "vitest"
+    _write_text(runner, "#!/bin/sh\n")
+    runner.chmod(0o755)
+
+    assert parse_package_intent("bunx vitest@latest run tests/example.test.ts", workspace=tmp_path) is not None
+    assert (
+        parse_package_intent("bunx --package vitest vitest run tests/example.test.ts", workspace=tmp_path) is not None
+    )
+    (tmp_path / "bun.lock").unlink()
+
+    assert parse_package_intent("bunx vitest run tests/example.test.ts", workspace=tmp_path) is not None
+
+
+def test_parse_package_intent_keeps_local_runner_guarded_without_lockfile_record(tmp_path: Path) -> None:
+    _write_text(tmp_path / "package.json", '{"name":"demo","devDependencies":{"vitest":"^4.1.8"}}\n')
+    _write_text(tmp_path / "bun.lock", "{}\n")
+    runner = tmp_path / "node_modules" / ".bin" / "vitest"
+    _write_text(runner, "#!/bin/sh\n")
+    runner.chmod(0o755)
+
+    assert parse_package_intent("bunx vitest run tests/example.test.ts", workspace=tmp_path) is not None
+
+
+@pytest.mark.parametrize(
+    ("lockfile_name", "lockfile_content"),
+    (
+        ("bun.lock", '"vitest-helpers": "1.0.0"\n'),
+        ("bun.lockb", b"vitest"),
+    ),
+)
+def test_parse_package_intent_keeps_runner_guarded_without_exact_text_lockfile_record(
+    tmp_path: Path, lockfile_name: str, lockfile_content: str | bytes
+) -> None:
+    _write_text(tmp_path / "package.json", '{"name":"demo","devDependencies":{"vitest":"^4.1.8"}}\n')
+    lockfile_path = tmp_path / lockfile_name
+    if isinstance(lockfile_content, bytes):
+        lockfile_path.write_bytes(lockfile_content)
+    else:
+        _write_text(lockfile_path, lockfile_content)
+    runner = tmp_path / "node_modules" / ".bin" / "vitest"
+    _write_text(runner, "#!/bin/sh\n")
+    runner.chmod(0o755)
+
+    assert parse_package_intent("bunx vitest run tests/example.test.ts", workspace=tmp_path) is not None
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows supports .cmd local launchers")
+def test_parse_package_intent_keeps_non_windows_script_wrapper_guarded(tmp_path: Path) -> None:
+    _write_text(tmp_path / "package.json", '{"name":"demo","devDependencies":{"vitest":"^4.1.8"}}\n')
+    _write_text(tmp_path / "bun.lock", '"vitest": "4.1.8"\n')
+    _write_text(tmp_path / "node_modules" / ".bin" / "vitest.cmd", "@echo off\n")
+
+    assert parse_package_intent("bunx vitest run tests/example.test.ts", workspace=tmp_path) is not None
+
+
+def test_parse_package_intent_skips_verified_local_jest_and_mocha_runs(tmp_path: Path) -> None:
+    _write_text(
+        tmp_path / "package.json",
+        '{"name":"demo","peerDependencies":{"jest":"^30.0.0"},"devDependencies":{"mocha":"^11.0.0"}}\n',
+    )
+    _write_text(
+        tmp_path / "package-lock.json",
+        '{"packages":{"node_modules/jest":{"version":"30.0.0"},"node_modules/mocha":{"version":"11.0.0"}}}\n',
+    )
+    for runner_name in ("jest", "mocha"):
+        runner = tmp_path / "node_modules" / ".bin" / runner_name
+        _write_text(runner, "#!/bin/sh\n")
+        runner.chmod(0o755)
+
+    assert parse_package_intent("npx --no-install jest tests/unit.test.js", workspace=tmp_path) is None
+    assert parse_package_intent("bunx mocha test/unit.test.js", workspace=tmp_path) is None
+
+
+def test_parse_package_intent_skips_verified_local_declared_executable(tmp_path: Path) -> None:
+    _write_text(tmp_path / "package.json", '{"name":"demo","devDependencies":{"eslint":"^9.0.0"}}\n')
+    _write_text(tmp_path / "bun.lock", '"eslint": "9.0.0"\n')
+    executable = tmp_path / "node_modules" / ".bin" / "eslint"
+    _write_text(executable, "#!/bin/sh\n")
+    executable.chmod(0o755)
+
+    assert parse_package_intent("bunx eslint .", workspace=tmp_path) is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "pnpm exec vitest run tests/unit.test.ts",
+        "uv run pytest tests/test_unit.py",
+        "poetry run pytest tests/test_unit.py",
+        "pipenv run pytest tests/test_unit.py",
+        "python -m pytest tests/test_unit.py",
+        "cargo test",
+        "go test ./...",
+        "mvn test",
+        "./gradlew test",
+        "bundle exec rspec spec/unit_spec.rb",
+        "vendor/bin/phpunit tests/Unit",
+    ),
+)
+def test_parse_package_intent_leaves_non_js_package_executors_unclassified(command: str) -> None:
+    assert parse_package_intent(command) is None
 
 
 def test_parse_package_intent_combines_multiple_package_segments() -> None:

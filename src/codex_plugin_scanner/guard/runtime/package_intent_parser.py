@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import os
 import re
 import shlex
 from collections.abc import Iterable
@@ -32,6 +34,9 @@ from .secret_file_requests import _SHELL_TOOL_NAMES, _candidate_command_texts, _
 
 _CONTROL_TOKENS = {"&&", "||", ";", "|", "|&", "&"}
 _ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
+_LOCAL_EXECUTION_COMMANDS = frozenset({"bunx", "npx"})
+_LOCAL_EXECUTION_FLAGS = frozenset({"--bun", "--no-install"})
+_JS_LOCKFILE_NAMES = ("bun.lock", "bun.lockb", "package-lock.json", "pnpm-lock.yaml", "yarn.lock")
 _PYTHON_EXECUTABLES = {"py", "python", "python3", "python3.11", "python3.12", "python3.13", "python3.14"}
 _PACKAGE_SOURCE_ENV_NAMES = frozenset(
     {
@@ -210,12 +215,98 @@ def _parse_bun_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> Pac
 
 
 def _parse_exec_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> PackageIntent | None:
+    if _is_verified_local_executable_execution(tokens, workspace=workspace):
+        return None
     package_token = _exec_package_spec(tokens)
     if package_token is None:
         return None
     ecosystem = "pypi" if _command_name(tokens[0]) in {"uvx", "pipx"} else "npm"
     target = python_target(package_token) if ecosystem == "pypi" else js_target(package_token)
     return _build_intent(_command_name(tokens[0]), "execute", tokens, (target,), workspace=workspace)
+
+
+def _is_verified_local_executable_execution(tokens: tuple[str, ...], *, workspace: Path | None) -> bool:
+    if workspace is None or not tokens or _command_name(tokens[0]) not in _LOCAL_EXECUTION_COMMANDS:
+        return False
+    executable = _local_executable_name(tokens)
+    if executable is None:
+        return False
+    return (
+        _workspace_declares_js_dependency(workspace, executable)
+        and _workspace_lockfile_records_js_dependency(workspace, executable)
+        and _workspace_has_local_executable(workspace, executable)
+    )
+
+
+def _local_executable_name(tokens: tuple[str, ...]) -> str | None:
+    index = 1
+    while index < len(tokens) and tokens[index].startswith("-"):
+        if tokens[index] not in _LOCAL_EXECUTION_FLAGS:
+            return None
+        index += 1
+    if index >= len(tokens):
+        return None
+    executable = tokens[index]
+    return executable if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", executable) else None
+
+
+def _workspace_declares_js_dependency(workspace: Path, package_name: str) -> bool:
+    try:
+        payload = json.loads((workspace / "package.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    for key in ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies"):
+        dependencies = payload.get(key)
+        if isinstance(dependencies, dict) and isinstance(dependencies.get(package_name), str):
+            return bool(dependencies[package_name].strip())
+    return False
+
+
+def _workspace_lockfile_records_js_dependency(workspace: Path, package_name: str) -> bool:
+    package_name_pattern = re.compile(rf"(?<![A-Za-z0-9._/@-]){re.escape(package_name)}(?![A-Za-z0-9._/@-])")
+    for lockfile_name in _JS_LOCKFILE_NAMES:
+        lockfile_path = workspace / lockfile_name
+        try:
+            content = lockfile_path.read_bytes()
+        except OSError:
+            continue
+        if not content.strip():
+            continue
+        if lockfile_name == "package-lock.json":
+            try:
+                payload = json.loads(content)
+            except (UnicodeDecodeError, ValueError):
+                continue
+            if not isinstance(payload, dict):
+                continue
+            packages = payload.get("packages")
+            if isinstance(packages, dict) and isinstance(packages.get(f"node_modules/{package_name}"), dict):
+                return True
+            dependencies = payload.get("dependencies")
+            if isinstance(dependencies, dict) and isinstance(dependencies.get(package_name), dict):
+                return True
+            continue
+        if lockfile_name == "bun.lockb":
+            continue
+        try:
+            text = content.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        if package_name_pattern.search(text):
+            return True
+    return False
+
+
+def _workspace_has_local_executable(workspace: Path, package_name: str) -> bool:
+    executable_dir = workspace / "node_modules" / ".bin"
+    suffixes = ("", ".cmd", ".ps1") if os.name == "nt" else ("",)
+    for suffix in suffixes:
+        candidate = executable_dir / f"{package_name}{suffix}"
+        if candidate.is_file() and (suffix or os.access(candidate, os.X_OK)):
+            return True
+    return False
 
 
 def _parse_pip_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> PackageIntent | None:

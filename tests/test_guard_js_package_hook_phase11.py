@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
+from codex_plugin_scanner import install_integrity
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.store import GuardStore
@@ -244,3 +245,46 @@ def test_guard_hook_blocks_js_exec_flows_before_subprocess(
     evidence = store.list_evidence()
     assert evidence
     assert evidence[0]["category"] == "supply-chain"
+
+
+def test_guard_hook_allows_verified_local_vitest_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    (workspace_dir / "package.json").write_text(
+        '{"name":"demo","devDependencies":{"vitest":"^4.1.8"}}\n', encoding="utf-8"
+    )
+    (workspace_dir / "bun.lock").write_text('"vitest": "4.1.8"\n', encoding="utf-8")
+    runner = workspace_dir / "node_modules" / ".bin" / "vitest"
+    runner.parent.mkdir(parents=True)
+    runner.write_text("#!/bin/sh\n", encoding="utf-8")
+    runner.chmod(0o755)
+    command = "bunx vitest run tests/example.test.ts"
+    payload_path = workspace_dir / "hook-event.json"
+    _write_codex_pre_tool_payload(payload_path, workspace_dir, command)
+    store = GuardStore(home_dir)
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+    monkeypatch.setattr(install_integrity, "warn_if_shadowed", lambda: None)
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--harness",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--event-file",
+            str(payload_path),
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    assert captured.out == ""
+    assert captured.err == ""
+    assert store.list_evidence() == []
