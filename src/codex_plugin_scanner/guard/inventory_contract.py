@@ -706,6 +706,7 @@ def _item_from_artifact(
         captured_at=generated_at,
         item_kind=item_kind,
         metadata=safe_metadata,
+        home_dir=home_dir,
         workspace_dir=workspace_dir,
         cisco_runs=cisco_runs,
     )
@@ -719,6 +720,17 @@ def _item_from_artifact(
             workspace_dir=workspace_dir,
             follow_unsafe_symlinks=follow_unsafe_symlinks,
         )
+    primary_content_hash = _primary_artifact_content_hash(
+        artifact,
+        artifact_type=artifact_type,
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+    )
+    if artifact_type == "skill":
+        safe_metadata = _bind_skill_document_evidence(
+            safe_metadata,
+            primary_content_hash=primary_content_hash,
+        )
     semantic_text = fingerprint_mapping(
         {
             "artifact_id": artifact_id,
@@ -726,12 +738,6 @@ def _item_from_artifact(
             "name": name,
             "metadata": _stable_snapshot_value(safe_metadata),
         }
-    )
-    primary_content_hash = _primary_artifact_content_hash(
-        artifact,
-        artifact_type=artifact_type,
-        home_dir=home_dir,
-        workspace_dir=workspace_dir,
     )
     if artifact_type in {"skill", "instruction"}:
         content_hash = primary_content_hash or semantic_text
@@ -1513,10 +1519,21 @@ def _apply_aibom_metadata_enrichment(
     captured_at: str,
     item_kind: InventoryItemKind,
     metadata: dict[str, object],
+    home_dir: Path,
     workspace_dir: Path | None,
     cisco_runs: tuple[object, ...] = (),
 ) -> dict[str, object]:
     enriched = dict(metadata)
+    artifact_type = str(getattr(artifact, "artifact_type", "unknown"))
+    if artifact_type == "skill":
+        from .skill_document_evidence import enrich_skill_document_metadata
+
+        enriched = enrich_skill_document_metadata(
+            getattr(artifact, "config_path", None),
+            enriched,
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+        )
     if item_kind == "overlay" and "instructionRole" not in enriched:
         config_path = getattr(artifact, "config_path", None)
         if isinstance(config_path, str):
@@ -1538,8 +1555,6 @@ def _capabilities_for_artifact(
     metadata: dict[str, object],
 ) -> tuple[InventoryCapability, ...]:
     capabilities: set[InventoryCapability] = set()
-    if artifact_type in {"skill", "skill_file"}:
-        capabilities.add("reads_files")
     if artifact_type in {"instruction", "overlay", "command"}:
         capabilities.add("reads_files")
     if artifact_type == "mcp_server":
@@ -1551,6 +1566,30 @@ def _capabilities_for_artifact(
     if bool(metadata.get("envConfigurationPresent")) or bool(metadata.get("has_auth_headers")):
         capabilities.add("reads_secrets")
     return tuple(sorted(capabilities)) if capabilities else ("unknown",)
+
+
+def _bind_skill_document_evidence(
+    metadata: dict[str, object],
+    *,
+    primary_content_hash: str | None,
+) -> dict[str, object]:
+    evidence = metadata.get("contentEvidence")
+    if (
+        isinstance(evidence, dict)
+        and isinstance(primary_content_hash, str)
+        and evidence.get("contentHash") == primary_content_hash
+    ):
+        return metadata
+
+    if isinstance(evidence, dict) and "contentHash" not in evidence:
+        bound = dict(metadata)
+        bound.pop("documentedCapabilities", None)
+        return bound
+
+    bound = dict(metadata)
+    bound.pop("contentEvidence", None)
+    bound.pop("documentedCapabilities", None)
+    return bound
 
 
 def _risk_level(metadata: dict[str, object]) -> InventorySeverity:
