@@ -17,6 +17,7 @@ def live_request_outbox_schema_statements() -> tuple[str, ...]:
           sequence integer primary key autoincrement,
           local_request_id text not null,
           changed_at text not null,
+          workspace_id text,
           attempt_count integer not null default 0,
           next_attempt_at text,
           last_error text
@@ -36,8 +37,16 @@ def live_request_outbox_schema_statements() -> tuple[str, ...]:
         begin
           delete from guard_live_request_outbox
           where local_request_id = new.request_id;
-          insert into guard_live_request_outbox (local_request_id, changed_at)
-          values (new.request_id, coalesce(new.last_seen_at, new.created_at));
+          insert into guard_live_request_outbox (local_request_id, changed_at, workspace_id)
+          values (
+            new.request_id,
+            coalesce(new.last_seen_at, new.created_at),
+            (
+              select json_extract(payload_json, '$.workspace_id')
+              from sync_state
+              where state_key = 'oauth_local_credentials'
+            )
+          );
         end
         """,
         "drop trigger if exists guard_live_request_outbox_after_update",
@@ -48,6 +57,7 @@ def live_request_outbox_schema_statements() -> tuple[str, ...]:
           insert into guard_live_request_outbox (
             local_request_id,
             changed_at,
+            workspace_id,
             attempt_count,
             next_attempt_at,
             last_error
@@ -55,6 +65,13 @@ def live_request_outbox_schema_statements() -> tuple[str, ...]:
           values (
             new.request_id,
             coalesce(new.resolved_at, new.last_seen_at, new.created_at),
+            (
+              select workspace_id
+              from guard_live_request_outbox
+              where local_request_id = new.request_id
+              order by sequence desc
+              limit 1
+            ),
             coalesce((
               select attempt_count
               from guard_live_request_outbox
@@ -97,6 +114,18 @@ def live_request_outbox_schema_statements() -> tuple[str, ...]:
     )
 
 
+def ensure_live_request_outbox_schema(connection: sqlite3.Connection) -> None:
+    statements = live_request_outbox_schema_statements()
+    connection.execute(statements[0])
+    columns = {
+        str(row["name"]) for row in connection.execute("pragma table_info(guard_live_request_outbox)").fetchall()
+    }
+    if "workspace_id" not in columns:
+        connection.execute("alter table guard_live_request_outbox add column workspace_id text")
+    for statement in statements[1:]:
+        connection.execute(statement)
+
+
 def seed_live_request_outbox(connection: sqlite3.Connection, now: str) -> None:
     row = connection.execute(
         "select 1 from sync_state where state_key = ?",
@@ -106,8 +135,15 @@ def seed_live_request_outbox(connection: sqlite3.Connection, now: str) -> None:
         return
     connection.execute(
         """
-        insert into guard_live_request_outbox (local_request_id, changed_at)
-        select request_id, coalesce(resolved_at, last_seen_at, created_at)
+        insert into guard_live_request_outbox (local_request_id, changed_at, workspace_id)
+        select
+          request_id,
+          coalesce(resolved_at, last_seen_at, created_at),
+          (
+            select json_extract(payload_json, '$.workspace_id')
+            from sync_state
+            where state_key = 'oauth_local_credentials'
+          )
         from approval_requests
         order by coalesce(resolved_at, last_seen_at, created_at), request_id
         """
@@ -131,23 +167,41 @@ def _retry_at(now: str, attempt_count: int) -> str:
 
 
 class StoreLiveRequestOutboxMixin:
+    def claim_unowned_live_request_outbox(self, workspace_id: str) -> int:
+        normalized_workspace_id = workspace_id.strip()
+        if not normalized_workspace_id:
+            raise ValueError("workspace_id is required")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                update guard_live_request_outbox
+                set workspace_id = ?
+                where workspace_id is null
+                """,
+                (normalized_workspace_id,),
+            )
+            return int(cursor.rowcount if cursor.rowcount is not None else 0)
+
     def list_ready_live_request_outbox(
         self,
         *,
         now: str,
         limit: int,
+        workspace_id: str | None = None,
     ) -> list[dict[str, object]]:
+        query = """
+            select sequence, local_request_id, changed_at, attempt_count
+            from guard_live_request_outbox
+            where (next_attempt_at is null or next_attempt_at <= ?)
+        """
+        parameters: list[object] = [now]
+        if workspace_id is not None:
+            query += " and workspace_id = ?"
+            parameters.append(workspace_id)
+        query += " order by sequence limit ?"
+        parameters.append(max(1, int(limit)))
         with self._connect() as connection:
-            rows = connection.execute(
-                """
-                select sequence, local_request_id, changed_at, attempt_count
-                from guard_live_request_outbox
-                where next_attempt_at is null or next_attempt_at <= ?
-                order by sequence
-                limit ?
-                """,
-                (now, max(1, int(limit))),
-            ).fetchall()
+            rows = connection.execute(query, parameters).fetchall()
         return [
             {
                 "sequence": int(row["sequence"]),

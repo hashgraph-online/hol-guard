@@ -5599,13 +5599,13 @@ class GuardDaemonServer:
             self._finish_service()
 
     def _finish_service(self) -> None:
-        if self._shutdown_started.is_set():
-            clear_guard_daemon_state_if_current(self._server.store.guard_home, pid=os.getpid(), port=self.port)
-            self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
-            return
         self._shutdown_started.set()
+        self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
+        self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
         clear_guard_daemon_state_if_current(self._server.store.guard_home, pid=os.getpid(), port=self.port)
         self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
+        if self._thread is threading.current_thread():
+            self._thread = None
 
     def _start_watchdog(self) -> None:
         if self._watchdog_thread is not None and self._watchdog_thread.is_alive():

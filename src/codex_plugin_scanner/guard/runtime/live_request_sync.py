@@ -256,6 +256,7 @@ def sync_live_requests_once(
 
     if not machine_id or not workspace_id or not machine_installation_id:
         raise RuntimeError("Guard live request sync requires machine_id, workspace_id, and machine_installation_id.")
+    store.claim_unowned_live_request_outbox(workspace_id)
 
     state = _load_sync_state(store)
     state.update(
@@ -277,6 +278,7 @@ def sync_live_requests_once(
             outbox_rows = store.list_ready_live_request_outbox(
                 now=_now(),
                 limit=LIVE_REQUEST_SYNC_BATCH_SIZE,
+                workspace_id=workspace_id,
             )
             if not outbox_rows:
                 break

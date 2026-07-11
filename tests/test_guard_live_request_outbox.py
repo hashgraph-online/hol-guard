@@ -81,6 +81,47 @@ def test_acknowledging_inflight_sequence_preserves_newer_mutation(tmp_path) -> N
     assert int(remaining[0]["sequence"]) > old_sequence
 
 
+def test_outbox_ownership_is_not_reassigned_after_workspace_switch(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard")
+    store.add_approval_request(_request("request-1"), _NOW)
+
+    assert store.claim_unowned_live_request_outbox("workspace-a") == 1
+    assert (
+        len(
+            store.list_ready_live_request_outbox(
+                now=_NOW,
+                limit=10,
+                workspace_id="workspace-a",
+            )
+        )
+        == 1
+    )
+    assert (
+        store.list_ready_live_request_outbox(
+            now=_NOW,
+            limit=10,
+            workspace_id="workspace-b",
+        )
+        == []
+    )
+
+    store.add_approval_request(
+        _request("request-1", summary="Updated review summary"),
+        "2026-07-11T12:00:00.050000+00:00",
+    )
+    assert store.claim_unowned_live_request_outbox("workspace-b") == 0
+    assert (
+        len(
+            store.list_ready_live_request_outbox(
+                now="2026-07-11T12:00:01+00:00",
+                limit=10,
+                workspace_id="workspace-a",
+            )
+        )
+        == 1
+    )
+
+
 def test_newer_mutation_preserves_retry_backoff(tmp_path) -> None:
     store = GuardStore(tmp_path / "guard")
     store.add_approval_request(_request("request-1"), _NOW)

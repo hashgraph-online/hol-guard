@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 # ruff: noqa: F403,F405
 from .store_base import *
-from .store_live_request_outbox import live_request_outbox_schema_statements, seed_live_request_outbox
+from .store_live_request_outbox import ensure_live_request_outbox_schema, seed_live_request_outbox
 from .store_secret_policy_integrity import _POLICY_INTEGRITY_LOOKUP_UNSET
 
 
@@ -464,7 +464,6 @@ class StoreConnectionSchemaMixin:
             connect_request_schema_statement(),
             connect_state_schema_statement(),
             approval_schema_statement(),
-            *live_request_outbox_schema_statements(),
             supply_chain_bundle_schema_statement(),
             supply_chain_eval_cache_schema_statement(),
             threat_intel_bundle_schema_statement(),
@@ -473,6 +472,7 @@ class StoreConnectionSchemaMixin:
         with self._connect() as connection:
             for statement in statements:
                 connection.execute(statement)
+            ensure_live_request_outbox_schema(connection)
             seed_live_request_outbox(connection, datetime.now(timezone.utc).isoformat())
             ensure_evidence_schema(connection)
             if not self._schema_version_applied(connection, version=4):
