@@ -37,6 +37,7 @@ function resolveDisplayName(profile: GuardCloudUserProfile): string {
 export function CloudUserMenu(props: {
   userProfile: GuardCloudUserProfile | null | undefined;
   workspaceId: string | null | undefined;
+  planId?: string | null;
   collapsed?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -131,6 +132,11 @@ export function CloudUserMenu(props: {
                   {props.workspaceId.slice(0, 8)}…
                 </button>
               ) : null}
+              {props.planId ? (
+                <span className="mt-1 inline-flex items-center rounded-md bg-brand-blue/10 px-1.5 py-0.5 text-[10px] font-semibold capitalize text-brand-blue">
+                  {props.planId}
+                </span>
+              ) : null}
             </div>
           </div>
         )}
@@ -194,6 +200,16 @@ export function CloudUserMenu(props: {
                 <p className="mt-1 text-[10px] text-slate-400">Not available</p>
               )}
             </div>
+            {props.planId ? (
+              <div className="border-t border-slate-100 pt-2">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">Plan</p>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className="inline-flex items-center rounded-md bg-brand-blue/10 px-1.5 py-0.5 text-[10px] font-semibold capitalize text-brand-blue">
+                    {props.planId}
+                  </span>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       )}

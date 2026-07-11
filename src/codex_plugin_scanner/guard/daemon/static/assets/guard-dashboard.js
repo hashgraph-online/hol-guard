@@ -15949,6 +15949,7 @@ function buildDemoRuntimeSnapshot() {
         avatar_url: ""
       },
       workspace_id: "demo-workspace-282f6ff2",
+      plan_id: "team",
       dashboard_url: dashboardUrl,
       inbox_url: inboxUrl,
       fleet_url: fleetUrl,
@@ -17626,7 +17627,8 @@ function CloudUserMenu(props) {
                   "…"
                 ]
               }
-            ) : null
+            ) : null,
+            props.planId ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1 inline-flex items-center rounded-md bg-brand-blue/10 px-1.5 py-0.5 text-[10px] font-semibold capitalize text-brand-blue", children: props.planId }) : null
           ] })
         }
       )
@@ -17682,7 +17684,11 @@ function CloudUserMenu(props) {
             ]
           }
         ) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-[10px] text-slate-400", children: "Not available" })
-      ] })
+      ] }),
+      props.planId ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 pt-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-medium uppercase tracking-wider text-slate-400", children: "Plan" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1 flex items-center gap-1.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex items-center rounded-md bg-brand-blue/10 px-1.5 py-0.5 text-[10px] font-semibold capitalize text-brand-blue", children: props.planId }) })
+      ] }) : null
     ] }) })
   ] });
 }
@@ -17851,6 +17857,7 @@ function ShellSidebar(props) {
           {
             userProfile: props.cloudUserProfile,
             workspaceId: props.workspaceId,
+            planId: props.planId,
             collapsed
           }
         ) }) : null,
@@ -25938,7 +25945,8 @@ function ApprovalCenterLayout(props) {
         onUpdateGuard,
         onReinstallGuard,
         cloudUserProfile: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_user_profile : null,
-        workspaceId: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_pairing_state.workspace_id ?? null : null
+        workspaceId: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_pairing_state.workspace_id ?? null : null,
+        planId: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_pairing_state.plan_id ?? null : null
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs(

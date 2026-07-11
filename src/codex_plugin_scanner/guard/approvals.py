@@ -1390,12 +1390,16 @@ def _build_runtime_cloud_context(
         connect_retry_required=connect_retry_required,
         connect_retry_refresh_race=connect_retry_refresh_race,
     )
-    oauth_credentials = store.get_oauth_local_credentials()
+    oauth_credentials = store.get_oauth_local_credentials(allow_primary=True)
     cloud_user_profile: dict[str, str] | None = None
+    cloud_plan_id: str | None = None
     if isinstance(oauth_credentials, dict):
         raw_profile = oauth_credentials.get("cloud_user_profile")
         if isinstance(raw_profile, dict):
             cloud_user_profile = {str(k): str(v) for k, v in raw_profile.items()}
+        raw_plan_id = oauth_credentials.get("supply_chain_plan_id")
+        if isinstance(raw_plan_id, str) and raw_plan_id:
+            cloud_plan_id = raw_plan_id
     cloud_workspace_id = store.get_cloud_workspace_id()
     return {
         "sync_configured": cloud_profile is not None,
@@ -1424,6 +1428,7 @@ def _build_runtime_cloud_context(
             "sync_configured": cloud_profile is not None,
             "cloud_user_profile": cloud_user_profile,
             "workspace_id": cloud_workspace_id,
+            "plan_id": cloud_plan_id,
             "dashboard_url": dashboard_url,
             "inbox_url": inbox_url,
             "fleet_url": fleet_url,

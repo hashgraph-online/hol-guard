@@ -246,6 +246,7 @@ export type GuardCloudPairingState = {
   sync_configured: boolean;
   cloud_user_profile?: GuardCloudUserProfile | null;
   workspace_id?: string | null;
+  plan_id: string | null;
   dashboard_url: string;
   inbox_url: string;
   fleet_url: string;

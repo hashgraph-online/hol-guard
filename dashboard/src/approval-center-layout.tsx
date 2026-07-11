@@ -250,6 +250,11 @@ export function ApprovalCenterLayout(props: LayoutProps) {
             ? props.runtime.snapshot.cloud_pairing_state.workspace_id ?? null
             : null
         }
+        planId={
+          props.runtime.kind === "ready"
+            ? props.runtime.snapshot.cloud_pairing_state.plan_id ?? null
+            : null
+        }
       />
       <div
         className={`flex flex-col transition-all duration-200 lg:min-h-screen ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`}
