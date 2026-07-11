@@ -357,6 +357,44 @@ def test_sync_reserves_every_tenth_slot_for_oldest_ready_event(
     assert sent[9] == "request-00"
 
 
+def test_transient_newest_failures_do_not_reset_oldest_fairness_slot(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard")
+    for index in range(11):
+        store.add_approval_request(
+            _request(f"request-{index:02d}"),
+            f"2026-07-11T12:{index:02d}:00+00:00",
+        )
+
+    def post_events(*_args, **kwargs):
+        request_id = kwargs["events"][0]["localRequestId"]
+        accepted = request_id == "request-00"
+        return {
+            "accepted": int(accepted),
+            "rejected": int(not accepted),
+            "perEventResults": [
+                {
+                    "index": 0,
+                    "accepted": accepted,
+                    "error": None if accepted else "temporary_failure",
+                },
+            ],
+        }
+
+    monkeypatch.setattr(live_request_sync, "LIVE_REQUEST_SYNC_MAX_BATCHES", 10)
+    monkeypatch.setattr(live_request_sync, "_post_sync_events", post_events)
+
+    live_request_sync.sync_live_requests_once(store, _AUTH)
+
+    rows = store.list_ready_live_request_outbox(
+        now="9999-12-31T23:59:59+00:00",
+        limit=20,
+    )
+    assert "request-00" not in {row["local_request_id"] for row in rows}
+
+
 def test_worker_safety_interval_is_subsecond() -> None:
     assert live_request_sync.DEFAULT_POLL_INTERVAL_SECONDS <= 0.1
     assert live_request_sync.LIVE_REQUEST_SYNC_BATCH_SIZE == 1

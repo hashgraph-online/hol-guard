@@ -389,7 +389,7 @@ def sync_live_requests_once(
                             now=_now(),
                             error=message,
                         )
-                        break
+                        continue
                     continue
 
             accounted = accepted + rejected
