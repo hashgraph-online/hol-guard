@@ -531,7 +531,7 @@ class TestRedactionLevelPartial:
         assert event is not None
         assert sensitive_identity not in event["displayCommand"]
         assert event["displayCommand"] == "my-harness: [redacted]"
-        assert event["redactedCommand"] == event["displayCommand"]
+        assert event["redactedCommand"] is None
         assert event["displayProvenance"] == "withheld"
 
     def test_redaction_full_marks_scrubbed_command_as_redacted(self, tmp_path: Path) -> None:

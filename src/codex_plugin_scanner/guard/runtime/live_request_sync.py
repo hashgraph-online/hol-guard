@@ -148,7 +148,7 @@ def _build_display_command(item: dict[str, object], redaction_level: str) -> tup
     )
 
     raw_command = display_command if redaction_level == "none" and safe_command else None
-    redacted_command = display_command if redaction_level != "none" else None
+    redacted_command = display_command if redaction_level != "none" and safe_command else None
     return display_command, display_summary, raw_command, redacted_command
 
 
