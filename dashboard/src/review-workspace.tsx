@@ -79,6 +79,7 @@ import {
   formatQueueRequestDate,
   queueCategoriesForItems,
   resolveQueueCategory,
+  riskScore,
   searchQueue,
   sortQueue,
   REVIEW_SEMANTIC_GROUPS,
@@ -854,7 +855,8 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
   selected?: boolean;
   onToggleSelect?: (item: GuardApprovalRequest) => void;
 }) {
-  const isBlocked = item.policy_action === "block";
+  const risk = riskScore(item);
+  const riskLevel = risk <= 2 ? "high" : risk <= 4 ? "medium" : "low";
   const category = resolveQueueCategory(item);
   const CategoryIcon = iconForQueueCategory(category.id);
   const preview = queueItemPreview(item);
@@ -947,16 +949,18 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
           </div>
           <span
             role="img"
-            aria-label={isBlocked ? "Blocked by policy" : "Allowed by policy"}
+            aria-label={`Risk: ${riskLevel}`}
             className="group/icon relative flex h-2 w-2 shrink-0 items-center justify-center"
           >
             <span
               className={`h-2 w-2 rounded-full ${
-                isBlocked ? "bg-brand-attention" : "bg-emerald-400"
+                riskLevel === "high" ? "bg-red-400"
+                : riskLevel === "medium" ? "bg-amber-400"
+                : "bg-emerald-400"
               }`}
             />
             <span className="pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100">
-              {isBlocked ? "Blocked by policy" : "Allowed by policy"}
+              {`Risk: ${riskLevel}`}
             </span>
           </span>
           <span
