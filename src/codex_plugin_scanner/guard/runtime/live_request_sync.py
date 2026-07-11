@@ -280,10 +280,12 @@ def sync_live_requests_once(
 
     try:
         while batches < LIVE_REQUEST_SYNC_MAX_BATCHES:
+            newest_first = batches % 10 != 9
             outbox_rows = store.list_ready_live_request_outbox(
                 now=_now(),
                 limit=LIVE_REQUEST_SYNC_BATCH_SIZE,
                 workspace_id=workspace_id,
+                newest_first=newest_first,
             )
             if not outbox_rows:
                 break

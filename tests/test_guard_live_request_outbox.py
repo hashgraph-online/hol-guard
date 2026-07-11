@@ -322,9 +322,39 @@ def test_newest_outbox_event_preempts_historical_backlog(tmp_path) -> None:
     rows = store.list_ready_live_request_outbox(
         now="9999-12-31T23:59:59+00:00",
         limit=1,
+        newest_first=True,
     )
 
     assert [row["local_request_id"] for row in rows] == ["new"]
+
+
+def test_sync_reserves_every_tenth_slot_for_oldest_ready_event(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard")
+    for index in range(11):
+        store.add_approval_request(
+            _request(f"request-{index:02d}"),
+            f"2026-07-11T12:{index:02d}:00+00:00",
+        )
+    sent: list[str] = []
+
+    def post_events(*_args, **kwargs):
+        sent.append(kwargs["events"][0]["localRequestId"])
+        return {
+            "accepted": 1,
+            "rejected": 0,
+            "perEventResults": [{"index": 0, "accepted": True}],
+        }
+
+    monkeypatch.setattr(live_request_sync, "LIVE_REQUEST_SYNC_MAX_BATCHES", 10)
+    monkeypatch.setattr(live_request_sync, "_post_sync_events", post_events)
+
+    live_request_sync.sync_live_requests_once(store, _AUTH)
+
+    assert sent[:9] == [f"request-{index:02d}" for index in range(10, 1, -1)]
+    assert sent[9] == "request-00"
 
 
 def test_worker_safety_interval_is_subsecond() -> None:

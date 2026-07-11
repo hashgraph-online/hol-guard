@@ -28,6 +28,15 @@ def live_request_outbox_schema_statements() -> tuple[str, ...]:
         on guard_live_request_outbox (next_attempt_at, sequence)
         """,
         """
+        create index if not exists idx_guard_live_request_outbox_newest_ready
+        on guard_live_request_outbox (
+          workspace_id,
+          next_attempt_at,
+          changed_at desc,
+          sequence desc
+        )
+        """,
+        """
         create index if not exists idx_guard_live_request_outbox_request
         on guard_live_request_outbox (local_request_id, sequence)
         """,
@@ -177,6 +186,7 @@ class StoreLiveRequestOutboxMixin:
         now: str,
         limit: int,
         workspace_id: str | None = None,
+        newest_first: bool = False,
     ) -> list[dict[str, object]]:
         query = """
             select sequence, local_request_id, changed_at, attempt_count
@@ -187,7 +197,8 @@ class StoreLiveRequestOutboxMixin:
         if workspace_id is not None:
             query += " and workspace_id = ?"
             parameters.append(workspace_id)
-        query += " order by changed_at desc, sequence desc limit ?"
+        order = "changed_at desc, sequence desc" if newest_first else "sequence"
+        query += f" order by {order} limit ?"
         parameters.append(max(1, int(limit)))
         with self._connect() as connection:
             rows = connection.execute(query, parameters).fetchall()
