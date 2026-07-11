@@ -1612,6 +1612,12 @@ class TestStateAwareLiveRequestSync:
             events = kwargs["events"]
             assert isinstance(events, list)
             posted_batches.append(events)
+            if len(posted_batches) == 1:
+                return {
+                    "accepted": 0,
+                    "rejected": len(events),
+                    "cursor": "cloud-cursor-that-is-not-a-local-page-cursor",
+                }
             return {
                 "accepted": len(events),
                 "rejected": 0,
@@ -1629,17 +1635,79 @@ class TestStateAwareLiveRequestSync:
             "machine_installation_id": "22222222-2222-4222-8222-222222222222",
         }
 
-        first = sync_live_requests_once(store, auth_context)
-        second = sync_live_requests_once(store, auth_context)
+        rejected = sync_live_requests_once(store, auth_context)
+        accepted = sync_live_requests_once(store, auth_context)
+        unchanged = sync_live_requests_once(store, auth_context)
         store.rows[0]["last_seen_at"] = "2026-07-10T00:00:01+00:00"
-        third = sync_live_requests_once(store, auth_context)
+        changed = sync_live_requests_once(store, auth_context)
 
-        assert first["synced"] == 1
-        assert first["cursor"] is None
-        assert second["synced"] == 0
-        assert third["synced"] == 1
-        assert len(posted_batches) == 2
+        assert rejected["synced"] == 0
+        assert rejected["rejected"] == 1
+        assert accepted["synced"] == 1
+        assert accepted["cursor"] is None
+        assert unchanged["synced"] == 0
+        assert changed["synced"] == 1
+        assert len(posted_batches) == 3
         assert store.get_sync_payload(LIVE_REQUEST_SYNC_CURSOR_KEY) == {}
         fingerprints = store.get_sync_payload(LIVE_REQUEST_SYNC_FINGERPRINTS_KEY)
         assert isinstance(fingerprints, dict)
         assert set(fingerprints) == {"request-1"}
+
+    def test_scan_reaches_changed_requests_beyond_the_first_page(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        rows = [
+            {
+                "request_id": f"request-{index}",
+                "status": "pending",
+                "action_identity": f"test-action-{index}",
+                "trigger_summary": f"Review test action {index}",
+                "harness": "guard-review",
+                "created_at": f"2026-07-10T00:00:0{index}+00:00",
+                "last_seen_at": f"2026-07-10T00:00:0{index}+00:00",
+            }
+            for index in range(5)
+        ]
+
+        class PagedQueueStore(Store):
+            def list_approval_requests(
+                self,
+                *,
+                status: str | None = "pending",
+                harness: str | None = None,
+                limit: int | None = 50,
+                cursor: str | None = None,
+                search: str | None = None,
+            ) -> list[dict[str, object]]:
+                del status, harness, limit, search
+                return rows[:3] if cursor is None else rows[2:5]
+
+        store = PagedQueueStore(tmp_path)
+        monkeypatch.setattr(
+            live_request_sync_module,
+            "LIVE_REQUEST_SYNC_SCAN_PAGE_SIZE",
+            2,
+        )
+        monkeypatch.setattr(
+            live_request_sync_module,
+            "LIVE_REQUEST_SYNC_BATCH_SIZE",
+            2,
+        )
+        fingerprints = {
+            str(item["request_id"]): live_request_sync_module._request_sync_fingerprint(item) for item in rows[:2]
+        }
+
+        events, pending, next_cursor = live_request_sync_module._build_changed_sync_events(
+            store,
+            fingerprints,
+            cursor=None,
+        )
+
+        assert [event["localRequestId"] for event in events] == [
+            "request-2",
+            "request-3",
+        ]
+        assert set(pending) == {"request-2", "request-3"}
+        assert isinstance(next_cursor, str)

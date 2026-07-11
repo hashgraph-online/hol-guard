@@ -46,6 +46,7 @@ from ..review_contracts import (
     build_local_review_request_claim,
     guard_review_oauth_metadata,
 )
+from ..store_approvals import _encode_page_cursor
 from ..store import GuardStore
 from .local_request_snapshots import (
     _cloud_safe_local_request_payload,
@@ -68,7 +69,7 @@ _LIVE_REQUEST_SEQUENCE_LOCK = threading.Lock()
 LIVE_REQUEST_SYNC_CURSOR_KEY = "guard_live_request_sync_cursor"
 LIVE_REQUEST_SYNC_STATE_KEY = "guard_live_request_sync_state"
 LIVE_REQUEST_SYNC_FINGERPRINTS_KEY = "guard_live_request_sync_fingerprints"
-LIVE_REQUEST_SYNC_SCAN_LIMIT = 5_000
+LIVE_REQUEST_SYNC_SCAN_PAGE_SIZE = 500
 
 # Live request cloud sync constants
 _OUTBOX_STATE_KEY = "guard_live_request_outbox_state"
@@ -385,7 +386,9 @@ def _build_sync_events(
 def _build_changed_sync_events(
     store: GuardStore,
     fingerprints: dict[str, str],
-) -> tuple[list[dict[str, object]], dict[str, str]]:
+    *,
+    cursor: str | None,
+) -> tuple[list[dict[str, object]], dict[str, str], str | None]:
     redaction_level = _resolve_cloud_receipt_redaction_level(store)
     try:
         oauth = guard_review_oauth_metadata(store)
@@ -394,35 +397,43 @@ def _build_changed_sync_events(
 
     events: list[dict[str, object]] = []
     pending_fingerprints: dict[str, str] = {}
-    rows = store.list_approval_requests(
-        status=None,
-        limit=LIVE_REQUEST_SYNC_SCAN_LIMIT,
-        cursor=None,
-    )
-    for item in rows:
-        request_id_value = item.get("request_id")
-        if not isinstance(request_id_value, str) or not request_id_value:
-            continue
-        fingerprint = _request_sync_fingerprint(item)
-        if fingerprints.get(request_id_value) == fingerprint:
-            continue
-        sequence = _next_local_event_sequence(store)
-        event = _build_live_request_event(
-            item,
-            redaction_level=redaction_level,
-            oauth=oauth,
-            store=store,
-            event_sequence=sequence,
+    scan_cursor = cursor
+    while True:
+        rows = store.list_approval_requests(
+            status=None,
+            limit=LIVE_REQUEST_SYNC_SCAN_PAGE_SIZE + 1,
+            cursor=scan_cursor,
         )
-        if event is None:
-            continue
-        events.append(event)
-        pending_fingerprints[request_id_value] = fingerprint
-        _save_local_event_sequence(store, sequence)
-        if len(events) >= LIVE_REQUEST_SYNC_BATCH_SIZE:
-            break
+        page_rows = rows[:LIVE_REQUEST_SYNC_SCAN_PAGE_SIZE]
+        if not page_rows:
+            return events, pending_fingerprints, None
 
-    return events, pending_fingerprints
+        for item in page_rows:
+            request_id_value = item.get("request_id")
+            if not isinstance(request_id_value, str) or not request_id_value:
+                continue
+            fingerprint = _request_sync_fingerprint(item)
+            if fingerprints.get(request_id_value) == fingerprint:
+                continue
+            sequence = _next_local_event_sequence(store)
+            event = _build_live_request_event(
+                item,
+                redaction_level=redaction_level,
+                oauth=oauth,
+                store=store,
+                event_sequence=sequence,
+            )
+            if event is None:
+                continue
+            events.append(event)
+            pending_fingerprints[request_id_value] = fingerprint
+            _save_local_event_sequence(store, sequence)
+            if len(events) >= LIVE_REQUEST_SYNC_BATCH_SIZE:
+                return events, pending_fingerprints, _encode_page_cursor(item)
+
+        if len(rows) <= LIVE_REQUEST_SYNC_SCAN_PAGE_SIZE:
+            return events, pending_fingerprints, None
+        scan_cursor = _encode_page_cursor(page_rows[-1])
 
 
 def _post_sync_events(
@@ -489,12 +500,14 @@ def sync_live_requests_once(
     total_rejected = 0
     all_errors: list[str] = []
     batches = 0
+    scan_cursor: str | None = None
 
     try:
         while batches < LIVE_REQUEST_SYNC_MAX_BATCHES:
-            events, pending_fingerprints = _build_changed_sync_events(
+            events, pending_fingerprints, next_scan_cursor = _build_changed_sync_events(
                 store,
                 fingerprints,
+                cursor=scan_cursor,
             )
             if not events:
                 break
@@ -523,10 +536,12 @@ def sync_live_requests_once(
             if accounted != len(events):
                 all_errors.append("Cloud live request sync acknowledgement count did not match the batch.")
                 break
-            fingerprints.update(pending_fingerprints)
-            _save_sync_fingerprints(store, fingerprints)
             if rejected:
                 all_errors.append(f"{rejected} live request events were rejected.")
+                break
+            fingerprints.update(pending_fingerprints)
+            _save_sync_fingerprints(store, fingerprints)
+            scan_cursor = next_scan_cursor
             batches += 1
 
         _save_sync_cursor(store, None)
