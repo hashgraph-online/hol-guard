@@ -33,6 +33,8 @@ class GuardStore(
     StoreConnectionSchemaMixin,
     StoreInventoryMixin,
     StorePolicyMixin,
+    StorePolicyIntegrityAdminMixin,
+    StoreCloudEventsMixin,
     StoreReceiptsRuntimeMixin,
     StoreApprovalsMixin,
     StoreEventReceiptsMixin,

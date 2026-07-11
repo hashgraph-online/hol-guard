@@ -1639,6 +1639,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"ids": store.get_read_state()})
             return
         if parsed.path in _ROOT_STATIC_FILES:
+            self._write_static_asset(parsed.path.removeprefix("/"))
             return
         if parsed.path.startswith("/assets/") or parsed.path.startswith("/brand/"):
             self._write_static_asset(parsed.path.removeprefix("/"))
@@ -4638,6 +4639,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/requests/remote-once",
             "/v1/settings/import",
             "/v1/settings/reset",
+            "/v1/read-state",
             "/v1/policy/clear",
             "/v1/approval-gate/cooldown/revoke",
             "/v1/approval-gate/totp/enroll",
@@ -4921,6 +4923,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/settings/export",
             "/v1/settings/import",
             "/v1/settings/reset",
+            "/v1/read-state",
             "/v1/update",
             "/v1/update/status",
         }:

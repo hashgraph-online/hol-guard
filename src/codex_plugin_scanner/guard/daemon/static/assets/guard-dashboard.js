@@ -15878,6 +15878,7 @@ async function postReadStateMarkRead(requestId) {
   }
   return readJson("/v1/read-state", {
     method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
     body: JSON.stringify({ action: "mark_read", request_id: requestId })
   });
 }
@@ -15887,6 +15888,7 @@ async function postReadStateMarkUnread(requestId) {
   }
   return readJson("/v1/read-state", {
     method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
     body: JSON.stringify({ action: "mark_unread", request_id: requestId })
   });
 }
@@ -15896,6 +15898,7 @@ async function postReadStateMarkAllRead(requestIds) {
   }
   return readJson("/v1/read-state", {
     method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
     body: JSON.stringify({ action: "mark_all_read", request_ids: requestIds })
   });
 }

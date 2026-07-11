@@ -452,6 +452,10 @@ class StoreConnectionSchemaMixin:
               read_at text not null
             )
             """,
+            """
+            create index if not exists idx_guard_request_read_state_read_at
+            on guard_request_read_state (read_at desc)
+            """,
             resume_schema_statement(),
             connect_state_schema_statement(),
             connect_request_schema_statement(),

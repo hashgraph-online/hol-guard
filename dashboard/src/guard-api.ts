@@ -1128,6 +1128,7 @@ export async function postReadStateMarkRead(requestId: string): Promise<GuardRea
   }
   return readJson<GuardReadStatePayload>("/v1/read-state", {
     method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
     body: JSON.stringify({ action: "mark_read", request_id: requestId }),
   });
 }
@@ -1138,6 +1139,7 @@ export async function postReadStateMarkUnread(requestId: string): Promise<GuardR
   }
   return readJson<GuardReadStatePayload>("/v1/read-state", {
     method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
     body: JSON.stringify({ action: "mark_unread", request_id: requestId }),
   });
 }
@@ -1148,6 +1150,7 @@ export async function postReadStateMarkAllRead(requestIds: string[]): Promise<Gu
   }
   return readJson<GuardReadStatePayload>("/v1/read-state", {
     method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
     body: JSON.stringify({ action: "mark_all_read", request_ids: requestIds }),
   });
 }
