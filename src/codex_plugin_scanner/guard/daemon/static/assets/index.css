@@ -4698,10 +4698,6 @@
         background-color: color-mix(in srgb,var(--brand-blue) 85%,var(--brand-dark));
       }
     }
-
-    .group-hover\:opacity-100:is(:where(.group):hover *) {
-      opacity: 1;
-    }
   }
 
   .placeholder\:text-slate-400::placeholder {
@@ -4973,6 +4969,10 @@
       }
     }
 
+    .hover\:bg-slate-200:hover {
+      background-color: var(--color-slate-200);
+    }
+
     .hover\:bg-slate-200\/50:hover {
       background-color: #e2e8f080;
     }
@@ -5195,10 +5195,6 @@
 
   .focus\:text-white:focus {
     color: var(--color-white);
-  }
-
-  .focus\:opacity-100:focus {
-    opacity: 1;
   }
 
   .focus\:ring-1:focus {
@@ -5744,8 +5740,8 @@
       grid-template-columns: 180px minmax(0, 1fr);
     }
 
-    .md\:grid-cols-\[260px_minmax\(0\,1fr\)\] {
-      grid-template-columns: 260px minmax(0, 1fr);
+    .md\:grid-cols-\[320px_minmax\(0\,1fr\)\] {
+      grid-template-columns: 320px minmax(0, 1fr);
     }
 
     .md\:grid-cols-\[minmax\(0\,1fr\)_200px\] {
@@ -5838,8 +5834,8 @@
       grid-template-columns: 1fr 340px;
     }
 
-    .lg\:grid-cols-\[280px_minmax\(0\,1fr\)\] {
-      grid-template-columns: 280px minmax(0, 1fr);
+    .lg\:grid-cols-\[340px_minmax\(0\,1fr\)\] {
+      grid-template-columns: 340px minmax(0, 1fr);
     }
 
     .lg\:grid-cols-\[minmax\(0\,0\.92fr\)_minmax\(0\,1\.08fr\)\] {
@@ -5978,8 +5974,8 @@
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
-    .xl\:grid-cols-\[300px_minmax\(0\,1fr\)\] {
-      grid-template-columns: 300px minmax(0, 1fr);
+    .xl\:grid-cols-\[360px_minmax\(0\,1fr\)\] {
+      grid-template-columns: 360px minmax(0, 1fr);
     }
 
     .xl\:grid-cols-\[minmax\(0\,1fr\)_280px\] {

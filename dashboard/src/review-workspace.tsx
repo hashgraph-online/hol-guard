@@ -19,6 +19,7 @@ import {
   HiMiniCube,
   HiMiniDocumentMagnifyingGlass,
   HiMiniDocumentPlus,
+  HiMiniEnvelopeOpen,
   HiMiniGlobeAlt,
   HiMiniKey,
   HiMiniPencilSquare,
@@ -377,7 +378,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
         </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)] items-start">
+      <div className="grid gap-4 md:grid-cols-[320px_minmax(0,1fr)] lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)] items-start">
         <div className={`${mobileQueueOpen ? "block" : "hidden"} md:block`}>
           <ReviewQueueList
             requests={pagedRequests}
@@ -658,7 +659,7 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
             type="search"
             value={searchTerm}
             onChange={handleSearchChange}
-            placeholder="Search command, category, host..."
+            placeholder="Search queue..."
             className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           />
         </label>
@@ -941,7 +942,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
           aria-posinset={index + 1}
           aria-setsize={undefined}
           tabIndex={active ? 0 : -1}
-          className="group flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
           <div className="flex min-w-0 items-center gap-2">
             <span
@@ -960,23 +961,33 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
               </p>
             </div>
           </div>
-          <span
-            className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-              active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"
-            }`}
-          >
-            <CategoryIcon className="h-4 w-4" aria-hidden="true" />
-          </span>
         </button>
-        <button
-          type="button"
-          onClick={handleMarkUnread}
-          aria-label={`Mark request ${preview} unread`}
-          title="Mark unread"
-          className="opacity-0 group-hover:opacity-100 focus:opacity-100 shrink-0 rounded-md p-1 text-[11px] font-medium text-slate-500 hover:bg-slate-100 hover:text-brand-dark transition-opacity"
+        <div
+          className="relative inline-flex shrink-0 cursor-pointer items-center justify-center"
+          onClick={handleClick}
         >
-          Mark unread
-        </button>
+          {isRead ? (
+            <button
+              type="button"
+              onClick={handleMarkUnread}
+              aria-label={`Mark request ${preview} unread`}
+              title="Mark unread"
+              className={`inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200 hover:text-brand-dark transition-colors ${
+                active ? "bg-brand-blue/10" : "bg-slate-50"
+              }`}
+            >
+              <HiMiniEnvelopeOpen className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          ) : (
+            <span
+              className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${
+                active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"
+              }`}
+            >
+              <CategoryIcon className="h-4 w-4" aria-hidden="true" />
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
