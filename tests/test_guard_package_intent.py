@@ -132,14 +132,16 @@ def test_parse_package_intent_skips_verified_local_test_runner_execution(tmp_pat
     _write_text(runner, "#!/bin/sh\n")
     runner.chmod(0o755)
 
-    assert parse_package_intent("bunx vitest run tests/example.test.ts", workspace=tmp_path) is None
+    assert parse_package_intent("bunx --no-install vitest run tests/example.test.ts", workspace=tmp_path) is None
     assert parse_package_intent("npx --no-install vitest --run tests/example.test.ts", workspace=tmp_path) is None
-    assert parse_package_intent("bunx vitest --help", workspace=tmp_path) is None
+    assert parse_package_intent("bunx vitest --run tests/example.test.ts", workspace=tmp_path) is not None
+    assert parse_package_intent("bunx vitest --help", workspace=tmp_path) is not None
+    assert parse_package_intent("bunx vitest --no-install", workspace=tmp_path) is not None
     assert (
         extract_package_intent_request(
             "Bash",
-            {"command": "bunx vitest run tests/example.test.ts"},
-            action_envelope_command="bunx vitest run tests/example.test.ts",
+            {"command": "bunx --no-install vitest run tests/example.test.ts"},
+            action_envelope_command="bunx --no-install vitest run tests/example.test.ts",
             workspace=tmp_path,
         )
         is None
@@ -219,7 +221,7 @@ def test_parse_package_intent_skips_verified_local_jest_and_mocha_runs(tmp_path:
         runner.chmod(0o755)
 
     assert parse_package_intent("npx --no-install jest tests/unit.test.js", workspace=tmp_path) is None
-    assert parse_package_intent("bunx mocha test/unit.test.js", workspace=tmp_path) is None
+    assert parse_package_intent("bunx --no-install mocha test/unit.test.js", workspace=tmp_path) is None
 
 
 def test_parse_package_intent_skips_verified_local_declared_executable(tmp_path: Path) -> None:
@@ -229,7 +231,7 @@ def test_parse_package_intent_skips_verified_local_declared_executable(tmp_path:
     _write_text(executable, "#!/bin/sh\n")
     executable.chmod(0o755)
 
-    assert parse_package_intent("bunx eslint .", workspace=tmp_path) is None
+    assert parse_package_intent("bunx --no-install eslint .", workspace=tmp_path) is None
 
 
 @pytest.mark.parametrize(
