@@ -14,8 +14,10 @@ ready.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any
 
 from .edge_events import build_memory_decision_event_envelope
@@ -24,6 +26,7 @@ from .memory_decision_event import (
     build_memory_decision_event,
     event_to_cloud_payload,
 )
+from .receipts.manager import build_receipt
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -66,6 +69,15 @@ def enqueue_memory_decision_event(
         )
         if event is None:
             return False
+        source_receipt_id = _ensure_source_receipt_id(
+            store,
+            enriched_request,
+            decision_action=event.decision_action,
+            scope=scope,
+        )
+        if source_receipt_id is None:
+            return False
+        event = replace(event, source_receipt_id=source_receipt_id)
 
         envelope = build_memory_decision_event_envelope(
             request_id=event.request_id,
@@ -120,6 +132,91 @@ def _resolve_owner_user_id(store: Any) -> str | None:
         value = credentials.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
+    return None
+
+
+def _ensure_source_receipt_id(
+    store: Any,
+    request: Mapping[str, object],
+    *,
+    decision_action: str,
+    scope: str,
+) -> str | None:
+    for key in ("source_receipt_id", "sourceReceiptId", "receipt_id", "receiptId"):
+        value = request.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    request_id = _request_string(request, "request_id")
+    if request_id is None:
+        return None
+    policy_decision = {
+        "approved": "allow",
+        "blocked": "block",
+        "dismissed_keep_asking": "require-reapproval",
+    }.get(decision_action)
+    if policy_decision is None:
+        return None
+
+    getter = getattr(store, "get_receipt_for_approval_request", None)
+    if callable(getter):
+        try:
+            receipt = getter(request_id, policy_decision=policy_decision)
+        except Exception:
+            receipt = None
+        receipt_id = _receipt_id(receipt)
+        if receipt_id is not None:
+            return receipt_id
+
+    add_receipt = getattr(store, "add_receipt", None)
+    if not callable(add_receipt):
+        return None
+    raw_command = _request_string(request, "raw_command_text", "review_command")
+    artifact_id = _request_string(request, "artifact_id") or f"approval-request:{request_id}"
+    artifact_identity = raw_command or artifact_id
+    artifact_hash = _request_string(request, "artifact_hash") or (
+        "sha256:" + hashlib.sha256(artifact_identity.encode()).hexdigest()
+    )
+    receipt = build_receipt(
+        harness=_request_string(request, "harness") or "guard",
+        artifact_id=artifact_id,
+        artifact_hash=artifact_hash,
+        policy_decision=policy_decision,
+        capabilities_summary=_request_string(request, "capabilities_summary") or "approval decision",
+        changed_capabilities=[],
+        provenance_summary="Guard approval decision",
+        artifact_name=_request_string(request, "artifact_name"),
+        source_scope=scope,
+        approval_source="memory_decision",
+        approval_request_id=request_id,
+        raw_command_text=raw_command,
+    )
+    deterministic_receipt_id = (
+        "guard-receipt-memory-" + hashlib.sha256(f"{request_id}:{policy_decision}".encode()).hexdigest()[:32]
+    )
+    receipt = replace(receipt, receipt_id=deterministic_receipt_id)
+    add_receipt(receipt)
+    _LOGGER.info(
+        "Created durable receipt for memory decision",
+        extra={"decision_action": decision_action, "scope": scope},
+    )
+    return receipt.receipt_id
+
+
+def _request_string(request: Mapping[str, object], *keys: str) -> str | None:
+    for key in keys:
+        value = request.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _receipt_id(receipt: object) -> str | None:
+    if not isinstance(receipt, Mapping):
+        return None
+    value = receipt.get("receipt_id")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
     return None
 
 
