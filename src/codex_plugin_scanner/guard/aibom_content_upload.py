@@ -186,10 +186,12 @@ def _prepared_upload_item(source: GuardAibomPrimaryContentSource) -> tuple[dict[
         return None
     return (
         {
+            "agentId": source.agent_id,
             "bodyBase64": base64.b64encode(body).decode("ascii"),
             "contentHash": source.content_hash,
             "itemKind": source.item_kind,
             "itemId": source.item_id,
+            "snapshotId": source.snapshot_id,
             "versionId": source.version_id,
             "mimeType": source.mime_type,
             "evidenceAuthority": "device_claim",

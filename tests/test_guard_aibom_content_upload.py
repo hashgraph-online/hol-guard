@@ -443,7 +443,9 @@ def test_primary_content_upload_batches_exact_bodies_and_item_count(tmp_path: Pa
     )
     first_item = json.loads(requests[0].data)["items"][0]
     assert first_item["bodyBase64"] == "IyBTa2lsbCAwCg=="
+    assert first_item["agentId"] == sources[0].agent_id
     assert first_item["contentHash"] == sources[0].content_hash
+    assert first_item["snapshotId"] == sources[0].snapshot_id
     assert first_item["versionId"] == sources[0].version_id
 
 
