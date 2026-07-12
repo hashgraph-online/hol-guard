@@ -47,7 +47,7 @@ def enqueue_memory_decision_event(
         workspace_id = _resolve_workspace_id(store)
         device_id, machine_installation_id = _resolve_device_metadata(store)
         owner_user_id = _resolve_owner_user_id(store)
-        machine_id = _resolve_oauth_machine_id(store) or machine_installation_id
+        machine_id = _resolve_oauth_machine_id(store) or device_id
         redaction_enabled = _resolve_redaction_enabled(store)
 
         enriched_request = _request_with_project_identity(store, request)
@@ -109,8 +109,7 @@ def _resolve_device_metadata(store: Any) -> tuple[str | None, str | None]:
         return None, None
     installation_id = metadata.get("installation_id")
     device_id = installation_id if isinstance(installation_id, str) and installation_id.strip() else None
-    machine_installation_id = device_id
-    return device_id, machine_installation_id
+    return device_id, None
 
 
 def _resolve_owner_user_id(store: Any) -> str | None:

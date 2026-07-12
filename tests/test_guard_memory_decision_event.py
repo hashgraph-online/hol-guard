@@ -420,6 +420,9 @@ class TestMemoryDecisionOutboxEnqueue:
         assert payload["eventType"] == "approval.memory_decision"
         assert payload["payload"]["decision_action"] == "approved"
         assert payload["payload"]["contractVersion"] == MEMORY_DECISION_EVENT_CONTRACT_VERSION
+        assert payload["payload"]["device_id"] is not None
+        assert payload["payload"]["machine_id"] is not None
+        assert payload["payload"]["machine_installation_id"] is None
 
     def test_enqueue_includes_project_identity_from_guard_operation(self, tmp_path: Path) -> None:
         store = _store(tmp_path)
