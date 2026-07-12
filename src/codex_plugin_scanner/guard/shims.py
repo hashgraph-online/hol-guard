@@ -42,6 +42,7 @@ HarnessContext = HarnessContextLike
 _PACKAGE_SHIM_COMMANDS = {
     "brew": "brew",
     "bun": "bun",
+    "bunx": "bunx",
     "bundle": "bundle",
     "cargo": "cargo",
     "composer": "composer",
@@ -61,6 +62,7 @@ _PACKAGE_SHIM_COMMANDS = {
     "yarn": "yarn",
 }
 _PACKAGE_SHIM_MANIFEST = "manifest.json"
+_LOCAL_TEST_RUNNER_COMMANDS = frozenset({"jest", "mocha", "vitest"})
 _GUARD_PROFILE_MARKER = "# HOL Guard harness launchers"
 _PACKAGE_PROFILE_MARKER = "# HOL Guard package manager shims"
 _PACKAGE_SHIM_PROBE_TIMEOUT_SECONDS = int(SQLITE_CONNECT_TIMEOUT_SECONDS) + 5
@@ -1015,6 +1017,7 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             f"guard_workspace = {str(context.workspace_dir) if context.workspace_dir is not None else None!r}",
             f"guard_has_explicit_workspace = {context.workspace_dir is not None!r}",
             f"shim_dir = {str(shim_dir.resolve())!r}",
+            f"local_test_runners = {tuple(sorted(_LOCAL_TEST_RUNNER_COMMANDS))!r}",
             "def _exec_real_manager():",
             "    path_entries = [entry for entry in os.environ.get('PATH', '').split(os.pathsep) if entry]",
             "    shim_dir_abs = os.path.abspath(shim_dir)",
@@ -1026,12 +1029,27 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             "        raise SystemExit(127)",
             "    manager_env = dict(os.environ)",
             "    manager_env['PATH'] = filtered_path",
+            "    manager_args = list(sys.argv[1:])",
+            "    local_only_flag = {'bunx': '--no-install', 'npx': '--no'}.get(command_name)",
+            "    leading_test_runner_flags = (",
+            "        {'--bun', '--no-install'} if command_name == 'bunx' else {'--no', '--no-install'}",
+            "    )",
+            "    runner_index = 0",
+            "    while runner_index < len(manager_args) and manager_args[runner_index] in leading_test_runner_flags:",
+            "        runner_index += 1",
+            "    if (",
+            "        local_only_flag is not None",
+            "        and runner_index < len(manager_args)",
+            "        and manager_args[runner_index] in local_test_runners",
+            "        and local_only_flag not in manager_args[:runner_index]",
+            "    ):",
+            "        manager_args.insert(runner_index, local_only_flag)",
             "    if os.name == 'nt':",
             "        try:",
-            "            raise SystemExit(subprocess.call([resolved_command, *sys.argv[1:]], env=manager_env))",
+            "            raise SystemExit(subprocess.call([resolved_command, *manager_args], env=manager_env))",
             "        except KeyboardInterrupt:",
             "            raise SystemExit(130)",
-            "    os.execvpe(resolved_command, [resolved_command, *sys.argv[1:]], manager_env)",
+            "    os.execvpe(resolved_command, [resolved_command, *manager_args], manager_env)",
             "def _command_requires_guard():",
             f"    if os.environ.get({SHIM_PROBE_ENV_VAR!r}) == {SHIM_PROBE_ENV_VALUE!r}:",
             "        return True",

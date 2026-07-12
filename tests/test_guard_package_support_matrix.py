@@ -76,6 +76,7 @@ def test_supported_managers_snapshot() -> None:
         "brew",
         "bun",
         "bundle",
+        "bunx",
         "cargo",
         "composer",
         "go",
