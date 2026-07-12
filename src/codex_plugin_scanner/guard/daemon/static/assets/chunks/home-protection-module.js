@@ -67,7 +67,7 @@ function HomeProtectionModule({
   const statusBorderClass = status === "protected" ? "border-brand-green/20 bg-brand-green/[0.04]" : status === "staged" ? "border-brand-blue/20 bg-brand-blue/[0.04]" : status === "partial" ? "border-brand-attention/20 bg-brand-attention/[0.04]" : status === "unprotected" ? "border-red-200 bg-red-50/60" : "border-slate-200 bg-slate-50/60";
   const StatusIcon = status === "protected" ? HiMiniShieldCheck : status === "staged" ? HiMiniInformationCircle : status === "partial" || status === "unprotected" ? HiMiniExclamationTriangle : HiMiniInformationCircle;
   const statusIconClass = status === "protected" ? "text-brand-green" : status === "staged" ? "text-brand-blue" : status === "partial" || status === "unprotected" ? "text-brand-attention" : "text-slate-400";
-  const statusLabel = status === "protected" ? "Package managers protected" : status === "staged" ? "Protection staged — restart shell or apps" : status === "partial" ? "Some package managers unprotected" : status === "unprotected" ? "Package managers unprotected" : "Supply chain status unknown";
+  const statusLabel = status === "protected" ? "Package managers protected" : status === "staged" ? "Protection staged, finish activation" : status === "partial" ? "Some package managers unprotected" : status === "unprotected" ? "Package managers unprotected" : "Supply chain status unknown";
   const handleToggle = () => setExpanded((prev) => !prev);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "section",

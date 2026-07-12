@@ -240,12 +240,12 @@ const restartRequiredProtection: PackageManagerProtection = {
 const restartRequiredCopy = resolvePackageManagerProtectionCopy(restartRequiredProtection);
 assert(restartRequiredCopy.pathTone === "blue", "SC2b: restart_required tone should use blue");
 assert(
-  restartRequiredCopy.pathLabel.toLowerCase().includes("restart"),
-  `SC2b: restart_required label should mention restart — got: "${restartRequiredCopy.pathLabel}"`
+  restartRequiredCopy.pathLabel.toLowerCase().includes("activation"),
+  `SC2b: restart_required label should direct activation — got: "${restartRequiredCopy.pathLabel}"`
 );
 assert(
-  restartRequiredCopy.pathDetail.toLowerCase().includes("restart") || restartRequiredCopy.pathDetail.toLowerCase().includes("new shell"),
-  `SC2b: restart_required detail should explain next step — got: "${restartRequiredCopy.pathDetail}"`
+  restartRequiredCopy.pathDetail.toLowerCase().includes("finish activation"),
+  `SC2b: restart_required detail should explain the recovery action — got: "${restartRequiredCopy.pathDetail}"`
 );
 
 const absentCopy = resolvePackageManagerProtectionCopy(undefined);

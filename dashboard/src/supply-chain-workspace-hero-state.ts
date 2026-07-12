@@ -44,7 +44,7 @@ function protectionDetail(
     } still open: ${protection.unprotected_managers.join(", ")}.`;
   }
   if (status === "staged") {
-    return "Guard updated your shell profile. Open a new terminal, then run a protection test.";
+    return "Guard saved your shell setup. Finish activation here, then run a protection check.";
   }
   if (status === "unprotected") {
     return "Turn on protection for npm, pip, and other tools in the firewall panel below.";

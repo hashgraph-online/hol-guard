@@ -122,16 +122,36 @@ assert(
   "SCSR170-D: paired cloud skips connect issue",
 );
 
+const restartRequiredIssues = resolveSupplyChainIssues({
+  ...baseSnapshot,
+  cloud_state: "paired_active",
+  cloud_state_label: "Connected",
+  supply_chain: {
+    package_manager_protection: makeProtection({
+      installed_managers: ["npm"],
+      path_contains_shim_dir: false,
+      path_status: "restart_required",
+      restart_shell_required: true,
+    }),
+  },
+});
+assert(
+  restartRequiredIssues.some(
+    (issue) => issue.id === "path_restart" && issue.action.kind === "activate_runtime",
+  ),
+  "SCSR170-E: restart-required recovery activates the Guard runtime instead of opening a terminal",
+);
+
 const compactHero = resolveSupplyChainWorkspaceHero(localPartialSnapshot, {
   openIssueCount: localPartialIssues.length,
 });
 assert(
   compactHero.title === "Work through the steps below",
-  "SCSR170-E: compact hero defers detail to issue carousel",
+  "SCSR170-F: compact hero defers detail to issue carousel",
 );
 assert(
   compactHero.detail.includes("2 setup steps"),
-  "SCSR170-F: compact hero summarizes open issue count",
+  "SCSR170-G: compact hero summarizes open issue count",
 );
 
 const staleDate = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
@@ -157,7 +177,7 @@ const staleIssues = resolveSupplyChainIssues({
 });
 assert(
   staleIssues.some((issue) => issue.id === "stale_intel" && issue.action.kind === "firewall_audit"),
-  "SCSR170-G: stale intel issue routes to workspace audit",
+  "SCSR170-H: stale intel issue routes to workspace audit",
 );
 
 console.log("supply-chain-issues.test.ts: all assertions passed");

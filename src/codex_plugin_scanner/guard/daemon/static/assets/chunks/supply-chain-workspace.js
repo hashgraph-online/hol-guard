@@ -539,7 +539,7 @@ function resolveSupplyChainIssues(snapshot) {
     issues.push({
       id: "path_missing",
       title: "Package installs are not being checked yet",
-      detail: "Guard has not hooked into your shell path yet. Turn on protection for your package tools, then open a new terminal.",
+      detail: "Guard has not activated package protection yet. Turn on protection for your package tools, then finish activation here.",
       tone: "attention",
       actionLabel: "Protect package tools",
       action: { kind: "firewall_unprotected" }
@@ -560,11 +560,11 @@ function resolveSupplyChainIssues(snapshot) {
   } else if (protection?.path_status === "restart_required" || stats.stagedManagers > 0) {
     issues.push({
       id: "path_restart",
-      title: "Open a new terminal to finish setup",
-      detail: "Guard updated your shell profile. Open a new terminal or restart your AI apps before running a protection test.",
+      title: "Finish activation in Guard",
+      detail: "Guard saved your shell setup. Finish activation here, then run a protection check from this dashboard.",
       tone: "blue",
-      actionLabel: "Open new shell",
-      action: { kind: "open_shell" }
+      actionLabel: "Finish activation",
+      action: { kind: "activate_runtime" }
     });
   }
   if (protectionStatus === "partial" && protection !== void 0 && protection.protected_managers.length > 0 && protection.unprotected_managers.length > 0) {
@@ -625,7 +625,7 @@ function protectionDetail(snapshot, status) {
     return `${protection.unprotected_managers.length} tool${protection.unprotected_managers.length === 1 ? "" : "s"} still open: ${protection.unprotected_managers.join(", ")}.`;
   }
   if (status === "staged") {
-    return "Guard updated your shell profile. Open a new terminal, then run a protection test.";
+    return "Guard saved your shell setup. Finish activation here, then run a protection check.";
   }
   if (status === "unprotected") {
     return "Turn on protection for npm, pip, and other tools in the firewall panel below.";
@@ -1030,8 +1030,9 @@ function SupplyChainWorkspace({
           await onRuntimeRefresh?.();
           return;
         }
-        if (action.kind === "open_shell") {
-          await panel.openShell();
+        if (action.kind === "activate_runtime") {
+          await panel.activateRuntime();
+          await onRuntimeRefresh?.();
         }
       } finally {
         setIssueActionPending(false);

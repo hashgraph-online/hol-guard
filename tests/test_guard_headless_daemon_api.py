@@ -1413,15 +1413,27 @@ def test_supply_chain_package_firewall_status_accepts_paid_oauth_entitlement(tmp
     }
 
 
-def test_supply_chain_package_firewall_open_shell_endpoint_returns_activation_launch_status(
+def test_supply_chain_package_firewall_activate_endpoint_activates_runtime_session(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {"tier": "premium", "workspace_id": "workspace-1"},
+        "2026-05-27T16:00:00.000Z",
+    )
     monkeypatch.setattr(
         daemon_server,
-        "_open_package_firewall_activation_shell",
-        lambda: (200, {"status": "opened", "message": "Opened a new Terminal window with a fresh shell session."}),
+        "_activate_package_firewall_runtime",
+        lambda _context: (
+            200,
+            {
+                "status": "verified",
+                "message": "Guard verified the installed package shim.",
+            },
+        ),
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -1430,7 +1442,7 @@ def test_supply_chain_package_firewall_open_shell_endpoint_returns_activation_la
         status, payload = _read_json_response(
             _request(
                 daemon.port,
-                "/v1/supply-chain/package-shims/open-shell",
+                "/v1/supply-chain/package-shims/activate",
                 token=token,
                 payload={},
             ),
@@ -1439,8 +1451,39 @@ def test_supply_chain_package_firewall_open_shell_endpoint_returns_activation_la
         daemon.stop()
 
     assert status == 200
-    assert payload["status"] == "opened"
-    assert "fresh shell session" in payload["message"]
+    assert payload["status"] == "verified"
+    assert "installed package shim" in payload["message"]
+
+
+def test_package_firewall_activation_uses_scoped_shim_proof(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    (guard_home / "package-shims" / "bin").mkdir(parents=True)
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=None,
+        guard_home=guard_home,
+    )
+    monkeypatch.setattr(
+        daemon_server,
+        "package_shim_status",
+        lambda _context: {"installed_managers": ["npx"], "path_active": False},
+    )
+    monkeypatch.setattr(
+        daemon_server,
+        "probe_package_shim_intercepts",
+        lambda _context, **_kwargs: {"intercept_proved": True},
+    )
+    previous_path = daemon_server.os.environ.get("PATH")
+
+    status, body = daemon_server._activate_package_firewall_runtime(context)
+
+    assert status == 200
+    assert body["status"] == "verified"
+    assert body["proof"] == {"intercept_proved": True}
+    assert daemon_server.os.environ.get("PATH") == previous_path
 
 
 def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(

@@ -81,7 +81,7 @@ function FailureBanner({ failed }: { failed: FirewallFailedOp }) {
 
 export type FirewallControlsViewProps = {
   activationAssistError: string | null;
-  openingShell: boolean;
+  activatingRuntime: boolean;
   data: PackageFirewallStatusResponse;
   pendingOp: FirewallPendingOp | null;
   lastCompleted: CompletedOp | null;
@@ -101,14 +101,14 @@ export type FirewallControlsViewProps = {
   onAudit: () => void;
   onSync: () => void;
   onDismissResult: () => void;
-  onOpenShell: () => void;
+  onActivateRuntime: () => void;
   onRefreshStatus: () => void;
   onOpenManagerDetails: (manager: string) => void;
 };
 
 export function FirewallControlsView({
   activationAssistError,
-  openingShell,
+  activatingRuntime,
   data,
   pendingOp,
   lastCompleted,
@@ -128,7 +128,7 @@ export function FirewallControlsView({
   onAudit,
   onSync,
   onDismissResult,
-  onOpenShell,
+  onActivateRuntime,
   onRefreshStatus,
   onOpenManagerDetails,
 }: FirewallControlsViewProps) {
@@ -190,8 +190,8 @@ export function FirewallControlsView({
       <ActivationSummary
         activationAssistError={activationAssistError}
         lastAuditProofAt={data.last_audit_proof_at}
-        openingShell={openingShell}
-        onOpenShell={onOpenShell}
+        activatingRuntime={activatingRuntime}
+        onActivateRuntime={onActivateRuntime}
         onRefreshStatus={onRefreshStatus}
         protection={data.protection}
       />
