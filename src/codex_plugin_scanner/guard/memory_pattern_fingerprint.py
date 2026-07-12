@@ -113,6 +113,8 @@ def build_memory_pattern_fingerprint(
             harness,
         )
     else:
+        if command is not None and _has_unquoted_shell_control_operator(command):
+            return None
         candidate = (
             _try_package_install(command, harness)
             or _try_mcp_tool(command, harness, artifact_id)
@@ -132,6 +134,27 @@ def _is_generic_label(fingerprint: str) -> bool:
     if not normalized:
         return True
     return normalized in _GENERIC_FINGERPRINT_LABELS
+
+
+def _has_unquoted_shell_control_operator(command: str) -> bool:
+    quote: str | None = None
+    escaped = False
+    for character in command:
+        if escaped:
+            escaped = False
+            continue
+        if character == "\\" and quote != "'":
+            escaped = True
+            continue
+        if character in {"'", '"'}:
+            if quote is None:
+                quote = character
+            elif quote == character:
+                quote = None
+            continue
+        if quote is None and character in {"\n", ";", "&", "|"}:
+            return True
+    return False
 
 
 def _normalize_token(value: str | None) -> str | None:
