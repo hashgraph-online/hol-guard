@@ -379,7 +379,7 @@ def _execute_approval_operation(
     if resolved:
         enqueue_memory_decision_event(
             store,
-            request=request_row,
+            request={**request_row, "source_receipt_id": receipt_id},
             action=resolution_action,
             scope=resolution_scope,
             resolved_at=generated_at,
