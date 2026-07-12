@@ -14,6 +14,8 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
@@ -48,12 +50,17 @@ jobs:
         env:
           GITHUB_REF: ${{ github.ref }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BASE_VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           VERSION="$BASE_VERSION"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
+          elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            VERSION="${BASE_VERSION}.dev${PR_NUMBER}$(printf '%06d' "$GITHUB_RUN_NUMBER")$(printf '%02d' "$GITHUB_RUN_ATTEMPT")"
           elif [[ ("$GITHUB_EVENT_NAME" == "push" || "$GITHUB_EVENT_NAME" == "workflow_dispatch") && "$GITHUB_REF" == "refs/heads/main" ]]; then
             # Check git tags first
             LAST_TAG=$(git tag --list 'v*' --sort=-version:refname 2>/dev/null | head -n1)
@@ -152,7 +159,7 @@ jobs:
 
   publish-testpypi:
     name: Publish to TestPyPI (Manual)
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'testpypi'
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'testpypi') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     needs: build
     runs-on: ubuntu-latest
     environment: testpypi
@@ -163,10 +170,22 @@ jobs:
         with:
           name: distributions
           path: dist/
+      - name: Keep only the Guard canary distribution
+        if: github.event_name == 'pull_request'
+        run: rm -f dist/plugin_scanner-*
       - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         with:
           repository-url: https://test.pypi.org/legacy/
           skip-existing: true
+      - name: Show canary install command
+        if: github.event_name == 'pull_request'
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          echo "## TestPyPI canary" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`bash" >> "$GITHUB_STEP_SUMMARY"
+          echo "uv tool install --force --index https://pypi.org/simple --find-links https://test.pypi.org/simple/hol-guard/ 'hol-guard==$VERSION'" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
 
   publish-pypi:
     name: Publish to PyPI
