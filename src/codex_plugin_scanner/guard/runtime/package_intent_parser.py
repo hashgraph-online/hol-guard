@@ -228,6 +228,8 @@ def _parse_exec_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> Pa
 def _is_verified_local_executable_execution(tokens: tuple[str, ...], *, workspace: Path | None) -> bool:
     if workspace is None or not tokens or _command_name(tokens[0]) not in _LOCAL_EXECUTION_COMMANDS:
         return False
+    if not _local_execution_disables_install(tokens):
+        return False
     executable = _local_executable_name(tokens)
     if executable is None:
         return False
@@ -236,6 +238,15 @@ def _is_verified_local_executable_execution(tokens: tuple[str, ...], *, workspac
         and _workspace_lockfile_records_js_dependency(workspace, executable)
         and _workspace_has_local_executable(workspace, executable)
     )
+
+
+def _local_execution_disables_install(tokens: tuple[str, ...]) -> bool:
+    for token in tokens[1:]:
+        if not token.startswith("-"):
+            return False
+        if token == "--no-install":
+            return True
+    return False
 
 
 def _local_executable_name(tokens: tuple[str, ...]) -> str | None:

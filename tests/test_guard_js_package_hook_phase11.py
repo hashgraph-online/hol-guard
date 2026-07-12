@@ -261,7 +261,7 @@ def test_guard_hook_allows_verified_local_vitest_run(
     runner.parent.mkdir(parents=True)
     runner.write_text("#!/bin/sh\n", encoding="utf-8")
     runner.chmod(0o755)
-    command = "bunx vitest run tests/example.test.ts"
+    command = "bunx --no-install vitest run tests/example.test.ts"
     payload_path = workspace_dir / "hook-event.json"
     _write_codex_pre_tool_payload(payload_path, workspace_dir, command)
     store = GuardStore(home_dir)
