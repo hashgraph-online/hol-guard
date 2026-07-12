@@ -144,7 +144,7 @@ export function HomeProtectionModule({
     status === "protected"
       ? "Package managers protected"
       : status === "staged"
-      ? "Protection staged — restart shell or apps"
+      ? "Protection staged, finish activation"
       : status === "partial"
       ? "Some package managers unprotected"
       : status === "unprotected"

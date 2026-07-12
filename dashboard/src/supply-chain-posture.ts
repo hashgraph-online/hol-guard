@@ -28,7 +28,7 @@ export function resolveSupplyChainPostureAlerts(
       kind: "path_repair",
       title: "Package installs are not being checked yet",
       detail:
-        "Guard has not hooked into your shell path yet. Turn on protection in the firewall panel below, then open a new terminal.",
+        "Guard has not activated this runtime yet. Turn on protection in the firewall panel below, then finish activation here.",
       tone: "attention",
     });
   } else if (stats.repairRequiredManagers > 0) {
@@ -42,15 +42,15 @@ export function resolveSupplyChainPostureAlerts(
     alerts.push({
       kind: "path_repair",
       title: "Fix your shell path before installs can be blocked",
-      detail: `Guard set up protection for ${managerLabel}, but your shell path still needs a quick repair. Tap Fix PATH in the firewall panel, then open a new terminal.`,
+      detail: `Guard set up protection for ${managerLabel}, but the active Guard session still needs a quick repair. Tap Fix PATH in the firewall panel, then finish activation here.`,
       tone: "attention",
     });
   } else if (protection?.path_status === "restart_required" || stats.stagedManagers > 0) {
     alerts.push({
       kind: "path_repair",
-      title: "Open a new terminal to finish setup",
+      title: "Finish activation in Guard",
       detail:
-        "Guard updated your shell profile. Open a new terminal or restart your AI apps before running a protection test.",
+        "Guard saved your shell setup. Finish activation here, then run a protection check from the firewall panel.",
       tone: "blue",
     });
   }

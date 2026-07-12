@@ -68,12 +68,6 @@ type ConnectFlowCardProps = {
   purpose?: "package_firewall" | "insights_share" | "audit";
 };
 
-type NavigatorWithUserAgentData = Navigator & {
-  userAgentData?: {
-    platform?: string;
-  };
-};
-
 type ConnectStepProps = {
   body: string;
   current: boolean;
@@ -303,16 +297,6 @@ function resolveConnectPrimaryLabel(input: {
     return "Try connect again";
   }
   return input.actionLabel;
-}
-
-function isMacClient(): boolean {
-  if (typeof navigator === "undefined") {
-    return false;
-  }
-  const navigatorWithUserAgentData = navigator as NavigatorWithUserAgentData;
-  const platformHint =
-    navigatorWithUserAgentData.userAgentData?.platform ?? navigator.userAgent ?? navigator.platform;
-  return platformHint.toLowerCase().includes("mac");
 }
 
 export function ConnectFlowCard({
@@ -575,15 +559,15 @@ export function EntitlementNotice({
 function activationHeadline(protection: PackageManagerProtection | null): string {
   if (protection === null) return "Activation status unavailable";
   if (protection.path_status === "in_path") return "Protection live now";
-  if (protection.path_status === "restart_required") return "Restart shell or apps to finish activation";
+  if (protection.path_status === "restart_required") return "Finish activation in Guard";
   return "Fix PATH to finish activation";
 }
 
 type ActivationSummaryProps = {
   activationAssistError: string | null;
   lastAuditProofAt?: string | null;
-  openingShell: boolean;
-  onOpenShell: () => void;
+  activatingRuntime: boolean;
+  onActivateRuntime: () => void;
   onRefreshStatus: () => void;
   protection: PackageManagerProtection | null;
 };
@@ -591,8 +575,8 @@ type ActivationSummaryProps = {
 export function ActivationSummary({
   activationAssistError,
   lastAuditProofAt = null,
-  openingShell,
-  onOpenShell,
+  activatingRuntime,
+  onActivateRuntime,
   onRefreshStatus,
   protection,
 }: ActivationSummaryProps) {
@@ -618,10 +602,8 @@ export function ActivationSummary({
       : protection.path_status === "restart_required"
       ? "text-brand-blue"
       : "text-brand-attention";
-  const canOpenShell =
-    protection.path_status === "restart_required" &&
-    protection.shell_profile_configured &&
-    isMacClient();
+  const canActivateRuntime =
+    protection.path_status === "restart_required" && protection.shell_profile_configured;
   return (
     <div className={`rounded-xl border px-4 py-3 ${toneClass}`}>
       <div className="flex items-start gap-2.5">
@@ -636,13 +618,13 @@ export function ActivationSummary({
           )}
           {protection.path_status === "restart_required" && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {canOpenShell && (
-                <ActionButton variant="primary" onClick={onOpenShell} disabled={openingShell}>
-                  {openingShell ? "Opening shell…" : "Open new shell"}
+              {canActivateRuntime && (
+                <ActionButton variant="primary" onClick={onActivateRuntime} disabled={activatingRuntime}>
+                  {activatingRuntime ? "Finishing activation…" : "Finish activation"}
                 </ActionButton>
               )}
-              <ActionButton variant="outline" onClick={onRefreshStatus} disabled={openingShell}>
-                Refresh after restart
+              <ActionButton variant="outline" onClick={onRefreshStatus} disabled={activatingRuntime}>
+                Refresh status
               </ActionButton>
             </div>
           )}

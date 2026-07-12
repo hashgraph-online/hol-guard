@@ -1,5 +1,5 @@
 const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/feed-health-workspace.js","assets/chunks/home-protection-module.js","assets/chunks/supply-chain-protection-stats.js","assets/chunks/audit-workspace.js"])))=>i.map(i=>d[i]);
-import { aC as isSupplyChainAuditIncomplete, aD as isSupplyChainAuditEvidence, r as reactExports, aE as buildApprovalProofCredentials, aF as isApprovalProofSubmitDisabled, j as jsxRuntimeExports, S as SectionLabel, aG as ApprovalProofFieldInputs, A as ActionButton, av as GuardHarnessActionError, aH as readString$1, aI as isRecord$1, d as HiMiniCheckCircle, ax as HiMiniArrowPath, x as HiMiniExclamationTriangle, ad as Tag, m as formatRelativeTime, aJ as HiMiniClock, aK as IconActionButton, J as HiMiniXCircle, ay as HiMiniTrash, l as HiMiniShieldCheck, I as HiMiniWrenchScrewdriver, aL as HiMiniBeaker, aM as ActivationSummary, aN as ActionResultPanel, ae as HiMiniMagnifyingGlass, b as EmptyState, aO as HiMiniBugAnt, Z as fetchSettings, o as HiMiniXMark, aP as GuardModalLayer, aQ as ConnectFlowCard, aR as ApprovalProofInline, aS as HiMiniArrowTopRightOnSquare, aT as HiMiniCloudArrowDown, aU as fetchPackageFirewallStatus, aV as runPackageAudit, aW as resolveSupplyChainAuditFailure, aX as runPackageSync, aY as startPackageFirewallConnect, aZ as openPackageFirewallAuthorizeFallback, a_ as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, a$ as runPackageFirewallAction, b0 as parseInterceptProofSnapshot, b1 as openPackageFirewallShell, b2 as EntitlementNotice, b3 as fetchReceipts, b4 as WorkspacePageHeader, b5 as __vitePreload } from "../guard-dashboard.js";
+import { aC as isSupplyChainAuditIncomplete, aD as isSupplyChainAuditEvidence, r as reactExports, aE as buildApprovalProofCredentials, aF as isApprovalProofSubmitDisabled, j as jsxRuntimeExports, S as SectionLabel, aG as ApprovalProofFieldInputs, A as ActionButton, av as GuardHarnessActionError, aH as readString$1, aI as isRecord$1, d as HiMiniCheckCircle, ax as HiMiniArrowPath, x as HiMiniExclamationTriangle, ad as Tag, m as formatRelativeTime, aJ as HiMiniClock, aK as IconActionButton, J as HiMiniXCircle, ay as HiMiniTrash, l as HiMiniShieldCheck, I as HiMiniWrenchScrewdriver, aL as HiMiniBeaker, aM as ActivationSummary, aN as ActionResultPanel, ae as HiMiniMagnifyingGlass, b as EmptyState, aO as HiMiniBugAnt, Z as fetchSettings, o as HiMiniXMark, aP as GuardModalLayer, aQ as ConnectFlowCard, aR as ApprovalProofInline, aS as HiMiniArrowTopRightOnSquare, aT as HiMiniCloudArrowDown, aU as fetchPackageFirewallStatus, aV as runPackageAudit, aW as resolveSupplyChainAuditFailure, aX as runPackageSync, aY as startPackageFirewallConnect, aZ as openPackageFirewallAuthorizeFallback, a_ as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, a$ as runPackageFirewallAction, b0 as parseInterceptProofSnapshot, b1 as activatePackageFirewallRuntime, b2 as EntitlementNotice, b3 as fetchReceipts, b4 as WorkspacePageHeader, b5 as __vitePreload } from "../guard-dashboard.js";
 const SEVERITY_RANK = {
   critical: 4,
   high: 3,
@@ -941,7 +941,7 @@ function FailureBanner({ failed }) {
 }
 function FirewallControlsView({
   activationAssistError,
-  openingShell,
+  activatingRuntime,
   data,
   pendingOp,
   lastCompleted,
@@ -961,7 +961,7 @@ function FirewallControlsView({
   onAudit,
   onSync,
   onDismissResult,
-  onOpenShell,
+  onActivateRuntime,
   onRefreshStatus,
   onOpenManagerDetails
 }) {
@@ -1015,8 +1015,8 @@ function FirewallControlsView({
       {
         activationAssistError,
         lastAuditProofAt: data.last_audit_proof_at,
-        openingShell,
-        onOpenShell,
+        activatingRuntime,
+        onActivateRuntime,
         onRefreshStatus,
         protection: data.protection
       }
@@ -1600,7 +1600,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
   const [connectError, setConnectError] = reactExports.useState(null);
   const [activationAssistError, setActivationAssistError] = reactExports.useState(null);
   const [startingConnect, setStartingConnect] = reactExports.useState(false);
-  const [openingShell, setOpeningShell] = reactExports.useState(false);
+  const [activatingRuntime, setActivatingRuntime] = reactExports.useState(false);
   const [confirmRemoveManager, setConfirmRemoveManager] = reactExports.useState(null);
   const [pendingApprovalOp, setPendingApprovalOp] = reactExports.useState(null);
   const [statusFilter, setStatusFilter] = reactExports.useState("all");
@@ -2058,17 +2058,19 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
   }, [handleAudit, runAuditRef]);
   const handleDismissResult = reactExports.useCallback(() => setLastCompleted(null), []);
   const handleRetry = reactExports.useCallback(() => void load(), [load]);
-  const handleOpenShell = reactExports.useCallback(async () => {
-    setOpeningShell(true);
+  const handleActivateRuntime = reactExports.useCallback(async () => {
+    setActivatingRuntime(true);
     setActivationAssistError(null);
     try {
-      await openPackageFirewallShell();
+      await activatePackageFirewallRuntime();
+      await refreshAfterOp();
+      await onStateChanged?.();
     } catch (error) {
-      setActivationAssistError(error instanceof Error ? error.message : "Unable to open a new shell.");
+      setActivationAssistError(error instanceof Error ? error.message : "Unable to activate package protection.");
     } finally {
-      setOpeningShell(false);
+      setActivatingRuntime(false);
     }
-  }, []);
+  }, [onStateChanged, refreshAfterOp]);
   const handleApprovalCancel = reactExports.useCallback(() => setPendingApprovalOp(null), []);
   const handleApprovalConfirm = reactExports.useCallback(
     (credentials) => {
@@ -2112,9 +2114,9 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
         handleAudit();
       },
       startConnect: handleStartConnect,
-      openShell: handleOpenShell
+      activateRuntime: handleActivateRuntime
     }),
-    [handleAudit, handleOpenShell, handleStartConnect]
+    [handleActivateRuntime, handleAudit, handleStartConnect]
   );
   const managerDrawerShim = panelLoad.phase === "loaded" && managerDrawerTarget !== null ? panelLoad.data.package_shims.find((entry) => entry.manager === managerDrawerTarget) : void 0;
   const auditConnectGate = panelLoad.phase === "loaded" && auditConnectGateActive ? resolveSupplyChainAuditConnectGate(panelLoad.data, { resumeAfterConnect: resumeAuditAfterConnect }) : null;
@@ -2164,10 +2166,10 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
           onAudit: handleAudit,
           onSync: handleSync,
           onDismissResult: handleDismissResult,
-          onOpenShell: handleOpenShell,
+          onActivateRuntime: handleActivateRuntime,
           onRefreshStatus: handleRetry,
           onOpenManagerDetails: handleOpenManagerDetails,
-          openingShell,
+          activatingRuntime,
           activationAssistError
         }
       )

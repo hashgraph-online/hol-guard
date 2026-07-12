@@ -10,7 +10,7 @@ import type {
 } from "./guard-types";
 import {
   fetchPackageFirewallStatus,
-  openPackageFirewallShell,
+  activatePackageFirewallRuntime,
   runPackageFirewallAction,
   runPackageAudit,
   runPackageSync,
@@ -76,7 +76,7 @@ export type PackageFirewallPanelHandle = {
   focusActionable: () => void;
   runAudit: () => void;
   startConnect: () => Promise<void>;
-  openShell: () => Promise<void>;
+  activateRuntime: () => Promise<void>;
 };
 
 function actionLabel(op: PackageFirewallActionType): string {
@@ -191,7 +191,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   const [connectError, setConnectError] = useState<string | null>(null);
   const [activationAssistError, setActivationAssistError] = useState<string | null>(null);
   const [startingConnect, setStartingConnect] = useState(false);
-  const [openingShell, setOpeningShell] = useState(false);
+  const [activatingRuntime, setActivatingRuntime] = useState(false);
   const [confirmRemoveManager, setConfirmRemoveManager] = useState<string | null>(null);
   const [pendingApprovalOp, setPendingApprovalOp] = useState<ApprovalOp | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -690,17 +690,19 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   }, [handleAudit, runAuditRef]);
   const handleDismissResult = useCallback(() => setLastCompleted(null), []);
   const handleRetry = useCallback(() => void load(), [load]);
-  const handleOpenShell = useCallback(async () => {
-    setOpeningShell(true);
+  const handleActivateRuntime = useCallback(async () => {
+    setActivatingRuntime(true);
     setActivationAssistError(null);
     try {
-      await openPackageFirewallShell();
+      await activatePackageFirewallRuntime();
+      await refreshAfterOp();
+      await onStateChanged?.();
     } catch (error) {
-      setActivationAssistError(error instanceof Error ? error.message : "Unable to open a new shell.");
+      setActivationAssistError(error instanceof Error ? error.message : "Unable to activate package protection.");
     } finally {
-      setOpeningShell(false);
+      setActivatingRuntime(false);
     }
-  }, []);
+  }, [onStateChanged, refreshAfterOp]);
   const handleApprovalCancel = useCallback(() => setPendingApprovalOp(null), []);
   const handleApprovalConfirm = useCallback(
     (credentials: { approval_password?: string; approval_totp_code?: string }) => {
@@ -750,9 +752,9 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
         handleAudit();
       },
       startConnect: handleStartConnect,
-      openShell: handleOpenShell,
+      activateRuntime: handleActivateRuntime,
     }),
-    [handleAudit, handleOpenShell, handleStartConnect],
+    [handleActivateRuntime, handleAudit, handleStartConnect],
   );
 
 
@@ -822,10 +824,10 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
             onAudit={handleAudit}
             onSync={handleSync}
             onDismissResult={handleDismissResult}
-            onOpenShell={handleOpenShell}
+            onActivateRuntime={handleActivateRuntime}
             onRefreshStatus={handleRetry}
             onOpenManagerDetails={handleOpenManagerDetails}
-            openingShell={openingShell}
+            activatingRuntime={activatingRuntime}
             activationAssistError={activationAssistError}
           />
         </>

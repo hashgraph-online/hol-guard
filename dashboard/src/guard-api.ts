@@ -2765,8 +2765,8 @@ export async function runPackageFirewallAction(
   return normalizePackageFirewallAction(payloadBody);
 }
 
-export async function openPackageFirewallShell(): Promise<void> {
-  const response = await fetchGuardApi("/v1/supply-chain/package-shims/open-shell", {
+export async function activatePackageFirewallRuntime(): Promise<void> {
+  const response = await fetchGuardApi("/v1/supply-chain/package-shims/activate", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -2781,7 +2781,7 @@ export async function openPackageFirewallShell(): Promise<void> {
   if (isRecord(payloadBody) && typeof payloadBody.message === "string" && payloadBody.message.trim()) {
     throw new Error(payloadBody.message);
   }
-  throw new Error("Unable to open a new shell.");
+  throw new Error("Unable to activate package protection.");
 }
 
 export type AuditRemediationAction = "package_shim_path";

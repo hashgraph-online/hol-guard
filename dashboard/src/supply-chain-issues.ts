@@ -9,7 +9,7 @@ export type SupplyChainIssueAction =
   | { kind: "firewall_unprotected" }
   | { kind: "firewall_repair" }
   | { kind: "firewall_audit" }
-  | { kind: "open_shell" };
+  | { kind: "activate_runtime" };
 
 export type SupplyChainIssue = {
   id: string;
@@ -46,7 +46,7 @@ export function resolveSupplyChainIssues(snapshot: GuardRuntimeSnapshot): Supply
       id: "path_missing",
       title: "Package installs are not being checked yet",
       detail:
-        "Guard has not hooked into your shell path yet. Turn on protection for your package tools, then open a new terminal.",
+        "Guard has not activated package protection yet. Turn on protection for your package tools, then finish activation here.",
       tone: "attention",
       actionLabel: "Protect package tools",
       action: { kind: "firewall_unprotected" },
@@ -70,12 +70,12 @@ export function resolveSupplyChainIssues(snapshot: GuardRuntimeSnapshot): Supply
   } else if (protection?.path_status === "restart_required" || stats.stagedManagers > 0) {
     issues.push({
       id: "path_restart",
-      title: "Open a new terminal to finish setup",
+      title: "Finish activation in Guard",
       detail:
-        "Guard updated your shell profile. Open a new terminal or restart your AI apps before running a protection test.",
+        "Guard saved your shell setup. Finish activation here, then run a protection check from this dashboard.",
       tone: "blue",
-      actionLabel: "Open new shell",
-      action: { kind: "open_shell" },
+      actionLabel: "Finish activation",
+      action: { kind: "activate_runtime" },
     });
   }
 

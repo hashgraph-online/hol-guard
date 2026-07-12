@@ -1222,6 +1222,7 @@ def probe_package_shim_intercepts(
     *,
     managers: tuple[str, ...] | None = None,
     workspace_dir: Path | None = None,
+    allow_inactive_path: bool = False,
 ) -> dict[str, object]:
     """Execute installed package-manager shims to prove intercept wiring is live."""
 
@@ -1252,7 +1253,7 @@ def probe_package_shim_intercepts(
                 },
             )
             continue
-        if manager not in protected:
+        if manager not in protected and not allow_inactive_path:
             manager_results.append(
                 {
                     "evaluator_invoked": False,

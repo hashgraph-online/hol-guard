@@ -13,7 +13,6 @@ import mimetypes
 import os
 import platform
 import secrets
-import subprocess
 import tempfile
 import threading
 import time
@@ -182,6 +181,7 @@ _HEADLESS_CLOUD_SYNC_STATE_LOCK = threading.Lock()
 _HEADLESS_CLOUD_SYNC_IN_FLIGHT: set[str] = set()
 _AUDIT_REMEDIATION_ACTIONS = {"package_shim_path"}
 _SUPPLY_CHAIN_PACKAGE_ACTIONS = {
+    "activate",
     "install",
     "repair",
     "test",
@@ -911,54 +911,39 @@ def _default_package_firewall_connect_flow(
     }
 
 
-def _open_package_firewall_activation_shell() -> tuple[int, dict[str, object]]:
-    system_name = platform.system().lower()
-    if system_name != "darwin":
+def _activate_package_firewall_runtime(context: HarnessContext) -> tuple[int, dict[str, object]]:
+    status = package_shim_status(context)
+    installed_managers = status.get("installed_managers")
+    if not isinstance(installed_managers, list) or not installed_managers:
         return (
-            501,
+            409,
             {
-                "error": "activation_shell_unsupported",
-                "message": "Opening a new shell from the dashboard is only supported on macOS right now.",
+                "error": "activation_requires_installed_shims",
+                "message": "Protect a package manager before activating this Guard session.",
             },
         )
-    osascript_path = Path("/usr/bin/osascript")
-    if not osascript_path.exists():
+    proof = probe_package_shim_intercepts(
+        context,
+        managers=tuple(str(manager) for manager in installed_managers),
+        allow_inactive_path=True,
+    )
+    if not bool(proof.get("intercept_proved")):
         return (
-            500,
+            409,
             {
-                "error": "activation_shell_unavailable",
-                "message": "macOS automation support is unavailable on this machine.",
-            },
-        )
-    command = [
-        str(osascript_path),
-        "-e",
-        'tell application "Terminal" to do script ""',
-        "-e",
-        'tell application "Terminal" to activate',
-    ]
-    try:
-        subprocess.Popen(
-            command,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-    except OSError as error:
-        return (
-            500,
-            {
-                "error": "activation_shell_launch_failed",
-                "message": f"Guard could not open a new shell automatically. {error}",
+                "error": "shim_verification_failed",
+                "message": ("Guard could not verify the installed package shim. Repair protection and try again."),
+                "package_shims": package_shim_status(context),
+                "proof": proof,
             },
         )
     return (
         200,
         {
-            "status": "opened",
-            "message": "Opened a new Terminal window with a fresh shell session.",
-            "platform": "macos",
+            "status": "verified",
+            "message": "Guard verified the installed package shim. Restart existing AI apps before using it.",
+            "package_shims": package_shim_status(context),
+            "proof": proof,
         },
     )
 
@@ -2662,11 +2647,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if action == "connect":
             self._handle_supply_chain_package_firewall_connect()
             return
-        if action == "open-shell":
-            status, response = _open_package_firewall_activation_shell()
-            self._write_json(response, status=status)
-            return
         operation = "remove" if action == "uninstall" else action
+        if operation == "open-shell":
+            operation = "activate"
         if not self._enforce_package_firewall_rate_limit(operation, payload):
             return
         entitlement = self._supply_chain_entitlement()
@@ -2703,6 +2686,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     purpose="supply_chain_firewall",
                     approval_gate_input=approval_gate_input_from_mapping(payload),
                 )
+            if operation == "activate":
+                status, response = _activate_package_firewall_runtime(context)
+                self._write_json(response, status=status)
+                return
             result = self._run_supply_chain_package_action(operation, context, managers)
         except ApprovalGateError as error:
             self._write_approval_gate_error(error)
@@ -4811,7 +4798,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return "supply_chain_bundle"
         if len(path_parts) == 4 and path_parts[:3] == ["v1", "supply-chain", "package-shims"]:
             action = "remove" if path_parts[3] == "uninstall" else path_parts[3]
-            if action in {"install", "repair", "test", "remove", "open-shell"}:
+            if action in {"activate", "install", "repair", "test", "remove", "open-shell"}:
                 return f"package_shims_{action}"
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "supply-chain"] and path_parts[2] in {"audit", "sync"}:
             return f"package_shims_{path_parts[2]}"
@@ -4918,6 +4905,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/insights/share",
             "/v1/cloud/connect",
             "/v1/supply-chain/package-shims/connect",
+            "/v1/supply-chain/package-shims/activate",
             "/v1/receipts/latest",
             "/v1/runtime",
             "/v1/settings",

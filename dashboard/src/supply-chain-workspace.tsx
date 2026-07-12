@@ -202,8 +202,9 @@ export function SupplyChainWorkspace({
           await onRuntimeRefresh?.();
           return;
         }
-        if (action.kind === "open_shell") {
-          await panel.openShell();
+        if (action.kind === "activate_runtime") {
+          await panel.activateRuntime();
+          await onRuntimeRefresh?.();
         }
       } finally {
         setIssueActionPending(false);
