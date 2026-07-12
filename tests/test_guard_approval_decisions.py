@@ -17,6 +17,7 @@ import pytest
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash as compute_artifact_hash
 from codex_plugin_scanner.guard.consumer import evaluate_detection
+from codex_plugin_scanner.guard.memory_pattern_fingerprint import build_memory_pattern_fingerprint
 from codex_plugin_scanner.guard.models import (
     GuardArtifact,
     HarnessDetection,
@@ -107,6 +108,115 @@ def test_resolve_policy_with_remote_only_rule_skips_policy_integrity_refresh(
     monkeypatch.setattr(store, "_policy_integrity_secret_material", fail_refresh)
 
     assert store.resolve_policy("codex", artifact_id, artifact_hash) == "allow"
+
+
+@pytest.mark.parametrize("policy_action", ["allow", "block"])
+def test_remote_suggested_memory_policy_matches_runtime_command_pattern(
+    tmp_path: Path,
+    policy_action: str,
+) -> None:
+    store = _make_store(tmp_path)
+    remembered = build_memory_pattern_fingerprint(
+        command="npm install lodash",
+        artifact_type="shell_command",
+        artifact_id="codex:runtime:shell:request-one",
+        artifact_name="Shell command",
+        harness="codex",
+    )
+    assert remembered is not None
+    store.replace_remote_policies(
+        [
+            PolicyDecision(
+                harness="codex",
+                scope="artifact",
+                artifact_id=f"memory:codex:{remembered.kind}:{remembered.fingerprint}",
+                artifact_hash=None,
+                workspace=None,
+                publisher=None,
+                action=policy_action,
+                reason="Suggested Memory",
+                owner=None,
+                source="cloud-sync",
+            )
+        ],
+        now="2026-07-11T00:00:00Z",
+        remote_write_authorized=True,
+    )
+
+    assert (
+        store.resolve_policy(
+            "codex",
+            "codex:runtime:shell:request-two",
+            memory_command="npm i lodash@latest",
+            memory_artifact_type="shell_command",
+            memory_artifact_name="Shell command",
+        )
+        == policy_action
+    )
+    assert (
+        store.resolve_policy(
+            "codex",
+            "codex:runtime:shell:request-three",
+            memory_command="npm install react",
+            memory_artifact_type="shell_command",
+            memory_artifact_name="Shell command",
+        )
+        is None
+    )
+
+def test_direct_artifact_policy_precedes_suggested_memory_policy(tmp_path: Path) -> None:
+    store = _make_store(tmp_path)
+    artifact_id = "codex:runtime:shell:request-one"
+    remembered = build_memory_pattern_fingerprint(
+        command="npm install lodash",
+        artifact_type="shell_command",
+        artifact_id=artifact_id,
+        artifact_name="Shell command",
+        harness="codex",
+    )
+    assert remembered is not None
+    store.replace_remote_policies(
+        [
+            PolicyDecision(
+                harness="codex",
+                scope="artifact",
+                artifact_id=artifact_id,
+                artifact_hash=None,
+                workspace=None,
+                publisher=None,
+                action="block",
+                reason="Direct policy",
+                owner=None,
+                source="cloud-sync",
+            ),
+            PolicyDecision(
+                harness="codex",
+                scope="artifact",
+                artifact_id=f"memory:codex:{remembered.kind}:{remembered.fingerprint}",
+                artifact_hash=None,
+                workspace=None,
+                publisher=None,
+                action="allow",
+                reason="Suggested Memory",
+                owner=None,
+                source="cloud-sync",
+            ),
+        ],
+        now="2026-07-11T00:00:00Z",
+        remote_write_authorized=True,
+    )
+
+    assert (
+        store.resolve_policy(
+            "codex",
+            artifact_id,
+            memory_command="npm install lodash",
+            memory_artifact_type="shell_command",
+            memory_artifact_name="Shell command",
+        )
+        == "block"
+    )
+
 
 
 class TestDecideAction:

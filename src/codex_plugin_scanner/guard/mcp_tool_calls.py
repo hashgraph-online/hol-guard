@@ -169,6 +169,9 @@ def evaluate_tool_call(
         artifact.artifact_id,
         artifact_hash=artifact_hash,
         workspace=str(config.workspace) if config.workspace is not None else None,
+        memory_command=artifact.command,
+        memory_artifact_type=artifact.artifact_type,
+        memory_artifact_name=artifact.name,
     )
     if override is None:
         override = config.resolve_action_override(artifact.harness, artifact.artifact_id, artifact.publisher)

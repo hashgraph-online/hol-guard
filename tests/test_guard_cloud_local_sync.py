@@ -139,6 +139,7 @@ def test_evaluate_detection_queues_instruction_access_graph_edges(tmp_path: Path
     assert any(entity["entityType"] == "instruction" for entity in graph_payload["entities"])
     assert any(edge["edgeType"] == "agent_uses_instruction" for edge in graph_payload["edges"])
 
+
 def test_evaluate_detection_queues_access_graph_snapshot_without_cloud_workspace(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store)
@@ -178,10 +179,12 @@ def test_access_graph_queue_failure_does_not_block_local_approval_decision(tmp_p
     assert "sk-live-secret-token" not in json.dumps(failure_events[0]["payload"])
 
 
-def test_guard_cloud_event_queue_is_bounded_and_overflow_log_is_redacted(tmp_path: Path) -> None:
+def test_guard_cloud_event_queue_backpressures_without_dropping_pending_events(
+    tmp_path: Path,
+) -> None:
     store = GuardStore(tmp_path / "guard-home", guard_event_queue_limit=3)
 
-    for index in range(4):
+    for index in range(3):
         event = build_runtime_session_event(
             session_id=f"session-{index}",
             occurred_at=f"2026-04-24T00:00:0{index}+00:00",
@@ -191,13 +194,41 @@ def test_guard_cloud_event_queue_is_bounded_and_overflow_log_is_redacted(tmp_pat
         )
         store.add_guard_event_v1(event)
 
-    pending = store.list_guard_events_v1(uploaded=False, limit=10)
-    overflow_events = store.list_events(limit=5, event_name="cloud_event_queue_overflow")
+    store.add_guard_event_v1(
+        build_runtime_session_event(
+            session_id="session-3",
+            occurred_at="2026-04-24T00:00:03+00:00",
+            payload={"sessionSecret": "sk-live-secret-token", "index": 3},
+            workspace_id="workspace-alpha",
+            device_id="device-1",
+        )
+    )
 
-    assert [item["event_type"] for item in pending] == ["runtime.session", "runtime.session", "runtime.session"]
-    assert pending[0]["payload"]["payload"]["index"] == 1
-    assert overflow_events[0]["payload"]["dropped_count"] == 1
-    assert "sk-live-secret-token" not in json.dumps(overflow_events[0]["payload"])
+    pending = store.list_guard_events_v1(uploaded=False, limit=10)
+    assert [item["payload"]["payload"]["index"] for item in pending] == [0, 1, 2]
+    assert store.get_sync_payload("guard_event_queue_capacity") == {
+        "exhausted": True,
+        "firstRejectedAt": "2026-04-24T00:00:03+00:00",
+        "lastRejectedAt": "2026-04-24T00:00:03+00:00",
+        "limit": 3,
+        "pendingCount": 3,
+        "rejectedCount": 1,
+        "rejectedEventType": "runtime.session",
+    }
+    store.mark_guard_events_v1_uploaded(
+        [str(pending[0]["event_id"])],
+        "2026-04-24T00:01:00+00:00",
+    )
+    assert store.get_sync_payload("guard_event_queue_capacity") == {
+        "exhausted": False,
+        "firstRejectedAt": "2026-04-24T00:00:03+00:00",
+        "lastRejectedAt": "2026-04-24T00:00:03+00:00",
+        "limit": 3,
+        "pendingCount": 2,
+        "recoveredAt": "2026-04-24T00:01:00+00:00",
+        "rejectedCount": 1,
+        "rejectedEventType": "runtime.session",
+    }
 
 
 def test_sync_guard_events_records_failed_backoff_without_dropping_pending_events(
@@ -235,7 +266,9 @@ def test_sync_guard_events_records_failed_backoff_without_dropping_pending_event
     assert len(pending) == 1
 
 
-def test_guard_cloud_event_queue_handles_large_overflow_without_sqlite_parameter_limit(tmp_path: Path) -> None:
+def test_guard_cloud_event_queue_backpressures_large_backlog_without_sqlite_limit(
+    tmp_path: Path,
+) -> None:
     store = GuardStore(tmp_path / "guard-home", guard_event_queue_limit=1100)
 
     for index in range(1005):
@@ -259,11 +292,16 @@ def test_guard_cloud_event_queue_handles_large_overflow_without_sqlite_parameter
         )
     )
 
-    pending = store.list_guard_events_v1(uploaded=False, limit=10)
-    overflow_events = store.list_events(limit=5, event_name="cloud_event_queue_overflow")
-
-    assert [item["payload"]["payload"]["index"] for item in pending] == [1004, 1005]
-    assert overflow_events[0]["payload"]["dropped_count"] == 1004
+    assert store.count_guard_events_v1(uploaded=False) == 1005
+    assert store.get_sync_payload("guard_event_queue_capacity") == {
+        "exhausted": True,
+        "firstRejectedAt": "2026-04-24T00:16:45+00:00",
+        "lastRejectedAt": "2026-04-24T00:16:45+00:00",
+        "limit": 2,
+        "pendingCount": 1005,
+        "rejectedCount": 1,
+        "rejectedEventType": "runtime.session",
+    }
 
 
 def test_sync_guard_events_preserves_pending_events_when_v1_endpoint_is_unavailable(
