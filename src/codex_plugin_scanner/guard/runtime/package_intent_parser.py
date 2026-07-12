@@ -36,6 +36,7 @@ _CONTROL_TOKENS = {"&&", "||", ";", "|", "|&", "&"}
 _ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
 _LOCAL_EXECUTION_COMMANDS = frozenset({"bunx", "npx"})
 _LOCAL_EXECUTION_FLAGS = frozenset({"--bun", "--no-install"})
+_LOCAL_TEST_RUNNER_EXECUTABLES = frozenset({"jest", "mocha", "vitest"})
 _JS_LOCKFILE_NAMES = ("bun.lock", "bun.lockb", "package-lock.json", "pnpm-lock.yaml", "yarn.lock")
 _PYTHON_EXECUTABLES = {"py", "python", "python3", "python3.11", "python3.12", "python3.13", "python3.14"}
 _PACKAGE_SOURCE_ENV_NAMES = frozenset(
@@ -228,7 +229,7 @@ def _parse_exec_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> Pa
 def _is_verified_local_executable_execution(tokens: tuple[str, ...], *, workspace: Path | None) -> bool:
     if workspace is None or not tokens or _command_name(tokens[0]) not in _LOCAL_EXECUTION_COMMANDS:
         return False
-    if not _local_execution_disables_install(tokens):
+    if not _local_execution_disables_install(tokens) and not _is_local_test_runner_execution(tokens):
         return False
     executable = _local_executable_name(tokens)
     if executable is None:
@@ -247,6 +248,11 @@ def _local_execution_disables_install(tokens: tuple[str, ...]) -> bool:
         if token == "--no-install":
             return True
     return False
+
+
+def _is_local_test_runner_execution(tokens: tuple[str, ...]) -> bool:
+    executable = _local_executable_name(tokens)
+    return executable in _LOCAL_TEST_RUNNER_EXECUTABLES
 
 
 def _local_executable_name(tokens: tuple[str, ...]) -> str | None:

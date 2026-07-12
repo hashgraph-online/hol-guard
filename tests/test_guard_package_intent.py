@@ -134,9 +134,10 @@ def test_parse_package_intent_skips_verified_local_test_runner_execution(tmp_pat
 
     assert parse_package_intent("bunx --no-install vitest run tests/example.test.ts", workspace=tmp_path) is None
     assert parse_package_intent("npx --no-install vitest --run tests/example.test.ts", workspace=tmp_path) is None
-    assert parse_package_intent("bunx vitest --run tests/example.test.ts", workspace=tmp_path) is not None
-    assert parse_package_intent("bunx vitest --help", workspace=tmp_path) is not None
-    assert parse_package_intent("bunx vitest --no-install", workspace=tmp_path) is not None
+    assert parse_package_intent("bunx vitest --run tests/example.test.ts", workspace=tmp_path) is None
+    assert parse_package_intent("bunx vitest --help", workspace=tmp_path) is None
+    assert parse_package_intent("bunx vitest --no-install", workspace=tmp_path) is None
+    assert parse_package_intent("bunx eslint .", workspace=tmp_path) is not None
     assert (
         extract_package_intent_request(
             "Bash",
