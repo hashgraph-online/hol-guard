@@ -1183,6 +1183,10 @@ def receipt_index_statements() -> list[str]:
             "create index if not exists idx_receipts_harness_artifact_timestamp_desc "
             "on runtime_receipts(harness, artifact_id, timestamp desc)"
         ),
+        (
+            "create index if not exists idx_receipts_approval_request_decision "
+            "on runtime_receipts(approval_request_id, policy_decision)"
+        ),
     ]
 
 

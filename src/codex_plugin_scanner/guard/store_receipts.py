@@ -281,6 +281,21 @@ class StoreReceiptsRuntimeMixin:
             return None
         return self._receipt_dict_from_row(row, include_rowid=False)
 
+    def get_receipt_for_approval_request(
+        self,
+        request_id: str,
+        *,
+        policy_decision: str,
+    ) -> dict[str, object] | None:
+        query = self._receipt_base_query(
+            "where r.approval_request_id = ? and r.policy_decision = ? order by r.rowid asc limit 1"
+        )
+        with self._connect() as connection:
+            row = connection.execute(query, (request_id, policy_decision)).fetchone()
+        if row is None:
+            return None
+        return self._receipt_dict_from_row(row, include_rowid=False)
+
     def get_latest_receipt(self, harness: str, artifact_id: str) -> dict[str, object] | None:
         query = self._receipt_base_query("where r.harness = ? and r.artifact_id = ? order by r.timestamp desc limit 1")
         with self._connect() as connection:

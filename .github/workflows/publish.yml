@@ -60,7 +60,16 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
           elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            VERSION="${BASE_VERSION}.dev${PR_NUMBER}$(printf '%06d' "$GITHUB_RUN_NUMBER")$(printf '%02d' "$GITHUB_RUN_ATTEMPT")"
+            VERSION=$(BASE_VERSION="$BASE_VERSION" PR_NUMBER="$PR_NUMBER" GITHUB_RUN_NUMBER="$GITHUB_RUN_NUMBER" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" python - <<'PY'
+          import os
+
+          def pair(left: int, right: int) -> int:
+              total = left + right
+              return total * (total + 1) // 2 + right
+
+          print(f"{os.environ['BASE_VERSION']}.dev{pair(pair(int(os.environ['PR_NUMBER']), int(os.environ['GITHUB_RUN_NUMBER'])), int(os.environ['GITHUB_RUN_ATTEMPT']))}")
+          PY
+            )
           elif [[ ("$GITHUB_EVENT_NAME" == "push" || "$GITHUB_EVENT_NAME" == "workflow_dispatch") && "$GITHUB_REF" == "refs/heads/main" ]]; then
             # Check git tags first
             LAST_TAG=$(git tag --list 'v*' --sort=-version:refname 2>/dev/null | head -n1)
@@ -172,7 +181,7 @@ jobs:
           path: dist/
       - name: Keep only the Guard canary distribution
         if: github.event_name == 'pull_request'
-        run: rm -f dist/plugin_scanner-*
+        run: rm -f dist/plugin_scanner-* dist/plugin-scanner-*
       - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         with:
           repository-url: https://test.pypi.org/legacy/

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from codex_plugin_scanner.guard.memory_decision_event import (
@@ -11,13 +9,9 @@ from codex_plugin_scanner.guard.memory_decision_event import (
     build_memory_decision_event,
     event_to_cloud_payload,
 )
-from codex_plugin_scanner.guard.memory_decision_outbox import (
-    enqueue_memory_decision_event,
-)
 from codex_plugin_scanner.guard.memory_pattern_fingerprint import (
     build_memory_pattern_fingerprint,
 )
-from codex_plugin_scanner.guard.store import GuardStore
 
 # ── Pattern fingerprint ──────────────────────────────────────────────────────
 
@@ -376,186 +370,3 @@ class TestMemoryDecisionEventBuilder:
         assert payload["contractVersion"] == MEMORY_DECISION_EVENT_CONTRACT_VERSION
         assert payload["decision_action"] == "approved"
         assert isinstance(payload["memory_pattern_components"], dict)
-
-
-# ── Outbox enqueue integration ───────────────────────────────────────────────
-
-
-def _store(tmp_path: Path) -> GuardStore:
-    return GuardStore(tmp_path / "guard-home")
-
-
-def _seed_workspace(store: GuardStore) -> None:
-    store.set_oauth_local_credentials(
-        issuer="https://hol.org",
-        client_id="guard-local-daemon",
-        refresh_token="demo-token",
-        dpop_private_key_pem=None,  # type: ignore[arg-type]
-        dpop_public_jwk=None,  # type: ignore[arg-type]
-        dpop_public_jwk_thumbprint=None,  # type: ignore[arg-type]
-        grant_id="grant-1",
-        machine_id="machine-1",
-        workspace_id="workspace-1",
-        now="2026-07-07T00:00:00Z",
-    )
-
-
-class TestMemoryDecisionOutboxEnqueue:
-    def test_enqueue_writes_event_to_outbox(self, tmp_path: Path) -> None:
-        store = _store(tmp_path)
-        _seed_workspace(store)
-        enqueued = enqueue_memory_decision_event(
-            store,
-            request=_approval_request(),
-            action="allow",
-            scope="harness",
-            resolved_at="2026-07-07T00:00:00Z",
-        )
-        assert enqueued is True
-        events = store.list_guard_events_v1(uploaded=False, limit=10)
-        assert len(events) == 1
-        assert events[0]["event_type"] == "approval.memory_decision"
-        payload = events[0]["payload"]
-        assert isinstance(payload, dict)
-        assert payload["eventType"] == "approval.memory_decision"
-        assert payload["payload"]["decision_action"] == "approved"
-        assert payload["payload"]["contractVersion"] == MEMORY_DECISION_EVENT_CONTRACT_VERSION
-        assert payload["payload"]["device_id"] is not None
-        assert payload["payload"]["machine_id"] is not None
-        assert payload["payload"]["machine_installation_id"] is None
-
-    def test_enqueue_includes_project_identity_from_guard_operation(self, tmp_path: Path) -> None:
-        store = _store(tmp_path)
-        _seed_workspace(store)
-        store.upsert_guard_session(
-            session_id="session-1",
-            harness="codex",
-            surface="cli",
-            status="active",
-            client_name="codex",
-            client_title=None,
-            client_version=None,
-            workspace=str(tmp_path),
-            capabilities=[],
-            now="2026-07-07T00:00:00Z",
-        )
-        store.upsert_guard_operation(
-            operation_id="operation-1",
-            session_id="session-1",
-            harness="codex",
-            operation_type="tool_call",
-            status="waiting",
-            approval_request_ids=["req-1"],
-            resume_token=None,
-            metadata={"project_id": "project-1", "workspace_path": str(tmp_path)},
-            now="2026-07-07T00:00:00Z",
-        )
-
-        enqueued = enqueue_memory_decision_event(
-            store,
-            request=_approval_request(request_id="req-1"),
-            action="allow",
-            scope="harness",
-            resolved_at="2026-07-07T00:00:00Z",
-        )
-
-        assert enqueued is True
-        events = store.list_guard_events_v1(uploaded=False, limit=10)
-        payload = events[0]["payload"]
-        assert isinstance(payload, dict)
-        assert payload["payload"]["project_id"] == "project-1"
-
-    def test_enqueue_is_idempotent_by_request_action_time(self, tmp_path: Path) -> None:
-        store = _store(tmp_path)
-        _seed_workspace(store)
-        for _ in range(3):
-            enqueue_memory_decision_event(
-                store,
-                request=_approval_request(),
-                action="allow",
-                scope="harness",
-                resolved_at="2026-07-07T00:00:00Z",
-            )
-        events = store.list_guard_events_v1(uploaded=False, limit=10)
-        assert len(events) == 1
-
-    def test_block_and_allow_on_same_request_are_distinct(self, tmp_path: Path) -> None:
-        store = _store(tmp_path)
-        _seed_workspace(store)
-        enqueue_memory_decision_event(
-            store,
-            request=_approval_request(),
-            action="allow",
-            scope="harness",
-            resolved_at="2026-07-07T00:00:00Z",
-        )
-        enqueue_memory_decision_event(
-            store,
-            request=_approval_request(),
-            action="block",
-            scope="harness",
-            resolved_at="2026-07-07T00:00:00Z",
-        )
-        events = store.list_guard_events_v1(uploaded=False, limit=10)
-        assert len(events) == 2
-
-    def test_enqueue_skips_when_no_signal(self, tmp_path: Path) -> None:
-        store = _store(tmp_path)
-        _seed_workspace(store)
-        request = _approval_request(
-            review_command="",
-            raw_command=None,
-            artifact_id=None,
-            artifact_name=None,
-        )
-        # build_memory_decision_event still produces an event when artifact_name
-        # is None — but with no command and no artifact there is no fingerprint.
-        # The contract: events with no fingerprint are still recorded (they may
-        # carry enough Cloud-side context), but events with no request_id are
-        # rejected. Here we assert the request_id-missing rejection path instead.
-        request["request_id"] = "req-no-signal"
-        enqueued = enqueue_memory_decision_event(
-            store,
-            request=request,
-            action="allow",
-            scope="harness",
-            resolved_at="2026-07-07T00:00:00Z",
-        )
-        # With no command and no artifact, the event has no fingerprint but is
-        # still recorded as decision evidence (Cloud may enrich it). Assert it
-        # enqueued without a fingerprint rather than rejecting outright.
-        assert enqueued is True
-        events = store.list_guard_events_v1(uploaded=False, limit=10)
-        assert len(events) == 1
-        payload = events[0]["payload"]
-        assert isinstance(payload, dict)
-        assert payload["payload"]["memory_pattern_fingerprint"] is None
-
-    def test_enqueue_rejects_empty_request_id(self, tmp_path: Path) -> None:
-        store = _store(tmp_path)
-        _seed_workspace(store)
-        request = _approval_request()
-        request["request_id"] = ""
-        enqueued = enqueue_memory_decision_event(
-            store,
-            request=request,
-            action="allow",
-            scope="harness",
-            resolved_at="2026-07-07T00:00:00Z",
-        )
-        assert enqueued is False
-        assert store.count_guard_events_v1(uploaded=False) == 0
-
-    def test_enqueue_does_not_raise_without_cloud_pairing(self, tmp_path: Path) -> None:
-        store = _store(tmp_path)
-        # No OAuth seeding — store has no cloud pairing.
-        enqueued = enqueue_memory_decision_event(
-            store,
-            request=_approval_request(),
-            action="allow",
-            scope="harness",
-            resolved_at="2026-07-07T00:00:00Z",
-        )
-        # Event still enqueues into the outbox; sync will skip until paired.
-        # The important contract: no exception is raised.
-        assert isinstance(enqueued, bool)

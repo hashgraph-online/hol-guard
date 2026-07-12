@@ -30,14 +30,17 @@ def test_pr_canary_uses_trusted_publishing_for_same_repository_prs() -> None:
         for step in job["steps"]
         if isinstance(step, dict)
     )
+    assert "rm -f dist/plugin_scanner-* dist/plugin-scanner-*" in (ROOT / ".github/workflows/publish.yml").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_pr_canary_builds_a_unique_pep440_dev_release() -> None:
     workflow_path = ROOT / ".github/workflows/publish.yml"
     workflow_text = workflow_path.read_text(encoding="utf-8")
 
-    assert "printf '%06d' \"$GITHUB_RUN_NUMBER\"" in workflow_text
-    assert "printf '%02d' \"$GITHUB_RUN_ATTEMPT\"" in workflow_text
+    assert "def pair(left: int, right: int) -> int:" in workflow_text
+    assert "pair(pair(int(os.environ['PR_NUMBER']), int(os.environ['GITHUB_RUN_NUMBER']))" in workflow_text
     assert "scripts/sync_repo_version.py --version" in workflow_text
     assert "python -m build" in workflow_text
     assert "twine check dist/*" in workflow_text
