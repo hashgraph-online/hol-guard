@@ -10,6 +10,7 @@ _PACKAGE_SHIM_PARSER_MANAGERS = frozenset(
     {
         "brew",
         "bun",
+        "bunx",
         "bundle",
         "cargo",
         "composer",

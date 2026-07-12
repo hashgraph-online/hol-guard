@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime import package_intent_parser
 from codex_plugin_scanner.guard.runtime.package_intent import (
     extract_package_intent_request,
     parse_manifest_dependency_changes,
@@ -143,6 +144,53 @@ def test_parse_package_intent_skips_verified_local_test_runner_execution(tmp_pat
             {"command": "bunx --no-install vitest run tests/example.test.ts"},
             action_envelope_command="bunx --no-install vitest run tests/example.test.ts",
             workspace=tmp_path,
+        )
+        is None
+    )
+
+
+def test_parse_package_intent_skips_guard_shimmed_bunx_test_runner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_text(tmp_path / "package.json", '{"name":"demo","devDependencies":{"vitest":"^4.1.8"}}\n')
+    _write_text(tmp_path / "bun.lock", '"vitest": "4.1.8"\n')
+    runner = tmp_path / "node_modules" / ".bin" / "vitest"
+    _write_text(runner, "#!/bin/sh\n")
+    runner.chmod(0o755)
+    home_dir = tmp_path / "home"
+    shim_path = home_dir / ".hol-guard" / "package-shims" / "bin" / "bunx"
+    _write_text(shim_path, "#!/bin/sh\n")
+    shim_path.chmod(0o755)
+    monkeypatch.setattr(package_intent_parser.Path, "home", classmethod(lambda cls: home_dir))
+    monkeypatch.setattr(
+        package_intent_parser.shutil, "which", lambda command: str(shim_path) if command == "bunx" else None
+    )
+
+    assert parse_package_intent("bunx vitest run tests/example.test.ts", workspace=tmp_path) is None
+    assert parse_package_intent("bunx --bun vitest run tests/example.test.ts", workspace=tmp_path) is None
+
+
+def test_extract_package_intent_skips_guard_shimmed_npx_test_runner_in_pipeline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_text(tmp_path / "package.json", '{"name":"demo","devDependencies":{"vitest":"^4.1.8"}}\n')
+    _write_text(tmp_path / "bun.lock", '"vitest": "4.1.8"\n')
+    runner = tmp_path / "node_modules" / ".bin" / "vitest"
+    _write_text(runner, "#!/bin/sh\n")
+    runner.chmod(0o755)
+    home_dir = tmp_path / "home"
+    shim_path = home_dir / ".hol-guard" / "package-shims" / "bin" / "npx"
+    _write_text(shim_path, "#!/bin/sh\n")
+    shim_path.chmod(0o755)
+    monkeypatch.setattr(package_intent_parser.Path, "home", classmethod(lambda cls: home_dir))
+    monkeypatch.setattr(
+        package_intent_parser.shutil, "which", lambda command: str(shim_path) if command == "npx" else None
+    )
+    command = "cd project && npx vitest run tests/unit.test.tsx 2>&1 | tail -15"
+
+    assert (
+        extract_package_intent_request(
+            "Bash", {"command": command}, action_envelope_command=command, workspace=tmp_path
         )
         is None
     )

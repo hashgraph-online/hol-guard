@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -35,7 +36,11 @@ from .secret_file_requests import _SHELL_TOOL_NAMES, _candidate_command_texts, _
 _CONTROL_TOKENS = {"&&", "||", ";", "|", "|&", "&"}
 _ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
 _LOCAL_EXECUTION_COMMANDS = frozenset({"bunx", "npx"})
-_LOCAL_EXECUTION_FLAGS = frozenset({"--bun", "--no-install"})
+_LOCAL_EXECUTION_FLAGS_BY_COMMAND = {
+    "bunx": frozenset({"--bun", "--no-install"}),
+    "npx": frozenset({"--no", "--no-install"}),
+}
+_LOCAL_TEST_RUNNER_EXECUTABLES = frozenset({"jest", "mocha", "vitest"})
 _JS_LOCKFILE_NAMES = ("bun.lock", "bun.lockb", "package-lock.json", "pnpm-lock.yaml", "yarn.lock")
 _PYTHON_EXECUTABLES = {"py", "python", "python3", "python3.11", "python3.12", "python3.13", "python3.14"}
 _PACKAGE_SOURCE_ENV_NAMES = frozenset(
@@ -228,7 +233,9 @@ def _parse_exec_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> Pa
 def _is_verified_local_executable_execution(tokens: tuple[str, ...], *, workspace: Path | None) -> bool:
     if workspace is None or not tokens or _command_name(tokens[0]) not in _LOCAL_EXECUTION_COMMANDS:
         return False
-    if not _local_execution_disables_install(tokens):
+    if not _local_execution_disables_install(tokens) and not (
+        _is_local_test_runner_execution(tokens) and _guard_package_shim_is_active(tokens[0])
+    ):
         return False
     executable = _local_executable_name(tokens)
     if executable is None:
@@ -241,18 +248,40 @@ def _is_verified_local_executable_execution(tokens: tuple[str, ...], *, workspac
 
 
 def _local_execution_disables_install(tokens: tuple[str, ...]) -> bool:
+    command = _command_name(tokens[0]) if tokens else ""
+    local_only_flags = _LOCAL_EXECUTION_FLAGS_BY_COMMAND.get(command, frozenset())
     for token in tokens[1:]:
         if not token.startswith("-"):
             return False
-        if token == "--no-install":
+        if token not in local_only_flags:
+            return False
+        if token in {"--no", "--no-install"}:
             return True
     return False
 
 
+def _is_local_test_runner_execution(tokens: tuple[str, ...]) -> bool:
+    executable = _local_executable_name(tokens)
+    return executable in _LOCAL_TEST_RUNNER_EXECUTABLES
+
+
+def _guard_package_shim_is_active(command: str) -> bool:
+    resolved_command = shutil.which(command)
+    if resolved_command is None:
+        return False
+    try:
+        expected_shim = Path.home() / ".hol-guard" / "package-shims" / "bin" / command
+        return Path(resolved_command).resolve() == expected_shim.resolve()
+    except (OSError, RuntimeError):
+        return False
+
+
 def _local_executable_name(tokens: tuple[str, ...]) -> str | None:
+    command = _command_name(tokens[0]) if tokens else ""
+    allowed_flags = _LOCAL_EXECUTION_FLAGS_BY_COMMAND.get(command, frozenset())
     index = 1
     while index < len(tokens) and tokens[index].startswith("-"):
-        if tokens[index] not in _LOCAL_EXECUTION_FLAGS:
+        if tokens[index] not in allowed_flags:
             return None
         index += 1
     if index >= len(tokens):

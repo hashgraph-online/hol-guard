@@ -1312,6 +1312,28 @@ def test_guard_package_shims_block_before_manager_execution(
     assert "HOL Guard" in result.stdout
 
 
+@pytest.mark.parametrize(
+    ("manager", "expected_local_only_flag"),
+    (("bunx", "--no-install"), ("npx", "--no")),
+)
+def test_package_shim_uses_manager_specific_local_only_flag(
+    tmp_path: Path,
+    manager: str,
+    expected_local_only_flag: str,
+) -> None:
+    context = HarnessContext(
+        home_dir=Path.home(),
+        guard_home=tmp_path / ".hol-guard",
+        workspace_dir=tmp_path / "workspace",
+    )
+    shim_source = guard_shims_module._build_package_manager_python_shim(context, manager)
+
+    assert f"command_name = {manager!r}" in shim_source
+    assert "local_only_flag = {'bunx': '--no-install', 'npx': '--no'}.get(command_name)" in shim_source
+    assert "manager_args.insert(runner_index, local_only_flag)" in shim_source
+    assert expected_local_only_flag in shim_source
+
+
 def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
