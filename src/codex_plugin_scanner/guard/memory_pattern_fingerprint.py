@@ -31,10 +31,10 @@ MemoryPatternKind = Literal[
 
 def build_exact_command_memory_artifact_id(command: str | None) -> str | None:
     """Build a local policy key that matches only the remembered command."""
-    normalized = command.strip() if command is not None else ""
-    if not normalized:
+    exact = command if command is not None else ""
+    if not exact.strip():
         return None
-    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(exact.encode("utf-8")).hexdigest()
     return f"memory:exact-command:{digest}"
 
 

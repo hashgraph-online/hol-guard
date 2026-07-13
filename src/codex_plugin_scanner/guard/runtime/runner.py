@@ -1157,15 +1157,21 @@ def _policy_bundle_rule_locations(rule: dict[str, object]) -> list[str]:
     return [item.strip() for item in locations if isinstance(item, str) and item.strip()]
 
 
+def _policy_bundle_non_empty_exact_command(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value
+    return None
+
+
 def _policy_bundle_rule_exact_command(rule: dict[str, object]) -> str | None:
     matcher = rule.get("matcher")
     if isinstance(matcher, dict):
-        command = non_empty_string(matcher.get("command"))
+        command = _policy_bundle_non_empty_exact_command(matcher.get("command"))
         if command is not None:
             return command
     scope = rule.get("scope")
     if isinstance(scope, dict):
-        return non_empty_string(scope.get("command"))
+        return _policy_bundle_non_empty_exact_command(scope.get("command"))
     return None
 
 

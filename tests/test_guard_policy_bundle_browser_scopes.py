@@ -204,7 +204,7 @@ class TestBrowserScopeDecisionNarrowing:
             _build_policy_bundle_decisions,
         )
 
-        command = "python -m pytest"
+        command = " python -m pytest "
         rule = self._local_match_rule()
         rule["matcher"] = {"command": command, "tool": "shell"}
         rule["artifactId"] = "memory:codex:command_pattern:broad"

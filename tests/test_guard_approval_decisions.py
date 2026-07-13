@@ -215,6 +215,20 @@ def test_remote_exact_command_policy_rejects_command_suffix(
         )
         is None
     )
+    for whitespace_variant in (
+        " printf 'suggested-memory'",
+        "printf 'suggested-memory' ",
+    ):
+        assert (
+            store.resolve_policy(
+                "codex",
+                "codex:runtime:shell:request-whitespace",
+                memory_command=whitespace_variant,
+                memory_artifact_type="shell_command",
+                memory_artifact_name="Shell command",
+            )
+            is None
+        )
 
 
 @pytest.mark.parametrize(
