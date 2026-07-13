@@ -174,9 +174,7 @@ def test_remote_exact_command_policy_rejects_command_suffix(
     policy_action: str,
 ) -> None:
     store = _make_store(tmp_path)
-    exact_artifact_id = build_exact_command_memory_artifact_id(
-        "printf 'suggested-memory'"
-    )
+    exact_artifact_id = build_exact_command_memory_artifact_id("printf 'suggested-memory'")
     assert exact_artifact_id is not None
     store.replace_remote_policies(
         [

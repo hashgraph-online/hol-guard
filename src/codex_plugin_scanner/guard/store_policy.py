@@ -216,13 +216,8 @@ class StorePolicyMixin:
         )
         if direct_lookup["decision"] is not None or direct_lookup.get("ignored_local_integrity") is not None:
             return direct_lookup
-        exact_command_artifact_id = build_exact_command_memory_artifact_id(
-            memory_command
-        )
-        if (
-            exact_command_artifact_id is not None
-            and exact_command_artifact_id != artifact_id
-        ):
+        exact_command_artifact_id = build_exact_command_memory_artifact_id(memory_command)
+        if exact_command_artifact_id is not None and exact_command_artifact_id != artifact_id:
             exact_command_lookup = self.resolve_policy_decision_lookup(
                 harness,
                 exact_command_artifact_id,

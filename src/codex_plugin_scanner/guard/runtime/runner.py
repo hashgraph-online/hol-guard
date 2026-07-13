@@ -1170,9 +1170,7 @@ def _policy_bundle_rule_exact_command(rule: dict[str, object]) -> str | None:
 
 
 def _policy_bundle_rule_exact_artifact_ids(rule: dict[str, object]) -> list[str]:
-    exact_command_artifact_id = build_exact_command_memory_artifact_id(
-        _policy_bundle_rule_exact_command(rule)
-    )
+    exact_command_artifact_id = build_exact_command_memory_artifact_id(_policy_bundle_rule_exact_command(rule))
     if exact_command_artifact_id is not None:
         return [exact_command_artifact_id]
 

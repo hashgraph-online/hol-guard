@@ -210,14 +210,10 @@ class TestBrowserScopeDecisionNarrowing:
         rule["artifactId"] = "memory:codex:command_pattern:broad"
         rule["matcherFamilies"] = ["tool-action"]
         bundle = _valid_bundle_with_rules([rule])
-        decisions = _build_policy_bundle_decisions(
-            bundle, device_id="device-1", device_name="dev"
-        )
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
         assert len(decisions) == 1
         assert decisions[0].scope == "artifact"
-        assert decisions[0].artifact_id == build_exact_command_memory_artifact_id(
-            command
-        )
+        assert decisions[0].artifact_id == build_exact_command_memory_artifact_id(command)
 
     def test_rule_with_only_sensitive_surface_skipped(self) -> None:
         """A rule with only sensitiveSurface scope is skipped (no broad allow)."""
