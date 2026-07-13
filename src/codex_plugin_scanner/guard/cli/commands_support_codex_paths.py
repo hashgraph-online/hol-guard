@@ -150,9 +150,22 @@ def _codex_search_targets_are_source_like(
     targets = _codex_search_targets(args, executable=executable)
     if not targets:
         return False
-    return bool(targets) and all(
-        _codex_search_target_is_source_like(target, cwd=cwd, home_dir=home_dir) for target in targets
+    from ..runtime.source_paths import source_path_is_allowed
+
+    allow_external_source = executable == "grep"
+    decisions = tuple(
+        source_path_is_allowed(
+            target,
+            cwd=cwd,
+            home_dir=home_dir,
+            allow_external_source=allow_external_source,
+        )
+        for target in targets
     )
+    if not all(decision.allowed for decision in decisions):
+        return False
+    has_external_target = any(decision.reason_code == "external_source_path" for decision in decisions)
+    return not (has_external_target and executable == "grep" and _codex_grep_args_request_recursive_search(args))
 
 
 def _codex_fd_targets_are_source_like(args: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:
@@ -181,6 +194,44 @@ def _codex_fd_exec_is_bounded_read_only(args: list[str]) -> bool:
         return False
     sed_args = [arg for arg in exec_parts[1:] if arg != "{}"]
     return _codex_sed_args_are_bounded_filter(sed_args)
+
+
+def _codex_grep_args_request_recursive_search(args: list[str]) -> bool:
+    skip_next = False
+    for index, arg in enumerate(args):
+        if skip_next:
+            skip_next = False
+            continue
+        if arg == "--":
+            return False
+        if arg in _CODEX_SEARCH_PATTERN_VALUE_FLAGS:
+            skip_next = True
+            continue
+        if any(arg.startswith(flag) and len(arg) > len(flag) for flag in ("-e", "-f")):
+            continue
+        if arg in {"--dereference-recursive", "--recursive"}:
+            return True
+        if arg == "-d":
+            if index + 1 >= len(args) or args[index + 1] not in {"read", "skip"}:
+                return True
+            skip_next = True
+            continue
+        if arg.startswith("-d"):
+            if arg.removeprefix("-d") not in {"read", "skip"}:
+                return True
+            continue
+        if arg == "--directories":
+            if index + 1 >= len(args) or args[index + 1] not in {"read", "skip"}:
+                return True
+            skip_next = True
+            continue
+        if arg.startswith("--directories="):
+            if arg.removeprefix("--directories=") not in {"read", "skip"}:
+                return True
+            continue
+        if arg.startswith("-") and not arg.startswith("--") and "r" in arg[1:]:
+            return True
+    return False
 
 
 def _codex_search_targets(args: list[str], *, executable: str) -> tuple[str, ...]:
@@ -244,10 +295,38 @@ def _codex_search_arg_is_unsafe(arg: str, *, executable: str, option_value_flags
     return False
 
 
-def _codex_search_target_is_source_like(target: str, *, cwd: Path | None, home_dir: Path | None) -> bool:
+def _codex_search_target_is_source_like(
+    target: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    allow_external_source: bool = False,
+) -> bool:
     from ..runtime.source_paths import source_path_is_allowed
 
-    return source_path_is_allowed(target, cwd=cwd, home_dir=home_dir).allowed
+    return source_path_is_allowed(
+        target,
+        cwd=cwd,
+        home_dir=home_dir,
+        allow_external_source=allow_external_source,
+    ).allowed
+
+
+def _codex_search_target_is_external_source_like(
+    target: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> bool:
+    from ..runtime.source_paths import source_path_is_allowed
+
+    decision = source_path_is_allowed(
+        target,
+        cwd=cwd,
+        home_dir=home_dir,
+        allow_external_source=True,
+    )
+    return decision.reason_code == "external_source_path"
 
 
 def _codex_resolve_source_like_path(target: str, *, cwd: Path | None, home_dir: Path | None) -> Path | None:
@@ -459,6 +538,7 @@ __all__ = [
     "_codex_prompt_display_text",
     "_codex_resolve_source_like_path",
     "_codex_search_arg_is_unsafe",
+    "_codex_search_target_is_external_source_like",
     "_codex_search_target_is_source_like",
     "_codex_search_targets",
     "_codex_search_targets_are_source_like",

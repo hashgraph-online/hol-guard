@@ -19617,6 +19617,57 @@ def test_sync_runtime_session_treats_token_endpoint_503_as_retryable_error(tmp_p
     assert not isinstance(error.value, guard_runner_module.GuardSyncAuthorizationExpiredError)
 
 
+def test_codex_read_only_source_inspection_external_targets_require_plain_non_recursive_grep(
+    tmp_path: Path,
+) -> None:
+    home_dir = tmp_path / "home"
+    projects_dir = home_dir / "projects"
+    workspace_dir = projects_dir / "workspace"
+    source_root = projects_dir / "sibling-worktree"
+    source_file = source_root / "src" / "safe.ts"
+    workspace_dir.mkdir(parents=True)
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text("export const browser = true;\n")
+    (source_root / ".git").write_text("gitdir: ../.git/worktrees/test-checkout\n")
+
+    assert guard_commands_module._codex_command_is_read_only_source_inspection(
+        f"grep 'browser' {source_file}",
+        cwd=workspace_dir,
+        home_dir=home_dir,
+    )
+
+    workspace_source = workspace_dir / "src" / "local.ts"
+    workspace_source.parent.mkdir()
+    workspace_source.write_text("export const browser = true;\n")
+    assert guard_commands_module._codex_command_is_read_only_source_inspection(
+        f"grep -r 'browser' {workspace_source.parent}",
+        cwd=workspace_dir,
+        home_dir=home_dir,
+    )
+
+    rejected_commands = (
+        f"grep -r 'browser' {source_file.parent}",
+        f"grep -R 'browser' {source_file.parent}",
+        f"grep -rn 'browser' {source_file.parent}",
+        f"grep -nR 'browser' {source_file.parent}",
+        f"grep --recursive 'browser' {source_file.parent}",
+        f"grep --dereference-recursive 'browser' {source_file.parent}",
+        f"grep -d recurse 'browser' {source_file.parent}",
+        f"grep -drecurse 'browser' {source_file.parent}",
+        f"grep --directories=recurse 'browser' {source_file.parent}",
+        f"grep --directories recurse 'browser' {source_file.parent}",
+        f"rg 'browser' {source_file}",
+        f"git grep 'browser' {source_file}",
+        f"bash -c \"grep 'browser' {source_file}\"",
+    )
+    for command in rejected_commands:
+        assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+            command,
+            cwd=workspace_dir,
+            home_dir=home_dir,
+        )
+
+
 def test_codex_read_only_source_inspection_rejects_globbed_targets(tmp_path: Path) -> None:
     workspace_dir = tmp_path / "workspace"
     (workspace_dir / "src").mkdir(parents=True)

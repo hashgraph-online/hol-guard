@@ -26,6 +26,7 @@ if TYPE_CHECKING:
         _codex_fd_targets,
         _codex_fd_targets_are_source_like,
         _codex_resolve_source_like_path,
+        _codex_search_target_is_external_source_like,
         _codex_search_target_is_source_like,
         _codex_search_targets,
         _codex_search_targets_are_source_like,
@@ -73,6 +74,34 @@ def _codex_source_inspection_target_tokens(parts: list[str]) -> tuple[str, ...]:
     return ()
 
 
+def _codex_command_has_external_source_search_target(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> bool:
+    chained_segments = _split_codex_safe_read_only_chain(command_text)
+    if chained_segments is not None:
+        return any(
+            _codex_command_has_external_source_search_target(segment, cwd=cwd, home_dir=home_dir)
+            for segment in chained_segments
+        )
+    pipeline_segments = _split_codex_safe_read_only_pipeline(command_text)
+    if pipeline_segments:
+        return any(
+            _codex_command_has_external_source_search_target(segment, cwd=cwd, home_dir=home_dir)
+            for segment in pipeline_segments
+        )
+    try:
+        parts = shlex.split(command_text)
+    except ValueError:
+        return False
+    return any(
+        _codex_search_target_is_external_source_like(target, cwd=cwd, home_dir=home_dir)
+        for target in _codex_source_inspection_target_tokens(parts)
+    )
+
+
 def _codex_cat_targets(args: list[str]) -> list[str]:
     targets: list[str] = []
     after_option_terminator = False
@@ -100,6 +129,15 @@ def _codex_command_is_read_only_source_inspection(
         return False
     if _codex_command_has_unquoted_glob_metachar(command):
         return False
+    if _codex_command_has_external_source_search_target(command, cwd=cwd, home_dir=home_dir):
+        try:
+            parts = shlex.split(command)
+        except ValueError:
+            return False
+        if not parts or parts[0] != "grep":
+            return False
+        # External targets are allowed only for one direct plain grep command.
+        return _codex_command_is_read_only_source_search(command, cwd=cwd, home_dir=home_dir)
     chained_segments = _split_codex_safe_read_only_chain(command)
     if chained_segments is not None:
         current_cwd = cwd
@@ -529,6 +567,7 @@ def _codex_sed_args_are_bounded_filter(args: list[str]) -> bool:
 __all__ = [
     "_codex_cat_targets",
     "_codex_cat_targets_are_source_like",
+    "_codex_command_has_external_source_search_target",
     "_codex_command_has_unquoted_glob_metachar",
     "_codex_command_is_bounded_read_only_filter",
     "_codex_command_is_read_only_source_inspection",

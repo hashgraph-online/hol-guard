@@ -230,6 +230,7 @@ _CODEX_SEARCH_OPTION_VALUE_FLAGS = frozenset(
 )
 
 _CODEX_SEARCH_OPTION_VALUE_FLAGS_BY_EXECUTABLE = {
+    "grep": frozenset({"-d", "--directories"}),
     "rg": frozenset({"-T"}),
 }
 
