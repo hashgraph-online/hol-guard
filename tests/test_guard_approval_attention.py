@@ -183,6 +183,33 @@ def test_attention_policy_opens_critical_request_without_delay(tmp_path: Path) -
     assert opened_urls == ["http://127.0.0.1:5474/requests/pending"]
 
 
+def test_attention_policy_retries_critical_request_after_open_burst(tmp_path: Path) -> None:
+    store, runtime, result = _queue_operation(tmp_path, harness="pi", severity="critical")
+    now = [100.0]
+    opened_urls: list[str] = []
+    coordinator = _schedule(store, runtime, result, now=now, opened_urls=opened_urls)
+    coordinator.process_due()
+
+    operation = result["operation"]
+    requests = result["approval_requests"]
+    assert isinstance(operation, dict)
+    assert isinstance(requests, list)
+    coordinator.schedule(
+        operation_id=str(operation["operation_id"]),
+        requests=[request for request in requests if isinstance(request, dict)],
+        browser_url="http://127.0.0.1:5474/requests/critical",
+    )
+    coordinator.process_due()
+    assert opened_urls == ["http://127.0.0.1:5474/requests/pending"]
+
+    now[0] += 5
+    coordinator.process_due()
+    assert opened_urls == [
+        "http://127.0.0.1:5474/requests/pending",
+        "http://127.0.0.1:5474/requests/critical",
+    ]
+
+
 def test_attention_severity_uses_structured_signals() -> None:
     request = {
         "decision_v2_json": {

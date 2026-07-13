@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import final
 
@@ -15,6 +15,7 @@ from .surface_server import GuardSurfaceRuntime
 
 _SEVERITY_ORDER = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 _BROWSER_OPEN_COOLDOWN_SECONDS = 300.0
+_CRITICAL_BURST_COOLDOWN_SECONDS = 5.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +24,7 @@ class _PendingAttention:
     request_ids: tuple[str, ...]
     browser_url: str
     due_at: float
+    urgent: bool
 
 
 def request_max_severity(request: dict[str, object]) -> str:
@@ -109,16 +111,14 @@ class ApprovalAttentionCoordinator:
         config = self._config_for_requests(requests)
         if config.approval_surface_policy != "attention-aware":
             return
-        delay = (
-            0.0
-            if should_open_immediately(requests, config.approval_browser_immediate_severity)
-            else float(config.approval_browser_delay_seconds)
-        )
+        urgent = should_open_immediately(requests, config.approval_browser_immediate_severity)
+        delay = 0.0 if urgent else float(config.approval_browser_delay_seconds)
         item = _PendingAttention(
             operation_id=operation_id,
             request_ids=request_ids,
             browser_url=browser_url,
             due_at=self._clock() + delay,
+            urgent=urgent,
         )
         with self._condition:
             self._pending[operation_id] = item
@@ -165,8 +165,13 @@ class ApprovalAttentionCoordinator:
         config = self._config_for_requests(requests)
         if config.approval_surface_policy != "attention-aware" or self._runtime.has_live_surface("approval-center"):
             return
-        if self._last_opened_at is not None and now - self._last_opened_at < self._cooldown_seconds:
-            return
+        if self._last_opened_at is not None:
+            elapsed = now - self._last_opened_at
+            if item.urgent and elapsed < _CRITICAL_BURST_COOLDOWN_SECONDS:
+                self._reschedule(item, due_at=now + _CRITICAL_BURST_COOLDOWN_SECONDS - elapsed)
+                return
+            if not item.urgent and elapsed < self._cooldown_seconds:
+                return
         try:
             opened = self._opener(item.browser_url)
         except Exception:
@@ -175,6 +180,13 @@ class ApprovalAttentionCoordinator:
             return
         self._last_opened_at = now
         self._runtime.record_surface_open(surface="approval-center", open_key=f"attention:{item.request_ids[0]}")
+
+    def _reschedule(self, item: _PendingAttention, *, due_at: float) -> None:
+        with self._condition:
+            if self._stopping:
+                return
+            self._pending[item.operation_id] = replace(item, due_at=due_at)
+            self._condition.notify_all()
 
     def _operation_was_superseded(self, operation: dict[str, object]) -> bool:
         session_id = operation.get("session_id")
