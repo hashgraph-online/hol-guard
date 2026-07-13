@@ -18,8 +18,8 @@ from codex_plugin_scanner.guard.runtime.source_paths import (
 
 @pytest.fixture()
 def workspace(tmp_path: Path) -> Path:
-    ws = tmp_path / "workspace"
-    ws.mkdir()
+    ws = tmp_path / "home" / "workspace"
+    ws.mkdir(parents=True)
     (ws / "src").mkdir()
     (ws / "docs").mkdir()
     (ws / "lib").mkdir()
@@ -29,8 +29,13 @@ def workspace(tmp_path: Path) -> Path:
 @pytest.fixture()
 def home_dir(tmp_path: Path) -> Path:
     hd = tmp_path / "home"
-    hd.mkdir()
+    hd.mkdir(exist_ok=True)
     return hd
+
+
+def _write_worktree_git_marker(checkout_root: Path) -> None:
+    checkout_root.mkdir(parents=True, exist_ok=True)
+    (checkout_root / ".git").write_text("gitdir: ../.git/worktrees/test-checkout\n")
 
 
 class TestSourceClassifierVersion:
@@ -108,6 +113,218 @@ class TestSourcePathIsAllowed:
         outside.write_text("x")
         decision = source_path_is_allowed(str(outside), cwd=workspace, home_dir=home_dir)
         assert not decision.allowed
+
+    def test_external_source_path_requires_explicit_search_opt_in(
+        self, workspace: Path, home_dir: Path, tmp_path: Path
+    ) -> None:
+        source_file = (home_dir / "sibling-source" / "scripts" / "guard-test").resolve()
+        source_file.parent.mkdir(parents=True)
+        source_file.write_text("#!/bin/sh\n")
+        _write_worktree_git_marker(home_dir / "sibling-source")
+
+        decision = source_path_is_allowed(
+            str(source_file),
+            cwd=workspace,
+            home_dir=home_dir,
+            allow_external_source=True,
+        )
+
+        assert decision.allowed
+        assert decision.reason_code == "external_source_path"
+
+    def test_external_source_path_under_sibling_git_directory_allowed(
+        self, workspace: Path, home_dir: Path
+    ) -> None:
+        source_root = home_dir / "sibling-repository"
+        source_file = (source_root / "src" / "main.py").resolve()
+        source_file.parent.mkdir(parents=True)
+        source_file.write_text("value = 1\n")
+        (source_root / ".git").mkdir()
+
+        decision = source_path_is_allowed(
+            str(source_file),
+            cwd=workspace,
+            home_dir=home_dir,
+            allow_external_source=True,
+        )
+
+        assert decision.allowed
+        assert decision.reason_code == "external_source_path"
+
+    def test_external_source_path_in_downloads_nested_git_checkout_rejected(
+        self, workspace: Path, home_dir: Path
+    ) -> None:
+        nested_checkout = home_dir / "Downloads" / "app"
+        source_file = (nested_checkout / "src" / "main.py").resolve()
+        source_file.parent.mkdir(parents=True)
+        source_file.write_text("value = 1\n")
+        (nested_checkout / ".git").mkdir()
+
+        decision = source_path_is_allowed(
+            str(source_file),
+            cwd=workspace,
+            home_dir=home_dir,
+            allow_external_source=True,
+        )
+
+        assert not decision.allowed
+        assert decision.reason_code == "external_target_not_sibling_git_checkout"
+
+    def test_external_source_path_outside_home_rejected(
+        self, workspace: Path, home_dir: Path, tmp_path: Path
+    ) -> None:
+        source_file = (tmp_path / "outside-home" / "scripts" / "guard-test").resolve()
+        source_file.parent.mkdir(parents=True)
+        source_file.write_text("#!/bin/sh\n")
+
+        decision = source_path_is_allowed(
+            str(source_file),
+            cwd=workspace,
+            home_dir=home_dir,
+            allow_external_source=True,
+        )
+
+        assert not decision.allowed
+        assert decision.reason_code == "external_target_outside_home"
+
+    def test_external_source_path_without_home_rejected(
+        self, workspace: Path, home_dir: Path
+    ) -> None:
+        source_file = (home_dir / "sibling-source" / "scripts" / "guard-test").resolve()
+        source_file.parent.mkdir(parents=True)
+        source_file.write_text("#!/bin/sh\n")
+        _write_worktree_git_marker(home_dir / "sibling-source")
+
+        decision = source_path_is_allowed(
+            str(source_file),
+            cwd=workspace,
+            home_dir=None,
+            allow_external_source=True,
+        )
+
+        assert not decision.allowed
+        assert decision.reason_code == "external_home_unavailable"
+
+    def test_external_source_path_with_unresolvable_home_rejected(
+        self, workspace: Path, home_dir: Path, tmp_path: Path
+    ) -> None:
+        source_file = (home_dir / "sibling-source" / "scripts" / "guard-test").resolve()
+        source_file.parent.mkdir(parents=True)
+        source_file.write_text("#!/bin/sh\n")
+        _write_worktree_git_marker(home_dir / "sibling-source")
+
+        decision = source_path_is_allowed(
+            str(source_file),
+            cwd=workspace,
+            home_dir=tmp_path / "missing-home",
+            allow_external_source=True,
+        )
+
+        assert not decision.allowed
+        assert decision.reason_code == "external_home_unavailable"
+
+    def test_external_search_opt_in_rejects_relative_escape(
+        self, workspace: Path, home_dir: Path, tmp_path: Path
+    ) -> None:
+        source_file = home_dir / "external-source" / "scripts" / "guard-test"
+        source_file.parent.mkdir(parents=True)
+        source_file.write_text("#!/bin/sh\n")
+
+        decision = source_path_is_allowed(
+            "../external-source/scripts/guard-test",
+            cwd=workspace,
+            home_dir=home_dir,
+            allow_external_source=True,
+        )
+
+        assert not decision.allowed
+        assert decision.reason_code == "absolute_path_outside_workspace"
+
+    def test_external_sensitive_path_rejected(self, workspace: Path, home_dir: Path, tmp_path: Path) -> None:
+        secret_file = (home_dir / "sibling-source" / "credentials" / "config.ts").resolve()
+        secret_file.parent.mkdir(parents=True)
+        secret_file.write_text("credential = 'value'\n")
+        _write_worktree_git_marker(home_dir / "sibling-source")
+
+        decision = source_path_is_allowed(
+            str(secret_file),
+            cwd=workspace,
+            home_dir=home_dir,
+            allow_external_source=True,
+        )
+
+        assert not decision.allowed
+        assert decision.reason_code == "sensitive_basename"
+
+    @pytest.mark.parametrize("filename", ("secrets.json", "credentials.yaml", "auth_token.ts"))
+    def test_external_sensitive_filename_rejected(
+        self,
+        workspace: Path,
+        home_dir: Path,
+        filename: str,
+    ) -> None:
+        source_root = home_dir / "sibling-source"
+        source_file = (source_root / filename).resolve()
+        source_file.parent.mkdir(parents=True)
+        source_file.write_text("value = 1\n")
+        _write_worktree_git_marker(source_root)
+
+        decision = source_path_is_allowed(
+            str(source_file),
+            cwd=workspace,
+            home_dir=home_dir,
+            allow_external_source=True,
+        )
+
+        assert not decision.allowed
+        assert decision.reason_code == "sensitive_basename"
+
+    @pytest.mark.parametrize("filename", ("authentication.ts", "tokenizer.ts", "secretary.ts"))
+    def test_external_sensitive_filename_avoids_substring_false_positives(
+        self,
+        workspace: Path,
+        home_dir: Path,
+        filename: str,
+    ) -> None:
+        source_root = home_dir / "sibling-source"
+        source_file = (source_root / filename).resolve()
+        source_file.parent.mkdir(parents=True)
+        source_file.write_text("value = 1\n")
+        _write_worktree_git_marker(source_root)
+
+        decision = source_path_is_allowed(
+            str(source_file),
+            cwd=workspace,
+            home_dir=home_dir,
+            allow_external_source=True,
+        )
+
+        assert decision.allowed
+        assert decision.reason_code == "external_source_path"
+
+    def test_external_symlinked_source_path_rejected(
+        self, workspace: Path, home_dir: Path, tmp_path: Path
+    ) -> None:
+        source_root = (home_dir / "sibling-source").resolve()
+        real_file = source_root / "scripts" / "guard-test"
+        real_file.parent.mkdir(parents=True)
+        real_file.write_text("#!/bin/sh\n")
+        _write_worktree_git_marker(source_root)
+        link = source_root / "scripts" / "linked-guard-test"
+        try:
+            link.symlink_to(real_file)
+        except OSError as exc:
+            pytest.skip(f"Cannot create symlinks: {exc}")
+
+        decision = source_path_is_allowed(
+            str(link),
+            cwd=workspace,
+            home_dir=home_dir,
+            allow_external_source=True,
+        )
+
+        assert not decision.allowed
+        assert decision.reason_code == "symlink_in_path"
 
     def test_relative_path_escape_rejected(self, workspace: Path, home_dir: Path, tmp_path: Path) -> None:
         outside = tmp_path / "outside.ts"
