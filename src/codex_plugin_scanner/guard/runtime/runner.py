@@ -45,6 +45,7 @@ from ..cloud_exceptions import (
 )
 from ..config import VALID_RECEIPT_REDACTION_LEVELS, GuardConfig, load_guard_config
 from ..edge_events import build_runtime_session_event
+from ..memory_pattern_fingerprint import build_exact_command_memory_artifact_id
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..package_firewall_defaults import extract_cloud_user_profile
 from ..package_firewall_entitlement import (
@@ -1095,6 +1096,8 @@ def _policy_bundle_rule_saved_decision_families(rule: dict[str, object]) -> list
     family-row behavior.
     """
     families = _policy_bundle_rule_matcher_families(rule)
+    if _policy_bundle_rule_exact_command(rule) is not None:
+        families = [family for family in families if family != "tool-action"]
     if "package-request" not in families:
         return families
     if _policy_bundle_rule_has_package_scope(rule):
@@ -1154,7 +1157,25 @@ def _policy_bundle_rule_locations(rule: dict[str, object]) -> list[str]:
     return [item.strip() for item in locations if isinstance(item, str) and item.strip()]
 
 
+def _policy_bundle_rule_exact_command(rule: dict[str, object]) -> str | None:
+    matcher = rule.get("matcher")
+    if isinstance(matcher, dict):
+        command = non_empty_string(matcher.get("command"))
+        if command is not None:
+            return command
+    scope = rule.get("scope")
+    if isinstance(scope, dict):
+        return non_empty_string(scope.get("command"))
+    return None
+
+
 def _policy_bundle_rule_exact_artifact_ids(rule: dict[str, object]) -> list[str]:
+    exact_command_artifact_id = build_exact_command_memory_artifact_id(
+        _policy_bundle_rule_exact_command(rule)
+    )
+    if exact_command_artifact_id is not None:
+        return [exact_command_artifact_id]
+
     artifact_ids: list[str] = []
     matcher = rule.get("matcher")
     if isinstance(matcher, dict):
