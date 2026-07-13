@@ -6,7 +6,10 @@ from __future__ import annotations
 
 # ruff: noqa: F403,F405
 from .approval_scope_support import package_request_portable_workspace_scope
-from .memory_pattern_fingerprint import build_memory_pattern_fingerprint
+from .memory_pattern_fingerprint import (
+    build_exact_command_memory_artifact_id,
+    build_memory_pattern_fingerprint,
+)
 from .store_base import *
 
 
@@ -213,6 +216,22 @@ class StorePolicyMixin:
         )
         if direct_lookup["decision"] is not None or direct_lookup.get("ignored_local_integrity") is not None:
             return direct_lookup
+        exact_command_artifact_id = build_exact_command_memory_artifact_id(memory_command)
+        if exact_command_artifact_id is not None and exact_command_artifact_id != artifact_id:
+            exact_command_lookup = self.resolve_policy_decision_lookup(
+                harness,
+                exact_command_artifact_id,
+                artifact_hash=artifact_hash,
+                workspace=workspace,
+                publisher=publisher,
+                now=now,
+                runtime_exact_match_context=runtime_exact_match_context,
+            )
+            if (
+                exact_command_lookup["decision"] is not None
+                or exact_command_lookup.get("ignored_local_integrity") is not None
+            ):
+                return exact_command_lookup
         memory_pattern = build_memory_pattern_fingerprint(
             command=memory_command,
             artifact_type=memory_artifact_type,

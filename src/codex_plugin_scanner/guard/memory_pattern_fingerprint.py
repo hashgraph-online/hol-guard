@@ -28,6 +28,16 @@ MemoryPatternKind = Literal[
     "generic_artifact_pattern",
 ]
 
+
+def build_exact_command_memory_artifact_id(command: str | None) -> str | None:
+    """Build a local policy key that matches only the remembered command."""
+    exact = command if command is not None else ""
+    if not exact.strip():
+        return None
+    digest = hashlib.sha256(exact.encode("utf-8")).hexdigest()
+    return f"memory:exact-command:{digest}"
+
+
 # Bare labels that are too generic to ever anchor reusable memory. They describe
 # a capability category, not a concrete behavior the user repeatedly chose.
 _GENERIC_FINGERPRINT_LABELS: frozenset[str] = frozenset(
