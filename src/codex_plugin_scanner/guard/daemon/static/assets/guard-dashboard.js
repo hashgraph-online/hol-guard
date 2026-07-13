@@ -16046,7 +16046,9 @@ async function fetchSettings() {
           codex: {}
         },
         approval_wait_timeout_seconds: 120,
-        approval_surface_policy: "auto-open-once",
+        approval_surface_policy: "attention-aware",
+        approval_browser_delay_seconds: 20,
+        approval_browser_immediate_severity: "critical",
         telemetry: false,
         sync: false,
         billing: false

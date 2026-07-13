@@ -181,9 +181,16 @@ const actionOptions = [
 ];
 
 const surfacePolicyOptions = [
-  { value: "auto-open-once", label: "Open this dashboard once" },
-  { value: "approval-center", label: "Show in this dashboard" },
-  { value: "native-only", label: "Show in my AI app only" },
+  { value: "attention-aware", label: "Smart (recommended)" },
+  { value: "approval-center", label: "Open prompts immediately" },
+  { value: "native-only", label: "Never open the browser" },
+];
+
+const attentionSeverityOptions = [
+  { value: "critical", label: "Critical risk" },
+  { value: "high", label: "High or critical risk" },
+  { value: "medium", label: "Medium risk or higher" },
+  { value: "low", label: "Any identified risk" },
 ];
 
 const protectionModeChoices = [
@@ -598,6 +605,16 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     setDraft((value) => value === null ? value : { ...value, approval_wait_timeout_seconds: nextTimeout });
     setSaveError(null);
   }, []);
+
+  const handleNumberChange = useCallback(
+    (key: keyof GuardSettings) => (event: ChangeEvent<HTMLInputElement>) => {
+      const parsed = Number.parseInt(event.target.value, 10);
+      const value = Number.isNaN(parsed) ? 0 : parsed;
+      setDraft((settings) => settings === null ? settings : { ...settings, [key]: value });
+      setSaveError(null);
+    },
+    [],
+  );
 
   const handleModeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const nextMode = event.target.value as GuardSettings["mode"];
@@ -1576,6 +1593,27 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 <SettingSelect label="Nested commands" value={draft.subprocess_action} options={actionOptions} onChange={handleStringChange("subprocess_action")} />
                 <SettingSelect label="Where to ask" value={draft.approval_surface_policy} options={surfacePolicyOptions} onChange={handleStringChange("approval_surface_policy")} />
               </div>
+              {draft.approval_surface_policy === "attention-aware" ? (
+                <div className="grid gap-3 border-t border-slate-100 py-3 sm:grid-cols-2">
+                  <SettingNumber
+                    label="Browser delay"
+                    value={draft.approval_browser_delay_seconds}
+                    min={0}
+                    max={300}
+                    suffix="seconds"
+                    onChange={handleNumberChange("approval_browser_delay_seconds")}
+                  />
+                  <SettingSelect
+                    label="Open immediately for"
+                    value={draft.approval_browser_immediate_severity}
+                    options={attentionSeverityOptions}
+                    onChange={handleStringChange("approval_browser_immediate_severity")}
+                  />
+                  <p className="text-xs leading-5 text-slate-500 sm:col-span-2">
+                    Guard cancels the browser prompt when your AI app continues with a different action. Desktop and in-app notices still appear immediately.
+                  </p>
+                </div>
+              ) : null}
             </SettingsFormSection>
           </div>
         )}
@@ -1875,6 +1913,34 @@ function SettingSelect(props: {
           <option key={option.value} value={option.value}>{option.label}</option>
         ))}
       </select>
+    </label>
+  );
+}
+
+function SettingNumber(props: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  suffix: string;
+  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+}) {
+  const inputId = `setting-${props.label.toLowerCase().replaceAll(" ", "-")}`;
+  return (
+    <label htmlFor={inputId} className="space-y-2">
+      <span className="block text-sm font-medium text-brand-dark">{props.label}</span>
+      <span className="flex min-h-11 items-center rounded-lg border border-slate-200 bg-white focus-within:border-brand-blue focus-within:ring-1 focus-within:ring-brand-blue/20">
+        <input
+          id={inputId}
+          type="number"
+          min={props.min}
+          max={props.max}
+          value={props.value}
+          onChange={props.onChange}
+          className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-brand-dark focus:outline-none"
+        />
+        <span className="border-l border-slate-100 px-3 text-xs text-slate-500">{props.suffix}</span>
+      </span>
     </label>
   );
 }

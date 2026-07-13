@@ -288,6 +288,8 @@ def _auto_open_first_pending_request(*, store: GuardStore, workspace: Path | Non
     approval_surface_policy = config.approval_surface_policy
     if approval_surface_policy == "native-only":
         approval_surface_policy = "never-auto-open"
+    elif approval_surface_policy == "attention-aware":
+        approval_surface_policy = "approval-center"
     result = GuardSurfaceRuntime(store).ensure_surface(
         surface="approval-center",
         approval_center_url=approval_center_url,
