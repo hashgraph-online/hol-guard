@@ -195,19 +195,25 @@ class TestBrowserScopeDecisionNarrowing:
         decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
         assert decisions == []
 
-    def test_non_browser_scoped_rule_still_produces_decisions(self) -> None:
-        """A rule without browser scope keys still generates harness-scoped family decisions."""
-        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+    def test_exact_command_rule_does_not_create_family_decision(self) -> None:
+        """An exact command rule must not broaden into all tool actions."""
+        from codex_plugin_scanner.guard.memory_pattern_fingerprint import (
+            build_exact_command_memory_artifact_id,
+        )
+        from codex_plugin_scanner.guard.runtime.runner import (
+            _build_policy_bundle_decisions,
+        )
 
+        command = " python -m pytest "
         rule = self._local_match_rule()
-        rule["scope"]["command"] = "python -m pytest"
+        rule["matcher"] = {"command": command, "tool": "shell"}
+        rule["artifactId"] = "memory:codex:command_pattern:broad"
+        rule["matcherFamilies"] = ["tool-action"]
         bundle = _valid_bundle_with_rules([rule])
         decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
-        assert len(decisions) > 0
-        for decision in decisions:
-            assert decision.scope == "harness"
-            assert decision.artifact_id is not None
-            assert decision.artifact_id.startswith("family:")
+        assert len(decisions) == 1
+        assert decisions[0].scope == "artifact"
+        assert decisions[0].artifact_id == build_exact_command_memory_artifact_id(command)
 
     def test_rule_with_only_sensitive_surface_skipped(self) -> None:
         """A rule with only sensitiveSurface scope is skipped (no broad allow)."""

@@ -17,7 +17,10 @@ import pytest
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash as compute_artifact_hash
 from codex_plugin_scanner.guard.consumer import evaluate_detection
-from codex_plugin_scanner.guard.memory_pattern_fingerprint import build_memory_pattern_fingerprint
+from codex_plugin_scanner.guard.memory_pattern_fingerprint import (
+    build_exact_command_memory_artifact_id,
+    build_memory_pattern_fingerprint,
+)
 from codex_plugin_scanner.guard.models import (
     GuardArtifact,
     HarnessDetection,
@@ -163,6 +166,69 @@ def test_remote_suggested_memory_policy_matches_runtime_command_pattern(
         )
         is None
     )
+
+
+@pytest.mark.parametrize("policy_action", ["allow", "block"])
+def test_remote_exact_command_policy_rejects_command_suffix(
+    tmp_path: Path,
+    policy_action: str,
+) -> None:
+    store = _make_store(tmp_path)
+    exact_artifact_id = build_exact_command_memory_artifact_id("printf 'suggested-memory'")
+    assert exact_artifact_id is not None
+    store.replace_remote_policies(
+        [
+            PolicyDecision(
+                harness="codex",
+                scope="artifact",
+                artifact_id=exact_artifact_id,
+                artifact_hash=None,
+                workspace=None,
+                publisher=None,
+                action=policy_action,
+                reason="Exact command memory",
+                owner=None,
+                source="cloud-sync",
+            )
+        ],
+        now="2026-07-11T00:00:00Z",
+        remote_write_authorized=True,
+    )
+
+    assert (
+        store.resolve_policy(
+            "codex",
+            "codex:runtime:shell:request-two",
+            memory_command="printf 'suggested-memory'",
+            memory_artifact_type="shell_command",
+            memory_artifact_name="Shell command",
+        )
+        == policy_action
+    )
+    assert (
+        store.resolve_policy(
+            "codex",
+            "codex:runtime:shell:request-three",
+            memory_command="printf 'suggested-memory' extra",
+            memory_artifact_type="shell_command",
+            memory_artifact_name="Shell command",
+        )
+        is None
+    )
+    for whitespace_variant in (
+        " printf 'suggested-memory'",
+        "printf 'suggested-memory' ",
+    ):
+        assert (
+            store.resolve_policy(
+                "codex",
+                "codex:runtime:shell:request-whitespace",
+                memory_command=whitespace_variant,
+                memory_artifact_type="shell_command",
+                memory_artifact_name="Shell command",
+            )
+            is None
+        )
 
 
 @pytest.mark.parametrize(
