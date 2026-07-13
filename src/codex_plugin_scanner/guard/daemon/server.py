@@ -56,6 +56,7 @@ from ..approvals import (
     ApprovalRequestAlreadyResolvedError,
     ApprovalRequestNotFoundError,
     apply_approval_resolution,
+    build_approval_browser_url,
     build_runtime_snapshot,
     bulk_allow_read_only_once,
 )
@@ -131,6 +132,7 @@ from ..review_contracts import (
     validate_remote_approval_request_binding,
     validated_remote_approval_envelope,
 )
+from ..runtime.approval_attention import ApprovalAttentionCoordinator
 from ..runtime.live_request_sync import LiveRequestSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -269,6 +271,7 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     package_firewall_action_rate_limiter: PackageFirewallActionRateLimiter
     package_firewall_session_nonces: dict[str, float]
     package_firewall_session_nonces_lock: threading.Lock
+    approval_attention: ApprovalAttentionCoordinator
 
     def __init__(
         self,
@@ -305,6 +308,11 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         from .hook_worker import HookWorker
 
         self.hook_worker = HookWorker(store=store)
+        self.approval_attention = ApprovalAttentionCoordinator(
+            store=store,
+            runtime=self.runtime,
+            opener=webbrowser.open,
+        )
 
     def daemon_host(self) -> str:
         return str(self.server_address[0])
@@ -4041,6 +4049,30 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self._write_json({"error": str(error)}, status=400)
             return
+        surface = response.get("surface")
+        operation = response.get("operation")
+        requests = response.get("approval_requests")
+        if (
+            isinstance(surface, dict)
+            and surface.get("reason") == "attention-deferred"
+            and isinstance(operation, dict)
+            and isinstance(operation.get("operation_id"), str)
+            and isinstance(requests, list)
+        ):
+            typed_requests = [request for request in requests if _is_string_object_dict(request)]
+            first_url: str | None = None
+            for request in typed_requests:
+                candidate_url = request.get("approval_url")
+                if isinstance(candidate_url, str):
+                    first_url = candidate_url
+                    break
+            browser_url = build_approval_browser_url(first_url, auth_token=self.server.auth_token)  # type: ignore[attr-defined]
+            if browser_url is not None:
+                self.server.approval_attention.schedule(  # type: ignore[attr-defined]
+                    operation_id=str(operation["operation_id"]),
+                    requests=typed_requests,
+                    browser_url=browser_url,
+                )
         self._write_json(response)
 
     def _handle_operation_item(self, operation_id: str, payload: dict[str, object]) -> None:
@@ -5553,6 +5585,9 @@ class GuardDaemonServer:
             started_at=self._server.runtime_started_at,
             last_heartbeat_at=_now(),
         )
+        approval_attention = getattr(self._server, "approval_attention", None)
+        if approval_attention is not None:
+            approval_attention.start()
         self._start_watchdog()
         self._start_headless_cloud_sync()
         self._start_supply_chain_bundle_refresh()
@@ -5589,6 +5624,9 @@ class GuardDaemonServer:
 
     def _finish_service(self) -> None:
         self._shutdown_started.set()
+        approval_attention = getattr(self._server, "approval_attention", None)
+        if approval_attention is not None:
+            approval_attention.stop()
         self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
         self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
         clear_guard_daemon_state_if_current(self._server.store.guard_home, pid=os.getpid(), port=self.port)

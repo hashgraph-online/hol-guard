@@ -203,6 +203,8 @@ EDITABLE_GUARD_SETTING_KEYS = frozenset(
         "harness_risk_actions",
         "approval_wait_timeout_seconds",
         "approval_surface_policy",
+        "approval_browser_delay_seconds",
+        "approval_browser_immediate_severity",
         "desktop_notifications",
         "telemetry",
         "sync",
@@ -212,7 +214,8 @@ EDITABLE_GUARD_SETTING_KEYS = frozenset(
 )
 VALID_RECEIPT_REDACTION_LEVELS = frozenset({"full", "partial", "none"})
 
-VALID_APPROVAL_SURFACE_POLICIES = {"auto-open-once", "native-only", "approval-center"}
+VALID_APPROVAL_SURFACE_POLICIES = {"attention-aware", "auto-open-once", "native-only", "approval-center"}
+VALID_APPROVAL_BROWSER_SEVERITIES = frozenset({"info", "low", "medium", "high", "critical"})
 BARE_TOML_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 WORKSPACE_BLOCKED_POLICY_KEYS = frozenset(
     {
@@ -303,7 +306,9 @@ class GuardConfig:
     new_network_domain_action: GuardAction = "warn"
     subprocess_action: GuardAction = "warn"
     approval_wait_timeout_seconds: int = 120
-    approval_surface_policy: str = "auto-open-once"
+    approval_surface_policy: str = "attention-aware"
+    approval_browser_delay_seconds: int = 20
+    approval_browser_immediate_severity: str = "critical"
     desktop_notifications: bool = True
     telemetry: bool = False
     sync: bool = False
@@ -405,7 +410,15 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
             merged.get("approval_wait_timeout_seconds"),
             120,
         ),
-        approval_surface_policy=str(merged.get("approval_surface_policy", "auto-open-once")),
+        approval_surface_policy=_coerce_loaded_approval_surface_policy(merged.get("approval_surface_policy")),
+        approval_browser_delay_seconds=_coerce_loaded_bounded_int(
+            merged.get("approval_browser_delay_seconds"),
+            default=20,
+            maximum=300,
+        ),
+        approval_browser_immediate_severity=_coerce_loaded_approval_browser_severity(
+            merged.get("approval_browser_immediate_severity")
+        ),
         desktop_notifications=_coerce_loaded_bool(merged.get("desktop_notifications", True)),
         telemetry=bool(merged.get("telemetry", False)),
         sync=bool(merged.get("sync", False)),
@@ -443,6 +456,8 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "harness_risk_actions": dict(config.harness_risk_actions or {}),
         "approval_wait_timeout_seconds": config.approval_wait_timeout_seconds,
         "approval_surface_policy": config.approval_surface_policy,
+        "approval_browser_delay_seconds": config.approval_browser_delay_seconds,
+        "approval_browser_immediate_severity": config.approval_browser_immediate_severity,
         "desktop_notifications": config.desktop_notifications,
         "telemetry": config.telemetry,
         "sync": config.sync,
@@ -512,8 +527,16 @@ def _coerce_editable_setting(key: str, value: object) -> object:
         raise ValueError("Invalid Guard action.")
     if key == "approval_surface_policy":
         if isinstance(value, str) and value in VALID_APPROVAL_SURFACE_POLICIES:
-            return value
+            return "attention-aware" if value == "auto-open-once" else value
         raise ValueError("Invalid approval surface policy.")
+    if key == "approval_browser_delay_seconds":
+        if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 300:
+            return value
+        raise ValueError("Browser attention delay must be between 0 and 300 seconds.")
+    if key == "approval_browser_immediate_severity":
+        if isinstance(value, str) and value in VALID_APPROVAL_BROWSER_SEVERITIES:
+            return value
+        raise ValueError("Invalid immediate browser attention severity.")
     if key == "approval_wait_timeout_seconds":
         if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= MAX_APPROVAL_WAIT_TIMEOUT_SECONDS:
             return value
@@ -580,6 +603,26 @@ def _coerce_loaded_non_negative_int(value: object, fallback: int) -> int:
     if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
         return value
     return fallback
+
+
+def _coerce_loaded_bounded_int(value: object, *, default: int, maximum: int) -> int:
+    if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= maximum:
+        return value
+    return default
+
+
+def _coerce_loaded_approval_surface_policy(value: object) -> str:
+    if value == "auto-open-once":
+        return "attention-aware"
+    if isinstance(value, str) and value in VALID_APPROVAL_SURFACE_POLICIES:
+        return value
+    return "attention-aware"
+
+
+def _coerce_loaded_approval_browser_severity(value: object) -> str:
+    if isinstance(value, str) and value in VALID_APPROVAL_BROWSER_SEVERITIES:
+        return value
+    return "critical"
 
 
 def _coerce_loaded_positive_int(value: object, fallback: int) -> int:
