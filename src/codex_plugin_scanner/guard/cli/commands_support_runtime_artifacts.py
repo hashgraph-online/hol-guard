@@ -430,6 +430,7 @@ def _codex_post_tool_output_artifact(
         content_matches=content_matches,
         cwd=cwd,
         home_dir=home_dir,
+        payload=payload,
     ):
         return None
     if _codex_focused_pytest_can_skip_secret_output(
