@@ -38,7 +38,7 @@ hol-guard init
 | **Agent tool calls** | Evaluates supported shell, file, MCP, prompt, and tool-result events through native hooks, managed proxies, or reversible launch overlays. |
 | **Secrets and credentials** | Detects sensitive file access, credential-shaped output, staged exfiltration, and suspicious outbound commands. |
 | **AI supply chain** | Reviews package installs, plugins, skills, MCP servers, hooks, and agent configuration before trust is granted. |
-| **Prompt injection** | Screens supported prompt and tool intent for instructions that attempt to expose secrets, evade controls, or trigger destructive behavior. |
+| **Prompt injection** | For adapters that expose prompt events, screens prompt and tool intent for instructions that attempt to expose secrets, evade controls, or trigger destructive behavior. |
 | **Human approval** | Routes ambiguous actions to native prompts, the local approval center, or Guard Cloud according to the active policy. |
 | **Security evidence** | Records attributable receipts and inventory changes so decisions can be reviewed, explained, and synchronized. |
 
