@@ -38,6 +38,7 @@ from .commands_support_codex_tool_output import (
     _codex_strip_env_wrapper,
     _codex_unwrapped_command_parts,
 )
+from .commands_support_native_search import native_post_tool_search_is_read_only
 
 
 def _codex_pipeline_segment_may_read_local_content(segment: str, *, index: int, cwd: Path | None) -> bool:
@@ -368,8 +369,19 @@ def _codex_source_inspection_can_skip_secret_output(
     content_matches: tuple[SecretContentMatch, ...],
     cwd: Path | None,
     home_dir: Path | None = None,
+    payload: dict[str, object] | None = None,
 ) -> bool:
-    if not _codex_command_is_read_only_source_inspection(command_text, cwd=cwd, home_dir=home_dir):
+    command_is_read_only = _codex_command_is_read_only_source_inspection(
+        command_text,
+        cwd=cwd,
+        home_dir=home_dir,
+    )
+    native_search_is_read_only = payload is not None and native_post_tool_search_is_read_only(
+        payload=payload,
+        cwd=cwd,
+        home_dir=home_dir,
+    )
+    if not command_is_read_only and not native_search_is_read_only:
         return False
     if _codex_command_references_sensitive_local_source(command_text, cwd=cwd):
         return False
