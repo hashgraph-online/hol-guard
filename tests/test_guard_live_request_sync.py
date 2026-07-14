@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.runtime import live_request_sync as live_request
 from codex_plugin_scanner.guard.runtime.live_request_sync import (
     LIVE_REQUEST_SYNC_PROTOCOL_VERSION,
     _build_live_request_event,
+    _encode_live_request_events,
     _post_sync_events,
     _resolve_sync_url,
     start_cloud_sync_sync_worker,
@@ -677,6 +678,13 @@ class TestPendingRequestAgeConnectivity:
         assert event is not None
         assert event["eventType"] == "request_created"
         assert event["requestPayload"]["status"] == "pending"
+
+
+def test_event_encoder_keeps_base64url_padding() -> None:
+    encoded = _encode_live_request_events([{}])
+
+    assert encoded.endswith("==")
+    assert json_loads(urlsafe_b64decode(encoded)) == [{}]
 
 
 def test_sync_transport_encodes_waf_sensitive_event_content(
