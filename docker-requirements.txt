@@ -986,16 +986,9 @@ linkify-it-py==2.1.0 \
     --hash=sha256:0d252c1594ecba2ecedc444053db5d3a9b7ec1b0dd929c8f1d74dce89f86c05e \
     --hash=sha256:43360231720999c10e9328dc3691160e27a718e280673d444c38d7d3aaa3b98b
     # via markdown-it-py
-litellm==1.92.0 \
-    --hash=sha256:437a0e403136996430795ead76502103dcf74769b6909e12d3e2511061ea8ff8 \
-    --hash=sha256:679a6287f9c3f829750e308cd7215a3d2da7b2e9a5bedae6d3ad4465edefdbe1 \
-    --hash=sha256:773adf5503ee1793289689c899394a83df8122993760d9acd782e32aa798db9d \
-    --hash=sha256:7fdba218ffd5dd56a18eeb57db805fa887484d0adedfb9f282b61e0b97c62de0 \
-    --hash=sha256:8f03047a73154f33c2733899e4bf9b5ed129e2e345caa305895a318452e4a807 \
-    --hash=sha256:9c7b2849591a35f7039dc7386a81a8e68fccb5ac2fecaa5122192c1172556b29 \
-    --hash=sha256:b4b65395c5d7b15fa24e08a13871c0617f6d156c46cee0eb920f3a5954e50adf \
-    --hash=sha256:f0ec8327aacc7914cc16310a1a3cc14340f1140b0a761403c5a4a98b01684373 \
-    --hash=sha256:f17499155366afd1eaaeb6fd0c7b55cbd2239dcd72f2fe1f8071a969cc402fae
+litellm==1.91.3 \
+    --hash=sha256:096cee401dfd353f050422adc6ed9b25da0fc5e110fc923ce3f0ffa5bc5c2957 \
+    --hash=sha256:5be4df2bdf5459f46a6224a75046f365dc979995a37a81f5aa3ce29f92f534cf
     # via
     #   --override (workspace)
     #   hol-guard (pyproject.toml)
