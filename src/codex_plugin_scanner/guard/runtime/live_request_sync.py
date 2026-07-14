@@ -1,5 +1,6 @@
 """Durable, independent synchronization for local Guard approval requests."""
 
+import base64
 import json
 import logging
 import os
@@ -68,6 +69,15 @@ def _resolve_sync_url(auth_context: dict[str, object], path: str) -> str:
         raise RuntimeError("Guard sync URL must be an absolute HTTP(S) URL.")
     normalized_path = path if path.startswith("/") else f"/{path}"
     return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, normalized_path, parsed.query, ""))
+
+
+def _encode_live_request_events(events: list[dict[str, object]]) -> str:
+    event_json = json.dumps(
+        events,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return base64.urlsafe_b64encode(event_json).rstrip(b"=").decode("ascii")
 
 
 def _load_sync_state(store: GuardStore) -> dict[str, object]:
@@ -230,7 +240,7 @@ def _post_sync_events(
         "workspaceId": workspace_id,
         "machineInstallationId": machine_installation_id,
         "inboundCursor": cursor,
-        "events": events,
+        "eventsBase64Url": _encode_live_request_events(events),
     }
     request = _guard_sync_request(
         auth_context,
