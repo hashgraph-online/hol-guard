@@ -27,7 +27,7 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "cisco-ai-mcp-scanner" not in dependencies
     assert "cisco-ai-mcp-scanner" not in cisco_extra
     assert "cisco-ai-mcp-scanner==4.7.3" in cisco_mcp_group
-    assert "litellm==1.89.1" in cisco_extra
+    assert "litellm==1.91.3" in cisco_extra
     assert "python_version >= '3.11'" in cisco_extra
     assert "python_version < '3.14'" in cisco_extra
     assert "python_version < '3.14'" in cisco_mcp_group
@@ -38,7 +38,7 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "cisco-ai-skill-scanner==2.0.11" in override_entries
     assert "importlib-metadata==9.0.0" in override_entries
     assert "jsonschema==4.26.0" in override_entries
-    assert "litellm==1.89.1" in override_entries
+    assert "litellm==1.91.3" in override_entries
     assert "openai==2.41.1" in override_entries
     assert "pyjwt==2.13.0" in override_entries
     assert "python-dotenv==1.2.2" in override_entries
@@ -113,7 +113,7 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert "aiohttp==3.14.1" in docker_requirements
     assert "cisco-ai-mcp-scanner==" in docker_requirements
     assert "importlib-metadata==9.0.0" in docker_requirements
-    assert "litellm==1.89.1" in docker_requirements
+    assert "litellm==1.91.3" in docker_requirements
     assert "python-dotenv==1.2.2" in docker_requirements
     assert "python-multipart==0.0.32" in docker_requirements
     assert "pyjwt==2.13.0" in docker_requirements

@@ -22,7 +22,7 @@ overrides = [
     { name = "fastapi", specifier = "==0.137.1" },
     { name = "importlib-metadata", specifier = "==9.0.0" },
     { name = "jsonschema", specifier = "==4.26.0" },
-    { name = "litellm", specifier = "==1.89.1" },
+    { name = "litellm", specifier = "==1.91.3" },
     { name = "openai", specifier = "==2.41.1" },
     { name = "pyjwt", specifier = "==2.13.0" },
     { name = "python-dotenv", specifier = "==1.2.2" },
@@ -1205,7 +1205,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=49.0.0" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.26.0" },
     { name = "keyring", specifier = ">=25.0" },
-    { name = "litellm", marker = "python_full_version >= '3.11' and python_full_version < '3.14' and extra == 'cisco'", specifier = "==1.89.1" },
+    { name = "litellm", marker = "python_full_version >= '3.11' and python_full_version < '3.14' and extra == 'cisco'", specifier = "==1.91.3" },
     { name = "mcp", marker = "python_full_version >= '3.10'", specifier = ">=1.27.0,<2" },
     { name = "packaging", specifier = ">=24.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.3" },
@@ -1601,7 +1601,7 @@ wheels = [
 
 [[package]]
 name = "litellm"
-version = "1.89.1"
+version = "1.91.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -1617,9 +1617,9 @@ dependencies = [
     { name = "tiktoken" },
     { name = "tokenizers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e8/1b/de398e6cef46d4cbc4395c895330f30eab05439bf6d0c5c53b0203661eeb/litellm-1.89.1.tar.gz", hash = "sha256:eb9292f90afe46dcce4bfef6bbeaa54494945813763e1c0917f4e9a1c584c1a4", size = 14071586, upload-time = "2026-06-16T03:12:52.997Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/36/33/879369fe202498a307e1130bae1f59c5f226362afc07829ba5a0279a563d/litellm-1.91.3.tar.gz", hash = "sha256:096cee401dfd353f050422adc6ed9b25da0fc5e110fc923ce3f0ffa5bc5c2957", size = 14875767, upload-time = "2026-07-11T22:43:32.975Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ec/24/81f03088876a13b628fdbaf746ee746e1dff127d63f339ef72f1a3801c91/litellm-1.89.1-py3-none-any.whl", hash = "sha256:a52a67625d89cb1787ef48c4b3c1ab9c2574ea304f56900bc631844297a13bd4", size = 15484855, upload-time = "2026-06-16T03:12:49.457Z" },
+    { url = "https://files.pythonhosted.org/packages/d6/3c/157c54c924f9e6025797545a0cd915a98e98ad8d3f9011502a575781d4b5/litellm-1.91.3-py3-none-any.whl", hash = "sha256:5be4df2bdf5459f46a6224a75046f365dc979995a37a81f5aa3ce29f92f534cf", size = 16674504, upload-time = "2026-07-11T22:43:30.517Z" },
 ]
 
 [[package]]
