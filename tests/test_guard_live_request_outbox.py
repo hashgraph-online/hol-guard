@@ -279,30 +279,38 @@ def test_partial_acknowledgement_retries_only_rejected_event(tmp_path, monkeypat
     assert rows[0]["attempt_count"] == 1
 
 
-def test_stale_rejection_is_acknowledged_while_transient_rejection_retries(
+def test_terminal_rejections_are_acknowledged_while_transient_rejection_retries(
     tmp_path,
     monkeypatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard")
     store.add_approval_request(_request("request-stale"), _NOW)
-    monkeypatch.setattr(live_request_sync, "LIVE_REQUEST_SYNC_BATCH_SIZE", 2)
     store.add_approval_request(_request("request-transient"), "2026-07-11T18:00:00+00:00")
-    monkeypatch.setattr(
-        live_request_sync,
-        "_post_sync_events",
-        lambda *_args, **_kwargs: {
+    store.add_approval_request(_request("request-decision-queued"), "2026-07-11T19:00:00+00:00")
+    monkeypatch.setattr(live_request_sync, "LIVE_REQUEST_SYNC_BATCH_SIZE", 3)
+
+    def post_events(*_args, **kwargs):
+        terminal_errors = {
+            "request-decision-queued": "decision_queued",
+            "request-stale": "stale_sequence",
+        }
+        return {
             "accepted": 0,
-            "rejected": 2,
+            "rejected": 3,
             "perEventResults": [
-                {"index": 0, "accepted": False, "error": "temporary failure"},
                 {
-                    "index": 1,
+                    "index": index,
                     "accepted": False,
-                    "error": "stale_sequence",
-                },
+                    "error": terminal_errors.get(
+                        event["localRequestId"],
+                        "temporary failure",
+                    ),
+                }
+                for index, event in enumerate(kwargs["events"])
             ],
-        },
-    )
+        }
+
+    monkeypatch.setattr(live_request_sync, "_post_sync_events", post_events)
 
     live_request_sync.sync_live_requests_once(store, _AUTH)
 
