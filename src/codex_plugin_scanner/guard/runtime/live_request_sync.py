@@ -249,7 +249,7 @@ def _is_terminally_superseded_result(item: dict[str, object]) -> bool:
     if item.get("code") == "stale_sequence":
         return True
     error = item.get("error")
-    if error in {"stale_regression_rejected", "stale_sequence"}:
+    if error in {"decision_queued", "stale_regression_rejected", "stale_sequence"}:
         return True
     return isinstance(error, str) and error.startswith("stale event sequence ")
 
