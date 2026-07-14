@@ -1,4 +1,4 @@
-# HOL Guard
+# HOL Guard: Open-Source Antivirus for AI Agents
 
 [![HOL Guard Version](https://img.shields.io/pypi/v/hol-guard.svg?logo=pypi&logoColor=white&cacheSeconds=300)](https://pypi.org/project/hol-guard/)
 [![Plugin Scanner Version](https://img.shields.io/pypi/v/plugin-scanner.svg?logo=pypi&logoColor=white&cacheSeconds=300)](https://pypi.org/project/plugin-scanner/)
@@ -13,22 +13,59 @@
 [![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/hol-guard?style=social)](https://github.com/hashgraph-online/hol-guard/stargazers)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64.svg)](https://github.com/astral-sh/ruff)
 
-| ![HOL whole dark logo](https://hol.org/brand/Logo_Whole_Dark.png) | **Protect your harness locally with `hol-guard`.** Use `plugin-scanner` when you need maintainer and CI checks for plugins, skills, MCP servers, and marketplace packages.<br><br>[PyPI Package (`hol-guard`)](https://pypi.org/project/hol-guard/)<br>[PyPI Package (`plugin-scanner`)](https://pypi.org/project/plugin-scanner/)<br>[HOL Plugin Registry](https://hol.org/registry/plugins)<br>[HOL GitHub Organization](https://github.com/hashgraph-online)<br>[Report an Issue](https://github.com/hashgraph-online/hol-guard/issues) |
+| ![HOL whole dark logo](https://hol.org/brand/Logo_Whole_Dark.png) | **Stop risky AI actions before they compromise your machine.** HOL Guard is a local-first security layer for AI agents, tools, plugins, skills, MCP servers, and package installs.<br><br>[Install HOL Guard](https://hol.org/guard/activate)<br>[Read the documentation](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/get-started.md)<br>[PyPI Package (`hol-guard`)](https://pypi.org/project/hol-guard/)<br>[Report an Issue](https://github.com/hashgraph-online/hol-guard/issues) |
 | :--- | :--- |
 
-## Start Here
+HOL Guard brings antivirus-style runtime protection to AI agents. It evaluates supported agent actions and local artifacts for secret exposure, prompt injection, unsafe commands, malicious packages, and MCP risks. Guard can allow safe work, block known threats, pause ambiguous actions for approval, and record security receipts for later review.
 
-| If you want to... | Install | Start with |
-| :--- | :--- | :--- |
-| protect Codex, Claude Code, Copilot CLI, Hermes, Cursor, Gemini, OpenCode, Pi, or ZCode before tools run | `hol-guard` | `hol-guard start` |
-| lint and verify packages in CI before release | `plugin-scanner` | `plugin-scanner verify .` |
+Use HOL Guard locally without a cloud account. Connect Guard Cloud when you want synchronized evidence, team policies, fleet visibility, and shared approval workflows.
 
-## Guard Quickstart
+## Install HOL Guard
 
 ```bash
 pipx install hol-guard
 hol-guard init
 ```
+
+`hol-guard init` discovers compatible AI agents, explains each setup change before applying it, and guides you through your first protected action.
+
+[Install guide](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/get-started.md) · [Supported agents](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/harness-support.md) · [Local vs. cloud](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/local-vs-cloud.md) · [Security policy](https://github.com/hashgraph-online/hol-guard/blob/main/SECURITY.md)
+
+## What HOL Guard Protects
+
+| Threat surface | Guard protection |
+| :--- | :--- |
+| **Agent tool calls** | Evaluates supported shell, file, MCP, prompt, and tool-result events through native hooks, managed proxies, or reversible launch overlays. |
+| **Secrets and credentials** | Detects sensitive file access, credential-shaped output, staged exfiltration, and suspicious outbound commands. |
+| **AI supply chain** | Reviews package installs, plugins, skills, MCP servers, hooks, and agent configuration before trust is granted. |
+| **Prompt injection** | For adapters that expose prompt events, screens prompt and tool intent for instructions that attempt to expose secrets, evade controls, or trigger destructive behavior. |
+| **Human approval** | Routes ambiguous actions to native prompts, the local approval center, or Guard Cloud according to the active policy. |
+| **Security evidence** | Records attributable receipts and inventory changes so decisions can be reviewed, explained, and synchronized. |
+
+Guard prefers the strongest integration each agent exposes. Enforcement depth varies by agent and event type; see the [support matrix](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/harness-support.md) for the exact current contract.
+
+## Supported AI Agents
+
+HOL Guard currently integrates with Codex, Claude Code, GitHub Copilot CLI, Cursor, Gemini CLI, Hermes, OpenClaw, OpenCode, Antigravity, Kimi Code, Grok, Pi / oh-my-pi, and ZCode.
+
+These developer agents are Guard's deepest integrations today, but the product boundary is broader: the same policy, supply-chain, approval, and evidence layers are designed to protect AI agents and their local tool ecosystems as new adapters are added.
+
+## Why HOL Guard
+
+Most security tools see only one part of an AI agent's attack surface. Code scanners run after files change. Sandboxes constrain a process but do not understand agent intent. MCP gateways see MCP traffic but not local shell commands, package installs, skills, hooks, or agent configuration.
+
+HOL Guard combines those signals at the local runtime boundary. It discovers the agent and its tools, evaluates supported actions against one policy, requests human approval only when needed, and records the resulting decision. The goal is practical protection without turning ordinary AI-assisted work into a stream of prompts.
+
+## Choose the Right Package
+
+| If you want to... | Install | Start with |
+| :--- | :--- | :--- |
+| protect AI agents and their local runtime | `hol-guard` | `hol-guard init` |
+| lint and verify plugins, skills, MCP servers, and marketplace packages in CI | `plugin-scanner` | `plugin-scanner verify .` |
+
+`hol-guard` is the end-user antivirus and runtime protection product. `plugin-scanner` is the maintainer and CI companion for analyzing agent ecosystem packages before release.
+
+## Guard Operations
 
 To update an existing pipx install from PyPI:
 
@@ -85,7 +122,7 @@ pipx run hol-guard explain install-connect
 
 What you get from Guard:
 
-- Detects local harness config on your machine
+- Detects supported AI agent configuration on your machine
 - Records a baseline before you trust a tool
 - Pauses cleanly on new or changed artifacts before launch
 - Queues blocked changes in a localhost approval center when the harness cannot prompt inline
@@ -155,7 +192,7 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
 
 ## Guard: Protection Levels
 
-HOL Guard is antivirus for AI harnesses. It intercepts every tool action before your files change or your network is contacted, then decides in milliseconds whether to allow or block.
+HOL Guard is antivirus for AI agents. It evaluates supported runtime events and local artifacts, then applies the active policy before execution where the agent provides a pre-action boundary. Other integrations use native approval, managed proxy, launch-time, or post-action evidence surfaces according to the [support matrix](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/harness-support.md).
 
 Choose a protection level with `hol-guard settings set security-level <level>`:
 

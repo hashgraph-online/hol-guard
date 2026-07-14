@@ -119,11 +119,6 @@ jobs:
           path = Path("pyproject.toml")
           text = path.read_text(encoding="utf-8")
           text = text.replace('name = "hol-guard"', 'name = "hol-guard"', 1)
-          text = text.replace(
-              'description = "Protect local AI harnesses with HOL Guard and run scanner checks for Codex, Claude, Cursor, Gemini, and OpenCode."',
-              'description = "Protect local AI harnesses with HOL Guard before tools run in Codex, Claude Code, Cursor, Gemini, and OpenCode."',
-              1,
-          )
           start = text.index("[project.scripts]")
           end = text.index("\n\n[project.urls]")
           scripts = "[project.scripts]\n" \
@@ -138,16 +133,21 @@ jobs:
         run: |
           cp pyproject.toml pyproject.toml.bak
           python3 - <<'PY'
+          import re
           from pathlib import Path
 
           path = Path("pyproject.toml")
           text = path.read_text(encoding="utf-8")
           text = text.replace('name = "hol-guard"', 'name = "plugin-scanner"', 1)
-          text = text.replace(
-              'description = "Protect local AI harnesses with HOL Guard and run scanner checks for Codex, Claude, Cursor, Gemini, and OpenCode."',
+          text, description_count = re.subn(
+              r'^description = ".*"$',
               'description = "Lint, verify, and gate plugin ecosystems for maintainers, CI, and publish workflows."',
-              1,
+              text,
+              count=1,
+              flags=re.MULTILINE,
           )
+          if description_count != 1:
+              raise RuntimeError("Expected one project description in pyproject.toml")
           start = text.index("[project.scripts]")
           end = text.index("\n\n[project.urls]")
           scripts = "[project.scripts]\n" \

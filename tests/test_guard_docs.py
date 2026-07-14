@@ -51,8 +51,8 @@ def test_static_docs_make_init_the_first_run_path() -> None:
     readme_text = _read_repo_file("README.md")
     get_started_text = _read_repo_file("docs/guard/get-started.md")
 
-    readme_quickstart = readme_text.split("## Guard Quickstart", 1)[1].split(
-        "Manual and follow-up commands:",
+    readme_quickstart = readme_text.split("## Install HOL Guard", 1)[1].split(
+        "## What HOL Guard Protects",
         1,
     )[0]
     everyday_flow = get_started_text.split("## The everyday flow", 1)[1].split(
