@@ -749,6 +749,104 @@ clearer UX and an implementation plan with technical references.
         assert output["recorded"] is True
         assert "approval_requests" not in output
 
+    def test_pi_post_tool_use_allows_native_grep_of_external_source_tree(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = home_dir / "workspace"
+        external_source_dir = tmp_path / "codex_plugin_scanner_full"
+        external_source_dir.mkdir(parents=True)
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "grep",
+            "tool_input": {
+                "pattern": (
+                    "def.*hook.*handler|def.*serve|def.*v1.*hooks|class.*Daemon|class.*HookServer|def.*handle_post"
+                ),
+                "path": str(external_source_dir),
+            },
+            "stdout": (
+                "guard/server.py:42:def handle_post(self):\n"
+                "guard/server.py:43:    daemon_auth_token = self.headers.get('X-Guard-Token')\n"
+            ),
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "pi",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["recorded"] is True
+        assert "approval_requests" not in output
+
+    def test_pi_post_tool_use_blocks_private_key_from_external_source_tree(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ec
+
+        home_dir = tmp_path / "home"
+        workspace_dir = home_dir / "workspace"
+        external_source_dir = tmp_path / "source"
+        external_source_dir.mkdir(parents=True)
+        _build_guard_fixture(home_dir, workspace_dir)
+        private_key_pem = (
+            ec.generate_private_key(ec.SECP256R1())
+            .private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+            .decode("ascii")
+        )
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "grep",
+            "tool_input": {"pattern": "PRIVATE KEY", "path": str(external_source_dir)},
+            "stdout": private_key_pem,
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "pi",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["approval_requests"]
+        assert "tool output contains credential-looking material" in output["risk_signals"]
+
     def test_codex_post_tool_use_allows_read_only_constants_source_search_with_fixture_output(
         self,
         monkeypatch,
