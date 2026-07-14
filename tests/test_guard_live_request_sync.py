@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from base64 import urlsafe_b64decode
 from json import dumps as json_dumps
+from json import loads as json_loads
 from pathlib import Path
 
 import pytest
@@ -11,6 +13,8 @@ from codex_plugin_scanner.guard.runtime import live_request_sync as live_request
 from codex_plugin_scanner.guard.runtime.live_request_sync import (
     LIVE_REQUEST_SYNC_PROTOCOL_VERSION,
     _build_live_request_event,
+    _encode_live_request_events,
+    _post_sync_events,
     _resolve_sync_url,
     start_cloud_sync_sync_worker,
     stop_cloud_sync_sync_worker,
@@ -674,6 +678,58 @@ class TestPendingRequestAgeConnectivity:
         assert event is not None
         assert event["eventType"] == "request_created"
         assert event["requestPayload"]["status"] == "pending"
+
+
+def test_event_encoder_keeps_base64url_padding() -> None:
+    encoded = _encode_live_request_events([{}])
+
+    assert encoded.endswith("==")
+    assert json_loads(urlsafe_b64decode(encoded)) == [{}]
+
+
+def test_sync_transport_encodes_waf_sensitive_event_content(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.runtime import runner
+
+    captured_body: dict[str, object] = {}
+
+    def capture_request(
+        _auth_context: dict[str, object],
+        *,
+        data: bytes,
+        **_kwargs: object,
+    ) -> object:
+        captured_body.update(json_loads(data))
+        return object()
+
+    monkeypatch.setattr(runner, "_guard_sync_request", capture_request)
+    monkeypatch.setattr(
+        runner,
+        "_urlopen_json_with_timeout_retry",
+        lambda **_kwargs: {"accepted": 1},
+    )
+    event = {
+        "localRequestId": "request-waf-sensitive",
+        "rawCommand": "gh api graphql --raw-field query=../../runtime/authorization",
+    }
+
+    response = _post_sync_events(
+        {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+        workspace_id="workspace-1",
+        machine_id="machine-1",
+        machine_installation_id="installation-1",
+        cursor=None,
+        events=[event],
+    )
+
+    encoded = captured_body["eventsBase64Url"]
+    assert isinstance(encoded, str)
+    assert captured_body["protocolVersion"] == "2"
+    assert "events" not in captured_body
+    assert "graphql" not in encoded
+    assert json_loads(urlsafe_b64decode(encoded)) == [event]
+    assert response == {"accepted": 1}
 
 
 # ---------------------------------------------------------------------------
