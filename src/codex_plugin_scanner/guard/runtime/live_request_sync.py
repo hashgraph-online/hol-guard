@@ -32,7 +32,7 @@ _LOGGER = logging.getLogger(__name__)
 
 LIVE_REQUEST_SYNC_BATCH_SIZE = 1
 LIVE_REQUEST_SYNC_MAX_BATCHES = 200
-LIVE_REQUEST_SYNC_PROTOCOL_VERSION = "1"
+LIVE_REQUEST_SYNC_PROTOCOL_VERSION = "2"
 _LIVE_REQUEST_COMMAND_MAX_UTF16_UNITS = 65_536
 _LIVE_REQUEST_SUMMARY_MAX_UTF16_UNITS = 512
 LIVE_REQUEST_SYNC_STATE_KEY = "guard_live_request_sync_state"
@@ -77,7 +77,7 @@ def _encode_live_request_events(events: list[dict[str, object]]) -> str:
         ensure_ascii=False,
         separators=(",", ":"),
     ).encode("utf-8")
-    return base64.urlsafe_b64encode(event_json).rstrip(b"=").decode("ascii")
+    return base64.urlsafe_b64encode(event_json).decode("ascii")
 
 
 def _load_sync_state(store: GuardStore) -> dict[str, object]:
