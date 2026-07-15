@@ -592,7 +592,7 @@ def _plain_text_command_extensions(payload: PayloadDict) -> str:
 
 def _plain_text_command_setup(payload: PayloadDict) -> str:
     detections = _coerce_dict_list(payload.get("detections"))
-    lines = [f"Detected command ecosystems ({payload.get('detected_count') or 0})"]
+    lines = [f"Recommended command ecosystems ({payload.get('recommended_count') or 0})"]
     for item in detections:
         if not item.get("recommended"):
             continue

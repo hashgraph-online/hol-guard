@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.cli.render import _plain_text_command_setup
 from codex_plugin_scanner.guard.runtime import command_ecosystem_detection
 from codex_plugin_scanner.guard.runtime.command_ecosystem_detection import (
     command_setup_detection_payload,
@@ -173,3 +174,20 @@ def test_command_setup_detect_rejects_missing_workspace(tmp_path: Path, capsys: 
 
     assert rc == 2
     assert "existing directory" in capsys.readouterr().err
+
+
+def test_command_setup_plain_text_count_matches_recommendation_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        command_ecosystem_detection.shutil,
+        "which",
+        lambda executable: "/managed/bin/pip" if executable == "pip" else None,
+    )
+
+    payload = command_setup_detection_payload(tmp_path)
+    output = _plain_text_command_setup(payload)
+
+    assert "Recommended command ecosystems (0)" in output
+    assert "command.package.python - recommended" not in output
