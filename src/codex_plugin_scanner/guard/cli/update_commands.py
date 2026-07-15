@@ -31,6 +31,7 @@ from ..adapters.opencode_pretool import (
     pretool_plugin_source,
 )
 from ..mdm.network import managed_urlopen
+from ..mdm.policy import load_managed_policy
 from ..redaction import redact_sensitive_text
 from ..shims import _trusted_import_root, _trusted_python_flags
 from ..store import GuardStore
@@ -107,6 +108,17 @@ def run_guard_update(
         "installer": installer,
         "dry_run": dry_run,
     }
+    managed_policy = load_managed_policy()
+    if managed_policy.policy is not None and managed_policy.policy.update.owner == "mdm":
+        payload.update(
+            {
+                "status": "skipped",
+                "changed": False,
+                "reason_code": "mdm_update_owned",
+                "message": "HOL Guard updates are managed by the organization.",
+            }
+        )
+        return payload, 0
     requested_wheel_path, requested_wheel_error = _resolve_requested_wheel_path(wheel)
     if requested_wheel_error is not None:
         payload["status"] = "failed"
