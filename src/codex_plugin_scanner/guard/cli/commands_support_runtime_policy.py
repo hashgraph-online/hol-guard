@@ -432,6 +432,11 @@ def _runtime_artifact_risk_classes(artifact: GuardArtifact) -> list[str]:
         return risk_classes
     if artifact.artifact_type != "tool_action_request":
         return []
+    composite_risk_classes = artifact.metadata.get("risk_classes")
+    if isinstance(composite_risk_classes, list):
+        normalized = [value for value in composite_risk_classes if isinstance(value, str) and value.strip()]
+        if normalized:
+            return list(dict.fromkeys(normalized))
     action_class = artifact.metadata.get("action_class")
     if not isinstance(action_class, str):
         return []

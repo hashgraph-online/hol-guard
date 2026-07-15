@@ -2,13 +2,25 @@
 
 from __future__ import annotations
 
-import re
-import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from .data_flow import extract_command_segments, extract_pipes
+from .command_structure import (
+    CommandRedirect,
+    EmbeddedCommand,
+    build_command_security_identity,
+    extract_command_redirects,
+)
+from .command_tokens import executable_name, leading_environment, shell_tokens
+from .data_flow import (
+    ShellHeredoc,
+    extract_command_segments,
+    extract_command_substitution_spans,
+    extract_heredocs,
+    extract_pipes,
+    mask_heredoc_bodies,
+)
 from .shell_command_wrappers import (
     SHELL_COMMAND_NORMALIZE_MAX_BYTES,
     normalize_transparent_shell_command,
@@ -22,23 +34,7 @@ MAX_COMMAND_BYTES = 32_768
 MAX_COMMAND_SEGMENTS = 128
 MAX_COMMAND_TOKENS = 2_048
 
-_ENV_ASSIGNMENT_PATTERN = re.compile(r"^(?P<name>[A-Za-z_][A-Za-z0-9_]*)=.*$", re.DOTALL)
-_SUDO_OPTIONS_WITH_VALUES = frozenset({"-C", "-D", "-g", "-h", "-p", "-R", "-r", "-T", "-t", "-u"})
-_SUDO_LONG_OPTIONS_WITH_VALUES = frozenset(
-    {
-        "--chdir",
-        "--chroot",
-        "--close-from",
-        "--command-timeout",
-        "--group",
-        "--host",
-        "--login-class",
-        "--prompt",
-        "--role",
-        "--type",
-        "--user",
-    }
-)
+_SHELL_SCRIPT_EXECUTABLES = frozenset({"ash", "bash", "dash", "sh", "zsh"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +48,7 @@ class CommandSegment:
     environment_names: tuple[str, ...]
     wrapper_chain: tuple[str, ...]
     path_overridden: bool
+    execution_context: str
     pipeline_index: int
     start: int
     end: int
@@ -65,6 +62,7 @@ class CommandSegment:
             "environment_names": list(self.environment_names),
             "wrapper_chain": list(self.wrapper_chain),
             "path_overridden": self.path_overridden,
+            "execution_context": self.execution_context,
             "pipeline_index": self.pipeline_index,
             "span": {"source": "normalized", "start": self.start, "end": self.end},
         }
@@ -81,12 +79,28 @@ class CanonicalCommand:
     extraction_provenance: str
     wrapper_chain: tuple[str, ...]
     segments: tuple[CommandSegment, ...]
+    redirects: tuple[CommandRedirect, ...]
+    embedded_commands: tuple[EmbeddedCommand, ...]
     confidence: ParseConfidence
     uncertainty_reason: str | None = None
 
     @property
     def path_overridden(self) -> bool:
         return any(segment.path_overridden for segment in self.segments)
+
+    @property
+    def security_identity(self) -> str:
+        """Return a versioned identity over the complete executable structure."""
+
+        return build_command_security_identity(
+            normalized_text=self.normalized_text,
+            dialect=self.dialect,
+            transport=self.transport,
+            wrapper_chain=self.wrapper_chain,
+            segments=self.segments,
+            redirects=self.redirects,
+            embedded_commands=self.embedded_commands,
+        )
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -96,6 +110,9 @@ class CanonicalCommand:
             "extraction_provenance": self.extraction_provenance,
             "wrapper_chain": list(self.wrapper_chain),
             "segments": [segment.to_dict() for segment in self.segments],
+            "redirects": [redirect.to_dict() for redirect in self.redirects],
+            "embedded_commands": [embedded.to_dict() for embedded in self.embedded_commands],
+            "security_identity": self.security_identity,
             "confidence": self.confidence,
             "uncertainty_reason": self.uncertainty_reason,
             "path_overridden": self.path_overridden,
@@ -125,6 +142,8 @@ def parse_shell_command(
             extraction_provenance=extraction_provenance,
             wrapper_chain=(),
             segments=(),
+            redirects=(),
+            embedded_commands=(),
             confidence="uncertain",
             uncertainty_reason=f"unsupported_{dialect}_{transport}",
         )
@@ -137,6 +156,8 @@ def parse_shell_command(
             extraction_provenance=extraction_provenance,
             wrapper_chain=(),
             segments=(),
+            redirects=(),
+            embedded_commands=(),
             confidence="uncertain",
             uncertainty_reason="command_byte_limit_exceeded",
         )
@@ -150,6 +171,8 @@ def parse_shell_command(
             extraction_provenance=extraction_provenance,
             wrapper_chain=(),
             segments=(),
+            redirects=(),
+            embedded_commands=(),
             confidence="uncertain",
             uncertainty_reason="command_byte_limit_exceeded",
         )
@@ -162,7 +185,8 @@ def parse_shell_command(
         confidence = "uncertain"
         uncertainty_reason = "wrapper_normalization_limit_exceeded"
 
-    segment_texts = _execution_segment_texts(normalized_text)
+    heredocs = extract_heredocs(normalized_text)
+    segment_texts = _execution_segment_texts(mask_heredoc_bodies(normalized_text, heredocs))
     if len(segment_texts) > MAX_COMMAND_SEGMENTS:
         return CanonicalCommand(
             raw_text=raw_text,
@@ -172,6 +196,8 @@ def parse_shell_command(
             extraction_provenance=extraction_provenance,
             wrapper_chain=normalization.wrapper_chain,
             segments=(),
+            redirects=(),
+            embedded_commands=(),
             confidence="uncertain",
             uncertainty_reason="command_segment_limit_exceeded",
         )
@@ -180,8 +206,8 @@ def parse_shell_command(
     segment_wrappers: list[str] = []
     cursor = 0
     total_tokens = 0
-    for pipeline_index, segment_text in segment_texts:
-        tokens, exact = _shell_tokens(segment_text)
+    for execution_context, pipeline_index, segment_text, source_offset in segment_texts:
+        tokens, exact = shell_tokens(segment_text)
         total_tokens += len(tokens)
         if total_tokens > MAX_COMMAND_TOKENS:
             return CanonicalCommand(
@@ -192,19 +218,21 @@ def parse_shell_command(
                 extraction_provenance=extraction_provenance,
                 wrapper_chain=normalization.wrapper_chain,
                 segments=tuple(segments),
+                redirects=(),
+                embedded_commands=(),
                 confidence="uncertain",
                 uncertainty_reason="command_token_limit_exceeded",
             )
         if not exact and confidence == "exact":
             confidence = "fallback"
             uncertainty_reason = "malformed_shell_quoting"
-        environment_names, executable_index, wrappers = _leading_environment(tokens)
+        environment_names, executable_index, wrappers = leading_environment(tokens)
         for wrapper in wrappers:
             if wrapper not in segment_wrappers:
                 segment_wrappers.append(wrapper)
         executable = tokens[executable_index] if executable_index < len(tokens) else None
         arguments = tokens[executable_index + 1 :] if executable is not None else ()
-        start = normalized_text.find(segment_text, cursor)
+        start = normalized_text.find(segment_text, max(cursor, source_offset))
         if start < 0:
             start = normalized_text.find(segment_text)
         if start < 0:
@@ -220,12 +248,22 @@ def parse_shell_command(
                 environment_names=environment_names,
                 wrapper_chain=wrappers,
                 path_overridden="PATH" in environment_names,
+                execution_context=execution_context,
                 pipeline_index=pipeline_index,
                 start=start,
                 end=end,
             )
         )
 
+    embedded_commands, embedded_segments = _embedded_execution(
+        normalized_text,
+        heredocs=heredocs,
+        top_level_segments=tuple(segments),
+    )
+    segments.extend(embedded_segments)
+    if len(segments) > MAX_COMMAND_SEGMENTS or sum(len(segment.tokens) for segment in segments) > MAX_COMMAND_TOKENS:
+        confidence = "uncertain"
+        uncertainty_reason = "embedded_command_limit_exceeded"
     return CanonicalCommand(
         raw_text=raw_text,
         normalized_text=normalized_text,
@@ -234,87 +272,170 @@ def parse_shell_command(
         extraction_provenance=extraction_provenance,
         wrapper_chain=(*normalization.wrapper_chain, *segment_wrappers),
         segments=tuple(segments),
+        redirects=extract_command_redirects(mask_heredoc_bodies(normalized_text, heredocs), heredocs),
+        embedded_commands=embedded_commands,
         confidence=confidence,
         uncertainty_reason=uncertainty_reason,
     )
 
 
-def _execution_segment_texts(command: str) -> tuple[tuple[int, str], ...]:
-    segments: list[tuple[int, str]] = []
-    for command_segment in extract_command_segments(command):
+def _execution_segment_texts(command: str, *, context_prefix: str = "top") -> tuple[tuple[str, int, str, int], ...]:
+    segments: list[tuple[str, int, str, int]] = []
+    cursor = 0
+    for group_index, command_segment in enumerate(extract_command_segments(command)):
+        source_offset = command.find(command_segment, cursor)
+        if source_offset < 0:
+            source_offset = cursor
+        cursor = source_offset + len(command_segment)
+        execution_context = f"{context_prefix}:{group_index}"
         pipes = extract_pipes(command_segment)
         if not pipes:
             stripped = command_segment.strip()
             if stripped:
-                segments.append((0, stripped))
+                segments.append((execution_context, 0, stripped, source_offset))
             continue
         pipe_parts = [pipes[0].left, *(pipe.right for pipe in pipes)]
-        segments.extend((index, part.strip()) for index, part in enumerate(pipe_parts) if part.strip())
+        part_cursor = source_offset
+        for index, part in enumerate(pipe_parts):
+            stripped = part.strip()
+            if not stripped:
+                continue
+            part_offset = command.find(stripped, part_cursor)
+            if part_offset < 0:
+                part_offset = part_cursor
+            segments.append((execution_context, index, stripped, part_offset))
+            part_cursor = part_offset + len(stripped)
     return tuple(segments)
 
 
-def _shell_tokens(command: str) -> tuple[tuple[str, ...], bool]:
-    try:
-        return tuple(shlex.split(command, posix=True, comments=False)), True
-    except ValueError:
-        return tuple(command.split()), False
+def _embedded_execution(
+    command: str,
+    *,
+    heredocs: tuple[ShellHeredoc, ...],
+    top_level_segments: tuple[CommandSegment, ...],
+) -> tuple[tuple[EmbeddedCommand, ...], tuple[CommandSegment, ...]]:
+    embedded: list[EmbeddedCommand] = []
+    segments: list[CommandSegment] = []
+    _append_substitution_execution(
+        command,
+        source_offset=0,
+        context_prefix="substitution",
+        excluded_ranges=tuple((heredoc.body_start, heredoc.end) for heredoc in heredocs),
+        embedded=embedded,
+        segments=segments,
+        depth=0,
+    )
+
+    for index, heredoc in enumerate(heredocs):
+        owner = next(
+            (segment for segment in top_level_segments if segment.start <= heredoc.operator_start <= segment.end),
+            None,
+        )
+        executable = executable_name(owner.executable) if owner is not None else None
+        if executable not in _SHELL_SCRIPT_EXECUTABLES:
+            continue
+        context = f"heredoc:{index}"
+        embedded.append(
+            EmbeddedCommand(
+                kind="heredoc",
+                text=heredoc.body,
+                execution_context=context,
+                start=heredoc.body_start,
+                end=heredoc.body_end,
+            )
+        )
+        segments.extend(
+            _segments_for_embedded(
+                heredoc.body,
+                execution_context=context,
+                source_offset=heredoc.body_start,
+            )
+        )
+        _append_substitution_execution(
+            heredoc.body,
+            source_offset=heredoc.body_start,
+            context_prefix=f"{context}:substitution",
+            excluded_ranges=(),
+            embedded=embedded,
+            segments=segments,
+            depth=0,
+        )
+    return tuple(embedded), tuple(segments)
 
 
-def _leading_environment(tokens: tuple[str, ...]) -> tuple[tuple[str, ...], int, tuple[str, ...]]:
-    names: list[str] = []
-    wrappers: list[str] = []
-    index = 0
-    while index < len(tokens):
-        match = _ENV_ASSIGNMENT_PATTERN.fullmatch(tokens[index])
-        while match is not None:
-            names.append(match.group("name"))
-            index += 1
-            if index >= len(tokens):
-                return tuple(names), index, tuple(wrappers)
-            match = _ENV_ASSIGNMENT_PATTERN.fullmatch(tokens[index])
-        executable = tokens[index].replace("\\", "/").rsplit("/", 1)[-1].lower()
-        if executable == "env":
-            wrappers.append("env")
-            index = _after_env_options(tokens, index + 1)
+def _append_substitution_execution(
+    command: str,
+    *,
+    source_offset: int,
+    context_prefix: str,
+    excluded_ranges: tuple[tuple[int, int], ...],
+    embedded: list[EmbeddedCommand],
+    segments: list[CommandSegment],
+    depth: int,
+) -> None:
+    if depth >= 4:
+        return
+    for index, substitution in enumerate(extract_command_substitution_spans(command)):
+        absolute_start = source_offset + substitution.body_start
+        if any(start <= absolute_start < end for start, end in excluded_ranges):
             continue
-        if executable == "sudo":
-            wrappers.append("sudo")
-            index = _after_sudo_options(tokens, index + 1)
-            continue
-        break
-    return tuple(names), index, tuple(wrappers)
+        context = f"{context_prefix}:{index}"
+        embedded.append(
+            EmbeddedCommand(
+                kind="substitution",
+                text=substitution.body,
+                execution_context=context,
+                start=absolute_start,
+                end=source_offset + substitution.body_end,
+            )
+        )
+        segments.extend(
+            _segments_for_embedded(
+                substitution.body,
+                execution_context=context,
+                source_offset=absolute_start,
+            )
+        )
+        _append_substitution_execution(
+            substitution.body,
+            source_offset=absolute_start,
+            context_prefix=f"{context}:nested",
+            excluded_ranges=(),
+            embedded=embedded,
+            segments=segments,
+            depth=depth + 1,
+        )
 
 
-def _after_env_options(tokens: tuple[str, ...], index: int) -> int:
-    while index < len(tokens):
-        token = tokens[index]
-        if token == "--":
-            return index + 1
-        if token in {"-u", "-C", "--unset", "--chdir"}:
-            index = min(index + 2, len(tokens))
-            continue
-        if token in {"-i", "-0", "--ignore-environment", "--null"} or token.startswith(("--unset=", "--chdir=")):
-            index += 1
-            continue
-        if _ENV_ASSIGNMENT_PATTERN.fullmatch(token) is not None:
-            return index
-        return index
-    return index
-
-
-def _after_sudo_options(tokens: tuple[str, ...], index: int) -> int:
-    while index < len(tokens):
-        token = tokens[index]
-        if token == "--":
-            return index + 1
-        option_name = token.split("=", 1)[0]
-        if option_name in _SUDO_OPTIONS_WITH_VALUES or option_name in _SUDO_LONG_OPTIONS_WITH_VALUES:
-            index += 1 if "=" in token else 2
-            continue
-        if token.startswith("-"):
-            index += 1
-            continue
-        if _ENV_ASSIGNMENT_PATTERN.fullmatch(token) is not None:
-            return index
-        return index
-    return index
+def _segments_for_embedded(
+    command: str,
+    *,
+    execution_context: str,
+    source_offset: int,
+) -> tuple[CommandSegment, ...]:
+    results: list[CommandSegment] = []
+    for context, pipeline_index, segment_text, local_offset in _execution_segment_texts(
+        command,
+        context_prefix=execution_context,
+    ):
+        tokens, _exact = shell_tokens(segment_text)
+        environment_names, executable_index, wrappers = leading_environment(tokens)
+        executable = tokens[executable_index] if executable_index < len(tokens) else None
+        arguments = tokens[executable_index + 1 :] if executable is not None else ()
+        start = source_offset + local_offset
+        results.append(
+            CommandSegment(
+                text=segment_text,
+                tokens=tokens,
+                executable=executable,
+                arguments=arguments,
+                environment_names=environment_names,
+                wrapper_chain=wrappers,
+                path_overridden="PATH" in environment_names,
+                execution_context=context,
+                pipeline_index=pipeline_index,
+                start=start,
+                end=start + len(segment_text),
+            )
+        )
+    return tuple(results)

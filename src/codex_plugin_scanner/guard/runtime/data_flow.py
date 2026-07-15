@@ -8,6 +8,31 @@ from dataclasses import dataclass
 from itertools import pairwise
 from typing import Literal
 
+from .shell_structure import (
+    ShellCommandSubstitution as ShellCommandSubstitution,
+)
+from .shell_structure import (
+    ShellHeredoc as ShellHeredoc,
+)
+from .shell_structure import (
+    ShellScanState as _ShellScanState,
+)
+from .shell_structure import (
+    extract_command_substitution_spans as extract_command_substitution_spans,
+)
+from .shell_structure import (
+    extract_command_substitutions as extract_command_substitutions,
+)
+from .shell_structure import (
+    extract_heredocs as extract_heredocs,
+)
+from .shell_structure import (
+    mask_complete_heredocs as mask_complete_heredocs,
+)
+from .shell_structure import (
+    mask_heredoc_bodies as mask_heredoc_bodies,
+)
+
 DataSourceType = Literal[
     "secret_file",
     "env",
@@ -58,7 +83,7 @@ _INPUT_REDIRECT_PATTERN = re.compile(r"(?<![<])(?:\d*)<\s*(?![<&])(?P<target>\"[
 _URL_PATTERN = re.compile(r"https?://[^\s\"'<>)}\]]+", re.IGNORECASE)
 _CURL_METHOD_PATTERN = re.compile(
     r"(?i)(?:^|[\s;&|])(?:curl|curl\.exe)\b[^\r\n;&|]*?"
-    r"(?:--request(?:=|\s+)|-X\s*)['\"]?(?P<method>[a-z]+)['\"]?\b"
+    + r"(?:--request(?:=|\s+)|-X\s*)['\"]?(?P<method>[a-z]+)['\"]?\b"
 )
 _FETCH_METHOD_PATTERN = re.compile(r"(?i)\bmethod\s*:\s*['\"](?P<method>[a-z]+)['\"]")
 _REQUESTS_METHOD_PATTERN = re.compile(r"(?i)\brequests\.(?P<method>get|post|put|patch|delete|head|options)\s*\(")
@@ -111,8 +136,6 @@ class DataSink:
         if not self.description.strip():
             raise ValueError("description must be a non-empty sink description")
         if self.method is not None:
-            if not isinstance(self.method, str):
-                raise ValueError("method must be a known HTTP method")
             normalized = self.method.upper()
             if normalized not in _HTTP_METHODS:
                 raise ValueError("method must be a known HTTP method")
@@ -146,49 +169,6 @@ def extract_input_redirects(command: str) -> tuple[str, ...]:
             if target and not target.startswith(("(", "&")):
                 targets.append(target)
     return _dedupe(targets)
-
-
-def extract_command_substitutions(command: str) -> tuple[str, ...]:
-    """Return commands inside top-level `$()` and backtick substitutions."""
-
-    substitutions: list[str] = []
-    index = 0
-    quote: str | None = None
-    while index < len(command):
-        char = command[index]
-        if char == "\\":
-            index += 2
-            continue
-        if char == "'" and quote is None:
-            quote = "'"
-            index += 1
-            continue
-        if char == "'" and quote == "'":
-            quote = None
-            index += 1
-            continue
-        if char == '"' and quote is None:
-            quote = '"'
-            index += 1
-            continue
-        if char == '"' and quote == '"':
-            quote = None
-            index += 1
-            continue
-        if quote != "'" and command.startswith("$(", index):
-            extracted, end_index = _extract_parenthesized(command, index + 2)
-            if extracted.strip():
-                substitutions.append(extracted.strip())
-            index = end_index + 1
-            continue
-        if quote != "'" and char == "`":
-            extracted, end_index = _extract_backtick(command, index + 1)
-            if extracted.strip():
-                substitutions.append(extracted.strip())
-            index = end_index + 1
-            continue
-        index += 1
-    return tuple(substitutions)
 
 
 def extract_pipes(command: str) -> tuple[ShellPipe, ...]:
@@ -325,84 +305,3 @@ def _append_segment(parts: list[str], value: str) -> None:
     stripped = value.strip()
     if stripped:
         parts.append(stripped)
-
-
-def _extract_parenthesized(command: str, start: int) -> tuple[str, int]:
-    depth = 1
-    index = start
-    quote: str | None = None
-    while index < len(command):
-        char = command[index]
-        if char == "\\":
-            index += 2
-            continue
-        if char in {"'", '"'}:
-            if quote is None:
-                quote = char
-            elif quote == char:
-                quote = None
-            index += 1
-            continue
-        if quote is None and char == "(":
-            depth += 1
-        elif quote is None and char == ")":
-            depth -= 1
-            if depth == 0:
-                return command[start:index], index
-        index += 1
-    return command[start:], len(command)
-
-
-def _extract_backtick(command: str, start: int) -> tuple[str, int]:
-    index = start
-    while index < len(command):
-        char = command[index]
-        if char == "\\":
-            index += 2
-            continue
-        if char == "`":
-            return command[start:index], index
-        index += 1
-    return command[start:], len(command)
-
-
-class _ShellScanState:
-    def __init__(self) -> None:
-        self.quote: str | None = None
-        self.subshell_depth = 0
-        self.in_backtick = False
-
-    @property
-    def is_top_level(self) -> bool:
-        return self.quote is None and self.subshell_depth == 0 and not self.in_backtick
-
-    def advance(self, command: str, index: int) -> int:
-        char = command[index]
-        if char == "\\":
-            return min(len(command), index + 2)
-        if char == "`" and self.quote != "'":
-            self.in_backtick = not self.in_backtick
-            return index + 1
-        if self.in_backtick:
-            return index + 1
-        if self.quote == "'":
-            if char == "'":
-                self.quote = None
-            return index + 1
-        if char == "'" and self.quote is None:
-            self.quote = "'"
-            return index + 1
-        if char == '"':
-            if self.quote == '"':
-                self.quote = None
-            elif self.quote is None:
-                self.quote = '"'
-            return index + 1
-        if self.quote != "'" and command.startswith("$(", index):
-            _extracted, end_index = _extract_parenthesized(command, index + 2)
-            return min(len(command), end_index + 1)
-        if self.quote is None and char == "(":
-            self.subshell_depth += 1
-        elif self.quote is None and char == ")" and self.subshell_depth > 0:
-            self.subshell_depth -= 1
-        return index + 1

@@ -148,6 +148,7 @@ class PipelineMatcher:
                 consumer_segment = command.segments[consumer.segment_index]
                 if (
                     consumer.segment_index == producer.segment_index + 1
+                    and consumer_segment.execution_context == producer_segment.execution_context
                     and consumer_segment.pipeline_index == producer_segment.pipeline_index + 1
                 ):
                     return (producer, consumer)
