@@ -3437,7 +3437,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _handle_requests_clear(self, payload: dict[str, object]) -> None:
         status = self._optional_string(payload.get("status")) or "pending"
         harness = self._optional_string(payload.get("harness"))
-        if status not in {"pending", "resolved", "expired"}:
+        if status not in {"pending", "resolved"}:
             self._write_json({"error": "invalid_status", "cleared": 0, "status": status}, status=400)
             return
         try:

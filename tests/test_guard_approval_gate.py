@@ -1206,6 +1206,9 @@ def test_approval_gate_clear_review_queue_route_requires_proof_and_preserves_his
         with pytest.raises(urllib.error.HTTPError) as missing_error:
             _post_daemon_json(daemon, "/v1/requests/clear", {"status": "pending"})
         missing_body = json.loads(missing_error.value.read().decode("utf-8"))
+        with pytest.raises(urllib.error.HTTPError) as expired_error:
+            _post_daemon_json(daemon, "/v1/requests/clear", {"status": "expired"})
+        expired_body = json.loads(expired_error.value.read().decode("utf-8"))
 
         clear_body = _post_daemon_json(
             daemon,
@@ -1217,6 +1220,9 @@ def test_approval_gate_clear_review_queue_route_requires_proof_and_preserves_his
 
     assert missing_error.value.code == 403
     assert missing_body["error"] == "approval_gate_required"
+    assert expired_error.value.code == 400
+    assert expired_body["error"] == "invalid_status"
+
     assert clear_body["cleared"] == 1
     assert clear_body["status"] == "pending"
     assert store.count_approval_requests(status="pending") == 0
