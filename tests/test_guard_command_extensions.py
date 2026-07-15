@@ -112,7 +112,14 @@ def test_command_extension_registry_rejects_duplicate_action_ownership() -> None
 
 def test_runtime_risk_class_mapping_remains_compatible() -> None:
     assert risk_classes_for_command_action("destructive shell command") == ("destructive_shell",)
-    assert risk_classes_for_command_action("GitHub PR body shell substitution") == ()
+    assert risk_classes_for_command_action("GitHub PR body shell substitution") == ("execution",)
+    assert risk_classes_for_command_action("Guard approval self-authorization command") == ("policy_bypass",)
+
+
+def test_every_extension_declares_its_actions_runtime_risk_classes() -> None:
+    for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions:
+        for action_class in extension.action_classes:
+            assert set(risk_classes_for_command_action(action_class)) <= set(extension.risk_classes)
 
 
 def test_command_cli_emits_stable_json_without_creating_guard_state(

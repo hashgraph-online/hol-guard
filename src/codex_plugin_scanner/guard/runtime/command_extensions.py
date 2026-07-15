@@ -9,6 +9,30 @@ from typing import final
 COMMAND_EXTENSION_SCHEMA_VERSION = 1
 _VERSION_PATTERN = re.compile(r"^[1-9][0-9]*\.[0-9]+\.[0-9]+$")
 
+_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
+    "credential exfiltration shell command": (
+        "data_flow_exfiltration",
+        "credential_exfiltration",
+        "network_egress",
+    ),
+    "guard-managed config write": ("destructive_shell",),
+    "docker-sensitive command": ("network_egress", "destructive_shell"),
+    "docker client config access": ("local_secret_read",),
+    "encoded or encrypted shell command": ("encoded_execution",),
+    "kubernetes secret read command": ("local_secret_read",),
+    "shell file upload command": ("credential_exfiltration", "network_egress"),
+    "sensitive local file write": ("destructive_shell", "local_secret_read"),
+    "destructive shell command": ("destructive_shell",),
+    "guard approval self-authorization command": ("policy_bypass",),
+    "github pr body shell substitution": ("execution",),
+}
+
+
+def risk_classes_for_command_action(action_class: str) -> tuple[str, ...]:
+    """Return the existing runtime risk classes for a command action class."""
+
+    return _ACTION_RISK_CLASSES.get(action_class.strip().lower(), ())
+
 
 @dataclass(frozen=True, slots=True)
 class CommandSafetyExtension:
@@ -55,10 +79,20 @@ class CommandSafetyExtensionRegistry:
                 owner = by_action_class.get(normalized_action_class)
                 if owner is not None:
                     ownership = f"{owner.extension_id} and {extension.extension_id}"
-                    raise ValueError(
-                        f"Command action class {action_class!r} is owned by both {ownership}"
-                    )
+                    raise ValueError(f"Command action class {action_class!r} is owned by both {ownership}")
                 by_action_class[normalized_action_class] = extension
+                undeclared_risk_classes = set(risk_classes_for_command_action(action_class)).difference(
+                    extension.risk_classes
+                )
+                if undeclared_risk_classes:
+                    undeclared = ", ".join(sorted(undeclared_risk_classes))
+                    message = " ".join(
+                        (
+                            f"Command safety extension {extension.extension_id} does not declare runtime",
+                            f"risk classes for {action_class!r}: {undeclared}",
+                        )
+                    )
+                    raise ValueError(message)
         self._extensions = ordered
         self._by_id = by_id
         self._by_action_class = by_action_class
@@ -87,6 +121,10 @@ def _validate_extension(extension: CommandSafetyExtension) -> None:
         raise ValueError(f"Command safety extension {extension.extension_id} must own an action class")
     if len(set(extension.action_classes)) != len(extension.action_classes):
         raise ValueError(f"Command safety extension {extension.extension_id} has duplicate action classes")
+    if not extension.risk_classes:
+        raise ValueError(f"Command safety extension {extension.extension_id} must declare a risk class")
+    if len(set(extension.risk_classes)) != len(extension.risk_classes):
+        raise ValueError(f"Command safety extension {extension.extension_id} has duplicate risk classes")
     if not extension.safer_alternatives:
         raise ValueError(f"Command safety extension {extension.extension_id} requires safer alternatives")
 
@@ -166,26 +204,3 @@ _BUILT_IN_EXTENSIONS = (
 )
 
 BUILT_IN_COMMAND_EXTENSION_REGISTRY = CommandSafetyExtensionRegistry(_BUILT_IN_EXTENSIONS)
-
-
-_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
-    "credential exfiltration shell command": (
-        "data_flow_exfiltration",
-        "credential_exfiltration",
-        "network_egress",
-    ),
-    "guard-managed config write": ("destructive_shell",),
-    "docker-sensitive command": ("network_egress", "destructive_shell"),
-    "docker client config access": ("local_secret_read",),
-    "encoded or encrypted shell command": ("encoded_execution",),
-    "kubernetes secret read command": ("local_secret_read",),
-    "shell file upload command": ("credential_exfiltration", "network_egress"),
-    "sensitive local file write": ("destructive_shell", "local_secret_read"),
-    "destructive shell command": ("destructive_shell",),
-}
-
-
-def risk_classes_for_command_action(action_class: str) -> tuple[str, ...]:
-    """Return the existing runtime risk classes for a command action class."""
-
-    return _ACTION_RISK_CLASSES.get(action_class.strip().lower(), ())
