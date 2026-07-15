@@ -40,7 +40,11 @@ def _configure_guard_cloud_parsers(
         "connect",
         help="Open browser OAuth, pair this runtime to HOL Guard, and send the first sync",
     )
-    connect_parser.add_argument("connect_command", nargs="?", choices=("status", "repair", "re-pair", "sources"))
+    connect_parser.add_argument(
+        "connect_command",
+        nargs="?",
+        choices=("status", "repair", "re-pair", "sources", "reassign-quarantined"),
+    )
     _add_guard_common_args(connect_parser)
     connect_parser.add_argument("--sync-url", default=DEFAULT_GUARD_SYNC_URL, type=_guard_http_url)
     connect_parser.add_argument("--connect-url", default=DEFAULT_GUARD_CONNECT_URL, type=_guard_http_url)
@@ -73,6 +77,14 @@ def _configure_guard_cloud_parsers(
         "--source",
         default="default",
         help="Named connection profile for multi-environment usage (e.g. 'staging'). Defaults to 'default'.",
+    )
+    connect_parser.add_argument(
+        "--confirm-source",
+        help="With reassign-quarantined, approve the exact destination source name.",
+    )
+    connect_parser.add_argument(
+        "--confirm-workspace",
+        help="With reassign-quarantined, approve the exact destination workspace ID.",
     )
     connect_parser.add_argument("--json", action="store_true")
 

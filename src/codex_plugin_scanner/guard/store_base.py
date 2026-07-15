@@ -112,6 +112,7 @@ from .store_connect import (
 from .store_connect import (
     mark_connect_result as persist_connect_result,
 )
+from .store_live_request_outbox import bind_live_request_outbox_for_request
 from .store_evidence import (
     EvidenceRecord,
     ensure_evidence_schema,

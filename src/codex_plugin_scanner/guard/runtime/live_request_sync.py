@@ -18,6 +18,7 @@ from ..review_contracts import (
     guard_review_oauth_metadata,
 )
 from ..store import GuardStore
+from ..store_live_request_outbox import live_request_oauth_subject_hash
 from .local_request_snapshots import (
     _cloud_safe_local_request_payload,
     _cloud_scrub_text,
@@ -80,13 +81,20 @@ def _encode_live_request_events(events: list[dict[str, object]]) -> str:
     return base64.urlsafe_b64encode(event_json).decode("ascii")
 
 
+def _live_request_sync_state_key(store: GuardStore) -> str:
+    source = store.guard_source
+    if source == "default":
+        return LIVE_REQUEST_SYNC_STATE_KEY
+    return f"{LIVE_REQUEST_SYNC_STATE_KEY}:{source}"
+
+
 def _load_sync_state(store: GuardStore) -> dict[str, object]:
-    payload = store.get_sync_payload(LIVE_REQUEST_SYNC_STATE_KEY)
+    payload = store.get_sync_payload(_live_request_sync_state_key(store))
     return dict(payload) if isinstance(payload, dict) else {}
 
 
 def _save_sync_state(store: GuardStore, state: dict[str, object]) -> None:
-    store.set_sync_payload(LIVE_REQUEST_SYNC_STATE_KEY, state, _now())
+    store.set_sync_payload(_live_request_sync_state_key(store), state, _now())
 
 
 def _resolve_display_provenance(
@@ -278,10 +286,28 @@ def sync_live_requests_once(
     machine_id = str(auth_context.get("machine_id") or "")
     workspace_id = str(auth_context.get("workspace_id") or "")
     machine_installation_id = str(auth_context.get("machine_installation_id") or "")
+    oauth_subject_hash = str(auth_context.get("oauth_subject_hash") or "")
+    oauth_source = str(auth_context.get("oauth_source") or "")
+    supplied_binding = {
+        "oauth_source": oauth_source,
+        "oauth_subject_hash": oauth_subject_hash,
+        "workspace_id": workspace_id,
+        "machine_id": machine_id,
+        "machine_installation_id": machine_installation_id,
+    }
 
-    if not machine_id or not workspace_id or not machine_installation_id:
-        raise RuntimeError("Guard live request sync requires machine_id, workspace_id, and machine_installation_id.")
-    store.claim_unowned_live_request_outbox(workspace_id)
+    if not all(supplied_binding.values()) or supplied_binding != store.get_live_request_oauth_binding():
+        raise RuntimeError(
+            "Guard live request sync requires a matching source, OAuth subject, machine, workspace, "
+            "and installation binding."
+        )
+    delivery_binding = {
+        "oauth_subject_hash": oauth_subject_hash,
+        "workspace_id": workspace_id,
+        "machine_id": machine_id,
+        "machine_installation_id": machine_installation_id,
+    }
+    store.claim_unowned_live_request_outbox(**delivery_binding)
 
     state = _load_sync_state(store)
     state.update(
@@ -304,7 +330,7 @@ def sync_live_requests_once(
             outbox_rows = store.list_ready_live_request_outbox(
                 now=_now(),
                 limit=LIVE_REQUEST_SYNC_BATCH_SIZE,
-                workspace_id=workspace_id,
+                **delivery_binding,
                 newest_first=newest_first,
             )
             if not outbox_rows:
@@ -325,7 +351,20 @@ def sync_live_requests_once(
                 sequence = sequence_value
                 request_id = str(outbox_row["local_request_id"])
                 request = store.get_approval_request(request_id)
-                if request is None:
+                row_binding = {
+                    key: outbox_row.get(key)
+                    for key in (
+                        "oauth_subject_hash",
+                        "workspace_id",
+                        "machine_id",
+                        "machine_installation_id",
+                    )
+                }
+                if (
+                    request is None
+                    or request.get("oauth_source") != store.guard_source
+                    or row_binding != delivery_binding
+                ):
                     missing_sequences.append(sequence)
                     continue
                 event = _build_live_request_event(
@@ -342,7 +381,7 @@ def sync_live_requests_once(
                 events.append(event)
 
             if missing_sequences:
-                store.acknowledge_live_request_outbox(missing_sequences)
+                store.acknowledge_live_request_outbox(missing_sequences, **delivery_binding)
             if not events:
                 continue
 
@@ -360,6 +399,7 @@ def sync_live_requests_once(
                     sequences,
                     now=_now(),
                     error=_redacted_error(error),
+                    **delivery_binding,
                 )
                 raise
 
@@ -396,7 +436,7 @@ def sync_live_requests_once(
                     and sum(bool(item["accepted"]) for item in per_event_results) == accepted
                     and len(per_event_results) - accepted == rejected
                 ):
-                    store.acknowledge_live_request_outbox(acknowledged_sequences)
+                    store.acknowledge_live_request_outbox(acknowledged_sequences, **delivery_binding)
                     if retry_sequences:
                         message = f"{len(retry_sequences)} live request events require retry."
                         all_errors.append(message)
@@ -404,6 +444,7 @@ def sync_live_requests_once(
                             retry_sequences,
                             now=_now(),
                             error=message,
+                            **delivery_binding,
                         )
                     continue
 
@@ -411,19 +452,29 @@ def sync_live_requests_once(
             if accounted != len(events):
                 message = "Cloud live request sync acknowledgement count did not match the batch."
                 all_errors.append(message)
-                store.retry_live_request_outbox(sequences, now=_now(), error=message)
+                store.retry_live_request_outbox(
+                    sequences,
+                    now=_now(),
+                    error=message,
+                    **delivery_binding,
+                )
                 break
             if rejected:
                 message = f"{rejected} live request events were rejected."
                 all_errors.append(message)
-                store.retry_live_request_outbox(sequences, now=_now(), error=message)
+                store.retry_live_request_outbox(
+                    sequences,
+                    now=_now(),
+                    error=message,
+                    **delivery_binding,
+                )
                 break
-            store.acknowledge_live_request_outbox(sequences)
+            store.acknowledge_live_request_outbox(sequences, **delivery_binding)
 
         completed_at = _now()
         outbox_status = store.live_request_outbox_status(
             now=completed_at,
-            workspace_id=workspace_id,
+            **delivery_binding,
         )
         state.update(
             {
@@ -488,10 +539,20 @@ def live_request_sync_status(store: GuardStore) -> dict[str, object]:
     state = _load_sync_state(store)
     profile = store.get_cloud_sync_profile()
     workspace_id = profile.get("workspace_id") if isinstance(profile, dict) else None
-    outbox = store.live_request_outbox_status(
-        now=_now(),
-        workspace_id=workspace_id,
-    )
+    binding = store.get_live_request_oauth_binding()
+    if binding is not None:
+        outbox = store.live_request_outbox_status(
+            now=_now(),
+            oauth_subject_hash=binding["oauth_subject_hash"],
+            workspace_id=binding["workspace_id"],
+            machine_id=binding["machine_id"],
+            machine_installation_id=binding["machine_installation_id"],
+        )
+    else:
+        outbox = store.live_request_outbox_status(
+            now=_now(),
+            workspace_id=workspace_id,
+        )
     return {
         "state": state.get("state") or "not_configured",
         "last_sync_at": state.get("last_sync_at"),
@@ -500,6 +561,7 @@ def live_request_sync_status(store: GuardStore) -> dict[str, object]:
         "synced_count": state.get("synced_count", 0),
         "rejected_count": state.get("rejected_count", 0),
         "outbox": outbox,
+        "oauth_source": store.guard_source,
         "protocol_version": LIVE_REQUEST_SYNC_PROTOCOL_VERSION,
         "protocolVersion": LIVE_REQUEST_SYNC_PROTOCOL_VERSION,
     }
@@ -588,11 +650,22 @@ def _with_live_request_sync_identity(
     auth_context: dict[str, object],
 ) -> dict[str, object]:
     oauth = guard_review_oauth_metadata(store)
+    subject_hash = live_request_oauth_subject_hash(oauth.grant_id)
+    if subject_hash is None:
+        raise GuardReviewContractError("missing_oauth_subject")
+    binding = store.get_live_request_oauth_binding()
+    expected_binding = {
+        "oauth_source": store.guard_source,
+        "oauth_subject_hash": subject_hash,
+        "workspace_id": oauth.workspace_id,
+        "machine_id": oauth.machine_id,
+        "machine_installation_id": oauth.installation_id,
+    }
+    if binding != expected_binding:
+        raise GuardReviewContractError("oauth_binding_mismatch")
     return {
         **auth_context,
-        "machine_id": oauth.machine_id,
-        "workspace_id": oauth.workspace_id,
-        "machine_installation_id": oauth.installation_id,
+        **expected_binding,
     }
 
 

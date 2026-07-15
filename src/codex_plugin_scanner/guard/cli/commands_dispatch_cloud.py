@@ -125,6 +125,34 @@ def _run_guard_connect_command(
         sources = store.list_oauth_sources()
         _emit("connect", {"sources": sources}, getattr(args, "json", False))
         return 0
+    if connect_subcommand == "reassign-quarantined":
+        approved_source = getattr(args, "confirm_source", None)
+        approved_workspace = getattr(args, "confirm_workspace", None)
+        if not isinstance(approved_source, str) or not isinstance(approved_workspace, str):
+            print(
+                "reassign-quarantined requires --confirm-source and --confirm-workspace",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            reassigned = store.reassign_quarantined_live_request_outbox(
+                approved_source=approved_source,
+                approved_workspace_id=approved_workspace,
+            )
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        _emit(
+            "connect",
+            {
+                "status": "reassigned",
+                "source": store.guard_source,
+                "workspace_id": approved_workspace,
+                "reassigned_count": reassigned,
+            },
+            getattr(args, "json", False),
+        )
+        return 0
     if connect_subcommand in {"status", "re-pair"}:
         payload = build_connect_status_payload(
             store=store,
