@@ -29,3 +29,10 @@ def test_windows_active_setup_expands_user_environment() -> None:
     stub_path = next(value for value in registry_values if value.attrib.get("Name") == "StubPath")
 
     assert stub_path.attrib["Type"] == "expandable"
+
+
+def test_macos_activation_preserves_spaced_home_paths() -> None:
+    script = Path("scripts/mdm/macos/activate-current-user.sh").read_text(encoding="utf-8")
+
+    assert "sed -n 's/^NFSHomeDirectory: //p'" in script
+    assert "awk '{print $2}'" not in script
