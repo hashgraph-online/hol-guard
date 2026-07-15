@@ -4,9 +4,12 @@ set -euo pipefail
 readonly RUNTIME="/Library/Application Support/HOL Guard"
 readonly STATE="/Library/Application Support/HOL Guard State"
 readonly LOGS="/Library/Logs/HOL Guard"
+readonly LAUNCH_AGENT="/Library/LaunchAgents/org.hol.guard.user-activation.plist"
 
 mkdir -p "${STATE}" "${LOGS}"
 chown -R root:wheel "${RUNTIME}" "${STATE}" "${LOGS}"
 chmod -R go-w "${RUNTIME}" "${STATE}" "${LOGS}"
 chmod 0755 "${RUNTIME}" "${STATE}" "${LOGS}"
+chown root:wheel "${LAUNCH_AGENT}"
+chmod 0644 "${LAUNCH_AGENT}"
 exit 0

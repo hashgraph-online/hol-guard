@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import config as config_module
 from codex_plugin_scanner.guard.config import load_guard_config, overlay_synced_guard_policy
 from codex_plugin_scanner.guard.mdm import policy as policy_module
 from codex_plugin_scanner.guard.mdm.contracts import MDM_POLICY_SCHEMA_VERSION, MachinePaths
@@ -109,6 +110,26 @@ def test_partial_managed_nested_policy_preserves_local_strengthening(tmp_path: P
     }
 
 
+def test_nested_managed_lock_rejects_persisted_weakening(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "policy.json"
+    path.write_text(
+        json.dumps(
+            _policy(
+                settings={"risk_actions": {"network_egress": "block"}},
+                lockedSettings=["risk_actions.network_egress"],
+            )
+        )
+    )
+    state = load_managed_policy(policy_path=path)
+    monkeypatch.setattr(config_module, "load_managed_policy", lambda: state)
+
+    with pytest.raises(ValueError, match=r"risk_actions\.network_egress"):
+        config_module.update_guard_settings(
+            tmp_path / "guard-home",
+            {"risk_actions": {"network_egress": "warn"}},
+        )
+
+
 def test_proxy_credentials_are_rejected_when_encoded() -> None:
     payload = _policy(
         network={
@@ -132,8 +153,14 @@ def test_managed_policy_survives_local_and_cloud_weakening(tmp_path: Path) -> No
     path.write_text(
         json.dumps(
             _policy(
-                settings={"mode": "enforce", "default_action": "block"},
-                lockedSettings=["mode", "default_action"],
+                settings={
+                    "mode": "enforce",
+                    "security_level": "paranoid",
+                    "default_action": "block",
+                    "risk_actions": {"network_egress": "block"},
+                    "harness_risk_actions": {"codex": {"network_egress": "block"}},
+                },
+                lockedSettings=["mode", "security_level", "default_action", "risk_actions.network_egress"],
             )
         )
     )
@@ -146,7 +173,10 @@ def test_managed_policy_survives_local_and_cloud_weakening(tmp_path: Path) -> No
     overlaid = overlay_synced_guard_policy(config, {"mode": "prompt", "defaultAction": "warn"})
 
     assert overlaid.mode == "enforce"
+    assert overlaid.security_level == "paranoid"
     assert overlaid.default_action == "block"
+    assert overlaid.risk_actions == {"network_egress": "block"}
+    assert overlaid.harness_risk_actions == {"codex": {"network_egress": "block"}}
     assert overlaid.install_owner == "mdm"
 
 

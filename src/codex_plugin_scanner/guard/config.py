@@ -521,10 +521,12 @@ def update_guard_settings(
         next_payload[key] = _coerce_editable_setting(key, value)
     if current_config.managed_policy is not None:
         composed = apply_managed_policy(next_payload, current_config.managed_policy)
+        missing = object()
         weakened = [
             key
             for key in current_config.managed_locked_settings
-            if key in next_payload and composed.get(key) != next_payload.get(key)
+            if (requested := _nested_setting_value(next_payload, key, missing)) is not missing
+            and _nested_setting_value(composed, key, missing) != requested
         ]
         if weakened:
             raise ValueError(f"Managed policy locks prevent weakening: {', '.join(sorted(weakened))}")
@@ -843,11 +845,14 @@ def _reapply_managed_config(config: GuardConfig) -> GuardConfig:
         return config
     local = {
         "mode": config.mode,
+        "security_level": config.security_level,
         "default_action": config.default_action,
         "unknown_publisher_action": config.unknown_publisher_action,
         "changed_hash_action": config.changed_hash_action,
         "new_network_domain_action": config.new_network_domain_action,
         "subprocess_action": config.subprocess_action,
+        "risk_actions": config.risk_actions or {},
+        "harness_risk_actions": config.harness_risk_actions or {},
         "telemetry": config.telemetry,
         "sync": config.sync,
         "receipt_redaction_level": config.receipt_redaction_level,
@@ -856,6 +861,7 @@ def _reapply_managed_config(config: GuardConfig) -> GuardConfig:
     return replace(
         config,
         mode=_coerce_loaded_guard_mode(composed.get("mode"), config.mode),
+        security_level=_coerce_loaded_security_level(composed.get("security_level")),
         default_action=_coerce_loaded_guard_action_or_default(composed.get("default_action"), config.default_action),
         unknown_publisher_action=_coerce_loaded_guard_action_or_default(
             composed.get("unknown_publisher_action"), config.unknown_publisher_action
@@ -869,12 +875,23 @@ def _reapply_managed_config(config: GuardConfig) -> GuardConfig:
         subprocess_action=_coerce_loaded_guard_action_or_default(
             composed.get("subprocess_action"), config.subprocess_action
         ),
+        risk_actions=_coerce_risk_action_map(composed.get("risk_actions")),
+        harness_risk_actions=_coerce_harness_risk_action_map(composed.get("harness_risk_actions")),
         telemetry=_coerce_loaded_bool(composed.get("telemetry", config.telemetry)),
         sync=_coerce_loaded_bool(composed.get("sync", config.sync)),
         receipt_redaction_level=_coerce_loaded_receipt_redaction_level(
             composed.get("receipt_redaction_level", config.receipt_redaction_level)
         ),
     )
+
+
+def _nested_setting_value(payload: dict[str, object], path: str, missing: object) -> object:
+    current: object = payload
+    for part in path.split("."):
+        if not isinstance(current, dict) or part not in current:
+            return missing
+        current = current[part]
+    return current
 
 
 def _coerce_action_value(value: object, fallback: GuardAction) -> GuardAction:
