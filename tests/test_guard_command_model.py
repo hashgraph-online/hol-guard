@@ -197,6 +197,17 @@ def test_parse_shell_command_distinguishes_heredoc_data_from_executable_script()
     assert script.redirects[0].target == "EOF"
 
 
+def test_parse_shell_command_preserves_tab_stripped_heredoc_segment_spans() -> None:
+    command = "bash <<-EOF\n\techo hello\nEOF"
+
+    parsed = parse_shell_command(command)
+    embedded_segment = parsed.segments[1]
+
+    assert embedded_segment.text == "echo hello"
+    assert embedded_segment.start == command.index("echo hello")
+    assert command[embedded_segment.start : embedded_segment.end] == embedded_segment.text
+
+
 def test_parse_shell_command_extracts_executable_substitutions() -> None:
     operation = "reset " + "--hard HEAD~1"
     parsed = parse_shell_command(f"printf '%s' \"$(git {operation})\"")

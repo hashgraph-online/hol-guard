@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-import re
-import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from .command_structure import (
+    CommandRedirect,
+    EmbeddedCommand,
+    build_command_security_identity,
+    extract_command_redirects,
+)
+from .command_tokens import executable_name, leading_environment, shell_tokens
 from .data_flow import (
     ShellHeredoc,
     extract_command_segments,
@@ -31,62 +34,7 @@ MAX_COMMAND_BYTES = 32_768
 MAX_COMMAND_SEGMENTS = 128
 MAX_COMMAND_TOKENS = 2_048
 
-_ENV_ASSIGNMENT_PATTERN = re.compile(r"^(?P<name>[A-Za-z_][A-Za-z0-9_]*)=.*$", re.DOTALL)
-_SUDO_OPTIONS_WITH_VALUES = frozenset({"-C", "-D", "-g", "-h", "-p", "-R", "-r", "-T", "-t", "-u"})
-_SUDO_LONG_OPTIONS_WITH_VALUES = frozenset(
-    {
-        "--chdir",
-        "--chroot",
-        "--close-from",
-        "--command-timeout",
-        "--group",
-        "--host",
-        "--login-class",
-        "--prompt",
-        "--role",
-        "--type",
-        "--user",
-    }
-)
 _SHELL_SCRIPT_EXECUTABLES = frozenset({"ash", "bash", "dash", "sh", "zsh"})
-_REDIRECT_PATTERN = re.compile(
-    r"(?<![<>])(?P<operator>(?:\d*)>>?|(?:\d*)<)(?![<>&])\s*(?P<target>\"[^\"]+\"|'[^']+'|[^ \t\r\n;&|<>]+)"
-)
-
-
-@dataclass(frozen=True, slots=True)
-class CommandRedirect:
-    """One non-heredoc shell redirect with normalized source spans."""
-
-    operator: str
-    target: str
-    start: int
-    end: int
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "operator": self.operator,
-            "target": self.target,
-            "span": {"source": "normalized", "start": self.start, "end": self.end},
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class EmbeddedCommand:
-    """Command text executed from substitution or an interpreter heredoc."""
-
-    kind: Literal["substitution", "heredoc"]
-    text: str
-    execution_context: str
-    start: int
-    end: int
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "kind": self.kind,
-            "execution_context": self.execution_context,
-            "span": {"source": "normalized", "start": self.start, "end": self.end},
-        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,27 +92,15 @@ class CanonicalCommand:
     def security_identity(self) -> str:
         """Return a versioned identity over the complete executable structure."""
 
-        payload = {
-            "version": 2,
-            "normalized_text": self.normalized_text,
-            "dialect": self.dialect,
-            "transport": self.transport,
-            "wrapper_chain": self.wrapper_chain,
-            "segments": [
-                {
-                    "tokens": segment.tokens,
-                    "environment_names": segment.environment_names,
-                    "wrapper_chain": segment.wrapper_chain,
-                    "execution_context": segment.execution_context,
-                    "pipeline_index": segment.pipeline_index,
-                }
-                for segment in self.segments
-            ],
-            "redirects": [(item.operator, item.target) for item in self.redirects],
-            "embedded": [(item.kind, item.text, item.execution_context) for item in self.embedded_commands],
-        }
-        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        return f"command-security-v2:{hashlib.sha256(encoded).hexdigest()}"
+        return build_command_security_identity(
+            normalized_text=self.normalized_text,
+            dialect=self.dialect,
+            transport=self.transport,
+            wrapper_chain=self.wrapper_chain,
+            segments=self.segments,
+            redirects=self.redirects,
+            embedded_commands=self.embedded_commands,
+        )
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -271,7 +207,7 @@ def parse_shell_command(
     cursor = 0
     total_tokens = 0
     for execution_context, pipeline_index, segment_text, source_offset in segment_texts:
-        tokens, exact = _shell_tokens(segment_text)
+        tokens, exact = shell_tokens(segment_text)
         total_tokens += len(tokens)
         if total_tokens > MAX_COMMAND_TOKENS:
             return CanonicalCommand(
@@ -290,7 +226,7 @@ def parse_shell_command(
         if not exact and confidence == "exact":
             confidence = "fallback"
             uncertainty_reason = "malformed_shell_quoting"
-        environment_names, executable_index, wrappers = _leading_environment(tokens)
+        environment_names, executable_index, wrappers = leading_environment(tokens)
         for wrapper in wrappers:
             if wrapper not in segment_wrappers:
                 segment_wrappers.append(wrapper)
@@ -336,7 +272,7 @@ def parse_shell_command(
         extraction_provenance=extraction_provenance,
         wrapper_chain=(*normalization.wrapper_chain, *segment_wrappers),
         segments=tuple(segments),
-        redirects=_command_redirects(normalized_text, heredocs),
+        redirects=extract_command_redirects(normalized_text, heredocs),
         embedded_commands=embedded_commands,
         confidence=confidence,
         uncertainty_reason=uncertainty_reason,
@@ -395,7 +331,7 @@ def _embedded_execution(
             (segment for segment in top_level_segments if segment.start <= heredoc.operator_start <= segment.end),
             None,
         )
-        executable = _executable_name(owner.executable) if owner is not None else None
+        executable = executable_name(owner.executable) if owner is not None else None
         if executable not in _SHELL_SCRIPT_EXECUTABLES:
             continue
         context = f"heredoc:{index}"
@@ -482,8 +418,8 @@ def _segments_for_embedded(
         command,
         context_prefix=execution_context,
     ):
-        tokens, _exact = _shell_tokens(segment_text)
-        environment_names, executable_index, wrappers = _leading_environment(tokens)
+        tokens, _exact = shell_tokens(segment_text)
+        environment_names, executable_index, wrappers = leading_environment(tokens)
         executable = tokens[executable_index] if executable_index < len(tokens) else None
         arguments = tokens[executable_index + 1 :] if executable is not None else ()
         start = source_offset + local_offset
@@ -503,109 +439,3 @@ def _segments_for_embedded(
             )
         )
     return tuple(results)
-
-
-def _command_redirects(command: str, heredocs: tuple[ShellHeredoc, ...]) -> tuple[CommandRedirect, ...]:
-    redirects: list[CommandRedirect] = []
-    heredoc_operator_starts = {item.operator_start for item in heredocs}
-    for match in _REDIRECT_PATTERN.finditer(command):
-        if match.start() in heredoc_operator_starts:
-            continue
-        redirects.append(
-            CommandRedirect(
-                operator=match.group("operator"),
-                target=_strip_quotes(match.group("target")),
-                start=match.start(),
-                end=match.end(),
-            )
-        )
-    redirects.extend(
-        CommandRedirect(
-            operator="<<-" if heredoc.strip_tabs else "<<",
-            target=heredoc.delimiter,
-            start=heredoc.operator_start,
-            end=heredoc.declaration_end,
-        )
-        for heredoc in heredocs
-    )
-    return tuple(sorted(redirects, key=lambda item: item.start))
-
-
-def _strip_quotes(value: str) -> str:
-    stripped = value.strip()
-    if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {"'", '"'}:
-        return stripped[1:-1]
-    return stripped
-
-
-def _executable_name(value: str | None) -> str | None:
-    if value is None:
-        return None
-    return value.replace("\\", "/").rsplit("/", 1)[-1].lower()
-
-
-def _shell_tokens(command: str) -> tuple[tuple[str, ...], bool]:
-    try:
-        return tuple(shlex.split(command, posix=True, comments=False)), True
-    except ValueError:
-        return tuple(command.split()), False
-
-
-def _leading_environment(tokens: tuple[str, ...]) -> tuple[tuple[str, ...], int, tuple[str, ...]]:
-    names: list[str] = []
-    wrappers: list[str] = []
-    index = 0
-    while index < len(tokens):
-        match = _ENV_ASSIGNMENT_PATTERN.fullmatch(tokens[index])
-        while match is not None:
-            names.append(match.group("name"))
-            index += 1
-            if index >= len(tokens):
-                return tuple(names), index, tuple(wrappers)
-            match = _ENV_ASSIGNMENT_PATTERN.fullmatch(tokens[index])
-        executable = tokens[index].replace("\\", "/").rsplit("/", 1)[-1].lower()
-        if executable == "env":
-            wrappers.append("env")
-            index = _after_env_options(tokens, index + 1)
-            continue
-        if executable == "sudo":
-            wrappers.append("sudo")
-            index = _after_sudo_options(tokens, index + 1)
-            continue
-        break
-    return tuple(names), index, tuple(wrappers)
-
-
-def _after_env_options(tokens: tuple[str, ...], index: int) -> int:
-    while index < len(tokens):
-        token = tokens[index]
-        if token == "--":
-            return index + 1
-        if token in {"-u", "-C", "--unset", "--chdir"}:
-            index = min(index + 2, len(tokens))
-            continue
-        if token in {"-i", "-0", "--ignore-environment", "--null"} or token.startswith(("--unset=", "--chdir=")):
-            index += 1
-            continue
-        if _ENV_ASSIGNMENT_PATTERN.fullmatch(token) is not None:
-            return index
-        return index
-    return index
-
-
-def _after_sudo_options(tokens: tuple[str, ...], index: int) -> int:
-    while index < len(tokens):
-        token = tokens[index]
-        if token == "--":
-            return index + 1
-        option_name = token.split("=", 1)[0]
-        if option_name in _SUDO_OPTIONS_WITH_VALUES or option_name in _SUDO_LONG_OPTIONS_WITH_VALUES:
-            index += 1 if "=" in token else 2
-            continue
-        if token.startswith("-"):
-            index += 1
-            continue
-        if _ENV_ASSIGNMENT_PATTERN.fullmatch(token) is not None:
-            return index
-        return index
-    return index

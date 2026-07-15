@@ -79,7 +79,7 @@ def test_extract_heredocs_preserves_multiple_declarations_and_spans():
 
     assert [(item.delimiter, item.body, item.quoted, item.strip_tabs) for item in heredocs] == [
         ("ONE", "first\n", True, False),
-        ("TWO", "second\n", False, True),
+        ("TWO", "\tsecond\n", False, True),
     ]
     assert command[heredocs[0].body_start : heredocs[0].body_end] == "first\n"
     assert command[heredocs[1].body_start : heredocs[1].body_end] == "\tsecond\n"
