@@ -150,9 +150,9 @@ def _stronger_floor(left: CommandDecisionFloor, right: CommandDecisionFloor) -> 
     return left if _FLOOR_RANK[left] >= _FLOOR_RANK[right] else right
 
 
-def _match_precedence_key(owned: OwnedCommandRuleMatch) -> tuple[int, int, str]:
+def _match_precedence_key(owned: OwnedCommandRuleMatch) -> tuple[int, int, int]:
     return (
         _FLOOR_RANK[_rule_floor(owned)],
         _SEVERITY_RANK[owned.match.rule.severity],
-        owned.match.rule.rule_id,
+        0 if owned.match.rule.compatibility_fallback else 1,
     )

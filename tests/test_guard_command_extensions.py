@@ -234,6 +234,7 @@ def test_command_inspection_emits_all_core_matches_without_duplicate_compatibili
         "command.git.hard-reset",
         "command.shell-mutations.destructive-shell",
     ]
+    assert payload["controlling_rule_id"] == "command.filesystem.recursive-delete"
 
 
 def test_command_inspection_safe_variant_does_not_hide_unrelated_matches(tmp_path: Path) -> None:
