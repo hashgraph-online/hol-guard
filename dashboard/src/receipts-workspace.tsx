@@ -3,8 +3,8 @@ import { HiMiniArrowDownTray, HiMiniDocumentText, HiMiniXMark } from "react-icon
 
 import { EmptyState, ActionButton, SectionLabel, IconActionButton } from "./approval-center-primitives";
 import { isDisplayableHarness, normalizeHarnessFilter } from "./approval-center-utils";
-import type { GuardReceipt, GuardReceiptAnalytics, GuardRuntimeSnapshot } from "./guard-types";
-import { fetchReceiptAnalytics } from "./guard-api";
+import type { GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
+import { useReceiptAnalytics, invalidateReceiptAnalyticsCache } from "./evidence/use-receipt-analytics";
 import type { EvidenceFilterState, EvidenceView, EvidenceSortKey } from "./evidence/evidence-types";
 import { filterEvidence } from "./evidence/evidence-filters";
 import { sortEvidence } from "./evidence/evidence-sort";
@@ -69,9 +69,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
   const [page, setPage] = useState(0);
   const [exportOpen, setExportOpen] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
-  const [analyticsState, setAnalyticsState] = useState<
-    { kind: "idle" } | { kind: "loading" } | { kind: "ready"; data: GuardReceiptAnalytics } | { kind: "error"; message: string }
-  >({ kind: "idle" });
+  const analytics = useReceiptAnalytics(true);
 
   const urlSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -201,31 +199,9 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
 
   const handleConfirmClear = useCallback(() => {
     setFilters(DEFAULT_FILTER_STATE);
+    invalidateReceiptAnalyticsCache();
     if (onClearEvidence) onClearEvidence();
   }, [onClearEvidence]);
-
-  useEffect(() => {
-    if (filters.view !== "insights") {
-      return;
-    }
-    let cancelled = false;
-    setAnalyticsState({ kind: "loading" });
-    fetchReceiptAnalytics()
-      .then((data) => {
-        if (!cancelled) setAnalyticsState({ kind: "ready", data });
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setAnalyticsState({
-            kind: "error",
-            message: error instanceof Error ? error.message : "Could not load analytics",
-          });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [filters.view, receiptItems.length]);
 
   const handleViewActions = useCallback(() => {
     setFilters((prev) => ({ ...prev, view: "actions", day: "" }));
@@ -267,12 +243,14 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
 
   const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label, id: t.key }));
 
+  const totalReceiptCount = analytics.kind === "ready" ? analytics.data.total : receiptItems.length;
+
   const insightsHeaderDescription = useMemo(() => {
     if (filters.view !== "insights") return undefined;
-    if (analyticsState.kind !== "ready") return "Loading analytics from your local evidence store.";
-    const total = analyticsState.data.total;
+    if (analytics.kind !== "ready") return "Loading analytics from your local evidence store.";
+    const total = analytics.data.total;
     return `${formatEvidenceCount(total)} actions in your full local store.`;
-  }, [filters.view, analyticsState]);
+  }, [filters.view, analytics]);
 
   const headerActions = useMemo(
     () => (
@@ -311,7 +289,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
       />
 
       {filters.view !== "insights" && (
-        <EvidenceHero totalCount={receiptItems.length} lastActivityAt={metrics.lastActivityAt} />
+        <EvidenceHero totalCount={totalReceiptCount} lastActivityAt={metrics.lastActivityAt} />
       )}
 
       <div className="pt-1">
@@ -326,7 +304,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
               <EvidenceFilterBar
                 filters={filters}
                 onChange={handleFilterChange}
-                totalCount={receiptItems.length}
+                totalCount={totalReceiptCount}
                 filteredCount={filtered.length}
                 harnesses={harnesses}
               />
@@ -362,15 +340,15 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
             aria-labelledby="tab-insights"
             className="guard-fade-in"
           >
-            {analyticsState.kind === "loading" || analyticsState.kind === "idle" ? (
+            {analytics.kind === "loading" || analytics.kind === "idle" ? (
               <div className="flex items-center justify-center py-16 text-sm text-slate-500">Loading insights…</div>
-            ) : analyticsState.kind === "error" ? (
+            ) : analytics.kind === "error" ? (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                {analyticsState.message}
+                {analytics.message}
               </div>
             ) : (
               <EvidenceAnalyticsPanel
-                analytics={analyticsState.data}
+                analytics={analytics.data}
                 runtime={runtime}
                 sampleCount={receiptItems.length}
                 onFilterHarness={handleFilterHarnessFromInsights}
@@ -440,7 +418,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
       />
 
       <EvidenceClearModal
-        count={receiptItems.length}
+        count={totalReceiptCount}
         isOpen={clearOpen}
         onClose={handleCloseClear}
         onCleared={handleConfirmClear}
