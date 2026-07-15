@@ -315,7 +315,13 @@ def _present_flags(
         if argument.startswith("-") and "=" in argument:
             flags.add(argument.split("=", 1)[0])
         if argument.startswith("-") and not argument.startswith("--") and len(argument) > 2:
-            flags.update(f"-{character}" for character in argument[1:] if character.isalpha())
+            for character in argument[1:]:
+                if not character.isalpha():
+                    continue
+                short_flag = f"-{character}"
+                flags.add(short_flag)
+                if short_flag in options_with_values:
+                    break
         option_name = argument.split("=", 1)[0]
         index += 2 if option_name in options_with_values and "=" not in argument else 1
     return frozenset(flags)

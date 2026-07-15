@@ -5758,8 +5758,12 @@ def _git_clean_is_preview(arguments: list[str]) -> bool:
             continue
         if normalized == "--dry-run":
             return True
-        if normalized.startswith("-") and not normalized.startswith("--") and "n" in normalized[1:]:
-            return True
+        if normalized.startswith("-") and not normalized.startswith("--"):
+            for flag in normalized[1:]:
+                if flag == "e":
+                    break
+                if flag == "n":
+                    return True
         index += 1
     return False
 

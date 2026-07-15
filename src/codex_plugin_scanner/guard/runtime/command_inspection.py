@@ -160,7 +160,11 @@ def inspect_command(
         "classification": {
             "matched": True,
             "explicitly_benign": benign,
-            "action_class": match.action_class if match is not None else None,
+            "action_class": (
+                match.action_class
+                if match is not None
+                else (primary_rule_match.action_class if primary_rule_match is not None else None)
+            ),
             "reason": classification_reason,
             "normalized_command": match.command_text if match is not None else canonical_command.normalized_text,
             "wrapper_chain": list(match.wrapper_chain) if match is not None else list(canonical_command.wrapper_chain),

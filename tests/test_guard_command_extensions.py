@@ -96,23 +96,40 @@ def test_command_extension_registry_is_deterministic_and_complete() -> None:
 
 
 @pytest.mark.parametrize(
-    ("command", "extension_id", "rule_id"),
+    ("command", "extension_id", "rule_id", "action_class"),
     [
-        ("shutdown -h now", "command.system", "command.system.disk-or-power-mutation"),
-        ("Format-Volume -DriveLetter D", "command.windows", "command.windows.destructive-storage"),
-        ("git push origin main --force", "command.git", "command.git.force-push"),
-        ("chmod -R 777 ./workspace", "command.filesystem", "command.filesystem.recursive-permission-change"),
+        (
+            "shutdown -h now",
+            "command.system",
+            "command.system.disk-or-power-mutation",
+            "system destructive command",
+        ),
+        (
+            "Format-Volume -DriveLetter D",
+            "command.windows",
+            "command.windows.destructive-storage",
+            "windows destructive command",
+        ),
+        ("git push origin main --force", "command.git", "command.git.force-push", "git destructive command"),
+        (
+            "chmod -R 777 ./workspace",
+            "command.filesystem",
+            "command.filesystem.recursive-permission-change",
+            "destructive shell command",
+        ),
     ],
 )
 def test_command_inspection_emits_structured_core_rules(
     command: str,
     extension_id: str,
     rule_id: str,
+    action_class: str,
     tmp_path: Path,
 ) -> None:
     payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
 
     assert payload["status"] == "review"
+    assert payload["classification"]["action_class"] == action_class
     assert payload["extensions"][0]["extension_id"] == extension_id
     assert payload["rules"][0]["rule_id"] == rule_id
     assert payload["rules"][0]["matcher_evidence"]
@@ -176,6 +193,17 @@ def test_git_clean_exclude_value_is_not_treated_as_preview_flag(tmp_path: Path) 
 
     assert payload["status"] == "review"
     assert [rule["rule_id"] for rule in payload["rules"]] == [
+        "command.git.force-clean",
+        "command.shell-mutations.destructive-shell",
+    ]
+
+
+def test_git_clean_attached_exclude_value_does_not_fabricate_force_flag(tmp_path: Path) -> None:
+    exclude_only = inspect_command("git clean -ef", cwd=tmp_path, home_dir=tmp_path)
+    force_then_exclude = inspect_command("git clean -feignored", cwd=tmp_path, home_dir=tmp_path)
+
+    assert [rule["rule_id"] for rule in exclude_only["rules"]] == ["command.shell-mutations.destructive-shell"]
+    assert [rule["rule_id"] for rule in force_then_exclude["rules"]] == [
         "command.git.force-clean",
         "command.shell-mutations.destructive-shell",
     ]
