@@ -86,11 +86,16 @@ def test_deactivation_restores_integrations_and_removes_marker(tmp_path: Path, m
         return {"managed_installs": []}
 
     monkeypatch.setattr(lifecycle, "apply_managed_install", fake_install)
-    payload = lifecycle.deactivate_user(tmp_path)
+    payload = lifecycle.deactivate_user(tmp_path, authorization_fingerprint="consumed-token")
 
     assert commands == ["uninstall"]
     assert payload["operation"] == "deactivate"
     assert not (guard_home / "mdm-activation.json").exists()
+
+
+def test_deactivation_requires_machine_authorization(tmp_path: Path) -> None:
+    with pytest.raises(PermissionError, match="mdm_removal_authorization_required"):
+        lifecycle.deactivate_user(tmp_path)
 
 
 def test_status_schema_accepts_stable_user_contract(tmp_path: Path) -> None:

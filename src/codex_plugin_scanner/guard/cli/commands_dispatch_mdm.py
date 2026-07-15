@@ -66,17 +66,11 @@ def _run_guard_mdm_command(
             elif command == "repair":
                 payload = repair_user(home, str(args.user))
             elif command == "deactivate":
-                policy = load_managed_policy()
-                authorization_fingerprint = None
-                removal_is_managed = policy.status in {"invalid", "inaccessible", "tampered"} or (
-                    policy.policy is not None and policy.policy.install_owner == "mdm"
-                )
-                if removal_is_managed and not args.authorization_file:
+                if not args.authorization_file:
                     raise PermissionError("mdm_removal_authorization_required")
-                if removal_is_managed:
-                    authorization_fingerprint = validate_removal_authorization(
-                        Path(str(args.authorization_file)), home=home, user=str(args.user)
-                    )
+                authorization_fingerprint = validate_removal_authorization(
+                    Path(str(args.authorization_file)), home=home, user=str(args.user)
+                )
                 payload = deactivate_user(home, authorization_fingerprint=authorization_fingerprint)
             else:
                 raise ValueError("mdm_command_invalid")

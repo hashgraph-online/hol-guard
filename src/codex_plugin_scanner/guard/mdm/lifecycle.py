@@ -388,6 +388,8 @@ def repair_user(home: Path, user: str | None = None) -> dict[str, object]:
 
 
 def deactivate_user(home: Path, *, authorization_fingerprint: str | None = None) -> dict[str, object]:
+    if authorization_fingerprint is None:
+        raise PermissionError("mdm_removal_authorization_required")
     guard_home = home / ".hol-guard"
     with _activation_lock(guard_home):
         context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard_home)
