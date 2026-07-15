@@ -8,7 +8,6 @@ from codex_plugin_scanner.guard.risk import artifact_risk_signals_v2
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     COMMAND_EXTENSION_SCHEMA_VERSION,
-    risk_classes_for_command_action,
 )
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.command_rules import CommandRuleMatch
@@ -53,7 +52,15 @@ def inspect_command(
             "detail": "Ran the same sensitive command parser used by Guard harness hooks.",
         },
     ]
-    if match is None:
+    structured_matches = BUILT_IN_COMMAND_EXTENSION_REGISTRY.matching_rules(canonical_command)
+    trace.append(
+        {
+            "step": "structured-rule-matching",
+            "result": str(len(structured_matches)),
+            "detail": "Matched versioned command rules against the canonical command model.",
+        }
+    )
+    if match is None and not structured_matches:
         return {
             "schema_version": COMMAND_EXTENSION_SCHEMA_VERSION,
             "status": "no_match",
@@ -79,26 +86,60 @@ def inspect_command(
             "side_effects": "none",
         }
 
-    extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class(match.action_class)
-    rule = BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class(match.action_class)
-    artifact = build_tool_action_request_artifact(
-        "guard-cli",
-        match,
-        config_path="command-inspection",
-        source_scope="inspection",
+    compatibility_extension = (
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class(match.action_class) if match is not None else None
     )
-    signals = artifact_risk_signals_v2(artifact)
+    compatibility_rule = (
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class(match.action_class) if match is not None else None
+    )
+    selected_matches = list(structured_matches)
+    selected_rule_ids = {rule.rule_id for _extension, rule, _evidence in selected_matches}
+    if (
+        compatibility_extension is not None
+        and compatibility_rule is not None
+        and compatibility_rule.rule_id not in selected_rule_ids
+    ):
+        selected_matches.append((compatibility_extension, compatibility_rule, ()))
+
+    signals = ()
+    if match is not None:
+        artifact = build_tool_action_request_artifact(
+            "guard-cli",
+            match,
+            config_path="command-inspection",
+            source_scope="inspection",
+        )
+        signals = artifact_risk_signals_v2(artifact)
+    extensions_by_id = {extension.extension_id: extension for extension, _rule, _evidence in selected_matches}
+    rule_matches: list[CommandRuleMatch] = []
+    for _extension, rule, evidence in selected_matches:
+        rule_action_class = rule.action_classes[0] if rule.action_classes else None
+        if rule_action_class is None and match is not None:
+            rule_action_class = match.action_class
+        rule_reason = rule.description
+        if match is not None and rule.compatibility_fallback:
+            rule_reason = match.reason
+        rule_matches.append(
+            CommandRuleMatch(
+                rule=rule,
+                action_class=rule_action_class,
+                reason=rule_reason,
+                command=canonical_command,
+                matcher_evidence=evidence,
+            )
+        )
+    risk_classes = sorted({risk for rule_match in rule_matches for risk in rule_match.rule.risk_classes})
     trace.extend(
         (
             {
                 "step": "extension-ownership",
-                "result": extension.extension_id if extension is not None else "unowned",
-                "detail": "Mapped the existing action class to a versioned command safety extension.",
+                "result": ",".join(sorted(extensions_by_id)) or "unowned",
+                "detail": "Selected structured extension ownership with compatibility fallback.",
             },
             {
                 "step": "rule-ownership",
-                "result": rule.rule_id if rule is not None else "unowned",
-                "detail": "Mapped the compatibility action class to a stable command safety rule.",
+                "result": ",".join(rule_match.rule.rule_id for rule_match in rule_matches) or "unowned",
+                "detail": "Selected every matching structured rule without making a policy decision.",
             },
             {
                 "step": "risk-signal-derivation",
@@ -107,17 +148,13 @@ def inspect_command(
             },
         )
     )
-    rule_match = (
-        CommandRuleMatch(
-            rule=rule,
-            action_class=match.action_class,
-            reason=match.reason,
-            command=canonical_command,
-            matcher_evidence=rule.matcher.match(canonical_command) if rule.matcher is not None else (),
-        )
-        if rule is not None
-        else None
-    )
+    primary_rule_match = rule_matches[0] if rule_matches else None
+    classification_action_class = match.action_class if match is not None else None
+    classification_reason = match.reason if match is not None else None
+    if primary_rule_match is not None:
+        classification_action_class = classification_action_class or primary_rule_match.action_class
+        classification_reason = classification_reason or primary_rule_match.rule.description
+    classification_reason = classification_reason or "Sensitive command matched without registered rule metadata."
     return {
         "schema_version": COMMAND_EXTENSION_SCHEMA_VERSION,
         "status": "review",
@@ -125,15 +162,15 @@ def inspect_command(
         "classification": {
             "matched": True,
             "explicitly_benign": benign,
-            "action_class": match.action_class,
-            "reason": match.reason,
-            "normalized_command": match.command_text,
-            "wrapper_chain": list(match.wrapper_chain),
+            "action_class": classification_action_class,
+            "reason": classification_reason,
+            "normalized_command": match.command_text if match is not None else canonical_command.normalized_text,
+            "wrapper_chain": list(match.wrapper_chain) if match is not None else list(canonical_command.wrapper_chain),
         },
-        "risk_classes": list(risk_classes_for_command_action(match.action_class)),
+        "risk_classes": risk_classes,
         "signals": [signal.to_dict() for signal in signals],
-        "extensions": [extension.to_dict()] if extension is not None else [],
-        "rules": [rule_match.to_dict()] if rule_match is not None else [],
+        "extensions": [extensions_by_id[extension_id].to_dict() for extension_id in sorted(extensions_by_id)],
+        "rules": [rule_match.to_dict() for rule_match in rule_matches],
         "command_model": canonical_command.to_dict(),
         "trace": trace,
         "policy_evaluation": "not_run",
