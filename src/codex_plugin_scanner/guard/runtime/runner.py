@@ -2750,10 +2750,15 @@ def _sign_guard_dpop_proof(
         if normalized_nonce:
             claims["nonce"] = normalized_nonce
     signing_input = f"{_encode_jwt_segment(header)}.{_encode_jwt_segment(claims)}".encode("ascii")
-    private_key = serialization.load_pem_private_key(
-        dpop_key_material.private_key_pem.encode("ascii"),
-        password=None,
-    )
+    try:
+        private_key = serialization.load_pem_private_key(
+            dpop_key_material.private_key_pem.encode("ascii"),
+            password=None,
+        )
+    except (TypeError, ValueError) as exc:
+        raise GuardSyncAuthorizationExpiredError(
+            "Guard Cloud authorization key is invalid. Reconnect Guard Cloud."
+        ) from exc
     if not isinstance(private_key, ec.EllipticCurvePrivateKey) or not isinstance(private_key.curve, ec.SECP256R1):
         raise RuntimeError("Guard DPoP key must be a P-256 (SECP256R1) EC private key.")
     der_signature = private_key.sign(signing_input, ec.ECDSA(hashes.SHA256()))
