@@ -107,6 +107,8 @@ def parse_package_intent(
         "helm": _parse_helm_intent,
     }
     intents: list[PackageIntent] = []
+    if not command_text.strip() and canonical_command is None:
+        return None
     parsed_command = canonical_command or parse_shell_command(command_text, cwd=workspace, home_dir=Path.home())
     for segment in _normalized_command_segments(command_text, canonical_command=parsed_command):
         if not segment.tokens:

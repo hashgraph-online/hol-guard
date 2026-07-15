@@ -21,6 +21,11 @@ def _write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def test_parse_package_intent_empty_command_returns_none() -> None:
+    assert parse_package_intent("") is None
+    assert parse_package_intent("   \t\n") is None
+
+
 def test_parse_package_intent_npm_install_supports_aliases_tags_versions_and_flags(tmp_path: Path) -> None:
     _write_text(tmp_path / "package.json", '{"name":"demo"}\n')
 
