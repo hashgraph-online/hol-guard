@@ -246,9 +246,7 @@ def machine_status(
     )
     payload = _base("status")
     healthy = (
-        verification.healthy
-        and policy.status in {"active", "absent"}
-        and (native.healthy or machine_root is not None)
+        verification.healthy and policy.status in {"active", "absent"} and (native.healthy or machine_root is not None)
     )
     if verification.healthy and policy.status == "invalid":
         state = "policy-invalid"
@@ -349,19 +347,11 @@ def activate_user(home: Path, user: str) -> dict[str, object]:
     with _activation_lock(guard_home):
         context = HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard_home)
         store = GuardStore(guard_home)
-        before = {
-            str(item.get("harness"))
-            for item in store.list_managed_installs()
-            if bool(item.get("active"))
-        }
+        before = {str(item.get("harness")) for item in store.list_managed_installs() if bool(item.get("active"))}
         try:
             result = apply_managed_install("install", None, True, context, store, None, _now())
         except (OSError, RuntimeError, ValueError):
-            after = {
-                str(item.get("harness"))
-                for item in store.list_managed_installs()
-                if bool(item.get("active"))
-            }
+            after = {str(item.get("harness")) for item in store.list_managed_installs() if bool(item.get("active"))}
             for harness in sorted(after - before):
                 try:
                     apply_managed_install("uninstall", harness, False, context, store, None, _now())

@@ -217,9 +217,7 @@ def _load_policy_cache(system_name: str) -> ManagedPolicyState | None:
         if metadata.st_size > _MAX_POLICY_BYTES:
             raise ManagedPolicyError("managed policy cache exceeds size limit")
         if not _cache_owner_is_trusted(path, system_name):
-            return ManagedPolicyState(
-                "tampered", str(path), reason_code="managed_policy_cache_tampered"
-            )
+            return ManagedPolicyState("tampered", str(path), reason_code="managed_policy_cache_tampered")
         policy = parse_managed_policy(json.loads(path.read_bytes()))
         return ManagedPolicyState(
             "active", str(path), policy=policy, reason_code="managed_policy_profile_removed_cached"
