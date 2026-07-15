@@ -952,12 +952,13 @@ def _target_paths(
 
 
 def apply_patch_target_paths(tool_input: Mapping[str, object]) -> tuple[str, ...]:
+    paths: list[str] = []
     for key in _PATCH_INPUT_KEYS:
         patch_text = tool_input.get(key)
         if not isinstance(patch_text, str) or not patch_text.strip():
             continue
-        return tuple(match.group("path").strip() for match in _PATCH_FILE_HEADER_PATTERN.finditer(patch_text))
-    return ()
+        paths.extend(match.group("path").strip() for match in _PATCH_FILE_HEADER_PATTERN.finditer(patch_text))
+    return tuple(dict.fromkeys(paths))
 
 
 def _network_hosts(command: str | None, prompt_excerpt: str | None) -> tuple[str, ...]:

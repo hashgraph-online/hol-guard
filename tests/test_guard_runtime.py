@@ -14201,6 +14201,34 @@ def test_guard_runtime_blocks_apply_patch_to_sensitive_file(tmp_path):
     assert match.path_class == "local .env file"
 
 
+def test_guard_runtime_checks_all_apply_patch_payload_keys(tmp_path):
+    sensitive_patch = """*** Begin Patch
+*** Update File: .env
+@@
+-TOKEN=old
++TOKEN=new
+*** End Patch"""
+
+    match = extract_sensitive_file_write_request(
+        "apply_patch",
+        {"patch": "no patch headers", "input": sensitive_patch},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.path_class == "local .env file"
+
+
+def test_guard_runtime_ignores_patch_syntax_for_other_write_tools(tmp_path):
+    match = extract_sensitive_file_write_request(
+        "write",
+        {"input": "*** Update File: .env\n..."},
+        cwd=tmp_path,
+    )
+
+    assert match is None
+
+
 def test_guard_runtime_allows_cd_prefixed_pytest_module_invocation(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",

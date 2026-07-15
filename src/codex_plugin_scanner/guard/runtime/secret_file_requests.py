@@ -747,7 +747,7 @@ def extract_sensitive_file_write_request(
         return None
     requested_tool_name = str(tool_name).strip() if isinstance(tool_name, str) and str(tool_name).strip() else "Write"
     normalized_protected_paths = protected_paths or {}
-    for candidate in _candidate_paths(arguments):
+    for candidate in _candidate_paths(arguments, include_apply_patch=normalized_tool_name == "apply_patch"):
         normalized_candidate = _normalized_candidate_path(candidate, cwd=cwd, home_dir=home_dir)
         if normalized_candidate is not None:
             protected_label = normalized_protected_paths.get(normalized_candidate)
@@ -3746,10 +3746,10 @@ def _request_with_wrapper_context(
     )
 
 
-def _candidate_paths(value: object) -> list[str]:
+def _candidate_paths(value: object, *, include_apply_patch: bool = False) -> list[str]:
     results: list[str] = []
     _collect_candidate_paths(value, results, depth=0)
-    if isinstance(value, dict):
+    if include_apply_patch and isinstance(value, dict):
         results.extend(apply_patch_target_paths(value))
     return results
 
