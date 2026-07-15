@@ -10,6 +10,8 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
     COMMAND_EXTENSION_SCHEMA_VERSION,
     risk_classes_for_command_action,
 )
+from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
+from codex_plugin_scanner.guard.runtime.command_rules import CommandRuleMatch
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
     extract_sensitive_tool_action_request,
@@ -30,14 +32,15 @@ def inspect_command(
         raise ValueError("Command text cannot be empty")
     workspace = (cwd or Path.cwd()).resolve()
     home = (home_dir or Path.home()).resolve()
+    canonical_command = parse_shell_command(command_text, cwd=workspace, home_dir=home)
     arguments = {"command": command_text}
     benign = is_explicitly_benign_tool_action_request("Shell", arguments, cwd=workspace, home_dir=home)
     match = extract_sensitive_tool_action_request("Shell", arguments, cwd=workspace, home_dir=home)
     trace: list[dict[str, object]] = [
         {
-            "step": "normalize",
-            "result": "completed",
-            "detail": "Applied Guard's transparent shell-wrapper normalization.",
+            "step": "canonical-parse",
+            "result": canonical_command.confidence,
+            "detail": "Built Guard's side-effect-free canonical command model.",
         },
         {
             "step": "benign-classification",
@@ -69,12 +72,15 @@ def inspect_command(
             "risk_classes": [],
             "signals": [],
             "extensions": [],
+            "rules": [],
+            "command_model": canonical_command.to_dict(),
             "trace": trace,
             "policy_evaluation": "not_run",
             "side_effects": "none",
         }
 
     extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class(match.action_class)
+    rule = BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class(match.action_class)
     artifact = build_tool_action_request_artifact(
         "guard-cli",
         match,
@@ -90,11 +96,26 @@ def inspect_command(
                 "detail": "Mapped the existing action class to a versioned command safety extension.",
             },
             {
+                "step": "rule-ownership",
+                "result": rule.rule_id if rule is not None else "unowned",
+                "detail": "Mapped the compatibility action class to a stable command safety rule.",
+            },
+            {
                 "step": "risk-signal-derivation",
                 "result": "completed",
                 "detail": f"Derived {len(signals)} existing Guard risk signal(s) from the classified artifact.",
             },
         )
+    )
+    rule_match = (
+        CommandRuleMatch(
+            rule=rule,
+            action_class=match.action_class,
+            reason=match.reason,
+            command=canonical_command,
+        )
+        if rule is not None
+        else None
     )
     return {
         "schema_version": COMMAND_EXTENSION_SCHEMA_VERSION,
@@ -111,6 +132,8 @@ def inspect_command(
         "risk_classes": list(risk_classes_for_command_action(match.action_class)),
         "signals": [signal.to_dict() for signal in signals],
         "extensions": [extension.to_dict()] if extension is not None else [],
+        "rules": [rule_match.to_dict()] if rule_match is not None else [],
+        "command_model": canonical_command.to_dict(),
         "trace": trace,
         "policy_evaluation": "not_run",
         "side_effects": "none",

@@ -6,32 +6,17 @@ import re
 from dataclasses import dataclass
 from typing import final
 
-COMMAND_EXTENSION_SCHEMA_VERSION = 1
-_VERSION_PATTERN = re.compile(r"^[1-9][0-9]*\.[0-9]+\.[0-9]+$")
+from .command_builtin_rules import COMMAND_ACTION_RISK_CLASSES, rules_for_extension
+from .command_rules import CommandSafetyRule
 
-_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
-    "credential exfiltration shell command": (
-        "data_flow_exfiltration",
-        "credential_exfiltration",
-        "network_egress",
-    ),
-    "guard-managed config write": ("destructive_shell",),
-    "docker-sensitive command": ("network_egress", "destructive_shell"),
-    "docker client config access": ("local_secret_read",),
-    "encoded or encrypted shell command": ("encoded_execution",),
-    "kubernetes secret read command": ("local_secret_read",),
-    "shell file upload command": ("credential_exfiltration", "network_egress"),
-    "sensitive local file write": ("destructive_shell", "local_secret_read"),
-    "destructive shell command": ("destructive_shell",),
-    "guard approval self-authorization command": ("policy_bypass",),
-    "github pr body shell substitution": ("execution",),
-}
+COMMAND_EXTENSION_SCHEMA_VERSION = 2
+_VERSION_PATTERN = re.compile(r"^[1-9][0-9]*\.[0-9]+\.[0-9]+$")
 
 
 def risk_classes_for_command_action(action_class: str) -> tuple[str, ...]:
     """Return the existing runtime risk classes for a command action class."""
 
-    return _ACTION_RISK_CLASSES.get(action_class.strip().lower(), ())
+    return COMMAND_ACTION_RISK_CLASSES.get(action_class.strip().lower(), ())
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +30,7 @@ class CommandSafetyExtension:
     action_classes: tuple[str, ...]
     risk_classes: tuple[str, ...]
     safer_alternatives: tuple[str, ...]
+    rules: tuple[CommandSafetyRule, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -58,6 +44,8 @@ class CommandSafetyExtension:
             "action_classes": list(self.action_classes),
             "risk_classes": list(self.risk_classes),
             "safer_alternatives": list(self.safer_alternatives),
+            "rule_count": len(self.rules),
+            "rules": [rule.to_dict() for rule in self.rules],
         }
 
 
@@ -69,6 +57,8 @@ class CommandSafetyExtensionRegistry:
         ordered = tuple(sorted(extensions, key=lambda extension: extension.extension_id))
         by_id: dict[str, CommandSafetyExtension] = {}
         by_action_class: dict[str, CommandSafetyExtension] = {}
+        by_action_rule: dict[str, CommandSafetyRule] = {}
+        by_rule_id: dict[str, CommandSafetyRule] = {}
         for extension in ordered:
             _validate_extension(extension)
             if extension.extension_id in by_id:
@@ -93,9 +83,45 @@ class CommandSafetyExtensionRegistry:
                         )
                     )
                     raise ValueError(message)
+            for rule in extension.rules:
+                if not rule.rule_id.startswith(f"{extension.extension_id}."):
+                    raise ValueError(
+                        f"Command safety rule {rule.rule_id} must use extension prefix {extension.extension_id}"
+                    )
+                if rule.rule_id in by_rule_id:
+                    raise ValueError(f"Duplicate command safety rule ID: {rule.rule_id}")
+                undeclared_rule_risks = set(rule.risk_classes).difference(extension.risk_classes)
+                if undeclared_rule_risks:
+                    undeclared = ", ".join(sorted(undeclared_rule_risks))
+                    raise ValueError(
+                        f"Command safety rule {rule.rule_id} declares risks outside its extension: {undeclared}"
+                    )
+                by_rule_id[rule.rule_id] = rule
+                for action_class in rule.action_classes:
+                    normalized_action_class = action_class.strip().lower()
+                    if normalized_action_class not in {item.lower() for item in extension.action_classes}:
+                        raise ValueError(
+                            f"Command safety rule {rule.rule_id} owns undeclared action class {action_class!r}"
+                        )
+                    existing_rule = by_action_rule.get(normalized_action_class)
+                    if existing_rule is not None:
+                        ownership = " and ".join((existing_rule.rule_id, rule.rule_id))
+                        raise ValueError(f"Command action class {action_class!r} is owned by rules {ownership}")
+                    by_action_rule[normalized_action_class] = rule
+            if extension.rules:
+                rule_actions = {
+                    action_class.strip().lower() for rule in extension.rules for action_class in rule.action_classes
+                }
+                extension_actions = {action_class.strip().lower() for action_class in extension.action_classes}
+                if rule_actions != extension_actions:
+                    raise ValueError(
+                        f"Command safety extension {extension.extension_id} rules must own every action class"
+                    )
         self._extensions = ordered
         self._by_id = by_id
         self._by_action_class = by_action_class
+        self._by_action_rule = by_action_rule
+        self._by_rule_id = by_rule_id
 
     @property
     def extensions(self) -> tuple[CommandSafetyExtension, ...]:
@@ -106,6 +132,12 @@ class CommandSafetyExtensionRegistry:
 
     def for_action_class(self, action_class: str) -> CommandSafetyExtension | None:
         return self._by_action_class.get(action_class.strip().lower())
+
+    def get_rule(self, rule_id: str) -> CommandSafetyRule | None:
+        return self._by_rule_id.get(rule_id.strip().lower())
+
+    def rule_for_action_class(self, action_class: str) -> CommandSafetyRule | None:
+        return self._by_action_rule.get(action_class.strip().lower())
 
 
 def _validate_extension(extension: CommandSafetyExtension) -> None:
@@ -141,6 +173,7 @@ _BUILT_IN_EXTENSIONS = (
             "Use a pinned image and a read-only container filesystem where possible.",
             "Pass only the specific secret or file required by the container.",
         ),
+        rules=rules_for_extension("command.container-runtime"),
     ),
     CommandSafetyExtension(
         extension_id="command.data-protection",
@@ -153,6 +186,7 @@ _BUILT_IN_EXTENSIONS = (
             "Send an explicit non-secret value instead of piping local files or environment output.",
             "Use a destination allowlist and review the exact payload before transmission.",
         ),
+        rules=rules_for_extension("command.data-protection"),
     ),
     CommandSafetyExtension(
         extension_id="command.encoded-execution",
@@ -164,6 +198,7 @@ _BUILT_IN_EXTENSIONS = (
         action_classes=("encoded or encrypted shell command",),
         risk_classes=("encoded_execution",),
         safer_alternatives=("Decode the payload to a file, inspect it, then invoke the reviewed file directly.",),
+        rules=rules_for_extension("command.encoded-execution"),
     ),
     CommandSafetyExtension(
         extension_id="command.guard-self-protection",
@@ -173,6 +208,7 @@ _BUILT_IN_EXTENSIONS = (
         action_classes=("Guard approval self-authorization command",),
         risk_classes=("policy_bypass",),
         safer_alternatives=("Approve the pending request through Guard's authenticated approval surface.",),
+        rules=rules_for_extension("command.guard-self-protection"),
     ),
     CommandSafetyExtension(
         extension_id="command.kubernetes-secrets",
@@ -182,6 +218,7 @@ _BUILT_IN_EXTENSIONS = (
         action_classes=("Kubernetes secret read command",),
         risk_classes=("local_secret_read",),
         safer_alternatives=("Request only the required non-secret field or metadata instead of the Secret payload.",),
+        rules=rules_for_extension("command.kubernetes-secrets"),
     ),
     CommandSafetyExtension(
         extension_id="command.shell-mutations",
@@ -200,6 +237,7 @@ _BUILT_IN_EXTENSIONS = (
             "Narrow the target path or Git ref and avoid recursive or forced mutation.",
             "Use a literal body file instead of shell substitution in command arguments.",
         ),
+        rules=rules_for_extension("command.shell-mutations"),
     ),
 )
 
