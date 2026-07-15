@@ -248,6 +248,7 @@ def _resolve_legacy_args(
         "preflight",
         "diff",
         "test-eval",
+        "command",
         "receipts",
         "history",
         "inventory",

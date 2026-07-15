@@ -118,6 +118,9 @@ pipx run hol-guard supply-chain sync
 pipx run hol-guard supply-chain scan
 pipx run hol-guard supply-chain explain minimist@1.2.5 --ecosystem npm
 pipx run hol-guard explain install-connect
+pipx run hol-guard command test 'git reset --hard HEAD~1'
+pipx run hol-guard command explain 'grep "rm -rf|git clean" README.md'
+pipx run hol-guard command extensions
 ```
 
 What you get from Guard:
@@ -130,6 +133,22 @@ What you get from Guard:
 - Keeps sync optional until you actually want shared history
 
 See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local flow.
+
+### Inspect command protection without running it
+
+Command safety extensions make Guard's existing shell, Git, filesystem, data-protection, container, Kubernetes,
+encoded-execution, and self-protection behavior inspectable. They are built-in capability boundaries over the same
+parser used by harness hooks, not downloadable regex bundles.
+
+Use `command test` for a concise classification and `command explain` for the complete evaluation trace. Both are
+side-effect free: they do not execute the command, evaluate final policy, create an approval, or record a receipt.
+Use `--json` for a stable automation contract.
+
+```bash
+hol-guard command test 'rm -rf ./build'
+hol-guard command explain 'grep "rm -rf|git clean" README.md'
+hol-guard command extensions command.shell-mutations --json
+```
 
 <details>
 <summary>Guard commands at a glance</summary>

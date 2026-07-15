@@ -479,6 +479,84 @@ def _render_init(console: Console, payload: dict[str, object]) -> None:
     console.print(_build_steps_panel(_coerce_dict_list(payload.get("next_steps"))))
 
 
+def _render_command_inspection(console: Console, payload: dict[str, object]) -> None:
+    status = str(payload.get("status") or "invalid")
+    classification = _coerce_object_dict(payload.get("classification"))
+    extensions = _coerce_dict_list(payload.get("extensions"))
+    risk_classes = _coerce_string_list(payload.get("risk_classes"))
+    border_style = "yellow" if status == "review" else "cyan"
+    summary = Table.grid(padding=(0, 1))
+    summary.add_row("Result", Text(status.upper(), style=f"bold {border_style}"))
+    action_class = classification.get("action_class")
+    summary.add_row("Action class", Text(str(action_class or "No sensitive action matched")))
+    if extensions:
+        summary.add_row("Extension", Text(str(extensions[0].get("extension_id") or "unknown"), style="cyan"))
+    if risk_classes:
+        summary.add_row("Risk classes", Text(", ".join(risk_classes)))
+    summary.add_row("Policy", Text("Not evaluated; this inspection creates no approvals or receipts", style="dim"))
+    console.print(Panel(summary, title="HOL Guard command inspection", border_style=border_style))
+    console.print(Panel(Syntax(str(payload.get("command") or ""), "bash", word_wrap=True), title="Command"))
+    reason = classification.get("reason")
+    if isinstance(reason, str) and reason:
+        console.print(Panel(Text(reason), title="Why", border_style=border_style))
+    if extensions:
+        alternatives = _coerce_string_list(extensions[0].get("safer_alternatives"))
+        if alternatives:
+            console.print(Panel("\n".join(f"• {item}" for item in alternatives), title="Safer approaches"))
+    if str(payload.get("mode") or "") == "explain":
+        trace = _coerce_dict_list(payload.get("trace"))
+        trace_table = Table(title="Evaluation trace", box=box.SIMPLE_HEAD, show_lines=False)
+        trace_table.add_column("Step", style="bold")
+        trace_table.add_column("Result")
+        trace_table.add_column("Detail")
+        for item in trace:
+            trace_table.add_row(
+                str(item.get("step") or ""),
+                str(item.get("result") or ""),
+                str(item.get("detail") or ""),
+            )
+        console.print(trace_table)
+
+
+def _render_command_extensions(console: Console, payload: dict[str, object]) -> None:
+    extensions = _coerce_dict_list(payload.get("extensions"))
+    table = Table(title="Built-in command safety extensions", box=box.SIMPLE_HEAD, show_lines=False)
+    table.add_column("Extension", style="bold cyan", no_wrap=True)
+    table.add_column("Version", no_wrap=True)
+    table.add_column("Coverage")
+    table.add_column("Purpose")
+    for extension in extensions:
+        table.add_row(
+            str(extension.get("extension_id") or ""),
+            str(extension.get("version") or ""),
+            str(len(_coerce_string_list(extension.get("action_classes")))),
+            str(extension.get("description") or ""),
+        )
+    console.print(table)
+
+
+def _plain_text_command_inspection(payload: PayloadDict) -> str:
+    classification = _coerce_object_dict(payload.get("classification"))
+    extensions = _coerce_dict_list(payload.get("extensions"))
+    lines = [
+        f"HOL Guard command inspection: {str(payload.get('status') or 'invalid').upper()}",
+        f"Command: {payload.get('command') or ''}",
+        f"Action class: {classification.get('action_class') or 'No sensitive action matched'}",
+        f"Reason: {classification.get('reason') or ''}",
+        "Policy: Not evaluated; this inspection creates no approvals or receipts.",
+    ]
+    if extensions:
+        lines.insert(3, f"Extension: {extensions[0].get('extension_id') or 'unknown'}")
+    return "\n".join(lines)
+
+
+def _plain_text_command_extensions(payload: PayloadDict) -> str:
+    extensions = _coerce_dict_list(payload.get("extensions"))
+    lines = [f"Built-in command safety extensions ({len(extensions)})"]
+    lines.extend(f"{item.get('extension_id')} {item.get('version')} - {item.get('description')}" for item in extensions)
+    return "\n".join(lines)
+
+
 def _init_plan_panel(plan: list[dict[str, object]], status: str) -> Panel:
     table = Table.grid(padding=(0, 1))
     for step in plan:
@@ -2684,11 +2762,15 @@ def _clean_terminal_output(value: str) -> str:
 
 
 _PLAIN_TEXT_RENDERERS: dict[str, PlainTextRenderer] = {
+    "command-extensions": _plain_text_command_extensions,
+    "command-inspection": _plain_text_command_inspection,
     "protect": _plain_text_protect,
 }
 
 
 _RENDERERS: dict[str, Renderer] = {
+    "command-extensions": _render_command_extensions,
+    "command-inspection": _render_command_inspection,
     "approvals": _render_approvals,
     "init": _render_init,
     "start": _render_start,
