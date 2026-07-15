@@ -54,6 +54,8 @@ def test_command_inspection_maps_existing_sensitive_actions_to_extensions(
     assert payload["status"] == "review"
     assert payload["classification"]["action_class"] == action_class
     assert payload["extensions"][0]["extension_id"] == extension_id
+    assert payload["rules"][0]["rule_id"].startswith(f"{extension_id}.")
+    assert payload["command_model"]["transport"] == "shell_string"
     assert payload["policy_evaluation"] == "not_run"
     assert payload["side_effects"] == "none"
 
@@ -74,6 +76,7 @@ def test_command_inspection_preserves_existing_safe_command_classification(comma
     assert payload["status"] == "no_match"
     assert payload["classification"]["matched"] is False
     assert payload["extensions"] == []
+    assert payload["rules"] == []
 
 
 def test_command_extension_registry_is_deterministic_and_complete() -> None:
@@ -84,6 +87,8 @@ def test_command_extension_registry_is_deterministic_and_complete() -> None:
     assert payload["count"] == len(BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions)
     assert "command.shell-mutations" in ids
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("destructive shell command") is not None
+    assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("destructive shell command") is not None
+    assert sum(extension["rule_count"] for extension in payload["extensions"]) == 11
 
 
 def test_command_extension_registry_rejects_duplicate_action_ownership() -> None:
@@ -137,6 +142,7 @@ def test_command_cli_emits_stable_json_without_creating_guard_state(
     assert payload["mode"] == "explain"
     assert payload["status"] == "review"
     assert payload["extensions"][0]["extension_id"] == "command.shell-mutations"
+    assert payload["rules"][0]["rule_id"] == "command.shell-mutations.destructive-shell"
     assert [item["step"] for item in payload["trace"]][-1] == "risk-signal-derivation"
     assert list(tmp_path.iterdir()) == []
 

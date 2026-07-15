@@ -140,6 +140,10 @@ Command safety extensions make Guard's existing shell, Git, filesystem, data-pro
 encoded-execution, and self-protection behavior inspectable. They are built-in capability boundaries over the same
 parser used by harness hooks, not downloadable regex bundles.
 
+Each extension publishes stable rule IDs and structured rule metadata. Command inspection also returns a canonical,
+side-effect-free parse model with wrapper, pipeline, environment-override, provenance, and confidence details so
+automation can distinguish exact parsing from malformed or unsupported input.
+
 Use `command test` for a concise classification and `command explain` for the complete evaluation trace. Both are
 side-effect free: they do not execute the command, evaluate final policy, create an approval, or record a receipt.
 Use `--json` for a stable automation contract.

@@ -483,6 +483,7 @@ def _render_command_inspection(console: Console, payload: dict[str, object]) -> 
     status = str(payload.get("status") or "invalid")
     classification = _coerce_object_dict(payload.get("classification"))
     extensions = _coerce_dict_list(payload.get("extensions"))
+    rules = _coerce_dict_list(payload.get("rules"))
     risk_classes = _coerce_string_list(payload.get("risk_classes"))
     border_style = "yellow" if status == "review" else "cyan"
     summary = Table.grid(padding=(0, 1))
@@ -491,6 +492,8 @@ def _render_command_inspection(console: Console, payload: dict[str, object]) -> 
     summary.add_row("Action class", Text(str(action_class or "No sensitive action matched")))
     if extensions:
         summary.add_row("Extension", Text(str(extensions[0].get("extension_id") or "unknown"), style="cyan"))
+    if rules:
+        summary.add_row("Rule", Text(str(rules[0].get("rule_id") or "unknown"), style="cyan"))
     if risk_classes:
         summary.add_row("Risk classes", Text(", ".join(risk_classes)))
     summary.add_row("Policy", Text("Not evaluated; this inspection creates no approvals or receipts", style="dim"))
@@ -524,12 +527,14 @@ def _render_command_extensions(console: Console, payload: dict[str, object]) -> 
     table.add_column("Extension", style="bold cyan", no_wrap=True)
     table.add_column("Version", no_wrap=True)
     table.add_column("Coverage")
+    table.add_column("Rules")
     table.add_column("Purpose")
     for extension in extensions:
         table.add_row(
             str(extension.get("extension_id") or ""),
             str(extension.get("version") or ""),
             str(len(_coerce_string_list(extension.get("action_classes")))),
+            str(extension.get("rule_count") or 0),
             str(extension.get("description") or ""),
         )
     console.print(table)
@@ -538,6 +543,7 @@ def _render_command_extensions(console: Console, payload: dict[str, object]) -> 
 def _plain_text_command_inspection(payload: PayloadDict) -> str:
     classification = _coerce_object_dict(payload.get("classification"))
     extensions = _coerce_dict_list(payload.get("extensions"))
+    rules = _coerce_dict_list(payload.get("rules"))
     lines = [
         f"HOL Guard command inspection: {str(payload.get('status') or 'invalid').upper()}",
         f"Command: {payload.get('command') or ''}",
@@ -547,6 +553,8 @@ def _plain_text_command_inspection(payload: PayloadDict) -> str:
     ]
     if extensions:
         lines.insert(3, f"Extension: {extensions[0].get('extension_id') or 'unknown'}")
+    if rules:
+        lines.insert(4, f"Rule: {rules[0].get('rule_id') or 'unknown'}")
     return "\n".join(lines)
 
 

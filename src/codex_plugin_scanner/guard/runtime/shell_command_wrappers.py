@@ -7,7 +7,7 @@ import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
-_MAX_NORMALIZE_BYTES = 8192
+SHELL_COMMAND_NORMALIZE_MAX_BYTES = 8192
 _ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
 _SHELL_CONTROL_TOKENS = frozenset({"&&", "||", ";", "|", "|&", "&"})
 _LEAN_CTX_BINARIES = frozenset({"lean-ctx"})
@@ -34,7 +34,7 @@ def normalize_transparent_shell_command(
     home_dir: Path | None = None,
 ) -> ShellCommandNormalization:
     stripped = command_text.strip()
-    if not stripped or len(stripped) > _MAX_NORMALIZE_BYTES:
+    if not stripped or len(stripped) > SHELL_COMMAND_NORMALIZE_MAX_BYTES:
         return ShellCommandNormalization(
             raw_command=stripped,
             normalized_command=stripped,
