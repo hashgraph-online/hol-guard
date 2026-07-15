@@ -17,6 +17,8 @@ from pathlib import Path
 
 from ..models import GuardArtifact
 from .actions import GuardActionEnvelope
+from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from .command_model import parse_shell_command
 from .false_positive_rules import (
     SOURCE_INSPECTION_BENIGN_DOTFILES,
     SOURCE_INSPECTION_EXTENSIONS,
@@ -1148,18 +1150,29 @@ def _destructive_shell_tool_action_request(
                 "`--body-file` for PR descriptions."
             ),
         )
-    if not _looks_destructive_shell_command(command_text, cwd=cwd, home_dir=home_dir):
-        return None
-    return ToolActionRequestMatch(
-        tool_name=tool_name,
-        normalized_tool_name=normalized_tool_name,
-        command_text=command_text,
-        action_class="destructive shell command",
-        reason=(
-            "Guard treats destructive shell writes and delete operations as sensitive because they can mutate the "
-            "local machine before the user confirms the action."
-        ),
-    )
+    if _looks_destructive_shell_command(command_text, cwd=cwd, home_dir=home_dir):
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="destructive shell command",
+            reason=(
+                "Guard treats destructive shell writes and delete operations as sensitive because they can mutate "
+                "the local machine before the user confirms the action."
+            ),
+        )
+    canonical_command = parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
+    for _extension, rule, _evidence in BUILT_IN_COMMAND_EXTENSION_REGISTRY.matching_rules(canonical_command):
+        if not rule.action_classes:
+            continue
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class=rule.action_classes[0],
+            reason=rule.description,
+        )
+    return None
 
 
 def _gh_pr_create_body_has_shell_command_substitution(command_text: str, *, depth: int = 0) -> bool:
@@ -5727,7 +5740,20 @@ def _segment_uses_destructive_git_command(segment_args: list[str]) -> bool:
         normalized_token = token.strip().lower()
         if normalized_token == "help":
             return False
+        if normalized_token == "clean":
+            clean_arguments = segment_args[subcommand_index + 1 :]
+            return not _git_clean_is_preview(clean_arguments)
         return normalized_token in _DESTRUCTIVE_GIT_SUBCOMMANDS
+    return False
+
+
+def _git_clean_is_preview(arguments: list[str]) -> bool:
+    for argument in arguments:
+        normalized = argument.strip().lower()
+        if normalized == "--dry-run":
+            return True
+        if normalized.startswith("-") and not normalized.startswith("--") and "n" in normalized[1:]:
+            return True
     return False
 
 

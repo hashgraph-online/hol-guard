@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
-from .command_rules import CommandSafetyRule
+from .command_rules import (
+    AnyMatcher,
+    ArgumentMatcher,
+    CommandMatcher,
+    CommandRuleSeverity,
+    CommandSafetyRule,
+    CommandSafeVariant,
+    ExecutableMatcher,
+    PipelineMatcher,
+)
 
 COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "credential exfiltration shell command": (
@@ -20,7 +29,24 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "destructive shell command": ("destructive_shell",),
     "guard approval self-authorization command": ("policy_bypass",),
     "github pr body shell substitution": ("execution",),
+    "filesystem destructive command": ("destructive_shell",),
+    "git destructive command": ("destructive_shell",),
+    "system destructive command": ("destructive_shell",),
+    "windows destructive command": ("destructive_shell",),
 }
+_GIT_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
+    {"-c", "-C", "--exec-path", "--git-dir", "--namespace", "--super-prefix", "--work-tree"}
+)
+
+
+def _git_matcher(subcommand: str, *, required_flags: frozenset[str]) -> ExecutableMatcher:
+    return ExecutableMatcher(
+        executables=frozenset({"git"}),
+        subcommands=(subcommand,),
+        required_flags=required_flags,
+        allow_leading_options=True,
+        leading_options_with_values=_GIT_GLOBAL_OPTIONS_WITH_VALUES,
+    )
 
 
 def _compatibility_rule(
@@ -30,6 +56,7 @@ def _compatibility_rule(
     description: str,
     action_class: str,
     safer_alternative: str,
+    matcher: CommandMatcher | None = None,
 ) -> CommandSafetyRule:
     return CommandSafetyRule(
         rule_id=rule_id,
@@ -39,6 +66,31 @@ def _compatibility_rule(
         risk_classes=COMMAND_ACTION_RISK_CLASSES[action_class.lower()],
         action_classes=(action_class,),
         safer_alternatives=(safer_alternative,),
+        matcher=matcher,
+    )
+
+
+def _structured_rule(
+    *,
+    rule_id: str,
+    title: str,
+    description: str,
+    matcher: CommandMatcher,
+    action_class: str,
+    safer_alternative: str,
+    severity: CommandRuleSeverity = "high",
+    safe_variants: tuple[CommandSafeVariant, ...] = (),
+) -> CommandSafetyRule:
+    return CommandSafetyRule(
+        rule_id=rule_id,
+        title=title,
+        description=description,
+        severity=severity,
+        risk_classes=("destructive_shell",),
+        action_classes=(action_class,),
+        safer_alternatives=(safer_alternative,),
+        matcher=matcher,
+        safe_variants=safe_variants,
     )
 
 
@@ -77,6 +129,13 @@ BUILT_IN_COMMAND_RULES = (
         description="Identifies decode or decrypt chains that immediately execute their output.",
         action_class="encoded or encrypted shell command",
         safer_alternative="Decode to a file, inspect the result, then invoke the reviewed file directly.",
+        matcher=PipelineMatcher(
+            producer=ArgumentMatcher(
+                executables=frozenset({"base64", "openssl", "gpg"}),
+                required_arguments=frozenset({"-d"}),
+            ),
+            consumer=ExecutableMatcher(executables=frozenset({"sh", "bash", "zsh", "pwsh", "powershell"})),
+        ),
     ),
     _compatibility_rule(
         rule_id="command.guard-self-protection.self-authorization",
@@ -84,6 +143,10 @@ BUILT_IN_COMMAND_RULES = (
         description="Identifies commands that attempt to approve or weaken their own Guard decision.",
         action_class="Guard approval self-authorization command",
         safer_alternative="Approve the request through Guard's authenticated approval surface.",
+        matcher=ExecutableMatcher(
+            executables=frozenset({"hol-guard"}),
+            subcommands=("approvals", "approve"),
+        ),
     ),
     _compatibility_rule(
         rule_id="command.kubernetes-secrets.secret-read",
@@ -119,6 +182,138 @@ BUILT_IN_COMMAND_RULES = (
         description="Identifies shell substitution used to construct a remote request body.",
         action_class="GitHub PR body shell substitution",
         safer_alternative="Use a literal body file whose contents can be reviewed before submission.",
+    ),
+    _structured_rule(
+        rule_id="command.filesystem.recursive-delete",
+        title="Recursive filesystem deletion",
+        description="Identifies recursive deletion that can remove a directory tree in one operation.",
+        matcher=ArgumentMatcher(
+            executables=frozenset({"rm"}),
+            required_arguments=frozenset({"-r"}),
+        ),
+        action_class="filesystem destructive command",
+        safer_alternative="List the exact target tree first, then remove only reviewed paths.",
+    ),
+    _structured_rule(
+        rule_id="command.filesystem.recursive-permission-change",
+        title="Recursive permission or ownership change",
+        description="Identifies recursive access-control changes across a filesystem tree.",
+        matcher=ArgumentMatcher(
+            executables=frozenset({"chmod", "chown", "chgrp"}),
+            required_arguments=frozenset({"-r"}),
+        ),
+        action_class="filesystem destructive command",
+        safer_alternative="Preview affected paths and apply the change to the narrowest directory possible.",
+    ),
+    _structured_rule(
+        rule_id="command.git.hard-reset",
+        title="Destructive Git reset",
+        description="Identifies hard resets that discard tracked working-tree and index changes.",
+        matcher=_git_matcher("reset", required_flags=frozenset({"--hard"})),
+        action_class="git destructive command",
+        safer_alternative="Inspect the diff and create a temporary branch or stash before resetting.",
+    ),
+    _structured_rule(
+        rule_id="command.git.force-clean",
+        title="Forced Git clean",
+        description="Identifies forced removal of untracked files from a repository.",
+        matcher=_git_matcher("clean", required_flags=frozenset({"-f"})),
+        action_class="git destructive command",
+        safer_alternative="Run `git clean -ndx` first and review every path before forced cleanup.",
+        safe_variants=(
+            CommandSafeVariant(
+                variant_id="dry-run",
+                title="Git clean preview",
+                matcher=AnyMatcher(
+                    matchers=(
+                        _git_matcher("clean", required_flags=frozenset({"-n"})),
+                        _git_matcher("clean", required_flags=frozenset({"--dry-run"})),
+                    )
+                ),
+            ),
+        ),
+    ),
+    _structured_rule(
+        rule_id="command.git.force-push",
+        title="Forced Git push",
+        description="Identifies remote history replacement through a forced push.",
+        matcher=AnyMatcher(
+            matchers=(
+                _git_matcher("push", required_flags=frozenset({"--force"})),
+                _git_matcher("push", required_flags=frozenset({"-f"})),
+            )
+        ),
+        action_class="git destructive command",
+        safer_alternative="Use `--force-with-lease` after fetching and reviewing the remote ref.",
+        safe_variants=(
+            CommandSafeVariant(
+                variant_id="dry-run",
+                title="Git push preview",
+                matcher=_git_matcher("push", required_flags=frozenset({"--dry-run"})),
+            ),
+        ),
+    ),
+    _structured_rule(
+        rule_id="command.system.disk-or-power-mutation",
+        title="Disk or power-state mutation",
+        description="Identifies commands that format storage or stop the operating system.",
+        matcher=AnyMatcher(
+            matchers=(
+                ExecutableMatcher(
+                    executables=frozenset({"shutdown", "reboot", "halt", "poweroff", "mkfs", "mkfs.ext4", "mkfs.xfs"})
+                ),
+                ExecutableMatcher(
+                    executables=frozenset({"diskutil"}),
+                    subcommands=("erasedisk",),
+                ),
+            )
+        ),
+        action_class="system destructive command",
+        safer_alternative="Inspect the selected device or host state and use a non-mutating status command first.",
+        severity="critical",
+        safe_variants=(
+            CommandSafeVariant(
+                variant_id="help",
+                title="System command help",
+                matcher=AnyMatcher(
+                    matchers=(
+                        ExecutableMatcher(
+                            executables=frozenset(
+                                {"shutdown", "reboot", "halt", "poweroff", "mkfs", "mkfs.ext4", "mkfs.xfs"}
+                            ),
+                            required_flags=frozenset({"--help"}),
+                        ),
+                        ExecutableMatcher(
+                            executables=frozenset(
+                                {"shutdown", "reboot", "halt", "poweroff", "mkfs", "mkfs.ext4", "mkfs.xfs"}
+                            ),
+                            required_flags=frozenset({"--version"}),
+                        ),
+                    )
+                ),
+            ),
+        ),
+    ),
+    _structured_rule(
+        rule_id="command.windows.destructive-storage",
+        title="Destructive Windows storage operation",
+        description="Identifies Windows commands that clear, format, or remove storage volumes.",
+        matcher=ExecutableMatcher(
+            executables=frozenset({"clear-disk", "format-volume", "remove-partition"}),
+        ),
+        action_class="windows destructive command",
+        safer_alternative="Inspect the disk and partition identifiers with read-only PowerShell commands first.",
+        severity="critical",
+        safe_variants=(
+            CommandSafeVariant(
+                variant_id="what-if",
+                title="PowerShell operation preview",
+                matcher=ExecutableMatcher(
+                    executables=frozenset({"clear-disk", "format-volume", "remove-partition"}),
+                    required_flags=frozenset({"-whatif"}),
+                ),
+            ),
+        ),
     ),
 )
 

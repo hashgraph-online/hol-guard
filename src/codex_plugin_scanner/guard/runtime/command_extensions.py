@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from typing import final
 
 from .command_builtin_rules import COMMAND_ACTION_RISK_CLASSES, rules_for_extension
-from .command_rules import CommandSafetyRule
+from .command_model import CanonicalCommand
+from .command_rules import CommandSafetyRule, MatcherEvidence
 
 COMMAND_EXTENSION_SCHEMA_VERSION = 2
 _VERSION_PATTERN = re.compile(r"^[1-9][0-9]*\.[0-9]+\.[0-9]+$")
@@ -31,6 +32,7 @@ class CommandSafetyExtension:
     risk_classes: tuple[str, ...]
     safer_alternatives: tuple[str, ...]
     rules: tuple[CommandSafetyRule, ...] = ()
+    required: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -40,6 +42,7 @@ class CommandSafetyExtension:
             "name": self.name,
             "description": self.description,
             "enabled": True,
+            "required": self.required,
             "source": "built-in",
             "action_classes": list(self.action_classes),
             "risk_classes": list(self.risk_classes),
@@ -103,11 +106,7 @@ class CommandSafetyExtensionRegistry:
                         raise ValueError(
                             f"Command safety rule {rule.rule_id} owns undeclared action class {action_class!r}"
                         )
-                    existing_rule = by_action_rule.get(normalized_action_class)
-                    if existing_rule is not None:
-                        ownership = " and ".join((existing_rule.rule_id, rule.rule_id))
-                        raise ValueError(f"Command action class {action_class!r} is owned by rules {ownership}")
-                    by_action_rule[normalized_action_class] = rule
+                    _ = by_action_rule.setdefault(normalized_action_class, rule)
             if extension.rules:
                 rule_actions = {
                     action_class.strip().lower() for rule in extension.rules for action_class in rule.action_classes
@@ -139,6 +138,31 @@ class CommandSafetyExtensionRegistry:
     def rule_for_action_class(self, action_class: str) -> CommandSafetyRule | None:
         return self._by_action_rule.get(action_class.strip().lower())
 
+    def matching_rules(
+        self,
+        command: CanonicalCommand,
+    ) -> tuple[tuple[CommandSafetyExtension, CommandSafetyRule, tuple[MatcherEvidence, ...]], ...]:
+        """Return every structured rule match in deterministic registry order."""
+
+        matches: list[tuple[CommandSafetyExtension, CommandSafetyRule, tuple[MatcherEvidence, ...]]] = []
+        for extension in self._extensions:
+            for rule in extension.rules:
+                if rule.matcher is None:
+                    continue
+                evidence = rule.matcher.match(command)
+                if not evidence:
+                    continue
+                safe_segment_indexes = {
+                    safe_evidence.segment_index
+                    for variant in rule.safe_variants
+                    for safe_evidence in variant.matcher.match(command)
+                }
+                effective_evidence = tuple(item for item in evidence if item.segment_index not in safe_segment_indexes)
+                if not effective_evidence:
+                    continue
+                matches.append((extension, rule, effective_evidence))
+        return tuple(matches)
+
 
 def _validate_extension(extension: CommandSafetyExtension) -> None:
     if not extension.extension_id.startswith("command."):
@@ -149,8 +173,8 @@ def _validate_extension(extension: CommandSafetyExtension) -> None:
         raise ValueError(f"Invalid command safety extension version: {extension.version}")
     if not extension.name.strip() or not extension.description.strip():
         raise ValueError(f"Command safety extension {extension.extension_id} requires a name and description")
-    if not extension.action_classes:
-        raise ValueError(f"Command safety extension {extension.extension_id} must own an action class")
+    if not extension.action_classes and not extension.rules:
+        raise ValueError(f"Command safety extension {extension.extension_id} must own an action class or rule")
     if len(set(extension.action_classes)) != len(extension.action_classes):
         raise ValueError(f"Command safety extension {extension.extension_id} has duplicate action classes")
     if not extension.risk_classes:
@@ -162,6 +186,56 @@ def _validate_extension(extension: CommandSafetyExtension) -> None:
 
 
 _BUILT_IN_EXTENSIONS = (
+    CommandSafetyExtension(
+        extension_id="command.filesystem",
+        version="1.0.0",
+        name="Filesystem protection",
+        description="Reviews recursive deletion and access-control changes across filesystem trees.",
+        action_classes=("filesystem destructive command",),
+        risk_classes=("destructive_shell",),
+        safer_alternatives=(
+            "List and review exact target paths before recursive mutation.",
+            "Limit permission and ownership changes to the narrowest path.",
+        ),
+        rules=rules_for_extension("command.filesystem"),
+        required=True,
+    ),
+    CommandSafetyExtension(
+        extension_id="command.git",
+        version="1.0.0",
+        name="Git protection",
+        description="Reviews local and remote Git operations that can discard work or replace history.",
+        action_classes=("git destructive command",),
+        risk_classes=("destructive_shell",),
+        safer_alternatives=(
+            "Preview affected files and refs before destructive repository operations.",
+            "Create a temporary branch or stash before discarding local work.",
+        ),
+        rules=rules_for_extension("command.git"),
+        required=True,
+    ),
+    CommandSafetyExtension(
+        extension_id="command.system",
+        version="1.0.0",
+        name="System protection",
+        description="Reviews storage formatting and operating-system power-state mutations.",
+        action_classes=("system destructive command",),
+        risk_classes=("destructive_shell",),
+        safer_alternatives=("Inspect the exact device or host state with a read-only command first.",),
+        rules=rules_for_extension("command.system"),
+        required=True,
+    ),
+    CommandSafetyExtension(
+        extension_id="command.windows",
+        version="1.0.0",
+        name="Windows protection",
+        description="Reviews destructive Windows storage and operating-system commands.",
+        action_classes=("windows destructive command",),
+        risk_classes=("destructive_shell",),
+        safer_alternatives=("Use read-only PowerShell inventory commands to verify exact targets first.",),
+        rules=rules_for_extension("command.windows"),
+        required=True,
+    ),
     CommandSafetyExtension(
         extension_id="command.container-runtime",
         version="1.0.0",
@@ -209,6 +283,7 @@ _BUILT_IN_EXTENSIONS = (
         risk_classes=("policy_bypass",),
         safer_alternatives=("Approve the pending request through Guard's authenticated approval surface.",),
         rules=rules_for_extension("command.guard-self-protection"),
+        required=True,
     ),
     CommandSafetyExtension(
         extension_id="command.kubernetes-secrets",

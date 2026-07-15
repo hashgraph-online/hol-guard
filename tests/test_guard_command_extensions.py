@@ -13,13 +13,14 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
     risk_classes_for_command_action,
 )
 from codex_plugin_scanner.guard.runtime.command_inspection import command_extensions_payload, inspect_command
+from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 
 
 @pytest.mark.parametrize(
     ("command", "action_class", "extension_id"),
     [
-        ("git reset --hard HEAD~1", "destructive shell command", "command.shell-mutations"),
-        ("rm -rf ./build", "destructive shell command", "command.shell-mutations"),
+        ("git reset --hard HEAD~1", "destructive shell command", "command.git"),
+        ("rm -rf ./build", "destructive shell command", "command.filesystem"),
         ("docker push registry.example.com/app:v1", "docker-sensitive command", "command.container-runtime"),
         (
             "kubectl get secret app-credentials -o yaml",
@@ -88,7 +89,129 @@ def test_command_extension_registry_is_deterministic_and_complete() -> None:
     assert "command.shell-mutations" in ids
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("destructive shell command") is not None
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("destructive shell command") is not None
-    assert sum(extension["rule_count"] for extension in payload["extensions"]) == 11
+    assert sum(extension["rule_count"] for extension in payload["extensions"]) == 18
+
+
+@pytest.mark.parametrize(
+    ("command", "extension_id", "rule_id"),
+    [
+        ("shutdown -h now", "command.system", "command.system.disk-or-power-mutation"),
+        ("Format-Volume -DriveLetter D", "command.windows", "command.windows.destructive-storage"),
+        ("git push origin main --force", "command.git", "command.git.force-push"),
+        ("chmod -R 777 ./workspace", "command.filesystem", "command.filesystem.recursive-permission-change"),
+    ],
+)
+def test_command_inspection_emits_structured_core_rules(
+    command: str,
+    extension_id: str,
+    rule_id: str,
+    tmp_path: Path,
+) -> None:
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "review"
+    assert [extension["extension_id"] for extension in payload["extensions"]] == [extension_id]
+    assert [rule["rule_id"] for rule in payload["rules"]] == [rule_id]
+    assert payload["rules"][0]["matcher_evidence"]
+
+
+@pytest.mark.parametrize(
+    ("command", "action_class"),
+    [
+        ("shutdown -h now", "system destructive command"),
+        ("Format-Volume -DriveLetter D", "windows destructive command"),
+        ("git push origin main --force", "git destructive command"),
+        ("git -C repo push origin main --force", "git destructive command"),
+        ("sudo -n git push origin main --force", "git destructive command"),
+        ("git push origin main -f", "git destructive command"),
+    ],
+)
+def test_structured_core_rules_feed_runtime_classification(
+    command: str,
+    action_class: str,
+    tmp_path: Path,
+) -> None:
+    match = extract_sensitive_tool_action_request(
+        "Shell",
+        {"command": command},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == action_class
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git clean -nfdx",
+        "git clean --dry-run -fdx",
+        "git push origin main --force --dry-run",
+        "shutdown --help",
+        "mkfs --version",
+        "Format-Volume -DriveLetter D -WhatIf",
+    ],
+)
+def test_structured_safe_variants_remain_runtime_safe(command: str, tmp_path: Path) -> None:
+    match = extract_sensitive_tool_action_request(
+        "Shell",
+        {"command": command},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert match is None
+
+
+def test_command_inspection_emits_all_core_matches_without_duplicate_compatibility_rule(tmp_path: Path) -> None:
+    payload = inspect_command("rm -rf ./build && git reset --hard HEAD~1", cwd=tmp_path, home_dir=tmp_path)
+
+    assert [extension["extension_id"] for extension in payload["extensions"]] == [
+        "command.filesystem",
+        "command.git",
+    ]
+    assert [rule["rule_id"] for rule in payload["rules"]] == [
+        "command.filesystem.recursive-delete",
+        "command.git.hard-reset",
+    ]
+
+
+def test_command_inspection_safe_variant_does_not_hide_unrelated_matches(tmp_path: Path) -> None:
+    preview = inspect_command("git clean -nfdx", cwd=tmp_path, home_dir=tmp_path)
+    mixed = inspect_command("git clean -nfdx && rm -rf ./build", cwd=tmp_path, home_dir=tmp_path)
+
+    assert preview["status"] == "no_match"
+    assert [rule["rule_id"] for rule in mixed["rules"]] == ["command.filesystem.recursive-delete"]
+
+
+@pytest.mark.parametrize(
+    ("command", "rule_id"),
+    [
+        ("git clean -fdx && git clean -nfdx", "command.git.force-clean"),
+        ("git clean -nfdx && git clean -fdx", "command.git.force-clean"),
+        ("git push origin main --force && git push origin main --force --dry-run", "command.git.force-push"),
+    ],
+)
+def test_safe_variant_is_scoped_to_its_own_segment(command: str, rule_id: str, tmp_path: Path) -> None:
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "review"
+    assert [rule["rule_id"] for rule in payload["rules"]] == [rule_id]
+    assert len(payload["rules"][0]["matcher_evidence"]) == 1
+
+
+def test_required_core_extensions_are_explicit_and_cannot_be_mistaken_for_optional() -> None:
+    payload = command_extensions_payload()
+    required_ids = {extension["extension_id"] for extension in payload["extensions"] if extension["required"] is True}
+
+    assert required_ids == {
+        "command.filesystem",
+        "command.git",
+        "command.guard-self-protection",
+        "command.system",
+        "command.windows",
+    }
 
 
 def test_command_extension_registry_rejects_duplicate_action_ownership() -> None:
@@ -141,8 +264,8 @@ def test_command_cli_emits_stable_json_without_creating_guard_state(
     assert exit_code == 0
     assert payload["mode"] == "explain"
     assert payload["status"] == "review"
-    assert payload["extensions"][0]["extension_id"] == "command.shell-mutations"
-    assert payload["rules"][0]["rule_id"] == "command.shell-mutations.destructive-shell"
+    assert payload["extensions"][0]["extension_id"] == "command.git"
+    assert payload["rules"][0]["rule_id"] == "command.git.force-clean"
     assert [item["step"] for item in payload["trace"]][-1] == "risk-signal-derivation"
     assert list(tmp_path.iterdir()) == []
 
