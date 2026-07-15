@@ -16,7 +16,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..models import GuardArtifact
-from .actions import GuardActionEnvelope
+from .actions import GuardActionEnvelope, apply_patch_target_paths
 from .command_evaluation import evaluate_command
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from .command_model import CanonicalCommand, parse_shell_command
@@ -61,6 +61,7 @@ _FILE_WRITE_TOOL_NAMES = frozenset(
         "multiedit",
         "write",
         "write_file",
+        "apply_patch",
     }
 )
 _PATH_KEYS = (
@@ -746,7 +747,7 @@ def extract_sensitive_file_write_request(
         return None
     requested_tool_name = str(tool_name).strip() if isinstance(tool_name, str) and str(tool_name).strip() else "Write"
     normalized_protected_paths = protected_paths or {}
-    for candidate in _candidate_paths(arguments):
+    for candidate in _candidate_paths(arguments, include_apply_patch=normalized_tool_name == "apply_patch"):
         normalized_candidate = _normalized_candidate_path(candidate, cwd=cwd, home_dir=home_dir)
         if normalized_candidate is not None:
             protected_label = normalized_protected_paths.get(normalized_candidate)
@@ -3745,9 +3746,11 @@ def _request_with_wrapper_context(
     )
 
 
-def _candidate_paths(value: object) -> list[str]:
+def _candidate_paths(value: object, *, include_apply_patch: bool = False) -> list[str]:
     results: list[str] = []
     _collect_candidate_paths(value, results, depth=0)
+    if include_apply_patch and isinstance(value, dict):
+        results.extend(apply_patch_target_paths(value))
     return results
 
 
