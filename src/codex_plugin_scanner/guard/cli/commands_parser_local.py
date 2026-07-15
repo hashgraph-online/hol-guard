@@ -189,6 +189,13 @@ def _configure_guard_local_parsers(
     )
     extensions_parser.add_argument("extension_id", nargs="?")
     extensions_parser.add_argument("--json", action="store_true")
+    setup_parser = command_subparsers.add_parser(
+        "setup",
+        help="Detect command ecosystems and preview recommended protection",
+    )
+    setup_parser.add_argument("--detect", action="store_true", required=True)
+    setup_parser.add_argument("--workspace", default=".")
+    setup_parser.add_argument("--json", action="store_true")
 
     preflight_parser = guard_subparsers.add_parser(
         "preflight",

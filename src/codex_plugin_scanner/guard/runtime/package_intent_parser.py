@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..protect import _collect_package_specs
+from .command_model import CanonicalCommand, CommandSegment, parse_shell_command
 from .homebrew_intent import parse_brew_intent
 from .mcp_protection import _command_name, _package_token
 from .package_intent_common import (
@@ -62,9 +63,15 @@ _PACKAGE_SOURCE_ENV_NAMES = frozenset(
 class _CommandSegment:
     tokens: tuple[str, ...]
     redacted_tokens: tuple[str, ...]
+    path_overridden: bool = False
 
 
-def parse_package_intent(command_text: str, *, workspace: Path | None = None) -> PackageIntent | None:
+def parse_package_intent(
+    command_text: str,
+    *,
+    workspace: Path | None = None,
+    canonical_command: CanonicalCommand | None = None,
+) -> PackageIntent | None:
     handlers = {
         "npm": _parse_npm_intent,
         "npx": _parse_exec_intent,
@@ -100,14 +107,24 @@ def parse_package_intent(command_text: str, *, workspace: Path | None = None) ->
         "helm": _parse_helm_intent,
     }
     intents: list[PackageIntent] = []
-    for segment in _normalized_command_segments(command_text):
+    if not command_text.strip() and canonical_command is None:
+        return None
+    parsed_command = canonical_command or parse_shell_command(command_text, cwd=workspace, home_dir=Path.home())
+    for segment in _normalized_command_segments(command_text, canonical_command=parsed_command):
         if not segment.tokens:
             continue
         command_name = _command_name(segment.tokens[0])
         handler = handlers.get(command_name)
         if handler is None:
             continue
-        intent = handler(segment.tokens, workspace=workspace)
+        if handler is _parse_exec_intent:
+            intent = _parse_exec_intent(
+                segment.tokens,
+                workspace=workspace,
+                path_overridden=segment.path_overridden,
+            )
+        else:
+            intent = handler(segment.tokens, workspace=workspace)
         if intent is not None:
             intents.append(replace(intent, redacted_command=redacted_command(segment.redacted_tokens)))
     return _combine_package_intents(tuple(intents))
@@ -219,8 +236,17 @@ def _parse_bun_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> Pac
     )
 
 
-def _parse_exec_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> PackageIntent | None:
-    if _is_verified_local_executable_execution(tokens, workspace=workspace):
+def _parse_exec_intent(
+    tokens: tuple[str, ...],
+    *,
+    workspace: Path | None,
+    path_overridden: bool = False,
+) -> PackageIntent | None:
+    if _is_verified_local_executable_execution(
+        tokens,
+        workspace=workspace,
+        path_overridden=path_overridden,
+    ):
         return None
     package_token = _exec_package_spec(tokens)
     if package_token is None:
@@ -230,8 +256,13 @@ def _parse_exec_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> Pa
     return _build_intent(_command_name(tokens[0]), "execute", tokens, (target,), workspace=workspace)
 
 
-def _is_verified_local_executable_execution(tokens: tuple[str, ...], *, workspace: Path | None) -> bool:
-    if workspace is None or not tokens or _command_name(tokens[0]) not in _LOCAL_EXECUTION_COMMANDS:
+def _is_verified_local_executable_execution(
+    tokens: tuple[str, ...],
+    *,
+    workspace: Path | None,
+    path_overridden: bool,
+) -> bool:
+    if workspace is None or path_overridden or not tokens or _command_name(tokens[0]) not in _LOCAL_EXECUTION_COMMANDS:
         return False
     if not _local_execution_disables_install(tokens) and not (
         _is_local_test_runner_execution(tokens) and _guard_package_shim_is_active(tokens[0])
@@ -745,7 +776,13 @@ def _normalized_command_tokens(command_text: str) -> tuple[str, ...]:
     return segments[0].tokens if segments else ()
 
 
-def _normalized_command_segments(command_text: str) -> tuple[_CommandSegment, ...]:
+def _normalized_command_segments(
+    command_text: str,
+    *,
+    canonical_command: CanonicalCommand | None = None,
+) -> tuple[_CommandSegment, ...]:
+    if canonical_command is not None and canonical_command.segments:
+        return tuple(_command_segment_from_canonical(segment) for segment in canonical_command.segments)
     try:
         tokens = _split_shell_tokens(command_text)
     except ValueError:
@@ -756,8 +793,31 @@ def _normalized_command_segments(command_text: str) -> tuple[_CommandSegment, ..
         if not normalized_tokens:
             continue
         redacted_tokens = _redacted_segment(raw_segment)
-        segments.append(_CommandSegment(tuple(normalized_tokens), tuple(redacted_tokens)))
+        segments.append(
+            _CommandSegment(
+                tuple(normalized_tokens),
+                tuple(redacted_tokens),
+                path_overridden=_raw_segment_overrides_path(raw_segment),
+            )
+        )
     return tuple(segments)
+
+
+def _command_segment_from_canonical(segment: CommandSegment) -> _CommandSegment:
+    normalized_tokens = _normalize_segment([segment.executable or "", *segment.arguments])
+    try:
+        raw_tokens = _split_shell_tokens(segment.text)
+    except ValueError:
+        raw_tokens = list(normalized_tokens)
+    return _CommandSegment(
+        tokens=tuple(normalized_tokens),
+        redacted_tokens=tuple(_redacted_segment(raw_tokens)),
+        path_overridden=segment.path_overridden,
+    )
+
+
+def _raw_segment_overrides_path(raw_segment: list[str]) -> bool:
+    return any(token.partition("=")[0].upper() == "PATH" for token in raw_segment if _ENV_ASSIGNMENT_RE.match(token))
 
 
 def _raw_command_segments(tokens: list[str]) -> tuple[list[str], ...]:
