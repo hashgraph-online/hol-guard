@@ -125,6 +125,7 @@ export type GuardApprovalRequest = {
   publisher: string | null;
   policy_action: string;
   recommended_scope: DecisionScope;
+  allowed_scopes?: DecisionScope[];
   risk_headline?: string;
   risk_summary?: string;
   risk_signals?: string[];
