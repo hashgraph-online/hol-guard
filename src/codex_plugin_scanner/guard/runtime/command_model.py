@@ -23,6 +23,22 @@ MAX_COMMAND_SEGMENTS = 128
 MAX_COMMAND_TOKENS = 2_048
 
 _ENV_ASSIGNMENT_PATTERN = re.compile(r"^(?P<name>[A-Za-z_][A-Za-z0-9_]*)=.*$", re.DOTALL)
+_SUDO_OPTIONS_WITH_VALUES = frozenset({"-C", "-D", "-g", "-h", "-p", "-R", "-r", "-T", "-t", "-u"})
+_SUDO_LONG_OPTIONS_WITH_VALUES = frozenset(
+    {
+        "--chdir",
+        "--chroot",
+        "--close-from",
+        "--command-timeout",
+        "--group",
+        "--host",
+        "--login-class",
+        "--prompt",
+        "--role",
+        "--type",
+        "--user",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +50,7 @@ class CommandSegment:
     executable: str | None
     arguments: tuple[str, ...]
     environment_names: tuple[str, ...]
+    wrapper_chain: tuple[str, ...]
     path_overridden: bool
     pipeline_index: int
     start: int
@@ -46,6 +63,7 @@ class CommandSegment:
             "executable": self.executable,
             "arguments": list(self.arguments),
             "environment_names": list(self.environment_names),
+            "wrapper_chain": list(self.wrapper_chain),
             "path_overridden": self.path_overridden,
             "pipeline_index": self.pipeline_index,
             "span": {"source": "normalized", "start": self.start, "end": self.end},
@@ -159,6 +177,7 @@ def parse_shell_command(
         )
 
     segments: list[CommandSegment] = []
+    segment_wrappers: list[str] = []
     cursor = 0
     total_tokens = 0
     for pipeline_index, segment_text in segment_texts:
@@ -179,7 +198,10 @@ def parse_shell_command(
         if not exact and confidence == "exact":
             confidence = "fallback"
             uncertainty_reason = "malformed_shell_quoting"
-        environment_names, executable_index = _leading_environment(tokens)
+        environment_names, executable_index, wrappers = _leading_environment(tokens)
+        for wrapper in wrappers:
+            if wrapper not in segment_wrappers:
+                segment_wrappers.append(wrapper)
         executable = tokens[executable_index] if executable_index < len(tokens) else None
         arguments = tokens[executable_index + 1 :] if executable is not None else ()
         start = normalized_text.find(segment_text, cursor)
@@ -196,6 +218,7 @@ def parse_shell_command(
                 executable=executable,
                 arguments=arguments,
                 environment_names=environment_names,
+                wrapper_chain=wrappers,
                 path_overridden="PATH" in environment_names,
                 pipeline_index=pipeline_index,
                 start=start,
@@ -209,7 +232,7 @@ def parse_shell_command(
         dialect=dialect,
         transport=transport,
         extraction_provenance=extraction_provenance,
-        wrapper_chain=normalization.wrapper_chain,
+        wrapper_chain=(*normalization.wrapper_chain, *segment_wrappers),
         segments=tuple(segments),
         confidence=confidence,
         uncertainty_reason=uncertainty_reason,
@@ -237,32 +260,61 @@ def _shell_tokens(command: str) -> tuple[tuple[str, ...], bool]:
         return tuple(command.split()), False
 
 
-def _leading_environment(tokens: tuple[str, ...]) -> tuple[tuple[str, ...], int]:
+def _leading_environment(tokens: tuple[str, ...]) -> tuple[tuple[str, ...], int, tuple[str, ...]]:
     names: list[str] = []
+    wrappers: list[str] = []
     index = 0
     while index < len(tokens):
         match = _ENV_ASSIGNMENT_PATTERN.fullmatch(tokens[index])
-        if match is None:
-            break
-        names.append(match.group("name"))
-        index += 1
-    if index >= len(tokens) or tokens[index].rsplit("/", 1)[-1].lower() != "env":
-        return tuple(names), index
-    index += 1
+        while match is not None:
+            names.append(match.group("name"))
+            index += 1
+            if index >= len(tokens):
+                return tuple(names), index, tuple(wrappers)
+            match = _ENV_ASSIGNMENT_PATTERN.fullmatch(tokens[index])
+        executable = tokens[index].replace("\\", "/").rsplit("/", 1)[-1].lower()
+        if executable == "env":
+            wrappers.append("env")
+            index = _after_env_options(tokens, index + 1)
+            continue
+        if executable == "sudo":
+            wrappers.append("sudo")
+            index = _after_sudo_options(tokens, index + 1)
+            continue
+        break
+    return tuple(names), index, tuple(wrappers)
+
+
+def _after_env_options(tokens: tuple[str, ...], index: int) -> int:
     while index < len(tokens):
         token = tokens[index]
         if token == "--":
-            index += 1
-            break
+            return index + 1
         if token in {"-u", "-C", "--unset", "--chdir"}:
             index = min(index + 2, len(tokens))
             continue
         if token in {"-i", "-0", "--ignore-environment", "--null"} or token.startswith(("--unset=", "--chdir=")):
             index += 1
             continue
-        match = _ENV_ASSIGNMENT_PATTERN.fullmatch(token)
-        if match is None:
-            break
-        names.append(match.group("name"))
-        index += 1
-    return tuple(names), index
+        if _ENV_ASSIGNMENT_PATTERN.fullmatch(token) is not None:
+            return index
+        return index
+    return index
+
+
+def _after_sudo_options(tokens: tuple[str, ...], index: int) -> int:
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--":
+            return index + 1
+        option_name = token.split("=", 1)[0]
+        if option_name in _SUDO_OPTIONS_WITH_VALUES or option_name in _SUDO_LONG_OPTIONS_WITH_VALUES:
+            index += 1 if "=" in token else 2
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        if _ENV_ASSIGNMENT_PATTERN.fullmatch(token) is not None:
+            return index
+        return index
+    return index
