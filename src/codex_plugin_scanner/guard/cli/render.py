@@ -540,6 +540,31 @@ def _render_command_extensions(console: Console, payload: dict[str, object]) -> 
     console.print(table)
 
 
+def _render_command_setup(console: Console, payload: dict[str, object]) -> None:
+    detections = _coerce_dict_list(payload.get("detections"))
+    table = Table(title="Command ecosystem setup", box=box.SIMPLE_HEAD, show_lines=False)
+    table.add_column("Ecosystem", style="bold cyan", no_wrap=True)
+    table.add_column("Status", no_wrap=True)
+    table.add_column("Detected from")
+    table.add_column("Protection")
+    for detection in detections:
+        marker_names = _coerce_string_list(detection.get("project_markers"))
+        executables = _coerce_string_list(detection.get("available_executables"))
+        evidence = [*(f"file:{name}" for name in marker_names), *(f"command:{name}" for name in executables)]
+        detected = bool(detection.get("detected"))
+        recommended = bool(detection.get("recommended"))
+        status = "recommended" if recommended else ("available" if detected else "not detected")
+        table.add_row(
+            str(detection.get("extension_id") or ""),
+            status,
+            ", ".join(evidence) or "none",
+            str(detection.get("delegated_protection") or "command rules"),
+            style="green" if recommended else ("cyan" if detected else "dim"),
+        )
+    console.print(table)
+    console.print("[dim]Detection is read-only. No Guard settings were changed.[/dim]")
+
+
 def _plain_text_command_inspection(payload: PayloadDict) -> str:
     classification = _coerce_object_dict(payload.get("classification"))
     extensions = _coerce_dict_list(payload.get("extensions"))
@@ -562,6 +587,17 @@ def _plain_text_command_extensions(payload: PayloadDict) -> str:
     extensions = _coerce_dict_list(payload.get("extensions"))
     lines = [f"Built-in command safety extensions ({len(extensions)})"]
     lines.extend(f"{item.get('extension_id')} {item.get('version')} - {item.get('description')}" for item in extensions)
+    return "\n".join(lines)
+
+
+def _plain_text_command_setup(payload: PayloadDict) -> str:
+    detections = _coerce_dict_list(payload.get("detections"))
+    lines = [f"Detected command ecosystems ({payload.get('detected_count') or 0})"]
+    for item in detections:
+        if not item.get("recommended"):
+            continue
+        lines.append(f"{item.get('extension_id')} - recommended")
+    lines.append("Detection is read-only. No Guard settings were changed.")
     return "\n".join(lines)
 
 
@@ -2772,6 +2808,7 @@ def _clean_terminal_output(value: str) -> str:
 _PLAIN_TEXT_RENDERERS: dict[str, PlainTextRenderer] = {
     "command-extensions": _plain_text_command_extensions,
     "command-inspection": _plain_text_command_inspection,
+    "command-setup": _plain_text_command_setup,
     "protect": _plain_text_protect,
 }
 
@@ -2779,6 +2816,7 @@ _PLAIN_TEXT_RENDERERS: dict[str, PlainTextRenderer] = {
 _RENDERERS: dict[str, Renderer] = {
     "command-extensions": _render_command_extensions,
     "command-inspection": _render_command_inspection,
+    "command-setup": _render_command_setup,
     "approvals": _render_approvals,
     "init": _render_init,
     "start": _render_start,

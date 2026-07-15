@@ -43,3 +43,10 @@ For Microsoft Copilot, Guard supports two real local boundaries only:
 That does not extend to VS Code Copilot extension-host interception.
 
 Cisco AIBOM stays out of Guard runtime policy in this phase. If it returns later, it should attach to evidence or export paths rather than launch blocking or approval flow.
+
+## Command protection references
+
+- [Command extension architecture](command-extension-architecture.md)
+- [Command extension precedence](command-extension-precedence.md)
+- [Command extension threat model](command-extension-threat-model.md)
+- [Package command extension coverage](command-package-extension-coverage.md)
