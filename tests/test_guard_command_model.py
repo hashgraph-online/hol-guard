@@ -130,6 +130,23 @@ def test_executable_matcher_does_not_treat_option_values_as_flags() -> None:
     assert matcher.match(parsed) == ()
 
 
+def test_matchers_honor_option_terminators() -> None:
+    recursive_delete = ArgumentMatcher(
+        executables=frozenset({"rm"}),
+        required_arguments=frozenset({"-r"}),
+    )
+    force_push = ExecutableMatcher(
+        executables=frozenset({"git"}),
+        subcommands=("push",),
+        required_flags=frozenset({"--force"}),
+        allow_leading_options=True,
+    )
+
+    assert recursive_delete.match(parse_shell_command("rm -- -r")) == ()
+    assert force_push.match(parse_shell_command("git push origin main -- --force")) == ()
+    assert force_push.match(parse_shell_command("git -- push origin main --force"))
+
+
 def test_parse_shell_command_preserves_literal_hash_arguments() -> None:
     parsed = parse_shell_command("printf '%s' value#fragment")
 

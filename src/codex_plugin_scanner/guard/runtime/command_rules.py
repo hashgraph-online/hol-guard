@@ -83,7 +83,8 @@ class ExecutableMatcher:
             )
             if self.subcommands and subcommand_arguments[: len(self.subcommands)] != self.subcommands:
                 continue
-            present_flags = _present_flags(lowered_arguments, options_with_values=self.options_with_values)
+            flag_arguments = subcommand_arguments[len(self.subcommands) :] if self.subcommands else subcommand_arguments
+            present_flags = _present_flags(flag_arguments, options_with_values=self.options_with_values)
             if not self.required_flags <= present_flags or self.forbidden_flags & present_flags:
                 continue
             evidence.append(
@@ -308,6 +309,8 @@ def _present_flags(
     index = 0
     while index < len(arguments):
         argument = arguments[index]
+        if argument == "--":
+            break
         flags.add(argument)
         if argument.startswith("-") and "=" in argument:
             flags.add(argument.split("=", 1)[0])

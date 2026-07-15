@@ -181,6 +181,14 @@ def test_git_clean_exclude_value_is_not_treated_as_preview_flag(tmp_path: Path) 
     ]
 
 
+def test_option_terminator_operands_do_not_trigger_structured_rules(tmp_path: Path) -> None:
+    filesystem = inspect_command("rm -- -r", cwd=tmp_path, home_dir=tmp_path)
+    git = inspect_command("git push origin main -- --force", cwd=tmp_path, home_dir=tmp_path)
+
+    assert "command.filesystem.recursive-delete" not in {rule["rule_id"] for rule in filesystem["rules"]}
+    assert git["status"] == "no_match"
+
+
 def test_command_inspection_emits_all_core_matches_without_duplicate_compatibility_rule(tmp_path: Path) -> None:
     payload = inspect_command("rm -rf ./build && git reset --hard HEAD~1", cwd=tmp_path, home_dir=tmp_path)
 
