@@ -28,7 +28,24 @@ def test_update_is_skipped_when_managed_policy_owns_updates(monkeypatch: pytest.
     monkeypatch.setattr(
         update_commands,
         "load_managed_policy",
-        lambda: SimpleNamespace(policy=policy),
+        lambda: SimpleNamespace(status="active", policy=policy),
+    )
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.0")
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=True)
+
+    assert exit_code == 0
+    assert payload["status"] == "skipped"
+    assert payload["changed"] is False
+    assert payload["reason_code"] == "mdm_update_owned"
+
+
+def test_update_is_skipped_when_managed_policy_is_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        update_commands,
+        "load_managed_policy",
+        lambda: SimpleNamespace(status="invalid", policy=None),
     )
     monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.0")
     monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")

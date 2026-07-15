@@ -109,7 +109,10 @@ def run_guard_update(
         "dry_run": dry_run,
     }
     managed_policy = load_managed_policy()
-    if managed_policy.policy is not None and managed_policy.policy.update.owner == "mdm":
+    managed_update_blocked = managed_policy.status != "absent" and (
+        managed_policy.policy is None or managed_policy.policy.update.owner == "mdm"
+    )
+    if managed_update_blocked:
         payload.update(
             {
                 "status": "skipped",
