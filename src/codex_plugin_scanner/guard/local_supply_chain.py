@@ -28,6 +28,7 @@ from .adapters.base import HarnessContext
 from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
 from .approval_scope_support import package_request_portable_workspace_scope
 from .config import GuardConfig, resolve_risk_action
+from .mdm.network import managed_urlopen
 from .models import GuardAction, GuardArtifact, GuardReceipt
 from .redaction import redact_local_path, redact_text
 from .runtime.package_intent_common import (
@@ -2350,7 +2351,7 @@ def _run_cloud_workspace_audit(
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=_CLOUD_AUDIT_TIMEOUT_SECONDS) as response:
+            with managed_urlopen(request, timeout=_CLOUD_AUDIT_TIMEOUT_SECONDS) as response:
                 response_payload = json.load(response)
         except urllib.error.HTTPError as error:
             return (
@@ -2564,7 +2565,7 @@ def _execute_cloud_workspace_audit_request(
         method=method,
     )
     try:
-        with urllib.request.urlopen(request, timeout=_CLOUD_AUDIT_TIMEOUT_SECONDS) as response:
+        with managed_urlopen(request, timeout=_CLOUD_AUDIT_TIMEOUT_SECONDS) as response:
             response_payload = json.load(response)
     except urllib.error.HTTPError as error:
         if error.code == 403:

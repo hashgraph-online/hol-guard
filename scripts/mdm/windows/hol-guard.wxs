@@ -1,0 +1,26 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="HOL Guard" Manufacturer="Hashgraph Online" Version="$(env.HOL_GUARD_VERSION)"
+           UpgradeCode="B15D39B1-6395-4FEA-98A9-5D734DDC455D" Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer HOL Guard version is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="HOL Guard" />
+    </StandardDirectory>
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="STATEFOLDER" Name="HOL Guard">
+        <Component Id="MachineState" Guid="5CF2D38E-C3EC-4F31-BE6C-A15BDD52B279">
+          <CreateFolder />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+    <Component Id="UserActivation" Directory="INSTALLFOLDER" Guid="EF2BC727-7CA8-44EC-B7A6-C82F4CE4C7BD">
+      <RegistryKey Root="HKLM" Key="Software\Microsoft\Active Setup\Installed Components\{AFA2F379-D7A2-4210-91E3-E71E43F1D994}">
+        <RegistryValue Name="Version" Value="$(env.HOL_GUARD_VERSION)" Type="string" KeyPath="yes" />
+        <RegistryValue Name="StubPath" Type="expandable"
+          Value="&quot;[INSTALLFOLDER]hol-guard\hol-guard.exe&quot; mdm repair --home &quot;%USERPROFILE%&quot; --user &quot;%USERNAME%&quot; --json" />
+      </RegistryKey>
+    </Component>
+    <Files Include="$(RuntimeRoot)\**" Directory="INSTALLFOLDER" />
+    <Feature Id="Main"><ComponentRef Id="MachineState" /><ComponentRef Id="UserActivation" /></Feature>
+  </Package>
+</Wix>

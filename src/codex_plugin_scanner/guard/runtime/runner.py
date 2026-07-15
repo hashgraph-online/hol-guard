@@ -45,6 +45,7 @@ from ..cloud_exceptions import (
 )
 from ..config import VALID_RECEIPT_REDACTION_LEVELS, GuardConfig, load_guard_config
 from ..edge_events import build_runtime_session_event
+from ..mdm.network import managed_urlopen
 from ..memory_pattern_fingerprint import build_exact_command_memory_artifact_id
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..package_firewall_defaults import extract_cloud_user_profile
@@ -2749,10 +2750,15 @@ def _sign_guard_dpop_proof(
         if normalized_nonce:
             claims["nonce"] = normalized_nonce
     signing_input = f"{_encode_jwt_segment(header)}.{_encode_jwt_segment(claims)}".encode("ascii")
-    private_key = serialization.load_pem_private_key(
-        dpop_key_material.private_key_pem.encode("ascii"),
-        password=None,
-    )
+    try:
+        private_key = serialization.load_pem_private_key(
+            dpop_key_material.private_key_pem.encode("ascii"),
+            password=None,
+        )
+    except (TypeError, ValueError) as exc:
+        raise GuardSyncAuthorizationExpiredError(
+            "Guard Cloud authorization key is invalid. Reconnect Guard Cloud."
+        ) from exc
     if not isinstance(private_key, ec.EllipticCurvePrivateKey) or not isinstance(private_key.curve, ec.SECP256R1):
         raise RuntimeError("Guard DPoP key must be a P-256 (SECP256R1) EC private key.")
     der_signature = private_key.sign(signing_input, ec.ECDSA(hashes.SHA256()))
@@ -3014,7 +3020,7 @@ def _refresh_guard_oauth_access_token(
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=_SYNC_HTTP_TIMEOUT_SECONDS) as response:
+            with managed_urlopen(request, timeout=_SYNC_HTTP_TIMEOUT_SECONDS) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
             payload = _http_error_payload(error) if error.code in {400, 401, 403} else None
@@ -3591,7 +3597,7 @@ def _urlopen_json_with_timeout_retry(
     gateway_retry_count = 0
     while True:
         try:
-            with urllib.request.urlopen(current_request, timeout=current_timeout_seconds) as response:
+            with managed_urlopen(current_request, timeout=current_timeout_seconds) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
             if error.code == 429 and rate_limit_retry_count < 2:
@@ -3656,7 +3662,7 @@ def _urlopen_with_timeout_retry(
     gateway_retry_count = 0
     while True:
         try:
-            with urllib.request.urlopen(current_request, timeout=current_timeout_seconds):
+            with managed_urlopen(current_request, timeout=current_timeout_seconds):
                 return
         except urllib.error.HTTPError as error:
             if error.code == 401:

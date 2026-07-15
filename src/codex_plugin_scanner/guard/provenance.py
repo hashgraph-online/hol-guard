@@ -14,6 +14,8 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
+from .mdm.network import managed_urlopen
+
 _HARD_RISK_CODES = frozenset(
     {
         "known_malware",
@@ -65,7 +67,7 @@ def _fetch_npm_attestations(package: str, version: str) -> dict[str, Any]:
     encoded = urllib.parse.quote(f"{package}/-/{package}-{version}.tgz", safe="@/")
     url = f"https://registry.npmjs.org/-/npm/v1/attestations/{encoded}"
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=10) as resp:
+    with managed_urlopen(req, timeout=10) as resp:
         return json.loads(resp.read())
 
 
@@ -73,7 +75,7 @@ def _fetch_pypi_attestations(package: str, version: str) -> dict[str, Any]:
     """Fetch PyPI attestation data from the PyPI API."""
     url = f"https://pypi.org/integrity/{package}/{version}/attestations.json"
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=10) as resp:
+    with managed_urlopen(req, timeout=10) as resp:
         return json.loads(resp.read())
 
 
