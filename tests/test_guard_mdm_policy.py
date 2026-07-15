@@ -85,6 +85,30 @@ def test_managed_value_replaces_invalid_local_type(tmp_path: Path) -> None:
     assert apply_managed_policy({"mode": True}, state.policy)["mode"] == "enforce"
 
 
+def test_partial_managed_nested_policy_preserves_local_strengthening(tmp_path: Path) -> None:
+    path = tmp_path / "policy.json"
+    path.write_text(
+        json.dumps(
+            _policy(
+                settings={"risk_actions": {"network_egress": "block"}},
+                lockedSettings=["risk_actions.network_egress"],
+            )
+        )
+    )
+    state = load_managed_policy(policy_path=path)
+    assert state.policy is not None
+
+    composed = apply_managed_policy(
+        {"risk_actions": {"network_egress": "review", "credential_access": "block"}},
+        state.policy,
+    )
+
+    assert composed["risk_actions"] == {
+        "network_egress": "block",
+        "credential_access": "block",
+    }
+
+
 def test_proxy_credentials_are_rejected_when_encoded() -> None:
     payload = _policy(
         network={

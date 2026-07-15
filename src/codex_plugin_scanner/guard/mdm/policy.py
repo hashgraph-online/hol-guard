@@ -318,6 +318,15 @@ def _strongest_security_value(local: object, managed: object) -> object:
     return managed
 
 
+def _compose_managed_value(local: object, managed: object) -> object:
+    if isinstance(local, dict) and isinstance(managed, dict):
+        composed = dict(local)
+        for key, managed_value in managed.items():
+            composed[key] = _compose_managed_value(composed.get(key), managed_value)
+        return composed
+    return _strongest_security_value(local, managed)
+
+
 def apply_managed_policy(local_payload: Mapping[str, object], policy: ManagedPolicy) -> dict[str, object]:
     """Compose local configuration without allowing a managed requirement to weaken."""
 
@@ -327,7 +336,7 @@ def apply_managed_policy(local_payload: Mapping[str, object], policy: ManagedPol
         if key == "actions" or key.endswith("Actions"):
             composed[key] = _merge_strongest_actions(local_value, managed_value)
         elif key in composed:
-            composed[key] = _strongest_security_value(local_value, managed_value)
+            composed[key] = _compose_managed_value(local_value, managed_value)
         else:
             composed[key] = managed_value
     for setting_path in policy.locked_settings:
