@@ -16,7 +16,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..models import GuardArtifact
-from .actions import GuardActionEnvelope
+from .actions import GuardActionEnvelope, apply_patch_target_paths
 from .command_evaluation import evaluate_command
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from .command_model import CanonicalCommand, parse_shell_command
@@ -61,6 +61,7 @@ _FILE_WRITE_TOOL_NAMES = frozenset(
         "multiedit",
         "write",
         "write_file",
+        "apply_patch",
     }
 )
 _PATH_KEYS = (
@@ -3748,6 +3749,8 @@ def _request_with_wrapper_context(
 def _candidate_paths(value: object) -> list[str]:
     results: list[str] = []
     _collect_candidate_paths(value, results, depth=0)
+    if isinstance(value, dict):
+        results.extend(apply_patch_target_paths(value))
     return results
 
 

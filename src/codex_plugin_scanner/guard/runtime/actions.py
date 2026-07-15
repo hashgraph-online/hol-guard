@@ -46,7 +46,7 @@ _VALID_ACTION_TYPES: frozenset[GuardActionType] = frozenset(
 _SCHEMA_VERSION = 1
 _SHELL_TOOL_NAMES = frozenset({"bash", "shell", "sh", "zsh", "terminal", "run_command", "run_terminal_command"})
 _FILE_READ_TOOL_NAMES = frozenset({"read", "read_file", "open_file", "view", "view_file", "cat_file"})
-_FILE_WRITE_TOOL_NAMES = frozenset({"write", "edit", "multiedit", "write_file", "edit_file"})
+_FILE_WRITE_TOOL_NAMES = frozenset({"write", "edit", "multiedit", "write_file", "edit_file", "apply_patch"})
 _PATH_KEYS = (
     "path",
     "paths",
@@ -76,6 +76,8 @@ _COMMAND_KEYS = (
 )
 _EXPLICIT_COMMAND_KEYS = ("command", "cmd", "shell_command", "shellCommand")
 _SEARCH_PATTERN_KEYS = ("pattern", "query", "search", "regex")
+_PATCH_INPUT_KEYS = ("patch", "input")
+_PATCH_FILE_HEADER_PATTERN = re.compile(r"^\*\*\* (?:Add|Delete|Update) File: (?P<path>.+)$", re.MULTILINE)
 _SENSITIVE_RAW_KEYS = frozenset(
     {
         "api_key",
@@ -552,6 +554,7 @@ def _normalize_action_payload(
         mcp_server=mcp_server,
     )
     target_paths = _target_paths(
+        tool_name=tool_name,
         tool_input=tool_input,
         command=normalized_command,
         prompt_text=prompt_text,
@@ -926,6 +929,7 @@ def _action_type(
 
 def _target_paths(
     *,
+    tool_name: str | None,
     tool_input: Mapping[str, object],
     command: str | None,
     prompt_text: str | None,
@@ -938,11 +942,22 @@ def _target_paths(
             paths.append(value.strip())
         elif isinstance(value, list):
             paths.extend(item.strip() for item in value if isinstance(item, str) and item.strip())
+    if isinstance(tool_name, str) and tool_name.strip().lower() == "apply_patch":
+        paths.extend(apply_patch_target_paths(tool_input))
     for text in (command, prompt_text):
         if text is not None:
             paths.extend(match.group("path") for match in _PROMPT_PATH_PATTERN.finditer(text))
     redacted_paths = (_redacted_target_path(path, home_dir=home_dir) for path in paths)
     return tuple(dict.fromkeys(path for path in redacted_paths if path is not None))
+
+
+def apply_patch_target_paths(tool_input: Mapping[str, object]) -> tuple[str, ...]:
+    for key in _PATCH_INPUT_KEYS:
+        patch_text = tool_input.get(key)
+        if not isinstance(patch_text, str) or not patch_text.strip():
+            continue
+        return tuple(match.group("path").strip() for match in _PATCH_FILE_HEADER_PATTERN.finditer(patch_text))
+    return ()
 
 
 def _network_hosts(command: str | None, prompt_excerpt: str | None) -> tuple[str, ...]:

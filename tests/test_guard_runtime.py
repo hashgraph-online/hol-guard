@@ -57,7 +57,10 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
     build_package_request_artifact,
     extract_package_intent_request,
 )
-from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from codex_plugin_scanner.guard.runtime.secret_file_requests import (
+    extract_sensitive_file_write_request,
+    extract_sensitive_tool_action_request,
+)
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import (
     GuardStore,
@@ -14169,6 +14172,33 @@ def test_guard_runtime_allows_simple_pytest_module_invocation(tmp_path):
     )
 
     assert match is None
+
+
+def test_guard_runtime_allows_apply_patch_to_non_sensitive_source_file(tmp_path):
+    patch = """*** Begin Patch
+*** Update File: src/codex_plugin_scanner/guard/runtime/secret_file_requests.py
+@@
++def _shell_interpreter_flag_payload(parts: list[str], index: int) -> object:
++    return _interpreter_flag_payload(parts, index)
+*** End Patch"""
+
+    match = extract_sensitive_file_write_request("apply_patch", {"input": patch}, cwd=tmp_path)
+
+    assert match is None
+
+
+def test_guard_runtime_blocks_apply_patch_to_sensitive_file(tmp_path):
+    patch = """*** Begin Patch
+*** Update File: .env
+@@
+-TOKEN=old
++TOKEN=new
+*** End Patch"""
+
+    match = extract_sensitive_file_write_request("apply_patch", {"input": patch}, cwd=tmp_path)
+
+    assert match is not None
+    assert match.path_class == "local .env file"
 
 
 def test_guard_runtime_allows_cd_prefixed_pytest_module_invocation(tmp_path):
