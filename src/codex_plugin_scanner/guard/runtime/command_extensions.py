@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import final
+from typing import Literal, final
 
 from .command_builtin_rules import COMMAND_ACTION_RISK_CLASSES, rules_for_extension
 from .command_model import CanonicalCommand
-from .command_rules import CommandSafetyRule, MatcherEvidence
+from .command_rules import CommandSafetyRule, MatcherEvidence, matcher_index_hints
 
 COMMAND_EXTENSION_SCHEMA_VERSION = 2
 _VERSION_PATTERN = re.compile(r"^[1-9][0-9]*\.[0-9]+\.[0-9]+$")
+_EXTENSION_ID_PATTERN = re.compile(r"^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$")
+
+CommandExtensionSource = Literal["built-in", "local-admin", "signed-cloud"]
+_VALID_EXTENSION_SOURCES = frozenset({"built-in", "local-admin", "signed-cloud"})
 
 
 def risk_classes_for_command_action(action_class: str) -> tuple[str, ...]:
@@ -33,6 +37,10 @@ class CommandSafetyExtension:
     safer_alternatives: tuple[str, ...]
     rules: tuple[CommandSafetyRule, ...] = ()
     required: bool = False
+    source: CommandExtensionSource = "built-in"
+    aliases: tuple[str, ...] = ()
+    dependencies: tuple[str, ...] = ()
+    conflicts: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -43,7 +51,10 @@ class CommandSafetyExtension:
             "description": self.description,
             "enabled": True,
             "required": self.required,
-            "source": "built-in",
+            "source": self.source,
+            "aliases": list(self.aliases),
+            "dependencies": list(self.dependencies),
+            "conflicts": list(self.conflicts),
             "action_classes": list(self.action_classes),
             "risk_classes": list(self.risk_classes),
             "safer_alternatives": list(self.safer_alternatives),
@@ -62,11 +73,20 @@ class CommandSafetyExtensionRegistry:
         by_action_class: dict[str, CommandSafetyExtension] = {}
         by_action_rule: dict[str, CommandSafetyRule] = {}
         by_rule_id: dict[str, CommandSafetyRule] = {}
+        aliases: dict[str, str] = {}
+        rule_records: list[tuple[CommandSafetyExtension, CommandSafetyRule]] = []
+        executable_index: dict[str, set[str]] = {}
+        keyword_index: dict[str, set[str]] = {}
+        unindexed_rule_ids: set[str] = set()
         for extension in ordered:
             _validate_extension(extension)
             if extension.extension_id in by_id:
                 raise ValueError(f"Duplicate command safety extension ID: {extension.extension_id}")
             by_id[extension.extension_id] = extension
+            for alias in extension.aliases:
+                if alias in by_id or alias in aliases:
+                    raise ValueError(f"Duplicate command safety extension alias: {alias}")
+                aliases[alias] = extension.extension_id
             for action_class in extension.action_classes:
                 normalized_action_class = action_class.strip().lower()
                 owner = by_action_class.get(normalized_action_class)
@@ -100,6 +120,15 @@ class CommandSafetyExtensionRegistry:
                         f"Command safety rule {rule.rule_id} declares risks outside its extension: {undeclared}"
                     )
                 by_rule_id[rule.rule_id] = rule
+                rule_records.append((extension, rule))
+                if rule.matcher is not None:
+                    hints = matcher_index_hints(rule.matcher)
+                    if not hints.complete or (not hints.executables and not hints.keywords):
+                        unindexed_rule_ids.add(rule.rule_id)
+                    for executable in hints.executables:
+                        executable_index.setdefault(executable, set()).add(rule.rule_id)
+                    for keyword in hints.keywords:
+                        keyword_index.setdefault(keyword, set()).add(rule.rule_id)
                 for action_class in rule.action_classes:
                     normalized_action_class = action_class.strip().lower()
                     if normalized_action_class not in {item.strip().lower() for item in extension.action_classes}:
@@ -117,18 +146,25 @@ class CommandSafetyExtensionRegistry:
                     raise ValueError(
                         f"Command safety extension {extension.extension_id} rules must own every action class"
                     )
+        _validate_registry_relationships(ordered, by_id=by_id, aliases=aliases)
         self._extensions = ordered
         self._by_id = by_id
+        self._aliases = aliases
         self._by_action_class = by_action_class
         self._by_action_rule = by_action_rule
         self._by_rule_id = by_rule_id
+        self._rule_records = tuple(rule_records)
+        self._executable_index = {key: frozenset(value) for key, value in executable_index.items()}
+        self._keyword_index = {key: frozenset(value) for key, value in keyword_index.items()}
+        self._unindexed_rule_ids = frozenset(unindexed_rule_ids)
 
     @property
     def extensions(self) -> tuple[CommandSafetyExtension, ...]:
         return self._extensions
 
     def get(self, extension_id: str) -> CommandSafetyExtension | None:
-        return self._by_id.get(extension_id.strip().lower())
+        normalized = extension_id.strip().lower()
+        return self._by_id.get(self._aliases.get(normalized, normalized))
 
     def for_action_class(self, action_class: str) -> CommandSafetyExtension | None:
         return self._by_action_class.get(action_class.strip().lower())
@@ -139,6 +175,22 @@ class CommandSafetyExtensionRegistry:
     def rule_for_action_class(self, action_class: str) -> CommandSafetyRule | None:
         return self._by_action_rule.get(action_class.strip().lower())
 
+    def candidate_rule_ids(self, command: CanonicalCommand) -> tuple[str, ...]:
+        """Return deterministic rule candidates from conservative registry indexes."""
+
+        candidate_rule_ids = set(self._unindexed_rule_ids)
+        command_executables = {
+            segment.executable.replace("\\", "/").rsplit("/", 1)[-1].lower()
+            for segment in command.segments
+            if segment.executable is not None
+        }
+        command_keywords = {token.lower() for segment in command.segments for token in segment.tokens}
+        for executable in command_executables:
+            candidate_rule_ids.update(self._executable_index.get(executable, ()))
+        for keyword in command_keywords:
+            candidate_rule_ids.update(self._keyword_index.get(keyword, ()))
+        return tuple(rule.rule_id for _extension, rule in self._rule_records if rule.rule_id in candidate_rule_ids)
+
     def matching_rules(
         self,
         command: CanonicalCommand,
@@ -146,30 +198,28 @@ class CommandSafetyExtensionRegistry:
         """Return every structured rule match in deterministic registry order."""
 
         matches: list[tuple[CommandSafetyExtension, CommandSafetyRule, tuple[MatcherEvidence, ...]]] = []
-        for extension in self._extensions:
-            for rule in extension.rules:
-                if rule.matcher is None:
-                    continue
-                evidence = rule.matcher.match(command)
-                if not evidence:
-                    continue
-                safe_segment_indexes = {
-                    safe_evidence.segment_index
-                    for variant in rule.safe_variants
-                    for safe_evidence in variant.matcher.match(command)
-                }
-                effective_evidence = tuple(item for item in evidence if item.segment_index not in safe_segment_indexes)
-                if not effective_evidence:
-                    continue
-                matches.append((extension, rule, effective_evidence))
+        candidate_rule_ids = frozenset(self.candidate_rule_ids(command))
+        for extension, rule in self._rule_records:
+            if rule.matcher is None or rule.rule_id not in candidate_rule_ids:
+                continue
+            evidence = rule.matcher.match(command)
+            if not evidence:
+                continue
+            safe_segment_indexes = {
+                safe_evidence.segment_index
+                for variant in rule.safe_variants
+                for safe_evidence in variant.matcher.match(command)
+            }
+            effective_evidence = tuple(item for item in evidence if item.segment_index not in safe_segment_indexes)
+            if not effective_evidence:
+                continue
+            matches.append((extension, rule, effective_evidence))
         return tuple(matches)
 
 
 def _validate_extension(extension: CommandSafetyExtension) -> None:
-    if not extension.extension_id.startswith("command."):
-        raise ValueError("Command safety extension IDs must start with 'command.'")
-    if extension.extension_id != extension.extension_id.lower():
-        raise ValueError("Command safety extension IDs must be lowercase")
+    if not _EXTENSION_ID_PATTERN.fullmatch(extension.extension_id):
+        raise ValueError("Command safety extension IDs must be lowercase and start with 'command.'")
     if not _VERSION_PATTERN.fullmatch(extension.version):
         raise ValueError(f"Invalid command safety extension version: {extension.version}")
     if not extension.name.strip() or not extension.description.strip():
@@ -184,6 +234,54 @@ def _validate_extension(extension: CommandSafetyExtension) -> None:
         raise ValueError(f"Command safety extension {extension.extension_id} has duplicate risk classes")
     if not extension.safer_alternatives:
         raise ValueError(f"Command safety extension {extension.extension_id} requires safer alternatives")
+    if extension.source not in _VALID_EXTENSION_SOURCES:
+        raise ValueError(f"Command safety extension {extension.extension_id} has invalid source")
+    if extension.required and extension.source != "built-in":
+        raise ValueError(f"Required command safety extension {extension.extension_id} must be built-in")
+    for field_name, values in (
+        ("aliases", extension.aliases),
+        ("dependencies", extension.dependencies),
+        ("conflicts", extension.conflicts),
+    ):
+        if len(set(values)) != len(values) or any(not _EXTENSION_ID_PATTERN.fullmatch(value) for value in values):
+            raise ValueError(f"Command safety extension {extension.extension_id} has invalid {field_name}")
+
+
+def _validate_registry_relationships(
+    extensions: tuple[CommandSafetyExtension, ...],
+    *,
+    by_id: dict[str, CommandSafetyExtension],
+    aliases: dict[str, str],
+) -> None:
+    for alias in aliases:
+        if alias in by_id:
+            raise ValueError(f"Command safety extension alias shadows an extension ID: {alias}")
+    for extension in extensions:
+        for dependency in extension.dependencies:
+            if dependency not in by_id:
+                raise ValueError(
+                    f"Command safety extension {extension.extension_id} has unknown dependency {dependency}"
+                )
+        for conflict in extension.conflicts:
+            if conflict == extension.extension_id or conflict in by_id:
+                raise ValueError(f"Command safety extension {extension.extension_id} conflicts with {conflict}")
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(extension_id: str) -> None:
+        if extension_id in visiting:
+            raise ValueError(f"Command safety extension dependency cycle includes {extension_id}")
+        if extension_id in visited:
+            return
+        visiting.add(extension_id)
+        for dependency in by_id[extension_id].dependencies:
+            visit(dependency)
+        visiting.remove(extension_id)
+        visited.add(extension_id)
+
+    for extension in extensions:
+        visit(extension.extension_id)
 
 
 _BUILT_IN_EXTENSIONS = (
