@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
@@ -17,6 +18,7 @@ import requests
 
 from ..config import resolve_guard_home
 from ..daemon.manager import load_guard_daemon_auth_token
+from ..mdm.network import managed_requests_required, managed_requests_session
 from ..store import GuardStore
 
 
@@ -102,9 +104,9 @@ class TelegramBackend(NotificationBackend):
 
     def send_notification(self, request: PendingRequest, message: str) -> bool:
         try:
-            resp = requests.post(
+            resp = _managed_post(
                 f"{self.api_url}/sendMessage",
-                json={"chat_id": self.chat_id, "text": message, "parse_mode": "Markdown"},
+                payload={"chat_id": self.chat_id, "text": message, "parse_mode": "Markdown"},
                 timeout=10,
             )
             return resp.status_code == 200
@@ -133,7 +135,7 @@ class WebhookBackend(NotificationBackend):
         if self.include_artifact_details:
             payload["text"] = message
         try:
-            resp = requests.post(self.url, json=payload, timeout=10)
+            resp = _managed_post(self.url, payload=payload, timeout=10)
             return resp.status_code in (200, 201)
         except Exception:
             return False
@@ -143,6 +145,12 @@ class WebhookBackend(NotificationBackend):
         if match:
             return (match.group(1), match.group(2))
         return (None, None)
+
+
+def _managed_post(url: str, *, payload: Mapping[str, object], timeout: int) -> requests.Response:
+    if not managed_requests_required():
+        return requests.post(url, json=payload, timeout=timeout)
+    return managed_requests_session().post(url, json=payload, timeout=timeout)
 
 
 def _parse_pending_request(data: dict[str, Any]) -> PendingRequest | None:

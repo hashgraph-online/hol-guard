@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "2.0.1080"
+version = "2.0.1082"
 description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -66,6 +66,9 @@ dev = [
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
     "ruff>=0.15.15",
+]
+mdm-build = [
+    "pyinstaller>=6.16,<7",
 ]
 publish = [
     "twine>=6.2.0",

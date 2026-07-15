@@ -115,6 +115,25 @@ def _run_guard_update_command(
 ) -> int:
     if guard_home is None:
         raise RuntimeError("Guard home is required")
+    from ..mdm.policy import load_managed_policy
+
+    managed_policy = load_managed_policy()
+    if managed_policy.status in {"invalid", "inaccessible", "tampered"} or (
+        managed_policy.policy is not None and managed_policy.policy.install_owner == "mdm"
+    ):
+        _emit(
+            "update",
+            {
+                "status": "managed",
+                "changed": False,
+                "reason_code": (
+                    "managed_policy_invalid" if managed_policy.policy is None else "managed_update_owned_by_mdm"
+                ),
+                "message": "Version changes are owned by the device management service.",
+            },
+            getattr(args, "json", False),
+        )
+        return 0
     dry_run = bool(getattr(args, "dry_run", False))
     store: GuardStore | None
     update_store_error: OSError | RuntimeError | sqlite3.Error | None = None

@@ -28,6 +28,7 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from ..config import load_guard_config, resolve_risk_action
+from ..mdm.network import managed_urlopen
 from ..models import GuardArtifact
 from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
@@ -2708,7 +2709,7 @@ def _scan_external_tarball(source_url: str) -> dict[str, str] | None:
 def _download_external_tarball(source_url: str) -> bytes | None:
     request = urllib.request.Request(source_url, method="GET")
     try:
-        with urllib.request.urlopen(request, timeout=_TARBALL_SCAN_TIMEOUT_SECONDS) as response:
+        with managed_urlopen(request, timeout=_TARBALL_SCAN_TIMEOUT_SECONDS) as response:
             payload = response.read(_TARBALL_SCAN_MAX_BYTES + 1)
     except OSError:
         return None

@@ -16,6 +16,7 @@ from ._commands_shared import *
 from .commands_parser_helpers import *
 
 _EARLY_HANDLERS = {
+    "mdm": "_run_guard_mdm_command",
     "command": "_run_guard_command_inspection_command",
     "scan": "_run_guard_scan_command",
     "preflight": "_run_guard_preflight_command",

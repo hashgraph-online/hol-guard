@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol.org/schemas/guard/mdm-policy-v1.schema.json",
+  "title": "HOL Guard managed policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion"],
+  "properties": {
+    "schemaVersion": {"const": "hol-guard-mdm-policy.v1"},
+    "settings": {"type": "object"},
+    "lockedSettings": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "requiredHarnesses": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "proxyMode": {"enum": ["system", "explicit", "none"]},
+        "proxyUrl": {"type": ["string", "null"]},
+        "caBundlePath": {"type": ["string", "null"]},
+        "allowPublicRegistries": {"type": "boolean"}
+      }
+    },
+    "update": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "owner": {"enum": ["user", "mdm"]},
+        "channel": {"type": "string", "minLength": 1},
+        "minimumVersion": {"type": ["string", "null"]},
+        "maximumVersion": {"type": ["string", "null"]},
+        "allowDowngrade": {"type": "boolean"}
+      }
+    },
+    "daemonStartup": {"enum": ["on-demand", "login"]}
+  }
+}

@@ -167,6 +167,23 @@ def _run_guard_uninstall_command(
     context = _require_guard_context(context)
     store = _require_guard_store(store)
     if bool(getattr(args, "self_uninstall", False)):
+        from ..mdm.policy import load_managed_policy
+
+        managed_policy = load_managed_policy()
+        if managed_policy.status in {"invalid", "inaccessible", "tampered"} or (
+            managed_policy.policy is not None and managed_policy.policy.install_owner == "mdm"
+        ):
+            _emit(
+                "uninstall",
+                {
+                    "status": "managed",
+                    "changed": False,
+                    "reason_code": "managed_removal_authorization_required",
+                    "message": "Removal is owned by the device management service.",
+                },
+                getattr(args, "json", False),
+            )
+            return 3
         if getattr(args, "harness", None) is not None or bool(getattr(args, "all", False)):
             print("Guard self uninstall does not accept a harness or --all.", file=sys.stderr)
             return 2

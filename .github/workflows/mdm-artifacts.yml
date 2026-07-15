@@ -1,0 +1,72 @@
+name: MDM artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_id:
+        description: Immutable release build identifier
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15, windows-2022, windows-2025]
+        python: ['3.12']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen --extra dev --python ${{ matrix.python }}
+      - run: uv run --no-sync pytest tests/test_guard_mdm_*.py --tb=short
+      - run: uv run --no-sync basedpyright --level error
+      - run: uv run --no-sync ruff check src/ tests/test_guard_mdm_*.py scripts/mdm/generate-release-manifest.py
+
+  unsigned-artifact:
+    needs: tests
+    strategy:
+      matrix:
+        include:
+          - os: macos-14
+            platform: macos
+          - os: windows-2022
+            platform: windows
+    runs-on: ${{ matrix.os }}
+    env:
+      HOL_GUARD_BUILD_ID: ${{ inputs.build_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen --extra mdm-build --python 3.12
+      - shell: bash
+        run: echo "HOL_GUARD_VERSION=$(uv run python -c 'from codex_plugin_scanner.version import __version__; print(__version__)')" >> "$GITHUB_ENV"
+      - if: matrix.platform == 'macos'
+        run: scripts/mdm/macos/build-pkg.sh
+      - if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          binary="dist/mdm/macos/stage/Library/Application Support/HOL Guard/hol-guard/hol-guard"
+          "$binary" --version
+          if "$binary" mdm status --scope machine --machine-root "dist/mdm/macos/stage/Library/Application Support/HOL Guard" --json; then exit 1; fi
+      - if: matrix.platform == 'windows'
+        shell: pwsh
+        run: dotnet tool install --global wix --version 6.0.2
+      - if: matrix.platform == 'windows'
+        shell: pwsh
+        run: scripts/mdm/windows/build-msi.ps1
+      - if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $binary = 'dist/mdm/windows/runtime/hol-guard/hol-guard.exe'
+          & $binary --version
+          & $binary mdm status --scope machine --machine-root 'dist/mdm/windows/runtime' --json
+          if ($LASTEXITCODE -eq 0) { throw 'Unsigned fixture must not report healthy.' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hol-guard-${{ matrix.platform }}-unsigned-${{ inputs.build_id }}
+          path: dist/mdm/${{ matrix.platform }}/
+          if-no-files-found: error
