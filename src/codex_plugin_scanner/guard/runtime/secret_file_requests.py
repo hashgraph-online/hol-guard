@@ -17,8 +17,10 @@ from pathlib import Path
 
 from ..models import GuardArtifact
 from .actions import GuardActionEnvelope
+from .command_evaluation import evaluate_command
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from .command_model import parse_shell_command
+from .command_model import CanonicalCommand, parse_shell_command
+from .data_flow import extract_heredocs
 from .false_positive_rules import (
     SOURCE_INSPECTION_BENIGN_DOTFILES,
     SOURCE_INSPECTION_EXTENSIONS,
@@ -645,6 +647,7 @@ class ToolActionRequestMatch:
     reason: str
     raw_command_text: str | None = None
     wrapper_chain: tuple[str, ...] = ()
+    canonical_command: CanonicalCommand | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -888,11 +891,13 @@ def extract_sensitive_tool_action_request(
     *,
     cwd: Path | None = None,
     home_dir: Path | None = None,
+    canonical_command: CanonicalCommand | None = None,
 ) -> ToolActionRequestMatch | None:
     """Extract a sensitive native tool action from arguments."""
 
+    command_texts = _candidate_command_texts(arguments)
     normalized_tool_name = _normalize_tool_name(tool_name)
-    if normalized_tool_name is None and not _candidate_command_texts(arguments):
+    if normalized_tool_name is None and not command_texts:
         return None
     requested_tool_name = str(tool_name).strip() if isinstance(tool_name, str) and str(tool_name).strip() else "Shell"
     effective_tool_name = _shell_normalized_tool_name(
@@ -901,8 +906,13 @@ def extract_sensitive_tool_action_request(
     )
     if effective_tool_name is None:
         return None
-    for command_text in _candidate_command_texts(arguments):
+    for command_text in command_texts:
         raw_command_text = command_text
+        candidate_canonical = (
+            canonical_command
+            if canonical_command is not None and canonical_command.raw_text == raw_command_text.strip()
+            else None
+        )
         wrapper_chain: tuple[str, ...] = ()
         normalized_command_text = command_text
         if effective_tool_name in _SHELL_TOOL_NAMES:
@@ -980,6 +990,11 @@ def extract_sensitive_tool_action_request(
             command_text=command_text,
             cwd=cwd,
             home_dir=home_dir,
+            canonical_command=(
+                candidate_canonical
+                if candidate_canonical is not None and candidate_canonical.normalized_text == command_text
+                else None
+            ),
         )
         if destructive_shell_request is not None:
             if wrapper_chain:
@@ -996,6 +1011,7 @@ def extract_sensitive_tool_action_request(
                 command_text=raw_command_text,
                 cwd=cwd,
                 home_dir=home_dir,
+                canonical_command=candidate_canonical,
             )
             if destructive_shell_request is not None:
                 destructive_shell_request = _request_with_wrapper_context(
@@ -1094,18 +1110,22 @@ def _destructive_shell_tool_action_request(
     command_text: str,
     cwd: Path | None,
     home_dir: Path | None,
+    canonical_command: CanonicalCommand | None = None,
 ) -> ToolActionRequestMatch | None:
     if normalized_tool_name not in _SHELL_TOOL_NAMES:
         return None
-    if is_guard_approval_mutation_command(command_text):
+    canonical_command = canonical_command or parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
+    detection_command_text = command_text
+    if is_guard_approval_mutation_command(detection_command_text):
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
             command_text=command_text,
             action_class=SELF_APPROVAL_ACTION_CLASS,
             reason=SELF_APPROVAL_REASON,
+            canonical_command=canonical_command,
         )
-    if _contains_encoded_or_encrypted_shell_command(command_text, cwd=cwd, home_dir=home_dir):
+    if _contains_encoded_or_encrypted_shell_command(detection_command_text, cwd=cwd, home_dir=home_dir):
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
@@ -1115,8 +1135,9 @@ def _destructive_shell_tool_action_request(
                 "Guard treats encoded or encrypted decode-and-exec shell flows as sensitive and inspects bounded "
                 "payloads in-process without executing them during evaluation."
             ),
+            canonical_command=canonical_command,
         )
-    if _contains_shell_credential_exfiltration(command_text, cwd=cwd, home_dir=home_dir):
+    if _contains_shell_credential_exfiltration(detection_command_text, cwd=cwd, home_dir=home_dir):
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
@@ -1126,8 +1147,9 @@ def _destructive_shell_tool_action_request(
                 "Guard treats shell scripts that combine credential-looking material with outbound HTTP posting as "
                 "sensitive because they can exfiltrate local secrets before the user confirms the action."
             ),
+            canonical_command=canonical_command,
         )
-    if _contains_shell_network_file_upload(command_text, cwd=cwd, home_dir=home_dir):
+    if _contains_shell_network_file_upload(detection_command_text, cwd=cwd, home_dir=home_dir):
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
@@ -1137,8 +1159,9 @@ def _destructive_shell_tool_action_request(
                 "Guard treats shell-driven local file uploads as sensitive because they can exfiltrate local file "
                 "contents to a network endpoint before the user confirms the action."
             ),
+            canonical_command=canonical_command,
         )
-    if _gh_pr_create_body_has_shell_command_substitution(command_text):
+    if _gh_pr_create_body_has_shell_command_substitution(detection_command_text):
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
@@ -1149,8 +1172,9 @@ def _destructive_shell_tool_action_request(
                 "or `$()` run before GitHub receives the PR text. Use single quotes around Markdown code spans or "
                 "`--body-file` for PR descriptions."
             ),
+            canonical_command=canonical_command,
         )
-    if _looks_destructive_shell_command(command_text, cwd=cwd, home_dir=home_dir):
+    if _looks_destructive_shell_command(detection_command_text, cwd=cwd, home_dir=home_dir):
         return ToolActionRequestMatch(
             tool_name=tool_name,
             normalized_tool_name=normalized_tool_name,
@@ -1160,8 +1184,8 @@ def _destructive_shell_tool_action_request(
                 "Guard treats destructive shell writes and delete operations as sensitive because they can mutate "
                 "the local machine before the user confirms the action."
             ),
+            canonical_command=canonical_command,
         )
-    canonical_command = parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
     for _extension, rule, _evidence in BUILT_IN_COMMAND_EXTENSION_REGISTRY.matching_rules(canonical_command):
         if not rule.action_classes:
             continue
@@ -1171,6 +1195,7 @@ def _destructive_shell_tool_action_request(
             command_text=command_text,
             action_class=rule.action_classes[0],
             reason=rule.description,
+            canonical_command=canonical_command,
         )
     return None
 
@@ -3643,6 +3668,14 @@ def build_tool_action_request_artifact(
 ) -> GuardArtifact:
     """Build a Guard artifact for a sensitive native tool action request."""
 
+    policy_command = request.raw_command_text or request.command_text
+    evaluation = evaluate_command(
+        policy_command,
+        canonical_command=(request.canonical_command if request.raw_command_text is None else None),
+        compatibility_action_class=request.action_class,
+        compatibility_reason=request.reason,
+    )
+    wrapper_chain = tuple(dict.fromkeys((*evaluation.command.wrapper_chain, *request.wrapper_chain)))
     fingerprint = hashlib.sha256(
         json.dumps(
             {
@@ -3655,16 +3688,16 @@ def build_tool_action_request_artifact(
         ).encode("utf-8")
     ).hexdigest()
     request_summary = f"Requested `{request.tool_name}` action `{request.command_text}` ({request.action_class})."
-    if request.wrapper_chain:
+    if wrapper_chain:
         request_summary = (
             f"Requested `{request.tool_name}` action `{request.command_text}` via transparent wrappers "
-            f"`{' -> '.join(request.wrapper_chain)}` ({request.action_class})."
+            f"`{' -> '.join(wrapper_chain)}` ({request.action_class})."
         )
     risk_summary = f"Requests a sensitive native tool action: {request.action_class}."
     runtime_reason = request.reason
-    if request.wrapper_chain:
+    if wrapper_chain:
         runtime_reason = (
-            f"Guard normalized the transparent wrapper chain {' -> '.join(request.wrapper_chain)} "
+            f"Guard normalized the transparent wrapper chain {' -> '.join(wrapper_chain)} "
             f"before evaluation. {request.reason}"
         )
     return GuardArtifact(
@@ -3674,6 +3707,7 @@ def build_tool_action_request_artifact(
         artifact_type="tool_action_request",
         source_scope=source_scope,
         config_path=config_path,
+        command=policy_command,
         metadata={
             "tool_name": request.tool_name,
             "command_text": request.command_text,
@@ -3683,7 +3717,12 @@ def build_tool_action_request_artifact(
             "runtime_request_summary": risk_summary,
             "runtime_request_reason": runtime_reason,
             "raw_command_text": request.raw_command_text,
-            "wrapper_chain": list(request.wrapper_chain),
+            "wrapper_chain": list(wrapper_chain),
+            "command_security_identity": evaluation.command.security_identity,
+            "command_rule_matches": [owned.to_dict() for owned in evaluation.matches],
+            "risk_classes": list(evaluation.risk_classes),
+            "command_parse_confidence": evaluation.command.confidence,
+            "command_uncertainty_reason": evaluation.command.uncertainty_reason,
         },
     )
 
@@ -3702,6 +3741,7 @@ def _request_with_wrapper_context(
         reason=request.reason,
         raw_command_text=raw_command_text,
         wrapper_chain=wrapper_chain,
+        canonical_command=request.canonical_command,
     )
 
 
@@ -4462,6 +4502,8 @@ def _looks_destructive_shell_command(
     normalized = command_text.strip()
     if not normalized:
         return False
+    if _is_literal_cat_heredoc_to_stdout(normalized):
+        return False
     for substitution_payload in _shell_command_substitution_payloads(normalized):
         if _looks_destructive_shell_command(substitution_payload, cwd=cwd, home_dir=home_dir):
             return True
@@ -4531,6 +4573,25 @@ def _looks_destructive_shell_command(
         command_name == "sed" and any(part == "-i" or part.startswith("-i") for part in parts[1:])
         for command_name in command_names
     )
+
+
+def _is_literal_cat_heredoc_to_stdout(command_text: str) -> bool:
+    heredocs = extract_heredocs(command_text)
+    if len(heredocs) != 1:
+        return False
+    heredoc = heredocs[0]
+    if command_text[heredoc.end :].strip():
+        return False
+    line_start = command_text.rfind("\n", 0, heredoc.operator_start) + 1
+    header = (
+        command_text[line_start:heredoc.operator_start]
+        + command_text[heredoc.declaration_end : heredoc.body_start]
+    )
+    try:
+        tokens = shlex.split(header, posix=True, comments=False)
+    except ValueError:
+        return False
+    return tokens in (["cat"], ["cat", "-"])
 
 
 def _looks_like_safe_read_only_lookup_command(

