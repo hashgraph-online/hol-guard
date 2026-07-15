@@ -26,7 +26,7 @@ This checklist implements the P0 requirements in the [HOL Guard MDM Compatibilit
 
 The shared runtime, managed policy, lifecycle CLI, enterprise network layer, native package sources, unsigned artifact proof, schemas, CI matrix, and administrator documentation are implemented on `feat/mdm-compatibility`. Checklist boxes remain open until merge because this file defines “checked” as merged with release evidence.
 
-Production certification still requires external inputs unavailable to the repository: Apple Developer ID/notarization credentials, Windows Authenticode credentials, the launch customer's MDM vendor and OS/architecture scope, test devices, Cloud enrollment choice, and security/release/support/customer-IT sign-off. The evidence form is [mdm-release-evidence-template.md](./mdm-release-evidence-template.md).
+Production certification still requires external inputs unavailable to the repository: Apple Developer ID/notarization credentials, Windows Authenticode credentials, representative MDM vendors and OS/architecture scope, test devices, Cloud enrollment choices, and security/release/support/pilot-organization sign-off. The evidence form is [mdm-release-evidence-template.md](./mdm-release-evidence-template.md).
 
 ## Critical path
 
@@ -34,11 +34,11 @@ Production certification still requires external inputs unavailable to the repos
 2. Complete the shared foundation in group B before platform lifecycle implementations.
 3. Build the self-contained runtime in group C before finishing native packages in group D.
 4. Develop user activation, lifecycle, self-protection, and networking in groups E-H against the frozen contracts.
-5. Complete group I before customer deployment and group J before production compatibility is declared.
+5. Complete group I before an organization pilot and group J before production compatibility is declared.
 
 ## A. Contract and architecture freeze
 
-- [ ] **MDM-T001 (R001-R005):** Record the launch customer's MDM vendor, platforms, minimum OS versions, CPU architectures, device/user assignment model, proxy/TLS inspection, and required Cloud enrollment flow.
+- [ ] **MDM-T001 (R001-R005):** Publish the supported MDM/OS/architecture matrix and a reusable organization intake profile covering assignment model, proxy/TLS inspection, and Cloud enrollment flow.
 - [ ] **MDM-T002 (R001):** Approve stable macOS package, bundle, team, receipt, binary, and service identifiers.
 - [ ] **MDM-T003 (R001):** Approve stable Windows publisher, MSI product/upgrade identities, install scope, binary names, and registry roots.
 - [ ] **MDM-T004 (R001-R002):** Approve machine runtime, machine state, user state, logs, backups, and command-discovery paths for both platforms.
@@ -92,9 +92,9 @@ Likely working set: `.github/workflows/publish.yml`, a new `packaging/` tree, re
 - [ ] **MDM-T037 (R001):** Code-sign executable payloads, sign the package with Developer ID Installer, notarize, staple, and validate every release.
 - [ ] **MDM-T038 (R001-R004):** Implement silent preinstall/postinstall behavior that never targets root's home and leaves explicit machine installation state.
 - [ ] **MDM-T039 (R002-R004):** Add the approved login activation mechanism and stable Service Management identifiers when required.
-- [ ] **MDM-T040 (R004):** Provide signed install, detection, activation, remediation, and removal examples for generic Apple MDM and the customer vendor.
+- [ ] **MDM-T040 (R004):** Provide signed install, detection, activation, remediation, and removal examples for generic Apple MDM plus each certified vendor adapter.
 - [ ] **MDM-T041 (R004):** Validate package replacement, patch upgrade, authorized rollback, failed-install recovery, and complete receipt removal.
-- [ ] **MDM-T042 (R001-R004):** Verify Intune macOS LOB requirements if Intune manages customer Macs.
+- [ ] **MDM-T042 (R001-R004):** Verify Intune macOS LOB requirements as one certified vendor adapter.
 
 ### Windows
 
@@ -104,7 +104,7 @@ Likely working set: `.github/workflows/publish.yml`, a new `packaging/` tree, re
 - [ ] **MDM-T046 (R002-R004):** Add the approved user-login activation mechanism without requiring interactive administrator privileges.
 - [ ] **MDM-T047 (R004):** Create the `.intunewin` recipe, install/uninstall commands, requirements, detection rules, return-code map, and supersedence guidance.
 - [ ] **MDM-T048 (R004):** Validate user-context and device-context assignments and document the supported assignment contract.
-- [ ] **MDM-T049 (R001-R004):** Test clean install, in-place upgrade, authorized rollback, repair, uninstall, and reinstall through Intune.
+- [ ] **MDM-T049 (R001-R004):** Test clean install, in-place upgrade, authorized rollback, repair, uninstall, and reinstall through the Intune adapter.
 
 ## E. Per-user activation and reconciliation
 
@@ -174,7 +174,7 @@ Likely working set: `.github/workflows/publish.yml`, a new `packaging/` tree, re
 - [ ] **MDM-T101 (R004-R005):** Run secret-redaction tests over installer logs, lifecycle logs, status JSON, network diagnostics, and MDM-collected bundles.
 - [ ] **MDM-T102 (R005):** Test direct network, system proxy, explicit proxy, authenticated proxy, private CA, blocked registry, DNS failure, clock skew, and offline operation.
 - [ ] **MDM-T103 (R001-R004):** Validate WDAC/AppLocker and macOS Gatekeeper behavior using signed publisher identities without broad exclusions.
-- [ ] **MDM-T104 (R001-R005):** Run real-MDM install, detection, activation, remediation, update, rollback, and removal on every launch-customer platform.
+- [ ] **MDM-T104 (R001-R005):** Run real-MDM install, detection, activation, remediation, update, rollback, and removal across every combination in the published certification matrix.
 
 ## J. Documentation, release, and pilot
 
@@ -185,9 +185,9 @@ Likely working set: `.github/workflows/publish.yml`, a new `packaging/` tree, re
 - [ ] **MDM-T109 (R004):** Update the enterprise packet, architecture, testing matrix, troubleshooting, incident response, and release checklist with the managed-install contract.
 - [ ] **MDM-T110 (R001-R005):** Add an MDM release evidence template containing signatures, notarization, hashes, SBOM/provenance, platform matrix, lifecycle tests, and real-MDM results.
 - [ ] **MDM-T111 (R001-R005):** Define pilot rings, success thresholds, health dashboards, support ownership, rollback triggers, and stop conditions.
-- [ ] **MDM-T112 (R001-R005):** Run an internal canary, then customer IT canary, then limited developer pilot; record evidence for every rollout gate.
+- [ ] **MDM-T112 (R001-R005):** Run an internal canary, then at least two organization pilots with different MDM vendors, then a limited developer rollout; record evidence for every gate.
 - [ ] **MDM-T113 (R001-R005):** Close every PRD open decision or record an approved scoped deferral that does not weaken a P0 acceptance criterion.
-- [ ] **MDM-T114 (R001-R005):** Obtain security, release engineering, support, and launch-customer IT sign-off before declaring production MDM compatibility.
+- [ ] **MDM-T114 (R001-R005):** Obtain security, release engineering, support, and pilot-organization IT sign-off before declaring production MDM compatibility.
 
 ## Required verification commands
 

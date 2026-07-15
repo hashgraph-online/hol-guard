@@ -10,6 +10,7 @@
 - **Security reviewer:** TBD
 - **Audience:** Guard engineering, release engineering, security, IT administrators, and customer success
 - **Implementation tracker:** [MDM compatibility TODO](./mdm-compatibility-todo.md)
+- **General availability plan:** [MDM general availability roadmap](./mdm-general-availability-roadmap.md)
 - **Last updated:** July 15, 2026
 
 ## Summary
@@ -47,7 +48,7 @@ The current installation contract has five production blockers:
 - Adding kernel extensions, system extensions, packet filters, or broad Full Disk Access without a demonstrated requirement.
 - Automatically interpreting arbitrary proxy PAC files in the first MDM release. Static system and explicit HTTPS proxy configurations are required.
 - Supporting mobile operating systems.
-- Supporting architectures the launch customer does not use. The certified architecture set must be recorded before release.
+- Claiming support for architectures outside the published certification matrix.
 
 ## Personas
 
@@ -302,7 +303,7 @@ All Guard HTTP clients, including `requests`, `urllib`, update checks, Cloud syn
 ### Certification
 
 - CI covers the approved macOS and Windows architecture/OS matrix with standard-user and administrator contexts.
-- A real MDM validates install, detection, remediation, update, rollback, and removal on each customer platform.
+- The conformance lab validates install, detection, remediation, update, rollback, and removal across the published MDM/platform matrix.
 - Pilot telemetry meets the agreed deployment and activation success thresholds with no policy weakening or cross-user data exposure.
 
 ## Success metrics
@@ -316,13 +317,13 @@ All Guard HTTP clients, including `requests`, `urllib`, update checks, Cloud syn
 
 ## Rollout gates
 
-1. **Contract gate:** approve paths, identities, schemas, precedence, authorization, exit codes, supported OS/architectures, and customer MDM.
+1. **Contract gate:** approve paths, identities, schemas, precedence, authorization, exit codes, and the supported OS/architecture matrix.
 2. **Packaging gate:** signed offline artifacts install, upgrade, repair, and uninstall on clean VMs.
 3. **Managed-policy gate:** monotonic precedence, locks, tamper detection, and update/uninstall ownership pass adversarial tests.
 4. **User-activation gate:** multi-user, no-user-at-install, late-user, late-harness, and interrupted activation tests pass.
 5. **Network gate:** direct, system proxy, explicit proxy, private CA, blocked registry, and offline scenarios pass.
 6. **MDM lab gate:** real vendor deployment passes detection, remediation, update, rollback, and removal.
-7. **Pilot gate:** phased customer rollout shows healthy activation and no security or support stop condition.
+7. **Pilot gate:** phased multi-organization rollout shows healthy activation and no security or support stop condition.
 
 Stop rollout on signature or notarization failure, policy weakening, wrong-user ownership, cross-user data exposure, false healthy detection, unrecoverable upgrade, TLS verification bypass, or unmanaged removal.
 
@@ -340,13 +341,13 @@ Stop rollout on signature or notarization failure, policy weakening, wrong-user 
 
 Implementation defaults are frozen in [ADR 0001](./adr/0001-mdm-managed-install-contract.md): stable paths and identifiers, machine precedence for non-action conflicts, on-demand daemons, strongest-action composition, MDM-owned updates, downgrade/removal fail-closed behavior, and evidence preservation by default.
 
-The remaining items are launch-customer certification inputs rather than code decisions:
+The remaining items are release and organization onboarding inputs rather than code decisions. Organization-specific values must be supplied through signed policy, deployment profiles, or administrator configuration; they must never require a custom Guard build:
 
-- Customer MDM vendor and whether macOS, Windows, or both are in the first rollout.
+- MDM vendor and whether macOS, Windows, or both are in an organization's rollout.
 - Required macOS CPU architectures and minimum macOS version.
 - Required Windows CPU architectures, editions, and minimum Windows version.
 - Final Apple team identity and Windows Authenticode publisher identity.
-- Whether zero-touch Guard Cloud workspace enrollment is required for the first customer or remains a separate user/admin step.
+- Whether zero-touch Guard Cloud workspace enrollment is enabled or remains a separate user/admin step.
 - Required deployment and activation success thresholds if the defaults in this PRD are not accepted.
 
 ## Required deliverables

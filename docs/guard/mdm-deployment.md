@@ -6,7 +6,11 @@ HOL Guard uses package identity `org.hol.guard` on macOS and the stable MSI upgr
 
 Builds require Python 3.12, the locked `uv` environment, and PyInstaller. macOS additionally requires Xcode command-line tools; Windows requires WiX 4 and SignTool. Production artifacts must be signed and, on macOS, notarized and stapled. Unsigned builds are test fixtures only.
 
-## Intune
+## Vendor-neutral deployment contract
+
+All MDM products use the same signed package, machine-policy schema, lifecycle commands, JSON status schema, and exit-code contract. Organization-specific assignment, proxy, trust, enrollment, retention, and policy values remain external configuration. Vendor adapters may translate these contracts into native packaging and detection formats, but must not fork Guard behavior or require a custom binary.
+
+## Intune adapter example
 
 - macOS install: `/usr/sbin/installer -pkg hol-guard.pkg -target /`
 - macOS uninstall: run the signed `uninstall.sh` as root.
@@ -16,4 +20,4 @@ Builds require Python 3.12, the locked `uv` environment, and PyInstaller. macOS 
 - User activation runs the platform activation command in user context. Device installation must never substitute SYSTEM/root's home.
 - Managed deactivation is two-context: the device authority creates a ≤2-minute authorization under machine state, then the user-context command consumes it and restores that user's adapters. macOS `deactivate-user.sh` performs both steps; Windows uses `authorize-deactivation.ps1`, assigns `deactivate-user.ps1` in user context, then removes the authorization in device context.
 
-Use Intune supersedence for upgrades. The MSI blocks downgrades. Rollback requires an administrator-authorized package and managed policy permitting the target version. Preserve user evidence by default; remove it only through an explicit customer retention decision.
+Use Intune supersedence for upgrades. The MSI blocks downgrades. Rollback requires an administrator-authorized package and managed policy permitting the target version. Preserve user evidence by default; remove it only through an explicit organization retention decision.
