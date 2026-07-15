@@ -67,6 +67,9 @@ Decision composition must be monotonic:
 
 A versioned truth table covering source authority, required status, extension mode, severity, uncertainty, safe variants, overlap, memory, and configured policy is a release artifact and executable test fixture.
 
+The accepted registry and minimum-action truth table is documented in
+[`command-extension-precedence.md`](command-extension-precedence.md) and enforced by the command extension tests.
+
 ## Memory migration
 
 The new security identity hashes the complete canonical command semantics, not a prefix or display label. It binds dialect, transport, normalized segments and suffixes, wrappers, aliases and executable path source, security-relevant environment overrides including `PATH`, cwd scope, workspace/source scope, parser confidence, and controlling rule ID plus semantic version.

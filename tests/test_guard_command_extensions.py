@@ -231,6 +231,7 @@ def test_command_inspection_emits_all_core_matches_without_duplicate_compatibili
         "command.git.hard-reset",
         "command.shell-mutations.destructive-shell",
     ]
+    assert payload["controlling_rule_id"] == "command.filesystem.recursive-delete"
 
 
 def test_command_inspection_safe_variant_does_not_hide_unrelated_matches(tmp_path: Path) -> None:
@@ -315,6 +316,7 @@ def test_inspection_handles_unregistered_legacy_action_without_crashing(
     assert payload["status"] == "review"
     assert payload["classification"]["action_class"] == "future sensitive command"
     assert payload["rules"] == []
+    assert payload["minimum_action"] == "review"
 
 
 def test_required_core_extensions_are_explicit_and_cannot_be_mistaken_for_optional() -> None:
