@@ -126,15 +126,15 @@ def test_parse_package_intent_detects_package_command_after_control_operator() -
     assert parse_package_intent("echo safe && grep foo src/file.ts") is None
 
 
-def test_parse_package_intent_skips_verified_local_test_runner_execution(tmp_path: Path) -> None:
+def test_parse_package_intent_reviews_declared_local_test_runner_execution(tmp_path: Path) -> None:
     _write_text(tmp_path / "package.json", '{"name":"demo","devDependencies":{"vitest":"^4.1.8"}}\n')
     _write_text(tmp_path / "bun.lock", '"vitest": "4.1.8"\n')
     runner = tmp_path / "node_modules" / ".bin" / "vitest"
     _write_text(runner, "#!/bin/sh\n")
     runner.chmod(0o755)
 
-    assert parse_package_intent("bunx --no-install vitest run tests/example.test.ts", workspace=tmp_path) is None
-    assert parse_package_intent("npx --no-install vitest --run tests/example.test.ts", workspace=tmp_path) is None
+    assert parse_package_intent("bunx --no-install vitest run tests/example.test.ts", workspace=tmp_path) is not None
+    assert parse_package_intent("npx --no-install vitest --run tests/example.test.ts", workspace=tmp_path) is not None
     assert parse_package_intent("bunx vitest --run tests/example.test.ts", workspace=tmp_path) is not None
     assert parse_package_intent("bunx vitest --help", workspace=tmp_path) is not None
     assert parse_package_intent("bunx vitest --no-install", workspace=tmp_path) is not None
@@ -145,11 +145,11 @@ def test_parse_package_intent_skips_verified_local_test_runner_execution(tmp_pat
             action_envelope_command="bunx --no-install vitest run tests/example.test.ts",
             workspace=tmp_path,
         )
-        is None
+        is not None
     )
 
 
-def test_parse_package_intent_skips_guard_shimmed_bunx_test_runner(
+def test_parse_package_intent_records_guard_shimmed_bunx_test_runner(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _write_text(tmp_path / "package.json", '{"name":"demo","devDependencies":{"vitest":"^4.1.8"}}\n')
@@ -163,14 +163,21 @@ def test_parse_package_intent_skips_guard_shimmed_bunx_test_runner(
     shim_path.chmod(0o755)
     monkeypatch.setattr(package_intent_parser.Path, "home", classmethod(lambda cls: home_dir))
     monkeypatch.setattr(
-        package_intent_parser.shutil, "which", lambda command: str(shim_path) if command == "bunx" else None
+        package_intent_parser.shutil,
+        "which",
+        lambda command, path=None: str(shim_path) if command == "bunx" else None,
     )
 
-    assert parse_package_intent("bunx vitest run tests/example.test.ts", workspace=tmp_path) is None
-    assert parse_package_intent("bunx --bun vitest run tests/example.test.ts", workspace=tmp_path) is None
+    intent = parse_package_intent("bunx vitest run tests/example.test.ts", workspace=tmp_path)
+    bun_intent = parse_package_intent("bunx --bun vitest run tests/example.test.ts", workspace=tmp_path)
+
+    assert intent is not None
+    assert bun_intent is not None
+    assert intent.local_executions[0].manager_is_guard_shim is True
+    assert bun_intent.local_executions[0].manager_is_guard_shim is True
 
 
-def test_extract_package_intent_skips_guard_shimmed_npx_test_runner_in_pipeline(
+def test_extract_package_intent_records_guard_shimmed_npx_test_runner_in_pipeline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _write_text(tmp_path / "package.json", '{"name":"demo","devDependencies":{"vitest":"^4.1.8"}}\n')
@@ -184,7 +191,9 @@ def test_extract_package_intent_skips_guard_shimmed_npx_test_runner_in_pipeline(
     shim_path.chmod(0o755)
     monkeypatch.setattr(package_intent_parser.Path, "home", classmethod(lambda cls: home_dir))
     monkeypatch.setattr(
-        package_intent_parser.shutil, "which", lambda command: str(shim_path) if command == "npx" else None
+        package_intent_parser.shutil,
+        "which",
+        lambda command, path=None: str(shim_path) if command == "npx" else None,
     )
     command = "cd project && npx vitest run tests/unit.test.tsx 2>&1 | tail -15"
 
@@ -192,7 +201,7 @@ def test_extract_package_intent_skips_guard_shimmed_npx_test_runner_in_pipeline(
         extract_package_intent_request(
             "Bash", {"command": command}, action_envelope_command=command, workspace=tmp_path
         )
-        is None
+        is not None
     )
 
 
@@ -254,7 +263,7 @@ def test_parse_package_intent_keeps_non_windows_script_wrapper_guarded(tmp_path:
     assert parse_package_intent("bunx vitest run tests/example.test.ts", workspace=tmp_path) is not None
 
 
-def test_parse_package_intent_skips_verified_local_jest_and_mocha_runs(tmp_path: Path) -> None:
+def test_parse_package_intent_reviews_declared_local_jest_and_mocha_runs(tmp_path: Path) -> None:
     _write_text(
         tmp_path / "package.json",
         '{"name":"demo","peerDependencies":{"jest":"^30.0.0"},"devDependencies":{"mocha":"^11.0.0"}}\n',
@@ -268,18 +277,18 @@ def test_parse_package_intent_skips_verified_local_jest_and_mocha_runs(tmp_path:
         _write_text(runner, "#!/bin/sh\n")
         runner.chmod(0o755)
 
-    assert parse_package_intent("npx --no-install jest tests/unit.test.js", workspace=tmp_path) is None
-    assert parse_package_intent("bunx --no-install mocha test/unit.test.js", workspace=tmp_path) is None
+    assert parse_package_intent("npx --no-install jest tests/unit.test.js", workspace=tmp_path) is not None
+    assert parse_package_intent("bunx --no-install mocha test/unit.test.js", workspace=tmp_path) is not None
 
 
-def test_parse_package_intent_skips_verified_local_declared_executable(tmp_path: Path) -> None:
+def test_parse_package_intent_reviews_declared_local_executable(tmp_path: Path) -> None:
     _write_text(tmp_path / "package.json", '{"name":"demo","devDependencies":{"eslint":"^9.0.0"}}\n')
     _write_text(tmp_path / "bun.lock", '"eslint": "9.0.0"\n')
     executable = tmp_path / "node_modules" / ".bin" / "eslint"
     _write_text(executable, "#!/bin/sh\n")
     executable.chmod(0o755)
 
-    assert parse_package_intent("bunx --no-install eslint .", workspace=tmp_path) is None
+    assert parse_package_intent("bunx --no-install eslint .", workspace=tmp_path) is not None
 
 
 @pytest.mark.parametrize(
