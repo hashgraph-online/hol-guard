@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
+from unittest.mock import Mock
 from xml.etree import ElementTree
 
 import pytest
@@ -47,3 +49,28 @@ def test_windows_machine_paths_ignore_process_environment(monkeypatch: pytest.Mo
 
     assert paths.runtime_root == Path(r"C:\Program Files") / "HOL Guard"
     assert paths.state_root == Path(r"C:\ProgramData") / "HOL Guard"
+
+
+def test_windows_native_verification_uses_pinned_powershell_and_safe_process_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = Mock(
+        return_value=subprocess.CompletedProcess(["powershell.exe"], 0, '{"Status":"Valid","Signer":"CN=HOL"}', "")
+    )
+
+    monkeypatch.setattr(native, "_windows_directory", lambda: r"D:\Windows")
+    monkeypatch.setattr(native.subprocess, "run", run)
+    monkeypatch.setenv("PATH", r"C:\attacker")
+
+    result = native._verify_windows(tmp_path)
+
+    assert result.healthy
+    command = run.call_args.args[0]
+    kwargs = run.call_args.kwargs
+    assert command[0] == r"D:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    assert kwargs["cwd"] == r"D:\Windows\System32"
+    assert kwargs["env"] == {
+        "ComSpec": r"D:\Windows\System32\cmd.exe",
+        "SystemRoot": r"D:\Windows",
+        "WINDIR": r"D:\Windows",
+    }

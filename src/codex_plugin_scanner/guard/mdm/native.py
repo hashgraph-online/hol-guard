@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ctypes
 import json
+import ntpath
 import platform
 import plistlib
 import subprocess
@@ -79,10 +81,20 @@ def _verify_windows(runtime_root: Path) -> NativeInstallVerification:
         "|ConvertTo-Json -Compress"
     )
     try:
+        windows_directory = _windows_directory()
+        system_directory = ntpath.join(windows_directory, "System32")
+        powershell = ntpath.join(system_directory, "WindowsPowerShell", "v1.0", "powershell.exe")
+        child_environment = {
+            "ComSpec": ntpath.join(system_directory, "cmd.exe"),
+            "SystemRoot": windows_directory,
+            "WINDIR": windows_directory,
+        }
         result = subprocess.run(
-            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
+            [powershell, "-NoProfile", "-NonInteractive", "-Command", command],
             check=True,
             capture_output=True,
+            cwd=system_directory,
+            env=child_environment,
             text=True,
             timeout=15,
         )
@@ -92,6 +104,14 @@ def _verify_windows(runtime_root: Path) -> NativeInstallVerification:
     if not isinstance(payload, dict) or payload.get("Status") != "Valid" or not payload.get("Signer"):
         return NativeInstallVerification("tampered", "native_publisher_signature_invalid", identity, "invalid")
     return NativeInstallVerification("healthy", "native_install_valid", identity, "valid")
+
+
+def _windows_directory() -> str:
+    buffer = ctypes.create_unicode_buffer(32_768)
+    length = int(ctypes.windll.kernel32.GetSystemWindowsDirectoryW(buffer, len(buffer)))
+    if length == 0 or length >= len(buffer):
+        raise OSError("windows_system_directory_unavailable")
+    return ntpath.normpath(str(buffer.value))
 
 
 __all__ = ["NativeInstallVerification", "verify_native_install"]
