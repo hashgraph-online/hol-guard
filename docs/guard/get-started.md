@@ -119,6 +119,8 @@ For security reviews, sales conversations, and GRC packets, see the
 
    Guard prints the latest bundle summary plus ecosystem support labels. Today `npm` and `PyPI` show **Protected** coverage, Cargo/Go/Maven/Gradle/Composer/RubyGems show **Beta**, and system packages or unsupported package managers stay **Monitor-only** so Guard never pretends advisory blocking where it does not exist.
 
+   The first project-local execution through `npx` or `bunx` requires review even when the command uses a local-only flag and the package is declared and locked. Guard shows the resolved package-manager path and binds the saved approval to that manager, the local executable, and the current manifest and lockfile evidence. Retrying an unchanged approved command is prompt-free; changing `PATH`, the executable, the manifest, or the lockfile requires review again. Custom package-manager wrappers should be installed through Guard's managed package-shim flow so their identity is visible and repairable.
+
 ## Which command should I use?
 
 | Situation | Command | What it answers |
