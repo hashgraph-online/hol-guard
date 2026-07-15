@@ -21,6 +21,8 @@ else:  # pragma: no cover - runtime compatibility
     tomllib = importlib.import_module("tomllib" if sys.version_info >= (3, 11) else "tomli")
 
 from .approval_gate import ApprovalGateGrant, public_config, require_settings_write
+from .mdm.contracts import ManagedPolicy, ManagedPolicyState
+from .mdm.policy import apply_managed_policy, fail_closed_managed_policy, load_managed_policy
 from .models import GuardAction, GuardMode
 
 DEFAULT_GUARD_DIRNAME = ".hol-guard"
@@ -325,6 +327,11 @@ class GuardConfig:
     publisher_actions: dict[str, GuardAction] | None = None
     artifact_actions: dict[str, GuardAction] | None = None
     evidence_retain_days: int = 90
+    managed_policy_status: str = "absent"
+    managed_policy_hash: str | None = None
+    managed_locked_settings: tuple[str, ...] = ()
+    install_owner: str = "user"
+    managed_policy: ManagedPolicy | None = None
 
     def resolve_action_override(
         self,
@@ -380,7 +387,12 @@ def _coerce_loaded_receipt_redaction_level(value: object) -> str:
     return "full"
 
 
-def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardConfig:
+def load_guard_config(
+    guard_home: Path,
+    workspace: Path | None = None,
+    *,
+    managed_policy_state: ManagedPolicyState | None = None,
+) -> GuardConfig:
     """Load Guard config from home and workspace overrides."""
 
     guard_home.mkdir(parents=True, exist_ok=True)
@@ -388,6 +400,12 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
     workspace_config = _load_workspace_guard_config(workspace)
 
     merged = _merge_config_payload(home_config, workspace_config)
+    managed_state = managed_policy_state or load_managed_policy()
+    effective_managed_policy = managed_state.policy
+    if effective_managed_policy is None and managed_state.status in {"invalid", "inaccessible", "tampered"}:
+        effective_managed_policy = fail_closed_managed_policy()
+    if effective_managed_policy is not None:
+        merged = apply_managed_policy(merged, effective_managed_policy)
     return GuardConfig(
         guard_home=guard_home,
         workspace=workspace,
@@ -437,6 +455,13 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
         receipt_redaction_level=_coerce_loaded_receipt_redaction_level(
             merged.get("receipt_redaction_level"),
         ),
+        managed_policy_status=managed_state.status,
+        managed_policy_hash=effective_managed_policy.content_hash if effective_managed_policy is not None else None,
+        managed_locked_settings=tuple(sorted(effective_managed_policy.locked_settings))
+        if effective_managed_policy is not None
+        else (),
+        install_owner=effective_managed_policy.install_owner if effective_managed_policy is not None else "user",
+        managed_policy=effective_managed_policy,
     )
 
 
@@ -464,6 +489,10 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "receipt_redaction_level": config.receipt_redaction_level,
         "billing": config.billing,
         "approval_gate": public_config(config.guard_home).to_dict(),
+        "managed_policy_status": config.managed_policy_status,
+        "managed_policy_hash": config.managed_policy_hash,
+        "managed_locked_settings": list(config.managed_locked_settings),
+        "install_owner": config.install_owner,
     }
 
 
@@ -490,6 +519,15 @@ def update_guard_settings(
         if key not in EDITABLE_GUARD_SETTING_KEYS:
             continue
         next_payload[key] = _coerce_editable_setting(key, value)
+    if current_config.managed_policy is not None:
+        composed = apply_managed_policy(next_payload, current_config.managed_policy)
+        weakened = [
+            key
+            for key in current_config.managed_locked_settings
+            if key in next_payload and composed.get(key) != next_payload.get(key)
+        ]
+        if weakened:
+            raise ValueError(f"Managed policy locks prevent weakening: {', '.join(sorted(weakened))}")
     if next_payload.get("sync") is True and next_payload.get("billing") is not True:
         raise ValueError("Cloud sync requires a paid team plan.")
     _write_guard_config(guard_home / "config.toml", next_payload)
@@ -782,7 +820,7 @@ def overlay_synced_guard_policy(
     )
     sync_enabled = payload.get("syncEnabled")
     cloud_redaction_level = payload.get("receiptRedactionLevel")
-    return replace(
+    overlaid = replace(
         config,
         mode=next_mode,
         default_action=default_action,
@@ -795,6 +833,46 @@ def overlay_synced_guard_policy(
             cloud_redaction_level
             if cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS
             else config.receipt_redaction_level
+        ),
+    )
+    return _reapply_managed_config(overlaid)
+
+
+def _reapply_managed_config(config: GuardConfig) -> GuardConfig:
+    if config.managed_policy is None:
+        return config
+    local = {
+        "mode": config.mode,
+        "default_action": config.default_action,
+        "unknown_publisher_action": config.unknown_publisher_action,
+        "changed_hash_action": config.changed_hash_action,
+        "new_network_domain_action": config.new_network_domain_action,
+        "subprocess_action": config.subprocess_action,
+        "telemetry": config.telemetry,
+        "sync": config.sync,
+        "receipt_redaction_level": config.receipt_redaction_level,
+    }
+    composed = apply_managed_policy(local, config.managed_policy)
+    return replace(
+        config,
+        mode=_coerce_loaded_guard_mode(composed.get("mode"), config.mode),
+        default_action=_coerce_loaded_guard_action_or_default(composed.get("default_action"), config.default_action),
+        unknown_publisher_action=_coerce_loaded_guard_action_or_default(
+            composed.get("unknown_publisher_action"), config.unknown_publisher_action
+        ),
+        changed_hash_action=_coerce_loaded_guard_action_or_default(
+            composed.get("changed_hash_action"), config.changed_hash_action
+        ),
+        new_network_domain_action=_coerce_loaded_guard_action_or_default(
+            composed.get("new_network_domain_action"), config.new_network_domain_action
+        ),
+        subprocess_action=_coerce_loaded_guard_action_or_default(
+            composed.get("subprocess_action"), config.subprocess_action
+        ),
+        telemetry=_coerce_loaded_bool(composed.get("telemetry", config.telemetry)),
+        sync=_coerce_loaded_bool(composed.get("sync", config.sync)),
+        receipt_redaction_level=_coerce_loaded_receipt_redaction_level(
+            composed.get("receipt_redaction_level", config.receipt_redaction_level)
         ),
     )
 

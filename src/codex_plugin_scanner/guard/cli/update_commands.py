@@ -30,6 +30,7 @@ from ..adapters.opencode_pretool import (
     managed_plugin_path,
     pretool_plugin_source,
 )
+from ..mdm.network import managed_urlopen
 from ..redaction import redact_sensitive_text
 from ..shims import _trusted_import_root, _trusted_python_flags
 from ..store import GuardStore
@@ -664,7 +665,7 @@ def _latest_version_from_pypi() -> str | None:
     global _last_pypi_payload
     request = urllib.request.Request(_PYPI_JSON_URL, headers={"Accept": "application/json"})
     try:
-        with urllib.request.urlopen(request, timeout=_PYPI_TIMEOUT_SECONDS) as response:
+        with managed_urlopen(request, timeout=_PYPI_TIMEOUT_SECONDS) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (
         OSError,

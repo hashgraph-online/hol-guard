@@ -67,6 +67,9 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.15.15",
 ]
+mdm-build = [
+    "pyinstaller>=6.16,<7",
+]
 publish = [
     "twine>=6.2.0",
 ]
