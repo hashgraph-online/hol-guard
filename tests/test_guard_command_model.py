@@ -208,6 +208,15 @@ def test_parse_shell_command_preserves_tab_stripped_heredoc_segment_spans() -> N
     assert command[embedded_segment.start : embedded_segment.end] == embedded_segment.text
 
 
+def test_parse_shell_command_ignores_redirect_syntax_inside_heredoc_bodies() -> None:
+    data = parse_shell_command("cat <<EOF\nvalue > output.txt\nEOF")
+    script = parse_shell_command("bash <<EOF\nprintf ok > output.txt\nEOF")
+
+    assert [(redirect.operator, redirect.target) for redirect in data.redirects] == [("<<", "EOF")]
+    assert [(redirect.operator, redirect.target) for redirect in script.redirects] == [("<<", "EOF")]
+    assert script.embedded_commands[0].text == "printf ok > output.txt\n"
+
+
 def test_parse_shell_command_extracts_executable_substitutions() -> None:
     operation = "reset " + "--hard HEAD~1"
     parsed = parse_shell_command(f"printf '%s' \"$(git {operation})\"")

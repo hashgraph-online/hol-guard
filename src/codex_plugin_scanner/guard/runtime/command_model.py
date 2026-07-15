@@ -272,7 +272,7 @@ def parse_shell_command(
         extraction_provenance=extraction_provenance,
         wrapper_chain=(*normalization.wrapper_chain, *segment_wrappers),
         segments=tuple(segments),
-        redirects=extract_command_redirects(normalized_text, heredocs),
+        redirects=extract_command_redirects(mask_heredoc_bodies(normalized_text, heredocs), heredocs),
         embedded_commands=embedded_commands,
         confidence=confidence,
         uncertainty_reason=uncertainty_reason,
