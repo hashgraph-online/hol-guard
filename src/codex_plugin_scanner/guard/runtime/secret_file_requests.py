@@ -5748,12 +5748,19 @@ def _segment_uses_destructive_git_command(segment_args: list[str]) -> bool:
 
 
 def _git_clean_is_preview(arguments: list[str]) -> bool:
-    for argument in arguments:
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
         normalized = argument.strip().lower()
+        option_name = normalized.split("=", 1)[0]
+        if option_name in {"-e", "--exclude"} and "=" not in normalized:
+            index += 2
+            continue
         if normalized == "--dry-run":
             return True
         if normalized.startswith("-") and not normalized.startswith("--") and "n" in normalized[1:]:
             return True
+        index += 1
     return False
 
 

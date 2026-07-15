@@ -106,7 +106,8 @@ class CommandSafetyExtensionRegistry:
                         raise ValueError(
                             f"Command safety rule {rule.rule_id} owns undeclared action class {action_class!r}"
                         )
-                    _ = by_action_rule.setdefault(normalized_action_class, rule)
+                    if rule.compatibility_fallback:
+                        _ = by_action_rule.setdefault(normalized_action_class, rule)
             if extension.rules:
                 rule_actions = {
                     action_class.strip().lower() for rule in extension.rules for action_class in rule.action_classes

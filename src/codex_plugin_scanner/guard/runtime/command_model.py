@@ -25,7 +25,19 @@ MAX_COMMAND_TOKENS = 2_048
 _ENV_ASSIGNMENT_PATTERN = re.compile(r"^(?P<name>[A-Za-z_][A-Za-z0-9_]*)=.*$", re.DOTALL)
 _SUDO_OPTIONS_WITH_VALUES = frozenset({"-C", "-D", "-g", "-h", "-p", "-R", "-r", "-T", "-t", "-u"})
 _SUDO_LONG_OPTIONS_WITH_VALUES = frozenset(
-    {"--chdir", "--chroot", "--close-from", "--group", "--host", "--prompt", "--role", "--type", "--user"}
+    {
+        "--chdir",
+        "--chroot",
+        "--close-from",
+        "--command-timeout",
+        "--group",
+        "--host",
+        "--login-class",
+        "--prompt",
+        "--role",
+        "--type",
+        "--user",
+    }
 )
 
 

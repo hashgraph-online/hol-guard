@@ -12,6 +12,7 @@ CommandRuleMode = Literal["required", "enforce", "review", "monitor", "disabled"
 
 _VALID_SEVERITIES = frozenset({"critical", "high", "medium", "low"})
 _VALID_MODES = frozenset({"required", "enforce", "review", "monitor", "disabled"})
+_EMPTY_STRING_SET: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +48,7 @@ class ExecutableMatcher:
     forbidden_flags: frozenset[str] = frozenset()
     allow_leading_options: bool = False
     leading_options_with_values: frozenset[str] = frozenset()
+    options_with_values: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         normalized = frozenset(value.strip().lower() for value in self.executables if value.strip())
@@ -59,10 +61,12 @@ class ExecutableMatcher:
         normalized_leading_options = frozenset(
             value.strip().lower() for value in self.leading_options_with_values if value.strip()
         )
+        normalized_options = frozenset(value.strip().lower() for value in self.options_with_values if value.strip())
         object.__setattr__(self, "subcommands", normalized_subcommands)
         object.__setattr__(self, "required_flags", normalized_required_flags)
         object.__setattr__(self, "forbidden_flags", normalized_forbidden_flags)
         object.__setattr__(self, "leading_options_with_values", normalized_leading_options)
+        object.__setattr__(self, "options_with_values", normalized_options)
         if normalized_required_flags & normalized_forbidden_flags:
             raise ValueError("A matcher flag cannot be both required and forbidden")
 
@@ -79,7 +83,7 @@ class ExecutableMatcher:
             )
             if self.subcommands and subcommand_arguments[: len(self.subcommands)] != self.subcommands:
                 continue
-            present_flags = _present_flags(lowered_arguments)
+            present_flags = _present_flags(lowered_arguments, options_with_values=self.options_with_values)
             if not self.required_flags <= present_flags or self.forbidden_flags & present_flags:
                 continue
             evidence.append(
@@ -202,6 +206,7 @@ class CommandSafetyRule:
     default_mode: CommandRuleMode = "review"
     matcher: CommandMatcher | None = None
     safe_variants: tuple[CommandSafeVariant, ...] = ()
+    compatibility_fallback: bool = False
 
     def __post_init__(self) -> None:
         if not self.rule_id.startswith("command.") or self.rule_id != self.rule_id.lower():
@@ -238,6 +243,7 @@ class CommandSafetyRule:
             "default_mode": self.default_mode,
             "matcher_kind": type(self.matcher).__name__ if self.matcher is not None else "compatibility",
             "safe_variants": [variant.to_dict() for variant in self.safe_variants],
+            "compatibility_fallback": self.compatibility_fallback,
         }
 
 
@@ -293,14 +299,22 @@ def _segment_matches_executable(segment: CommandSegment, executables: frozenset[
     return executable in executables
 
 
-def _present_flags(arguments: tuple[str, ...]) -> frozenset[str]:
+def _present_flags(
+    arguments: tuple[str, ...],
+    *,
+    options_with_values: frozenset[str] = _EMPTY_STRING_SET,
+) -> frozenset[str]:
     flags: set[str] = set()
-    for argument in arguments:
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
         flags.add(argument)
         if argument.startswith("-") and "=" in argument:
             flags.add(argument.split("=", 1)[0])
         if argument.startswith("-") and not argument.startswith("--") and len(argument) > 2:
             flags.update(f"-{character}" for character in argument[1:] if character.isalpha())
+        option_name = argument.split("=", 1)[0]
+        index += 2 if option_name in options_with_values and "=" not in argument else 1
     return frozenset(flags)
 
 

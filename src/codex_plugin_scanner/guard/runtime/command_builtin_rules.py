@@ -35,8 +35,13 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "windows destructive command": ("destructive_shell",),
 }
 _GIT_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
-    {"-c", "-C", "--exec-path", "--git-dir", "--namespace", "--super-prefix", "--work-tree"}
+    {"-c", "-C", "--config-env", "--exec-path", "--git-dir", "--namespace", "--super-prefix", "--work-tree"}
 )
+_GIT_SUBCOMMAND_OPTIONS_WITH_VALUES = {
+    "clean": frozenset({"-e", "--exclude"}),
+    "push": frozenset({"--exec", "--push-option", "--receive-pack", "--repo", "-o"}),
+    "reset": frozenset({"--pathspec-from-file"}),
+}
 
 
 def _git_matcher(subcommand: str, *, required_flags: frozenset[str]) -> ExecutableMatcher:
@@ -46,6 +51,7 @@ def _git_matcher(subcommand: str, *, required_flags: frozenset[str]) -> Executab
         required_flags=required_flags,
         allow_leading_options=True,
         leading_options_with_values=_GIT_GLOBAL_OPTIONS_WITH_VALUES,
+        options_with_values=_GIT_SUBCOMMAND_OPTIONS_WITH_VALUES.get(subcommand, frozenset()),
     )
 
 
@@ -67,6 +73,7 @@ def _compatibility_rule(
         action_classes=(action_class,),
         safer_alternatives=(safer_alternative,),
         matcher=matcher,
+        compatibility_fallback=True,
     )
 
 

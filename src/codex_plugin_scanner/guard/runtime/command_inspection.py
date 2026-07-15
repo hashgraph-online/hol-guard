@@ -98,7 +98,6 @@ def inspect_command(
         compatibility_extension is not None
         and compatibility_rule is not None
         and compatibility_rule.rule_id not in selected_rule_ids
-        and not selected_matches
     ):
         selected_matches.append((compatibility_extension, compatibility_rule, ()))
 
@@ -142,8 +141,16 @@ def inspect_command(
             },
         )
     )
-    primary_rule_match = rule_matches[0]
-    classification_reason = match.reason if match is not None else primary_rule_match.rule.description
+    primary_rule_match = rule_matches[0] if rule_matches else None
+    classification_reason = (
+        match.reason
+        if match is not None
+        else (
+            primary_rule_match.rule.description
+            if primary_rule_match is not None
+            else "Sensitive command matched without registered rule metadata."
+        )
+    )
     return {
         "schema_version": COMMAND_EXTENSION_SCHEMA_VERSION,
         "status": "review",

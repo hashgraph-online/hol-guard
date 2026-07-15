@@ -38,6 +38,15 @@ def test_parse_shell_command_tracks_sudo_and_nested_environment_wrapper() -> Non
     assert parsed.path_overridden is True
 
 
+def test_parse_shell_command_skips_all_sudo_options_with_values() -> None:
+    parsed = parse_shell_command(
+        "sudo --command-timeout 10 --login-class staff git --config-env token=TOKEN push --force"
+    )
+
+    assert parsed.segments[0].executable == "git"
+    assert parsed.segments[0].arguments[:2] == ("--config-env", "token=TOKEN")
+
+
 def test_parse_shell_command_normalizes_transparent_wrapper_once() -> None:
     parsed = parse_shell_command("bash -lc 'git clean -fdx'")
 
@@ -107,6 +116,18 @@ def test_executable_matcher_can_skip_declared_global_options() -> None:
     )
 
     assert matcher.match(parsed)
+
+
+def test_executable_matcher_does_not_treat_option_values_as_flags() -> None:
+    parsed = parse_shell_command("git clean -e -f")
+    matcher = ExecutableMatcher(
+        executables=frozenset({"git"}),
+        subcommands=("clean",),
+        required_flags=frozenset({"-f"}),
+        options_with_values=frozenset({"-e"}),
+    )
+
+    assert matcher.match(parsed) == ()
 
 
 def test_parse_shell_command_preserves_literal_hash_arguments() -> None:
