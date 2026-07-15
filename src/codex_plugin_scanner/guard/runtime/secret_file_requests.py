@@ -4584,8 +4584,7 @@ def _is_literal_cat_heredoc_to_stdout(command_text: str) -> bool:
         return False
     line_start = command_text.rfind("\n", 0, heredoc.operator_start) + 1
     header = (
-        command_text[line_start:heredoc.operator_start]
-        + command_text[heredoc.declaration_end : heredoc.body_start]
+        command_text[line_start : heredoc.operator_start] + command_text[heredoc.declaration_end : heredoc.body_start]
     )
     try:
         tokens = shlex.split(header, posix=True, comments=False)
