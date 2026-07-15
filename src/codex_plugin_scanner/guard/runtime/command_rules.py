@@ -294,6 +294,44 @@ class CommandRuleMatch:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class MatcherIndexHints:
+    """Conservative registry hints that never replace matcher evaluation."""
+
+    executables: frozenset[str] = frozenset()
+    keywords: frozenset[str] = frozenset()
+    complete: bool = True
+
+
+def matcher_index_hints(matcher: CommandMatcher) -> MatcherIndexHints:
+    """Return conservative executable and keyword hints for a trusted matcher."""
+
+    if isinstance(matcher, ExecutableMatcher):
+        return MatcherIndexHints(
+            executables=matcher.executables,
+            keywords=frozenset((*matcher.subcommands, *matcher.required_flags)),
+        )
+    if isinstance(matcher, ArgumentMatcher):
+        return MatcherIndexHints(
+            executables=matcher.executables,
+            keywords=matcher.required_arguments,
+        )
+    if isinstance(matcher, PipelineMatcher):
+        return _merge_matcher_hints((matcher.producer, matcher.consumer))
+    if isinstance(matcher, (AnyMatcher, AllMatcher)):
+        return _merge_matcher_hints(matcher.matchers)
+    return MatcherIndexHints(complete=False)
+
+
+def _merge_matcher_hints(matchers: tuple[CommandMatcher, ...]) -> MatcherIndexHints:
+    child_hints = tuple(matcher_index_hints(matcher) for matcher in matchers)
+    return MatcherIndexHints(
+        executables=frozenset(value for hints in child_hints for value in hints.executables),
+        keywords=frozenset(value for hints in child_hints for value in hints.keywords),
+        complete=all(hints.complete for hints in child_hints),
+    )
+
+
 def _segment_matches_executable(segment: CommandSegment, executables: frozenset[str]) -> bool:
     if segment.executable is None:
         return False
