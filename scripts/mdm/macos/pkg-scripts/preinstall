@@ -1,0 +1,7 @@
+#!/bin/zsh
+set -euo pipefail
+
+[[ "$(uname -s)" == "Darwin" ]] || exit 1
+[[ "$(uname -m)" == "arm64" || "$(uname -m)" == "x86_64" ]] || exit 1
+df -Pk / | awk 'NR == 2 { exit !($4 >= 524288) }'
+exit 0

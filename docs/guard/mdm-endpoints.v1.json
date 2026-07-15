@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "hol-guard-endpoints.v1",
+  "endpoints": [
+    {
+      "hostname": "hol.org",
+      "port": 443,
+      "purpose": "Guard Cloud policy, identity, and evidence synchronization",
+      "required": false,
+      "methods": ["GET", "POST"],
+      "dataClass": "policy-and-security-evidence",
+      "offlineFallback": "Local enforcement continues with the last validated policy and freshness warning"
+    },
+    {
+      "hostname": "pypi.org",
+      "port": 443,
+      "purpose": "Optional package metadata intelligence for Python",
+      "required": false,
+      "methods": ["GET"],
+      "dataClass": "public-package-metadata",
+      "offlineFallback": "Use signed cached intelligence or an approved internal mirror"
+    },
+    {
+      "hostname": "registry.npmjs.org",
+      "port": 443,
+      "purpose": "Optional package metadata intelligence for npm",
+      "required": false,
+      "methods": ["GET"],
+      "dataClass": "public-package-metadata",
+      "offlineFallback": "Use signed cached intelligence or an approved internal mirror"
+    },
+    {
+      "hostname": "files.pythonhosted.org",
+      "port": 443,
+      "purpose": "Optional Python package artifact intelligence",
+      "required": false,
+      "methods": ["GET"],
+      "dataClass": "public-package-artifact",
+      "offlineFallback": "Use signed cached intelligence or an approved internal mirror"
+    },
+    {
+      "hostname": "registry.yarnpkg.com",
+      "port": 443,
+      "purpose": "Optional Yarn package metadata intelligence",
+      "required": false,
+      "methods": ["GET"],
+      "dataClass": "public-package-metadata",
+      "offlineFallback": "Use signed cached intelligence or an approved internal mirror"
+    },
+    {
+      "hostname": "crates.io",
+      "port": 443,
+      "purpose": "Optional Cargo package metadata intelligence",
+      "required": false,
+      "methods": ["GET"],
+      "dataClass": "public-package-metadata",
+      "offlineFallback": "Use signed cached intelligence or an approved internal mirror"
+    },
+    {
+      "hostname": "rubygems.org",
+      "port": 443,
+      "purpose": "Optional Ruby package metadata intelligence",
+      "required": false,
+      "methods": ["GET"],
+      "dataClass": "public-package-metadata",
+      "offlineFallback": "Use signed cached intelligence or an approved internal mirror"
+    },
+    {
+      "hostname": "repo.maven.apache.org",
+      "port": 443,
+      "purpose": "Optional Maven package metadata intelligence",
+      "required": false,
+      "methods": ["GET"],
+      "dataClass": "public-package-metadata",
+      "offlineFallback": "Use signed cached intelligence or an approved internal mirror"
+    },
+    {
+      "hostname": "proxy.golang.org",
+      "port": 443,
+      "purpose": "Optional Go module metadata intelligence",
+      "required": false,
+      "methods": ["GET"],
+      "dataClass": "public-package-metadata",
+      "offlineFallback": "Use signed cached intelligence or an approved internal mirror"
+    },
+    {
+      "hostname": "api.telegram.org",
+      "port": 443,
+      "purpose": "Optional administrator-configured approval notification bridge",
+      "required": false,
+      "methods": ["GET", "POST"],
+      "dataClass": "approval-notification",
+      "offlineFallback": "Use local approval center or another configured notification backend"
+    }
+  ]
+}

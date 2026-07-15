@@ -240,6 +240,7 @@ def _resolve_legacy_args(
         "bootstrap",
         "detect",
         "install",
+        "mdm",
         "update",
         "uninstall",
         "package-shims",
