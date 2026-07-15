@@ -553,13 +553,21 @@ def _render_command_setup(console: Console, payload: dict[str, object]) -> None:
         evidence = [*(f"file:{name}" for name in marker_names), *(f"command:{name}" for name in executables)]
         detected = bool(detection.get("detected"))
         recommended = bool(detection.get("recommended"))
-        status = "recommended" if recommended else ("available" if detected else "not detected")
+        if recommended:
+            status = "recommended"
+            style = "green"
+        elif detected:
+            status = "available"
+            style = "cyan"
+        else:
+            status = "not detected"
+            style = "dim"
         table.add_row(
             str(detection.get("extension_id") or ""),
             status,
             ", ".join(evidence) or "none",
             str(detection.get("delegated_protection") or "command rules"),
-            style="green" if recommended else ("cyan" if detected else "dim"),
+            style=style,
         )
     console.print(table)
     console.print("[dim]Detection is read-only. No Guard settings were changed.[/dim]")
