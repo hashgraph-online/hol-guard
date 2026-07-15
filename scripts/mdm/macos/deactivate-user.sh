@@ -11,9 +11,10 @@ readonly AUTH_ROOT="/Library/Application Support/HOL Guard State/removal-authori
 readonly AUTH_FILE="${AUTH_ROOT}/${USER_UID}-$(uuidgen).json"
 readonly TOKEN_NAME="${AUTH_FILE:t}"
 
-trap 'rm -f "${AUTH_FILE}"' EXIT
+trap 'chmod -a "${USER_NAME} allow search,delete_child" "${AUTH_ROOT}" 2>/dev/null || true; rm -f "${AUTH_FILE}"' EXIT
 "${GUARD}" mdm authorize-deactivation --home "${USER_HOME}" --user "${USER_NAME}" \
   --token-name "${TOKEN_NAME}" --json >/dev/null
+chmod +a "${USER_NAME} allow search,delete_child" "${AUTH_ROOT}"
 launchctl asuser "${USER_UID}" sudo -u "${USER_NAME}" -- \
   "${GUARD}" mdm deactivate --home "${USER_HOME}" --user "${USER_NAME}" \
   --authorization-file "${AUTH_FILE}" --json

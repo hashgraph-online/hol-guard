@@ -151,7 +151,10 @@ def validate_removal_authorization(
     """Validate a root/MDM-owned, short-lived, user-bound removal authorization."""
 
     resolved_root = authorization_root or default_machine_paths().state_root / "removal-authorizations"
-    resolved = path.resolve(strict=True)
+    try:
+        resolved = path.resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise ValueError("mdm_removal_authorization_consumed_or_missing") from exc
     if not resolved.is_relative_to(resolved_root.resolve()) or not resolved.is_file():
         raise ValueError("mdm_removal_authorization_wrong_scope")
     metadata = resolved.stat()
@@ -182,9 +185,10 @@ def validate_removal_authorization(
     if (expires - issued).total_seconds() > 300 or (now - issued).total_seconds() > 300:
         raise ValueError("mdm_removal_authorization_expired")
     fingerprint = hashlib.sha256(resolved.read_bytes()).hexdigest()
-    consumed = home / ".hol-guard" / "mdm-removal-consumed"
-    if consumed.is_file() and fingerprint in consumed.read_text(encoding="utf-8").splitlines():
-        raise ValueError("mdm_removal_authorization_replayed")
+    try:
+        resolved.unlink()
+    except OSError as exc:
+        raise PermissionError("mdm_removal_authorization_not_consumable") from exc
     return fingerprint
 
 
@@ -391,11 +395,6 @@ def deactivate_user(home: Path, *, authorization_fingerprint: str | None = None)
         retired_pids = retire_all_guard_daemons_for_home(guard_home)
         result = apply_managed_install("uninstall", None, True, context, store, None, _now())
         (guard_home / "mdm-activation.json").unlink(missing_ok=True)
-        if authorization_fingerprint is not None:
-            consumed = guard_home / "mdm-removal-consumed"
-            with consumed.open("a", encoding="utf-8") as handle:
-                handle.write(f"{authorization_fingerprint}\n")
-            consumed.chmod(0o600)
         _audit(guard_home / "logs" / "mdm-lifecycle.log", operation="deactivate", status="complete", scope="user")
     payload = _base("deactivate")
     payload.update(

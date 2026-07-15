@@ -125,11 +125,10 @@ def test_removal_authorization_is_scoped_short_lived_and_single_use(
     fingerprint = lifecycle.validate_removal_authorization(
         token, home=home, user="developer", authorization_root=authorization_root
     )
-    guard_home = home / ".hol-guard"
-    guard_home.mkdir()
-    (guard_home / "mdm-removal-consumed").write_text(f"{fingerprint}\n")
+    assert len(fingerprint) == 64
+    assert not token.exists()
 
-    with pytest.raises(ValueError, match="mdm_removal_authorization_replayed"):
+    with pytest.raises(ValueError, match="mdm_removal_authorization_consumed_or_missing"):
         lifecycle.validate_removal_authorization(
             token, home=home, user="developer", authorization_root=authorization_root
         )
