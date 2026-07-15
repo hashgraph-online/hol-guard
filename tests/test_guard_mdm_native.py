@@ -6,6 +6,7 @@ from xml.etree import ElementTree
 import pytest
 
 from codex_plugin_scanner.guard.mdm import native
+from codex_plugin_scanner.guard.mdm.contracts import default_machine_paths
 
 
 def test_unsupported_platform_never_reports_healthy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -36,3 +37,13 @@ def test_macos_activation_preserves_spaced_home_paths() -> None:
 
     assert "sed -n 's/^NFSHomeDirectory: //p'" in script
     assert "awk '{print $2}'" not in script
+
+
+def test_windows_machine_paths_ignore_process_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PROGRAMFILES", r"C:\Users\attacker\runtime")
+    monkeypatch.setenv("PROGRAMDATA", r"C:\Users\attacker\state")
+
+    paths = default_machine_paths(system_name="Windows")
+
+    assert paths.runtime_root == Path(r"C:\Program Files") / "HOL Guard"
+    assert paths.state_root == Path(r"C:\ProgramData") / "HOL Guard"

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import platform
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -53,8 +52,8 @@ def default_machine_paths(*, system_name: str | None = None) -> MachinePaths:
             manifest_path=runtime_root / "release-manifest.json",
         )
     if resolved_system == "Windows":
-        program_files = Path(os.environ.get("PROGRAMFILES", r"C:\Program Files"))
-        program_data = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
+        program_files = Path(r"C:\Program Files")
+        program_data = Path(r"C:\ProgramData")
         runtime_root = program_files / "HOL Guard"
         state_root = program_data / "HOL Guard"
         return MachinePaths(
