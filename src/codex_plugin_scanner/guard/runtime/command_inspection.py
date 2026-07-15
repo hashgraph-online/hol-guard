@@ -111,18 +111,23 @@ def inspect_command(
         )
         signals = artifact_risk_signals_v2(artifact)
     extensions_by_id = {extension.extension_id: extension for extension, _rule, _evidence in selected_matches}
-    rule_matches = [
-        CommandRuleMatch(
-            rule=rule,
-            action_class=(
-                rule.action_classes[0] if rule.action_classes else (match.action_class if match is not None else None)
-            ),
-            reason=(match.reason if match is not None and rule.compatibility_fallback else rule.description),
-            command=canonical_command,
-            matcher_evidence=evidence,
+    rule_matches: list[CommandRuleMatch] = []
+    for _extension, rule, evidence in selected_matches:
+        rule_action_class = rule.action_classes[0] if rule.action_classes else None
+        if rule_action_class is None and match is not None:
+            rule_action_class = match.action_class
+        rule_reason = rule.description
+        if match is not None and rule.compatibility_fallback:
+            rule_reason = match.reason
+        rule_matches.append(
+            CommandRuleMatch(
+                rule=rule,
+                action_class=rule_action_class,
+                reason=rule_reason,
+                command=canonical_command,
+                matcher_evidence=evidence,
+            )
         )
-        for _extension, rule, evidence in selected_matches
-    ]
     risk_classes = sorted({risk for rule_match in rule_matches for risk in rule_match.rule.risk_classes})
     trace.extend(
         (
@@ -144,15 +149,12 @@ def inspect_command(
         )
     )
     primary_rule_match = rule_matches[0] if rule_matches else None
-    classification_reason = (
-        match.reason
-        if match is not None
-        else (
-            primary_rule_match.rule.description
-            if primary_rule_match is not None
-            else "Sensitive command matched without registered rule metadata."
-        )
-    )
+    classification_action_class = match.action_class if match is not None else None
+    classification_reason = match.reason if match is not None else None
+    if primary_rule_match is not None:
+        classification_action_class = classification_action_class or primary_rule_match.action_class
+        classification_reason = classification_reason or primary_rule_match.rule.description
+    classification_reason = classification_reason or "Sensitive command matched without registered rule metadata."
     return {
         "schema_version": COMMAND_EXTENSION_SCHEMA_VERSION,
         "status": "review",
@@ -160,11 +162,7 @@ def inspect_command(
         "classification": {
             "matched": True,
             "explicitly_benign": benign,
-            "action_class": (
-                match.action_class
-                if match is not None
-                else (primary_rule_match.action_class if primary_rule_match is not None else None)
-            ),
+            "action_class": classification_action_class,
             "reason": classification_reason,
             "normalized_command": match.command_text if match is not None else canonical_command.normalized_text,
             "wrapper_chain": list(match.wrapper_chain) if match is not None else list(canonical_command.wrapper_chain),
