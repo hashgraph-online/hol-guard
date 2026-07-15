@@ -204,6 +204,29 @@ def test_normalize_codex_pre_tool_bash_payload(tmp_path: Path) -> None:
     assert envelope.raw_payload_redacted["tool_input"] == {"command": "printf ok"}
 
 
+def test_normalize_codex_apply_patch_as_file_write(tmp_path: Path) -> None:
+    patch_path = (
+        "../../../../../private/"
+        "tmp/hol-guard-p01/src/codex_plugin_scanner/guard/runtime/secret_file_requests.py"
+    )
+    patch = f"""*** Begin Patch
+*** Update File: {patch_path}
+@@
++def _shell_interpreter_flag_payload(parts: list[str], index: int) -> object:
++    return _interpreter_flag_payload(parts, index)
+*** End Patch"""
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "apply_patch",
+        "tool_input": {"input": patch},
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.action_type == "file_write"
+    assert envelope.target_paths == (patch_path,)
+
+
 def test_normalize_codex_prompt_payload_extracts_prompt_excerpt(tmp_path: Path) -> None:
     payload = {
         "hook_event_name": "UserPromptSubmit",
