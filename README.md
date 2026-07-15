@@ -136,9 +136,10 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
 
 ### Inspect command protection without running it
 
-Command safety extensions make Guard's existing shell, Git, filesystem, data-protection, container, Kubernetes,
-encoded-execution, and self-protection behavior inspectable. They are built-in capability boundaries over the same
-parser used by harness hooks, not downloadable regex bundles.
+Command safety extensions make Guard's shell, Git, filesystem, system, Windows, data-protection, container,
+Kubernetes, encoded-execution, and self-protection behavior inspectable. Required core extensions cannot be mistaken
+for optional integrations. They are built-in capability boundaries over the same parser used by harness hooks, not
+downloadable regex bundles.
 
 Each extension publishes stable rule IDs and structured rule metadata. Command inspection also returns a canonical,
 side-effect-free parse model with wrapper, pipeline, environment-override, provenance, and confidence details so
@@ -151,8 +152,12 @@ Use `--json` for a stable automation contract.
 ```bash
 hol-guard command test 'rm -rf ./build'
 hol-guard command explain 'grep "rm -rf|git clean" README.md'
-hol-guard command extensions command.shell-mutations --json
+hol-guard command extensions command.git --json
 ```
+
+Structured core rules preserve every match in a compound command. A Git preview such as `git clean -ndx` remains
+safe, while an unrelated destructive segment still produces review. New structured coverage feeds the same runtime
+artifact and policy pipeline as existing command classifications.
 
 <details>
 <summary>Guard commands at a glance</summary>
