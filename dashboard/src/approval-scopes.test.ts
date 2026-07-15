@@ -1,5 +1,6 @@
 import {
   buildDecisionPayload,
+  normalizeDecisionScope,
   scopeChoicesForRequest,
   isAdvancedScope,
   advancedScopeChoicesForRequest,
@@ -83,6 +84,28 @@ assert(limitedScopeValues.includes("harness"), "T-AS-04: harness scope is availa
 assert(limitedScopeValues.includes("global"), "T-AS-04: global scope is available without source metadata");
 assert(!limitedScopeValues.includes("workspace"), "T-AS-04: workspace scope is hidden when the request has no workspace");
 assert(!limitedScopeValues.includes("publisher"), "T-AS-04: publisher scope is hidden when the request has no publisher");
+
+const requestWithDaemonScopeRestrictions: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "request-restricted-by-daemon",
+  allowed_scopes: ["artifact", "workspace", "publisher"],
+};
+const daemonRestrictedScopeValues = scopeChoicesForRequest(requestWithDaemonScopeRestrictions).map(
+  (choice) => choice.value,
+);
+
+assert(
+  !daemonRestrictedScopeValues.includes("harness"),
+  "T-AS-05: This app is hidden when the daemon does not allow harness scope",
+);
+assert(
+  !daemonRestrictedScopeValues.includes("global"),
+  "T-AS-05: Everywhere is hidden when the daemon does not allow global scope",
+);
+assert(
+  normalizeDecisionScope(requestWithDaemonScopeRestrictions, "global") === "artifact",
+  "T-AS-06: a stale unsupported selection falls back to an allowed scope",
+);
 
 assert(
   ADVANCED_SCOPE_VALUES.has("global"),

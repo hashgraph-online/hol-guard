@@ -40,6 +40,9 @@ export const DEFAULT_SCOPE_CHOICES: ApprovalScopeChoice[] = [
 ];
 
 export function requestSupportsScope(item: GuardApprovalRequest, scope: DecisionScope): boolean {
+  if (Array.isArray(item.allowed_scopes)) {
+    return item.allowed_scopes.includes(scope);
+  }
   if (scope === "workspace") {
     return typeof item.workspace === "string" && item.workspace.trim().length > 0;
   }
