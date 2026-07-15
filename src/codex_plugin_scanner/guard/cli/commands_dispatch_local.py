@@ -21,6 +21,31 @@ if TYPE_CHECKING:
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
+def _run_guard_command_inspection_command(
+    args: argparse.Namespace,
+    *,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    from ..runtime.command_inspection import command_extensions_payload, inspect_command
+
+    command_command = str(getattr(args, "command_command", ""))
+    try:
+        if command_command == "extensions":
+            payload = command_extensions_payload(getattr(args, "extension_id", None))
+            _emit("command-extensions", payload, bool(getattr(args, "json", False)))
+            return 0
+        if command_command not in {"test", "explain"}:
+            print("Choose command test, command explain, or command extensions.", file=sys.stderr)
+            return 2
+        payload = inspect_command(str(getattr(args, "command_text", "")), cwd=Path.cwd(), home_dir=Path.home())
+    except ValueError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 2
+    payload["mode"] = command_command
+    _emit("command-inspection", payload, bool(getattr(args, "json", False)))
+    return 0
+
 def _run_guard_scan_command(
     args: argparse.Namespace,
     *,
@@ -392,6 +417,7 @@ def _run_guard_mcp_command(
 __all__ = [
     "_run_guard_apps_command",
     "_run_guard_bootstrap_command",
+    "_run_guard_command_inspection_command",
     "_run_guard_dashboard_command",
     "_run_guard_detect_command",
     "_run_guard_init_command",

@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from .commands_support_prompts import _prompt_request_classes, _prompt_requires_hard_block
 
 
+from ..runtime.command_extensions import risk_classes_for_command_action
 from ..store import _runtime_scoped_exact_match_key, runtime_tool_action_exact_match_context
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
@@ -434,22 +435,7 @@ def _runtime_artifact_risk_classes(artifact: GuardArtifact) -> list[str]:
     action_class = artifact.metadata.get("action_class")
     if not isinstance(action_class, str):
         return []
-    action_risk_classes = {
-        "credential exfiltration shell command": [
-            "data_flow_exfiltration",
-            "credential_exfiltration",
-            "network_egress",
-        ],
-        "guard-managed config write": ["destructive_shell"],
-        "docker-sensitive command": ["network_egress", "destructive_shell"],
-        "docker client config access": ["local_secret_read"],
-        "encoded or encrypted shell command": ["encoded_execution"],
-        "kubernetes secret read command": ["local_secret_read"],
-        "shell file upload command": ["credential_exfiltration", "network_egress"],
-        "sensitive local file write": ["destructive_shell", "local_secret_read"],
-        "destructive shell command": ["destructive_shell"],
-    }
-    return action_risk_classes.get(action_class.strip().lower(), [])
+    return list(risk_classes_for_command_action(action_class))
 
 def _guard_settings_payload(config: GuardConfig) -> dict[str, object]:
     return {
