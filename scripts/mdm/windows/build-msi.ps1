@@ -27,14 +27,14 @@ if (-not [string]::IsNullOrWhiteSpace($env:HOL_GUARD_MANIFEST_SIGNING_KEY)) {
     Copy-Item $env:HOL_GUARD_MANIFEST_PUBLIC_KEYS (Join-Path $Runtime 'release-trusted-keys.json')
     $ManifestArgs += @('--signing-key', $env:HOL_GUARD_MANIFEST_SIGNING_KEY, '--key-id', $env:HOL_GUARD_MANIFEST_KEY_ID)
 }
-python (Join-Path $Root 'scripts/mdm/generate-release-manifest.py') @ManifestArgs
-
 if (-not [string]::IsNullOrWhiteSpace($env:HOL_GUARD_SIGNTOOL_CERT_SHA1)) {
     if ([string]::IsNullOrWhiteSpace($env:HOL_GUARD_MANIFEST_SIGNING_KEY)) { throw 'Signed installers require a signed manifest.' }
     Get-ChildItem -Path $Runtime -Filter '*.exe' -Recurse | ForEach-Object {
         & signtool sign /sha1 $env:HOL_GUARD_SIGNTOOL_CERT_SHA1 /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $_.FullName
     }
 }
+python (Join-Path $Root 'scripts/mdm/generate-release-manifest.py') @ManifestArgs
+
 $Msi = Join-Path $Out "hol-guard-$Version-x64.msi"
 & wix build (Join-Path $PSScriptRoot 'hol-guard.wxs') -arch x64 -d RuntimeRoot=$Runtime -o $Msi
 if (-not [string]::IsNullOrWhiteSpace($env:HOL_GUARD_SIGNTOOL_CERT_SHA1)) {
