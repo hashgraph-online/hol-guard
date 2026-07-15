@@ -18,7 +18,7 @@ import requests
 
 from ..config import resolve_guard_home
 from ..daemon.manager import load_guard_daemon_auth_token
-from ..mdm.network import managed_requests_kwargs, managed_requests_session
+from ..mdm.network import managed_requests_required, managed_requests_session
 from ..store import GuardStore
 
 
@@ -148,7 +148,7 @@ class WebhookBackend(NotificationBackend):
 
 
 def _managed_post(url: str, *, payload: Mapping[str, object], timeout: int) -> requests.Response:
-    if not managed_requests_kwargs():
+    if not managed_requests_required():
         return requests.post(url, json=payload, timeout=timeout)
     return managed_requests_session().post(url, json=payload, timeout=timeout)
 

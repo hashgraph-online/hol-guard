@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import IO
 
 import requests
+from requests.adapters import HTTPAdapter
 
 from .contracts import ManagedNetworkPolicy
 from .policy import load_managed_policy
@@ -161,6 +162,26 @@ def managed_urlopen(
     return managed_opener(resolved).open(request, timeout=timeout)
 
 
+class _AdditiveCAAdapter(HTTPAdapter):
+    def __init__(self, context: ssl.SSLContext) -> None:
+        self._managed_context = context
+        super().__init__()
+
+    def init_poolmanager(
+        self,
+        connections: int,
+        maxsize: int,
+        block: bool = False,
+        **pool_kwargs: object,
+    ) -> None:
+        pool_kwargs["ssl_context"] = self._managed_context
+        super().init_poolmanager(connections, maxsize, block=block, **pool_kwargs)
+
+    def proxy_manager_for(self, proxy: str, **proxy_kwargs: object) -> object:
+        proxy_kwargs["ssl_context"] = self._managed_context
+        return super().proxy_manager_for(proxy, **proxy_kwargs)
+
+
 def managed_requests_session(policy: ManagedNetworkPolicy | None = None) -> requests.Session:
     resolved, managed = _resolved_policy(policy)
     session = requests.Session()
@@ -170,13 +191,16 @@ def managed_requests_session(policy: ManagedNetworkPolicy | None = None) -> requ
     elif resolved.proxy_mode == "system" and managed:
         session.proxies.update(platform_system_proxies())
     if resolved.ca_bundle_path is not None:
-        bundle = Path(resolved.ca_bundle_path)
-        if not bundle.is_absolute() or not bundle.is_file():
-            raise ManagedNetworkError("managed_ca_bundle_invalid")
-        session.verify = str(bundle)
-    else:
-        session.verify = True
+        session.mount("https://", _AdditiveCAAdapter(managed_ssl_context(resolved)))
+    session.verify = True
     return session
+
+
+def managed_requests_required(policy: ManagedNetworkPolicy | None = None) -> bool:
+    """Return whether requests must use the managed session transport."""
+
+    _resolved, managed = _resolved_policy(policy)
+    return managed
 
 
 def managed_requests_kwargs(policy: ManagedNetworkPolicy | None = None) -> dict[str, object]:
@@ -195,10 +219,7 @@ def managed_requests_kwargs(policy: ManagedNetworkPolicy | None = None) -> dict[
             "https": system_proxies.get("https", ""),
         }
     if resolved.ca_bundle_path is not None:
-        bundle = Path(resolved.ca_bundle_path)
-        if not bundle.is_absolute() or not bundle.is_file():
-            raise ManagedNetworkError("managed_ca_bundle_invalid")
-        kwargs["verify"] = str(bundle)
+        managed_ssl_context(resolved)
     return kwargs
 
 
@@ -249,6 +270,7 @@ __all__ = [
     "diagnose_endpoint",
     "managed_opener",
     "managed_requests_kwargs",
+    "managed_requests_required",
     "managed_requests_session",
     "managed_ssl_context",
     "managed_urlopen",

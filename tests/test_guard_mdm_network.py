@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import certifi
 import pytest
 
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
@@ -42,6 +43,14 @@ def test_private_ca_must_be_an_absolute_readable_file(tmp_path: Path) -> None:
         managed_ssl_context(ManagedNetworkPolicy(ca_bundle_path="relative.pem"))
     with pytest.raises(ManagedNetworkError, match="managed_ca_bundle_invalid"):
         managed_requests_session(ManagedNetworkPolicy(ca_bundle_path=str(tmp_path / "missing.pem")))
+
+
+def test_private_ca_is_added_without_replacing_public_trust() -> None:
+    session = managed_requests_session(ManagedNetworkPolicy(ca_bundle_path=certifi.where()))
+
+    assert session.verify is True
+    assert session.adapters["https://"].__class__.__name__ == "_AdditiveCAAdapter"
+    assert "verify" not in managed_requests_kwargs(ManagedNetworkPolicy(ca_bundle_path=certifi.where()))
 
 
 def test_disabled_public_registry_fails_before_network() -> None:
