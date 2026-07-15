@@ -21,6 +21,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 from ...version import __version__
+from ..mdm.network import managed_urlopen
 from ..package_firewall_defaults import extract_cloud_user_profile as _extract_cloud_user_profile
 from ..package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
@@ -627,7 +628,7 @@ def request_device_authorization(url: str, body: str) -> dict[str, object]:
         method="POST",
         headers=_guard_oauth_request_headers(),
     )
-    with urllib.request.urlopen(request, timeout=20) as response:
+    with managed_urlopen(request, timeout=20) as response:
         payload = json.loads(response.read().decode("utf-8"))
     if not isinstance(payload, dict):
         raise RuntimeError("Guard Device Code authorization failed: invalid response.")
@@ -643,7 +644,7 @@ def exchange_guard_device_code(
     interval_seconds: int,
     expires_in_seconds: int,
     wait_timeout_seconds: float | None = None,
-    urlopen=urllib.request.urlopen,
+    urlopen=managed_urlopen,
     sleep=time.sleep,
     now: datetime | None = None,
 ) -> GuardOAuthTokenExchangeResult:
@@ -721,7 +722,7 @@ def exchange_guard_authorization_code(
     redirect_uri: str,
     code_verifier: str,
     dpop_key_material: GuardDpopKeyMaterial,
-    urlopen=urllib.request.urlopen,
+    urlopen=managed_urlopen,
     now: datetime | None = None,
 ) -> GuardOAuthTokenExchangeResult:
     request_body = urllib.parse.urlencode(
@@ -771,7 +772,7 @@ def refresh_guard_access_token(
     client_id: str,
     refresh_token: str,
     dpop_key_material: GuardDpopKeyMaterial,
-    urlopen=urllib.request.urlopen,
+    urlopen=managed_urlopen,
     now: datetime | None = None,
 ) -> GuardOAuthTokenExchangeResult:
     dpop_nonce: str | None = None
@@ -861,7 +862,7 @@ def revoke_guard_self_oauth_grant(
     workspace_id: str,
     revoke_cloud_grant: bool,
     dpop_key_material: GuardDpopKeyMaterial,
-    urlopen=urllib.request.urlopen,
+    urlopen=managed_urlopen,
     now: datetime | None = None,
 ) -> None:
     revoke_url = f"{oauth_client.issuer.rstrip('/')}/api/guard/oauth/revoke/self"
@@ -991,7 +992,7 @@ def run_guard_disconnect_command(
     store: GuardStore,
     revoke_cloud_grant: bool,
     now: str | None = None,
-    urlopen=urllib.request.urlopen,
+    urlopen=managed_urlopen,
 ) -> dict[str, object]:
     store.repair_oauth_local_credential_storage_from_primary()
     credentials = store.get_oauth_local_credentials(allow_primary=True)
@@ -1096,7 +1097,7 @@ def run_guard_device_connect_command(
     store: GuardStore,
     connect_url: str,
     request_device_authorization=request_device_authorization,
-    token_urlopen=urllib.request.urlopen,
+    token_urlopen=managed_urlopen,
     sleep=time.sleep,
     now: str | None = None,
     wait_timeout_seconds: float | None = None,

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Literal
 
 from ..adapters.base import HarnessContext
+from ..mdm.network import managed_urlopen
 from ..redaction import redact_sensitive_text
 from ..remote_pairing_constants import (
     REMOTE_PAIRING_CODE_ALPHABET,
@@ -144,7 +145,7 @@ def claim_remote_pairing_intent(
     label: str | None,
     public_dpop_jwk: dict[str, str],
     capability_summary: dict[str, object] | None = None,
-    urlopen=urllib.request.urlopen,
+    urlopen=managed_urlopen,
 ) -> dict[str, object]:
     normalized_code = normalize_remote_pairing_code(pair_code)
     if not is_remote_pairing_code_shape(normalized_code):
@@ -306,7 +307,7 @@ def run_guard_remote_pair_command(
     label: str | None,
     no_root: bool,
     now: str | None = None,
-    urlopen=urllib.request.urlopen,
+    urlopen=managed_urlopen,
 ) -> dict[str, object]:
     store.repair_oauth_local_credential_storage_from_primary()
     _assert_no_root_install_allowed(no_root=no_root)

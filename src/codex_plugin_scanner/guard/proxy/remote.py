@@ -7,6 +7,7 @@ import urllib.request
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
+from ..mdm.network import managed_urlopen
 from .stdio import _redact_json
 
 
@@ -40,7 +41,7 @@ class RemoteGuardProxy:
             headers=request_headers,
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=10) as response:
+        with managed_urlopen(request, timeout=10) as response:
             raw_response = response.read().decode("utf-8")
         response_payload = json.loads(raw_response) if expect_response and raw_response.strip() else None
         self.events.append(

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol.org/schemas/guard/mdm-status-v1.schema.json",
+  "title": "HOL Guard MDM lifecycle result v1",
+  "type": "object",
+  "required": ["schemaVersion", "operation"],
+  "properties": {
+    "schemaVersion": {"const": "hol-guard-mdm-status.v1"},
+    "operation": {"enum": ["status", "activate", "repair", "deactivate", "authorize-deactivation", "network-diagnose"]},
+    "scope": {"enum": ["machine", "user"]},
+    "healthy": {"type": "boolean"},
+    "state": {"enum": ["absent", "installed", "activated", "protected", "degraded", "repairable", "policy-invalid", "tampered", "unsupported"]},
+    "reasonCodes": {"type": "array", "items": {"type": ["string", "null"]}}
+  },
+  "additionalProperties": true
+}
