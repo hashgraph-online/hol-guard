@@ -114,8 +114,10 @@ def inspect_command(
     rule_matches = [
         CommandRuleMatch(
             rule=rule,
-            action_class=match.action_class if match is not None else None,
-            reason=match.reason if match is not None else rule.description,
+            action_class=(
+                rule.action_classes[0] if rule.action_classes else (match.action_class if match is not None else None)
+            ),
+            reason=(match.reason if match is not None and rule.compatibility_fallback else rule.description),
             command=canonical_command,
             matcher_evidence=evidence,
         )

@@ -260,6 +260,10 @@ def test_inspection_preserves_legacy_and_structured_evidence(tmp_path: Path) -> 
         "command.data-protection",
         "command.filesystem",
     ]
+    assert [rule["action_class"] for rule in payload["rules"]] == [
+        "filesystem destructive command",
+        "credential exfiltration shell command",
+    ]
 
 
 def test_inspection_handles_unregistered_legacy_action_without_crashing(
