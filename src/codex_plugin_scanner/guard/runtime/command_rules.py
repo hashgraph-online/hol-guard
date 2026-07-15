@@ -68,8 +68,8 @@ class ExecutableMatcher:
             lowered_arguments = tuple(argument.lower() for argument in segment.arguments)
             if self.subcommands and lowered_arguments[: len(self.subcommands)] != self.subcommands:
                 continue
-            argument_set = frozenset(lowered_arguments)
-            if not self.required_flags <= argument_set or self.forbidden_flags & argument_set:
+            present_flags = _present_flags(lowered_arguments)
+            if not self.required_flags <= present_flags or self.forbidden_flags & present_flags:
                 continue
             evidence.append(
                 MatcherEvidence(
@@ -191,5 +191,14 @@ class CommandRuleMatch:
 def _segment_matches_executable(segment: CommandSegment, executables: frozenset[str]) -> bool:
     if segment.executable is None:
         return False
-    executable = segment.executable.rsplit("/", 1)[-1].lower()
+    executable = segment.executable.replace("\\", "/").rsplit("/", 1)[-1].lower()
     return executable in executables
+
+
+def _present_flags(arguments: tuple[str, ...]) -> frozenset[str]:
+    flags: set[str] = set()
+    for argument in arguments:
+        flags.add(argument)
+        if argument.startswith("-") and "=" in argument:
+            flags.add(argument.split("=", 1)[0])
+    return frozenset(flags)

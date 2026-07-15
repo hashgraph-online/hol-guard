@@ -99,7 +99,7 @@ class CommandSafetyExtensionRegistry:
                 by_rule_id[rule.rule_id] = rule
                 for action_class in rule.action_classes:
                     normalized_action_class = action_class.strip().lower()
-                    if normalized_action_class not in {item.lower() for item in extension.action_classes}:
+                    if normalized_action_class not in {item.strip().lower() for item in extension.action_classes}:
                         raise ValueError(
                             f"Command safety rule {rule.rule_id} owns undeclared action class {action_class!r}"
                         )

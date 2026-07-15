@@ -110,6 +110,18 @@ def parse_shell_command(
             confidence="uncertain",
             uncertainty_reason=f"unsupported_{dialect}_{transport}",
         )
+    if len(raw_text) > MAX_COMMAND_BYTES:
+        return CanonicalCommand(
+            raw_text=raw_text,
+            normalized_text=raw_text,
+            dialect=dialect,
+            transport=transport,
+            extraction_provenance=extraction_provenance,
+            wrapper_chain=(),
+            segments=(),
+            confidence="uncertain",
+            uncertainty_reason="command_byte_limit_exceeded",
+        )
     command_bytes = len(raw_text.encode("utf-8"))
     if command_bytes > MAX_COMMAND_BYTES:
         return CanonicalCommand(
@@ -174,8 +186,8 @@ def parse_shell_command(
         if start < 0:
             start = normalized_text.find(segment_text)
         if start < 0:
-            start = cursor
-        end = start + len(segment_text)
+            start = min(cursor, len(normalized_text))
+        end = min(start + len(segment_text), len(normalized_text))
         cursor = end
         segments.append(
             CommandSegment(
@@ -214,7 +226,7 @@ def _execution_segment_texts(command: str) -> tuple[tuple[int, str], ...]:
                 segments.append((0, stripped))
             continue
         pipe_parts = [pipes[0].left, *(pipe.right for pipe in pipes)]
-        segments.extend((index, part) for index, part in enumerate(pipe_parts) if part)
+        segments.extend((index, part.strip()) for index, part in enumerate(pipe_parts) if part.strip())
     return tuple(segments)
 
 

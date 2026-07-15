@@ -113,6 +113,7 @@ def inspect_command(
             action_class=match.action_class,
             reason=match.reason,
             command=canonical_command,
+            matcher_evidence=rule.matcher.match(canonical_command) if rule.matcher is not None else (),
         )
         if rule is not None
         else None

@@ -45,10 +45,13 @@ def test_parse_shell_command_marks_malformed_and_unsupported_input() -> None:
 
 def test_parse_shell_command_marks_over_limit_input_uncertain() -> None:
     parsed = parse_shell_command("x" * (MAX_COMMAND_BYTES + 1))
+    multibyte = parse_shell_command("é" * ((MAX_COMMAND_BYTES // 2) + 1))
 
     assert parsed.confidence == "uncertain"
     assert parsed.uncertainty_reason == "command_byte_limit_exceeded"
     assert parsed.segments == ()
+    assert multibyte.confidence == "uncertain"
+    assert multibyte.uncertainty_reason == "command_byte_limit_exceeded"
 
 
 def test_executable_matcher_uses_structured_subcommands_and_flags() -> None:
@@ -64,6 +67,23 @@ def test_executable_matcher_uses_structured_subcommands_and_flags() -> None:
     assert len(evidence) == 1
     assert evidence[0].segment_index == 0
     assert evidence[0].executable == "docker"
+
+
+def test_executable_matcher_normalizes_flag_value_and_windows_path_forms() -> None:
+    parsed = parse_shell_command("'C:\\tools\\docker.exe' system prune --force=true")
+    matcher = ExecutableMatcher(
+        executables=frozenset({"docker.exe"}),
+        subcommands=("system", "prune"),
+        required_flags=frozenset({"--force"}),
+    )
+
+    assert matcher.match(parsed)
+
+
+def test_parse_shell_command_preserves_literal_hash_arguments() -> None:
+    parsed = parse_shell_command("printf '%s' value#fragment")
+
+    assert parsed.segments[0].arguments == ("%s", "value#fragment")
 
 
 def test_composite_matchers_have_explicit_any_and_all_semantics() -> None:
