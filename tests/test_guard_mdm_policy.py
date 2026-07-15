@@ -76,6 +76,27 @@ def test_locked_values_override_local_and_actions_only_strengthen(tmp_path: Path
     }
 
 
+def test_managed_value_replaces_invalid_local_type(tmp_path: Path) -> None:
+    path = tmp_path / "policy.json"
+    path.write_text(json.dumps(_policy()))
+    state = load_managed_policy(policy_path=path)
+    assert state.policy is not None
+
+    assert apply_managed_policy({"mode": True}, state.policy)["mode"] == "enforce"
+
+
+def test_proxy_credentials_are_rejected_when_encoded() -> None:
+    payload = _policy(
+        network={
+            "proxyMode": "explicit",
+            "proxyUrl": "https://user%40example:secret@proxy.example:8443",
+        }
+    )
+
+    with pytest.raises(ValueError, match="proxy credentials"):
+        policy_module.parse_managed_policy(payload)
+
+
 def test_missing_policy_reports_absent(tmp_path: Path) -> None:
     state = load_managed_policy(policy_path=tmp_path / "missing.json")
     assert state.status == "absent"
@@ -129,9 +150,7 @@ def test_invalid_machine_policy_fails_closed_in_runtime_config(tmp_path: Path) -
     assert config.install_owner == "mdm"
 
 
-def test_removed_profile_retains_last_valid_machine_floor(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_removed_profile_retains_last_valid_machine_floor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     native_path = tmp_path / "managed-policy.json"
     paths = MachinePaths(
         tmp_path / "runtime",

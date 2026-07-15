@@ -209,25 +209,34 @@ def _activation_lock(guard_home: Path) -> Iterator[None]:
         os.close(descriptor)
 
 
+def _load_trusted_keys(path: Path) -> dict[str, bytes]:
+    trusted_keys: dict[str, bytes] = {}
+    if not path.is_file():
+        return trusted_keys
+    try:
+        raw_keys = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return trusted_keys
+    if not isinstance(raw_keys, dict):
+        return trusted_keys
+    for key_id, value in raw_keys.items():
+        if not isinstance(key_id, str) or not isinstance(value, str):
+            continue
+        try:
+            trusted_keys[key_id] = base64.b64decode(value, validate=True)
+        except ValueError:
+            continue
+    return trusted_keys
+
+
 def machine_status(
     *, machine_root: Path | None = None, policy_path: Path | None = None, allow_unsigned: bool = False
 ) -> dict[str, object]:
     paths = default_machine_paths()
     runtime_root = (machine_root or paths.runtime_root).resolve()
     manifest_path = runtime_root / "release-manifest.json"
-    trusted_keys: dict[str, bytes] = {}
     trusted_keys_path = runtime_root / "release-trusted-keys.json"
-    if trusted_keys_path.is_file():
-        try:
-            raw_keys = json.loads(trusted_keys_path.read_text(encoding="utf-8"))
-            if isinstance(raw_keys, dict):
-                trusted_keys = {
-                    key_id: base64.b64decode(value, validate=True)
-                    for key_id, value in raw_keys.items()
-                    if isinstance(key_id, str) and isinstance(value, str)
-                }
-        except (OSError, ValueError):
-            trusted_keys = {}
+    trusted_keys = _load_trusted_keys(trusted_keys_path)
     expected_platform = {"Darwin": "macos", "Windows": "windows"}.get(platform.system())
     verification = verify_release_manifest(
         manifest_path,

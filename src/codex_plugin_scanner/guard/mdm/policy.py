@@ -6,6 +6,7 @@ import json
 import os
 import platform
 import plistlib
+import urllib.parse
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal, cast
@@ -101,8 +102,10 @@ def parse_managed_policy(payload: object) -> ManagedPolicy:
     proxy_url = _optional_string(network_raw.get("proxyUrl"), "network.proxyUrl")
     if proxy_mode == "explicit" and proxy_url is None:
         raise ManagedPolicyError("network.proxyUrl is required for explicit proxy mode")
-    if proxy_url is not None and "@" in proxy_url:
-        raise ManagedPolicyError("proxy credentials are forbidden in managed policy")
+    if proxy_url is not None:
+        parsed_proxy = urllib.parse.urlsplit(proxy_url)
+        if parsed_proxy.username is not None or parsed_proxy.password is not None:
+            raise ManagedPolicyError("proxy credentials are forbidden in managed policy")
     allow_registries = network_raw.get("allowPublicRegistries", True)
     if not isinstance(allow_registries, bool):
         raise ManagedPolicyError("network.allowPublicRegistries must be boolean")
@@ -323,9 +326,9 @@ def apply_managed_policy(local_payload: Mapping[str, object], policy: ManagedPol
         local_value = composed.get(key)
         if key == "actions" or key.endswith("Actions"):
             composed[key] = _merge_strongest_actions(local_value, managed_value)
-        elif isinstance(local_value, str) and isinstance(managed_value, str):
+        elif key in composed:
             composed[key] = _strongest_security_value(local_value, managed_value)
-        elif key not in composed:
+        else:
             composed[key] = managed_value
     for setting_path in policy.locked_settings:
         managed_value = _get_path(policy.settings, setting_path)

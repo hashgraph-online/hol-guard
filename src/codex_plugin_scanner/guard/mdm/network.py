@@ -75,16 +75,23 @@ def platform_system_proxies() -> dict[str, str]:
     if platform.system() == "Windows":
         try:
             import winreg
-
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\CurrentVersion\Internet Settings",
-            ) as key:
-                enabled, _ = winreg.QueryValueEx(key, "ProxyEnable")
-                server, _ = winreg.QueryValueEx(key, "ProxyServer")
-        except (ImportError, OSError):
+        except ImportError:
             return {}
-        if not enabled or not isinstance(server, str):
+        server: object = None
+        for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+            try:
+                with winreg.OpenKey(
+                    hive,
+                    r"Software\Microsoft\Windows\CurrentVersion\Internet Settings",
+                ) as key:
+                    enabled, _ = winreg.QueryValueEx(key, "ProxyEnable")
+                    candidate, _ = winreg.QueryValueEx(key, "ProxyServer")
+            except OSError:
+                continue
+            if enabled and isinstance(candidate, str):
+                server = candidate
+                break
+        if not isinstance(server, str):
             return {}
         if "=" not in server:
             return {"http": f"http://{server}", "https": f"http://{server}"}

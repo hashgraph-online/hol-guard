@@ -26,9 +26,7 @@ def test_user_home_must_be_absolute_and_exist(tmp_path: Path) -> None:
         lifecycle.validate_user_home(str(tmp_path / "missing"))
 
 
-def test_activation_is_idempotent_and_writes_user_only_marker(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_activation_is_idempotent_and_writes_user_only_marker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
     def fake_install(command: str, *_args: object, **_kwargs: object) -> dict[str, object]:
@@ -47,9 +45,7 @@ def test_activation_is_idempotent_and_writes_user_only_marker(
     assert marker.stat().st_mode & 0o077 == 0
 
 
-def test_partial_activation_rolls_back_new_harnesses(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_partial_activation_rolls_back_new_harnesses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeStore:
         active = False
 
@@ -79,9 +75,7 @@ def test_partial_activation_rolls_back_new_harnesses(
     assert FakeStore.active is False
 
 
-def test_deactivation_restores_integrations_and_removes_marker(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_deactivation_restores_integrations_and_removes_marker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     guard_home = tmp_path / ".hol-guard"
     guard_home.mkdir()
     (guard_home / "mdm-activation.json").write_text("{}")
@@ -153,9 +147,7 @@ def test_removal_authorization_rejects_arbitrary_path(tmp_path: Path) -> None:
         )
 
 
-def test_authorization_creation_requires_admin_and_safe_name(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_authorization_creation_requires_admin_and_safe_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     paths = MachinePaths(tmp_path, tmp_path / "state", None, tmp_path / "logs", tmp_path / "manifest")
     monkeypatch.setattr(lifecycle, "default_machine_paths", lambda: paths)
     monkeypatch.setattr(lifecycle, "_is_administrator", lambda: False)
@@ -168,3 +160,10 @@ def test_authorization_creation_requires_admin_and_safe_name(
         lifecycle.authorize_deactivation(tmp_path, "developer", token_name="../escape.json")
     payload = lifecycle.authorize_deactivation(tmp_path, "developer", token_name="developer.json")
     assert Path(str(payload["authorizationPath"])).is_file()
+
+
+def test_trusted_key_loader_skips_only_malformed_entries(tmp_path: Path) -> None:
+    path = tmp_path / "release-trusted-keys.json"
+    path.write_text(json.dumps({"valid": "a2V5", "invalid": "%%%"}))
+
+    assert lifecycle._load_trusted_keys(path) == {"valid": b"key"}

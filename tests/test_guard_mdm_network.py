@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import ssl
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,6 +14,7 @@ from codex_plugin_scanner.guard.mdm.network import (
     managed_requests_session,
     managed_ssl_context,
     managed_urlopen,
+    platform_system_proxies,
 )
 
 
@@ -58,4 +61,33 @@ def test_managed_system_proxy_uses_platform_configuration_not_environment(
     assert kwargs["proxies"] == {
         "http": "",
         "https": "http://system-proxy.example:8080",
+    }
+
+
+def test_windows_system_proxy_falls_back_to_machine_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeKey:
+        def __enter__(self) -> FakeKey:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    def open_key(hive: object, _path: str) -> FakeKey:
+        if hive == "current-user":
+            raise OSError
+        return FakeKey()
+
+    values = iter(((1, 0), ("proxy.example:8080", 0)))
+    fake_winreg = SimpleNamespace(
+        HKEY_CURRENT_USER="current-user",
+        HKEY_LOCAL_MACHINE="local-machine",
+        OpenKey=open_key,
+        QueryValueEx=lambda _key, _name: next(values),
+    )
+    monkeypatch.setitem(sys.modules, "winreg", fake_winreg)
+    monkeypatch.setattr("codex_plugin_scanner.guard.mdm.network.platform.system", lambda: "Windows")
+
+    assert platform_system_proxies() == {
+        "http": "http://proxy.example:8080",
+        "https": "http://proxy.example:8080",
     }

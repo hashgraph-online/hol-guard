@@ -19,10 +19,11 @@ POLICY_SCHEMA = "hol-guard-mdm-policy.v1"
 
 
 def _commit() -> str:
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"], check=True, capture_output=True, text=True
-    )
-    return result.stdout.strip()
+    try:
+        result = subprocess.run(["git", "rev-parse", "HEAD"], check=True, capture_output=True, text=True)
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    return result.stdout.strip() or "unknown"
 
 
 def main() -> int:
