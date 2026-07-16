@@ -2187,6 +2187,7 @@ def test_headless_app_operations_write_receipts_without_cli_copy(
     }.issubset(receipt_operations)
 
 
+@pytest.mark.daemon_headless_queue
 def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2262,6 +2263,7 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
     assert latest_state["proof"]["runtime_session_synced_at"] == "2026-05-23T17:18:35.000Z"
 
 
+@pytest.mark.daemon_headless_queue
 def test_headless_app_scan_does_not_spawn_unbounded_cloud_sync_threads(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
