@@ -259,6 +259,7 @@ def _resolve_legacy_args(
         "allow",
         "deny",
         "policies",
+        "policy",
         "trust",
         "settings",
         "exceptions",
