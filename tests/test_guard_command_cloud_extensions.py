@@ -102,6 +102,21 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.cloud.azure.resource-deletion",
         ),
         (
+            "aws ec2 terminate-instances --instance-ids i-123 --dry-run --dry-run=false",
+            "AWS destructive command",
+            "command.cloud.aws.resource-deletion",
+        ),
+        (
+            "gcloud compute instances delete api-1 --help --help=false",
+            "Google Cloud destructive command",
+            "command.cloud.gcp.resource-deletion",
+        ),
+        (
+            "az vm delete --resource-group app --name api-1 --help --help=false",
+            "Azure destructive command",
+            "command.cloud.azure.resource-deletion",
+        ),
+        (
             "aws.exe ec2 --region us-east-1 terminate-instances --instance-ids i-123",
             "AWS destructive command",
             "command.cloud.aws.resource-deletion",
@@ -221,6 +236,9 @@ def test_cloud_rules_feed_inspection_and_runtime_hooks(
         "aws --future-global-option account ec2 terminate-instances --instance-ids i-123 --dry-run",
         "gcloud --future-global-option account compute instances delete api-1 --help",
         "az --future-global-option tenant vm delete --resource-group app --name api-1 --help",
+        "aws ec2 terminate-instances --instance-ids i-123 --dry-run=false --dry-run",
+        "gcloud compute instances delete api-1 --help=false --help",
+        "az vm delete --resource-group app --name api-1 --help=false --help",
         "aws ec2 describe-instances --instance-ids i-123",
         "aws --future-global-option account ec2 describe-instances --instance-ids i-123",
         "gcloud compute instances describe api-1",

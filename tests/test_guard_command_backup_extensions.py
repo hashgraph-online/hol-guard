@@ -52,6 +52,16 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.backup.rclone.mutation",
         ),
         (
+            "rclone purge remote:archive --dry-run --dry-run=false",
+            "Rclone destructive command",
+            "command.backup.rclone.mutation",
+        ),
+        (
+            "rclone purge remote:archive --dry-run=true --dry-run=false",
+            "Rclone destructive command",
+            "command.backup.rclone.mutation",
+        ),
+        (
             "rclone -ab value purge remote:archive",
             "Rclone destructive command",
             "command.backup.rclone.mutation",
@@ -84,6 +94,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
         ),
         (
             "restic -qrs3:archive forget latest --prune",
+            "Restic destructive command",
+            "command.backup.restic.mutation",
+        ),
+        (
+            "restic forget latest --dry-run --dry-run=false",
             "Restic destructive command",
             "command.backup.restic.mutation",
         ),
@@ -132,6 +147,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "Borg destructive command",
             "command.backup.borg.mutation",
         ),
+        (
+            "borg prune --keep-daily 7 /archive --dry-run --dry-run=false",
+            "Borg destructive command",
+            "command.backup.borg.mutation",
+        ),
         ("velero backup delete release-1", "Velero destructive command", "command.backup.velero.deletion"),
         (
             "velero --namespace prod backup delete release-1",
@@ -146,6 +166,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
         ("velero -nprod schedule delete nightly", "Velero destructive command", "command.backup.velero.deletion"),
         (
             "velero -vnprod backup delete release-1",
+            "Velero destructive command",
+            "command.backup.velero.deletion",
+        ),
+        (
+            "velero backup delete release-1 --help --help=false",
             "Velero destructive command",
             "command.backup.velero.deletion",
         ),
@@ -193,6 +218,8 @@ def test_backup_rules_feed_runtime_hooks(
         "rclone sync source: destination: --dry-run",
         "rclone purge remote:archive --dry-run=true",
         "rclone purge remote:archive --dry-run=1",
+        "rclone purge remote:archive --dry-run=false --dry-run",
+        "rclone purge remote:archive --dry-run=false --dry-run=true",
         "rclone -n purge remote:archive",
         "restic -r s3:archive forget latest --dry-run",
         "restic rewrite --forget latest --dry-run",
@@ -212,15 +239,18 @@ def test_backup_rules_feed_runtime_hooks(
         "restic --compression max snapshots",
         "restic -qr forget snapshots",
         "restic -qrforget snapshots",
+        "restic forget latest --dry-run=false --dry-run",
         "borg list /archive",
         "borg --remote-ratelimit 1000 list /archive",
         "borg prune -Pfoo -n --keep-daily 7 /archive",
         "borg prune -afoo -n --keep-daily 7 /archive",
         "borg recreate -efoo -n /archive",
         "borg -vr prune list",
+        "borg prune --keep-daily 7 /archive --dry-run=false --dry-run",
         "velero backup describe release-1",
         "velero --future-global-option cluster backup describe release-1",
         "velero -vnprod backup describe release-1",
+        "velero backup delete release-1 --help=false --help",
         "grep 'rclone sync|restic forget|borg prune|velero backup delete' docs",
     ],
 )

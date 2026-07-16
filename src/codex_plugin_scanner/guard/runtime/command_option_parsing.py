@@ -19,7 +19,7 @@ class _ParseOutcome(Enum):
 @dataclass(frozen=True, slots=True)
 class _OptionTransition:
     advance: int
-    flags: frozenset[str] = frozenset()
+    flag_assignments: frozenset[tuple[str, bool]] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,8 +142,8 @@ def _flag_parse_outcome(
     options_with_values: frozenset[str],
     known_flags: frozenset[str],
 ) -> _ParseOutcome:
-    pending = [(0, False)]
-    visited: set[tuple[int, bool]] = set()
+    pending: list[tuple[int, bool | None]] = [(0, None)]
+    visited: set[tuple[int, bool | None]] = set()
     found_terminal = False
     while pending:
         state = pending.pop()
@@ -152,28 +152,27 @@ def _flag_parse_outcome(
         if len(visited) >= _MAX_OPTION_PARSE_STATES:
             return _ParseOutcome.UNCERTAIN
         visited.add(state)
-        argument_index, seen = state
+        argument_index, final_assignment = state
         if argument_index >= len(arguments) or arguments[argument_index] == "--":
-            if not seen:
+            if final_assignment is not True:
                 return _ParseOutcome.NO_MATCH
             found_terminal = True
             continue
         argument = arguments[argument_index]
         if not _is_option(argument):
-            pending.append((argument_index + 1, seen))
+            pending.append((argument_index + 1, final_assignment))
             continue
         shape = _option_shape(
             argument,
             options_with_values=options_with_values,
             known_flags=known_flags,
         )
-        pending.extend(
-            (
-                argument_index + transition.advance,
-                seen or required_flag in transition.flags,
-            )
-            for transition in shape.transitions
-        )
+        for transition in shape.transitions:
+            next_assignment = final_assignment
+            for flag, enabled in transition.flag_assignments:
+                if flag == required_flag:
+                    next_assignment = enabled
+            pending.append((argument_index + transition.advance, next_assignment))
     return _ParseOutcome.MATCH if found_terminal else _ParseOutcome.NO_MATCH
 
 
@@ -189,10 +188,9 @@ def _option_shape(
             advance = 1 if separator else 2
             return _OptionShape((_OptionTransition(advance),), fully_known=True)
         if option_name in known_flags:
-            flags = {argument}
-            if long_flag_assignment_is_enabled(argument):
-                flags.add(option_name)
-            return _OptionShape((_OptionTransition(1, frozenset(flags)),), fully_known=True)
+            enabled = long_flag_assignment_is_enabled(argument)
+            assignments = frozenset({(argument, True), (option_name, enabled)})
+            return _OptionShape((_OptionTransition(1, assignments),), fully_known=True)
         if separator:
             return _OptionShape((_OptionTransition(1),), fully_known=True)
         return _OptionShape((_OptionTransition(1), _OptionTransition(2)), fully_known=False)
@@ -216,16 +214,19 @@ def _short_option_shape(
         short_option = f"-{character}"
         if short_option in options_with_values:
             advance = 1 if index + 1 < len(argument) else 2
-            transitions.add(_OptionTransition(advance, frozenset(flags)))
+            assignments = frozenset((flag, True) for flag in flags)
+            transitions.add(_OptionTransition(advance, assignments))
             return _OptionShape(tuple(transitions), fully_known=fully_known)
         if short_option in known_flags:
             flags.add(short_option)
             continue
         fully_known = False
-        transitions.add(_OptionTransition(1, frozenset(flags)))
+        assignments = frozenset((flag, True) for flag in flags)
+        transitions.add(_OptionTransition(1, assignments))
         if index + 1 == len(argument):
-            transitions.add(_OptionTransition(2, frozenset(flags)))
-    transitions.add(_OptionTransition(1, frozenset(flags)))
+            transitions.add(_OptionTransition(2, assignments))
+    assignments = frozenset((flag, True) for flag in flags)
+    transitions.add(_OptionTransition(1, assignments))
     return _OptionShape(tuple(transitions), fully_known=fully_known)
 
 
