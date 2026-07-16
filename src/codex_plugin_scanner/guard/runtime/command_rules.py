@@ -321,8 +321,13 @@ def matcher_index_hints(matcher: CommandMatcher) -> MatcherIndexHints:
             executables=matcher.executables,
             keywords=matcher.required_arguments,
         )
+    from .command_database_matchers import database_matcher_index_hints
     from .command_structured_matchers import structured_matcher_index_hints
 
+    database_hints = database_matcher_index_hints(matcher)
+    if database_hints is not None:
+        executables, keywords = database_hints
+        return MatcherIndexHints(executables=executables, keywords=keywords)
     structured_hints = structured_matcher_index_hints(matcher)
     if structured_hints is not None:
         executables, keywords = structured_hints

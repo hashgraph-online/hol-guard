@@ -40,7 +40,7 @@ class LeadingOperandCountMatcher:
         for index, segment in enumerate(command.segments):
             if not _segment_matches_executable(segment, self.executables):
                 continue
-            leading_flags, operands = _leading_flags_and_operands(
+            leading_flags, operands = leading_flags_and_operands(
                 segment.arguments,
                 options_with_values=self.options_with_values,
             )
@@ -95,8 +95,8 @@ class OptionValueKeyMatcher:
         for index, segment in enumerate(command.segments):
             if not _segment_matches_executable(segment, self.executables):
                 continue
-            present_flags = _present_flags(segment.arguments, options_with_values=self.option_names)
-            if self.forbidden_flags & present_flags:
+            matched_flags = present_flags(segment.arguments, options_with_values=self.option_names)
+            if self.forbidden_flags & matched_flags:
                 continue
             settings: dict[str, str] = {}
             for option_value in _option_values(segment.arguments, self.option_names):
@@ -173,7 +173,7 @@ def _segment_matches_executable(segment: CommandSegment, executables: frozenset[
     return executable in executables
 
 
-def _leading_flags_and_operands(
+def leading_flags_and_operands(
     arguments: tuple[str, ...],
     *,
     options_with_values: frozenset[str],
@@ -270,7 +270,7 @@ def _split_option_setting(value: str) -> tuple[str, str]:
     return key.lower(), setting.strip().lower()
 
 
-def _present_flags(
+def present_flags(
     arguments: tuple[str, ...],
     *,
     options_with_values: frozenset[str],
