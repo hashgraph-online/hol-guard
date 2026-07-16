@@ -28,6 +28,16 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.remote.ssh.execution",
         ),
         ("ssh -g host.example uptime", "SSH remote execution command", "command.remote.ssh.execution"),
+        (
+            "ssh -o 'RemoteCommand=uname -a' host.example",
+            "SSH configured execution command",
+            "command.remote.ssh.configured-execution",
+        ),
+        (
+            "ssh -oProxyCommand='sh -c id' host.example",
+            "SSH configured execution command",
+            "command.remote.ssh.configured-execution",
+        ),
         ("scp artifact.zip host.example:/srv/app/", "SCP overwrite command", "command.remote.scp.transfer"),
         ("scp -p artifact.zip host.example:/srv/app/", "SCP overwrite command", "command.remote.scp.transfer"),
         (
@@ -44,6 +54,16 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "rsync.exe --remove-source-files ./queue/ host.example:/archive/",
             "Rsync destructive command",
             "command.remote.rsync.deletion",
+        ),
+        (
+            "rsync --rsync-path='sh -c id' ./out/ host.example:/srv/app/",
+            "Rsync remote shell command",
+            "command.remote.rsync.remote-shell",
+        ),
+        (
+            "rsync -e 'sh -c id' ./out/ host.example:/srv/app/",
+            "Rsync remote shell command",
+            "command.remote.rsync.remote-shell",
         ),
     ],
 )
@@ -75,7 +95,10 @@ def test_remote_rules_feed_runtime_hooks(
         "ssh -G host.example uptime",
         "ssh -vG host.example uptime",
         "ssh -V",
+        "ssh -o StrictHostKeyChecking=no host.example",
+        "ssh -vo StrictHostKeyChecking=no host.example",
         "scp -h",
+        "scp -vo StrictHostKeyChecking=no source",
         "rsync -av ./out/ host.example:/srv/app/",
         "rsync -av --delete ./out/ host.example:/srv/app/ --dry-run",
         "rsync -avn --delete ./out/ host.example:/srv/app/",
@@ -116,3 +139,18 @@ def test_leading_operand_matcher_consumes_separate_long_option_value(tmp_path: P
     command = parse_shell_command("remote-admin --profile production delete item", cwd=tmp_path, home_dir=tmp_path)
 
     assert matcher.match(command)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "rsync --delete --exclude -n src/ dst/",
+        "rsync --delete --exclude=-n src/ dst/",
+        "rsync --delete -f -n src/ dst/",
+    ],
+)
+def test_rsync_option_values_cannot_forge_dry_run(command: str, tmp_path: Path) -> None:
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "review"
+    assert payload["controlling_rule_id"] == "command.remote.rsync.deletion"

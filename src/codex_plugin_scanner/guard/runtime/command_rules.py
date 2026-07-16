@@ -206,6 +206,48 @@ class LeadingOperandCountMatcher:
 
 @final
 @dataclass(frozen=True, slots=True)
+class OptionValueKeyMatcher:
+    """Match documented option values whose leading key has execution semantics."""
+
+    executables: frozenset[str]
+    option_names: frozenset[str]
+    value_keys: frozenset[str]
+
+    def __post_init__(self) -> None:
+        normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
+        normalized_options = frozenset(value.strip() for value in self.option_names if value.strip())
+        normalized_keys = frozenset(value.strip().lower() for value in self.value_keys if value.strip())
+        if not normalized_executables or not normalized_options or not normalized_keys:
+            raise ValueError("OptionValueKeyMatcher requires executables, option names, and value keys")
+        object.__setattr__(self, "executables", normalized_executables)
+        object.__setattr__(self, "option_names", normalized_options)
+        object.__setattr__(self, "value_keys", normalized_keys)
+
+    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        evidence: list[MatcherEvidence] = []
+        for index, segment in enumerate(command.segments):
+            if not _segment_matches_executable(segment, self.executables):
+                continue
+            for value in _option_values(segment.arguments, self.option_names):
+                normalized_value = value.lstrip()
+                if not normalized_value:
+                    continue
+                key = normalized_value.split("=", 1)[0].split(None, 1)[0].lower()
+                if key not in self.value_keys:
+                    continue
+                evidence.append(
+                    MatcherEvidence(
+                        segment_index=index,
+                        executable=segment.executable,
+                        detail="Matched a structured option value with command execution semantics.",
+                    )
+                )
+                break
+        return tuple(evidence)
+
+
+@final
+@dataclass(frozen=True, slots=True)
 class PipelineMatcher:
     """Match an ordered producer-to-consumer pipeline."""
 
@@ -391,6 +433,8 @@ def matcher_index_hints(matcher: CommandMatcher) -> MatcherIndexHints:
         )
     if isinstance(matcher, LeadingOperandCountMatcher):
         return MatcherIndexHints(executables=matcher.executables)
+    if isinstance(matcher, OptionValueKeyMatcher):
+        return MatcherIndexHints(executables=matcher.executables, keywords=matcher.option_names)
     if isinstance(matcher, PipelineMatcher):
         return _merge_matcher_hints((matcher.producer, matcher.consumer))
     if isinstance(matcher, (AnyMatcher, AllMatcher)):
@@ -431,25 +475,62 @@ def _leading_flags_and_operands(
         option_name = _normalize_option_token(argument.split("=", 1)[0])
         flags.add(option_name)
         short_option = argument[:2] if argument.startswith("-") and not argument.startswith("--") else option_name
+        clustered_value_option: str | None = None
+        clustered_value_attached = False
         if argument.startswith("-") and not argument.startswith("--") and len(argument) > 2:
-            for character in argument[1:]:
+            for offset, character in enumerate(argument[1:], start=1):
                 if not character.isalpha():
                     break
                 clustered_flag = f"-{character}"
                 flags.add(clustered_flag)
                 if clustered_flag in options_with_values:
+                    clustered_value_option = clustered_flag
+                    clustered_value_attached = offset < len(argument) - 1
                     break
-        takes_value = option_name in options_with_values or short_option in options_with_values
+        takes_value = (
+            option_name in options_with_values
+            or short_option in options_with_values
+            or clustered_value_option is not None
+        )
         has_attached_value = "=" in argument or (
             argument.startswith("-")
             and not argument.startswith("--")
             and short_option in options_with_values
             and len(argument) > 2
-        )
+        ) or clustered_value_attached
         if takes_value and not has_attached_value:
             index += 1
         index += 1
     return frozenset(flags), arguments[index:]
+
+
+def _option_values(arguments: tuple[str, ...], option_names: frozenset[str]) -> tuple[str, ...]:
+    values: list[str] = []
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        matched_option = next(
+            (
+                option
+                for option in option_names
+                if argument == option or argument.startswith(f"{option}=") or argument.startswith(option)
+            ),
+            None,
+        )
+        if matched_option is None:
+            index += 1
+            continue
+        if argument == matched_option:
+            if index + 1 < len(arguments):
+                values.append(arguments[index + 1])
+                index += 2
+                continue
+        elif argument.startswith(f"{matched_option}="):
+            values.append(argument[len(matched_option) + 1 :])
+        elif matched_option.startswith("-") and not matched_option.startswith("--"):
+            values.append(argument[len(matched_option) :])
+        index += 1
+    return tuple(values)
 
 
 def _normalize_option_token(value: str) -> str:
