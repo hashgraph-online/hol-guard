@@ -45,8 +45,10 @@ from .models import (
     HarnessDetection,
     PolicyDecision,
 )
+from .package_execution_context import package_execution_context_from_scanner_evidence
 from .redaction import redact_text
 from .risk import artifact_risk_signals, artifact_risk_summary
+from .runtime.command_capability import command_capability_status
 from .store import (
     GuardStore,
     _runtime_scoped_exact_match_key,
@@ -501,6 +503,7 @@ def apply_approval_resolution(
     resolve_scope_matches: bool = True,
     approval_gate_input: ApprovalGateInput | None = None,
     approval_gate_grant: ApprovalGateGrant | None = None,
+    approval_gate_subject: str | None = None,
     persist_policy: bool | None = None,
 ) -> dict[str, object]:
     request = store.get_approval_request(request_id)
@@ -521,6 +524,7 @@ def apply_approval_resolution(
         artifact_id=request_artifact_id,
         artifact_hash=request_artifact_hash,
         artifact_type=_string_or_none(request.get("artifact_type")),
+        execution_context=package_execution_context_from_scanner_evidence(request.get("scanner_evidence")),
     )
     if scope == "workspace" and portable_package_workspace is not None:
         resolved_workspace = portable_package_workspace
@@ -553,6 +557,7 @@ def apply_approval_resolution(
         scope=scope,
         approval_gate_input=approval_gate_input,
         approval_gate_grant=approval_gate_grant,
+        subject=approval_gate_subject or f"approval-request:{request_id}",
         now=resolved_at,
     )
     persisted_rule = persist_policy is True or (persist_policy is None and scope != "artifact")
@@ -1142,6 +1147,7 @@ def build_runtime_snapshot(
         "items": pending_requests,
         "latest_receipts": latest_receipts,
         "managed_installs": store.list_managed_installs(),
+        "cloud_command_capability": command_capability_status(store, now=snapshot_now),
         "supply_chain": build_local_supply_chain_posture(store, config, now=snapshot_now),
         **cloud_context,
         "trust_status": trust_status,
@@ -2067,12 +2073,14 @@ def bulk_allow_read_only_once(
 
     bulk_resolution_action = "allow"
     bulk_resolution_scope = "artifact"
+    bulk_subject = f"approval-request-batch:{uuid.uuid5(uuid.NAMESPACE_URL, chr(0).join(sorted(request_ids))).hex}"
     resolved_count = 0
     failed: list[dict[str, str]] = []
     bulk_gate_grant = require_approval_decision(
         store.guard_home,
         action=bulk_resolution_action,
         scope=bulk_resolution_scope,
+        subject=bulk_subject,
         approval_gate_input=approval_gate_input,
         now=resolved_at,
     )
@@ -2098,6 +2106,7 @@ def bulk_allow_read_only_once(
                 return_queue_result=False,
                 resolve_scope_matches=True,
                 approval_gate_grant=bulk_gate_grant,
+                approval_gate_subject=bulk_subject,
                 persist_policy=False,
             )
             resolved_count += 1

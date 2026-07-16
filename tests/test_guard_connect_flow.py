@@ -295,6 +295,42 @@ def test_connect_repair_copy_points_to_browser_sign_in(tmp_path: Path) -> None:
     assert "guardPairSecret" not in rendered
 
 
+def test_connect_status_surfaces_legacy_live_request_recovery(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    binding = {
+        "oauth_source": "default",
+        "oauth_subject_hash": "subject-1",
+        "workspace_id": "workspace-1",
+        "machine_id": "machine-1",
+        "machine_installation_id": "installation-1",
+    }
+    monkeypatch.setattr(store, "get_live_request_oauth_binding", lambda: binding)
+    monkeypatch.setattr(
+        store,
+        "live_request_outbox_status",
+        lambda **kwargs: {
+            "binding_state": "legacy_ambiguous",
+            "legacy_unbound_depth": 3,
+            **kwargs,
+        },
+    )
+
+    payload = build_connect_status_payload(
+        store=store,
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        connect_url="https://hol.org/guard/connect",
+    )
+
+    assert payload["live_request_outbox"]["binding_state"] == "legacy_ambiguous"
+    assert payload["live_request_outbox"]["legacy_unbound_depth"] == 3
+    assert payload["live_request_recovery_command"] == (
+        "hol-guard connect reassign-quarantined --confirm-source default --confirm-workspace workspace-1"
+    )
+
+
 def test_connect_status_requires_retry_when_oauth_not_configured(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.record_guard_connect_pairing_completed(

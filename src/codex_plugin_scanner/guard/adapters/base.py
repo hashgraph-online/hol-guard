@@ -7,7 +7,8 @@ import os
 import shlex
 import shutil
 import subprocess
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
 
@@ -23,6 +24,7 @@ class HarnessContext:
     home_dir: Path
     workspace_dir: Path | None
     guard_home: Path
+    executable_overrides: Mapping[str, str] = field(default_factory=dict[str, str])
 
 
 def _json_payload(path: Path) -> dict[str, object]:
@@ -55,12 +57,20 @@ def _resolve_command(command: str, candidates: tuple[Path, ...] = ()) -> str | N
     return None
 
 
-def _run_command_probe(command: list[str], timeout_seconds: int = 5) -> dict[str, object]:
+def _run_command_probe(
+    command: list[str],
+    timeout_seconds: int = 5,
+    *,
+    cwd: Path | None = None,
+    env: Mapping[str, str] | None = None,
+) -> dict[str, object]:
     try:
         result = subprocess.run(
             command,
             capture_output=True,
             check=False,
+            cwd=cwd,
+            env=env,
             text=True,
             timeout=timeout_seconds,
         )
@@ -183,6 +193,17 @@ class HarnessAdapter:
     def launch_environment(self, context: HarnessContext) -> dict[str, str]:
         del context
         return {}
+
+    def prepare_launch_environment(
+        self,
+        context: HarnessContext,
+        inherited: Mapping[str, str],
+    ) -> dict[str, str]:
+        """Return the environment used to launch this harness."""
+
+        environment = dict(inherited)
+        environment.update(self.launch_environment(context))
+        return environment
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
         return None

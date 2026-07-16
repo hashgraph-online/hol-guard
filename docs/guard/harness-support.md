@@ -84,7 +84,9 @@ Current Guard support in this repo:
   - fails open if a hook crashes or times out, so Kimi Code keeps working when Guard is unreachable
   - uses the same JSON stdin/stdout wire protocol as Codex and Claude Code
 - `grok`
-  - detects the `grok` executable, `~/.grok/config.toml`, `~/.grok/managed_config.toml`, `~/.grok/hooks/`, skills, plugins, and project `.grok/` surfaces
+  - detects a trusted absolute `grok` executable, `~/.grok/config.toml`, `~/.grok/managed_config.toml`, `~/.grok/hooks/`, skills, plugins, and project `.grok/` surfaces
+  - rejects relative, current-directory, workspace, unsafe-owner/mode, and workspace-targeting symlink executables before probing or launch; custom install roots can be selected once with `hol-guard run grok --grok-executable /absolute/path/to/grok`
+  - binds an explicit custom selection to its SHA-256 identity and sanitizes code-loader variables and unsafe PATH entries without adding prompts to unchanged launches
   - installs Guard-owned `PreToolUse` hooks for `Bash`, `Read`, `Edit`, `Grep`, `MCPTool`, and `WebFetch` plus `UserPromptSubmit` prompt screening in `~/.grok/hooks/hol-guard-*.json`
   - installs Guard-managed deny rules in `~/.grok/managed_config.toml` without touching user `~/.grok/config.toml` or `~/.grok/auth`
   - blocks by returning exit code `2` and Grok-native stdout JSON `{"decision":"deny","reason":"..."}` with approval-center copy in stderr

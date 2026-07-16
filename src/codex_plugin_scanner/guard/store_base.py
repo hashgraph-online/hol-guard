@@ -112,6 +112,7 @@ from .store_connect import (
 from .store_connect import (
     mark_connect_result as persist_connect_result,
 )
+from .store_live_request_outbox import bind_live_request_outbox_for_request
 from .store_evidence import (
     EvidenceRecord,
     ensure_evidence_schema,
@@ -215,6 +216,13 @@ _OAUTH_LOCAL_CREDENTIALS_HASH_KEY = "credentials_sha256"
 _OAUTH_LOCAL_CREDENTIALS_REF_KEY = "credentials_ref"
 _OAUTH_PRIMARY_SECRET_TIMEOUT_SECONDS = 2.0
 _APPROVAL_GATE_POLICY_SOURCE = "approval-gate"
+_GUARD_CLOUD_COMMAND_STATE_KEYS = (
+    "guard_command_queue_state",
+    "guard_command_capability_v1",
+    "guard_command_pending_approvals_v1",
+    "guard_command_local_approvals_v1",
+    "guard_command_replay_state_v1",
+)
 _GUARD_CLOUD_RESET_STATE_KEYS = (
     "sync_summary",
     "receipt_sync_cursor",
@@ -229,6 +237,7 @@ _GUARD_CLOUD_RESET_STATE_KEYS = (
     "supply_chain_bundle_entitlement",
     "supply_chain_bundle_daemon",
     "headless_app_sync_summary",
+    *_GUARD_CLOUD_COMMAND_STATE_KEYS,
 )
 
 

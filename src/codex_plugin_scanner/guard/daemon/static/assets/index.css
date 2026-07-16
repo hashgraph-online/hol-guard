@@ -3763,6 +3763,10 @@
     padding-left: calc(var(--spacing) * 3.5);
   }
 
+  .pl-4 {
+    padding-left: calc(var(--spacing) * 4);
+  }
+
   .pl-7 {
     padding-left: calc(var(--spacing) * 7);
   }

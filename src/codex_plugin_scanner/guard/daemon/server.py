@@ -171,6 +171,13 @@ from ..store_evidence import (
 )
 from .command_queue_worker import CommandQueueWorker, start_command_queue_worker, stop_command_queue_worker
 from .dashboard_update import merge_dashboard_update_progress, schedule_guard_dashboard_update
+from .discovery import (
+    DAEMON_DISCOVERY_CHALLENGE_TTL_SECONDS,
+    DAEMON_DISCOVERY_PROTOCOL_VERSION,
+    authenticated_challenge_payload,
+    load_authenticated_daemon_state,
+    load_daemon_discovery_key,
+)
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
     clear_guard_daemon_state_if_current,
@@ -272,6 +279,8 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     package_firewall_session_nonces: dict[str, float]
     package_firewall_session_nonces_lock: threading.Lock
     approval_attention: ApprovalAttentionCoordinator
+    daemon_discovery_challenges: dict[str, dict[str, object]]
+    daemon_discovery_challenges_lock: threading.Lock
 
     def __init__(
         self,
@@ -305,6 +314,8 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
         self.package_firewall_action_rate_limiter = PackageFirewallActionRateLimiter()
         self.package_firewall_session_nonces = {}
         self.package_firewall_session_nonces_lock = threading.Lock()
+        self.daemon_discovery_challenges = {}
+        self.daemon_discovery_challenges_lock = threading.Lock()
         from .hook_worker import HookWorker
 
         self.hook_worker = HookWorker(store=store)
@@ -1706,6 +1717,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             ).hexdigest()
             self._write_json({"proof": proof})
             return
+        if parsed.path == "/v1/daemon/identity-challenge":
+            self._handle_daemon_identity_challenge(payload)
+            return
         if self._requires_header_token(parsed.path, path_parts) and not self._header_token_is_valid(payload=payload):
             if (
                 len(path_parts) == 4
@@ -1730,6 +1744,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
             else:
                 self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+            return
+        if parsed.path == "/v1/hooks/codex" and not self._consume_codex_daemon_challenge(payload):
+            self._write_json(
+                {"error": "daemon_identity_required", "repair": "Run `hol-guard daemon repair`."},
+                status=401,
+            )
             return
         if parsed.path == "/v1/initialize":
             self._handle_initialize(payload)
@@ -4428,6 +4448,105 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _query_has_guard_token(self, query: str) -> bool:
         return any(key == "token" for key, _value in parse_qsl(query, keep_blank_values=True))
 
+    def _handle_daemon_identity_challenge(self, payload: dict[str, object]) -> None:
+        nonce = self._optional_string(payload.get("nonce"))
+        hook_event = self._optional_string(payload.get("hook_event"))
+        state_id = self._optional_string(payload.get("state_id"))
+        protocol_version = payload.get("protocol_version")
+        if (
+            nonce is None
+            or len(nonce) != 64
+            or any(character not in "0123456789abcdef" for character in nonce.lower())
+            or hook_event is None
+            or len(hook_event) > 128
+            or state_id is None
+            or protocol_version != DAEMON_DISCOVERY_PROTOCOL_VERSION
+        ):
+            self._write_json({"error": "invalid_daemon_identity_challenge"}, status=400)
+            return
+        daemon_server = self._daemon_server()
+        guard_home = daemon_server.store.guard_home
+        state = load_authenticated_daemon_state(guard_home)
+        discovery_key = load_daemon_discovery_key(guard_home)
+        if state is None or discovery_key is None:
+            self._write_json({"error": "daemon_identity_unavailable"}, status=503)
+            return
+        expected_guard_home = str(guard_home.resolve())
+        if (
+            state.get("state_id") != state_id
+            or state.get("guard_home") != expected_guard_home
+            or state.get("host") != daemon_server.daemon_host()
+            or state.get("port") != daemon_server.daemon_port()
+            or state.get("pid") != os.getpid()
+        ):
+            self._write_json({"error": "daemon_identity_state_mismatch"}, status=409)
+            return
+        issued_at_ms = int(time.time() * 1000)
+        expires_at_ms = issued_at_ms + DAEMON_DISCOVERY_CHALLENGE_TTL_SECONDS * 1000
+        response = authenticated_challenge_payload(
+            discovery_key=discovery_key,
+            state=state,
+            nonce=nonce,
+            hook_event=hook_event,
+            issued_at_ms=issued_at_ms,
+            expires_at_ms=expires_at_ms,
+        )
+        with daemon_server.daemon_discovery_challenges_lock:
+            expired: list[str] = []
+            for candidate, item in daemon_server.daemon_discovery_challenges.items():
+                candidate_expiry = item.get("expires_at_ms")
+                if not isinstance(candidate_expiry, int) or candidate_expiry < issued_at_ms:
+                    expired.append(candidate)
+            for candidate in expired:
+                daemon_server.daemon_discovery_challenges.pop(candidate, None)
+            if len(daemon_server.daemon_discovery_challenges) >= 256:
+                oldest = next(iter(daemon_server.daemon_discovery_challenges))
+                daemon_server.daemon_discovery_challenges.pop(oldest, None)
+            daemon_server.daemon_discovery_challenges[nonce] = {
+                "proof": response["proof"],
+                "hook_event": hook_event,
+                "expires_at_ms": expires_at_ms,
+                "connection_id": id(self.connection),
+                "state_id": state_id,
+            }
+        self.close_connection = False
+        # The handler intentionally remains HTTP/1.0 for the rest of the daemon,
+        # but this two-step proof must stay on one TCP connection.  Advertise an
+        # HTTP/1.1 response for this request only; the response has an explicit
+        # Content-Length, so http.client can safely reuse the socket for the
+        # authenticated hook request.  ``close_connection = False`` also tells
+        # BaseHTTPRequestHandler to read that next request on this handler.
+        self.connection.settimeout(DAEMON_DISCOVERY_CHALLENGE_TTL_SECONDS)
+        previous_protocol_version = self.protocol_version
+        self.protocol_version = "HTTP/1.1"
+        try:
+            self._write_json(response, extra_headers={"Cache-Control": "no-store"})
+        finally:
+            self.protocol_version = previous_protocol_version
+
+    def _consume_codex_daemon_challenge(self, payload: dict[str, object]) -> bool:
+        nonce = self.headers.get("X-Guard-Daemon-Nonce")
+        proof = self.headers.get("X-Guard-Daemon-Proof")
+        if not isinstance(nonce, str) or not isinstance(proof, str):
+            return False
+        daemon_server = self._daemon_server()
+        with daemon_server.daemon_discovery_challenges_lock:
+            challenge = daemon_server.daemon_discovery_challenges.pop(nonce, None)
+        if challenge is None:
+            return False
+        expires_at_ms = challenge.get("expires_at_ms")
+        expected_proof = challenge.get("proof")
+        if (
+            not isinstance(expires_at_ms, int)
+            or expires_at_ms < int(time.time() * 1000)
+            or challenge.get("connection_id") != id(self.connection)
+            or not isinstance(expected_proof, str)
+            or not secrets.compare_digest(proof, expected_proof)
+        ):
+            return False
+        event = payload.get("hook_event_name", payload.get("event"))
+        return isinstance(event, str) and event.strip() == challenge.get("hook_event")
+
     def _write_unauthorized(self, *, extra_headers: dict[str, str] | None = None) -> None:
         self._record_auth_audit_event()
         self._write_json({"error": "unauthorized"}, status=401, extra_headers=extra_headers)
@@ -5577,7 +5696,14 @@ class GuardDaemonServer:
         self._shutdown_started.clear()
         self._persist_aibom_inventory_context()
         self._server.last_activity_monotonic = time.monotonic()
-        write_guard_daemon_state(self._server.store.guard_home, self.port, self._server.auth_token)
+        write_guard_daemon_state(
+            self._server.store.guard_home,
+            self.port,
+            self._server.auth_token,
+            host=self._server.daemon_host(),
+            state_id=self._server.runtime_session_id,
+            started_at=self._server.runtime_started_at,
+        )
         self._server.store.upsert_runtime_state(
             session_id=self._server.runtime_session_id,
             daemon_host=self._server.runtime_host,

@@ -155,6 +155,13 @@ def _configure_guard_local_parsers(
         "--default-action",
         choices=("allow", "warn", "review", "block", "sandbox-required", "require-reapproval"),
     )
+    run_parser.add_argument(
+        "--grok-executable",
+        help=(
+            "Select and register an absolute Grok executable path. Required once for trusted custom "
+            "installations that are not in a standard install root."
+        ),
+    )
     run_parser.add_argument("--arg", dest="passthrough_args", action="append", default=[])
 
     protect_parser = guard_subparsers.add_parser(

@@ -1,6 +1,6 @@
 import { ActionButton, Badge, KeyValueGrid, SectionLabel, Surface, Tag, ProofStrip } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
-import type { GuardCloudSyncHealth, GuardInventoryItem, GuardProofStatus, GuardReceipt, GuardRuntimeDevice, GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-types";
+import type { GuardCloudCommandCapability, GuardCloudSyncHealth, GuardInventoryItem, GuardProofStatus, GuardReceipt, GuardRuntimeDevice, GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-types";
 
 const WATCHED_HARNESSES = ["codex", "claude-code", "opencode", "copilot", "gemini", "cursor", "hermes", "openclaw", "kimi", "grok"] as const;
 
@@ -168,6 +168,89 @@ function CloudSyncHealthCard(props: { health: GuardCloudSyncHealth }) {
         <Tag tone={cloudSyncHealthTone(props.health.state)}>{humanizeCloudSyncHealthLabel(copy.label)}</Tag>
       </div>
       <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{copy.detail}</p>
+    </div>
+  );
+}
+
+export function resolveCloudCommandCapabilityCopy(capability: GuardCloudCommandCapability | undefined): {
+  label: string;
+  detail: string;
+  tone: "green" | "slate" | "attention";
+} {
+  if (capability?.reason === "command_queue_environment_disabled") {
+    return {
+      label: "Commands paused",
+      detail: "A local emergency environment setting is pausing Cloud commands. Read-only Cloud sync continues.",
+      tone: "slate",
+    };
+  }
+  if (capability === undefined || !capability.enabled) {
+    return {
+      label: "Commands off",
+      detail: "Guard Cloud commands are disabled on this device. Read-only Cloud sync continues independently.",
+      tone: "slate",
+    };
+  }
+  if (capability.pending_commands.length > 0) {
+    return {
+      label: `${capability.pending_commands.length} awaiting local approval`,
+      detail: "A state-changing Cloud command is paused until you approve that exact job locally.",
+      tone: "attention",
+    };
+  }
+  return {
+    label: "Commands enabled",
+    detail: `${capability.operations.length} exact operation${capability.operations.length === 1 ? " is" : "s are"} granted. State-changing jobs still require one-job local approval.`,
+    tone: "green",
+  };
+}
+
+function CloudCommandCapabilityCard(props: { capability: GuardCloudCommandCapability | undefined }) {
+  const capability = props.capability;
+  const copy = resolveCloudCommandCapabilityCopy(capability);
+  const capabilityValid = capability?.capability_valid ?? capability?.enabled ?? false;
+  const command = capabilityValid
+    ? capability.revoke_command
+    : capability?.enable_command ?? "hol-guard commands enable --operations read-only";
+  return (
+    <div className="rounded-xl border border-border bg-white px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">
+          Guard Cloud command access
+        </p>
+        <Tag tone={copy.tone}>{copy.label}</Tag>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{copy.detail}</p>
+      {capabilityValid && capability ? (
+        <>
+          <p className="mt-2 text-xs text-slate-500">
+            Issuer: {capability.issuer ?? "local device"}
+            {capability.expires_at ? ` · Expires ${formatRelativeTime(capability.expires_at)}` : ""}
+          </p>
+          <details className="mt-2 text-xs text-slate-600">
+            <summary className="cursor-pointer font-medium">
+              Granted operations ({capability.operations.length})
+            </summary>
+            <ul className="mt-2 space-y-1 pl-4 font-mono">
+              {capability.operations.map((operation) => <li key={operation}>{operation}</li>)}
+            </ul>
+          </details>
+          {capability.pending_commands.slice(0, 3).map((pending) => (
+            <div key={pending.id} className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              <p className="text-xs font-medium text-amber-900">{pending.operation} · {pending.issuer}</p>
+              <p className="mt-1 break-all font-mono text-xs text-amber-800">{pending.approveCommand}</p>
+            </div>
+          ))}
+          {capability.pending_commands.length > 3 ? (
+            <p className="mt-2 text-xs text-slate-500">
+              {capability.pending_commands.length - 3} more pending commands are available with hol-guard commands status.
+            </p>
+          ) : null}
+        </>
+      ) : null}
+      <p className="mt-3 break-all rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs text-slate-600">
+        {command}
+      </p>
     </div>
   );
 }
@@ -410,6 +493,8 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
           <DeviceProofCard device={snapshot.device} proofStatus={snapshot.proof_status} />
           <PackageManagerProtectionCard snapshot={snapshot} />
         </div>
+
+        <CloudCommandCapabilityCard capability={snapshot.cloud_command_capability} />
 
         <div className="rounded-xl border border-border bg-white px-5 py-4">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">

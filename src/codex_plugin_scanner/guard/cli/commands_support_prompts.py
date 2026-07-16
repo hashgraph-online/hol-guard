@@ -436,6 +436,9 @@ def _guard_rerun_command(args: argparse.Namespace) -> str:
     default_action = getattr(args, "default_action", None)
     if isinstance(default_action, str) and default_action:
         command.extend(["--default-action", default_action])
+    grok_executable = getattr(args, "grok_executable", None)
+    if isinstance(grok_executable, str) and grok_executable:
+        command.extend(["--grok-executable", grok_executable])
     passthrough_args = getattr(args, "passthrough_args", [])
     if isinstance(passthrough_args, list):
         for value in passthrough_args:

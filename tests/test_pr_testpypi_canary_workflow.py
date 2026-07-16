@@ -12,8 +12,9 @@ def test_pr_canary_uses_trusted_publishing_for_same_repository_prs() -> None:
     workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
 
     assert workflow[True]["pull_request"] == {"branches": ["main"]}
-    assert workflow["permissions"]["id-token"] == "write"
+    assert workflow["permissions"] == {"contents": "read"}
     job = workflow["jobs"]["publish-testpypi"]
+    assert job["permissions"] == {"id-token": "write"}
     assert "github.event.pull_request.head.repo.full_name == github.repository" in job["if"]
     assert job["environment"] == "testpypi"
     assert "github.event_name == 'pull_request'" in job["if"]
@@ -26,9 +27,7 @@ def test_pr_canary_uses_trusted_publishing_for_same_repository_prs() -> None:
     assert "token" not in publish_step.get("with", {})
     assert "username" not in publish_step.get("with", {})
     assert any(
-        step.get("name") == "Keep only the Guard canary distribution"
-        for step in job["steps"]
-        if isinstance(step, dict)
+        step.get("name") == "Keep only the Guard canary distribution" for step in job["steps"] if isinstance(step, dict)
     )
     assert "rm -f dist/plugin_scanner-* dist/plugin-scanner-*" in (ROOT / ".github/workflows/publish.yml").read_text(
         encoding="utf-8"

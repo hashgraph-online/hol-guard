@@ -189,13 +189,33 @@ def test_unidentified_package_reason_fires_for_supported_ecosystem(tmp_path: Pat
         workspace_dir=tmp_path / "workspace",
         now="2026-05-19T00:00:00Z",
     )
-    assert result.decision == "monitor"
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert "monitor" not in result.user_copy.summary.lower()
     assert len(result.packages) == 1
     codes = [reason["code"] for reason in result.packages[0]["reasons"]]
     assert "no_cached_match" in codes
     assert "unidentified_package" in codes
     unidentified = next(r for r in result.packages[0]["reasons"] if r["code"] == "unidentified_package")
     assert unidentified["severity"] == "medium"
+
+
+def test_unidentified_package_blocks_under_strict_policy(tmp_path: Path) -> None:
+    """Strict policy fails closed when registry identity cannot be resolved."""
+
+    guard_home = tmp_path / "home"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text('security_level = "strict"\n', encoding="utf-8")
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("unresolved-npm-pkg@1.0.0"),
+        store=GuardStore(guard_home),
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "block"
+    assert result.policy_action == "block"
 
 
 def test_unidentified_package_reason_absent_for_unsupported_ecosystem(tmp_path: Path) -> None:

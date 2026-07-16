@@ -546,7 +546,7 @@ def guard_run(
     environment["HOME"] = str(context.home_dir)
     if os.name == "nt":
         environment["USERPROFILE"] = str(context.home_dir)
-    environment.update(adapter.launch_environment(context))
+    environment = adapter.prepare_launch_environment(context, environment)
     if harness == "hermes":
         _hermes_token = _resolve_hermes_guard_access_token(store)
         if _hermes_token is not None:

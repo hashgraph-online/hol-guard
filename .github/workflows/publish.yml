@@ -19,7 +19,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: hol-guard-publish-${{ github.ref }}
@@ -41,8 +40,18 @@ jobs:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
-          uv-version: "0.9.26"
+          version: "0.9.26"
           enable-cache: true
+      - name: Verify release uv before dependency install
+        env:
+          EXPECTED_UV_VERSION: "0.9.26"
+          SETUP_UV_ACTION_REF: fac544c07dec837d0ccb6301d7b5580bf5edae39
+        run: |
+          python3 scripts/write_release_toolchain_sbom.py \
+            --output "$RUNNER_TEMP/hol-guard-release-toolchain-preflight.cdx.json" \
+            --release-version preflight \
+            --expected-uv-version "$EXPECTED_UV_VERSION" \
+            --setup-action-ref "$SETUP_UV_ACTION_REF"
       - name: Install dependencies
         run: uv sync --frozen --extra dev --extra publish --extra cisco
       - name: Compute publish version
@@ -105,6 +114,17 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Computed version: $VERSION"
+      - name: Verify release toolchain and write SBOM
+        env:
+          EXPECTED_UV_VERSION: "0.9.26"
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          SETUP_UV_ACTION_REF: fac544c07dec837d0ccb6301d7b5580bf5edae39
+        run: |
+          python3 scripts/write_release_toolchain_sbom.py \
+            --output "release-metadata/plugin-scanner-v${RELEASE_VERSION}.toolchain.cdx.json" \
+            --release-version "$RELEASE_VERSION" \
+            --expected-uv-version "$EXPECTED_UV_VERSION" \
+            --setup-action-ref "$SETUP_UV_ACTION_REF"
       - name: Stamp package version
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -165,6 +185,12 @@ jobs:
         with:
           name: distributions
           path: dist/
+      - name: Upload release toolchain SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-toolchain-sbom
+          path: release-metadata/*.cdx.json
+          if-no-files-found: error
 
   publish-testpypi:
     name: Publish to TestPyPI (Manual)
@@ -229,6 +255,11 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distributions
+          path: dist/
+      - name: Download release toolchain SBOM
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-toolchain-sbom
           path: dist/
       - name: Skip if release already exists
         id: release_exists
@@ -349,7 +380,7 @@ jobs:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
-          uv-version: "0.9.26"
+          version: "0.9.26"
       - name: Sync locked release tooling
         run: |
           uv sync --frozen
@@ -392,8 +423,7 @@ jobs:
     needs: [build, publish-pypi, release, publish-container]
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -407,6 +437,8 @@ jobs:
         with:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
       - name: Sync locked release tooling
         run: |
           uv sync --frozen

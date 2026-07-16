@@ -290,7 +290,7 @@ hol-guard settings approval-password status
 
 The default mode requires proof for allow decisions and broad trust changes. If your team also wants proof before block decisions, enable **Require password for block decisions too** in Settings or pass `--strict-all-decisions` when enabling the gate.
 
-Cooldown is intentionally narrow. A valid cooldown can satisfy ordinary non-global allow decisions, but it cannot satisfy global allow, policy clear, settings import/reset, disabling the password gate, disabling TOTP, recovery, or policy-memory clear. When TOTP is enabled, cooldown is disabled so every protected action requires both the password and a current authenticator code. Lock or unlock the current password-only terminal approval window explicitly:
+Cooldown is intentionally narrow. A valid cooldown can satisfy ordinary non-global allow decisions, but it cannot satisfy global allow, policy clear, settings import/reset, disabling the password gate, disabling TOTP, recovery, or policy-memory clear. When TOTP is enabled, it replaces password proof and cooldown is disabled, so every protected action requires a current authenticator code. Lock or unlock the current password-only terminal approval window explicitly:
 
 ```bash
 hol-guard approvals unlock --duration 15m
@@ -305,7 +305,9 @@ hol-guard settings approval-totp verify --current-password '<password>' --code 1
 hol-guard settings approval-totp status
 ```
 
-Guard emits a standard `otpauth://totp/HOL%20Guard:<device>` URI with a Base32 secret, SHA-1, 6 digits, and a 30-second period. The seed is encrypted locally and never appears in public settings, diagnostics export, receipts, URLs, or screenshots. Guard rejects invalid codes, replayed time steps, and stale enrollment state. When TOTP is enabled, protected actions require both the current password and a current authenticator code.
+Guard emits a standard `otpauth://totp/HOL%20Guard:<device>` URI with a Base32 secret, SHA-1, 6 digits, and a 30-second period. The seed is encrypted locally and never appears in public settings, diagnostics export, receipts, URLs, or screenshots. Guard rejects invalid codes, replayed time steps, and stale enrollment state. When TOTP is enabled, protected actions require a current authenticator code instead of the password.
+
+After the active factor succeeds, Guard issues an internal 30-second grant bound to that exact action, scope, subject, and session nonce. It exists only long enough for the daemon and store to finish the current transaction; it is not exposed to the browser or reusable as a broad session. Guard counts password and authenticator failures separately and locks the active factor after five failed attempts. Password or TOTP rotation revokes outstanding grants and clears any recovery, approval-session, or trusted-device state.
 
 ## What `install` does
 
@@ -379,7 +381,9 @@ Current strategy:
 - `grok`
   installs Guard-owned Grok hook JSON in `~/.grok/hooks/` and permission deny rules in `~/.grok/managed_config.toml`,
   blocks with Grok-native stdout JSON `{"decision":"deny"}` plus approval-center copy, never reads `~/.grok/auth`, and
-  treats `--always-approve` or `bypassPermissions` as degraded protection when detected
+  treats `--always-approve` or `bypassPermissions` as degraded protection when detected. Guard launches only a trusted
+  absolute Grok executable; for a custom install root, select it once with
+  `hol-guard run grok --grok-executable /absolute/path/to/grok`.
 
 Guard does not claim VS Code Copilot extension-host interception in this pass. A VS Code inline tool prompt by itself is
 not proof that Guard blocked the action, because that prompt can come from VS Code's own permission surface. For Copilot,
@@ -446,6 +450,16 @@ When Guard blocks a launch, it opens a persistent approval link in the terminal 
 To inspect a pending request's details or get the approval URL, pass the request-id to the `approve` command with `--dry-run`, or visit the approval center URL shown in the block message directly.
 
 ## Troubleshooting
+
+### Codex cannot authenticate the local daemon
+
+Codex hooks authenticate the daemon discovery record before sending the local daemon token or hook input. The bridge automatically attempts one daemon restart and then uses the isolated local review path. If Codex reports that daemon authentication still failed, run:
+
+```bash
+hol-guard daemon repair
+```
+
+Then retry the Codex action. Repair preserves pending approvals, clears stale authenticated-discovery state, and removes an invalid discovery key so the next daemon start can generate a private replacement. Do not make `daemon-state.json`, `daemon-auth-token`, or `daemon-discovery-key` group- or world-readable; Guard rejects those files instead of weakening the identity check.
 
 ### Approval link says API error
 

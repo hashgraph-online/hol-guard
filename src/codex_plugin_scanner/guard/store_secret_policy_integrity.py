@@ -91,6 +91,11 @@ class StoreSecretPolicyIntegrityMixin:
         self._initialize()
 
     @property
+    def guard_source(self) -> str:
+        """Return the normalized connection source bound to this store view."""
+        return self._guard_source
+
+    @property
     def _oauth_secret_store(self) -> SecretStore:
         secret_store = getattr(self, "_StoreSecretPolicyIntegrityMixin__oauth_secret_store", _OAUTH_SECRET_STORE_UNSET)
         if secret_store is _OAUTH_SECRET_STORE_UNSET:

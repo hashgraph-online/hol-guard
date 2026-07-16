@@ -21,7 +21,7 @@ def start_command_queue_worker(
     store: GuardStore,
     existing: CommandQueueWorker | None = None,
 ) -> CommandQueueWorker | None:
-    if not command_queue_enabled():
+    if not command_queue_enabled(store):
         return existing if existing is not None and existing.thread.is_alive() else None
     if existing is not None and existing.thread.is_alive() and not existing.stop_event.is_set():
         return existing

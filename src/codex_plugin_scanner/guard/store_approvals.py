@@ -161,6 +161,7 @@ def approval_schema_statement() -> str:
           recommended_scope text not null,
           changed_fields_json text not null,
           source_scope text not null,
+          oauth_source text,
           config_path text not null,
           workspace text,
           launch_target text,
@@ -196,8 +197,15 @@ def approval_schema_statement() -> str:
         """
 
 
-def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalRequest, now: str) -> str:
+def add_approval_request(
+    connection: sqlite3.Connection,
+    request: GuardApprovalRequest,
+    now: str,
+    *,
+    oauth_source: str = "default",
+) -> str:
     _begin_immediate(connection)
+    normalized_oauth_source = oauth_source.strip().lower() or "default"
     identity_key = _normalized_identity_key(request.launch_target)
     action_identity, queue_group_id = approval_queue_identity_for_request(request)
     existing = connection.execute(
@@ -206,11 +214,12 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
         from approval_requests
         where queue_group_id = ?
           and harness = ?
+          and oauth_source = ?
           and status = 'pending'
         order by last_seen_at desc, request_id desc
         limit 1
         """,
-        (queue_group_id, request.harness),
+        (queue_group_id, request.harness, normalized_oauth_source),
     ).fetchone()
     if existing is None:
         existing = connection.execute(
@@ -218,6 +227,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
         select request_id
         from approval_requests
         where harness = ?
+          and oauth_source = ?
           and artifact_id = ?
           and workspace IS ?
           and normalized_identity_key = ?
@@ -226,7 +236,13 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
         order by created_at desc
         limit 1
         """,
-            (request.harness, request.artifact_id, request.workspace, identity_key),
+            (
+                request.harness,
+                normalized_oauth_source,
+                request.artifact_id,
+                request.workspace,
+                identity_key,
+            ),
         ).fetchone()
     if existing is None:
         existing = connection.execute(
@@ -234,6 +250,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
             select request_id
             from approval_requests
             where harness = ?
+              and oauth_source = ?
               and artifact_id = ?
               and workspace IS ?
               and launch_target IS ?
@@ -243,7 +260,13 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
             order by created_at desc
             limit 1
             """,
-            (request.harness, request.artifact_id, request.workspace, request.launch_target),
+            (
+                request.harness,
+                normalized_oauth_source,
+                request.artifact_id,
+                request.workspace,
+                request.launch_target,
+            ),
         ).fetchone()
     request_id = str(existing["request_id"]) if existing is not None else request.request_id
     if existing is not None:
@@ -260,7 +283,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
                 artifact_label = ?, source_label = ?, trigger_summary = ?, why_now = ?, launch_summary = ?,
                 risk_headline = ?, action_envelope_json = ?, decision_v2_json = ?, fallback_cli_command = ?,
                 scanner_evidence_json = ?, review_command = ?, approval_url = ?, raw_command_text = ?
-            where request_id = ?
+            where request_id = ? and oauth_source = ?
             """,
             (
                 request.harness,
@@ -300,6 +323,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
                 approval_url,
                 request.raw_command_text,
                 request_id,
+                normalized_oauth_source,
             ),
         )
         return request_id
@@ -307,7 +331,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
         """
         insert into approval_requests (
           request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
-          recommended_scope, changed_fields_json, source_scope, config_path, workspace,
+          recommended_scope, changed_fields_json, source_scope, oauth_source, config_path, workspace,
           launch_target, normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at,
           transport, risk_summary,
           risk_signals_json, artifact_label, source_label, trigger_summary, why_now, launch_summary, risk_headline,
@@ -318,7 +342,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
         values (
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-          ?
+          ?, ?
             )
         """,
         (
@@ -333,6 +357,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
             request.recommended_scope,
             json.dumps(list(request.changed_fields)),
             request.source_scope,
+            normalized_oauth_source,
             request.config_path,
             request.workspace,
             request.launch_target,
@@ -425,7 +450,8 @@ def list_approval_requests(
     where_clause = f"where {' and '.join(clauses)}" if clauses else ""
     query = f"""
         select request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
-               recommended_scope, changed_fields_json, source_scope, config_path, workspace, launch_target,
+               recommended_scope, changed_fields_json, source_scope, oauth_source, config_path, workspace,
+                launch_target,
                 normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at, transport,
                 risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
                 launch_summary, risk_headline, action_envelope_json, decision_v2_json,
@@ -448,7 +474,8 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
     row = connection.execute(
         f"""
         select request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
-               recommended_scope, changed_fields_json, source_scope, config_path, workspace, launch_target,
+               recommended_scope, changed_fields_json, source_scope,
+                {_column_expr(columns, "oauth_source", "NULL")}, config_path, workspace, launch_target,
                 {_column_expr(columns, "normalized_identity_key", "NULL")},
                 {_column_expr(columns, "action_identity", "NULL")},
                 {_column_expr(columns, "queue_group_id", "NULL")},
@@ -567,6 +594,7 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "recommended_scope": str(row["recommended_scope"]),
         "changed_fields": _safe_json_list(row["changed_fields_json"]),
         "source_scope": str(row["source_scope"]),
+        "oauth_source": row["oauth_source"],
         "config_path": str(row["config_path"]),
         "workspace": row["workspace"],
         "launch_target": row["launch_target"],
@@ -647,7 +675,10 @@ def approval_index_statements() -> list[str]:
             "create index if not exists idx_approval_status_identity_workspace "
             "on approval_requests(status, normalized_identity_key, workspace)"
         ),
-        "create index if not exists idx_approval_group_status on approval_requests(queue_group_id, status)",
+        (
+            "create index if not exists idx_approval_source_group_status "
+            "on approval_requests(oauth_source, queue_group_id, status)"
+        ),
         (
             "create index if not exists idx_approval_status_last_seen "
             "on approval_requests(status, last_seen_at desc, request_id desc)"
@@ -917,6 +948,7 @@ def resolve_request_with_queue_result(
     duplicate_ids = resolve_matching_duplicate_requests(
         connection,
         queue_group_id=str(queue_group_id) if isinstance(queue_group_id, str) else None,
+        oauth_source=str(request["oauth_source"]) if isinstance(request.get("oauth_source"), str) else None,
         request_id=request_id,
         resolution_action=resolution_action,
         resolution_scope=resolution_scope,
@@ -994,6 +1026,7 @@ def resolve_matching_duplicate_requests(
     connection: sqlite3.Connection,
     *,
     queue_group_id: str | None,
+    oauth_source: str | None,
     request_id: str,
     resolution_action: str,
     resolution_scope: str,
@@ -1008,11 +1041,12 @@ def resolve_matching_duplicate_requests(
         select request_id
         from approval_requests
         where queue_group_id = ?
+          and oauth_source is ?
           and request_id != ?
           and status = 'pending'
         order by last_seen_at desc, request_id desc
         """,
-        (queue_group_id, request_id),
+        (queue_group_id, oauth_source, request_id),
     ).fetchall()
     connection.execute(
         """
@@ -1023,10 +1057,11 @@ def resolve_matching_duplicate_requests(
             reason = ?,
             resolved_at = ?
         where queue_group_id = ?
+          and oauth_source is ?
           and request_id != ?
           and status = 'pending'
         """,
-        (resolution_action, resolution_scope, reason, resolved_at, queue_group_id, request_id),
+        (resolution_action, resolution_scope, reason, resolved_at, queue_group_id, oauth_source, request_id),
     )
     return [str(row["request_id"]) for row in rows]
 

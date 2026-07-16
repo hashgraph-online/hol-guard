@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import threading
 import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -89,8 +90,11 @@ def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPa
 
     auth_token = "test-guard-token"
     guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    (guard_home / "daemon-auth-token").write_text(auth_token, encoding="utf-8")
+    guard_home.mkdir(mode=0o700)
+    token_path = guard_home / "daemon-auth-token"
+    token_path.write_text(auth_token, encoding="utf-8")
+    if os.name != "nt":
+        os.chmod(token_path, 0o600)
     state_path = guard_home / "daemon-state.json"
 
     daemon_server = HTTPServer(("127.0.0.1", 0), _DaemonHandler)

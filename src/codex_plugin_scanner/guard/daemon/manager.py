@@ -7,8 +7,10 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shlex
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -24,6 +26,13 @@ from typing import BinaryIO, TypedDict
 
 from ...version import __version__
 from ..launcher import merge_guard_launcher_env
+from .discovery import (
+    authenticate_daemon_state,
+    daemon_discovery_key_path,
+    ensure_daemon_discovery_key,
+    load_authenticated_daemon_state,
+    load_daemon_discovery_key,
+)
 
 DEFAULT_GUARD_DAEMON_PORT = 4781
 GUARD_DAEMON_PORT_RANGE = 1000
@@ -41,6 +50,8 @@ _APPROVAL_CENTER_LOCATOR_FILE = "approval-center-locator.json"
 
 _START_LOCKS: dict[str, threading.Lock] = {}
 _START_LOCKS_GUARD = threading.Lock()
+_STATE_WRITE_LOCKS: dict[str, threading.Lock] = {}
+_STATE_WRITE_LOCKS_GUARD = threading.Lock()
 _LAST_EPHEMERAL_REAP_AT = 0.0
 _runtime_fingerprint_cache: str | None = None
 
@@ -98,6 +109,15 @@ def ensure_guard_daemon(
                 return existing_url
             retire_all_guard_daemons_for_home(guard_home)
             clear_guard_daemon_state(guard_home)
+        raw_state = _load_state(guard_home)
+        if (
+            state_path.is_file()
+            and isinstance(raw_state, dict)
+            and _load_authenticated_daemon_identity(guard_home) is None
+        ):
+            _retire_guard_daemon_process({**raw_state, "guard_home": str(guard_home)})
+            clear_guard_daemon_state(guard_home)
+            _remove_invalid_daemon_discovery_key(guard_home)
         adopted_url = _adopt_existing_guard_daemon(guard_home, preferred_port=preferred_port)
         if adopted_url is not None:
             _retire_duplicate_guard_daemons(
@@ -198,9 +218,10 @@ def guard_daemon_url_for_home(guard_home: Path) -> str:
 
 
 def load_guard_daemon_url(guard_home: Path) -> str | None:
-    payload = _load_state(guard_home)
-    if payload is None:
+    identity = _load_authenticated_daemon_identity(guard_home)
+    if identity is None:
         return None
+    payload, auth_token = identity
     if not _guard_daemon_state_matches_current_runtime(payload):
         return None
     port = payload.get("port")
@@ -221,8 +242,7 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
         return url
     # In-process or wrapped daemons may not expose a command line we can bind
     # back to guard_home, so fall back to authenticated detailed health.
-    auth_token = load_guard_daemon_auth_token(guard_home)
-    if auth_token and _daemon_healthz_details_match_guard_home(url, guard_home, auth_token=auth_token):
+    if _daemon_healthz_details_match_guard_home(url, guard_home, auth_token=auth_token):
         return url
     compatibility_version = payload.get("compatibility_version")
     if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
@@ -230,19 +250,33 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
     return None
 
 
+def _load_authenticated_daemon_identity(guard_home: Path) -> tuple[dict[str, object], str] | None:
+    payload = load_authenticated_daemon_state(guard_home)
+    if payload is None:
+        return None
+    auth_token = load_guard_daemon_auth_token(guard_home)
+    expected_token_id = payload.get("auth_token_id")
+    if (
+        auth_token is None
+        or not isinstance(expected_token_id, str)
+        or not secrets.compare_digest(
+            hashlib.sha256(auth_token.encode("utf-8")).hexdigest(),
+            expected_token_id,
+        )
+    ):
+        return None
+    return payload, auth_token
+
+
 def load_guard_daemon_auth_token(guard_home: Path) -> str | None:
     token_path = _auth_token_path(guard_home)
+    if not _private_daemon_file_is_valid(token_path):
+        return None
     try:
         token = token_path.read_text(encoding="utf-8").strip()
     except OSError:
-        token = ""
-    if token:
-        return token
-    payload = _load_state(guard_home)
-    if payload is None:
         return None
-    token = payload.get("auth_token")
-    return token if isinstance(token, str) and token.strip() else None
+    return token or None
 
 
 def _daemon_health_request(url: str, auth_token: str | None = None) -> urllib.request.Request:
@@ -405,33 +439,43 @@ def write_guard_daemon_state(
     *,
     pid: int | None = None,
     write_auth_token: bool = True,
+    host: str = "127.0.0.1",
+    state_id: str | None = None,
+    started_at: str | None = None,
 ) -> None:
     state_path = _state_path(guard_home)
     _ensure_private_directory(state_path.parent)
-    _write_private_text(
-        state_path,
-        json.dumps(
+    with _guard_daemon_state_write_lock(guard_home):
+        discovery_key = ensure_daemon_discovery_key(guard_home)
+        daemon_state = authenticate_daemon_state(
             {
-                "guard_home": str(guard_home),
+                "guard_home": str(guard_home.resolve()),
+                "host": host,
                 "port": port,
                 "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
                 "package_version": __version__,
                 "source_root": _current_guard_daemon_source_root(),
                 "runtime_fingerprint": _current_guard_daemon_runtime_fingerprint(),
                 "pid": pid if isinstance(pid, int) and pid > 0 else os.getpid(),
-                "started_at": datetime.now(timezone.utc).isoformat(),
+                "started_at": started_at or datetime.now(timezone.utc).isoformat(),
+                "state_id": state_id or secrets.token_hex(16),
+                "auth_token_id": hashlib.sha256(auth_token.encode("utf-8")).hexdigest(),
             },
-            indent=2,
-        ),
-    )
-    if write_auth_token:
-        _write_private_text(_auth_token_path(guard_home), auth_token)
+            discovery_key=discovery_key,
+        )
+        if write_auth_token:
+            _write_private_atomic_text(_auth_token_path(guard_home), auth_token)
+        _write_private_atomic_text(
+            state_path,
+            json.dumps(daemon_state, indent=2),
+        )
 
 
 def clear_guard_daemon_state(guard_home: Path) -> None:
     state_path = _state_path(guard_home)
     _ensure_private_directory(state_path.parent)
-    _write_private_text(state_path, "{}")
+    with _guard_daemon_state_write_lock(guard_home):
+        _write_private_atomic_text(state_path, "{}")
 
 
 def clear_guard_daemon_state_if_current(guard_home: Path, *, pid: int, port: int) -> bool:
@@ -455,11 +499,12 @@ def _daemon_state_points_to(guard_home: Path, *, pid: int, port: int) -> bool:
 
 
 def repair_approval_center_locator(guard_home: Path) -> dict[str, object]:
-    """Remove a stale approval center locator and optionally clear dead daemon state.
+    """Repair stale locator and authenticated daemon-discovery state.
 
-    Only clears daemon-state.json when the recorded PID is no longer running,
-    so a live daemon's state is not disturbed.  Raises OSError if a required
-    write fails so callers can detect incomplete repair.
+    A healthy live daemon is preserved.  A live daemon with an invalid identity
+    bundle is retired before its state is cleared, and an invalid discovery key
+    is removed so the next daemon start can regenerate it.  Raises OSError if a
+    required write fails so callers can detect incomplete repair.
 
     Safe to call while the database is live.  Returns a dict describing what was cleared.
     """
@@ -469,18 +514,26 @@ def repair_approval_center_locator(guard_home: Path) -> dict[str, object]:
         locator.unlink()
         cleared.append("locator")
     state = _state_path(guard_home)
+    state_payload = _load_state(guard_home) if state.is_file() else None
+    identity_is_invalid = _load_authenticated_daemon_identity(guard_home) is None
     if state.is_file():
-        state_payload = _load_state(guard_home)
-        pid = state_payload.get("pid") if isinstance(state_payload, dict) else None
+        identity_payload = state_payload if isinstance(state_payload, dict) else {}
+        pid = identity_payload.get("pid")
         daemon_is_live = (
             isinstance(pid, int)
             and pid > 0
             and _guard_daemon_pid_is_running(pid)
             and _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home)
         )
+        if daemon_is_live and identity_is_invalid:
+            _retire_guard_daemon_process({**identity_payload, "guard_home": str(guard_home)})
+            daemon_is_live = False
+            cleared.append("daemon_process")
         if not daemon_is_live:
-            _write_private_text(state, "{}")
+            clear_guard_daemon_state(guard_home)
             cleared.append("daemon_state")
+    if identity_is_invalid and _remove_invalid_daemon_discovery_key(guard_home):
+        cleared.append("daemon_discovery_key")
     return {"repaired": True, "cleared": cleared}
 
 
@@ -626,6 +679,37 @@ def _auth_token_path(guard_home: Path) -> Path:
     return guard_home / "daemon-auth-token"
 
 
+def _private_daemon_file_is_valid(path: Path) -> bool:
+    try:
+        parent_metadata = path.parent.lstat()
+        metadata = path.lstat()
+    except OSError:
+        return False
+    if not stat.S_ISDIR(parent_metadata.st_mode):
+        return False
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        return False
+    if os.name == "nt":
+        return True
+    return (
+        parent_metadata.st_uid == os.getuid()
+        and metadata.st_uid == os.getuid()
+        and not stat.S_IMODE(parent_metadata.st_mode) & 0o077
+        and not stat.S_IMODE(metadata.st_mode) & 0o077
+    )
+
+
+def _remove_invalid_daemon_discovery_key(guard_home: Path) -> bool:
+    if load_daemon_discovery_key(guard_home) is not None:
+        return False
+    key_path = daemon_discovery_key_path(guard_home)
+    try:
+        key_path.unlink()
+    except FileNotFoundError:
+        return False
+    return True
+
+
 def _ensure_private_directory(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
     _set_private_mode(path, _GUARD_DAEMON_PRIVATE_DIR_MODE)
@@ -639,6 +723,27 @@ def _write_private_text(path: Path, text: str) -> None:
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
         handle.write(text)
     _set_private_mode(path, _GUARD_DAEMON_PRIVATE_FILE_MODE)
+
+
+def _write_private_atomic_text(path: Path, text: str) -> None:
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary_path = Path(temporary_name)
+    try:
+        if os.name != "nt" and hasattr(os, "fchmod"):
+            os.fchmod(descriptor, _GUARD_DAEMON_PRIVATE_FILE_MODE)
+        with os.fdopen(descriptor, "w", encoding="utf-8", closefd=False) as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.close(descriptor)
+        descriptor = -1
+        os.replace(temporary_path, path)
+        _set_private_mode(path, _GUARD_DAEMON_PRIVATE_FILE_MODE)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        with suppress(OSError):
+            temporary_path.unlink()
 
 
 def _set_private_mode(path: Path, mode: int) -> None:
@@ -1124,6 +1229,24 @@ def _guard_daemon_start_lock(guard_home: Path):
         thread_lock = _START_LOCKS.setdefault(lock_key, threading.Lock())
     with thread_lock:
         lock_path = guard_home / "daemon-start.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+b") as handle:
+            _lock_daemon_start_file(handle)
+            try:
+                yield
+            finally:
+                _unlock_daemon_start_file(handle)
+
+
+@contextmanager
+def _guard_daemon_state_write_lock(guard_home: Path):
+    """Serialize the token/state generation across threads and processes."""
+
+    lock_key = str(guard_home.resolve())
+    with _STATE_WRITE_LOCKS_GUARD:
+        thread_lock = _STATE_WRITE_LOCKS.setdefault(lock_key, threading.Lock())
+    with thread_lock:
+        lock_path = guard_home / "daemon-state-write.lock"
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         with lock_path.open("a+b") as handle:
             _lock_daemon_start_file(handle)

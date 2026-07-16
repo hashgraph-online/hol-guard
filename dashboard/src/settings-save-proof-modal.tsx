@@ -166,10 +166,7 @@ export function isSettingsSaveProofSubmitDisabled(
   if (totpRequired) {
     return totp.length === 0;
   }
-  if (current.length === 0) {
-    return true;
-  }
-  return false;
+  return current.length === 0;
 }
 
 export function SettingsSaveProofModal(props: SettingsSaveProofModalProps) {
