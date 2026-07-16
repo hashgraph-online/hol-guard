@@ -34,10 +34,8 @@ updates:
       - "github-actions"
     commit-message:
       prefix: "deps(actions)"
-    groups:
-      github-actions-all:
-        patterns:
-          - "*"
+    # Keep action updates in individual PRs so each upstream changelog and
+    # permission/runtime change can be reviewed before its SHA moves.
 
   - package-ecosystem: "docker"
     directory: "/"
