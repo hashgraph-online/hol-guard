@@ -14,6 +14,7 @@ from .command_rules import (
     ExecutableMatcher,
     PipelineMatcher,
 )
+from .command_storage_extensions import STORAGE_COMMAND_RULES
 
 COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "credential exfiltration shell command": (
@@ -40,6 +41,10 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "aws destructive command": ("destructive_shell", "network_egress"),
     "google cloud destructive command": ("destructive_shell", "network_egress"),
     "azure destructive command": ("destructive_shell", "network_egress"),
+    "aws storage destructive command": ("destructive_shell", "network_egress"),
+    "google storage destructive command": ("destructive_shell", "network_egress"),
+    "azure storage destructive command": ("destructive_shell", "network_egress"),
+    "minio storage destructive command": ("destructive_shell", "network_egress"),
 }
 _GIT_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     {"-c", "-C", "--config-env", "--exec-path", "--git-dir", "--namespace", "--super-prefix", "--work-tree"}
@@ -331,6 +336,7 @@ BUILT_IN_COMMAND_RULES = (
     ),
     *DOMAIN_COMMAND_RULES,
     *CLOUD_COMMAND_RULES,
+    *STORAGE_COMMAND_RULES,
 )
 
 _RULES_BY_EXTENSION: dict[str, tuple[CommandSafetyRule, ...]] = {}

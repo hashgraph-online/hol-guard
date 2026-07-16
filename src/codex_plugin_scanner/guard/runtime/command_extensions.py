@@ -14,6 +14,7 @@ from .command_extension_specs import command_extension_values
 from .command_model import CanonicalCommand
 from .command_package_extensions import PACKAGE_COMMAND_EXTENSION_SPECS, PackageCommandExtensionSpec
 from .command_rules import CommandSafetyRule, MatcherEvidence, matcher_index_hints
+from .command_storage_extensions import STORAGE_COMMAND_EXTENSION_SPECS, STORAGE_COMMAND_RULES
 
 COMMAND_EXTENSION_SCHEMA_VERSION = 2
 _VERSION_PATTERN = re.compile(r"^[1-9][0-9]*\.[0-9]+\.[0-9]+$")
@@ -26,8 +27,6 @@ _VALID_EXTENSION_DELEGATES = frozenset({"package-firewall"})
 
 
 def risk_classes_for_command_action(action_class: str) -> tuple[str, ...]:
-    """Return the existing runtime risk classes for a command action class."""
-
     return COMMAND_ACTION_RISK_CLASSES.get(action_class.strip().lower(), ())
 
 
@@ -491,10 +490,10 @@ _BUILT_IN_EXTENSIONS = (
     *(
         CommandSafetyExtension(**command_extension_values(spec, rules))
         for specs, rules in ((DOMAIN_COMMAND_EXTENSION_SPECS, DOMAIN_COMMAND_RULES),
-                             (CLOUD_COMMAND_EXTENSION_SPECS, CLOUD_COMMAND_RULES))
+                             (CLOUD_COMMAND_EXTENSION_SPECS, CLOUD_COMMAND_RULES),
+                             (STORAGE_COMMAND_EXTENSION_SPECS, STORAGE_COMMAND_RULES))
         for spec in specs
     ),
     *(_package_command_extension(spec) for spec in PACKAGE_COMMAND_EXTENSION_SPECS),
 )
-
 BUILT_IN_COMMAND_EXTENSION_REGISTRY = CommandSafetyExtensionRegistry(_BUILT_IN_EXTENSIONS)
