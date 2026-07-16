@@ -260,6 +260,8 @@ def parse_shell_command(
         normalized_text,
         heredocs=heredocs,
         top_level_segments=tuple(segments),
+        cwd=cwd,
+        home_dir=home_dir,
     )
     segments.extend(embedded_segments)
     if len(segments) > MAX_COMMAND_SEGMENTS or sum(len(segment.tokens) for segment in segments) > MAX_COMMAND_TOKENS:
@@ -314,6 +316,8 @@ def _embedded_execution(
     *,
     heredocs: tuple[ShellHeredoc, ...],
     top_level_segments: tuple[CommandSegment, ...],
+    cwd: Path | None,
+    home_dir: Path | None,
 ) -> tuple[tuple[EmbeddedCommand, ...], tuple[CommandSegment, ...]]:
     embedded: list[EmbeddedCommand] = []
     segments: list[CommandSegment] = []
@@ -325,6 +329,8 @@ def _embedded_execution(
         embedded=embedded,
         segments=segments,
         depth=0,
+        cwd=cwd,
+        home_dir=home_dir,
     )
 
     for index, heredoc in enumerate(heredocs):
@@ -344,6 +350,8 @@ def _embedded_execution(
                     segments=segments,
                     depth=0,
                     expanded_heredoc=True,
+                    cwd=cwd,
+                    home_dir=home_dir,
                 )
             continue
         context = f"heredoc:{index}"
@@ -361,6 +369,8 @@ def _embedded_execution(
                 heredoc.body,
                 execution_context=context,
                 source_offset=heredoc.body_start,
+                cwd=cwd,
+                home_dir=home_dir,
             )
         )
         _append_substitution_execution(
@@ -371,6 +381,8 @@ def _embedded_execution(
             embedded=embedded,
             segments=segments,
             depth=0,
+            cwd=cwd,
+            home_dir=home_dir,
         )
     return tuple(embedded), tuple(segments)
 
@@ -384,6 +396,8 @@ def _append_substitution_execution(
     embedded: list[EmbeddedCommand],
     segments: list[CommandSegment],
     depth: int,
+    cwd: Path | None,
+    home_dir: Path | None,
     expanded_heredoc: bool = False,
 ) -> None:
     if depth >= 4:
@@ -408,6 +422,8 @@ def _append_substitution_execution(
                 substitution.body,
                 execution_context=context,
                 source_offset=absolute_start,
+                cwd=cwd,
+                home_dir=home_dir,
             )
         )
         _append_substitution_execution(
@@ -418,6 +434,8 @@ def _append_substitution_execution(
             embedded=embedded,
             segments=segments,
             depth=depth + 1,
+            cwd=cwd,
+            home_dir=home_dir,
         )
 
 
@@ -426,17 +444,21 @@ def _segments_for_embedded(
     *,
     execution_context: str,
     source_offset: int,
+    cwd: Path | None,
+    home_dir: Path | None,
 ) -> tuple[CommandSegment, ...]:
     results: list[CommandSegment] = []
+    normalization = normalize_transparent_shell_command(command, cwd=cwd, home_dir=home_dir)
     for context, pipeline_index, segment_text, local_offset in _execution_segment_texts(
-        command,
+        normalization.normalized_command,
         context_prefix=execution_context,
     ):
         tokens, _exact = shell_tokens(segment_text)
         environment_names, executable_index, wrappers = leading_environment(tokens)
         executable = tokens[executable_index] if executable_index < len(tokens) else None
         arguments = tokens[executable_index + 1 :] if executable is not None else ()
-        start = source_offset + local_offset
+        original_offset = command.find(segment_text)
+        start = source_offset + (original_offset if original_offset >= 0 else local_offset)
         results.append(
             CommandSegment(
                 text=segment_text,
@@ -444,7 +466,7 @@ def _segments_for_embedded(
                 executable=executable,
                 arguments=arguments,
                 environment_names=environment_names,
-                wrapper_chain=wrappers,
+                wrapper_chain=(*normalization.wrapper_chain, *wrappers),
                 path_overridden="PATH" in environment_names,
                 execution_context=context,
                 pipeline_index=pipeline_index,

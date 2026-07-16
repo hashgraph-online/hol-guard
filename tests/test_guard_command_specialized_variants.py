@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 
@@ -84,6 +86,66 @@ def test_unquoted_data_heredoc_expands_substitutions_despite_body_quotes(body: s
     assert payload["status"] == "review"
     assert payload["controlling_rule_id"] == "command.filesystem.recursive-delete"
     assert match is not None
+
+
+@pytest.mark.parametrize(
+    "substitution",
+    [
+        "$(sh -c 'rm -rf ./build')",
+        '$(sh -c "rm -rf ./build")',
+        "$(sh -c 'sh -c \"rm -rf ./build\"')",
+    ],
+)
+def test_heredoc_substitution_shell_wrappers_feed_cli_and_runtime_classification(
+    substitution: str,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    command = f"cat <<EOF\n{substitution}\nEOF"
+
+    exit_code = main(["guard", "command", "test", "--json", command])
+    payload = json.loads(capsys.readouterr().out)
+    match = extract_sensitive_tool_action_request(
+        "Shell",
+        {"command": command},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert exit_code == 0
+    assert payload["status"] == "review"
+    assert payload["classification"]["matched"] is True
+    assert payload["classification"]["action_class"] == "filesystem destructive command"
+    assert payload["controlling_rule_id"] == "command.filesystem.recursive-delete"
+    assert match is not None
+    assert match.action_class == "filesystem destructive command"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cat <<'EOF'\n$(sh -c 'rm -rf ./build')\nEOF",
+        "cat <<EOF\n\\$(sh -c 'rm -rf ./build')\nEOF",
+    ],
+)
+def test_literal_shell_wrapped_heredoc_substitutions_remain_safe_at_cli_and_runtime_boundaries(
+    command: str,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(["guard", "command", "test", "--json", command])
+    payload = json.loads(capsys.readouterr().out)
+    match = extract_sensitive_tool_action_request(
+        "Shell",
+        {"command": command},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert exit_code == 0
+    assert payload["status"] == "no_match"
+    assert payload["classification"]["matched"] is False
+    assert match is None
 
 
 @pytest.mark.parametrize(
