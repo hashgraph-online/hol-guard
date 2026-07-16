@@ -61,6 +61,14 @@ def test_parse_shell_command_preserves_quoted_heredoc_like_argument() -> None:
     assert parsed.segments[0].arguments == ("delete", "target", "<<--help")
 
 
+@pytest.mark.parametrize("argument", ["< --help", "> --help", "2> --help", "value>--help"])
+def test_parse_shell_command_preserves_quoted_redirect_like_argument(argument: str) -> None:
+    parsed = parse_shell_command(f"tool delete '{argument}'")
+
+    assert parsed.segments[0].arguments == ("delete", argument)
+    assert parsed.redirects == ()
+
+
 def test_parse_shell_command_skips_all_sudo_options_with_values() -> None:
     parsed = parse_shell_command(
         "sudo --command-timeout 10 --login-class staff git --config-env token=TOKEN push --force"
