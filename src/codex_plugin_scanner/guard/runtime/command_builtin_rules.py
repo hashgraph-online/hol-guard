@@ -52,8 +52,10 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "borg destructive command": ("destructive_shell", "network_egress"),
     "velero destructive command": ("destructive_shell", "network_egress"),
     "ssh remote execution command": ("execution", "network_egress"),
+    "ssh configured execution command": ("execution", "network_egress"),
     "scp overwrite command": ("destructive_shell", "network_egress"),
     "rsync destructive command": ("destructive_shell", "network_egress"),
+    "rsync remote shell command": ("execution", "network_egress"),
 }
 _GIT_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     {"-c", "-C", "--config-env", "--exec-path", "--git-dir", "--namespace", "--super-prefix", "--work-tree"}

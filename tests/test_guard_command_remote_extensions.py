@@ -6,10 +6,16 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from codex_plugin_scanner.guard.runtime.command_extensions import (
+    BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+    risk_classes_for_command_action,
+)
 from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
-from codex_plugin_scanner.guard.runtime.command_rules import LeadingOperandCountMatcher
+from codex_plugin_scanner.guard.runtime.command_structured_matchers import (
+    LeadingOperandCountMatcher,
+    OptionValueKeyMatcher,
+)
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 
 
@@ -168,6 +174,43 @@ def test_leading_operand_matcher_consumes_separate_long_option_value(tmp_path: P
     command = parse_shell_command("remote-admin --profile production delete item", cwd=tmp_path, home_dir=tmp_path)
 
     assert matcher.match(command)
+
+
+def test_leading_operand_matcher_parses_numeric_clustered_flags(tmp_path: Path) -> None:
+    matcher = LeadingOperandCountMatcher(
+        executables=frozenset({"remote-admin"}),
+        minimum_operands=2,
+        forbidden_flags=frozenset({"-N"}),
+    )
+    command = parse_shell_command("remote-admin -4N host action", cwd=tmp_path, home_dir=tmp_path)
+
+    assert matcher.match(command) == ()
+
+
+def test_option_key_matcher_prefers_longest_overlapping_option(tmp_path: Path) -> None:
+    matcher = OptionValueKeyMatcher(
+        executables=frozenset({"remote-admin"}),
+        option_names=frozenset({"-o", "-option"}),
+        value_keys=frozenset({"proxycommand"}),
+    )
+    command = parse_shell_command(
+        "remote-admin -optionProxyCommand='sh -c id' host",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert matcher.match(command)
+
+
+def test_remote_execution_actions_publish_risk_classes() -> None:
+    assert risk_classes_for_command_action("SSH configured execution command") == (
+        "execution",
+        "network_egress",
+    )
+    assert risk_classes_for_command_action("Rsync remote shell command") == (
+        "execution",
+        "network_egress",
+    )
 
 
 @pytest.mark.parametrize(

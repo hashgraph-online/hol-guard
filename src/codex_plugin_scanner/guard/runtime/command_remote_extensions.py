@@ -10,11 +10,9 @@ from .command_rules import (
     CommandRuleSeverity,
     CommandSafetyRule,
     CommandSafeVariant,
-    EnvironmentNameMatcher,
     ExecutableMatcher,
-    LeadingOperandCountMatcher,
-    OptionValueKeyMatcher,
 )
+from .command_structured_matchers import EnvironmentNameMatcher, LeadingOperandCountMatcher, OptionValueKeyMatcher
 
 _SSH_OPTIONS_WITH_VALUES = frozenset(
     {
