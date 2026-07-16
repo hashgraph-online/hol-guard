@@ -65,6 +65,10 @@ from ..policy_bundle_trusted_keys import (
     policy_bundle_keyring_payload,
     validate_synced_policy_bundle,
 )
+from ..policy_bundle_v2 import (
+    POLICY_BUNDLE_V2_CONTRACT,
+    validate_policy_bundle_v2_transition,
+)
 from ..redaction import redact_sensitive_text
 from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
@@ -1049,6 +1053,21 @@ def _policy_bundle_is_version_downgrade(
     existing_bundle: dict[str, object] | None,
     next_bundle: dict[str, object],
 ) -> bool:
+    if next_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
+        current_version = existing_bundle.get("bundleVersion") if isinstance(existing_bundle, dict) else None
+        current_hash = existing_bundle.get("bundleHash") if isinstance(existing_bundle, dict) else None
+        return (
+            validate_policy_bundle_v2_transition(
+                next_bundle,
+                current_bundle_version=(
+                    current_version
+                    if isinstance(current_version, int) and not isinstance(current_version, bool)
+                    else None
+                ),
+                current_bundle_hash=(current_hash if isinstance(current_hash, str) else None),
+            )
+            is not None
+        )
     if not isinstance(existing_bundle, dict) or not existing_bundle:
         return False
     existing_issued_at = non_empty_string(existing_bundle.get("issuedAt"))

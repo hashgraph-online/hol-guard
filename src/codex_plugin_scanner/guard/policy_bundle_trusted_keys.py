@@ -6,10 +6,12 @@ import hashlib
 import importlib
 import time
 from dataclasses import dataclass
+from typing import Protocol, cast
 
 from .runtime.supply_chain_bundle_base import _parse_iso_timestamp
 
 _VERIFICATION_KEY_STATES = frozenset({"active", "grace", "revoked"})
+_POLICY_BUNDLE_V2_CONTRACT = "guard-policy-bundle.v2"
 
 
 def _policy_bundle_parser_module():
@@ -59,6 +61,21 @@ class PolicyBundleVerificationKey:
             state=normalized_state,
             valid_until=normalized_valid_until,
         )
+
+
+class _PolicyBundleV2Module(Protocol):
+    def validated_policy_bundle_v2_payload(
+        self,
+        policy_bundle: dict[str, object],
+        *,
+        trusted_verification_keys: tuple[PolicyBundleVerificationKey, ...],
+        anchored_verification_keys: tuple[PolicyBundleVerificationKey, ...],
+    ) -> tuple[dict[str, object] | None, str | None]: ...
+
+
+def _policy_bundle_v2_module() -> _PolicyBundleV2Module:
+    module = importlib.import_module(".policy_bundle_v2", __package__)
+    return cast(_PolicyBundleV2Module, cast(object, module))
 
 
 def policy_bundle_key_fingerprint(public_key_pem: str) -> str:
@@ -223,11 +240,20 @@ def validate_synced_policy_bundle(
         sync_payload=sync_payload,
         supply_chain_keyring=supply_chain_keyring,
     )
-    validated_bundle, rejection_reason = _policy_bundle_parser_module().validated_policy_bundle_payload(
-        policy_bundle,
-        trusted_verification_keys=trusted_keys,
-        anchored_verification_keys=anchored_keys,
-    )
+    if policy_bundle.get("contractVersion") == _POLICY_BUNDLE_V2_CONTRACT:
+        validated_policy_bundle_v2_payload = _policy_bundle_v2_module().validated_policy_bundle_v2_payload
+
+        validated_bundle, rejection_reason = validated_policy_bundle_v2_payload(
+            policy_bundle,
+            trusted_verification_keys=trusted_keys,
+            anchored_verification_keys=anchored_keys,
+        )
+    else:
+        validated_bundle, rejection_reason = _policy_bundle_parser_module().validated_policy_bundle_payload(
+            policy_bundle,
+            trusted_verification_keys=trusted_keys,
+            anchored_verification_keys=anchored_keys,
+        )
     if validated_bundle is None:
         return None, rejection_reason, anchored_keys
     updated_keys = persistable_policy_bundle_keyring(
