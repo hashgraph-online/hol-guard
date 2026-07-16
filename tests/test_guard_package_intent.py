@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime import package_intent_parser
-from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.package_intent import (
     extract_package_intent_request,
     parse_manifest_dependency_changes,
@@ -321,9 +320,18 @@ def test_parse_package_intent_allows_verified_local_typescript_check(
     assert parse_package_intent(command, workspace=workspace) is None
 
 
-def test_parse_package_intent_allows_explicit_verified_typescript_package(
+@pytest.mark.parametrize(
+    "command",
+    (
+        "npx --package typescript tsc --noEmit",
+        "npx --package tsc@file:./evil tsc --noEmit",
+        "npx --package=tsc@file:./evil tsc --noEmit",
+    ),
+)
+def test_parse_package_intent_keeps_explicit_typescript_package_guarded(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    command: str,
 ) -> None:
     _write_text(tmp_path / "package.json", '{"devDependencies":{"typescript":"^5.9.0"}}\n')
     _write_text(tmp_path / "package-lock.json", '{"packages":{"node_modules/typescript":{"version":"5.9.0"}}}\n')
@@ -335,7 +343,7 @@ def test_parse_package_intent_allows_explicit_verified_typescript_package(
     manager.chmod(0o755)
     monkeypatch.setenv("PATH", str(manager.parent))
 
-    assert parse_package_intent("npx --package typescript tsc --noEmit", workspace=tmp_path) is None
+    assert parse_package_intent(command, workspace=tmp_path) is not None
 
 
 @pytest.mark.parametrize(
