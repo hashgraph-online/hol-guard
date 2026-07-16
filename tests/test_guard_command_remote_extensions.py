@@ -50,6 +50,16 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
             "command.remote.ssh.configured-execution",
         ),
         (
+            "ssh -voProxyCommand='sh -c id' host.example",
+            "SSH configured execution command",
+            "command.remote.ssh.configured-execution",
+        ),
+        (
+            "ssh -4oRemoteCommand='id' host.example",
+            "SSH configured execution command",
+            "command.remote.ssh.configured-execution",
+        ),
+        (
             "ssh -oLocalCommand='sh -c id' -oPermitLocalCommand=yes host.example",
             "SSH configured execution command",
             "command.remote.ssh.configured-execution",
@@ -120,6 +130,7 @@ def test_remote_rules_feed_runtime_hooks(
         "ssh host.example",
         "ssh -G host.example uptime",
         "ssh -vG host.example uptime",
+        "ssh -vGoProxyCommand='sh -c id' host.example",
         "ssh -V",
         "ssh -V host.example uptime",
         "ssh -Q cipher host.example uptime",
@@ -128,6 +139,8 @@ def test_remote_rules_feed_runtime_hooks(
         "ssh -O check host.example uptime",
         "ssh -o StrictHostKeyChecking=no host.example",
         "ssh -vo StrictHostKeyChecking=no host.example",
+        "ssh -voStrictHostKeyChecking=no host.example",
+        "ssh -voProxyCommand=none host.example",
         "ssh -G -oProxyCommand='sh -c id' host.example",
         "ssh -oProxyCommand=none host.example",
         "ssh -oLocalCommand='sh -c id' host.example",

@@ -219,6 +219,17 @@ def test_parse_shell_command_distinguishes_heredoc_data_from_executable_script()
     assert script.redirects[0].target == "EOF"
 
 
+def test_parse_shell_command_extracts_substitutions_from_unquoted_data_heredocs() -> None:
+    body = "r" + "m -rf ./build"
+    expanded = parse_shell_command(f"cat <<EOF\n$({body})\nEOF")
+    literal = parse_shell_command(f"cat <<'EOF'\n$({body})\nEOF")
+
+    assert [segment.executable for segment in expanded.segments] == ["cat", "rm"]
+    assert expanded.segments[1].execution_context == "heredoc:0:substitution:0:0"
+    assert literal.embedded_commands == ()
+    assert [segment.executable for segment in literal.segments] == ["cat"]
+
+
 def test_parse_shell_command_preserves_tab_stripped_heredoc_segment_spans() -> None:
     command = "bash <<-EOF\n\techo hello\nEOF"
 
