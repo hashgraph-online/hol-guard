@@ -188,7 +188,7 @@ def _supabase_matchers(*subcommands: str) -> tuple[ExecutableMatcher, ...]:
             interspersed_flags=interspersed_flags,
         ),
         ExecutableMatcher(
-            executables=executable_names("pnpm"),
+            executables=executable_names("pnpm") | executable_names("yarn"),
             subcommands=("dlx", "supabase", *subcommands),
             forbidden_flags=_SUPABASE_FORBIDDEN_FLAGS,
             interspersed_options_with_values=interspersed_options,

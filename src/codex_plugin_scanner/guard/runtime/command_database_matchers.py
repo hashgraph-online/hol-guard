@@ -7,7 +7,7 @@ from typing import final
 
 from .command_matcher_contracts import CommandMatcher, MatcherEvidence
 from .command_model import CanonicalCommand, CommandSegment
-from .command_structured_matchers import leading_flags_and_operands
+from .command_structured_matchers import leading_flags_and_operands, present_flags
 
 
 @final
@@ -168,8 +168,11 @@ class LeadingSubcommandMatcher:
             lowered_operands = tuple(value.lower() for value in operands)
             if self.forbidden_flags & leading_flags or lowered_operands[: len(self.subcommands)] != self.subcommands:
                 continue
-            present_flags = _present_flags(tuple(argument.lower() for argument in segment.arguments))
-            if not self.required_flags_anywhere <= present_flags:
+            matched_flags = present_flags(
+                tuple(argument.lower() for argument in segment.arguments),
+                options_with_values=self.options_with_values,
+            )
+            if not self.required_flags_anywhere <= matched_flags:
                 continue
             evidence.append(
                 MatcherEvidence(
@@ -203,13 +206,3 @@ def _segment_matches_executable(segment: CommandSegment, executables: frozenset[
 def _normalize_option_token(value: str) -> str:
     stripped = value.strip()
     return stripped.lower() if stripped.startswith("--") else stripped
-
-
-def _present_flags(arguments: tuple[str, ...]) -> frozenset[str]:
-    flags: set[str] = set(arguments)
-    for argument in arguments:
-        if argument.startswith("-") and "=" in argument:
-            flags.add(argument.split("=", 1)[0])
-        if argument.startswith("-") and not argument.startswith("--") and len(argument) > 2:
-            flags.update(f"-{character}" for character in argument[1:] if character.isalnum())
-    return frozenset(flags)

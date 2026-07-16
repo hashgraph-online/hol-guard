@@ -6,8 +6,10 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime.command_database_matchers import LeadingSubcommandMatcher
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
+from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 
 
@@ -69,6 +71,11 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sens
         ),
         (
             "pnpm supabase migration down --linked --last 1",
+            "Supabase destructive command",
+            "command.database.supabase.reset",
+        ),
+        (
+            "yarn dlx supabase db reset --linked",
             "Supabase destructive command",
             "command.database.supabase.reset",
         ),
@@ -152,3 +159,15 @@ def test_database_extensions_publish_official_references() -> None:
         assert extension is not None
         assert extension.reference_urls
         assert all(url.startswith("https://") for url in extension.reference_urls)
+
+
+def test_database_matcher_does_not_treat_attached_option_values_as_flags(tmp_path: Path) -> None:
+    matcher = LeadingSubcommandMatcher(
+        executables=frozenset({"db-admin"}),
+        subcommands=("drop",),
+        options_with_values=frozenset({"-u"}),
+        required_flags_anywhere=frozenset({"-r"}),
+    )
+    command = parse_shell_command("db-admin -uroot drop production", cwd=tmp_path, home_dir=tmp_path)
+
+    assert matcher.match(command) == ()
