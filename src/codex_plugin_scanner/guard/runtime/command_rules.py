@@ -511,6 +511,9 @@ def _without_options(
     index = 0
     while index < len(arguments):
         argument = arguments[index]
+        if argument == "--":
+            retained.extend(arguments[index + 1 :])
+            break
         option_name = argument.split("=", 1)[0]
         if option_name in flags:
             index += 1
