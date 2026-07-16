@@ -82,6 +82,10 @@ from .supply_chain_bundle import (
 from .supply_chain_bundle_models import SupplyChainVerificationKey
 from .supply_chain_support import ecosystem_support_matrix
 
+_POLICY_DOCUMENT_VERSIONS = ("guard.hashgraphonline.com/v1alpha1",)
+_POLICY_YAML_IMPORT_ENV = "HOL_GUARD_POLICY_YAML_IMPORT"
+_POLICY_CANONICAL_ENFORCEMENT_ENV = "HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT"
+
 
 def detect_harness(harness: str, context: HarnessContext) -> HarnessDetection:
     from ..consumer import detect_harness as _detect_harness
@@ -2460,7 +2464,7 @@ def sync_runtime_session(
 
 
 def _local_guard_runtime_session() -> dict[str, object]:
-    return {
+    session: dict[str, object] = {
         "harness": "hol-guard",
         "surface": "cli",
         "status": "active",
@@ -2469,7 +2473,12 @@ def _local_guard_runtime_session() -> dict[str, object]:
         "client_version": __version__,
         "workspace": "local-machine",
         "capabilities": ["approval-center", "guard-cloud-sync", "local-daemon"],
+        "policy_document_versions": list(_POLICY_DOCUMENT_VERSIONS),
+        "yaml_import": os.environ.get(_POLICY_YAML_IMPORT_ENV) == "1",
     }
+    if os.environ.get(_POLICY_CANONICAL_ENFORCEMENT_ENV) == "1":
+        session["canonical_policy_enforcement"] = True
+    return session
 
 
 def sync_local_guard_cloud_proof(
@@ -4549,13 +4558,20 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
     created_at = _optional_string(session.get("created_at") or session.get("createdAt")) or _now()
     updated_at = _optional_string(session.get("updated_at") or session.get("updatedAt")) or created_at
     capabilities = list(_string_items(session.get("capabilities")))
+    policy_document_versions = list(
+        _string_items(session.get("policy_document_versions") or session.get("policyDocumentVersions"))
+    )
+    yaml_import = session.get("yaml_import") is True or session.get("yamlImport") is True
+    canonical_policy_enforcement = (
+        session.get("canonical_policy_enforcement") is True or session.get("canonicalPolicyEnforcement") is True
+    )
     package_manager_coverage = _cloud_package_manager_coverage(
         store,
         workspace=workspace,
         generated_at=updated_at,
     )
     local_identity = _cloud_local_identity_payload(observed_at=updated_at)
-    return {
+    payload: dict[str, object] = {
         "sessionId": session_id,
         "harness": _optional_string(session.get("harness")) or "hol-guard",
         "surface": _optional_string(session.get("surface")) or "cli",
@@ -4575,6 +4591,12 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
         "createdAt": created_at,
         "updatedAt": updated_at,
     }
+    if policy_document_versions:
+        payload["policyDocumentVersions"] = policy_document_versions
+    payload["yamlImport"] = yaml_import
+    if canonical_policy_enforcement:
+        payload["canonicalPolicyEnforcement"] = True
+    return payload
 
 
 def _cloud_local_identity_payload(*, observed_at: str) -> dict[str, object]:
