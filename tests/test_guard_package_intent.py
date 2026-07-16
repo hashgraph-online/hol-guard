@@ -297,6 +297,65 @@ def test_parse_package_intent_reviews_declared_local_executable(tmp_path: Path) 
     assert parse_package_intent("bunx --no-install eslint .", workspace=tmp_path) is not None
 
 
+def test_parse_package_intent_allows_verified_local_typescript_check(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    project = workspace / "crm-install-dropdowns"
+    project.mkdir(parents=True)
+    _write_text(project / "package.json", '{"devDependencies":{"typescript":"^5.9.0"}}\n')
+    _write_text(
+        project / "package-lock.json",
+        '{"packages":{"node_modules/typescript":{"version":"5.9.0"}}}\n',
+    )
+    runner = project / "node_modules" / ".bin" / "tsc"
+    _write_text(runner, "#!/bin/sh\n")
+    runner.chmod(0o755)
+    manager = tmp_path / "bin" / "npx"
+    _write_text(manager, "#!/bin/sh\n")
+    manager.chmod(0o755)
+    monkeypatch.setenv("PATH", str(manager.parent))
+    command = "cd crm-install-dropdowns && npx tsc --noEmit --pretty 2>&1 | head -40"
+
+    assert parse_package_intent(command, workspace=workspace) is None
+
+
+@pytest.mark.parametrize(
+    "command_suffix",
+    (
+        "--pretty",
+        "--noEmit=false --pretty",
+        "--noEmit --generateTrace trace-output",
+        "--noEmit --outDir generated",
+        "--noEmit --pretty 2> diagnostics.ts",
+    ),
+)
+def test_parse_package_intent_keeps_non_read_only_typescript_execution_guarded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command_suffix: str,
+) -> None:
+    _write_text(tmp_path / "package.json", '{"devDependencies":{"typescript":"^5.9.0"}}\n')
+    _write_text(tmp_path / "package-lock.json", '{"packages":{"node_modules/typescript":{"version":"5.9.0"}}}\n')
+    runner = tmp_path / "node_modules" / ".bin" / "tsc"
+    _write_text(runner, "#!/bin/sh\n")
+    runner.chmod(0o755)
+    manager = tmp_path / "bin" / "npx"
+    _write_text(manager, "#!/bin/sh\n")
+    manager.chmod(0o755)
+    monkeypatch.setenv("PATH", str(manager.parent))
+
+    assert parse_package_intent(f"npx tsc {command_suffix}", workspace=tmp_path) is not None
+
+
+def test_parse_package_intent_keeps_uninstalled_typescript_execution_guarded(tmp_path: Path) -> None:
+    _write_text(tmp_path / "package.json", '{"devDependencies":{"typescript":"^5.9.0"}}\n')
+    _write_text(tmp_path / "package-lock.json", '{"packages":{"node_modules/typescript":{"version":"5.9.0"}}}\n')
+
+    assert parse_package_intent("npx tsc --noEmit --pretty", workspace=tmp_path) is not None
+
+
 @pytest.mark.parametrize(
     "command",
     (

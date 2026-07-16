@@ -45,6 +45,21 @@ _LOCAL_EXECUTION_FLAGS_BY_COMMAND = {
     "bunx": frozenset({"--bun", "--no-install"}),
     "npx": frozenset({"--no", "--no-install"}),
 }
+_TSC_READ_ONLY_FLAGS = frozenset(
+    {
+        "--diagnostics",
+        "--extendedDiagnostics",
+        "--explainFiles",
+        "--listFiles",
+        "--listFilesOnly",
+        "--noEmit",
+        "--noErrorTruncation",
+        "--pretty",
+        "--skipLibCheck",
+        "--traceResolution",
+    }
+)
+_LOCAL_EXECUTABLE_PACKAGE_ALIASES = {"tsc": "typescript"}
 _JS_LOCKFILE_NAMES = ("bun.lock", "bun.lockb", "package-lock.json", "pnpm-lock.yaml", "yarn.lock")
 _PYTHON_EXECUTABLES = {"py", "python", "python3", "python3.11", "python3.12", "python3.13", "python3.14"}
 _PACKAGE_SOURCE_ENV_NAMES = frozenset(
@@ -273,24 +288,59 @@ def _parse_exec_intent(
     )
     if command not in _LOCAL_EXECUTION_COMMANDS:
         return intent
+    local_execution = _local_package_execution_evidence(
+        command,
+        tokens,
+        workspace=workspace,
+        effective_path=effective_path,
+        path_source=path_source,
+        effective_cwd=effective_cwd or workspace or Path.cwd(),
+        cwd_source=cwd_source,
+        execution_context_hash=execution_context_hash,
+        manifest_paths=intent.manifest_paths,
+        lockfile_paths=intent.lockfile_paths,
+    )
+    if _is_verified_read_only_typescript_check(tokens, local_execution):
+        return None
     return replace(
         intent,
-        local_executions=(
-            _local_package_execution_evidence(
-                command,
-                tokens,
-                workspace=workspace,
-                effective_path=effective_path,
-                path_source=path_source,
-                effective_cwd=effective_cwd or workspace or Path.cwd(),
-                cwd_source=cwd_source,
-                execution_context_hash=execution_context_hash,
-                manifest_paths=intent.manifest_paths,
-                lockfile_paths=intent.lockfile_paths,
-            ),
-        ),
+        local_executions=(local_execution,),
         notes=(*intent.notes, "local-execution-requires-review"),
     )
+
+
+def _is_verified_read_only_typescript_check(
+    tokens: tuple[str, ...],
+    evidence: LocalPackageExecutionEvidence,
+) -> bool:
+    if evidence.package_name != "tsc" or evidence.executable_name != "tsc":
+        return False
+    required_files = (evidence.manager, evidence.local_executable, *evidence.manifests, *evidence.lockfiles)
+    if (
+        evidence.declared_version is None
+        or not evidence.manifests
+        or not evidence.lockfiles
+        or any(file is None or file.status != "available" for file in required_files)
+    ):
+        return False
+    try:
+        executable_index = tokens.index("tsc", 1)
+    except ValueError:
+        return False
+    compiler_args = tokens[executable_index + 1 :]
+    if "--noEmit" not in compiler_args:
+        return False
+    if "2>" in compiler_args and compiler_args[-1] != "2>":
+        return False
+    return all(_is_read_only_typescript_argument(token) for token in compiler_args)
+
+
+def _is_read_only_typescript_argument(token: str) -> bool:
+    if token in _TSC_READ_ONLY_FLAGS or token == "2>":
+        return True
+    if token.startswith("-"):
+        return False
+    return token.endswith((".cts", ".mts", ".ts", ".tsx"))
 
 
 def _local_execution_disables_install(tokens: tuple[str, ...]) -> bool:
@@ -339,6 +389,7 @@ def _workspace_js_dependency_version(
     effective_cwd: Path,
     package_name: str,
 ) -> str | None:
+    dependency_name = _LOCAL_EXECUTABLE_PACKAGE_ALIASES.get(package_name, package_name)
     for root in _node_resolution_roots(workspace, effective_cwd):
         try:
             payload = json.loads((root / "package.json").read_text(encoding="utf-8"))
@@ -348,8 +399,8 @@ def _workspace_js_dependency_version(
             continue
         for key in ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies"):
             dependencies = payload.get(key)
-            if isinstance(dependencies, dict) and isinstance(dependencies.get(package_name), str):
-                version = dependencies[package_name].strip()
+            if isinstance(dependencies, dict) and isinstance(dependencies.get(dependency_name), str):
+                version = dependencies[dependency_name].strip()
                 return version or None
     return None
 
