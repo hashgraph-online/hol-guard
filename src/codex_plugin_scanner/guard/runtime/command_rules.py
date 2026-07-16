@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Protocol, final
+from typing import Literal, final
 
+from .command_matcher_contracts import CommandMatcher, MatcherEvidence
 from .command_model import CanonicalCommand, CommandSegment
 
 CommandRuleSeverity = Literal["critical", "high", "medium", "low"]
@@ -13,28 +14,6 @@ CommandRuleMode = Literal["required", "enforce", "review", "monitor", "disabled"
 _VALID_SEVERITIES = frozenset({"critical", "high", "medium", "low"})
 _VALID_MODES = frozenset({"required", "enforce", "review", "monitor", "disabled"})
 _EMPTY_STRING_SET: frozenset[str] = frozenset()
-
-
-@dataclass(frozen=True, slots=True)
-class MatcherEvidence:
-    """Redaction-safe location emitted by one structured matcher."""
-
-    segment_index: int
-    executable: str | None
-    detail: str
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "segment_index": self.segment_index,
-            "executable": self.executable,
-            "detail": self.detail,
-        }
-
-
-class CommandMatcher(Protocol):
-    """Side-effect-free structured command matcher."""
-
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]: ...
 
 
 @final
@@ -342,6 +321,12 @@ def matcher_index_hints(matcher: CommandMatcher) -> MatcherIndexHints:
             executables=matcher.executables,
             keywords=matcher.required_arguments,
         )
+    from .command_structured_matchers import structured_matcher_index_hints
+
+    structured_hints = structured_matcher_index_hints(matcher)
+    if structured_hints is not None:
+        executables, keywords = structured_hints
+        return MatcherIndexHints(executables=executables, keywords=keywords)
     if isinstance(matcher, PipelineMatcher):
         return _merge_matcher_hints((matcher.producer, matcher.consumer))
     if isinstance(matcher, (AnyMatcher, AllMatcher)):
@@ -365,6 +350,11 @@ def _segment_matches_executable(segment: CommandSegment, executables: frozenset[
     return executable in executables
 
 
+def _normalize_option_token(value: str) -> str:
+    stripped = value.strip()
+    return stripped.lower() if stripped.startswith("--") else stripped
+
+
 def _present_flags(
     arguments: tuple[str, ...],
     *,
@@ -381,7 +371,7 @@ def _present_flags(
             flags.add(argument.split("=", 1)[0])
         if argument.startswith("-") and not argument.startswith("--") and len(argument) > 2:
             for character in argument[1:]:
-                if not character.isalpha():
+                if not character.isalnum():
                     continue
                 short_flag = f"-{character}"
                 flags.add(short_flag)
