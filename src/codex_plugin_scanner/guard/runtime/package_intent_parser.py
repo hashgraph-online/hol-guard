@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..protect import _collect_package_specs
-from .command_model import CanonicalCommand, CommandSegment, parse_shell_command
+from .command_model import CanonicalCommand
 from .homebrew_intent import parse_brew_intent
 from .mcp_protection import _command_name, _package_token
 from .package_intent_common import (
@@ -1054,6 +1054,16 @@ def _normalized_command_segments(
                 current_cwd=effective_shell_cwd,
                 current_source=shell_cwd_source,
             )
+    return tuple(segments)
+
+
+def _execution_context_hash(command_text: str, segment_index: int) -> str:
+    payload = json.dumps(
+        {"command": command_text, "segment_index": segment_index},
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _raw_command_segments(tokens: list[str]) -> tuple[list[str], ...]:
