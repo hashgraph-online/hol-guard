@@ -18,7 +18,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 def _document(*, document_id: str = "policy-doc", rule_ids: tuple[str, ...] = ("rule-1",)) -> GuardPolicyDocument:
     return GuardPolicyDocument.from_mapping(
         {
-            "apiVersion": "guard.hol.org/v1alpha1",
+            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
             "kind": "GuardPolicy",
             "metadata": {
                 "id": document_id,
@@ -80,7 +80,7 @@ def test_import_persists_document_identity_and_provenance(tmp_path: Path) -> Non
     assert len(rows) == 1
     assert dict(rows[0]) == {
         "source": "policy-yaml-import",
-        "policy_document_schema_version": "guard.hol.org/v1alpha1",
+        "policy_document_schema_version": "guard.hashgraphonline.com/v1alpha1",
         "policy_document_id": "policy-doc",
         "policy_document_digest": result.digest,
         "policy_rule_id": "rule-1",

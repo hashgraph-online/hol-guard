@@ -905,7 +905,7 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
             "nextRefreshAt": "2026-04-24T00:15:00+00:00",
         },
     }
-    assert session_payload["policyDocumentVersions"] == ["guard.hol.org/v1alpha1"]
+    assert session_payload["policyDocumentVersions"] == ["guard.hashgraphonline.com/v1alpha1"]
     assert session_payload["yamlImport"] is False
     assert "canonicalPolicyEnforcement" not in session_payload
 
@@ -918,7 +918,7 @@ def test_local_runtime_session_advertises_enabled_policy_capabilities(
 
     session = guard_runner_module._local_guard_runtime_session()
 
-    assert session["policy_document_versions"] == ["guard.hol.org/v1alpha1"]
+    assert session["policy_document_versions"] == ["guard.hashgraphonline.com/v1alpha1"]
     assert session["yaml_import"] is True
     assert session["canonical_policy_enforcement"] is True
 
