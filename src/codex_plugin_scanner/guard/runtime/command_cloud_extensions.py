@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .command_extension_matchers import executable_matcher, safe_flag_variant
+from .command_extension_matchers import executable_matcher, safe_flag_variant, safe_option_variant
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant
 
@@ -188,17 +188,19 @@ CLOUD_COMMAND_RULES = (
         safer_alternative="Describe the exact resources and confirm the active account and region before deletion.",
         safe_variants=(
             safe_flag_variant(_AWS_RESOURCE_DELETE, variant_id="help", title="AWS command help", flag="--help"),
-            safe_flag_variant(
+            safe_option_variant(
                 _AWS_RESOURCE_DELETE,
                 variant_id="generate-cli-skeleton",
                 title="AWS request skeleton",
-                flag="--generate-cli-skeleton",
+                option="--generate-cli-skeleton",
+                allowed_values=frozenset({"input", "output", "yaml-input"}),
             ),
             safe_flag_variant(
                 _AWS_EC2_TERMINATE,
                 variant_id="dry-run",
                 title="EC2 termination permission check",
                 flag="--dry-run",
+                inverse_flag="--no-dry-run",
             ),
         ),
     ),
