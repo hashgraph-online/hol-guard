@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli.connect_flow import CONNECT_SYNC_AUTH_CONTEXT_KEY
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
@@ -388,6 +390,7 @@ def test_daemon_finalize_guard_connect_payload_keeps_first_sync_pending_on_sync_
     assert "retry while the daemon is running" in str(payload["repair_message"])
 
 
+@pytest.mark.daemon_headless_queue
 def test_queue_headless_cloud_sync_respects_same_process_in_flight_marker(tmp_path, monkeypatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
 
@@ -412,6 +415,7 @@ def test_queue_headless_cloud_sync_respects_same_process_in_flight_marker(tmp_pa
     }
 
 
+@pytest.mark.daemon_headless_queue
 def test_queue_headless_cloud_sync_respects_cross_process_sync_lock(tmp_path, monkeypatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
 
@@ -733,6 +737,7 @@ def test_headless_cloud_sync_retry_unexpected_error_becomes_pending(tmp_path, mo
     assert summary["message"] == "retry exploded"
 
 
+@pytest.mark.daemon_headless_queue
 def test_queue_headless_cloud_sync_repairs_degraded_profile_before_queueing(tmp_path, monkeypatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
     profile_calls = {"count": 0}
