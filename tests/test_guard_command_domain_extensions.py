@@ -123,6 +123,26 @@ def test_domain_preview_and_help_commands_remain_safe(command: str, tmp_path: Pa
     ) is None
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "kubectl delete deployment api --dry-run=none",
+        "kubectl drain node-a --dry-run=none",
+    ],
+)
+def test_kubernetes_dry_run_none_remains_live_execution(command: str, tmp_path: Path) -> None:
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "review"
+    assert payload["classification"]["action_class"] == "Kubernetes destructive command"
+    assert extract_sensitive_tool_action_request(
+        "Shell",
+        {"command": command},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    ) is not None
+
+
 def test_container_argument_named_help_remains_runtime_execution(tmp_path: Path) -> None:
     payload = inspect_command("docker run alpine --help", cwd=tmp_path, home_dir=tmp_path)
 

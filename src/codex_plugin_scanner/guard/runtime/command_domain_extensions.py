@@ -118,6 +118,24 @@ def _help_variant_for_any(matcher: AnyMatcher) -> CommandSafeVariant:
     )
 
 
+def _kubernetes_dry_run_variant(subcommand: str) -> CommandSafeVariant:
+    return CommandSafeVariant(
+        variant_id="dry-run",
+        title=f"Kubernetes {subcommand} preview",
+        matcher=AnyMatcher(
+            matchers=tuple(
+                _executable_matcher(
+                    frozenset({"kubectl"}),
+                    subcommand,
+                    required_flags=frozenset({f"--dry-run={mode}"}),
+                    leading_options_with_values=_KUBECTL_GLOBAL_OPTIONS,
+                )
+                for mode in ("client", "server")
+            )
+        ),
+    )
+
+
 def _rule(
     *,
     rule_id: str,
@@ -260,16 +278,7 @@ DOMAIN_COMMAND_RULES = (
         safer_alternative="Run a client-side dry run and review the exact resource names and namespace first.",
         safe_variants=(
             _help_variant(_KUBECTL_DELETE),
-            CommandSafeVariant(
-                variant_id="dry-run",
-                title="Kubernetes delete preview",
-                matcher=_executable_matcher(
-                    frozenset({"kubectl"}),
-                    "delete",
-                    required_flags=frozenset({"--dry-run"}),
-                    leading_options_with_values=_KUBECTL_GLOBAL_OPTIONS,
-                ),
-            ),
+            _kubernetes_dry_run_variant("delete"),
         ),
     ),
     _rule(
@@ -282,16 +291,7 @@ DOMAIN_COMMAND_RULES = (
         safer_alternative="Preview the drain and verify disruption budgets, node identity, and workload scope first.",
         safe_variants=(
             _help_variant(_KUBECTL_DRAIN),
-            CommandSafeVariant(
-                variant_id="dry-run",
-                title="Kubernetes drain preview",
-                matcher=_executable_matcher(
-                    frozenset({"kubectl"}),
-                    "drain",
-                    required_flags=frozenset({"--dry-run"}),
-                    leading_options_with_values=_KUBECTL_GLOBAL_OPTIONS,
-                ),
-            ),
+            _kubernetes_dry_run_variant("drain"),
         ),
     ),
     _rule(
