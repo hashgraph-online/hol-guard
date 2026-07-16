@@ -875,9 +875,7 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
     guard_runner_module.sync_runtime_session(
         store,
         session={
-            "harness": "codex",
-            "surface": "cli",
-            "status": "active",
+            **guard_runner_module._local_guard_runtime_session(),
             "updatedAt": "2026-04-24T00:01:00+00:00",
             "workspace": str(workspace_dir),
         },
@@ -905,6 +903,22 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
             "nextRefreshAt": "2026-04-24T00:15:00+00:00",
         },
     }
+    assert session_payload["policyDocumentVersions"] == ["guard.hol.org/v1alpha1"]
+    assert session_payload["yamlImport"] is False
+    assert "canonicalPolicyEnforcement" not in session_payload
+
+
+def test_local_runtime_session_advertises_enabled_policy_capabilities(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HOL_GUARD_POLICY_YAML_IMPORT", "1")
+    monkeypatch.setenv("HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT", "1")
+
+    session = guard_runner_module._local_guard_runtime_session()
+
+    assert session["policy_document_versions"] == ["guard.hol.org/v1alpha1"]
+    assert session["yaml_import"] is True
+    assert session["canonical_policy_enforcement"] is True
 
 
 def test_sync_runtime_session_prefers_latest_sync_summary_for_package_manager_coverage_freshness(
