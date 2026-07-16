@@ -43,7 +43,7 @@ The deterministic formatter emits block-style YAML, stable core-field order, UTF
 
 The signing/hash input is UTF-8 canonical JSON of the complete normalized document:
 
-1. object keys sorted lexicographically by Unicode code point;
+1. object keys sorted lexicographically by UTF-16 code units, as required by RFC 8785;
 2. no insignificant whitespace;
 3. JSON string escaping with unescaped non-ASCII Unicode;
 4. integer numbers only;
