@@ -36,6 +36,7 @@ from .package_intent_common import (
     version_target,
 )
 from .package_manager_command import strip_package_manager_global_options
+from .package_manifest_diff import parse_manifest_dependencies
 from .secret_file_requests import _SHELL_TOOL_NAMES, _candidate_command_texts, _normalize_tool_name
 
 _CONTROL_TOKENS = {"&&", "||", ";", "|", "|&", "&"}
@@ -313,7 +314,7 @@ def _is_verified_read_only_typescript_check(
     tokens: tuple[str, ...],
     evidence: LocalPackageExecutionEvidence,
 ) -> bool:
-    if evidence.package_name != "tsc" or evidence.executable_name != "tsc":
+    if evidence.package_name not in {"tsc", "typescript"} or evidence.executable_name != "tsc":
         return False
     required_files = (evidence.manager, evidence.local_executable, *evidence.manifests, *evidence.lockfiles)
     if (
@@ -321,6 +322,7 @@ def _is_verified_read_only_typescript_check(
         or not evidence.manifests
         or not evidence.lockfiles
         or any(file is None or file.status != "available" for file in required_files)
+        or not _lockfiles_record_typescript(evidence.lockfiles)
     ):
         return False
     try:
@@ -333,6 +335,20 @@ def _is_verified_read_only_typescript_check(
     if "2>" in compiler_args and compiler_args[-1] != "2>":
         return False
     return all(_is_read_only_typescript_argument(token) for token in compiler_args)
+
+
+def _lockfiles_record_typescript(lockfiles: tuple[PackageExecutionFileEvidence, ...]) -> bool:
+    for lockfile in lockfiles:
+        if lockfile.resolved_path is None or lockfile.status != "available":
+            continue
+        try:
+            text = Path(lockfile.resolved_path).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        dependencies = parse_manifest_dependencies(path=lockfile.path, text=text)
+        if any(name == "typescript" or name.endswith("/typescript") for name in dependencies):
+            return True
+    return False
 
 
 def _is_read_only_typescript_argument(token: str) -> bool:
@@ -367,6 +383,12 @@ def _local_executable_name(
     allowed_flags = _LOCAL_EXECUTION_FLAGS_BY_COMMAND.get(command, frozenset())
     index = 1
     while index < len(tokens) and tokens[index].startswith("-"):
+        if command == "npx" and tokens[index] == "--package" and index + 1 < len(tokens):
+            index += 2
+            continue
+        if command == "npx" and tokens[index].startswith("--package="):
+            index += 1
+            continue
         if tokens[index] not in allowed_flags:
             return None
         index += 1
@@ -1055,7 +1077,9 @@ def _exec_package_spec(tokens: tuple[str, ...]) -> str | None:
         return first_positional(tokens[2:], skip_value_options={"--python"})
     if command_name in {"pnpm", "yarn"} and len(tokens) >= 2 and tokens[1] == "dlx":
         return first_positional(tokens[2:], skip_value_options=set())
-    if command_name in {"npx", "bunx", "uvx"}:
+    if command_name == "npx":
+        return option_value(tokens, "--package") or first_positional(tokens[1:], skip_value_options={"--package"})
+    if command_name in {"bunx", "uvx"}:
         return first_positional(tokens[1:], skip_value_options=set())
     return _package_token(command_name=command_name, args=tokens[1:])
 
