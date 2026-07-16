@@ -6,10 +6,12 @@ from .command_extension_matchers import executable_matcher, executable_names, sa
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import (
     AnyMatcher,
-    ArgumentPositionMatcher,
+    ArgumentCommandMatcher,
     CommandMatcher,
     CommandSafetyRule,
     CommandSafeVariant,
+    CommandSequenceMatcher,
+    ExecutableMatcher,
     LeadingOperandCountMatcher,
     LeadingSubcommandMatcher,
 )
@@ -27,7 +29,32 @@ _MYSQL_GLOBAL_OPTIONS = frozenset(
         "--user",
         "--defaults-file",
         "--defaults-extra-file",
+        "--bind-address",
+        "--character-sets-dir",
+        "--compression-algorithms",
+        "--connect-timeout",
+        "--count",
+        "--default-auth",
         "--login-path",
+        "--max-allowed-packet",
+        "--plugin-dir",
+        "--protocol",
+        "--server-public-key-path",
+        "--shared-memory-base-name",
+        "--shutdown-timeout",
+        "--sleep",
+        "--ssl-ca",
+        "--ssl-capath",
+        "--ssl-cert",
+        "--ssl-cipher",
+        "--ssl-crl",
+        "--ssl-crlpath",
+        "--ssl-key",
+        "--tls-ciphersuites",
+        "--tls-sni-servername",
+        "--tls-version",
+        "--zstd-compression-level",
+        "-i",
     }
 )
 _REDIS_GLOBAL_OPTIONS = frozenset(
@@ -41,7 +68,9 @@ _REDIS_GLOBAL_OPTIONS = frozenset(
         "-p",
         "-r",
         "-s",
+        "-t",
         "-u",
+        "-X",
         "--cacert",
         "--cacertdir",
         "--cert",
@@ -49,68 +78,133 @@ _REDIS_GLOBAL_OPTIONS = frozenset(
         "--key",
         "--pass",
         "--sni",
+        "--show-pushes",
         "--user",
     }
 )
-_SUPABASE_GLOBAL_OPTIONS = frozenset({"--workdir", "--dns-resolver"})
+_SUPABASE_GLOBAL_OPTIONS = frozenset(
+    {"--agent", "--dns-resolver", "--network-id", "--output", "--profile", "--workdir", "-o"}
+)
+_SUPABASE_GLOBAL_FLAGS = frozenset({"--create-ticket", "--debug", "--experimental", "--yes"})
+_SUPABASE_FORBIDDEN_FLAGS = frozenset({"--help", "--version", "-h", "-v"})
+_RUNNER_OPTIONS_WITH_VALUES = frozenset(
+    {"--cache", "--call", "--dir", "--filter", "--package", "--reporter", "--workspace", "-C", "-F", "-c", "-p", "-w"}
+)
+_RUNNER_FLAGS = frozenset(
+    {"--aggregate-output", "--silent", "--stream", "--use-stderr", "--workspace-root", "--yes", "-y"}
+)
 _POSTGRES_DROP = LeadingOperandCountMatcher(
     executables=executable_names("dropdb"),
     minimum_operands=1,
     options_with_values=_POSTGRES_OPTIONS_WITH_VALUES,
-    forbidden_flags=frozenset({"--help", "--version"}),
+    forbidden_flags=frozenset({"--help", "--version", "-?", "-V"}),
 )
-_MYSQL_DROP = AnyMatcher(
+_MYSQL_DROP = CommandSequenceMatcher(
+    executables=executable_names("mysqladmin"),
+    command_arities=(
+        ("create", 1),
+        ("debug", 0),
+        ("drop", 1),
+        ("extended-status", 0),
+        ("flush-hosts", 0),
+        ("flush-logs", 0),
+        ("flush-privileges", 0),
+        ("flush-status", 0),
+        ("kill", 1),
+        ("password", 1),
+        ("ping", 0),
+        ("processlist", 0),
+        ("reload", 0),
+        ("refresh", 0),
+        ("shutdown", 0),
+        ("start-replica", 0),
+        ("start-slave", 0),
+        ("status", 0),
+        ("stop-replica", 0),
+        ("stop-slave", 0),
+        ("variables", 0),
+        ("version", 0),
+    ),
+    target_commands=frozenset({"drop"}),
+    options_with_values=_MYSQL_GLOBAL_OPTIONS,
+    forbidden_flags=frozenset({"--help", "--version", "-?", "-V"}),
+)
+_MONGO_RESTORE_DROP = AnyMatcher(
     matchers=(
-        LeadingSubcommandMatcher(
-            executables=executable_names("mysqladmin"),
-            subcommands=("drop",),
-            options_with_values=_MYSQL_GLOBAL_OPTIONS,
+        executable_matcher(
+            "mongorestore",
+            required_flags=frozenset({"--drop"}),
             forbidden_flags=frozenset({"--help", "--version"}),
         ),
     )
 )
-_MONGO_RESTORE_DROP = AnyMatcher(matchers=(executable_matcher("mongorestore", required_flags=frozenset({"--drop"})),))
 _REDIS_MUTATION = AnyMatcher(
     matchers=tuple(
         LeadingSubcommandMatcher(
             executables=executable_names("redis-cli"),
             subcommands=(command,),
             options_with_values=_REDIS_GLOBAL_OPTIONS,
-            forbidden_flags=frozenset({"--help", "--version"}),
+            forbidden_flags=frozenset({"--eval", "--help", "--version", "-?"}),
         )
         for command in ("flushall", "flushdb", "del", "unlink")
     )
 )
-_SQLITE_RESTORE = ArgumentPositionMatcher(
+_SQLITE_RESTORE = ArgumentCommandMatcher(
     executables=executable_names("sqlite3"),
-    required_argument=".restore",
-    positions=frozenset({0, 1}),
-    forbidden_arguments=frozenset({".help"}),
+    command=".restore",
+    minimum_abbreviation_length=len(".rest"),
+    minimum_position=1,
 )
-_SUPABASE_RESET = AnyMatcher(
-    matchers=(
-        LeadingSubcommandMatcher(
+
+
+def _supabase_matchers(*subcommands: str) -> tuple[ExecutableMatcher, ...]:
+    interspersed_options = _SUPABASE_GLOBAL_OPTIONS | _RUNNER_OPTIONS_WITH_VALUES
+    interspersed_flags = _SUPABASE_GLOBAL_FLAGS | _RUNNER_FLAGS
+    return (
+        ExecutableMatcher(
             executables=executable_names("supabase"),
-            subcommands=("db", "reset"),
-            options_with_values=_SUPABASE_GLOBAL_OPTIONS,
+            subcommands=subcommands,
+            forbidden_flags=_SUPABASE_FORBIDDEN_FLAGS,
+            interspersed_options_with_values=_SUPABASE_GLOBAL_OPTIONS,
+            interspersed_flags=_SUPABASE_GLOBAL_FLAGS,
+        ),
+        ExecutableMatcher(
+            executables=executable_names("npx") | executable_names("bunx"),
+            subcommands=("supabase", *subcommands),
+            forbidden_flags=_SUPABASE_FORBIDDEN_FLAGS,
+            interspersed_options_with_values=interspersed_options,
+            interspersed_flags=interspersed_flags,
+        ),
+        ExecutableMatcher(
+            executables=executable_names("pnpm") | executable_names("yarn"),
+            subcommands=("supabase", *subcommands),
+            forbidden_flags=_SUPABASE_FORBIDDEN_FLAGS,
+            interspersed_options_with_values=interspersed_options,
+            interspersed_flags=interspersed_flags,
+        ),
+        ExecutableMatcher(
+            executables=executable_names("npm") | executable_names("pnpm"),
+            subcommands=("exec", "supabase", *subcommands),
+            forbidden_flags=_SUPABASE_FORBIDDEN_FLAGS,
+            interspersed_options_with_values=interspersed_options,
+            interspersed_flags=interspersed_flags,
+        ),
+        ExecutableMatcher(
+            executables=executable_names("pnpm"),
+            subcommands=("dlx", "supabase", *subcommands),
+            forbidden_flags=_SUPABASE_FORBIDDEN_FLAGS,
+            interspersed_options_with_values=interspersed_options,
+            interspersed_flags=interspersed_flags,
         ),
     )
-)
+
+
+_SUPABASE_RESET = AnyMatcher(matchers=_supabase_matchers("db", "reset"))
 _SUPABASE_MUTATION = AnyMatcher(
     matchers=(
         *_SUPABASE_RESET.matchers,
-        LeadingSubcommandMatcher(
-            executables=executable_names("supabase"),
-            subcommands=("migration", "down"),
-            options_with_values=_SUPABASE_GLOBAL_OPTIONS,
-        ),
+        *_supabase_matchers("migration", "down"),
     )
-)
-_SUPABASE_RESET_DRY_RUN = LeadingSubcommandMatcher(
-    executables=executable_names("supabase"),
-    subcommands=("db", "reset"),
-    options_with_values=_SUPABASE_GLOBAL_OPTIONS,
-    required_flags_anywhere=frozenset({"--dry-run"}),
 )
 
 
@@ -194,14 +288,7 @@ DATABASE_COMMAND_RULES = (
         description="Identifies Supabase reset and migration-down operations that discard database state.",
         matcher=_SUPABASE_MUTATION,
         action_class="Supabase destructive command",
-        safer_alternative="Run the documented dry run and confirm whether the target is local, linked, or explicit.",
-        safe_variants=(
-            CommandSafeVariant(
-                variant_id="dry-run",
-                title="Supabase database dry run",
-                matcher=_SUPABASE_RESET_DRY_RUN,
-            ),
-        ),
+        safer_alternative="Confirm the target and create a database dump before resetting or rolling back migrations.",
     ),
 )
 
