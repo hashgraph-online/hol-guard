@@ -7,21 +7,33 @@ from .command_rules import AnyMatcher, CommandSafeVariant, ExecutableMatcher
 _EMPTY_STRING_SET: frozenset[str] = frozenset()
 
 
+def executable_names(name: str) -> frozenset[str]:
+    """Return portable launcher names for one command."""
+
+    return frozenset({name, f"{name}.cmd", f"{name}.exe"})
+
+
 def executable_matcher(
     executable: str,
     *subcommands: str,
     required_flags: frozenset[str] = _EMPTY_STRING_SET,
     global_options_with_values: frozenset[str] = _EMPTY_STRING_SET,
     global_flags: frozenset[str] = _EMPTY_STRING_SET,
+    allow_leading_options: bool = False,
+    leading_options_with_values: frozenset[str] = _EMPTY_STRING_SET,
+    options_with_values: frozenset[str] = _EMPTY_STRING_SET,
 ) -> ExecutableMatcher:
-    """Build a portable executable matcher with structured global options."""
+    """Build a portable executable matcher with structured option handling."""
 
     return ExecutableMatcher(
-        executables=frozenset({executable, f"{executable}.cmd", f"{executable}.exe"}),
+        executables=executable_names(executable),
         subcommands=subcommands,
         required_flags=required_flags,
         interspersed_options_with_values=global_options_with_values,
         interspersed_flags=global_flags,
+        allow_leading_options=allow_leading_options,
+        leading_options_with_values=leading_options_with_values,
+        options_with_values=options_with_values,
     )
 
 
