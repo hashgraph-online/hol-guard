@@ -346,6 +346,7 @@ def test_parse_package_intent_allows_explicit_verified_typescript_package(
         "--noEmit --generateTrace trace-output",
         "--noEmit --outDir generated",
         "--noEmit --pretty 2> diagnostics.ts",
+        "--noEmit 2>diagnostics.ts",
     ),
 )
 def test_parse_package_intent_keeps_non_read_only_typescript_execution_guarded(

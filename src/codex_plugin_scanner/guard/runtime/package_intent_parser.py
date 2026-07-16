@@ -358,6 +358,8 @@ def _lockfiles_record_typescript(lockfiles: tuple[PackageExecutionFileEvidence, 
 def _is_read_only_typescript_argument(token: str) -> bool:
     if token in _TSC_READ_ONLY_FLAGS or token == "2>":
         return True
+    if re.match(r"^\d*(?:>>?|<<?)", token):
+        return False
     if token.startswith("-"):
         return False
     return token.endswith((".cts", ".mts", ".ts", ".tsx"))
