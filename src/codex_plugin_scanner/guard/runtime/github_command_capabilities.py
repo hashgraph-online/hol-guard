@@ -119,8 +119,6 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
     normalized = [str(arg) for arg in args]
     if not normalized:
         return _assessment("unknown", "github.command.missing", "The GitHub CLI subcommand is missing.")
-    has_dynamic_arguments = any(_contains_dynamic_shell_text(arg) for arg in normalized)
-
     normalized = _strip_global_options(normalized)
     if not normalized:
         return _assessment(
@@ -142,8 +140,6 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
     if top_level == "auth" and len(normalized) > 1 and normalized[1].lower() in _LOCAL_AUTH_SUBCOMMANDS:
         return _assessment("read_local", "github.command.local-auth-read", "The command reads local CLI auth state.")
     if top_level in _READ_ONLY_TOP_LEVEL:
-        if has_dynamic_arguments:
-            return _dynamic_argument_assessment()
         return _assessment(
             "read_remote",
             "github.command.proven-read",
@@ -166,8 +162,6 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
         if subcommand == "help":
             return _assessment("read_local", "github.command.local-help", "The command displays local CLI help.")
         if subcommand in _READ_ONLY_SUBCOMMANDS[top_level]:
-            if has_dynamic_arguments:
-                return _dynamic_argument_assessment()
             return _assessment(
                 "read_remote",
                 "github.command.proven-read",
@@ -486,14 +480,6 @@ def _field_value_is_external(value: str) -> bool:
 
 def _contains_dynamic_shell_text(value: str) -> bool:
     return any(marker in value for marker in ("$(", "`", "${", "$'", '$"'))
-
-
-def _dynamic_argument_assessment() -> GitHubCommandAssessment:
-    return _assessment(
-        "unknown",
-        "github.command.dynamic-argument",
-        "The GitHub CLI invocation contains an argument that cannot be classified statically.",
-    )
 
 
 def _api_parse_failure() -> GitHubCommandAssessment:

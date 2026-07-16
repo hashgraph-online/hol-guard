@@ -478,7 +478,6 @@ def _disable_totp_locked(
         state["totp_enabled"] = False
         _write_state(guard_home, state, now=now)
         return public_config(guard_home, now=now)
-    _verify_password_stage(guard_home, state, password=gate_input.password, now=now)
     if gate_input.totp_code is None:
         raise ApprovalGateError("approval_gate_totp_required", "TOTP code is required.")
     secret = TotpSecretStore(guard_home).get_secret(secret_id)
@@ -719,16 +718,16 @@ def _validate_grant_locked(
         raise ApprovalGateError("approval_gate_required", "Approval password is required.")
     metadata = _ACTIVE_GRANTS.get(approval_gate_grant.grant_id)
     if metadata is None:
-        raise ApprovalGateError("approval_gate_required", "Approval password is required.")
+        raise ApprovalGateError("approval_gate_required", "Approval proof is required.")
     now_epoch = _epoch(now)
     if metadata.get("guard_home") != str(guard_home):
-        raise ApprovalGateError("approval_gate_required", "Approval password is required.")
+        raise ApprovalGateError("approval_gate_required", "Approval proof is invalid.")
     expires_epoch = _optional_float(metadata.get("expires_epoch")) or 0.0
     if expires_epoch <= now_epoch:
         _ACTIVE_GRANTS.pop(approval_gate_grant.grant_id, None)
         raise ApprovalGateError(
             "approval_gate_grant_expired",
-            "Approval proof expired. Enter both factors again.",
+            "Approval proof expired. Enter your approval proof again.",
         )
     immutable_fields = {
         "purpose": approval_gate_grant.purpose,
@@ -748,9 +747,11 @@ def _validate_grant_locked(
         raise ApprovalGateError("approval_gate_required", "Approval proof is invalid.")
     if _optional_int(metadata.get("factor_generation")) != _factor_generation(state):
         _ACTIVE_GRANTS.pop(approval_gate_grant.grant_id, None)
-        raise ApprovalGateError("approval_gate_required", "Approval proof was revoked. Enter both factors again.")
+        raise ApprovalGateError(
+            "approval_gate_required", "Approval proof was revoked. Enter your approval proof again."
+        )
     if purpose is not None and approval_gate_grant.purpose != purpose:
-        raise ApprovalGateError("approval_gate_required", "Approval password is required.")
+        raise ApprovalGateError("approval_gate_required", "Approval proof does not match this purpose.")
     if action is not None and approval_gate_grant.action != action:
         raise ApprovalGateError("approval_gate_required", "Approval proof does not match this action.")
     if scope is not None and approval_gate_grant.scope != scope:
@@ -760,14 +761,10 @@ def _validate_grant_locked(
     if session_nonce is not None and approval_gate_grant.session_nonce != session_nonce:
         raise ApprovalGateError("approval_gate_required", "Approval proof does not match this session.")
     if strict and not approval_gate_grant.strict:
-        raise ApprovalGateError("approval_gate_required", "Approval password is required.")
+        raise ApprovalGateError("approval_gate_required", "A fresh approval proof is required.")
     if _totp_enabled(state):
         _validate_totp_state_or_raise(guard_home, state)
-        if (
-            approval_gate_grant.factor_set != ("password", "totp")
-            or not approval_gate_grant.password_verified
-            or not approval_gate_grant.totp_verified
-        ):
+        if approval_gate_grant.factor_set != ("totp",) or not approval_gate_grant.totp_verified:
             raise ApprovalGateError("approval_gate_totp_required", "TOTP code is required.")
     elif strict and approval_gate_grant.factor_set != ("password",):
         raise ApprovalGateError("approval_gate_password_required", "Approval password is required.")
@@ -860,7 +857,6 @@ def _verify_or_raise_locked(
             totp_verified=False,
             now=now,
         )
-    _verify_password_stage(guard_home, state, password=gate_input.password, now=now)
     accepted_counter: int | None = None
     factor_set = ("password",)
     if _totp_enabled(state):
@@ -872,9 +868,11 @@ def _verify_or_raise_locked(
             code=gate_input.totp_code,
             now_epoch=now_epoch,
         )
-        factor_set = ("password", "totp")
+        factor_set = ("totp",)
         state["totp_last_counter"] = accepted_counter
         state.pop("cooldown_expires_at", None)
+    else:
+        _verify_password_stage(guard_home, state, password=gate_input.password, now=now)
     _reset_failed_attempts(state)
     cooldown_expires_at: str | None = None
     if (
@@ -898,7 +896,7 @@ def _verify_or_raise_locked(
         strict=strict,
         used_cooldown=False,
         cooldown_expires_at=cooldown_expires_at,
-        password_verified=True,
+        password_verified=accepted_counter is None,
         totp_verified=accepted_counter is not None,
         now=now,
     )

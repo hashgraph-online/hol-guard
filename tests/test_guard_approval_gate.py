@@ -708,7 +708,7 @@ def test_approval_gate_cli_allow_policy_write_uses_active_cooldown_without_promp
     assert policy["artifact_id"] == "codex:project:allow-cli"
 
 
-def test_approval_gate_cli_policy_write_requires_password_and_totp(
+def test_approval_gate_cli_policy_write_requires_totp_when_enabled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -720,7 +720,7 @@ def test_approval_gate_cli_policy_write_requires_password_and_totp(
     now = datetime.now(timezone.utc).isoformat()
     code = totp_code_at_counter(secret=secret, counter=_counter(now))
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
-    responses = iter((WRONG_PASSWORD, code, PASSWORD, code))
+    responses = iter(("000000", code))
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.approval_gate_prompt.getpass.getpass",
         lambda _prompt: next(responses),
@@ -970,42 +970,34 @@ def test_approval_gate_totp_manual_key_accepts_readability_dashes(tmp_path: Path
     assert totp_code_at_counter(secret=dashed_secret, counter=_counter("2026-04-11T00:01:00+00:00"))
 
 
-def test_approval_gate_disable_totp_requires_password_and_totp_when_enabled(tmp_path: Path) -> None:
+def test_approval_gate_disable_totp_requires_totp_only_when_enabled(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
     secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
 
-    with pytest.raises(ApprovalGateError) as missing_password:
+    with pytest.raises(ApprovalGateError) as missing_totp:
         disable_totp(store.guard_home, approval_gate_input=ApprovalGateInput(), now="2026-04-11T00:00:31+00:00")
-    assert missing_password.value.code == "approval_gate_password_required"
+    assert missing_totp.value.code == "approval_gate_totp_required"
 
     disable_now = "2026-04-11T00:01:31+00:00"
     disable_code = totp_code_at_counter(secret=secret, counter=_counter(disable_now))
-    with pytest.raises(ApprovalGateError) as invalid_password:
-        disable_totp(
-            store.guard_home,
-            approval_gate_input=ApprovalGateInput(password=WRONG_PASSWORD, totp_code=disable_code),
-            now=disable_now,
-        )
-    assert invalid_password.value.code == "approval_gate_invalid_password"
-
     with pytest.raises(ApprovalGateError) as invalid_totp:
         disable_totp(
             store.guard_home,
-            approval_gate_input=ApprovalGateInput(password=PASSWORD, totp_code="000000"),
+            approval_gate_input=ApprovalGateInput(totp_code="000000"),
             now=disable_now,
         )
     assert invalid_totp.value.code == "approval_gate_totp_invalid"
 
     gate = disable_totp(
         store.guard_home,
-        approval_gate_input=ApprovalGateInput(password=PASSWORD, totp_code=disable_code),
+        approval_gate_input=ApprovalGateInput(totp_code=disable_code),
         now=disable_now,
     )
     assert gate.totp_enabled is False
 
 
-def test_approval_gate_password_disable_requires_password_and_totp_when_enabled(tmp_path: Path) -> None:
+def test_approval_gate_password_disable_requires_totp_when_enabled(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
     workspace = tmp_path / "workspace"
@@ -1037,7 +1029,7 @@ def test_approval_gate_password_disable_requires_password_and_totp_when_enabled(
             guard_command="settings",
             settings_command="approval-password",
             settings_approval_password_command="disable",
-            current_password=PASSWORD,
+            current_password=None,
             totp_code=disable_code,
             guard_home=str(store.guard_home),
             home=str(home_dir),
@@ -1051,7 +1043,7 @@ def test_approval_gate_password_disable_requires_password_and_totp_when_enabled(
     assert public_config(store.guard_home).enabled is False
 
 
-def test_approval_gate_totp_does_not_override_password_for_reviews(tmp_path: Path) -> None:
+def test_approval_gate_totp_overrides_password_for_reviews(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
     secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
@@ -1059,28 +1051,17 @@ def test_approval_gate_totp_does_not_override_password_for_reviews(tmp_path: Pat
     approve_code = totp_code_at_counter(secret=secret, counter=_counter(approve_now))
     _add_request(store, "req-totp-only")
 
-    with pytest.raises(ApprovalGateError) as invalid_password:
-        _approve(
-            store,
-            "req-totp-only",
-            gate_input=ApprovalGateInput(password=WRONG_PASSWORD, totp_code=approve_code),
-            now=approve_now,
-        )
-
-    assert invalid_password.value.code == "approval_gate_invalid_password"
-    assert store.get_approval_request("req-totp-only")["status"] == "pending"
-
     _approve(
         store,
         "req-totp-only",
-        gate_input=ApprovalGateInput(password=PASSWORD, totp_code=approve_code),
+        gate_input=ApprovalGateInput(password=WRONG_PASSWORD, totp_code=approve_code),
         now=approve_now,
     )
 
     assert store.get_approval_request("req-totp-only")["status"] == "resolved"
 
 
-def test_approval_gate_two_factor_grant_is_context_bound_and_expires(tmp_path: Path) -> None:
+def test_approval_gate_totp_grant_is_context_bound_and_expires(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
     secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
@@ -1093,14 +1074,14 @@ def test_approval_gate_two_factor_grant_is_context_bound_and_expires(tmp_path: P
         scope="artifact",
         subject="approval-request:req-bound",
         session_nonce="dashboard-session-1",
-        approval_gate_input=ApprovalGateInput(password=PASSWORD, totp_code=code),
+        approval_gate_input=ApprovalGateInput(totp_code=code),
         now=issued_at,
     )
 
     assert grant is not None
-    assert grant.password_verified is True
+    assert grant.password_verified is False
     assert grant.totp_verified is True
-    assert grant.factor_set == ("password", "totp")
+    assert grant.factor_set == ("totp",)
     assert grant.action == "allow"
     assert grant.scope == "artifact"
     assert grant.subject == "approval-request:req-bound"
@@ -1183,7 +1164,7 @@ def test_approval_gate_totp_disable_revokes_outstanding_grants_and_auth_state(tm
     assert "approval_sessions" not in rotated_state
     assert "recovery_code_hashes" not in rotated_state
     assert "trusted_devices" not in rotated_state
-    with pytest.raises(ApprovalGateError, match="Approval password is required"):
+    with pytest.raises(ApprovalGateError, match="Approval proof is required"):
         validate_grant(
             store.guard_home,
             grant,
@@ -1193,47 +1174,41 @@ def test_approval_gate_totp_disable_revokes_outstanding_grants_and_auth_state(tm
         )
 
 
-def test_approval_gate_tracks_factor_failures_and_combined_budget(tmp_path: Path) -> None:
+def test_approval_gate_tracks_active_totp_failures_and_locks(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
     secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
     attempt_now = "2026-04-11T00:00:31+00:00"
-    valid_code = totp_code_at_counter(secret=secret, counter=_counter(attempt_now))
     _add_request(store, "req-factor-budget")
 
-    for password, code, expected_error in (
-        (WRONG_PASSWORD, valid_code, "approval_gate_invalid_password"),
-        (PASSWORD, "000000", "approval_gate_totp_invalid"),
-        (WRONG_PASSWORD, valid_code, "approval_gate_invalid_password"),
-        (PASSWORD, "000000", "approval_gate_totp_invalid"),
-    ):
+    for _ in range(4):
         with pytest.raises(ApprovalGateError) as error:
             _approve(
                 store,
                 "req-factor-budget",
-                gate_input=ApprovalGateInput(password=password, totp_code=code),
+                gate_input=ApprovalGateInput(totp_code="000000"),
                 now=attempt_now,
             )
-        assert error.value.code == expected_error
+        assert error.value.code == "approval_gate_totp_invalid"
 
     state = json.loads((store.guard_home / "approval-gate.json").read_text(encoding="utf-8"))
-    assert state["password_failed_attempts"] == 2
-    assert state["totp_failed_attempts"] == 2
+    assert state["password_failed_attempts"] == 0
+    assert state["totp_failed_attempts"] == 4
     assert state["failed_attempts"] == 4
 
     with pytest.raises(ApprovalGateError) as fifth_failure:
         _approve(
             store,
             "req-factor-budget",
-            gate_input=ApprovalGateInput(password=WRONG_PASSWORD, totp_code=valid_code),
+            gate_input=ApprovalGateInput(totp_code="000000"),
             now=attempt_now,
         )
-    assert fifth_failure.value.code == "approval_gate_invalid_password"
+    assert fifth_failure.value.code == "approval_gate_totp_invalid"
     with pytest.raises(ApprovalGateError) as locked:
         _approve(
             store,
             "req-factor-budget",
-            gate_input=ApprovalGateInput(password=PASSWORD, totp_code=valid_code),
+            gate_input=ApprovalGateInput(totp_code=totp_code_at_counter(secret=secret, counter=_counter(attempt_now))),
             now=attempt_now,
         )
     assert locked.value.code == "approval_gate_locked"
@@ -1421,7 +1396,7 @@ def test_approval_gate_settings_import_and_reset_require_totp_when_enabled(tmp_p
     assert reset_body["error"] == "approval_gate_totp_required"
 
 
-def test_approval_gate_settings_update_requires_password_and_totp(tmp_path: Path) -> None:
+def test_approval_gate_settings_update_requires_totp_when_enabled(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
     secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
@@ -1430,27 +1405,26 @@ def test_approval_gate_settings_update_requires_password_and_totp(tmp_path: Path
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
-        update_request = urllib.request.Request(
+        missing_totp_request = urllib.request.Request(
             f"http://127.0.0.1:{daemon.port}/v1/settings",
             data=json.dumps(
                 {
                     "settings": {"approval_wait_timeout_seconds": 90},
-                    "approval_totp_code": settings_code,
+                    "approval_password": PASSWORD,
                 }
             ).encode("utf-8"),
             headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
             method="POST",
         )
-        with pytest.raises(urllib.error.HTTPError) as password_error:
-            urllib.request.urlopen(update_request, timeout=5)
-        password_body = json.loads(password_error.value.read().decode("utf-8"))
+        with pytest.raises(urllib.error.HTTPError) as totp_error:
+            urllib.request.urlopen(missing_totp_request, timeout=5)
+        totp_body = json.loads(totp_error.value.read().decode("utf-8"))
 
         verified_request = urllib.request.Request(
             f"http://127.0.0.1:{daemon.port}/v1/settings",
             data=json.dumps(
                 {
                     "settings": {"approval_wait_timeout_seconds": 90},
-                    "approval_password": PASSWORD,
                     "approval_totp_code": settings_code,
                 }
             ).encode("utf-8"),
@@ -1462,8 +1436,8 @@ def test_approval_gate_settings_update_requires_password_and_totp(tmp_path: Path
     finally:
         daemon.stop()
 
-    assert password_error.value.code == 403
-    assert password_body["error"] == "approval_gate_password_required"
+    assert totp_error.value.code == 403
+    assert totp_body["error"] == "approval_gate_totp_required"
     assert update_body["settings"]["approval_wait_timeout_seconds"] == 90
 
 
@@ -1544,7 +1518,6 @@ def test_approval_gate_daemon_totp_routes_round_trip(tmp_path: Path) -> None:
             f"http://127.0.0.1:{daemon.port}/v1/approval-gate/totp/disable",
             data=json.dumps(
                 {
-                    "approval_gate": {"password": PASSWORD},
                     "approval_totp_code": disable_code,
                 }
             ).encode("utf-8"),

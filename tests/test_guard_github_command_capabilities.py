@@ -90,12 +90,14 @@ def test_classify_github_cli_rejects_ambiguous_graphql_inputs(args):
     "command",
     (
         "gh pr view 17",
+        "gh pr view ${PR_NUMBER}",
         "gh issue list --limit 10",
+        "gh issue list --repo ${REPO}",
         "gh api repos/example/project -X GET -f per_page=1 --jq '.name'",
         "gh api graphql -f 'query=query { viewer { login } }' | jq -r '.data.viewer.login'",
         (
             "gh api graphql -f 'query=query { viewer { login } }' 2>&1 | "
-            'python3 -c "import json,sys; print(json.load(sys.stdin)[\'data\'][\'viewer\'][\'login\'])"'
+            "python3 -c \"import json,sys; print(json.load(sys.stdin)['data']['viewer']['login'])\""
         ),
     ),
 )

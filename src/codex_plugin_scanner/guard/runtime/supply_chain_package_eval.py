@@ -1187,11 +1187,18 @@ def _unidentified_packages_fail_closed(*, store: GuardStore, workspace_dir: Path
     return config.security_level in {"strict", "paranoid"}
 
 
-def _unidentified_package_decision(ecosystem: str, *, fail_closed: bool) -> str:
+def _unidentified_package_decision(
+    ecosystem: str,
+    *,
+    fail_closed: bool,
+    identity_resolved: bool = False,
+) -> str:
     support_level = ecosystem_support_metadata(ecosystem)["support_level"]
     if support_level not in {"protected", "beta"}:
         return "monitor"
-    return "block" if fail_closed else "ask"
+    if fail_closed:
+        return "block"
+    return "monitor" if identity_resolved else "ask"
 
 
 def _evaluate_with_bundle(
@@ -2161,11 +2168,13 @@ def _unknown_package_result(
     target: dict[str, object],
     *,
     fail_closed_unidentified: bool = False,
+    identity_resolved: bool = False,
 ) -> dict[str, object]:
     ecosystem = _optional_string(target.get("ecosystem")) or "npm"
     decision = _unidentified_package_decision(
         ecosystem,
         fail_closed=fail_closed_unidentified,
+        identity_resolved=identity_resolved,
     )
     requires_review = decision in {"ask", "block"}
     package_name = str(target.get("name") or "this package")
@@ -2230,8 +2239,14 @@ def _fallback_package_results(
     )
     if bun_fallback_packages:
         return tuple(bun_fallback_packages)
+    lockfile_versions = _lockfile_dependency_versions(workspace_dir, artifact, targets)
     return tuple(
-        _unknown_package_result(target, fail_closed_unidentified=fail_closed_unidentified) for target in targets
+        _unknown_package_result(
+            target,
+            fail_closed_unidentified=fail_closed_unidentified,
+            identity_resolved=_lockfile_target_key(target) in lockfile_versions,
+        )
+        for target in targets
     )
 
 
